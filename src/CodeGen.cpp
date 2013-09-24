@@ -81,7 +81,7 @@ CodeGen::CodeGen() :
     value(NULL),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
-    buffer_t(NULL) {
+    buffer_t(NULL), need_stack_restore(false) {
 
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
@@ -1208,6 +1208,7 @@ void CodeGen::visit(const Call *op) {
             const Call *c = op->args[0].as<Call>();
 
             Value *buffer = builder->CreateAlloca(buffer_t, ConstantInt::get(i32, 1));
+            need_stack_restore = true;
 
             // Populate the fields
             Value *host_ptr;
@@ -1296,6 +1297,8 @@ void CodeGen::visit(const Call *op) {
             // Codegen the value index. Should be the same for all lanes.
             Value *value_index = codegen(unbroadcast(op->args[2]));
 
+            Value *saved_stack = save_stack();
+
             // Allocate and populate a stack entry for the value arg
             Type type = op->args[3].type();
             Value *value_stored_array = builder->CreateAlloca(llvm_type_of(type), ConstantInt::get(i32, 1));
@@ -1333,6 +1336,8 @@ void CodeGen::visit(const Call *op) {
             assert(trace_fn);
 
             builder->CreateCall(trace_fn, args);
+
+            restore_stack(saved_stack);
 
             // Evaluates to the value arg
             value = value_stored;
@@ -1473,6 +1478,7 @@ void CodeGen::visit(const Let *op) {
 
 void CodeGen::visit(const LetStmt *op) {
     sym_push(op->name, codegen(op->value));
+
     if (op->value.type() == Int(32)) {
         alignment_info.push(op->name, modulus_remainder(op->value, alignment_info));
     }
@@ -1570,18 +1576,25 @@ void CodeGen::visit(const For *op) {
         // Within the loop, the variable is equal to the phi value
         sym_push(op->name, phi);
 
-        // Save the stack in case the loop body does Allocas. Note
-        // that this makes it impossible to alloca a bunch of stuff
-        // inside a Halide for loop and use it afterwards. I'm not
-        // sure why you would ever do that, as it's not expressible in
-        // Halide IR, and it could make the stack huge if the loop
-        // counter is large.
+        // Set up state to detect if we need to do a stack restore on exit from this block.
+        bool old_need_stack_restore = need_stack_restore;
+        need_stack_restore = false;
         Value *saved_stack = save_stack();
 
         // Emit the loop body
         codegen(op->body);
 
-        restore_stack(saved_stack);
+        // Do any necessary stack restore/save
+        if (need_stack_restore) {
+            restore_stack(saved_stack);
+        } else {
+            // Remove the save
+            Instruction *save_inst = dyn_cast<Instruction>(saved_stack);
+            assert(save_inst);
+            save_inst->eraseFromParent();
+        }
+
+        need_stack_restore = old_need_stack_restore;
 
         // Update the counter
         Value *next_var = builder->CreateNSWAdd(phi, ConstantInt::get(i32, 1));
