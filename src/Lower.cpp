@@ -422,13 +422,28 @@ pair<Stmt, Stmt> build_realization(Function func) {
                 string var = func.name() + "." + func.args()[i];
                 Expr update_min = Variable::make(Int(32), var + ".update_min_required");
                 Expr update_extent = Variable::make(Int(32), var + ".update_extent_required");
-                Expr consume_min = Variable::make(Int(32), var + ".min_produced");
-                Expr consume_extent = Variable::make(Int(32), var + ".extent_produced");
-                Expr init_min = Min::make(update_min, consume_min);
-                Expr init_max_plus_one = Max::make(update_min + update_extent, consume_min + consume_extent);
+                Expr min_produced = Variable::make(Int(32), var + ".min_produced");
+                Expr extent_produced = Variable::make(Int(32), var + ".extent_produced");
+                Expr init_min = Min::make(update_min, min_produced);
+                Expr init_max_plus_one = Max::make(update_min + update_extent, min_produced + extent_produced);
                 Expr init_extent = init_max_plus_one - init_min;
+
+                // Redefine max_min just after we redefine min and
+                // extent produced, otherwise we may truncate our
+                // initialization and not initialize some values that
+                // are only read by the update step.
+                Expr new_max_min = min_produced + extent_produced - func.min_realization_size(i);
+                produce = LetStmt::make(var + ".max_min", new_max_min, produce);
+
+                // Inside that, redefine the min produced.
                 produce = LetStmt::make(var + ".min_produced", init_min, produce);
+
+                // The new extent produced refers to the old min
+                // produced, so it must be defined inside the new
+                // definition of min produced.
                 produce = LetStmt::make(var + ".extent_produced", init_extent, produce);
+
+
             }
 
             // Define the region read during the update step
