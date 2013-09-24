@@ -345,6 +345,7 @@ public:
 };
 
 MonotonicResult is_monotonic(Expr e, const std::string &var) {
+    if (!e.defined()) return Unknown;
     Monotonic m(var);
     e.accept(&m);
     return m.result;
