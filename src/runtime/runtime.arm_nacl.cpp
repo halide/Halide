@@ -1,5 +1,6 @@
 #include "posix_allocator.cpp"
 #ifdef __linux__
+#define LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME 263
 #include "linux_clock.cpp"
 #else
 #include "posix_clock.cpp"
