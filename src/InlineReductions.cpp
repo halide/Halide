@@ -35,7 +35,7 @@ private:
             return;
         }
 
-        if (starts_with(v->name, "iv.")) {
+        if (Var::is_implicit(v->name)) {
             // Don't capture implicit vars
             return;
         }

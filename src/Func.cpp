@@ -11,6 +11,7 @@
 #include "Image.h"
 #include "Param.h"
 #include "Debug.h"
+#include <algorithm>
 #include <iostream>
 #include <string.h>
 #include <fstream>
@@ -52,7 +53,7 @@ Func::Func(Expr e) : func(unique_name('f')),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
                      custom_trace(NULL) {
-    (*this)() = e;
+    (*this)(_) = e;
 }
 
 /*
@@ -66,7 +67,7 @@ Func::Func(Buffer b) : func(unique_name('f')),
     for (int i = 0; i < b.dimensions(); i++) {
         args.push_back(Var::implicit(i));
     }
-    (*this)() = Internal::Call::make(b, args);
+    (*this)(_) = Internal::Call::make(b, args);
 }
 */
 
@@ -176,109 +177,172 @@ int Func::dimensions() const {
 FuncRefVar Func::operator()() const {
     // Bulk up the argument list using implicit vars
     vector<Var> args;
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x) const {
     // Bulk up the argument list using implicit vars
     vector<Var> args = vec(x);
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x, Var y) const {
     vector<Var> args = vec(x, y);
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z) const{
     vector<Var> args = vec(x, y, z);
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) const {
     vector<Var> args = vec(x, y, z, w);
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u) const {
     vector<Var> args = vec(x, y, z, w, u);
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
   vector<Var> args = vec(x, y, z, w, u, v);
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(vector<Var> args) const {
-    add_implicit_vars(args);
-    return FuncRefVar(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(Expr x) const {
     vector<Expr> args = vec(x);
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y) const {
     vector<Expr> args = vec(x, y);
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) const {
     vector<Expr> args = vec(x, y, z);
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
     vector<Expr> args = vec(x, y, z, w);
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const {
     vector<Expr> args = vec(x, y, z, w, u);
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const {
     vector<Expr> args = vec(x, y, z, w, u, v);
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
 FuncRefExpr Func::operator()(vector<Expr> args) const {
-    add_implicit_vars(args);
-    return FuncRefExpr(func, args);
+    int placeholder_pos = add_implicit_vars(args);
+    return FuncRefExpr(func, args, placeholder_pos);
 }
 
-void Func::add_implicit_vars(vector<Var> &args) const {
-    int i = 0;
-    while ((int)args.size() < dimensions()) {
-        Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-        args.push_back(Var::implicit(i++));
+int Func::add_implicit_vars(vector<Var> &args) const {
+    int placeholder_pos = -1;
+    std::vector<Var>::iterator iter = args.begin();
+    while (iter != args.end() && !iter->same_as(_))
+        iter++;
+    if (iter != args.end()) {
+        placeholder_pos = iter - args.begin();
+        int i = 0;
+        iter = args.erase(iter);
+        while ((int)args.size() < dimensions()) {
+            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            iter = args.insert(iter, Var::implicit(i++));
+            iter++;
+        }
     }
-}
+#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
+    else {
+        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
+        // the provided arguments.
+        placeholder_pos = args.size();
+        if ((int)args.size() < dimensions()) {
+            std::cout << "Implicit arguments without placeholders are deprecated. Adding " <<
+              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
-void Func::add_implicit_vars(vector<Expr> &args) const {
-    int i = 0;
-    while ((int)args.size() < dimensions()) {
-        Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-        args.push_back(Var::implicit(i++));
+            int i = 0;
+            placeholder_pos = args.size();
+            while ((int)args.size() < dimensions()) {
+                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+                args.push_back(Var::implicit(i++));
+
+            }
+        }
     }
+#endif
+
+    return placeholder_pos;
 }
 
+int Func::add_implicit_vars(vector<Expr> &args) const {
+    int placeholder_pos = -1;
+    std::vector<Expr>::iterator iter = args.begin();
+    while (iter != args.end()) {
+        const Variable *var = iter->as<Variable>();
+        if (var != NULL && Var::is_implicit(var->name))
+            break;
+        iter++;
+    }
+    if (iter != args.end()) {
+        placeholder_pos = iter - args.begin();
+        int i = 0;
+        iter = args.erase(iter);
+        while ((int)args.size() < dimensions()) {
+            Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+            iter = args.insert(iter, Var::implicit(i++));
+            iter++;
+        }
+    }
+#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
+    else {
+        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
+        // the provided arguments.
+        placeholder_pos = args.size();
+        if ((int)args.size() < dimensions()) {
+            std::cout << "Implicit arguments without placeholders are deprecated. Adding " <<
+              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
+
+            int i = 0;
+            placeholder_pos = args.size();
+            while ((int)args.size() < dimensions()) {
+                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
+                args.push_back(Var::implicit(i++));
+
+            }
+        }
+    }
+#endif
+
+    return placeholder_pos;
+}
 
 namespace {
 bool var_name_match(string candidate, string var) {
@@ -893,7 +957,8 @@ ScheduleHandle Func::update() {
     return ScheduleHandle(func.reduction_schedule());
 }
 
-FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a) : func(f) {
+FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
+    implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
         args[i] = a[i].name();
@@ -914,20 +979,31 @@ public:
     using IRGraphVisitor::visit;
 
     void visit(const Variable *v) {
-        if (v->name.size() > 3 && v->name.substr(0, 3) == "iv.") {
-            int n = atoi(v->name.c_str()+3);
-            if (n >= count) count = n+1;
-        }
+      int index = Var::implicit_index(v->name);
+      if (index != -1) {
+            if (index >= count) count = index + 1;
+      }
     }
 };
 }
 
-void FuncRefVar::add_implicit_vars(vector<string> &a, const vector<Expr> &e) const {
-    CountImplicitVars count(e);
-    Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
-    for (int i = 0; i < count.count; i++) {
-        a.push_back(Var::implicit(i).name());
+vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
+    vector<string> a = args;
+
+    if (implicit_placeholder_pos != -1) {
+        CountImplicitVars count(e);
+
+        Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
+          func.name() << " at position " << implicit_placeholder_pos << "\n";
+
+        vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
+        for (int i = 0; i < count.count; i++) {
+            iter = a.insert(iter, Var::implicit(i).name());
+            iter++;
+        }
     }
+
+    return a;
 }
 
 void FuncRefVar::operator=(Expr e) {
@@ -942,8 +1018,7 @@ void FuncRefVar::operator=(const Tuple &e) {
     }
 
     // Find implicit args in the expr and add them to the args list before calling define
-    vector<string> a = args;
-    add_implicit_vars(a, e.as_vector());
+    vector<string> a = args_with_implicit_vars(e.as_vector());
     func.define(a, e.as_vector());
 }
 
@@ -1027,31 +1102,45 @@ FuncRefVar::operator Tuple() const {
 }
 */
 
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a) : func(f), args(a) {
+FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
+    implicit_placeholder_pos = placeholder_pos;
     ImageParam::check_arg_types(f.name(), &args);
 }
 
-FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a) : func(f) {
+FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
+                         int placeholder_pos) : func(f) {
+    implicit_placeholder_pos = placeholder_pos;
     args.resize(a.size());
     for (size_t i = 0; i < a.size(); i++) {
         args[i] = Var(a[i]);
     }
 }
 
-void FuncRefExpr::add_implicit_vars(vector<Expr> &a, const vector<Expr> &e) const {
-    CountImplicitVars f(e);
-    // Implicit vars are also allowed in the lhs of a reduction. E.g.:
-    // f(x, y) = x+y
-    // g(x, y) = 0
-    // g(f(r.x)) = 1   (this means g(f(r.x, i0), i0) = 1)
+vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
+    vector<Expr> a = args;
 
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i].accept(&f);
+    if (implicit_placeholder_pos != -1) {
+        CountImplicitVars f(e);
+        // TODO: Check if there is a test case for this and add one if not.
+        // Implicit vars are also allowed in the lhs of a reduction. E.g.:
+        // f(x, y) = x+y
+        // g(x, y) = 0
+        // g(f(r.x)) = 1   (this means g(f(r.x, i0), i0) = 1)
+
+        for (size_t i = 0; i < a.size(); i++) {
+            a[i].accept(&f);
+        }
+
+        Internal::debug(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
+
+        vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
+        for (int i = 0; i < f.count; i++) {
+            iter = a.insert(iter, Var::implicit(i));
+            iter++;
+        }
     }
-    Internal::debug(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
-    for (int i = 0; i < f.count; i++) {
-        a.push_back(Var::implicit(i));
-    }
+
+    return a;
 }
 
 void FuncRefExpr::operator=(Expr e) {
@@ -1062,9 +1151,7 @@ void FuncRefExpr::operator=(const Tuple &e) {
     assert(func.has_pure_definition() &&
            "Can't add a reduction definition to an undefined function");
 
-    vector<Expr> a = args;
-    add_implicit_vars(a, e.as_vector());
-
+    vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_reduction(args, e.as_vector());
 }
 
@@ -1103,29 +1190,25 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
 }
 
 void FuncRefExpr::operator+=(Expr e) {
-    vector<Expr> a = args;
-    add_implicit_vars(a, vec(e));
+    vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 0));
     (*this) = Expr(*this) + e;
 }
 
 void FuncRefExpr::operator*=(Expr e) {
-    vector<Expr> a = args;
-    add_implicit_vars(a, vec(e));
+    vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 1));
     (*this) = Expr(*this) * e;
 }
 
 void FuncRefExpr::operator-=(Expr e) {
-    vector<Expr> a = args;
-    add_implicit_vars(a, vec(e));
+    vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 0));
     (*this) = Expr(*this) - e;
 }
 
 void FuncRefExpr::operator/=(Expr e) {
-    vector<Expr> a = args;
-    add_implicit_vars(a, vec(e));
+    vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 1));
     (*this) = Expr(*this) / e;
 }
@@ -1692,5 +1775,9 @@ void Func::test() {
     std::cout << "Func test passed\n";
 
 }
+
+Var _("_");
+Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
+    _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }

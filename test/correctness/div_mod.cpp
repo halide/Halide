@@ -378,7 +378,7 @@ bool division() {
 
     // Compute division result and check it.
     Func f;
-    f() = a / b;  // Using Halide division operation.
+    f(_) = a / b;  // Using Halide division operation.
     f.realize(out);
 
     int ecount = 0;
@@ -458,7 +458,7 @@ bool mod() {
 
     // Compute modulus result and check it.
     Func f;
-    f() = a % b;  // Using Halide mod operation.
+    f(_) = a % b;  // Using Halide mod operation.
     f.realize(out);
 
     int ecount = 0;
@@ -535,7 +535,7 @@ bool f_mod() {
 
     // Compute modulus result and check it.
     Func f;
-    f() = a % b;  // Using Halide mod operation.
+    f(_) = a % b;  // Using Halide mod operation.
     f.realize(out);
 
     // Explicit checks of the simplifier for consistency with runtime computation
