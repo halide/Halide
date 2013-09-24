@@ -288,7 +288,13 @@ protected:
      * doing your own allocas. */
     llvm::Value *save_stack();
 
+    /** If you're doing an Alloca but can't clean it up right now, set
+     * this to high and it will get cleaned up at the close of the
+     * next For loop. */
+    bool need_stack_restore;
+
 private:
+
     /** All the values in scope at the current code location during
      * codegen. Use sym_push and sym_pop to access. */
     Scope<llvm::Value *> symbol_table;
