@@ -29,10 +29,11 @@ class FuncRefExpr;
 
 class FuncRefVar {
     Internal::Function func;
+    int implicit_placeholder_pos;
     std::vector<std::string> args;
-    void add_implicit_vars(std::vector<std::string> &args, const std::vector<Expr> &e) const;
+    std::vector<std::string> args_with_implicit_vars(const std::vector<Expr> &e) const;
 public:
-    FuncRefVar(Internal::Function, const std::vector<Var> &);
+    FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
 
     /**  Use this as the left-hand-side of a definition. */
     EXPORT void operator=(Expr);
@@ -99,11 +100,14 @@ public:
  */
 class FuncRefExpr {
     Internal::Function func;
+    int implicit_placeholder_pos;
     std::vector<Expr> args;
-    void add_implicit_vars(std::vector<Expr> &args, const std::vector<Expr> &e) const;
+    std::vector<Expr> args_with_implicit_vars(const std::vector<Expr> &e) const;
 public:
-    FuncRefExpr(Internal::Function, const std::vector<Expr> &);
-    FuncRefExpr(Internal::Function, const std::vector<std::string> &);
+    FuncRefExpr(Internal::Function, const std::vector<Expr> &,
+                int placeholder_pos = -1);
+    FuncRefExpr(Internal::Function, const std::vector<std::string> &,
+                int placeholder_pos = -1);
 
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
@@ -337,8 +341,8 @@ class Func {
      * up with 'implicit' vars with canonical names. This lets you
      * pass around partially-applied halide functions. */
     // @{
-    void add_implicit_vars(std::vector<Var> &) const;
-    void add_implicit_vars(std::vector<Expr> &) const;
+    int add_implicit_vars(std::vector<Var> &) const;
+    int add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
     /** The lowered imperative form of this function. Cached here so
@@ -1066,11 +1070,11 @@ public:
      Func f, g;
      Var x;
      g(x) = ...
-     f() = g * 2;
+     f(_) = g * 2;
      \endcode
     */
     operator Expr() const {
-        return (*this)();
+        return (*this)(_);
     }
 
     /** Use a Func as an argument to an external stage. */
@@ -1087,7 +1091,7 @@ template<typename T>
 T evaluate(Expr e) {
     assert(e.type() == type_of<T>());
     Func f;
-    f() = e;
+    f(_) = e;
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1099,7 +1103,7 @@ void evaluate(Tuple t, A *a, B *b) {
     assert(t[0].type() == type_of<A>());
     assert(t[1].type() == type_of<B>());
     Func f;
-    f() = t;
+    f(_) = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1111,7 +1115,7 @@ void evaluate(Tuple t, A *a, B *b, C *c) {
     assert(t[1].type() == type_of<B>());
     assert(t[2].type() == type_of<C>());
     Func f;
-    f() = t;
+    f(_) = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1125,7 +1129,7 @@ void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
     assert(t[2].type() == type_of<C>());
     assert(t[3].type() == type_of<D>());
     Func f;
-    f() = t;
+    f(_) = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1135,5 +1139,6 @@ void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
 // @}
 
 }
+
 
 #endif
