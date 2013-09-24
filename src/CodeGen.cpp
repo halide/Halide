@@ -1207,7 +1207,6 @@ void CodeGen::visit(const Call *op) {
             // Make some memory for this buffer_t
             const Call *c = op->args[0].as<Call>();
 
-            // TODO: What if this happens in an inner loop?
             Value *buffer = builder->CreateAlloca(buffer_t, ConstantInt::get(i32, 1));
 
             // Populate the fields
@@ -1297,8 +1296,6 @@ void CodeGen::visit(const Call *op) {
             // Codegen the value index. Should be the same for all lanes.
             Value *value_index = codegen(unbroadcast(op->args[2]));
 
-            Value *saved_stack = save_stack();
-
             // Allocate and populate a stack entry for the value arg
             Type type = op->args[3].type();
             Value *value_stored_array = builder->CreateAlloca(llvm_type_of(type), ConstantInt::get(i32, 1));
@@ -1339,8 +1336,6 @@ void CodeGen::visit(const Call *op) {
 
             // Evaluates to the value arg
             value = value_stored;
-
-            restore_stack(saved_stack);
 
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);
@@ -1575,8 +1570,18 @@ void CodeGen::visit(const For *op) {
         // Within the loop, the variable is equal to the phi value
         sym_push(op->name, phi);
 
+        // Save the stack in case the loop body does Allocas. Note
+        // that this makes it impossible to alloca a bunch of stuff
+        // inside a Halide for loop and use it afterwards. I'm not
+        // sure why you would ever do that, as it's not expressible in
+        // Halide IR, and it could make the stack huge if the loop
+        // counter is large.
+        Value *saved_stack = save_stack();
+
         // Emit the loop body
         codegen(op->body);
+
+        restore_stack(saved_stack);
 
         // Update the counter
         Value *next_var = builder->CreateNSWAdd(phi, ConstantInt::get(i32, 1));
