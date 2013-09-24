@@ -89,7 +89,7 @@ private:
         if (!is_placeholder && !placeholder_seen &&
             (int)args.size() == total_args &&
             (int)args.size() < dims) {
-            std::cout << "Implicit arguments without placeholders ('_') are deprecated."
+            std::cout << "Implicit arguments without placeholders ('_') are deprecated. "
                       << "Adding " << dims - args.size()
                       << " arguments to Image " << buffer.name() << '\n';
             int i = 0;
