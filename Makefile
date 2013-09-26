@@ -146,7 +146,7 @@ RUNTIME_OPTS_x86_32 = -m32 -march=k8
 RUNTIME_OPTS_x86_32_sse41 = -m32 -march=penryn
 RUNTIME_OPTS_arm = -m32
 RUNTIME_OPTS_arm_android = -m32
-RUNTIME_OPTS_arm_ios = -m32 -triple=armv7-apple-ios
+RUNTIME_OPTS_arm_ios = -m32 -march=cortex-a9 -Xclang -triple=armv7-apple-ios
 RUNTIME_OPTS_opencl_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host_debug = $(RUNTIME_OPTS_x86_64)
