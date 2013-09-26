@@ -107,6 +107,9 @@ public:
 
     /** Construct a new function with the given name */
     Function(const std::string &n) : contents(new FunctionContents) {
+        for (size_t i = 0; i < n.size(); i++) {
+            assert(n[i] != '.' && "Func names may not contain the character '.', as it is used internally by Halide as a separator");
+        }
         contents.ptr->name = n;
     }
 
