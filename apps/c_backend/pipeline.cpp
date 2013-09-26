@@ -12,6 +12,9 @@ int main(int argc, char **argv) {
     f(x, y) = (input(clamp(x+2, 0, input.width()-1), clamp(y-2, 0, input.height()-1)) * 17)/13;
     g(x, y) = f(y, x) + f(x, y);
 
+    f.compute_root();
+    f.debug_to_file("f.tiff");
+
     std::vector<Argument> args;
     args.push_back(input);
 

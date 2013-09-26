@@ -498,14 +498,17 @@ void CodeGen_C::visit(const Call *op) {
     // Handle intrinsics first
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::debug_to_file) {
-            assert(op->args.size() == 8);
-            string filename = op->args[0].as<Call>()->name;
-            string func = op->args[1].as<Call>()->name;
-
+            assert(op->args.size() == 9);
+            const StringImm *string_imm = op->args[0].as<StringImm>();
+            assert(string_imm);
+            string filename = string_imm->value;
+            const Load *load = op->args[1].as<Load>();
+            assert(load);
+            string func = load->name;
 
             vector<string> args(6);
             for (size_t i = 0; i < args.size(); i++) {
-                args[i] = print_expr(op->args[i+2]);
+                args[i] = print_expr(op->args[i+3]);
             }
 
             rhs << "halide_debug_to_file(\"" + filename + "\", " + func;

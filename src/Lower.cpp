@@ -1550,7 +1550,7 @@ Stmt lower(Function f) {
     debug(2) << "Storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
-    s = debug_to_file(s, env);
+    s = debug_to_file(s, order[order.size()-1], env);
     debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Performing storage flattening...\n";
