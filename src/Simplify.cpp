@@ -1146,6 +1146,8 @@ class Simplify : public IRMutator {
         IRMutator::visit(op);
     }
 
+
+
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
         assert(!var_info.contains(op->name) && "Simplify only works on code where every name is unique\n");
@@ -1154,98 +1156,73 @@ class Simplify : public IRMutator {
         // we can subs it in later
         Expr value = mutate(op->value);
         Body body = op->body;
-        assert(value.defined());
-        assert(body.defined());
-        const Ramp *ramp = value.as<Ramp>();
-        const Broadcast *broadcast = value.as<Broadcast>();
-        const Variable *var = value.as<Variable>();
-        const Mul *mul = value.as<Mul>();
-        const Add *add = value.as<Add>();
-        const Div *div = value.as<Div>();
-        const Sub *sub = value.as<Sub>();
 
-        Expr new_value;
-        string new_name;
+        // Iteratively peel off certain operations from the let value and push them inside.
+        Expr new_value = value;
+        string new_name = op->name + ".s";
+        Expr new_var = Variable::make(new_value.type(), new_name);
+        Expr replacement = new_var;
+
+        debug(4) << "simplify let " << op->name << " = " << value << " in ... " << op->name << " ...\n";
+
+        while (1) {
+            const Variable *var = new_value.as<Variable>();
+            const Add *add = new_value.as<Add>();
+            const Sub *sub = new_value.as<Sub>();
+            const Mul *mul = new_value.as<Mul>();
+            const Div *div = new_value.as<Div>();
+            const Mod *mod = new_value.as<Mod>();
+            const Ramp *ramp = new_value.as<Ramp>();
+            const Broadcast *broadcast = new_value.as<Broadcast>();
+
+            if (is_const(new_value)) {
+                replacement = substitute(new_name, new_value, replacement);
+                new_value = Expr();
+                break;
+            } else if (var) {
+                replacement = substitute(new_name, var, replacement);
+                new_value = Expr();
+                break;
+            } else if (add && is_const(add->b)) {
+                replacement = substitute(new_name, Add::make(new_var, add->b), replacement);
+                new_value = add->a;
+            } else if (mul && is_const(mul->b)) {
+                replacement = substitute(new_name, Mul::make(new_var, mul->b), replacement);
+                new_value = mul->a;
+            } else if (div && is_const(div->b)) {
+                replacement = substitute(new_name, Div::make(new_var, div->b), replacement);
+                new_value = div->a;
+            } else if (sub && is_const(sub->b)) {
+                replacement = substitute(new_name, Sub::make(new_var, sub->b), replacement);
+                new_value = sub->a;
+            } else if (mod && is_const(mod->b)) {
+                replacement = substitute(new_name, Mod::make(new_var, mod->b), replacement);
+                new_value = mod->a;
+            } else if (ramp && is_const(ramp->stride)) {
+                new_var = Variable::make(new_value.type().element_of(), new_name);
+                replacement = substitute(new_name, Ramp::make(new_var, ramp->stride, ramp->width), replacement);
+                new_value = ramp->base;
+            } else if (broadcast) {
+                new_var = Variable::make(new_value.type().element_of(), new_name);
+                replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
+                new_value = broadcast->value;
+            } else {
+                break;
+            }
+        }
+
+        if (new_value.same_as(value)) {
+            // Nothing to substitute
+            new_value = Expr();
+            replacement = Expr();
+        } else {
+            debug(4) << "new let " << new_name << " = " << new_value << " in ... " << replacement << " ...\n";
+        }
 
         VarInfo info;
         info.old_uses = 0;
         info.new_uses = 0;
-
-        // Blindly push all vector expressions inside to help peephole matching later.
-        if (value.type().width > 1) {
-            info.replacement = value;
-        } else if (is_const(value)) {
-            // Substitute the value wherever we see it and remove this let statement
-            info.replacement = value;
-        } else if (ramp && is_simple_const(ramp->stride)) {
-
-            // Make a new name to refer to the base instead, and push the ramp inside
-            new_name = op->name + ".base";
-            Expr val = Variable::make(ramp->base.type(), new_name);
-            Expr base = ramp->base;
-
-            // If it's a multiply, move the multiply part inwards
-            const Mul *mul = base.as<Mul>();
-            const IntImm *mul_b = mul ? mul->b.as<IntImm>() : NULL;
-            if (mul_b) {
-                base = mul->a;
-                val = Ramp::make(val * mul->b, ramp->stride, ramp->width);
-            } else {
-                val = Ramp::make(val, ramp->stride, ramp->width);
-            }
-
-            info.replacement = val;
-
-            new_value = base;
-        } else if (broadcast) {
-            // Make a new name to refer to the scalar version, and push the broadcast inside
-            new_name = op->name + ".base";
-            info.replacement =
-                Broadcast::make(Variable::make(broadcast->value.type(),
-                                               new_name),
-                                broadcast->width);
-            new_value = broadcast->value;
-        } else if (value.type() == Int(32) && mul && is_const(mul->b)) {
-            // Multiplication by a scalar. Push the scalar inside.
-            if (mul->a.as<Variable>()) {
-                info.replacement = value;
-            } else {
-                new_name = op->name + ".lhs";
-                info.replacement = Variable::make(value.type(), new_name) * mul->b;
-                new_value = mul->a;
-            }
-        } else if (value.type() == Int(32) && add && is_const(add->b)) {
-            // Addition of a scalar. Push the scalar inside.
-            if (add->a.as<Variable>()) {
-                info.replacement = value;
-            } else {
-                new_name = op->name + ".lhs";
-                info.replacement = Variable::make(value.type(), new_name) + add->b;
-                new_value = add->a;
-            }
-        } else if (value.type() == Int(32) && div && is_const(div->b)) {
-            // Division by a scalar. Push the scalar inside.
-            if (div->a.as<Variable>()) {
-                info.replacement = value;
-            } else {
-                new_name = op->name + ".lhs";
-                info.replacement = Variable::make(value.type(), new_name) / div->b;
-                new_value = div->a;
-            }
-        } else if (value.type() == Int(32) && sub && is_const(sub->b)) {
-            if (sub->a.as<Variable>()) {
-                info.replacement = value;
-            } else {
-                // Subtraction of a scalar. Push the scalar inside.
-                new_name = op->name + ".lhs";
-                info.replacement = Variable::make(value.type(), new_name) - sub->b;
-                new_value = sub->a;
-            }
-        } else if (var) {
-            // This var is just equal to another var. We should subs
-            // it in.
-            info.replacement = var;
-        }
+        info.replacement = replacement;
 
         var_info.push(op->name, info);
 
@@ -1257,7 +1234,7 @@ class Simplify : public IRMutator {
             new_value_tracked = true;
         }
         bool value_tracked = false;
-        if (value.defined() && value.type() == Int(32)) {
+        if (value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
             alignment_info.push(op->name, mod_rem);
             value_tracked = true;
