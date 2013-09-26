@@ -8,9 +8,9 @@ extern "C" {
 
 extern void __android_log_vprint(int, const char *, const char *, va_list);
 
-extern uint32_t fwrite(void *, uint32_t, uint32_t, void *);
+extern size_t fwrite(const void *, size_t, size_t, void *);
 extern void *fopen(const char *, const char *);
-extern void fclose(void *);
+extern int fclose(void *);
 
 WEAK int halide_printf(const char * fmt, ...) {
     va_list args;
