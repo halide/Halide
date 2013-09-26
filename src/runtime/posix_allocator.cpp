@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 
+#ifndef _SIZE_T
 #ifdef __APPLE__
 typedef unsigned long size_t;
 #else
@@ -11,10 +12,13 @@ typedef uint64_t size_t;
 typedef uint32_t size_t;
 #endif
 #endif
+#endif
+
 #define WEAK __attribute__((weak))
 #ifndef NULL
 #define NULL 0
 #endif
+
 
 extern "C" {
 
