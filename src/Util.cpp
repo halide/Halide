@@ -58,7 +58,7 @@ string unique_name(const string &name) {
     // Check the '$' character doesn't appear in the prefix. This lets
     // us separate the name from the number using '$' as a delimiter,
     // which guarantees uniqueness of the generated name, without
-    // having to track all name generated so far.
+    // having to track all names generated so far.
     for (size_t i = 0; i < name.length(); i++) {
         assert(name[i] != '$' && "names passed to unique_name may not contain the character '$'");
     }
