@@ -461,7 +461,7 @@ bool test(int vec_width) {
                 if (std::isfinite(correct_pow) && a > 0)
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
 
-                if (log_mantissa_error > 2) {
+                if (log_mantissa_error > 8) {
                     printf("log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, im15(x, y), correct_log, correct_log_mantissa, log_mantissa);
                 }
@@ -517,7 +517,7 @@ bool test(int vec_width) {
             double b = (double)(input(x+1, y));
             double w = (double)(input(x+2, y));
             if (w < 0) w = 0;
-            if (!t.is_float()) {                
+            if (!t.is_float()) {
                 uint64_t divisor = 1;
                 divisor <<= t.bits;
                 divisor -= 1;
