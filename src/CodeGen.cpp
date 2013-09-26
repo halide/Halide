@@ -1508,11 +1508,18 @@ void CodeGen::visit(const AssertStmt *op) {
 }
 
 Value *CodeGen::create_string_constant(const string &s) {
-    llvm::Type *str_type = ArrayType::get(i8, s.size()+1);
-    GlobalVariable *str_global = new GlobalVariable(*module, str_type,
-                                                    true, GlobalValue::PrivateLinkage, 0);
-    str_global->setInitializer(ConstantDataArray::getString(*context, s));
-    return builder->CreateConstInBoundsGEP2_32(str_global, 0, 0);
+    map<string, Value *>::iterator iter = string_constants.find(s);
+    if (iter == string_constants.end()) {
+        llvm::Type *str_type = ArrayType::get(i8, s.size()+1);
+        GlobalVariable *str_global = new GlobalVariable(*module, str_type,
+                                                        true, GlobalValue::PrivateLinkage, 0);
+        str_global->setInitializer(ConstantDataArray::getString(*context, s));
+        llvm::Value *val = builder->CreateConstInBoundsGEP2_32(str_global, 0, 0);
+        string_constants[s] = val;
+        return val;
+    } else {
+        return iter->second;
+    }
 }
 
 void CodeGen::create_assertion(Value *cond, const string &message) {

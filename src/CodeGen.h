@@ -302,6 +302,9 @@ private:
     /** Alignment info for Int(32) variables in scope. */
     Scope<ModulusRemainder> alignment_info;
 
+    /** String constants already emitted to the module. Tracked to
+     * prevent emitting the same string many times. */
+    std::map<std::string, llvm::Value *> string_constants;
 };
 
 }}
