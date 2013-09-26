@@ -100,8 +100,31 @@ public:
     DebugToFile(const map<string, Function> &e) : env(e) {}
 };
 
-Stmt debug_to_file(Stmt s, const map<string, Function> &env) {
-    return DebugToFile(env).mutate(s);
+Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
+    // Temporarily wrap the statement in a realize node for the output function
+    Function out = env.find(output)->second;
+    std::vector<Range> output_bounds;
+    for (int i = 0; i < out.dimensions(); i++) {
+        string dim = int_to_string(i);
+        Expr min    = Variable::make(Int(32), output + ".min." + dim);
+        Expr extent = Variable::make(Int(32), output + ".extent." + dim);
+        output_bounds.push_back(Range(min, extent));
+    }
+    s = Realize::make(output, out.output_types(), output_bounds, s);
+    s = DebugToFile(env).mutate(s);
+
+    // Remove the realize node we wrapped around the output
+    if (const Realize *r = s.as<Realize>()) {
+        s = r->body;
+    } else if (const Block *b = s.as<Block>()) {
+        const Realize *r = b->rest.as<Realize>();
+        assert(r);
+        s = Block::make(b->first, r->body);
+    } else {
+        assert(false);
+    }
+
+    return s;
 }
 
 }
