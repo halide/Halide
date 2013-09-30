@@ -19,8 +19,11 @@ int main(int argc, char **argv) {
     dst.compile_to_assembly("memcpy.s", Internal::vec<Argument>(src), "memcpy");
     dst.compile_jit();
 
-    Image<uint8_t> input(12345678);
-    Image<uint8_t> output(12345678);
+    const int32_t buffer_size = 12345678;
+    const int iterations = 50;
+
+    Image<uint8_t> input(buffer_size);
+    Image<uint8_t> output(buffer_size);
 
     src.set(input);
 
@@ -28,7 +31,7 @@ int main(int argc, char **argv) {
     dst.realize(output);
 
     double halide = 0, system = 0;
-    for (int i = 0; i < 50; i++) {
+    for (int i = 0; i < iterations; i++) {
         double t1 = currentTime();
         dst.realize(output);
         dst.realize(output);
@@ -42,8 +45,8 @@ int main(int argc, char **argv) {
         halide += t2-t1;
     }
 
-    printf("system memcpy: %f\n", system);
-    printf("halide memcpy: %f\n", halide);
+    printf("system memcpy: %.3e byte/s\n", (buffer_size / system) * 1000 * iterations);
+    printf("halide memcpy: %.3e byte/s\n", (buffer_size / halide) * 1000 * iterations);
 
     // memcpy will win by a little bit for large inputs because it uses streaming stores
     if (halide > system * 2) {
