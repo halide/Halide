@@ -23,9 +23,12 @@ int main(int argc, char **argv) {
     dst.reorder(c, x, y).unroll(c);
     dst.vectorize(x, 16);
 
+    // Run test many times to avoid timing jitter
+    const int iterations = 20;
+
     // Allocate two 16 megapixel, 3 channel, 8-bit images -- input and output
-    const int32_t buffer_size = 1 << 24;
-    const int32_t buffer_side_length = 1 << 12;
+    const int32_t buffer_side_length = (1 << 12);
+    const int32_t buffer_size = buffer_side_length * buffer_side_length;
 
     uint8_t *src_storage(new uint8_t[buffer_size * 3]);
     uint8_t *dst_storage(new uint8_t[buffer_size * 3]);
@@ -65,16 +68,23 @@ int main(int argc, char **argv) {
           src_image(x, y, 2) = 255;
         }
     }
+    memset(dst_storage, 0, buffer_size);
 
     src.set(src_image);
 
     dst.compile_jit();
 
-    double t1 = currentTime();
+    // Warm up caches, etc.
     dst.realize(dst_image);
+
+    double t1 = currentTime();
+
+    for (int i = 0; i < iterations; i++)
+        dst.realize(dst_image);
+
     double t2 = currentTime();
 
-    printf("Interelaved to planar bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000);
+    printf("Interelaved to planar bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000 * iterations);
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
         for (int32_t y = 0; y < buffer_side_length; y++) {
@@ -95,8 +105,13 @@ int main(int argc, char **argv) {
     dst_buffer.stride[2] = dst_buffer.extent[0];
     dst_buffer.elem_size = 1;
 
+    memset(dst_storage, 0, buffer_size);
+
     double t3 = currentTime();
-    dst.realize(dst_image);
+
+    for (int i = 0; i < iterations; i++)
+        dst.realize(dst_image);
+
     double t4 = currentTime();
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
@@ -107,7 +122,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Interelaved to semi-planar bandwidth %.3e byte/s.\n", (buffer_size / (t4 - t3)) * 1000);
+    printf("Interelaved to semi-planar bandwidth %.3e byte/s.\n", (buffer_size / (t4 - t3)) * 1000 * iterations);
 
     delete[] src_storage;
     delete[] dst_storage;
