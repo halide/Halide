@@ -20,39 +20,53 @@ inline Func lambda(Expr e) {
     return f;
 }
 
-/** Create a 1-D halide function in the first argument that returns the
- * second argument. The function may have more dimensions if the expression
- * contains implicit arguments. */
+/** Create a 1-D halide function in the first argument that returns
+ * the second argument. The function may have more dimensions if the
+ * expression contains implicit arguments and the list of Var
+ * arguments contains a placeholder ("_"). */
 inline Func lambda(Var x, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, _) = e;
+    f(x) = e;
     return f;
 }
 
-/** Create a 2-D halide function in the first two arguments that returns the
- * last argument. The function may have more dimensions if the expression
- * contains implicit arguments. */
+/** Create a 2-D halide function in the first two arguments that
+ * returns the last argument. The function may have more dimensions if
+ * the expression contains implicit arguments and the list of Var
+ * arguments contains a placeholder ("_"). */
 inline Func lambda(Var x, Var y, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, y, _) = e;
+    f(x, y) = e;
     return f;
 }
 
-/** Create a 3-D halide function in the first three arguments that returns the
- * last argument.  The function may have more dimensions if the expression
- * contains implicit arguments. */
+/** Create a 3-D halide function in the first three arguments that
+ * returns the last argument.  The function may have more dimensions
+ * if the expression contains implicit arguments and the list of Var
+ * arguments contains a placeholder ("_"). */
 inline Func lambda(Var x, Var y, Var z, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, y, z, _) = e;
+    f(x, y, z) = e;
     return f;
 }
 
-/** Create a 4-D halide function in the first four arguments that returns the
- * last argument. The function may have more dimensions if the expression
- * contains implicit arguments. */
+/** Create a 4-D halide function in the first four arguments that
+ * returns the last argument. The function may have more dimensions if
+ * the expression contains implicit arguments and the list of Var
+ * arguments contains a placeholder ("_"). */
 inline Func lambda(Var x, Var y, Var z, Var w, Expr e) {
     Func f("lambda" + Internal::unique_name('_'));
-    f(x, y, z, w, _) = e;
+    f(x, y, z, w) = e;
+    return f;
+}
+
+/** Create a 5-D halide function in the first five arguments that
+ * returns the last argument. The function may have more dimensions if
+ * the expression contains implicit arguments and the list of Var
+ * arguments contains a placeholder ("_"). */
+inline Func lambda(Var x, Var y, Var z, Var w, Var v, Expr e) {
+    Func f("lambda" + Internal::unique_name('_'));
+    f(x, y, z, w, v) = e;
     return f;
 }
 
