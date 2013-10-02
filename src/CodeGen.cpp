@@ -1536,8 +1536,8 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     }
 
     // Make a new basic block for the assert
-    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert_failed", function);
-    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "after_assert", function);
+    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert failed: " + message, function);
+    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded: " + message, function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
     builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
@@ -1566,8 +1566,21 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
 }
 
 void CodeGen::visit(const Pipeline *op) {
+    BasicBlock *produce = BasicBlock::Create(*context, std::string("produce ") + op->name, function);
+    builder->CreateBr(produce);
+    builder->SetInsertPoint(produce);
     codegen(op->produce);
-    if (op->update.defined()) codegen(op->update);
+
+    if (op->update.defined()) {
+        BasicBlock *update = BasicBlock::Create(*context, std::string("update ") + op->name, function);
+        builder->CreateBr(update);
+        builder->SetInsertPoint(update);
+        codegen(op->update);
+    }
+
+    BasicBlock *consume = BasicBlock::Create(*context, std::string("consume ") + op->name, function);
+    builder->CreateBr(consume);
+    builder->SetInsertPoint(consume);
     codegen(op->consume);
 }
 
@@ -1581,9 +1594,9 @@ void CodeGen::visit(const For *op) {
         BasicBlock *preheader_bb = builder->GetInsertBlock();
 
         // Make a new basic block for the loop
-        BasicBlock *loop_bb = BasicBlock::Create(*context, op->name + "_loop", function);
+        BasicBlock *loop_bb = BasicBlock::Create(*context, std::string("for ") + op->name, function);
         // Create the block that comes after the loop
-        BasicBlock *after_bb = BasicBlock::Create(*context, op->name + "_after_loop", function);
+        BasicBlock *after_bb = BasicBlock::Create(*context, std::string("end for ") + op->name, function);
 
         // If min < max, fall through to the loop bb
         Value *enter_condition = builder->CreateICmpSLT(min, max);
@@ -1651,7 +1664,7 @@ void CodeGen::visit(const For *op) {
         // Make a new function that does one iteration of the body of the loop
         FunctionType *func_t = FunctionType::get(i32, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
         llvm::Function *containing_function = function;
-        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par_for_" + op->name, module);
+        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par for " + op->name, module);
         function->setDoesNotAlias(2);
 
         // Make the initial basic block and jump the builder into the new function
