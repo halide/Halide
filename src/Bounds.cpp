@@ -700,7 +700,7 @@ private:
                 if (!op->args[i].type().is_handle()) {
                     bounds = bounds_of_expr_in_scope(op->args[i], scope);
                     debug(3) << "Bounds of call to " << op->name << " in dimension " << i << ": "
-                             << simplify(bounds.min) << ", " << simplify(bounds.max) << "\n";
+                             << bounds.min << ", " << bounds.max << "\n";
                 }
 
                 if (r.size() > i) {
