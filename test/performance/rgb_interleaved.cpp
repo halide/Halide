@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
 
     double t2 = currentTime();
 
-    printf("Interelaved to planar bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000 * iterations);
+    printf("Interleaved to planar bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000 * iterations);
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
         for (int32_t y = 0; y < buffer_side_length; y++) {
@@ -122,11 +122,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("Interelaved to semi-planar bandwidth %.3e byte/s.\n", (buffer_size / (t4 - t3)) * 1000 * iterations);
+    printf("Interleaved to semi-planar bandwidth %.3e byte/s.\n", (buffer_size / (t4 - t3)) * 1000 * iterations);
 
     delete[] src_storage;
     delete[] dst_storage;
-   
+
     printf("Success!\n");
     return 0;
 }
