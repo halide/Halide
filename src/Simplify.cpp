@@ -183,6 +183,11 @@ class Simplify : public IRMutator {
         // on cases to check
         if (is_simple_const(a) && !is_simple_const(b)) std::swap(a, b);
 
+        // Rearrange a + min or a + max to min + a or max + a to cut down on cases to check
+        if (b.as<Min>() || b.as<Max>()) {
+            std::swap(a, b);
+        }
+
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
@@ -193,6 +198,26 @@ class Simplify : public IRMutator {
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+
+        const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
+        const Mod *mod_a = a.as<Mod>();
+        const Mod *mod_b = b.as<Mod>();
+
+        const Mul *mul_a_a = add_a ? add_a->a.as<Mul>(): NULL;
+        const Mod *mod_a_a = add_a ? add_a->a.as<Mod>(): NULL;
+        const Mul *mul_a_b = add_a ? add_a->b.as<Mul>(): NULL;
+        const Mod *mod_a_b = add_a ? add_a->b.as<Mod>(): NULL;
+
+        const Min *min_a = a.as<Min>();
+        const Max *max_a = a.as<Max>();
+        const Sub *sub_a_a = min_a ? min_a->a.as<Sub>() : NULL;
+        const Sub *sub_a_b = min_a ? min_a->b.as<Sub>() : NULL;
+        const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
+        const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
+        sub_a_a = max_a ? max_a->a.as<Sub>() : sub_a_a;
+        sub_a_b = max_a ? max_a->b.as<Sub>() : sub_a_b;
+        add_a_a = max_a ? max_a->a.as<Add>() : add_a_a;
+        add_a_b = max_a ? max_a->b.as<Add>() : add_a_b;
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
@@ -236,11 +261,40 @@ class Simplify : public IRMutator {
             expr = mutate((a + add_b->a) + add_b->b);
         } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
             expr = mutate((sub_a->a + b) - sub_a->b);
+
         } else if (sub_a && equal(b, sub_a->b)) {
             // Additions that cancel an inner term
+            // (a - b) + b
             expr = sub_a->a;
         } else if (sub_b && equal(a, sub_b->b)) {
+            // a + (b - a)
             expr = sub_b->a;
+
+        } else if (min_a && sub_a_b && equal(sub_a_b->b, b)) {
+            // min(a, b-c) + c -> min(a+c, b)
+            expr = mutate(Min::make(Add::make(min_a->a, b), sub_a_b->a));
+        } else if (min_a && sub_a_a && equal(sub_a_a->b, b)) {
+            // min(a-c, b) + c -> min(a, b+c)
+            expr = mutate(Min::make(sub_a_a->a, Add::make(min_a->b, b)));
+        } else if (max_a && sub_a_b && equal(sub_a_b->b, b)) {
+            // max(a, b-c) + c -> max(a+c, b)
+            expr = mutate(Max::make(Add::make(max_a->a, b), sub_a_b->a));
+        } else if (max_a && sub_a_a && equal(sub_a_a->b, b)) {
+            // max(a-c, b) + c -> max(a, b+c)
+            expr = mutate(Max::make(sub_a_a->a, Add::make(max_a->b, b)));
+
+        } else if (min_a && add_a_b && const_int(add_a_b->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
+            // min(a, b + (-2)) + 2 -> min(a + 2, b)
+            expr = mutate(Min::make(Add::make(min_a->a, b), add_a_b->a));
+        } else if (min_a && add_a_a && const_int(add_a_a->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
+            // min(a + (-2), b) + 2 -> min(a, b + 2)
+            expr = mutate(Min::make(add_a_a->a, Add::make(min_a->b, b)));
+        } else if (max_a && add_a_b && const_int(add_a_b->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
+            // max(a, b + (-2)) + 2 -> max(a + 2, b)
+            expr = mutate(Max::make(Add::make(max_a->a, b), add_a_b->a));
+        } else if (max_a && add_a_a && const_int(add_a_a->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
+            // max(a + (-2), b) + 2 -> max(a, b + 2)
+            expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b + mul_b->b));
@@ -250,6 +304,32 @@ class Simplify : public IRMutator {
             expr = mutate(mul_a->b * (mul_a->a + mul_b->a));
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->b)) {
             expr = mutate(mul_a->a * (mul_a->b + mul_b->a));
+
+        } else if (mod_a && mul_b && equal(mod_a->b, mul_b->b)) {
+            // (x%3) + y*3 -> y*3 + x%3
+            expr = mutate(b + a);
+        } else if (mul_a && mod_b && div_a_a &&
+                   equal(mul_a->b, div_a_a->b) &&
+                   equal(mul_a->b, mod_b->b) &&
+                   equal(div_a_a->a, mod_b->a)) {
+            // (x/3)*3 + x%3 -> x
+            expr = div_a_a->a;
+        } else if (add_a && mul_a_a && mod_b &&
+                   equal(mul_a_a->b, mod_b->b)) {
+            // ((x*3) + y) + z%3 -> (x*3 + z%3) + y
+            expr = mutate((add_a->a + b) + add_a->b);
+        } else if (add_a && mod_a_a && mul_b &&
+                   equal(mod_a_a->b, mul_b->b)) {
+            // ((x%3) + y) + z*3 -> (z*3 + x%3) + y
+            expr = mutate((b + add_a->a) + add_a->b);
+        } else if (add_a && mul_a_b && mod_b &&
+                   equal(mul_a_b->b, mod_b->b)) {
+            // (y + (x*3)) + z%3 -> y + (x*3 + z%3)
+            expr = mutate(add_a->a + (add_a->b + b));
+        } else if (add_a && mod_a_b && mul_b &&
+                   equal(mod_a_b->b, mul_b->b)) {
+            // (y + (x%3)) + z*3 -> y + (z*3 + x%3)
+            expr = mutate(add_a->a + (b + add_a->b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             // If we've made no changes, and can't find a rule to apply, return the operator unchanged.
             expr = op;
@@ -276,10 +356,12 @@ class Simplify : public IRMutator {
         const Mul *mul_b = b.as<Mul>();
 
         const Min *min_b = b.as<Min>();
+        const Max *max_b = b.as<Max>();
         const Add *add_b_a = min_b ? min_b->a.as<Add>() : NULL;
         const Add *add_b_b = min_b ? min_b->b.as<Add>() : NULL;
 
         const Min *min_a = a.as<Min>();
+        const Max *max_a = a.as<Max>();
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
 
@@ -393,6 +475,19 @@ class Simplify : public IRMutator {
         } else if (min_a && add_a_b && equal(b, add_a_b->b)) {
             // min(c, b + a) - a -> min(b, c-a)
             expr = mutate(min(add_a_b->a, min_a->a - b));
+
+        } else if (false && !op->type.is_uint() && max_a && min_b &&
+                   ((equal(max_a->a, min_b->a) && equal(max_a->b, min_b->b)) ||
+                    (equal(max_a->a, min_b->b) && equal(max_a->b, min_b->a)))) {
+            Expr diff = max_a->a - max_a->b;
+            // max(a, b) - min(a, b) -> max(a - b, -(a - b))
+            expr = abs(diff);
+        } else if (false && !op->type.is_uint() && min_a && max_b &&
+                   ((equal(min_a->a, max_b->a) && equal(min_a->b, max_b->b)) ||
+                    (equal(min_a->a, max_b->b) && equal(min_a->b, max_b->a)))) {
+            // min(a, b) - max(a, b) -> min(a - b, -(a - b))
+            Expr diff = min_a->a - min_a->b;
+            expr = -abs(mutate(diff));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -615,6 +710,9 @@ class Simplify : public IRMutator {
         const Max *max_a = a.as<Max>();
         const Max *max_b = b.as<Max>();
 
+        min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
+        const Min *min_b_a = max_b ? max_b->a.as<Min>(): NULL;
+
         // Detect if the lhs or rhs is a rounding-up operation
         int a_round_up_factor = 0, b_round_up_factor = 0;
         Expr a_round_up = is_round_up(a, &a_round_up_factor);
@@ -667,14 +765,14 @@ class Simplify : public IRMutator {
                 expr = a;
             }
         } else if (add_a && const_int(add_a->b, &ia) && equal(add_a->a, b)) {
-            // min(x + 5, x)
+            // min(x + 5, x) -> x
             if (ia > 0) {
                 expr = b;
             } else {
                 expr = a;
             }
         } else if (add_b && const_int(add_b->b, &ib) && equal(add_b->a, a)) {
-            // min(x, x + 5)
+            // min(x, x + 5) -> x
             if (ib > 0) {
                 expr = a;
             } else {
@@ -688,18 +786,6 @@ class Simplify : public IRMutator {
             } else {
                 expr = b;
             }
-        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
-            // min(a + b, c + b) -> min(a, c) + b
-            expr = mutate(min(add_a->a, add_b->a)) + add_a->b;
-        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
-            // min(b + a, b + c) -> min(a, c) + b
-            expr = mutate(min(add_a->b, add_b->b)) + add_a->a;
-        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
-            // min(b + a, c + b) -> min(a, c) + b
-            expr = mutate(min(add_a->b, add_b->a)) + add_a->a;
-        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
-            // min(a + b, b + c) -> min(a, c) + b
-            expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
         } else if (a_round_up.defined() && equal(a_round_up, b)) {
             // min(((a + 3)/4)*4, a) -> a
             expr = b;
@@ -735,6 +821,62 @@ class Simplify : public IRMutator {
         } else if (min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
             // min(min(min(min(min(x, y), z), w), l), y) -> min(min(min(min(x, y), z), w), l)
             expr = a;
+
+        } else if (max_a && max_b && equal(max_a->a, max_b->a)) {
+            // Distributive law for min/max
+            // min(max(x, y), max(x, z)) -> max(min(y, z), x)
+            expr = mutate(Max::make(Min::make(max_a->b, max_b->b), max_a->a));
+        } else if (max_a && max_b && equal(max_a->a, max_b->b)) {
+            // min(max(x, y), max(z, x)) -> max(min(y, z), x)
+            expr = mutate(Max::make(Min::make(max_a->b, max_b->a), max_a->a));
+        } else if (max_a && max_b && equal(max_a->b, max_b->a)) {
+            // min(max(y, x), max(x, z)) -> max(min(y, z), x)
+            expr = mutate(Max::make(Min::make(max_a->a, max_b->b), max_a->b));
+        } else if (max_a && max_b && equal(max_a->b, max_b->b)) {
+            // min(max(y, x), max(z, x)) -> max(min(y, z), x)
+            expr = mutate(Max::make(Min::make(max_a->a, max_b->a), max_a->b));
+        } else if (min_a && min_b && equal(min_a->a, min_b->a)) {
+            // min(min(x, y), min(x, z)) -> min(min(y, z), x)
+            expr = mutate(Min::make(Min::make(min_a->b, min_b->b), min_a->a));
+        } else if (min_a && min_b && equal(min_a->a, min_b->b)) {
+            // min(min(x, y), min(z, x)) -> min(min(y, z), x)
+            expr = mutate(Min::make(Min::make(min_a->b, min_b->a), min_a->a));
+        } else if (min_a && min_b && equal(min_a->b, min_b->a)) {
+            // min(min(y, x), min(x, z)) -> min(min(y, z), x)
+            expr = mutate(Min::make(Min::make(min_a->a, min_b->b), min_a->b));
+        } else if (min_a && min_b && equal(min_a->b, min_b->b)) {
+            // min(min(y, x), min(z, x)) -> min(min(y, z), x)
+            expr = mutate(Min::make(Min::make(min_a->a, min_b->a), min_a->b));
+
+        } else if (max_a && min_a_a && max_b && min_b_a && equal(min_a_a->a, min_b_a->a)) {
+            // Min of two different clamps of the same thing
+            // min(max(min(x, z), y), max(min(x, w), v)) -> max(min(x, min(z, w)), min(y, v))
+            expr = mutate(Max::make(Min::make(min_a_a->a, Min::make(min_a_a->b, min_b_a->b)),
+                                    Min::make(max_a->b, max_b->b)));
+
+        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+            // Distributive law for addition
+            // min(a + b, c + b) -> min(a, c) + b
+            expr = mutate(min(add_a->a, add_b->a)) + add_a->b;
+        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+            // min(b + a, b + c) -> min(a, c) + b
+            expr = mutate(min(add_a->b, add_b->b)) + add_a->a;
+        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+            // min(b + a, c + b) -> min(a, c) + b
+            expr = mutate(min(add_a->b, add_b->a)) + add_a->a;
+        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+            // min(a + b, b + c) -> min(a, c) + b
+            expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
+
+
+        } else if (false && add_a && add_b && const_int(add_a->b, &ia) && const_int(add_b->b, &ib)) {
+            // Shuffle constants outside
+            // min(x + 2, y + 3) -> min(x, y + 1) + 2
+            expr = mutate(Min::make(add_a->a, add_b->a + (ib - ia)) + ia);
+        } else if (false && add_a && const_int(add_a->b, &ia) && const_int(b, &ib)) {
+            // min(x + 3, 5) -> min(x, 2) + 3
+            expr = mutate(Min::make(add_a->a, ib - ia) + ia);
+
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -764,6 +906,10 @@ class Simplify : public IRMutator {
         const Max *max_a_a_a = max_a_a ? max_a_a->a.as<Max>() : NULL;
         const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
         const Min *min_a = a.as<Min>();
+        const Min *min_b = b.as<Min>();
+
+        const Min *min_a_a = max_a ? max_a->a.as<Min>() : NULL;
+        const Min *min_b_a = max_b ? max_b->a.as<Min>() : NULL;
 
         if (equal(a, b)) {
             expr = a;
@@ -835,6 +981,61 @@ class Simplify : public IRMutator {
         } else if (max_a_a_a_a && equal(max_a_a_a_a->b, b)) {
             // max(max(max(max(max(x, y), z), w), l), y) -> max(max(max(max(x, y), z), w), l)
             expr = a;
+
+        } else if (max_a && max_b && equal(max_a->a, max_b->a)) {
+            // Distributive law for min/max
+            // max(max(x, y), max(x, z)) -> max(max(y, z), x)
+            expr = mutate(Max::make(Max::make(max_a->b, max_b->b), max_a->a));
+        } else if (max_a && max_b && equal(max_a->a, max_b->b)) {
+            // max(max(x, y), max(z, x)) -> max(max(y, z), x)
+            expr = mutate(Max::make(Max::make(max_a->b, max_b->a), max_a->a));
+        } else if (max_a && max_b && equal(max_a->b, max_b->a)) {
+            // max(max(y, x), max(x, z)) -> max(max(y, z), x)
+            expr = mutate(Max::make(Max::make(max_a->a, max_b->b), max_a->b));
+        } else if (max_a && max_b && equal(max_a->b, max_b->b)) {
+            // max(max(y, x), max(z, x)) -> max(max(y, z), x)
+            expr = mutate(Max::make(Max::make(max_a->a, max_b->a), max_a->b));
+        } else if (min_a && min_b && equal(min_a->a, min_b->a)) {
+            // max(min(x, y), min(x, z)) -> min(max(y, z), x)
+            expr = mutate(Min::make(Max::make(min_a->b, min_b->b), min_a->a));
+        } else if (min_a && min_b && equal(min_a->a, min_b->b)) {
+            // max(min(x, y), min(z, x)) -> min(max(y, z), x)
+            expr = mutate(Min::make(Max::make(min_a->b, min_b->a), min_a->a));
+        } else if (min_a && min_b && equal(min_a->b, min_b->a)) {
+            // max(min(y, x), min(x, z)) -> min(max(y, z), x)
+            expr = mutate(Min::make(Max::make(min_a->a, min_b->b), min_a->b));
+        } else if (min_a && min_b && equal(min_a->b, min_b->b)) {
+            // max(min(y, x), min(z, x)) -> min(max(y, z), x)
+            expr = mutate(Min::make(Max::make(min_a->a, min_b->a), min_a->b));
+
+        } else if (max_a && min_a_a && max_b && min_b_a && equal(min_a_a->a, min_b_a->a)) {
+            // Max of two different clamps of the same thing
+            // max(max(min(x, z), y), max(min(x, w), v)) -> max(min(x, max(z, w)), max(y, v))
+            expr = mutate(Max::make(Min::make(min_a_a->a, Max::make(min_a_a->b, min_b_a->b)),
+                                    Max::make(max_a->b, max_b->b)));
+
+        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+            // Distributive law for addition
+            // max(a + b, c + b) -> max(a, c) + b
+            expr = mutate(max(add_a->a, add_b->a)) + add_a->b;
+        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+            // max(b + a, b + c) -> max(a, c) + b
+            expr = mutate(max(add_a->b, add_b->b)) + add_a->a;
+        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+            // max(b + a, c + b) -> max(a, c) + b
+            expr = mutate(max(add_a->b, add_b->a)) + add_a->a;
+        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+            // max(a + b, b + c) -> max(a, c) + b
+            expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
+
+        } else if (false && add_a && add_b && const_int(add_a->b, &ia) && const_int(add_b->b, &ib)) {
+            // Shuffle constants outside
+            // max(x + 2, y + 3) -> max(x, y + 1) + 2
+            expr = mutate(Max::make(add_a->a, add_b->a + (ib - ia))) + ia;
+        } else if (false && add_a && const_int(add_a->b, &ia) && const_int(b, &ib)) {
+            // max(x + 3, 5) -> max(x, 2) + 3
+            expr = mutate(Max::make(add_a->a, ib - ia) + ia);
+
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1414,6 +1615,7 @@ Stmt simplify(Stmt s) {
 }
 
 void check(Expr a, Expr b) {
+    //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
         std::cout << std::endl << "Simplification failure: " << std::endl;
@@ -1425,7 +1627,7 @@ void check(Expr a, Expr b) {
 }
 
 void simplify_test() {
-    Expr x = Var("x"), y = Var("y"), z = Var("z");
+    Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
     Expr xf = cast<float>(x);
     Expr yf = cast<float>(y);
 
@@ -1644,6 +1846,17 @@ void simplify_test() {
     // Check that non-extremes do not lead to incorrect simplification
     check(Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -127)), Max::make(Cast::make(Int(8), x), Cast::make(Int(8), -127)));
 
+    // Check an optimization important for fusing dimensions
+    check((x/3)*3 + x%3, x);
+    check(x%3 + (x/3)*3, x);
+
+    check(((x/3)*3 + y) + x%3, x + y);
+    check((x%3 + y) + (x/3)*3, x + y);
+
+    check((y + x%3) + (x/3)*3, y + x);
+    check((y + (x/3*3)) + x%3, y + x);
+
+
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
     check((x + y) - (y + z), x - z);
@@ -1674,12 +1887,47 @@ void simplify_test() {
     //check(max(x, 16) - 16, max(x + -16, 0));
     //check(min(x, -4) + 7, min(x + 7, 3));
 
+    // Min and max of clamped expressions
+    check(min(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+(-1), y, z));
+    check(max(clamp(x+1, y, z), clamp(x-1, y, z)), clamp(x+1, y, z));
+
+    // Additions that cancel a term inside a min or max
+    check(x + min(y - x, z), min(y, z + x));
+    check(x + max(y - x, z), max(y, z + x));
+    check(min(y + (-2), z) + 2, min(y, z + 2));
+    check(max(y + (-2), z) + 2, max(y, z + 2));
+
+    check(x + min(y - x, z), min(y, z + x));
+    check(x + max(y - x, z), max(y, z + x));
+    check(min(y + (-2), z) + 2, min(y, z + 2));
+    check(max(y + (-2), z) + 2, max(y, z + 2));
+
+    // Min/Max distributive law
+    check(max(max(x, y), max(x, z)), max(max(y, z), x));
+    check(min(max(x, y), max(x, z)), max(min(y, z), x));
+    check(min(min(x, y), min(x, z)), min(min(y, z), x));
+    check(max(min(x, y), min(x, z)), min(max(y, z), x));
+
     // Mins of expressions and rounded up versions of them
     check(min(((x+7)/8)*8, x), x);
     check(min(x, ((x+7)/8)*8), x);
 
     check(min(((x+7)/8)*8, max(x, 8)), max(x, 8));
     check(min(max(x, 8), ((x+7)/8)*8), max(x, 8));
+
+    // Pull constants all the way outside of a clamp
+    //check(clamp(x + 1, -10, 15), clamp(x, -11, 14) + 1);
+    //check(clamp(x + 1, y - 10, 15), clamp(x, y + (-11), 14) + 1);
+
+    // The min of two matching clamps is the clamp of the mins
+    check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
+
+    // The min of two clamps that match in the first arg is the clamp using the min of the bounds
+    check(min(clamp(x, y, z), clamp(x, v, w)),
+          clamp(x, min(y, v), min(z, w)));
+
+    check(max(clamp(x, y, z), clamp(x, v, w)),
+          clamp(x, max(y, v), max(z, w)));
 
     check(!f, t);
     check(!t, f);

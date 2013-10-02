@@ -135,7 +135,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
             Schedule::Split &first = splits[i];
             Schedule::Split &second = splits[j];
             if (first.outer == second.old_var) {
-                assert(!second.is_rename && "Rename of derived variable found in splits list. This should never happen.");
+                assert(!second.is_rename() && "Rename of derived variable found in splits list. This should never happen.");
                 second.old_var = unique_name('s');
                 first.outer   = second.outer;
                 second.outer  = second.inner;
@@ -156,7 +156,7 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
     for (size_t i = 0; i < splits.size(); i++) {
         const Schedule::Split &split = splits[i];
         Expr outer = Variable::make(Int(32), prefix + split.outer);
-        if (!split.is_rename) {
+        if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min_produced");
             Expr max_min = Variable::make(Int(32), prefix + split.old_var + ".max_min");
@@ -192,6 +192,25 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
 
             // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
             stmt = substitute(prefix + split.old_var, base + inner, stmt);
+        } else if (split.is_fuse()) {
+            // Define the inner and outer in terms of the fused var
+            Expr fused = Variable::make(Int(32), prefix + split.old_var);
+            Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".min_produced");
+            Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".min_produced");
+            Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".extent_produced");
+            //Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".extent_produced");
+            //Expr inner_max_min = Variable::make(Int(32), prefix + split.inner + ".max_min");
+            //Expr outer_max_min = Variable::make(Int(32), prefix + split.outer + ".max_min");
+            // Q: If we're fusing, how could outer and inner have a max min?
+
+            Expr inner = fused % inner_extent + inner_min;
+            Expr outer = fused / inner_extent + outer_min;
+
+            //stmt = LetStmt::make(prefix + split.inner, inner, stmt);
+            //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
+            stmt = substitute(prefix + split.inner, inner, stmt);
+            stmt = substitute(prefix + split.outer, outer, stmt);
+
         } else {
             // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
@@ -212,21 +231,24 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
         const Schedule::Split &split = splits[i-1];
         Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".extent_produced");
         Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".min_produced");
-        if (!split.is_rename) {
+        if (split.is_split()) {
             Expr inner_extent = split.factor;
             Expr outer_extent = (old_var_extent + split.factor - 1)/split.factor;
             stmt = LetStmt::make(prefix + split.inner + ".min_produced", 0, stmt);
             stmt = LetStmt::make(prefix + split.inner + ".extent_produced", inner_extent, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".min_produced", 0, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".extent_produced", outer_extent, stmt);
-
-            // The extent of the old variable must be at least the
-            // split size. Adding this definition here prevents the
-            // clamping that takes place during splitting from going
-            // below the original min.
-            //Expr new_old_extent = max(old_var_extent, split.factor);
-            //stmt = LetStmt::make(prefix + split.old_var + ".extent", new_old_extent, stmt);
+        } else if (split.is_fuse()) {
+            // Define bounds on the fused var using the bounds on the inner and outer
+            Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".extent_produced");
+            Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".extent_produced");
+            stmt = LetStmt::make(prefix + split.old_var + ".min_produced", 0, stmt);
+            stmt = LetStmt::make(prefix + split.old_var + ".extent_produced", inner_extent * outer_extent, stmt);
+            // The max_min of the fused var is the max_min of the outer times the inner extent
+            Expr outer_max_min = Variable::make(Int(32), prefix + split.outer + ".max_min");
+            stmt = LetStmt::make(prefix + split.old_var + ".max_min", outer_max_min * inner_extent, stmt);
         } else {
+            // rename
             stmt = LetStmt::make(prefix + split.outer + ".min_produced", old_var_min, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".extent_produced", old_var_extent, stmt);
         }
@@ -686,10 +708,14 @@ public:
         }
 
         for (size_t i = 0; i < s.splits.size(); i++) {
-            if (s.splits[i].is_rename) {
+            if (s.splits[i].is_rename()) {
                 std::cerr << "Warning: It is meaningless to rename variable "
                           << s.splits[i].old_var << " of function "
                           << f.name() << " to " << s.splits[i].outer
+                          << " because " << f.name() << " is scheduled inline.\n";
+            } else if (s.splits[i].is_fuse()) {
+                std::cerr << "Warning: It is meaningless to fuse variables "
+                          << s.splits[i].inner << " and " << s.splits[i].outer
                           << " because " << f.name() << " is scheduled inline.\n";
             } else {
                 std::cerr << "Warning: It is meaningless to split variable "
@@ -1256,7 +1282,7 @@ Stmt add_image_checks(Stmt s, Function f) {
         const Region &region = regions[is_output_buffer ? f.name() : name];
 
         // An expression returning whether or not we're in inference mode
-        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null");
+        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", param);
 
         maybe_return_condition = maybe_return_condition || inference_mode;
 

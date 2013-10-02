@@ -73,12 +73,21 @@ struct Schedule {
         std::string old_var, outer, inner;
         Expr factor;
 
-        // If is_rename is true, then this is just a renaming of the
+        enum SplitType {SplitVar = 0, RenameVar, FuseVars};
+
+        // If split_type is Rename, then this is just a renaming of the
         // old_var to the outer and not a split. The inner var should
         // be ignored, and factor should be one. Renames are kept in
         // the same list as splits so that ordering between them is
         // respected.
-        bool is_rename;
+
+        // If split_type is Fuse, then this does the opposite of a
+        // split, it joins the outer and inner into the old_var.
+        SplitType split_type;
+
+        bool is_rename() const {return split_type == RenameVar;}
+        bool is_split() const {return split_type == SplitVar;}
+        bool is_fuse() const {return split_type == FuseVars;}
     };
     /** The traversal of the domain of a function can have some of its
      * dimensions split into sub-dimensions. See

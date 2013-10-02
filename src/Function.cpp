@@ -294,8 +294,12 @@ Expr Function::min_realization_size(int d) const {
     Expr size = 1;
     const vector<Schedule::Split> &splits = schedule().splits;
     for (size_t i = 0; i < splits.size(); i++) {
-        if (splits[i].old_var == dim) {
-            if (!splits[i].is_rename) {
+        if (splits[i].outer == dim) {
+            // When fusing dimensions, the minimum size burden is borne by the outer.
+            assert(splits[i].is_fuse());
+            dim = splits[i].old_var;
+        } else if (splits[i].old_var == dim) {
+            if (splits[i].is_split()) {
                 Expr factor = splits[i].factor;
                 size = Mul::make(size, factor);
             }
@@ -303,9 +307,6 @@ Expr Function::min_realization_size(int d) const {
         }
     }
     return size;
-
-    // TODO: Take the max of what happens to the pure vars in a reduction
-    
 }
 
 Expr Function::min_realization_factor(int d) const {
@@ -316,8 +317,11 @@ Expr Function::min_realization_factor(int d) const {
     Expr size = 1;
     const vector<Schedule::Split> &splits = reduction_schedule().splits;
     for (size_t i = 0; i < splits.size(); i++) {
-        if (splits[i].old_var == dim) {
-            if (!splits[i].is_rename) {
+        if (splits[i].outer == dim) {
+            assert(splits[i].is_fuse());
+            dim = splits[i].old_var;
+        } else if (splits[i].old_var == dim) {
+            if (splits[i].is_split()) {
                 Expr factor = splits[i].factor;
                 size = Mul::make(size, factor);
             }
@@ -327,7 +331,7 @@ Expr Function::min_realization_factor(int d) const {
     return size;
 
     // TODO: Take the max of what happens to the pure vars in a reduction
-    
+
 }
 
 
