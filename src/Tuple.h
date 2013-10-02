@@ -27,13 +27,13 @@ public:
 
     /** Get a reference to an element. */
     Expr &operator[](size_t x) {
-        assert(x < exprs.size() && "Tuple access out of bounds");
+        assert((x < exprs.size()) && "Tuple access out of bounds");
         return exprs[x];
     }
 
     /** Get a copy of an element. */
     Expr operator[](size_t x) const {
-        assert(x < exprs.size() && "Tuple access out of bounds");
+        assert((x < exprs.size()) && "Tuple access out of bounds");
         return exprs[x];
     }
 
@@ -62,7 +62,7 @@ public:
 
     /** Construct a Tuple from a vector of Exprs */
     explicit Tuple(const std::vector<Expr> &e) : exprs(e) {
-        assert(e.size() > 0 && "Tuples must have at least one element\n");
+        assert((e.size() > 0) && "Tuples must have at least one element\n");
     }
 
     /** Construct a Tuple from a function reference. */
@@ -94,13 +94,13 @@ public:
 
     /** Get a copy of an element. */
     Buffer operator[](size_t x) const {
-        assert(x < buffers.size() && "Realization access out of bounds");
+        assert((x < buffers.size()) && "Realization access out of bounds");
         return buffers[x];
     }
 
     /** Single-element realizations are implicitly castable to Buffers. */
     operator Buffer() const {
-        assert(buffers.size() == 1 && "Can only cast single-element realizations to buffers or images");
+        assert((buffers.size() == 1) && "Can only cast single-element realizations to buffers or images");
         return buffers[0];
     }
 
