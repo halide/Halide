@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "IRPrinter.h"
 #include "IROperator.h"
+#include "Simplify.h"
 #include <sstream>
 
 namespace Halide {
@@ -19,11 +20,11 @@ using std::pair;
 // Inject let stmts defining the bounds of a function required at each loop level
 class BoundsInference : public IRMutator {
 public:
-    const vector<string> &funcs;
-    const map<string, Function> &env;
+    const vector<Function> &funcs;
     Scope<int> in_consume, in_realize;
 
-    BoundsInference(const vector<string> &f, const map<string, Function> &e) : funcs(f), env(e) {}
+    BoundsInference(const vector<Function> &f) : funcs(f) {
+    }
 
     using IRMutator::visit;
 
@@ -41,11 +42,11 @@ public:
 
         debug(3) << "\nIn loop over " << for_loop->name << " regions called are:\n\n";
         for (size_t i = 0; i < funcs.size(); i++) {
-            map<string, Region>::const_iterator iter = regions.find(funcs[i]);
+            map<string, Region>::const_iterator iter = regions.find(funcs[i].name());
             if (iter == regions.end()) continue;
             const Region &r = iter->second;
 
-            debug(3) << funcs[i] << ":\n";
+            debug(3) << funcs[i].name() << ":\n";
             for (size_t j = 0; j < r.size(); j++) {
                 debug(3) << "  min " << j << ": " << r[j].min << "\n"
                          << "  extent " << j << ": " << r[j].extent << "\n";
@@ -58,7 +59,7 @@ public:
             // For the output function, the bounds required is the (possibly
             // constrained) size of the first output buffer. (TODO: check the
             // other output buffers match this size).
-            const Function &f = env.find(funcs[funcs.size()-1])->second;
+            const Function &f = funcs[funcs.size()-1];
             Region region;
 
             Parameter b = f.output_buffers()[0];
@@ -98,12 +99,15 @@ public:
 
         // Inject let statements defining those bounds
         for (size_t i = 0; i < funcs.size(); i++) {
-            if (in_consume.contains(funcs[i])) continue;
-            bool func_used = regions.find(funcs[i]) != regions.end();
-            Region region = regions[funcs[i]];
-            const Function &f = env.find(funcs[i])->second;
+            if (in_consume.contains(funcs[i].name())) continue;
 
-            debug(3) << "Injecting bounds for " << funcs[i] << '\n';
+            map<string, Region>::iterator iter = regions.find(funcs[i].name());
+            bool func_used = iter != regions.end();
+            Region region;
+            if (func_used) region = iter->second;
+            const Function &f = funcs[i];
+
+            debug(3) << "Injecting bounds for " << funcs[i].name() << '\n';
 
             // If this func f is an input to an extern stage called g,
             // take a region union with the result of bounds inference
@@ -111,10 +115,10 @@ public:
             for (size_t j = i+1; j < funcs.size(); j++) {
                 debug(4) << "Checking to see if " << f.name() << " is used by an extern stage\n";
                 bool used_by_extern = false;
-                const Function &g = env.find(funcs[j])->second;
+                const Function &g = funcs[j];
 
                 // g isn't used in this loop, so don't bother.
-                if (regions.find(funcs[j]) == regions.end()) continue;
+                if (regions.find(funcs[j].name()) == regions.end()) continue;
 
                 if (g.has_extern_definition()) {
                     for (size_t k = 0; k < g.extern_arguments().size(); k++) {
@@ -403,7 +407,12 @@ Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Fun
     // Add a outermost::make loop to make sure we get outermost bounds definitions too
     s = For::make("<outermost>", 0, 1, For::Serial, s);
 
-    s = BoundsInference(order, env).mutate(s);
+    vector<Function> funcs(order.size());
+    for (size_t i = 0; i < order.size(); i++) {
+        funcs[i] = env.find(order[i])->second;
+    }
+
+    s = BoundsInference(funcs).mutate(s);
 
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
