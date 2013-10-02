@@ -183,6 +183,8 @@ public:
      * variable name as either the inner or outer variable. */
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
 
+    EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
+
     /** Mark a dimension to be traversed in parallel */
     EXPORT ScheduleHandle &parallel(Var var);
 
@@ -734,6 +736,7 @@ public:
      * meanings. */
     // @{
     EXPORT Func &split(Var old, Var outer, Var inner, Expr factor);
+    EXPORT Func &fuse(Var inner, Var outer, Var fused);
     EXPORT Func &parallel(Var var);
     EXPORT Func &vectorize(Var var);
     EXPORT Func &unroll(Var var);

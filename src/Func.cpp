@@ -410,9 +410,58 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
         assert(false);
     }
 
-
     // Add the split to the splits list
-    Schedule::Split split = {old_name, outer_name, inner_name, factor, false};
+    Schedule::Split split = {old_name, outer_name, inner_name, factor, Schedule::Split::SplitVar};
+    schedule.splits.push_back(split);
+    return *this;
+}
+
+
+ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
+    // Replace the old dimensions with the new dimension in the dims list
+    bool found_outer = false, found_inner = false;
+    string inner_name, outer_name, fused_name;
+    vector<Schedule::Dim> &dims = schedule.dims;
+
+    for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, outer.name())) {
+            found_outer = true;
+            outer_name = dims[i].var;
+            // Remove it
+            for (size_t j = i; j < dims.size()-1; j++) {
+                dims[j] = dims[j+1];
+            }
+            dims.pop_back();
+        }
+    }
+    if (!found_outer) {
+        std::cerr << "Could not find outer fuse dimension in argument list: "
+                  << outer.name()
+                  << "\n";
+        dump_argument_list();
+        assert(false);
+    }
+
+    for (size_t i = 0; (!found_inner) && i < dims.size(); i++) {
+        if (var_name_match(dims[i].var, inner.name())) {
+            found_inner = true;
+            inner_name = dims[i].var;
+            fused_name = inner_name + "." + fused.name();
+            dims[i].var = fused_name;
+        }
+    }
+
+    if (!found_inner) {
+        std::cerr << "Could not find inner fuse dimension in argument list: "
+                  << inner.name()
+                  << "\n";
+        dump_argument_list();
+        assert(false);
+    }
+
+
+    // Add the fuse to the splits list
+    Schedule::Split split = {fused_name, outer_name, inner_name, Expr(), Schedule::Split::FuseVars};
     schedule.splits.push_back(split);
     return *this;
 }
@@ -443,7 +492,7 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
 
     if (old_name.find('.') == string::npos) {
         // If it's a primitive name, add the rename to the splits list.
-        Schedule::Split split = {old_name, new_name, "", 1, true};
+        Schedule::Split split = {old_name, new_name, "", 1, Schedule::Split::RenameVar};
         schedule.splits.push_back(split);
     } else {
         // It's a derived name, so just rewrite the split or rename that defines it.
@@ -696,6 +745,11 @@ ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, Var z,
 
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
+    return *this;
+}
+
+Func &Func::fuse(Var inner, Var outer, Var fused) {
+    ScheduleHandle(func.schedule()).fuse(inner, outer, fused);
     return *this;
 }
 
