@@ -289,16 +289,12 @@ void Function::define_extern(const std::string &function_name,
 
 }
 
-Expr Function::min_realization_size(int d) const {
-    string dim = args()[d];
+namespace {
+Expr compute_min_extent(string dim, const Schedule &sched) {
     Expr size = 1;
-    const vector<Schedule::Split> &splits = schedule().splits;
+    const vector<Schedule::Split> &splits = sched.splits;
     for (size_t i = 0; i < splits.size(); i++) {
-        if (splits[i].outer == dim) {
-            // When fusing dimensions, the minimum size burden is borne by the outer.
-            assert(splits[i].is_fuse());
-            dim = splits[i].old_var;
-        } else if (splits[i].old_var == dim) {
+        if (splits[i].old_var == dim && !splits[i].is_fuse()) {
             if (splits[i].is_split()) {
                 Expr factor = splits[i].factor;
                 size = Mul::make(size, factor);
@@ -308,30 +304,18 @@ Expr Function::min_realization_size(int d) const {
     }
     return size;
 }
+}
 
-Expr Function::min_realization_factor(int d) const {
+Expr Function::min_extent_produced(const string &d) const {
+    return compute_min_extent(d, schedule());
+}
+
+Expr Function::min_extent_updated(const string &d) const {
     if (!has_reduction_definition()) {
         return 1;
+    } else {
+        return compute_min_extent(d, reduction_schedule());
     }
-    string dim = args()[d];
-    Expr size = 1;
-    const vector<Schedule::Split> &splits = reduction_schedule().splits;
-    for (size_t i = 0; i < splits.size(); i++) {
-        if (splits[i].outer == dim) {
-            assert(splits[i].is_fuse());
-            dim = splits[i].old_var;
-        } else if (splits[i].old_var == dim) {
-            if (splits[i].is_split()) {
-                Expr factor = splits[i].factor;
-                size = Mul::make(size, factor);
-            }
-            dim = splits[i].outer;
-        }
-    }
-    return size;
-
-    // TODO: Take the max of what happens to the pure vars in a reduction
-
 }
 
 

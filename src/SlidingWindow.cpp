@@ -65,7 +65,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // dimensions of the buffer has a min/extent that depends
             // on the loop_var.
             string dim = "";
-            int dim_idx = 0;
             Expr min, extent;
 
             Region r = region_called(op, func.name());
@@ -79,13 +78,11 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     expr_depends_on_var(r[i].extent, loop_var)) {
                     if (!dim.empty()) {
                         dim = "";
-                        dim_idx = 0;
                         min = Expr();
                         extent = Expr();
                         break;
                     } else {
                         dim = func.args()[i];
-                        dim_idx = i;
                         min = r[i].min;
                         extent = r[i].extent;
                     }
@@ -147,9 +144,12 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     // TODO: It would be better to truncate back to
                     // the max min, but this produces expressions too
                     // difficult for storage folding to handle.
-                    Expr min_extent = func.min_realization_size(dim_idx);
+                    Expr min_extent = func.min_extent_produced(dim);
                     if (!is_one(min_extent)) {
-                        Expr max_min = Variable::make(Int(32), func.name() + "." + dim + ".max_min");
+                        //Expr max_min = Variable::make(Int(32), func.name() + "." + dim + ".max_min");
+                        Expr extent_produced = Variable::make(Int(32), func.name() + "." + dim + ".extent_realized");
+                        Expr min_produced = Variable::make(Int(32), func.name() + "." + dim + ".min_realized");
+                        Expr max_min = min_produced + extent_produced - min_extent;
                         Expr before_end = new_min < max_min;
                         steady_state = steady_state && before_end;
                     }
