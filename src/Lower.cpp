@@ -90,15 +90,18 @@ Expr qualify_expr(const string &prefix, Expr value) {
 }
 
 // Build a loop nest about a provide node using a schedule
-Stmt build_provide_loop_nest(string buffer, string prefix,
+Stmt build_provide_loop_nest(Function f,
+                             string prefix,
                              const vector<Expr> &site,
                              const vector<Expr> &values,
                              const Schedule &s,
                              bool is_update) {
+
+    string buffer = f.name();
     // We'll build it from inside out, starting from a store node,
     // then wrapping it in for loops.
 
-    // Make the (multi-dimensional) store nodes
+    // Make the (multi-dimensional multi-valued) store node.
     assert(!values.empty());
     Stmt stmt = Provide::make(buffer, values, site);
 
@@ -108,10 +111,6 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
     for (size_t i = 0; i < s.bounds.size(); i++) {
         known_size_dims[s.bounds[i].var] = s.bounds[i].extent;
     }
-
-    // TODO: Check that the dimensions post-splitting will have unique
-    // names. Otherwise the rebalancing just makes things more
-    // confused.
 
     vector<Schedule::Split> splits = s.splits;
 
@@ -159,18 +158,16 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
         if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
             Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".min_produced");
-            Expr max_min = Variable::make(Int(32), prefix + split.old_var + ".max_min");
-            Expr extent_realized = Variable::make(Int(32), prefix + split.old_var + ".extent_realized");
+            Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".extent_produced");
 
             known_size_dims[split.inner] = split.factor;
 
-            // Assuming for the moment that the original min is zero,
-            // the starting index for the inner loop should be:
             Expr base = outer * split.factor;
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
-            if (iter != known_size_dims.end() &&
+            if ((iter != known_size_dims.end()) &&
                 is_zero(simplify(iter->second % split.factor))) {
+
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base.
                 known_size_dims[split.outer] = iter->second / split.factor;
@@ -183,7 +180,9 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
                 // the production in bounds inference to account for
                 // the extra work.
 
-                base = Min::make(base + old_min, max_min);
+                Expr min_extent_produced = f.min_extent_produced(split.old_var);
+
+                base = Min::make(base, old_extent - min_extent_produced) + old_min;
 
                 string name = prefix + split.inner + ".base";
                 stmt = LetStmt::make(name, base, stmt);
@@ -198,10 +197,6 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
             Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".min_produced");
             Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".min_produced");
             Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".extent_produced");
-            //Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".extent_produced");
-            //Expr inner_max_min = Variable::make(Int(32), prefix + split.inner + ".max_min");
-            //Expr outer_max_min = Variable::make(Int(32), prefix + split.outer + ".max_min");
-            // Q: If we're fusing, how could outer and inner have a max min?
 
             Expr inner = fused % inner_extent + inner_min;
             Expr outer = fused / inner_extent + outer_min;
@@ -242,11 +237,9 @@ Stmt build_provide_loop_nest(string buffer, string prefix,
             // Define bounds on the fused var using the bounds on the inner and outer
             Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".extent_produced");
             Expr outer_extent = Variable::make(Int(32), prefix + split.outer + ".extent_produced");
+            Expr fused_extent = inner_extent * outer_extent;
             stmt = LetStmt::make(prefix + split.old_var + ".min_produced", 0, stmt);
-            stmt = LetStmt::make(prefix + split.old_var + ".extent_produced", inner_extent * outer_extent, stmt);
-            // The max_min of the fused var is the max_min of the outer times the inner extent
-            Expr outer_max_min = Variable::make(Int(32), prefix + split.outer + ".max_min");
-            stmt = LetStmt::make(prefix + split.old_var + ".max_min", outer_max_min * inner_extent, stmt);
+            stmt = LetStmt::make(prefix + split.old_var + ".extent_produced", fused_extent, stmt);
         } else {
             // rename
             stmt = LetStmt::make(prefix + split.outer + ".min_produced", old_var_min, stmt);
@@ -377,7 +370,7 @@ Stmt build_produce(Function f) {
             site.push_back(Variable::make(Int(32), f.name() + "." + f.args()[i]));
         }
 
-        return build_provide_loop_nest(f.name(), prefix, site, values, f.schedule(), false);
+        return build_provide_loop_nest(f, prefix, site, values, f.schedule(), false);
     }
 }
 
@@ -398,7 +391,7 @@ Stmt build_update(Function f) {
         debug(2) << "Reduction site " << i << " = " << site[i] << "\n";
     }
 
-    Stmt loop = build_provide_loop_nest(f.name(), prefix, site, values, f.reduction_schedule(), true);
+    Stmt loop = build_provide_loop_nest(f, prefix, site, values, f.reduction_schedule(), true);
 
     // Now define the bounds on the reduction domain
     const vector<ReductionVariable> &dom = f.reduction_domain().domain();
@@ -456,7 +449,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
                 // extent produced, otherwise we may truncate our
                 // initialization and not initialize some values that
                 // are only read by the update step.
-                Expr new_max_min = min_produced + extent_produced - func.min_realization_size(i);
+                Expr new_max_min = min_produced + extent_produced - func.min_extent_produced(func.args()[i]);
                 produce = LetStmt::make(var + ".max_min", new_max_min, produce);
 
                 // Inside that, redefine the min produced.
@@ -575,7 +568,7 @@ private:
 
         for (int i = 0; i < func.dimensions(); i++) {
             string arg = func.args()[i];
-            Expr min_extent = func.min_realization_size(i);
+            Expr min_extent = func.min_extent_produced(arg);
             string extent_realized = bounds[i].extent.as<Variable>()->name;
             string min_realized = bounds[i].min.as<Variable>()->name;
             Expr extent_produced = Variable::make(Int(32), func.name() + "." + arg + ".extent_produced");

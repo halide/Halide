@@ -315,7 +315,12 @@ public:
                 Expr extent_produced_var = Variable::make(Int(32), extent_produced_name);
                 Expr min_produced_var = Variable::make(Int(32), min_produced_name);
 
-                Expr min_extent = f.min_realization_size(j);
+                string extent_realized_name = prefix + ".extent_realized";
+                string min_realized_name = prefix + ".min_realized";
+                Expr extent_realized_var = Variable::make(Int(32), extent_realized_name);
+                Expr min_realized_var = Variable::make(Int(32), min_realized_name);
+
+                Expr min_extent = f.min_extent_produced(arg_name);
 
                 // Round up the extent to cover the min production size and factor
                 Expr extent_produced = extent_required_var;
@@ -323,7 +328,7 @@ public:
                     extent_produced = Max::make(extent_required_var, min_extent);
                 }
 
-                Expr min_extent_factor = f.min_realization_factor(j);
+                Expr min_extent_factor = f.min_extent_updated(arg_name);
                 if (!is_one(min_extent_factor)) {
                     extent_produced += min_extent_factor - 1;
                     extent_produced /= min_extent_factor;
