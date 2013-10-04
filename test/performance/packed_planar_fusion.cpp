@@ -26,9 +26,11 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
         f.reorder(c, x, y).fuse(c, x, fused).vectorize(fused, 16);
     }
 
+    f.compile_to_assembly(std::string("copy_") + f.name() + ".s", Internal::vec<Argument>(src), "copy");
+
     f.realize(dst);
 
-    f.compile_to_assembly(std::string("copy_") + f.name() + ".s", Internal::vec<Argument>(src), "copy");
+
 
     double t1 = currentTime();
     for (int i = 0; i < 10; i++) {
@@ -69,17 +71,21 @@ int main(int argc, char **argv) {
     const int W = 1<<11, H = 1<<11;
 
     // Allocate two 4 megapixel, 3 channel, 8-bit images -- input and output
-    uint8_t *storage_1(new uint8_t[W * H * 3]);
-    uint8_t *storage_2(new uint8_t[W * H * 3]);
+    uint8_t *storage_1(new uint8_t[W * H * 3 + 32]);
+    uint8_t *storage_2(new uint8_t[W * H * 3 + 32]);
 
-    double t_packed_packed = test_copy(make_packed(storage_1, W, H),
-                                       make_packed(storage_2, W, H));
-    double t_packed_planar = test_copy(make_packed(storage_1, W, H),
-                                       make_planar(storage_2, W, H));
-    double t_planar_packed = test_copy(make_planar(storage_1, W, H),
-                                       make_packed(storage_2, W, H));
-    double t_planar_planar = test_copy(make_planar(storage_1, W, H),
-                                       make_planar(storage_2, W, H));
+    uint8_t *ptr_1 = storage_1, *ptr_2 = storage_2;
+    while ((size_t)ptr_1 & 0x1f) ptr_1 ++;
+    while ((size_t)ptr_2 & 0x1f) ptr_2 ++;
+
+    double t_packed_packed = test_copy(make_packed(ptr_1, W, H),
+                                       make_packed(ptr_2, W, H));
+    double t_packed_planar = test_copy(make_packed(ptr_1, W, H),
+                                       make_planar(ptr_2, W, H));
+    double t_planar_packed = test_copy(make_planar(ptr_1, W, H),
+                                       make_packed(ptr_2, W, H));
+    double t_planar_planar = test_copy(make_planar(ptr_1, W, H),
+                                       make_planar(ptr_2, W, H));
 
 
 
