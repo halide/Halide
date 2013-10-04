@@ -1,22 +1,20 @@
-#include "HalideRuntime.h"
-
-#include <stdarg.h>
+#include "mini_stdint.h"
 
 #define WEAK __attribute__((weak))
 
 extern "C" {
 
-extern void __android_log_vprint(int, const char *, const char *, va_list);
+extern void __android_log_vprint(int, const char *, const char *, __builtin_va_list);
 
 extern size_t fwrite(const void *, size_t, size_t, void *);
 extern void *fopen(const char *, const char *);
 extern int fclose(void *);
 
 WEAK int halide_printf(const char * fmt, ...) {
-    va_list args;
-    va_start(args,fmt);
+    __builtin_va_list args;
+    __builtin_va_start(args,fmt);
     __android_log_vprint(7, "halide", fmt, args);
-    va_end(args);
+    __builtin_va_end(args);
     // Profiler assumes that return value <=0 is failure,
     // so return something else here.
     return 1;

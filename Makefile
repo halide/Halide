@@ -79,6 +79,11 @@ TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
+HOST_OS=linux
+endif
+
+ifeq ($(UNAME), Darwin)
+HOST_OS=os_x
 endif
 
 # Compiling the tutorials requires libpng
@@ -139,24 +144,24 @@ include/HalideRuntime.h: src/runtime/HalideRuntime.h
 $(BIN_DIR)/build_halide_h: src/build_halide_h.cpp
 	g++ $< -o $@
 
-RUNTIME_OPTS_x86_64 = -march=k8
-RUNTIME_OPTS_x86_64_sse41 = -march=penryn
-RUNTIME_OPTS_x86_64_avx = -march=corei7-avx
-RUNTIME_OPTS_x86_32 = -m32 -march=k8
-RUNTIME_OPTS_x86_32_sse41 = -m32 -march=penryn
-RUNTIME_OPTS_arm = -m32
-RUNTIME_OPTS_arm_android = -m32
-RUNTIME_OPTS_arm_ios = -m32 -march=cortex-a9 -Xclang -triple=armv7-apple-ios
+RUNTIME_OPTS_x86_64 = -march=k8 -DHALIDE_ARCH_x86_64 -DHALIDE_OS_$(HOST_OS)
+RUNTIME_OPTS_x86_64_sse41 = -march=penryn -DHALIDE_ARCH_x86_64 -DHALIDE_OS_$(HOST_OS)
+RUNTIME_OPTS_x86_64_avx = -march=corei7-avx -DHALIDE_ARCH_x86_64 -DHALIDE_OS_$(HOST_OS)
+RUNTIME_OPTS_x86_32 = -m32 -march=k8 -DHALIDE_ARCH_x86_32 -DHALIDE_OS_$(HOST_OS)
+RUNTIME_OPTS_x86_32_sse41 = -m32 -march=penryn -DHALIDE_ARCH_x86_32 -DHALIDE_OS_$(HOST_OS)
+RUNTIME_OPTS_arm = -m32 -DHALIDE_ARCH_arm -DHALIDE_OS_linux
+RUNTIME_OPTS_arm_android = -m32 -DHALIDE_ARCH_arm -DHALIDE_OS_linux
+RUNTIME_OPTS_arm_ios = -m32 -march=cortex-a9 -Xclang -triple=armv7-apple-ios -DHALIDE_ARCH_arm -DHALIDE_OS_ios
 RUNTIME_OPTS_opencl_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_host_debug = $(RUNTIME_OPTS_x86_64)
 RUNTIME_OPTS_ptx_dev =
-RUNTIME_OPTS_x86_64_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
-RUNTIME_OPTS_x86_64_sse41_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE)
-RUNTIME_OPTS_x86_64_avx_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7-avx -isystem $(NATIVE_CLIENT_X86_INCLUDE)
-RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE)
-RUNTIME_OPTS_x86_32_sse41_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE)
-RUNTIME_OPTS_arm_nacl = -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ARM_INCLUDE)
+RUNTIME_OPTS_x86_64_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_64 -DHALIDE_OS_nacl
+RUNTIME_OPTS_x86_64_sse41_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_64 -DHALIDE_OS_nacl
+RUNTIME_OPTS_x86_64_avx_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7-avx -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_64 -DHALIDE_OS_nacl
+RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_32 -DHALIDE_OS_nacl
+RUNTIME_OPTS_x86_32_sse41_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_32 -DHALIDE_OS_nacl
+RUNTIME_OPTS_arm_nacl = -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ARM_INCLUDE) -DHALIDE_ARCH_arm -DHALIDE_OS_nacl
 RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_x86_32_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
 RUNTIME_LL_STUBS_x86_64 = src/runtime/x86.ll src/runtime/posix_math.ll
@@ -180,7 +185,7 @@ RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll src/runtime/posix_math.ll
 
 $(BUILD_DIR)/initmod.%.ll: src/runtime/*.cpp src/runtime/CL/*.h $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $@
+	$(CLANG) -fno-blocks -DHALIDE_TARGET_$* $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $@
 
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll src/runtime/*.ll $(BUILD_DIR)/llvm_ok
 	cat $(BUILD_DIR)/initmod.$*.ll $(RUNTIME_LL_STUBS_$*) | \

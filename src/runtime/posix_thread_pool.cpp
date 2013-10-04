@@ -1,20 +1,10 @@
-#include "HalideRuntime.h"
+#include "mini_stdint.h"
 
-#include <stdint.h>
-#include <unistd.h>
-
-#ifndef __APPLE__
-#ifdef _LP64
-typedef uint64_t size_t;
-#else
-typedef uint32_t size_t;
-#endif
-#endif
 #define WEAK __attribute__((weak))
 
 extern "C" {
 
-#ifndef __SIZEOF_PTHREAD_ATTR_T
+extern long sysconf(int);
 
 typedef struct {
     uint32_t flags;
@@ -46,14 +36,6 @@ extern int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t 
 extern int pthread_mutex_lock(pthread_mutex_t *mutex);
 extern int pthread_mutex_unlock(pthread_mutex_t *mutex);
 extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
-#else
-
-// We've already included some of pthreads, may as well include it
-// all. This is forced by the OpenCL backend, where CL.h includes some
-// of pthreads.
-#include <pthread.h>
-
-#endif
 
 extern char *getenv(const char *);
 extern int atoi(const char *);
@@ -206,7 +188,19 @@ WEAK void *halide_worker_thread(void *void_arg) {
 }
 
 WEAK int halide_host_cpu_count() {
-    return sysconf(_SC_NPROCESSORS_ONLN);
+#if defined (HALIDE_ARCH_arm)
+    return sysconf(97);
+#elif defined (HALIDE_ARCH_x86_32) || defined (HALIDE_ARCH_x86_64)
+#if defined (HALIDE_OS_linux) || defined (HALIDE_OS_nacl)
+    return sysconf(84);
+#elif defined (HALIDE_OS_os_x)
+    return sysconf(58);
+#else
+#error "HALIDE_OS_* doesn't seem to be defined, or compiling this file for the wrong OS"
+#endif
+#else
+#error "HALIDE_ARCH_* doesn't seem to be defined, or compiling this file for the wrong architecture"
+#endif
 }
 
 WEAK int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {

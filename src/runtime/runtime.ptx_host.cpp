@@ -4,27 +4,12 @@
  *   clang -I/usr/local/cuda/include -c -S -emit-llvm ptx_shim_tmpl.c -o ptx_shim_tmpl.ll
  */
 
-//#include <cuda.h>
-#include <stdint.h>
+#include "mini_stdint.h"
 #include "../buffer_t.h"
 
 // The PTX host extends the x86 target
-#include "posix_allocator.cpp"
-#include "posix_clock.cpp"
-#include "posix_error_handler.cpp"
-#include "write_debug_image.cpp"
-#include "posix_io.cpp"
-#include "tracing.cpp"
-#include "posix_math.cpp"
-#ifdef _WIN32
-#include "fake_thread_pool.cpp"
-#else
-#ifdef __APPLE__
-#include "gcd_thread_pool.cpp"
-#else
-#include "posix_thread_pool.cpp"
-#endif
-#endif
+#define HALIDE_HAVE_COPY_TO_HOST
+#include "runtime.x86_64.cpp"
 
 extern "C" int atoi(const char *);
 
@@ -56,7 +41,7 @@ extern "C" {
 #endif //DEBUG
 
 #ifndef __cuda_cuda_h__
-#ifdef _WIN32
+#ifdef HALIDE_TARGET_OS_windows
 #define CUDAAPI __stdcall
 #else
 #define CUDAAPI

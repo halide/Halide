@@ -1,16 +1,16 @@
-#include <stdint.h>
+#include "mini_stdint.h"
 
 #ifndef _STRUCT_TIMEVAL
 #define _STRUCT_TIMEVAL
 
-#ifdef _LP64
+#if defined(HALIDE_TARGET_ARCH_x86_64)
 typedef int64_t sec_t;
 #else
 typedef int32_t sec_t;
 #endif
 
 // OSX always uses an int32 for the usec field
-#if defined(_LP64) && !defined(__APPLE__)
+#if defined(HALIDE_TARGET_ARCH_x86_64) && !defined(HALIDE_TARGET_OS_os_x)
 typedef int64_t usec_t;
 #else
 typedef int32_t usec_t;

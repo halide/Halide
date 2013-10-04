@@ -1,7 +1,4 @@
-#include "HalideRuntime.h"
-
-#include <stdarg.h>
-#include <stdint.h>
+#include "mini_stdint.h"
 
 #define WEAK __attribute__((weak))
 
@@ -11,13 +8,13 @@ extern "C" objc_id objc_getClass(const char *name);
 extern "C" objc_sel sel_getUid(const char *str);
 extern "C" objc_id objc_msgSend(objc_id self, objc_sel op, ...);
 
-extern "C" void NSLogv(objc_id fmt, va_list args);
+extern "C" void NSLogv(objc_id fmt, __builtin_va_list args);
 // To allocate a constant string, use: __builtin___CFStringMakeConstantString
 
 extern "C" {
 WEAK int halide_printf(const char * fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
+    __builtin_va_list args;
+    __builtin_va_start(args, fmt);
 
     // Buy an autorelease pool because this is not perf critical and it is the
     // really safe thing to do.
@@ -35,7 +32,7 @@ WEAK int halide_printf(const char * fmt, ...) {
 
     objc_msgSend(pool, sel_getUid("drain"));
 
-    va_end(args);
+    __builtin_va_end(args);
     return 1; // TODO: consider changing this routine to be void.
 }
 
@@ -48,7 +45,7 @@ static bool write_stub(const void *bytes, size_t size, void *f) {
     return (count == 1);
 }
 
-WEAK int32_t halide_debug_to_file(const char *filename, uint8_t *data, 
+WEAK int32_t halide_debug_to_file(const char *filename, uint8_t *data,
                                   int32_t s0, int32_t s1, int32_t s2, int32_t s3,
                                   int32_t type_code, int32_t bytes_per_element) {
     void *f = fopen(filename, "wb");

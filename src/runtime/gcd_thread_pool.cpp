@@ -1,6 +1,4 @@
-#include "HalideRuntime.h"
-
-#include <stdint.h>
+#include "mini_stdint.h"
 
 #define WEAK __attribute__((weak))
 
