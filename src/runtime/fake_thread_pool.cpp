@@ -1,11 +1,5 @@
-#include "HalideRuntime.h"
+#include "mini_stdint.h"
 
-#include <stdint.h>
-#ifdef _LP64
-typedef uint64_t size_t;
-#else
-typedef uint32_t size_t;
-#endif
 #define WEAK __attribute__((weak))
 
 extern "C" {

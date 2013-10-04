@@ -1,4 +1,4 @@
-#include "HalideRuntime.h"
+#include "mini_stdint.h"
 
 // Forward declared so that we can use this code on ios too
 extern "C" {

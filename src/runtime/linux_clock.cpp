@@ -1,5 +1,4 @@
-#include <stdint.h>
-#include <unistd.h>
+#include "mini_stdint.h"
 
 #ifndef __clockid_t_defined
 #define __clockid_t_defined 1
@@ -38,20 +37,27 @@ WEAK timespec halide_reference_clock;
 // -- android arm is 263
 // -- i386 and android x86 is 265
 // -- x64 is 228
-// Unfortunately, we don't (yet) have a good general infrastructure
-// to tell the runtime the platform we are building for (the target);
-// if we use (e.g.) ifdef __arm__, that sniffs the host compiler,
-// not the target. As a stopgap for now, we require the includer of this
-// file (which happens to know the proper platform) to define the proper
-// value.
-#ifndef LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME
-#error "LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME must be defined to use this file"
+
+#ifndef HALIDE_OS_linux
+#error "This file should only be compiled for linux targets"
 #endif
+
+#if defined(HALIDE_ARCH_arm)
+#define SYS_CLOCK_GETTIME 263
+#elif defined(HALIDE_ARCH_x86_64)
+#define SYS_CLOCK_GETTIME 228
+#elif defined(HALIDE_ARCH_x86_32)
+#define SYS_CLOCK_GETTIME 265
+#else
+#error "HALIDE_ARCH_* doesn't seem to be defined"
+#endif
+
+extern int syscall(int num, ...);
 
 WEAK int halide_start_clock() {
     // Guard against multiple calls
     if (!halide_reference_clock_inited) {
-        syscall(LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME, CLOCK_REALTIME, &halide_reference_clock);
+        syscall(SYS_CLOCK_GETTIME, CLOCK_REALTIME, &halide_reference_clock);
         halide_reference_clock_inited = true;
     }
     return 0;
@@ -60,6 +66,7 @@ WEAK int halide_start_clock() {
 WEAK int64_t halide_current_time_ns() {
     timespec now;
     // To avoid requiring people to link -lrt, we just make the syscall directly.
+
     syscall(LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME, CLOCK_REALTIME, &now);
     int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec)*1000000000;
     int64_t nd = (now.tv_nsec - halide_reference_clock.tv_nsec);

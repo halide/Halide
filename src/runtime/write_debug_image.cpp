@@ -1,3 +1,4 @@
+#include "mini_stdint.h"
 #include "HalideRuntime.h"
 
 // Use TIFF because it meets the following criteria:
@@ -127,7 +128,7 @@ int halide_write_debug_image(const char *filename, uint8_t *data,
         header.byte_order_marker = (c[0] << 8) | c[1];
 
 	header.version = 42;
-	header.ifd0_offset = offsetof(halide_tiff_header, entry_count);
+	header.ifd0_offset = __builtin_offsetof(halide_tiff_header, entry_count);
 	header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
 	tiff_tag *tag = &header.entries[0];
@@ -145,9 +146,9 @@ int halide_write_debug_image(const char *filename, uint8_t *data,
 			    sizeof(header) +
 				channels * sizeof(int32_t));     // strip byte counts, bug if 32-bit truncation
 	tag++->assign32(282, 5, 1,
-		      offsetof(halide_tiff_header, width_resolution));     // Width resolution
+                        __builtin_offsetof(halide_tiff_header, width_resolution));     // Width resolution
 	tag++->assign32(283, 5, 1,
-		      offsetof(halide_tiff_header, height_resolution));    // Height resolution
+                        __builtin_offsetof(halide_tiff_header, height_resolution));    // Height resolution
 	tag++->assign16(284, 1, 2);                              // Planar configuration -- planar
 	tag++->assign16(296, 1, 1);                              // Resolution Unit -- none
 	tag++->assign16(339, 1,

@@ -7,22 +7,8 @@
 #include "../buffer_t.h"
 
 // The OpenCL host extends the x86 target
-#include "posix_allocator.cpp"
-#include "posix_clock.cpp"
-#include "posix_error_handler.cpp"
-#include "write_debug_image.cpp"
-#include "posix_io.cpp"
-#include "tracing.cpp"
-#include "posix_math.cpp"
-#ifdef _WIN32
-#include "fake_thread_pool.cpp"
-#else
-#ifdef __APPLE__
-#include "gcd_thread_pool.cpp"
-#else
-#include "posix_thread_pool.cpp"
-#endif
-#endif
+#define HALIDE_HAVE_COPY_TO_HOST
+#include "runtime.x86_64.cpp"
 
 // OpenCL defines are included simply by embedding the standard Khronos cl.h,
 // cl_platform.h headers in the project. They are licensed permissively enough.

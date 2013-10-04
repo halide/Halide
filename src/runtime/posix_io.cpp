@@ -1,7 +1,4 @@
-#include "HalideRuntime.h"
-
-#include <stdarg.h>
-#include <stdint.h>
+#include "mini_stdint.h"
 
 #define WEAK __attribute__((weak))
 
@@ -10,9 +7,9 @@ extern "C" {
 extern char *getenv(const char *);
 extern void *fopen(const char *path, const char *mode);
 extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
-extern int vfprintf(void *stream, const char *format, va_list ap);
+extern int vfprintf(void *stream, const char *format, __builtin_va_list ap);
 extern int snprintf(char *str, size_t size, const char *format, ...);
-#ifdef __APPLE__
+#ifdef HALIDE_TARGET_OS_os_x
 #define stderr __stderrp
 #endif
 extern void *stderr;
@@ -20,10 +17,10 @@ extern void *stderr;
 extern int fclose(void *f);
 
 WEAK int halide_printf(const char * fmt, ...) {
-    va_list args;
-    va_start(args,fmt);
+    __builtin_va_list args;
+    __builtin_va_start(args,fmt);
     int ret = vfprintf(stderr, fmt, args);
-    va_end(args);
+    __builtin_va_end(args);
     return ret;
 }
 

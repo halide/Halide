@@ -1,6 +1,5 @@
 #include "posix_allocator.cpp"
-#ifdef __linux__
-#define LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME 265
+#if defined(HALIDE_TARGET_OS_linux)
 #include "linux_clock.cpp"
 #else
 #include "posix_clock.cpp"
@@ -10,10 +9,10 @@
 #include "posix_io.cpp"
 #include "tracing.cpp"
 #include "posix_math.cpp"
-#ifdef _WIN32
+#if defined(HALIDE_TARGET_OS_windows)
 #include "fake_thread_pool.cpp"
 #else
-#ifdef __APPLE__
+#if defined(HALIDE_TARGET_OS_os_x) || defined(HALIDE_TARGET_OS_ios)
 #include "gcd_thread_pool.cpp"
 #else
 #include "posix_thread_pool.cpp"
