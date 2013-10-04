@@ -377,7 +377,9 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     #else
     target_machine->addAnalysisPasses(pass_manager);
     #endif
-    pass_manager.add(new DataLayout(module));
+    DataLayout *layout = new DataLayout(module);
+    debug(2) << "Data layout: " << layout->getStringRepresentation();
+    pass_manager.add(layout);
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(createAlwaysInlinerPass());
@@ -434,12 +436,12 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
-    /*
     // Check it's 32-byte aligned
 
-    // Andrew: There's no point. External buffers come in with unknown
-    // mins, so accesses to them are never aligned anyway.
+    // Disabled, because we don't currently require external
+    // allocations to be aligned.
 
+    /*
     Value *base = builder->CreatePtrToInt(host_ptr, i64);
     Value *check_alignment = builder->CreateAnd(base, 0x1f);
     check_alignment = builder->CreateIsNull(check_alignment);
@@ -447,6 +449,10 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
     string error_message = "Buffer " + name + " is not 32-byte aligned";
     create_assertion(check_alignment, error_message);
     */
+
+    // Instead track this buffer name so that loads and stores from it
+    // don't try to be too aligned.
+    might_be_misaligned.insert(name);
 
     // Make sure the buffer object itself is not null
     create_assertion(builder->CreateIsNotNull(buffer), "buffer argument " + name + " is NULL");
@@ -956,6 +962,8 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
 
 void CodeGen::visit(const Load *op) {
 
+    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
+
     // There are several cases. Different architectures may wish to override some.
     if (op->type.is_scalar()) {
         // Scalar loads
@@ -965,6 +973,9 @@ void CodeGen::visit(const Load *op) {
         value = load;
     } else {
         int alignment = op->type.bytes();
+        if (possibly_misaligned) {
+            alignment = op->type.element_of().bytes();
+        }
         const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
@@ -1021,7 +1032,7 @@ void CodeGen::visit(const Load *op) {
             Expr base = ramp->base - ramp->width + 1;
 
             // Re-do alignment analysis for the flipped index
-            if (internal) {
+            if (internal && !possibly_misaligned) {
                 alignment = op->type.bytes();
                 ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
                 alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
@@ -1726,6 +1737,7 @@ void CodeGen::visit(const For *op) {
 void CodeGen::visit(const Store *op) {
     Value *val = codegen(op->value);
     Halide::Type value_type = op->value.type();
+    bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
     // Scalar
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
@@ -1748,6 +1760,9 @@ void CodeGen::visit(const Store *op) {
 
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
             Value *ptr2 = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
+            if (possibly_misaligned) {
+                alignment = op->value.type().element_of().bytes();
+            }
             StoreInst *store = builder->CreateAlignedStore(val, ptr2, alignment);
             add_tbaa_metadata(store, op->name);
         } else if (ramp) {
@@ -1761,11 +1776,11 @@ void CodeGen::visit(const Store *op) {
                 if (const_stride) {
                     // Use a constant offset from the base pointer
                     Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
-                    StoreInst *store = builder->CreateAlignedStore(v, p, op->value.type().bytes());
+                    StoreInst *store = builder->CreateStore(v, p);
                     add_tbaa_metadata(store, op->name);
                 } else {
                     // Increment the pointer by the stride for each element
-                    StoreInst *store = builder->CreateAlignedStore(v, ptr, op->value.type().bytes());
+                    StoreInst *store = builder->CreateStore(v, ptr);
                     add_tbaa_metadata(store, op->name);
                     ptr = builder->CreateInBoundsGEP(ptr, stride);
                 }
