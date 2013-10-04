@@ -293,6 +293,11 @@ protected:
      * next For loop. */
     bool need_stack_restore;
 
+    /** Which buffers came in from the outside world (and so we can't
+     * guarantee their alignment) */
+    std::set<std::string> might_be_misaligned;
+
+
 private:
 
     /** All the values in scope at the current code location during
