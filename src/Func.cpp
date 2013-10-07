@@ -213,7 +213,7 @@ FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u) const {
 }
 
 FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
-  vector<Var> args = vec(x, y, z, w, u, v);
+    vector<Var> args = vec(x, y, z, w, u, v);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
