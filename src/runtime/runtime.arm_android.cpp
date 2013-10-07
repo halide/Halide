@@ -1,6 +1,3 @@
-#define LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME 263
-#define POSIX_THREAD_POOL_SYSCALL_NPROCESSORS_ONLN 97
-
 #include "posix_allocator.cpp"
 #include "linux_clock.cpp"
 #include "posix_error_handler.cpp"
