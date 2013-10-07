@@ -200,7 +200,7 @@ Image<T> init(Type t, int unique, int width, int height) {
     }
     else if (t.is_float()) {
         uint64_t uv, vsalt;
-        uint64_t max = 0xffffffffffffffff;
+        uint64_t max = (uint64_t)(-1);
         double v;
         for (int i = 0; i < width; i++) {
             for (int j = 0; j < height; j++) {

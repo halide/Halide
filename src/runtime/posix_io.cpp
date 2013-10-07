@@ -9,7 +9,7 @@ extern void *fopen(const char *path, const char *mode);
 extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
 extern int vfprintf(void *stream, const char *format, __builtin_va_list ap);
 extern int snprintf(char *str, size_t size, const char *format, ...);
-#ifdef HALIDE_TARGET_OS_os_x
+#ifdef HALIDE_OS_os_x
 #define stderr __stderrp
 #endif
 extern void *stderr;

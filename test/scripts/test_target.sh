@@ -10,8 +10,8 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
         # OS X auto-detects the output format correctly
         export LD="ld"
     fi
-    export CC="cc -m32"
-    export CXX="c++ -m32"
+    export CC="gcc -m32"
+    export CXX="g++ -m32"
     export GXX="g++ -m32"
     export CLANG=llvm/${LLVM}/build-32/bin/clang
     export LLVM_CONFIG=llvm/${LLVM}/build-32/bin/llvm-config
@@ -20,8 +20,8 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
 else
     # ptx falls into this category
     export LD="ld"
-    export CC="cc -m64"
-    export CXX="c++ -m64"
+    export CC="gcc -m64"
+    export CXX="g++ -m64"
     export GXX="g++ -m64"
     export CLANG=llvm/${LLVM}/build-64/bin/clang
     export LLVM_CONFIG=llvm/${LLVM}/build-64/bin/llvm-config
@@ -35,6 +35,7 @@ echo Using CC = $CC
 echo Using CXX = $CXX
 make clean &&
 make -j8 build_tests || exit 1
+#make || exit 1
 if [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
     echo "Halide builds but tests not run."

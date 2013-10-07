@@ -210,8 +210,6 @@ typedef double                  cl_double;
 
 #else
 
-#include <stdint.h>
-
 /* scalar types  */
 typedef int8_t          cl_char;
 typedef uint8_t         cl_uchar;
