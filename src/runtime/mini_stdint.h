@@ -27,6 +27,4 @@ typedef int32_t ptrdiff_t;
 #define __UINT64_C(c)	c ## ULL
 #endif
 
-
-
 #endif
