@@ -1,5 +1,5 @@
 #include "posix_allocator.cpp"
-#ifdef HALIDE_TARGET_OS_linux
+#ifdef HALIDE_OS_linux
 #include "linux_clock.cpp"
 #else
 #include "posix_clock.cpp"

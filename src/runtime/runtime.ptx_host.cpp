@@ -41,7 +41,7 @@ extern "C" {
 #endif //DEBUG
 
 #ifndef __cuda_cuda_h__
-#ifdef HALIDE_TARGET_OS_windows
+#ifdef HALIDE_OS_windows
 #define CUDAAPI __stdcall
 #else
 #define CUDAAPI

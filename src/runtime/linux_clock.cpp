@@ -67,7 +67,7 @@ WEAK int64_t halide_current_time_ns() {
     timespec now;
     // To avoid requiring people to link -lrt, we just make the syscall directly.
 
-    syscall(LINUX_CLOCK_SYSCALL_SYS_CLOCK_GETTIME, CLOCK_REALTIME, &now);
+    syscall(SYS_CLOCK_GETTIME, CLOCK_REALTIME, &now);
     int64_t d = int64_t(now.tv_sec - halide_reference_clock.tv_sec)*1000000000;
     int64_t nd = (now.tv_nsec - halide_reference_clock.tv_nsec);
     return d + nd;
