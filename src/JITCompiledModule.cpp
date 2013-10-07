@@ -1,3 +1,4 @@
+#include <stdint.h>
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
 #include "CodeGen.h"

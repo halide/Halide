@@ -1,8 +1,6 @@
 #ifndef HALIDE_BUFFER_T_H
 #define HALIDE_BUFFER_T_H
 
-#include <stdint.h>
-
 /** \file
  * Defines the internal runtime representation of an image: buffer_t
  */

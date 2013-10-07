@@ -4,6 +4,7 @@
  *   clang -framework OpenCL -DTEST_STUB runtime.opencl_host.cpp
  */
 
+#include "mini_stdint.h"
 #include "../buffer_t.h"
 
 // The OpenCL host extends the x86 target
