@@ -1,15 +1,13 @@
 #ifndef HALIDE_BUFFER_H
 #define HALIDE_BUFFER_H
 
-
+#include <stdint.h>
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
 #include "IntrusivePtr.h"
 #include "Type.h"
 #include "Argument.h"
 #include "Util.h"
-
-#include <stdint.h>
 
 /** \file
  * Defines Buffer - A c++ wrapper around a buffer_t.
