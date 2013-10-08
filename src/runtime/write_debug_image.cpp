@@ -1,6 +1,11 @@
 #include "mini_stdint.h"
 #include "HalideRuntime.h"
 
+
+extern "C" void *fopen(const char *, const char *);
+extern "C" int fclose(void *);
+extern "C" size_t fwrite(const void *, size_t, size_t, void *);
+
 // Use TIFF because it meets the following criteria:
 // - Supports uncompressed data
 // - Supports 3D images as well as 2D
@@ -37,26 +42,26 @@ struct tiff_tag {
         int32_t i32;
     } value;
 
-  void assign16(int16_t tag_code, int32_t count, int16_t value) {
-    this->tag_code = tag_code;
-    this->type_code = 3;
-    this->count = count;
-    this->value.i16 = value;
-  }
+    void assign16(int16_t tag_code, int32_t count, int16_t value) {
+        this->tag_code = tag_code;
+        this->type_code = 3;
+        this->count = count;
+        this->value.i16 = value;
+    }
 
-  void assign32(int16_t tag_code, int32_t count, int32_t value) {
-    this->tag_code = tag_code;
-    this->type_code = 4;
-    this->count = count;
-    this->value.i32 = value;
-  }
+    void assign32(int16_t tag_code, int32_t count, int32_t value) {
+        this->tag_code = tag_code;
+        this->type_code = 4;
+        this->count = count;
+        this->value.i32 = value;
+    }
 
-  void assign32(int16_t tag_code, int16_t type_code, int32_t count, int32_t value) {
-    this->tag_code = tag_code;
-    this->type_code = type_code;
-    this->count = count;
-    this->value.i32 = value;
-  }
+    void assign32(int16_t tag_code, int16_t type_code, int32_t count, int32_t value) {
+        this->tag_code = tag_code;
+        this->type_code = type_code;
+        this->count = count;
+        this->value.i32 = value;
+    }
 };
 
 struct halide_tiff_header {
@@ -98,11 +103,14 @@ bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
-typedef bool (*write_func)(const void *bytes, size_t size, void *arg);
+}
 
-int halide_write_debug_image(const char *filename, uint8_t *data,
-			    int32_t s0, int32_t s1, int32_t s2, int32_t s3,
-			    int32_t type_code, int32_t bytes_per_element, write_func write, void* write_arg) {
+WEAK extern "C" int32_t halide_debug_to_file(const char *filename, uint8_t *data,
+                                             int32_t s0, int32_t s1, int32_t s2, int32_t s3,
+                                             int32_t type_code, int32_t bytes_per_element) {
+    void *f = fopen(filename, "wb");
+    if (!f) return -1;
+
     size_t elts = s0;
     elts *= s1*s2*s3;
 
@@ -161,34 +169,42 @@ int halide_write_debug_image(const char *filename, uint8_t *data,
 	header.height_resolution[0] = 1;
 	header.height_resolution[1] = 1;
 
-	if(!(*write)((void *)(&header), sizeof(header), write_arg))
+	if (!fwrite((void *)(&header), sizeof(header), 1, f)) {
+            fclose(f);
 	    return -2;
+        }
 
 	if (channels > 1) {
 	  int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
 	  for (int32_t i = 0; i < channels; i++) {
-	    if (!(*write)((void*)(&offset), 4, write_arg))
-		return -2;
-	    offset += s0 * s1 * depth * bytes_per_element;
+              if (!fwrite((void*)(&offset), 4, 1, f)) {
+                  fclose(f);
+                  return -2;
+              }
+              offset += s0 * s1 * depth * bytes_per_element;
 	  }
 	  int32_t count = s0 * s1 * depth;
 	  for (int32_t i = 0; i < channels; i++) {
-	    if (!(*write)((void*)(&count), 4, write_arg))
-		return -2;
+              if (!fwrite((void*)(&count), 4, 1, f)) {
+                  fclose(f);
+                  return -2;
+              }
 	  }
 	}
-    }
-    else {
+    } else {
         int32_t header[] = {s0, s1, s2, s3, type_code};
-        if(!(*write)((void *)(&header[0]), sizeof(header), write_arg))
+        if (!fwrite((void *)(&header[0]), sizeof(header), 1, f)) {
+            fclose(f);
             return -2;
+        }
     }
 
-    bool write_success = (*write)((void *)data, bytes_per_element * elts, write_arg);
-    if (!write_success)
+    if (fwrite((void *)data, bytes_per_element * elts, 1, f)) {
+        fclose(f);
+        return 0;
+    } else {
+        fclose(f);
         return -1;
-    return 0;
     }
-
 };
