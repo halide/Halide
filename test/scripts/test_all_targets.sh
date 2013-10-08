@@ -110,14 +110,14 @@ for LLVM in trunk release-3.2 release-3.3 pnacl; do
     if [ ! -f build-32/bin/llvm-config ]; then
         mkdir build-32
         cd build-32
-        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
+        CC=gcc CXX=g++ cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
         make -j8
         cd ..
     fi
     if [ ! -f build-64/bin/llvm-config ]; then
         mkdir build-64
         cd build-64
-        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+        CC=gcc CXX=g++ cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
         make -j8
         cd ..
     fi
