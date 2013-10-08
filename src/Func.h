@@ -538,17 +538,15 @@ public:
     EXPORT void set_error_handler(void (*handler)(const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory, with 32-bytes extra
-     * allocated on the start and end so that vector loads can spill
-     * off the end slightly. Metadata (e.g. the base address of the
-     * region allocated) can go in this margin - it is only read, not
-     * written. If you are compiling statically, you can also just
-     * define your own functions with signatures
+     * return 32-byte aligned chunks of memory. If compiling
+     * statically, routines with appropriate signatures can be
+     * provided directly
      \code
-     extern "C" void *malloc(size_t)
+     extern "C" void *halide_malloc(size_t)
      extern "C" void halide_free(void *)
      \endcode
-     * These will clobber Halide's versions.
+     * These will clobber Halide's versions. See \file HalideRuntime.h
+     * for declarations.
      */
     EXPORT void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
 
