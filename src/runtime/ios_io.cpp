@@ -33,30 +33,13 @@ WEAK int halide_printf(const char * fmt, ...) {
     objc_msgSend(pool, sel_getUid("drain"));
 
     __builtin_va_end(args);
-    return 1; // TODO: consider changing this routine to be void.
-}
 
-extern "C" void *fopen(const char *path, const char *mode);
-extern "C" size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
-extern "C" int fclose(void *f);
+    // On most systems, vprintf returns the number of characters
+    // printed, but on ios, NSLogV returns no such information, so
+    // just return 1 to keep any assertions wrapped around this happy.
+    return 1;
 
-static bool write_stub(const void *bytes, size_t size, void *f) {
-    int count = fwrite(bytes, size, 1, f);
-    return (count == 1);
-}
 
-WEAK int32_t halide_debug_to_file(const char *filename, uint8_t *data,
-                                  int32_t s0, int32_t s1, int32_t s2, int32_t s3,
-                                  int32_t type_code, int32_t bytes_per_element) {
-    void *f = fopen(filename, "wb");
-    if (!f) return -1;
-
-    int result = halide_write_debug_image(filename, data, s0, s1, s2, s3,
-                                          type_code, bytes_per_element,
-                                          write_stub, (void *)f);
-
-    fclose(f);
-    return result;
 }
 
 }
