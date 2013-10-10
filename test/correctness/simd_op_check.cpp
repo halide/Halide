@@ -75,7 +75,7 @@ void do_job(job &j) {
 
     char cmd[1024];
     snprintf(cmd, 1024,
-	     "sed -n '/for test_/,/end for test_/p' < %s | "
+	     "sed -n '/for /,/end for test_/p' < %s | "
              "sed 's/@.*//' > %s.s && "
 	     "grep \"\tv\\{0,1\\}%s\" %s.s > /dev/null",
 	     module, module, op, module);
