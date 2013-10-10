@@ -56,7 +56,8 @@ void signal_handler(int signum) {
 
 int main(int argc, char **argv) {
 
-   signal(SIGSEGV, signal_handler);
+    signal(SIGSEGV, signal_handler);
+    signal(SIGBUS, signal_handler);
 
     // Loads from this image will barf, because we've messed up the host pointer
     Image<int> input(100, 100);
