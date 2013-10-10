@@ -6,11 +6,17 @@ else
   SCHEDULE=0
 endif
 
+ifdef BUILD_PREFIX
+LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
+else
+LIB_HALIDE = bin/libHalide.a
+endif
+
 all: process
 
 camera_pipe: ../../ camera_pipe.cpp
-	$(MAKE) -C ../../ bin/libHalide.a
-	$(CXX) camera_pipe.cpp -I ../../include/ ../../bin/libHalide.a -o camera_pipe -ldl -lpthread
+	$(MAKE) -C ../../ $(LIB_HALIDE)
+	$(CXX) camera_pipe.cpp -I ../../include/ ../../$(LIB_HALIDE) -o camera_pipe -ldl -lpthread
 
 curved.o: camera_pipe
 	./camera_pipe 8 0 # 8-bit output,

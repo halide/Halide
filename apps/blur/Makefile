@@ -1,6 +1,11 @@
 # We really need to use g++ here, to support openmp
 GXX ?= g++
 
+ifdef BUILD_PREFIX
+LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
+else
+LIB_HALIDE = bin/libHalide.a
+endif
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
@@ -21,8 +26,8 @@ ifeq ($(HL_TARGET),ptx-debug)
 endif
 
 halide_blur: ../../ halide_blur.cpp
-	$(MAKE) -C ../../ bin/libHalide.a
-	$(GXX) halide_blur.cpp -I ../../include ../../bin/libHalide.a -o halide_blur -ldl -lpthread
+	$(MAKE) -C ../../ $(LIB_HALIDE)
+	$(GXX) halide_blur.cpp -I ../../include ../../$(LIB_HALIDE) -o halide_blur -ldl -lpthread
 
 halide_blur.o: halide_blur
 	./halide_blur
