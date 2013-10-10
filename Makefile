@@ -204,7 +204,6 @@ $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 clean:
 	rm -rf $(BIN_DIR)/*
 	rm -rf $(BUILD_DIR)/*
-	rm -rf $(DISTRIB_DIR)/*
 	rm -rf include/*
 	rm -rf doc
 
@@ -343,7 +342,7 @@ docs: doc
 doc: src test
 	doxygen
 
-$(DISTRIB_DIR)/halide.tgz: all
+$(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/lib
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/lib
 	cp include/Halide.h $(DISTRIB_DIR)/include
