@@ -2,6 +2,12 @@ CXX ?= g++
 
 HL_MODULES = daubechies_x.o inverse_daubechies_x.o haar_x.o inverse_haar_x.o
 
+ifdef BUILD_PREFIX
+LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
+else
+LIB_HALIDE = bin/libHalide.a
+endif
+
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
@@ -23,8 +29,8 @@ endif
 all: filter
 
 wavelet: ../../ wavelet.cpp
-	$(MAKE) -C ../../ bin/libHalide.a
-	$(CXX) wavelet.cpp -I ../../include ../../bin/libHalide.a -o wavelet -lpthread -ldl
+	$(MAKE) -C ../../ $(LIB_HALIDE)
+	$(CXX) wavelet.cpp -I ../../include ../../$(LIB_HALIDE) -o wavelet -lpthread -ldl
 
 $(HL_MODULES): wavelet
 	./wavelet

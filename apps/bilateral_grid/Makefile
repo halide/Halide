@@ -1,5 +1,11 @@
 CXX ?= g++
 
+ifdef BUILD_PREFIX
+LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
+else
+LIB_HALIDE = bin/libHalide.a
+endif
+
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
@@ -21,8 +27,8 @@ endif
 all: filter
 
 bilateral_grid: ../../ bilateral_grid.cpp
-	$(MAKE) -C ../../ bin/libHalide.a
-	$(CXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../include/ ../../bin/libHalide.a -o bilateral_grid  -lpthread -ldl
+	$(MAKE) -C ../../ $(LIB_HALIDE)
+	$(CXX) $(CPPFLAGS) bilateral_grid.cpp -I ../../include/  ../../$(LIB_HALIDE) -o bilateral_grid  -lpthread -ldl
 
 bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8
