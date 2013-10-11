@@ -2,7 +2,7 @@ LLVM=$1
 
 export HL_TARGET=$2
 
-if [[ "$HL_TARGET" == x86_3* ]]; then
+if [[ "$HL_TARGET" == x86-3* ]]; then
     UNAME=`uname`
     if [[ `uname` == Linux ]]; then
         export LD="ld -melf_i386"
