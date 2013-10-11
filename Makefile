@@ -7,7 +7,7 @@
 CXX ?= g++
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
-LLVM_VERSION = $(shell $(LLVM_CONFIG) --version)
+LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
@@ -179,7 +179,6 @@ $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 clean:
 	rm -rf $(BIN_DIR)/*
 	rm -rf $(BUILD_DIR)/*
-	rm -rf $(DISTRIB_DIR)/*
 	rm -rf include/*
 	rm -rf doc
 
@@ -276,6 +275,10 @@ ifneq (,$(findstring Apple clang version 4.0,$(CLANG_VERSION)))
 CLANG_OK=yes
 endif
 
+ifneq (,$(findstring Apple LLVM version 5.0,$(CLANG_VERSION)))
+CLANG_OK=yes
+endif
+
 ifneq (,$(findstring 3.,$(LLVM_VERSION)))
 ifeq (,$(findstring 3.0,$(LLVM_VERSION)))
 ifeq (,$(findstring 3.1,$(LLVM_VERSION)))
@@ -325,7 +328,7 @@ docs: doc
 doc: src test
 	doxygen
 
-$(DISTRIB_DIR)/halide.tgz: all
+$(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
 	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/lib
 	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/lib
 	cp include/Halide.h $(DISTRIB_DIR)/include

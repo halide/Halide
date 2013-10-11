@@ -24,47 +24,6 @@ using std::make_pair;
 
 using namespace llvm;
 
-CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
-                                     target(t) {
-    #if !(WITH_ARM)
-    assert(false && "arm not enabled for this build of Halide.");
-    #endif
-
-    assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
-
-    #if !(WITH_NATIVE_CLIENT)
-    assert(target.os != Target::NaCl && "llvm build not configured with native client enabled.");
-    #endif
-}
-
-void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // Fix the target triple.
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    if (target.os == Target::Android) {
-        module->setTargetTriple("arm-linux-eabi");
-    } else if (target.os == Target::IOS) {
-        module->setTargetTriple("armv7-apple-ios");
-    } else if (target.os == Target::NaCl) {
-        module->setTargetTriple("arm-nacl");
-    } else if (target.os == Target::Linux) {
-        module->setTargetTriple("arm-linux-gnueabihf");
-    } else {
-        assert(false && "No arm support for this OS");
-    }
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args);
-
-    // Optimize
-    CodeGen::optimize_module();
-}
 
 namespace {
 // cast operators
@@ -145,10 +104,237 @@ Expr _u32q(Expr e) {
         return cast(UInt(32, e.type().width), clamp(e, 0, UInt(32).max()));
     }
 }
+}
 
+CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
+                                     target(t) {
+    #if !(WITH_ARM)
+    assert(false && "arm not enabled for this build of Halide.");
+    #endif
 
+    assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
+
+    #if !(WITH_NATIVE_CLIENT)
+    assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
+    #endif
+
+    casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
+    casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
+    casts.push_back(Pattern("vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256)));
+    casts.push_back(Pattern("vaddhn.v4i16", _u16((wild_u32x4 + wild_u32x4)/65536)));
+    casts.push_back(Pattern("vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256)));
+    casts.push_back(Pattern("vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)));
+    casts.push_back(Pattern("vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)));
+    casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
+    casts.push_back(Pattern("vrhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8) + 1)/2)));
+    casts.push_back(Pattern("vrhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8) + 1)/2)));
+    casts.push_back(Pattern("vrhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4) + 1)/2)));
+    casts.push_back(Pattern("vrhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4) + 1)/2)));
+    casts.push_back(Pattern("vrhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2) + 1)/2)));
+    casts.push_back(Pattern("vrhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2) + 1)/2)));
+    casts.push_back(Pattern("vrhadds.v16i8",   _i8((_i16(wild_i8x16) + _i16(wild_i8x16) + 1)/2)));
+    casts.push_back(Pattern("vrhaddu.v16i8",   _u8((_u16(wild_u8x16) + _u16(wild_u8x16) + 1)/2)));
+    casts.push_back(Pattern("vrhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8) + 1)/2)));
+    casts.push_back(Pattern("vrhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8) + 1)/2)));
+    casts.push_back(Pattern("vrhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4) + 1)/2)));
+    casts.push_back(Pattern("vrhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4) + 1)/2)));
+
+    casts.push_back(Pattern("vhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8))/2)));
+    casts.push_back(Pattern("vhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8))/2)));
+    casts.push_back(Pattern("vhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4))/2)));
+    casts.push_back(Pattern("vhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4))/2)));
+    casts.push_back(Pattern("vhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2))/2)));
+    casts.push_back(Pattern("vhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2))/2)));
+    casts.push_back(Pattern("vhadds.v16i8", _i8((_i16(wild_i8x16) + _i16(wild_i8x16))/2)));
+    casts.push_back(Pattern("vhaddu.v16i8", _u8((_u16(wild_u8x16) + _u16(wild_u8x16))/2)));
+    casts.push_back(Pattern("vhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8))/2)));
+    casts.push_back(Pattern("vhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8))/2)));
+    casts.push_back(Pattern("vhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4))/2)));
+    casts.push_back(Pattern("vhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4))/2)));
+    casts.push_back(Pattern("vhsubs.v8i8", _i8((_i16(wild_i8x8) - _i16(wild_i8x8))/2)));
+    casts.push_back(Pattern("vhsubu.v8i8", _u8((_u16(wild_u8x8) - _u16(wild_u8x8))/2)));
+    casts.push_back(Pattern("vhsubs.v4i16", _i16((_i32(wild_i16x4) - _i32(wild_i16x4))/2)));
+    casts.push_back(Pattern("vhsubu.v4i16", _u16((_u32(wild_u16x4) - _u32(wild_u16x4))/2)));
+    casts.push_back(Pattern("vhsubs.v2i32", _i32((_i64(wild_i32x2) - _i64(wild_i32x2))/2)));
+    casts.push_back(Pattern("vhsubu.v2i32", _u32((_u64(wild_u32x2) - _u64(wild_u32x2))/2)));
+    casts.push_back(Pattern("vhsubs.v16i8", _i8((_i16(wild_i8x16) - _i16(wild_i8x16))/2)));
+    casts.push_back(Pattern("vhsubu.v16i8", _u8((_u16(wild_u8x16) - _u16(wild_u8x16))/2)));
+    casts.push_back(Pattern("vhsubs.v8i16", _i16((_i32(wild_i16x8) - _i32(wild_i16x8))/2)));
+    casts.push_back(Pattern("vhsubu.v8i16", _u16((_u32(wild_u16x8) - _u32(wild_u16x8))/2)));
+    casts.push_back(Pattern("vhsubs.v4i32", _i32((_i64(wild_i32x4) - _i64(wild_i32x4))/2)));
+    casts.push_back(Pattern("vhsubu.v4i32", _u32((_u64(wild_u32x4) - _u64(wild_u32x4))/2)));
+
+    casts.push_back(Pattern("vqadds.v8i8", _i8q(_i16(wild_i8x8) + _i16(wild_i8x8))));
+    casts.push_back(Pattern("vqaddu.v8i8", _u8q(_u16(wild_u8x8) + _u16(wild_u8x8))));
+    casts.push_back(Pattern("vqadds.v4i16", _i16q(_i32(wild_i16x4) + _i32(wild_i16x4))));
+    casts.push_back(Pattern("vqaddu.v4i16", _u16q(_u32(wild_u16x4) + _u32(wild_u16x4))));
+    casts.push_back(Pattern("vqadds.v2i32", _i32q(_i64(wild_i32x2) + _i64(wild_i32x2))));
+    casts.push_back(Pattern("vqaddu.v2i32", _u32q(_u64(wild_u32x2) + _u64(wild_u32x2))));
+    casts.push_back(Pattern("vqadds.v16i8", _i8q(_i16(wild_i8x16) + _i16(wild_i8x16))));
+    casts.push_back(Pattern("vqaddu.v16i8", _u8q(_u16(wild_u8x16) + _u16(wild_u8x16))));
+    casts.push_back(Pattern("vqadds.v8i16", _i16q(_i32(wild_i16x8) + _i32(wild_i16x8))));
+    casts.push_back(Pattern("vqaddu.v8i16", _u16q(_u32(wild_u16x8) + _u32(wild_u16x8))));
+    casts.push_back(Pattern("vqadds.v4i32", _i32q(_i64(wild_i32x4) + _i64(wild_i32x4))));
+    casts.push_back(Pattern("vqaddu.v4i32", _u32q(_u64(wild_u32x4) + _u64(wild_u32x4))));
+
+        // N.B. Saturating subtracts of unsigned types are expressed
+        // by widening to a *signed* type
+    casts.push_back(Pattern("vqsubs.v8i8", _i8q(_i16(wild_i8x8) - _i16(wild_i8x8))));
+    casts.push_back(Pattern("vqsubu.v8i8", _u8q(_i16(wild_u8x8) - _i16(wild_u8x8))));
+    casts.push_back(Pattern("vqsubs.v4i16", _i16q(_i32(wild_i16x4) - _i32(wild_i16x4))));
+    casts.push_back(Pattern("vqsubu.v4i16", _u16q(_i32(wild_u16x4) - _i32(wild_u16x4))));
+    casts.push_back(Pattern("vqsubs.v2i32", _i32q(_i64(wild_i32x2) - _i64(wild_i32x2))));
+    casts.push_back(Pattern("vqsubu.v2i32", _u32q(_i64(wild_u32x2) - _i64(wild_u32x2))));
+    casts.push_back(Pattern("vqsubs.v16i8", _i8q(_i16(wild_i8x16) - _i16(wild_i8x16))));
+    casts.push_back(Pattern("vqsubu.v16i8", _u8q(_i16(wild_u8x16) - _i16(wild_u8x16))));
+    casts.push_back(Pattern("vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8))));
+    casts.push_back(Pattern("vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8))));
+    casts.push_back(Pattern("vqsubs.v4i32", _i32q(_i64(wild_i32x4) - _i64(wild_i32x4))));
+    casts.push_back(Pattern("vqsubu.v4i32", _u32q(_i64(wild_u32x4) - _i64(wild_u32x4))));
+
+    // Technically, the unsigned ones only need to saturate below, and
+    // sometimes the Halide optimizer recognizes that.
+    casts.push_back(Pattern("vqsubu.v8i8", _u8(max(_i16(wild_u8x8) - _i16(wild_u8x8), 0))));
+    casts.push_back(Pattern("vqsubu.v4i16", _u16(max(_i32(wild_u16x4) - _i32(wild_u16x4), 0))));
+    casts.push_back(Pattern("vqsubu.v2i32", _u32(max(_i64(wild_u32x2) - _i64(wild_u32x2), 0))));
+    casts.push_back(Pattern("vqsubu.v16i8", _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))));
+    casts.push_back(Pattern("vqsubu.v8i16", _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))));
+    casts.push_back(Pattern("vqsubu.v4i32", _u32(max(_i64(wild_u32x4) - _i64(wild_u32x4), 0))));
+
+    casts.push_back(Pattern("vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), Pattern::RightShift));
+    casts.push_back(Pattern("vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), Pattern::RightShift));
+    casts.push_back(Pattern("vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), Pattern::RightShift));
+    casts.push_back(Pattern("vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), Pattern::RightShift));
+    casts.push_back(Pattern("vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), Pattern::RightShift));
+    casts.push_back(Pattern("vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), Pattern::RightShift));
+
+    casts.push_back(Pattern("vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftns.v2i32", _i32q(wild_i64x2/wild_i64x2), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v8i8", _u8q(wild_u16x8/wild_u16x8), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v4i16", _u16q(wild_u32x4/wild_u32x4), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnu.v2i32", _u32q(wild_u64x2/wild_u64x2), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v8i8", _u8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v4i16", _u16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
+    casts.push_back(Pattern("vqshiftnsu.v2i32", _u32q(wild_i64x2/wild_i64x2), Pattern::RightShift));
+
+    casts.push_back(Pattern("vqshifts.v8i8", _i8q(_i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v4i16", _i16q(_i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v2i32", _i32q(_i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v8i8", _u8q(_u16(wild_u8x8)*wild_u16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v4i16", _u16q(_u32(wild_u16x4)*wild_u32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v2i32", _u32q(_u64(wild_u32x2)*wild_u64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v8i8", _u8q(_i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v4i16", _u16q(_i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v2i32", _u32q(_i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v16i8", _i8q(_i16(wild_i8x16)*wild_i16x16), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v8i16", _i16q(_i32(wild_i16x8)*wild_i32x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshifts.v4i32", _i32q(_i64(wild_i32x4)*wild_i64x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v16i8", _u8q(_u16(wild_u8x16)*wild_u16x16), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v8i16", _u16q(_u32(wild_u16x8)*wild_u32x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftu.v4i32", _u32q(_u64(wild_u32x4)*wild_u64x4), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v16i8", _u8q(_i16(wild_i8x16)*wild_i16x16), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v8i16", _u16q(_i32(wild_i16x8)*wild_i32x8), Pattern::LeftShift));
+    casts.push_back(Pattern("vqshiftsu.v4i32", _u32q(_i64(wild_i32x4)*wild_i64x4), Pattern::LeftShift));
+
+    casts.push_back(Pattern("vqmovns.v8i8", _i8q(wild_i16x8)));
+    casts.push_back(Pattern("vqmovns.v4i16", _i16q(wild_i32x4)));
+    casts.push_back(Pattern("vqmovns.v2i32", _i32q(wild_i64x2)));
+    casts.push_back(Pattern("vqmovnu.v8i8", _u8q(wild_u16x8)));
+    casts.push_back(Pattern("vqmovnu.v4i16", _u16q(wild_u32x4)));
+    casts.push_back(Pattern("vqmovnu.v2i32", _u32q(wild_u64x2)));
+    casts.push_back(Pattern("vqmovnsu.v8i8", _u8q(wild_i16x8)));
+    casts.push_back(Pattern("vqmovnsu.v4i16", _u16q(wild_i32x4)));
+    casts.push_back(Pattern("vqmovnsu.v2i32", _u32q(wild_i64x2)));
+
+    // Widening left shifts
+    left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
+
+    // Non-widening left shifts
+    left_shifts.push_back(Pattern("vshifts.v16i8", wild_i8x16*wild_i8x16, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshifts.v8i16", wild_i16x8*wild_i16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshifts.v4i32", wild_i32x4*wild_i32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshifts.v2i64", wild_i64x2*wild_i64x2, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v16i8", wild_u8x16*wild_u8x16, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v8i16", wild_u16x8*wild_u16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v4i32", wild_u32x4*wild_u32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v2i64", wild_u64x2*wild_u64x2, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshifts.v8i8",  wild_i8x8*wild_i8x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshifts.v4i16", wild_i16x4*wild_i16x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshifts.v2i32", wild_i32x2*wild_i32x2, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v8i8",  wild_u8x8*wild_u8x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v4i16", wild_u16x4*wild_u16x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftu.v2i32", wild_u32x2*wild_u32x2, Pattern::LeftShift));
+
+    averagings.push_back(Pattern("vhadds.v8i8", (wild_i8x8 + wild_i8x8)/2));
+    averagings.push_back(Pattern("vhaddu.v8i8", (wild_u8x8 + wild_u8x8)/2));
+    averagings.push_back(Pattern("vhadds.v4i16", (wild_i16x4 + wild_i16x4)/2));
+    averagings.push_back(Pattern("vhaddu.v4i16", (wild_u16x4 + wild_u16x4)/2));
+    averagings.push_back(Pattern("vhadds.v2i32", (wild_i32x2 + wild_i32x2)/2));
+    averagings.push_back(Pattern("vhaddu.v2i32", (wild_u32x2 + wild_u32x2)/2));
+    averagings.push_back(Pattern("vhadds.v16i8", (wild_i8x16 + wild_i8x16)/2));
+    averagings.push_back(Pattern("vhaddu.v16i8", (wild_u8x16 + wild_u8x16)/2));
+    averagings.push_back(Pattern("vhadds.v8i16", (wild_i16x8 + wild_i16x8)/2));
+    averagings.push_back(Pattern("vhaddu.v8i16", (wild_u16x8 + wild_u16x8)/2));
+    averagings.push_back(Pattern("vhadds.v4i32", (wild_i32x4 + wild_i32x4)/2));
+    averagings.push_back(Pattern("vhaddu.v4i32", (wild_u32x4 + wild_u32x4)/2));
+    averagings.push_back(Pattern("vhsubs.v8i8", (wild_i8x8 - wild_i8x8)/2));
+    averagings.push_back(Pattern("vhsubu.v8i8", (wild_u8x8 - wild_u8x8)/2));
+    averagings.push_back(Pattern("vhsubs.v4i16", (wild_i16x4 - wild_i16x4)/2));
+    averagings.push_back(Pattern("vhsubu.v4i16", (wild_u16x4 - wild_u16x4)/2));
+    averagings.push_back(Pattern("vhsubs.v2i32", (wild_i32x2 - wild_i32x2)/2));
+    averagings.push_back(Pattern("vhsubu.v2i32", (wild_u32x2 - wild_u32x2)/2));
+    averagings.push_back(Pattern("vhsubs.v16i8", (wild_i8x16 - wild_i8x16)/2));
+    averagings.push_back(Pattern("vhsubu.v16i8", (wild_u8x16 - wild_u8x16)/2));
+    averagings.push_back(Pattern("vhsubs.v8i16", (wild_i16x8 - wild_i16x8)/2));
+    averagings.push_back(Pattern("vhsubu.v8i16", (wild_u16x8 - wild_u16x8)/2));
+    averagings.push_back(Pattern("vhsubs.v4i32", (wild_i32x4 - wild_i32x4)/2));
+    averagings.push_back(Pattern("vhsubu.v4i32", (wild_u32x4 - wild_u32x4)/2));
+
+    negations.push_back(Pattern("vqneg.v8i8", -max(wild_i8x8, -127)));
+    negations.push_back(Pattern("vqneg.v16i8", -max(wild_i8x16, -127)));
+    negations.push_back(Pattern("vqneg.v4i16", -max(wild_i16x4, -32767)));
+    negations.push_back(Pattern("vqneg.v8i16", -max(wild_i16x8, -32767)));
+    negations.push_back(Pattern("vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))));
+    negations.push_back(Pattern("vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))));
 
 }
+
+
+void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {
+
+    init_module();
+
+    module = get_initial_module_for_target(target, context);
+
+    // Fix the target triple.
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    if (target.os == Target::Android) {
+        module->setTargetTriple("arm-linux-eabi");
+    } else if (target.os == Target::IOS) {
+        module->setTargetTriple("armv7-apple-ios");
+    } else if (target.os == Target::NaCl) {
+        module->setTargetTriple("arm-nacl");
+    } else if (target.os == Target::Linux) {
+        module->setTargetTriple("arm-linux-gnueabihf");
+    } else {
+        assert(false && "No arm support for this OS");
+    }
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+    // Pass to the generic codegen
+    CodeGen::compile(stmt, name, args);
+
+    // Optimize
+    CodeGen::optimize_module();
+}
+
 
 Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
@@ -230,145 +416,12 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> a
 void CodeGen_ARM::visit(const Cast *op) {
     vector<Expr> matches;
 
-    struct Pattern {
-        string intrin;
-        Expr pattern;
-        int type;
-    };
-
-    const int Simple = 0, LeftShift = 1, RightShift = 2;
-
-    Pattern patterns[] = {
-        {"vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256), Simple},
-        {"vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536), Simple},
-        {"vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256), Simple},
-        {"vaddhn.v4i16", _u16((wild_u32x4 + wild_u32x4)/65536), Simple},
-        {"vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256), Simple},
-        {"vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536), Simple},
-        {"vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256), Simple},
-        {"vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536), Simple},
-        {"vrhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8) + 1)/2), Simple},
-        {"vrhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8) + 1)/2), Simple},
-        {"vrhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4) + 1)/2), Simple},
-        {"vrhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4) + 1)/2), Simple},
-        {"vrhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2) + 1)/2), Simple},
-        {"vrhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2) + 1)/2), Simple},
-        {"vrhadds.v16i8",   _i8((_i16(wild_i8x16) + _i16(wild_i8x16) + 1)/2), Simple},
-        {"vrhaddu.v16i8",   _u8((_u16(wild_u8x16) + _u16(wild_u8x16) + 1)/2), Simple},
-        {"vrhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8) + 1)/2), Simple},
-        {"vrhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8) + 1)/2), Simple},
-        {"vrhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4) + 1)/2), Simple},
-        {"vrhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4) + 1)/2), Simple},
-
-        {"vhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8))/2), Simple},
-        {"vhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8))/2), Simple},
-        {"vhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4))/2), Simple},
-        {"vhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4))/2), Simple},
-        {"vhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2))/2), Simple},
-        {"vhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2))/2), Simple},
-        {"vhadds.v16i8", _i8((_i16(wild_i8x16) + _i16(wild_i8x16))/2), Simple},
-        {"vhaddu.v16i8", _u8((_u16(wild_u8x16) + _u16(wild_u8x16))/2), Simple},
-        {"vhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8))/2), Simple},
-        {"vhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8))/2), Simple},
-        {"vhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4))/2), Simple},
-        {"vhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4))/2), Simple},
-        {"vhsubs.v8i8", _i8((_i16(wild_i8x8) - _i16(wild_i8x8))/2), Simple},
-        {"vhsubu.v8i8", _u8((_u16(wild_u8x8) - _u16(wild_u8x8))/2), Simple},
-        {"vhsubs.v4i16", _i16((_i32(wild_i16x4) - _i32(wild_i16x4))/2), Simple},
-        {"vhsubu.v4i16", _u16((_u32(wild_u16x4) - _u32(wild_u16x4))/2), Simple},
-        {"vhsubs.v2i32", _i32((_i64(wild_i32x2) - _i64(wild_i32x2))/2), Simple},
-        {"vhsubu.v2i32", _u32((_u64(wild_u32x2) - _u64(wild_u32x2))/2), Simple},
-        {"vhsubs.v16i8", _i8((_i16(wild_i8x16) - _i16(wild_i8x16))/2), Simple},
-        {"vhsubu.v16i8", _u8((_u16(wild_u8x16) - _u16(wild_u8x16))/2), Simple},
-        {"vhsubs.v8i16", _i16((_i32(wild_i16x8) - _i32(wild_i16x8))/2), Simple},
-        {"vhsubu.v8i16", _u16((_u32(wild_u16x8) - _u32(wild_u16x8))/2), Simple},
-        {"vhsubs.v4i32", _i32((_i64(wild_i32x4) - _i64(wild_i32x4))/2), Simple},
-        {"vhsubu.v4i32", _u32((_u64(wild_u32x4) - _u64(wild_u32x4))/2), Simple},
-
-        {"vqadds.v8i8", _i8q(_i16(wild_i8x8) + _i16(wild_i8x8)), Simple},
-        {"vqaddu.v8i8", _u8q(_u16(wild_u8x8) + _u16(wild_u8x8)), Simple},
-        {"vqadds.v4i16", _i16q(_i32(wild_i16x4) + _i32(wild_i16x4)), Simple},
-        {"vqaddu.v4i16", _u16q(_u32(wild_u16x4) + _u32(wild_u16x4)), Simple},
-        {"vqadds.v2i32", _i32q(_i64(wild_i32x2) + _i64(wild_i32x2)), Simple},
-        {"vqaddu.v2i32", _u32q(_u64(wild_u32x2) + _u64(wild_u32x2)), Simple},
-        {"vqadds.v16i8", _i8q(_i16(wild_i8x16) + _i16(wild_i8x16)), Simple},
-        {"vqaddu.v16i8", _u8q(_u16(wild_u8x16) + _u16(wild_u8x16)), Simple},
-        {"vqadds.v8i16", _i16q(_i32(wild_i16x8) + _i32(wild_i16x8)), Simple},
-        {"vqaddu.v8i16", _u16q(_u32(wild_u16x8) + _u32(wild_u16x8)), Simple},
-        {"vqadds.v4i32", _i32q(_i64(wild_i32x4) + _i64(wild_i32x4)), Simple},
-        {"vqaddu.v4i32", _u32q(_u64(wild_u32x4) + _u64(wild_u32x4)), Simple},
-
-        // N.B. Saturating subtracts of unsigned types are expressed
-        // by widening to a *signed* type
-        {"vqsubs.v8i8", _i8q(_i16(wild_i8x8) - _i16(wild_i8x8)), Simple},
-        {"vqsubu.v8i8", _u8q(_i16(wild_u8x8) - _i16(wild_u8x8)), Simple},
-        {"vqsubs.v4i16", _i16q(_i32(wild_i16x4) - _i32(wild_i16x4)), Simple},
-        {"vqsubu.v4i16", _u16q(_i32(wild_u16x4) - _i32(wild_u16x4)), Simple},
-        {"vqsubs.v2i32", _i32q(_i64(wild_i32x2) - _i64(wild_i32x2)), Simple},
-        {"vqsubu.v2i32", _u32q(_i64(wild_u32x2) - _i64(wild_u32x2)), Simple},
-        {"vqsubs.v16i8", _i8q(_i16(wild_i8x16) - _i16(wild_i8x16)), Simple},
-        {"vqsubu.v16i8", _u8q(_i16(wild_u8x16) - _i16(wild_u8x16)), Simple},
-        {"vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8)), Simple},
-        {"vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8)), Simple},
-        {"vqsubs.v4i32", _i32q(_i64(wild_i32x4) - _i64(wild_i32x4)), Simple},
-        {"vqsubu.v4i32", _u32q(_i64(wild_u32x4) - _i64(wild_u32x4)), Simple},
-
-        {"vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), RightShift},
-        {"vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), RightShift},
-        {"vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), RightShift},
-        {"vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), RightShift},
-        {"vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), RightShift},
-        {"vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), RightShift},
-
-        {"vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), RightShift},
-        {"vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), RightShift},
-        {"vqshiftns.v2i32", _i32q(wild_i64x2/wild_i64x2), RightShift},
-        {"vqshiftnu.v8i8", _u8q(wild_u16x8/wild_u16x8), RightShift},
-        {"vqshiftnu.v4i16", _u16q(wild_u32x4/wild_u32x4), RightShift},
-        {"vqshiftnu.v2i32", _u32q(wild_u64x2/wild_u64x2), RightShift},
-        {"vqshiftnsu.v8i8", _u8q(wild_i16x8/wild_i16x8), RightShift},
-        {"vqshiftnsu.v4i16", _u16q(wild_i32x4/wild_i32x4), RightShift},
-        {"vqshiftnsu.v2i32", _u32q(wild_i64x2/wild_i64x2), RightShift},
-
-        {"vqshifts.v8i8", _i8q(_i16(wild_i8x8)*wild_i16x8), LeftShift},
-        {"vqshifts.v4i16", _i16q(_i32(wild_i16x4)*wild_i32x4), LeftShift},
-        {"vqshifts.v2i32", _i32q(_i64(wild_i32x2)*wild_i64x2), LeftShift},
-        {"vqshiftu.v8i8", _u8q(_u16(wild_u8x8)*wild_u16x8), LeftShift},
-        {"vqshiftu.v4i16", _u16q(_u32(wild_u16x4)*wild_u32x4), LeftShift},
-        {"vqshiftu.v2i32", _u32q(_u64(wild_u32x2)*wild_u64x2), LeftShift},
-        {"vqshiftsu.v8i8", _u8q(_i16(wild_i8x8)*wild_i16x8), LeftShift},
-        {"vqshiftsu.v4i16", _u16q(_i32(wild_i16x4)*wild_i32x4), LeftShift},
-        {"vqshiftsu.v2i32", _u32q(_i64(wild_i32x2)*wild_i64x2), LeftShift},
-        {"vqshifts.v16i8", _i8q(_i16(wild_i8x16)*wild_i16x16), LeftShift},
-        {"vqshifts.v8i16", _i16q(_i32(wild_i16x8)*wild_i32x8), LeftShift},
-        {"vqshifts.v4i32", _i32q(_i64(wild_i32x4)*wild_i64x4), LeftShift},
-        {"vqshiftu.v16i8", _u8q(_u16(wild_u8x16)*wild_u16x16), LeftShift},
-        {"vqshiftu.v8i16", _u16q(_u32(wild_u16x8)*wild_u32x8), LeftShift},
-        {"vqshiftu.v4i32", _u32q(_u64(wild_u32x4)*wild_u64x4), LeftShift},
-        {"vqshiftsu.v16i8", _u8q(_i16(wild_i8x16)*wild_i16x16), LeftShift},
-        {"vqshiftsu.v8i16", _u16q(_i32(wild_i16x8)*wild_i32x8), LeftShift},
-        {"vqshiftsu.v4i32", _u32q(_i64(wild_i32x4)*wild_i64x4), LeftShift},
-
-        {"vqmovns.v8i8", _i8q(wild_i16x8), Simple},
-        {"vqmovns.v4i16", _i16q(wild_i32x4), Simple},
-        {"vqmovns.v2i32", _i32q(wild_i64x2), Simple},
-        {"vqmovnu.v8i8", _u8q(wild_u16x8), Simple},
-        {"vqmovnu.v4i16", _u16q(wild_u32x4), Simple},
-        {"vqmovnu.v2i32", _u32q(wild_u64x2), Simple},
-        {"vqmovnsu.v8i8", _u8q(wild_i16x8), Simple},
-        {"vqmovnsu.v4i16", _u16q(wild_i32x4), Simple},
-        {"vqmovnsu.v2i32", _u32q(wild_i64x2), Simple},
-
-        {"sentinel", 0, Simple}
-
-    };
-
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
-        const Pattern &pattern = patterns[i];
+    for (size_t i = 0; i < casts.size() ; i++) {
+        const Pattern &pattern = casts[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
             //debug(4) << "Match!\n";
-            if (pattern.type == Simple) {
+            if (pattern.type == Pattern::Pattern::Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
                 return;
             } else { // must be a shift
@@ -376,8 +429,10 @@ void CodeGen_ARM::visit(const Cast *op) {
                 int shift_amount;
                 bool power_of_two = is_const_power_of_two(constant, &shift_amount);
                 if (power_of_two && shift_amount < matches[0].type().bits) {
-                    if (pattern.type == RightShift) {
+                    if (pattern.type == Pattern::RightShift) {
                         shift_amount = -shift_amount;
+                    } else {
+                        assert(pattern.type == Pattern::LeftShift);
                     }
                     Value *shift = ConstantInt::get(llvm_type_of(matches[0].type()),
                                                     shift_amount);
@@ -389,6 +444,7 @@ void CodeGen_ARM::visit(const Cast *op) {
             }
         }
     }
+
 
     CodeGen::visit(op);
 
@@ -420,42 +476,12 @@ void CodeGen_ARM::visit(const Mul *op) {
 
     vector<Expr> matches;
 
-    struct Pattern {
-        string intrin;
-        Expr pattern;
-    };
-
-    Pattern const_rhs[] = {
-        // {"intrinsic name", pattern, type}
-        // Widening left shifts
-        {"vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8},
-        {"vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4},
-        {"vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2},
-        {"vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8},
-        {"vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4},
-        {"vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2},
-        // Non-widening left shifts
-        {"vshifts.v16i8", wild_i8x16*wild_i8x16},
-        {"vshifts.v8i16", wild_i16x8*wild_i16x8},
-        {"vshifts.v4i32", wild_i32x4*wild_i32x4},
-        {"vshifts.v2i64", wild_i64x2*wild_i64x2},
-        {"vshiftu.v16i8", wild_u8x16*wild_u8x16},
-        {"vshiftu.v8i16", wild_u16x8*wild_u16x8},
-        {"vshiftu.v4i32", wild_u32x4*wild_u32x4},
-        {"vshiftu.v2i64", wild_u64x2*wild_u64x2},
-        {"vshifts.v8i8",  wild_i8x8*wild_i8x8},
-        {"vshifts.v4i16", wild_i16x4*wild_i16x4},
-        {"vshifts.v2i32", wild_i32x2*wild_i32x2},
-        {"vshiftu.v8i8",  wild_u8x8*wild_u8x8},
-        {"vshiftu.v4i16", wild_u16x4*wild_u16x4},
-        {"vshiftu.v2i32", wild_u32x2*wild_u32x2},
-    };
-
     int shift_amount = 0;
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
     if (power_of_two) {
-        for (size_t i = 0; i < sizeof(const_rhs)/sizeof(const_rhs[0]); i++) {
-            const Pattern &pattern = const_rhs[i];
+        for (size_t i = 0; i < left_shifts.size(); i++) {
+            const Pattern &pattern = left_shifts[i];
+            assert(pattern.type == Pattern::LeftShift);
             if (expr_match(pattern.pattern, op, matches)) {
                 llvm::Type *t_arg = llvm_type_of(matches[0].type());
                 llvm::Type *t_result = llvm_type_of(pattern.pattern.type());
@@ -471,42 +497,11 @@ void CodeGen_ARM::visit(const Mul *op) {
 
 void CodeGen_ARM::visit(const Div *op) {
 
-    // First check if it's an averaging op
-    struct Pattern {
-        string op;
-        Expr pattern;
-    };
-    Pattern averagings[] = {
-        {"vhadds.v8i8", (wild_i8x8 + wild_i8x8)/2},
-        {"vhaddu.v8i8", (wild_u8x8 + wild_u8x8)/2},
-        {"vhadds.v4i16", (wild_i16x4 + wild_i16x4)/2},
-        {"vhaddu.v4i16", (wild_u16x4 + wild_u16x4)/2},
-        {"vhadds.v2i32", (wild_i32x2 + wild_i32x2)/2},
-        {"vhaddu.v2i32", (wild_u32x2 + wild_u32x2)/2},
-        {"vhadds.v16i8", (wild_i8x16 + wild_i8x16)/2},
-        {"vhaddu.v16i8", (wild_u8x16 + wild_u8x16)/2},
-        {"vhadds.v8i16", (wild_i16x8 + wild_i16x8)/2},
-        {"vhaddu.v8i16", (wild_u16x8 + wild_u16x8)/2},
-        {"vhadds.v4i32", (wild_i32x4 + wild_i32x4)/2},
-        {"vhaddu.v4i32", (wild_u32x4 + wild_u32x4)/2},
-        {"vhsubs.v8i8", (wild_i8x8 - wild_i8x8)/2},
-        {"vhsubu.v8i8", (wild_u8x8 - wild_u8x8)/2},
-        {"vhsubs.v4i16", (wild_i16x4 - wild_i16x4)/2},
-        {"vhsubu.v4i16", (wild_u16x4 - wild_u16x4)/2},
-        {"vhsubs.v2i32", (wild_i32x2 - wild_i32x2)/2},
-        {"vhsubu.v2i32", (wild_u32x2 - wild_u32x2)/2},
-        {"vhsubs.v16i8", (wild_i8x16 - wild_i8x16)/2},
-        {"vhsubu.v16i8", (wild_u8x16 - wild_u8x16)/2},
-        {"vhsubs.v8i16", (wild_i16x8 - wild_i16x8)/2},
-        {"vhsubu.v8i16", (wild_u16x8 - wild_u16x8)/2},
-        {"vhsubs.v4i32", (wild_i32x4 - wild_i32x4)/2},
-        {"vhsubu.v4i32", (wild_u32x4 - wild_u32x4)/2}};
-
     if (is_two(op->b) && (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
-        for (size_t i = 0; i < sizeof(averagings)/sizeof(averagings[0]); i++) {
+        for (size_t i = 0; i < averagings.size(); i++) {
             if (expr_match(averagings[i].pattern, op, matches)) {
-                value = call_intrin(matches[0].type(), averagings[i].op, matches);
+                value = call_intrin(matches[0].type(), averagings[i].intrin, matches);
                 return;
             }
         }
@@ -688,24 +683,11 @@ void CodeGen_ARM::visit(const Add *op) {
 }
 
 void CodeGen_ARM::visit(const Sub *op) {
-    // Saturating negate
-    struct Pattern {
-        string op;
-        Expr pattern;
-    };
-    Pattern patterns[] = {
-        {"vqneg.v8i8", -max(wild_i8x8, -127)},
-        {"vqneg.v16i8", -max(wild_i8x16, -127)},
-        {"vqneg.v4i16", -max(wild_i16x4, -32767)},
-        {"vqneg.v8i16", -max(wild_i16x8, -32767)},
-        {"vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))},
-        {"vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))}
-    };
 
     vector<Expr> matches;
-    for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
-        if (expr_match(patterns[i].pattern, op, matches)) {
-            value = call_intrin(matches[0].type(), patterns[i].op, matches);
+    for (size_t i = 0; i < negations.size(); i++) {
+        if (expr_match(negations[i].pattern, op, matches)) {
+            value = call_intrin(matches[0].type(), negations[i].intrin, matches);
             return;
         }
     }

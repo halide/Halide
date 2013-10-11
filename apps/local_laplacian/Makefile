@@ -1,5 +1,11 @@
 CXX ?= g++
 
+ifdef BUILD_PREFIX
+LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
+else
+LIB_HALIDE = bin/libHalide.a
+endif
+
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
@@ -21,8 +27,8 @@ endif
 all: process
 
 local_laplacian: ../../ local_laplacian.cpp
-	$(MAKE) -C ../../ bin/libHalide.a
-	$(CXX) local_laplacian.cpp -I ../../include ../../bin/libHalide.a -o local_laplacian -lpthread -ldl -O3
+	$(MAKE) -C ../../ $(LIB_HALIDE)
+	$(CXX) local_laplacian.cpp -I ../../include ../../$(LIB_HALIDE) -o local_laplacian -lpthread -ldl -O3
 
 local_laplacian.o: local_laplacian
 	./local_laplacian

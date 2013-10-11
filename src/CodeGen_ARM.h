@@ -59,6 +59,18 @@ protected:
     void visit(const Call *);
     // @}
 
+    /** Various patterns to peephole match against */
+    struct Pattern {
+        std::string intrin;
+        Expr pattern;
+        enum PatternType {Simple = 0, LeftShift, RightShift};
+        PatternType type;
+        Pattern() {}
+        Pattern(std::string i, Expr p, PatternType t = Simple) : intrin(i), pattern(p), type(t) {}
+    };
+    std::vector<Pattern> casts, left_shifts, averagings, negations;
+
+
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
