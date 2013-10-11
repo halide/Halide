@@ -45,7 +45,10 @@ if [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
     echo "Halide builds but tests not run."
 else
-    make run_tests -j8 &&
+    make test_correctness -j8 &&
+    make test_errors -j8 &&
+    make test_tutorials -j8 &&
+    make test_performance &&
     make test_apps &&
     echo "All tests pass"
 fi
