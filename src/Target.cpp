@@ -342,25 +342,17 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
 
     // Link them all together
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-    llvm::Linker linker("halide initial module", modules[0]);
-#else
-    llvm::Linker linker(modules[0]);
-#endif
     for (size_t i = 1; i < modules.size(); i++) {
         string err_msg;
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
-        bool failed = linker.LinkInModule(modules[i], &err_msg);
-#else
-        bool failed = linker.linkInModule(modules[i], llvm::Linker::DestroySource, &err_msg);
-#endif
+        bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
+                                                llvm::Linker::DestroySource, &err_msg);
         if (failed) {
             std::cerr << "Failure linking initial modules: " << err_msg << "\n";
             assert(false);
         }
     }
 
-    return linker.getModule();
+    return modules[0];
 }
 
 }

@@ -41,7 +41,6 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     module = get_initial_module_for_target(target, context);
 
     // Fix the target triple
-
     #if WITH_NATIVE_CLIENT
     if (target.os == Target::NaCl) {
         llvm::Triple triple(module->getTargetTriple());
