@@ -96,8 +96,6 @@ int main(int argc, char **argv) {
 
     bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input);
     
-    dump_call_graph("bilateral_grid.calls.json", bilateral_grid);
-
     return 0;
 }
 
