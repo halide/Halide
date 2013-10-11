@@ -284,6 +284,13 @@ endif
 endif
 endif
 
+ifneq (,$findstring 3.3.,$(LLVM_VERSION))
+LLVM_OK=yes
+endif
+ifneq (,$findstring 3.2.,$(LLVM_VERSION))
+LLVM_OK=yes
+endif
+
 ifdef CLANG_OK
 $(BUILD_DIR)/clang_ok:
 	@echo "Found a new enough version of clang"
