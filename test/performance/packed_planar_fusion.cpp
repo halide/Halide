@@ -93,9 +93,9 @@ int main(int argc, char **argv) {
     delete[] storage_1;
     delete[] storage_2;
 
-    if (t_planar_planar > t_packed_packed * 1.2 ||
-        t_packed_packed > t_packed_planar * 1.2 ||
-        t_packed_planar > t_planar_packed * 1.2) {
+    if (t_planar_planar > t_packed_packed * 1.4 ||
+        t_packed_packed > t_packed_planar * 1.4 ||
+        t_packed_planar > t_planar_packed * 1.4) {
         printf("Times were not in expected order:\n"
                "planar -> planar: %f \n"
                "packed -> packed: %f \n"

@@ -187,21 +187,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
     return NULL;
 }
 
-WEAK int halide_host_cpu_count() {
-#if defined (HALIDE_ARCH_arm)
-    return sysconf(97);
-#elif defined (HALIDE_ARCH_x86_32) || defined (HALIDE_ARCH_x86_64)
-#if defined (HALIDE_OS_linux) || defined (HALIDE_OS_nacl)
-    return sysconf(84);
-#elif defined (HALIDE_OS_os_x)
-    return sysconf(58);
-#else
-#error "HALIDE_OS_* doesn't seem to be defined, or compiling this file for the wrong OS"
-#endif
-#else
-#error "HALIDE_ARCH_* doesn't seem to be defined, or compiling this file for the wrong architecture"
-#endif
-}
+extern int halide_host_cpu_count();
 
 WEAK int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {

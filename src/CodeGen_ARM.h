@@ -6,23 +6,16 @@
  */
 
 #include "CodeGen_Posix.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
-/** Bitmask flags for specifying code generation options to CodeGen_ARM. */
-enum CodeGen_ARM_Options {
-    ARM_Android = 1,  /// Compile targeting the Android standard library
-    ARM_NaCl    = 2,  /// Compile for Native Client (must be using the Native Client llvm tree)
-    ARM_IOS     = 4   /// Compile targeting iOS
-};
-
 /** A code generator that emits ARM code from a given Halide stmt. */
 class CodeGen_ARM : public CodeGen_Posix {
 public:
-    /** Create an ARM code generator. Processor features can be
-     * enabled using the appropriate flags from CodeGen_X86_Options */
-    CodeGen_ARM(uint32_t options = 0);
+    /** Create an ARM code generator for the given arm target. */
+    CodeGen_ARM(Target);
 
     /** Compile to an internally-held llvm module. Takes a halide
      * statement, the name of the function produced, and the arguments
@@ -36,14 +29,8 @@ public:
 
 protected:
 
-    /** Use the android-specific standard library */
-    bool use_android;
-
-    /** Use the ios-specific standard library */
-    bool use_ios;
-
-    /** Compile for Native Client. */
-    bool use_nacl;
+    /** Which arm target are we compiling for */
+    Target target;
 
     /** Generate a call to a neon intrinsic */
     // @{

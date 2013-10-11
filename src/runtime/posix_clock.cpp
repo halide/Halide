@@ -3,14 +3,14 @@
 #ifndef _STRUCT_TIMEVAL
 #define _STRUCT_TIMEVAL
 
-#if defined(HALIDE_ARCH_x86_64)
+#if defined(HALIDE_ARCH_X86_64)
 typedef int64_t sec_t;
 #else
 typedef int32_t sec_t;
 #endif
 
 // OSX always uses an int32 for the usec field
-#if defined(HALIDE_ARCH_x86_64) && !defined(HALIDE_OS_os_x)
+#if defined(HALIDE_ARCH_X86_64) && !defined(HALIDE_OS_OSX)
 typedef int64_t usec_t;
 #else
 typedef int32_t usec_t;

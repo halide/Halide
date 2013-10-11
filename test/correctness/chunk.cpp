@@ -14,8 +14,8 @@ int main(int argc, char **argv) {
     f(x, y) = cast<float>(x);
     g(x, y) = f(x+1, y) + f(x-1, y);
 
-    std::string target = get_target();
-    if (target == "ptx" || target == "ptx-debug") {
+    Target target = get_target_from_environment();
+    if (target.features & Target::CUDA) {
         Var xi, yi;
         g.cuda_tile(x, y, 8, 8);
         f.compute_at(g, Var("blockidx")).cuda_threads(x, y);

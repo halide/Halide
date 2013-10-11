@@ -33,6 +33,7 @@
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
+#include <llvm/Linker.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3.
 // Protected as at least one installation of llvm elides version macros.

@@ -7,10 +7,6 @@ extern "C" {
 extern int halide_printf(const char *, ...);
 extern void exit(int);
 
-#ifndef NULL
-#define NULL 0
-#endif
-
 WEAK void (*halide_error_handler)(const char *) = NULL;
 
 WEAK void halide_error(const char *msg) {

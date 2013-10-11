@@ -38,18 +38,16 @@ WEAK timespec halide_reference_clock;
 // -- i386 and android x86 is 265
 // -- x64 is 228
 
-#ifndef HALIDE_OS_linux
-#error "This file should only be compiled for linux targets"
+#ifndef SYS_CLOCK_GETTIME
+
+#ifdef BITS_64
+#define SYS_CLOCK_GETTIME 228
 #endif
 
-#if defined(HALIDE_ARCH_arm)
-#define SYS_CLOCK_GETTIME 263
-#elif defined(HALIDE_ARCH_x86_64)
-#define SYS_CLOCK_GETTIME 228
-#elif defined(HALIDE_ARCH_x86_32)
+#ifdef BITS_32
 #define SYS_CLOCK_GETTIME 265
-#else
-#error "HALIDE_ARCH_* doesn't seem to be defined"
+#endif
+
 #endif
 
 extern int syscall(int num, ...);

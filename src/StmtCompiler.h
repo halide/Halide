@@ -7,19 +7,12 @@
 
 #include "IR.h"
 #include "JITCompiledModule.h"
+#include "Target.h"
 
 #include <string>
 #include <vector>
 
 namespace Halide {
-
-/** Return the target that Halide will use if no HL_TARGET variable is
- * defined, or if it is set to "native" */
-std::string get_native_target();
-
-/** Return the target that Halide will use. If HL_TARGET is set it
- * uses that. Otherwise calls \ref get_native_target */
-std::string get_target();
 
 namespace Internal {
 
@@ -32,12 +25,8 @@ class StmtCompiler {
     IntrusivePtr<CodeGen> contents;
 public:
 
-    /** Build a code generator for the given architecture. Valid
-     * architectures are x86, x86-avx. Architectures to come include
-     * x86-avx2, arm, arm-android, and ptx. If you leave the
-     * architecture field blank, it uses the environment variable
-     * HL_TARGET. */
-    StmtCompiler(std::string arch = "");
+    /** Build a code generator for the given target. */
+    StmtCompiler(Target target);
 
     /** Compile a statement to an llvm module of the given name with
      * the given toplevel arguments. The module is stored internally

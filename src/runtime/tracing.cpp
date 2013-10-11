@@ -1,6 +1,6 @@
 #include "mini_stdint.h"
+#include "HalideRuntime.h"
 
-// Forward declared so that we can use this code on ios too
 extern "C" {
 
 extern char *getenv(const char *);

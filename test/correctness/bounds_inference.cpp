@@ -13,8 +13,8 @@ int main(int argc, char **argv) {
     h.compute_root();
     g.compute_root();
 
-    std::string target = get_target();
-    if (target == "ptx" || target == "ptx-debug") {
+    Target target = get_target_from_environment();
+    if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 16, 16);
         g.cuda_tile(x, 128);
         h.cuda_tile(x, 128);

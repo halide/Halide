@@ -1387,11 +1387,11 @@ int main(int argc, char **argv) {
     if (argc > 1) filter = argv[1];
     else filter = NULL;
 
-    string target = get_target();
+    Target target = get_target_from_environment();
 
-    use_avx2 = target.find("avx2") != string::npos;
-    use_avx = use_avx2 || target.find("avx") != string::npos;
-    use_sse41 = use_avx || target.find("sse41") != string::npos;
+    use_avx2 = target.features & Target::AVX2;
+    use_avx = use_avx2 | (target.features & Target::AVX);
+    use_sse41 = use_avx | (target.features & Target::SSE41);
 
     // There's no separate target for SSSE3; we currently enable it in
     // lockstep with SSE4.1
@@ -1399,9 +1399,9 @@ int main(int argc, char **argv) {
     // There's no separate target for SSS4.2; we currently assume that
     // it should be used iff AVX is being used.
     use_sse42 = use_avx;
-    if (target.find("x86") != string::npos) {
+    if (target.arch == Target::X86) {
 	check_sse_all();
-    } else if (target.find("arm") != string::npos) {
+    } else {
 	check_neon_all();
     }
 

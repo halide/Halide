@@ -11,14 +11,6 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
-#if WITH_PTX
-extern "C" unsigned char halide_internal_initmod_ptx_dev[];
-extern "C" int halide_internal_initmod_ptx_dev_length;
-#else
-static void *halide_internal_initmod_ptx_dev = 0;
-static int halide_internal_initmod_ptx_dev_length = 0;
-#endif
-
 namespace Halide {
 namespace Internal {
 
@@ -124,29 +116,9 @@ void CodeGen_PTX_Dev::init_module() {
 
     CodeGen::init_module();
 
-    StringRef sb;
-
-    sb = StringRef((char *)halide_internal_initmod_ptx_dev,
-                           halide_internal_initmod_ptx_dev_length);
-    MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
-
-    // Parse it
-    std::string errstr;
-    module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
-    if (!module) {
-        std::cerr << "Error parsing initial module: " << errstr << "\n";
-    }
-    assert(module && "llvm encountered an error in parsing a bitcode file.");
-    module->setTargetTriple(Triple::normalize(march()+"--"));
-
-    // Fix the target triple
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    module->setModuleIdentifier("<halide_ptx>");
+    module = new llvm::Module("<halide_ptx>", *context);
 
     owns_module = true;
-
-    delete bitcode_buffer;
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {

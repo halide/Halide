@@ -107,18 +107,19 @@ BIN_DIR = bin
 DISTRIB_DIR=distrib
 endif
 
-SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_GPU_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_OpenCL_Dev.cpp CodeGen_GPU_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp OneToOne.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Debug.cpp Parameter.cpp Reduction.cpp RDom.cpp Profiling.cpp Tracing.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp UniquifyVariableNames.cpp CSE.cpp Tuple.cpp Lerp.cpp
+SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_GPU_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_OpenCL_Dev.cpp CodeGen_GPU_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp OneToOne.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Debug.cpp Parameter.cpp Reduction.cpp RDom.cpp Profiling.cpp Tracing.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp integer_division_table.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp UniquifyVariableNames.cpp CSE.cpp Tuple.cpp Lerp.cpp Target.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
-HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h
+HEADER_FILES = Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h
 
 SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-STDLIB_ARCHS = $(X86_ARCHS) $(ARM_ARCHS) $(PTX_ARCHS) $(NATIVE_CLIENT_ARCHS) $(OPENCL_ARCHS)
+RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug
+RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41
 
-INITIAL_MODULES = $(STDLIB_ARCHS:%=$(BUILD_DIR)/initmod.%.o)
+INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o)
 
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
@@ -144,52 +145,21 @@ include/HalideRuntime.h: src/runtime/HalideRuntime.h
 $(BIN_DIR)/build_halide_h: src/build_halide_h.cpp
 	g++ $< -o $@
 
-RUNTIME_OPTS_x86_64 = -march=k8 -DHALIDE_ARCH_x86_64 -DHALIDE_OS_$(HOST_OS)
-RUNTIME_OPTS_x86_64_sse41 = -march=penryn -DHALIDE_ARCH_x86_64 -DHALIDE_OS_$(HOST_OS)
-RUNTIME_OPTS_x86_64_avx = -march=corei7-avx -DHALIDE_ARCH_x86_64 -DHALIDE_OS_$(HOST_OS)
-RUNTIME_OPTS_x86_32 = -m32 -march=k8 -DHALIDE_ARCH_x86_32 -DHALIDE_OS_$(HOST_OS)
-RUNTIME_OPTS_x86_32_sse41 = -m32 -march=penryn -DHALIDE_ARCH_x86_32 -DHALIDE_OS_$(HOST_OS)
-RUNTIME_OPTS_arm = -m32 -DHALIDE_ARCH_arm -DHALIDE_OS_linux
-RUNTIME_OPTS_arm_android = -m32 -DHALIDE_ARCH_arm -DHALIDE_OS_linux
-RUNTIME_OPTS_arm_ios = -m32 -march=cortex-a9 -Xclang -triple=armv7-apple-ios -DHALIDE_ARCH_arm -DHALIDE_OS_ios
-RUNTIME_OPTS_opencl_host = $(RUNTIME_OPTS_x86_64)
-RUNTIME_OPTS_ptx_host = $(RUNTIME_OPTS_x86_64)
-RUNTIME_OPTS_ptx_host_debug = $(RUNTIME_OPTS_x86_64)
-RUNTIME_OPTS_ptx_dev =
-RUNTIME_OPTS_x86_64_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_64 -DHALIDE_OS_nacl
-RUNTIME_OPTS_x86_64_sse41_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_64 -DHALIDE_OS_nacl
-RUNTIME_OPTS_x86_64_avx_nacl = -Xclang -triple -Xclang x86_64-unknown-nacl -m64 -march=corei7-avx -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_64 -DHALIDE_OS_nacl
-RUNTIME_OPTS_x86_32_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=k8 -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_32 -DHALIDE_OS_nacl
-RUNTIME_OPTS_x86_32_sse41_nacl = -Xclang -triple -Xclang i386-unknown-nacl -m32 -march=penryn -isystem $(NATIVE_CLIENT_X86_INCLUDE) -DHALIDE_ARCH_x86_32 -DHALIDE_OS_nacl
-RUNTIME_OPTS_arm_nacl = -Xclang -target-cpu -Xclang "" -Xclang -triple -Xclang arm-unknown-nacl -m32 -isystem $(NATIVE_CLIENT_ARM_INCLUDE) -DHALIDE_ARCH_arm -DHALIDE_OS_nacl
-RUNTIME_LL_STUBS_x86_32 = src/runtime/x86.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_32_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_64 = src/runtime/x86.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_64_sse41 = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_64_avx = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_arm = src/runtime/arm.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_arm_android = src/runtime/arm.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_arm_ios = src/runtime/arm.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_opencl_host = $(RUNTIME_LL_STUBS_x86_64_sse41)
-RUNTIME_LL_STUBS_ptx_host = $(RUNTIME_LL_STUBS_x86_64_sse41)
-RUNTIME_LL_STUBS_ptx_host_debug = $(RUNTIME_LL_STUBS_x86_64_sse41)
-RUNTIME_LL_STUBS_ptx_dev = src/runtime/ptx_dev.ll
-RUNTIME_LL_STUBS_x86_32_nacl = src/runtime/x86.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_32_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_64_nacl = src/runtime/x86.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_64_sse41_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_x86_64_avx_nacl = src/runtime/x86.ll src/runtime/x86_sse41.ll src/runtime/x86_avx.ll src/runtime/posix_math.ll
-RUNTIME_LL_STUBS_arm_nacl = src/runtime/arm.ll src/runtime/posix_math.ll
-
 -include $(OBJECTS:.o=.d)
 
-$(BUILD_DIR)/initmod.%.ll: src/runtime/*.cpp src/runtime/CL/*.h $(BUILD_DIR)/clang_ok
+$(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -fno-blocks -DHALIDE_TARGET_$* $(RUNTIME_OPTS_$*) -emit-llvm -O3 -S src/runtime/runtime.$*.cpp -o $@
+	$(CLANG) -fno-blocks -m64 -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
 
-$(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll src/runtime/*.ll $(BUILD_DIR)/llvm_ok
-	cat $(BUILD_DIR)/initmod.$*.ll $(RUNTIME_LL_STUBS_$*) | \
-	$(LLVM_AS) -o $@
+$(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
+	@-mkdir -p $(BUILD_DIR)
+	$(CLANG) -fno-blocks -m32 -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
+
+$(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
+	cp src/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
+
+$(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
+	$(LLVM_AS) $(BUILD_DIR)/initmod.$*.ll -o $(BUILD_DIR)/initmod.$*.bc
 
 $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp $(BUILD_DIR)/initmod.%.bc
 	./$(BIN_DIR)/bitcode2cpp $* < $(BUILD_DIR)/initmod.$*.bc > $@

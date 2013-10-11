@@ -11,6 +11,7 @@
 #include "Image.h"
 #include "Param.h"
 #include "Debug.h"
+#include "Target.h"
 #include <algorithm>
 #include <iostream>
 #include <string.h>
@@ -1466,7 +1467,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg;
+    StmtCompiler cg(get_target_from_environment());
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_bitcode(filename);
 }
@@ -1484,7 +1485,7 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg;
+    StmtCompiler cg(get_target_from_environment());
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, false);
 }
@@ -1562,7 +1563,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg;
+    StmtCompiler cg(get_target_from_environment());
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
     cg.compile_to_native(filename, true);
 }
@@ -1784,7 +1785,7 @@ void *Func::compile_jit() {
                          << infer_args.arg_types[i].is_buffer << "\n";
     }
 
-    StmtCompiler cg;
+    StmtCompiler cg(get_target_from_environment());
     cg.compile(lowered, name(), infer_args.arg_types);
 
     if (debug::debug_level >= 3) {

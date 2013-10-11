@@ -289,44 +289,23 @@ void CodeGen_GPU_Host::Closure::visit(const For *loop) {
 }
 
 
-CodeGen_GPU_Host::CodeGen_GPU_Host(uint32_t options) :
-    CodeGen_X86(options),
+CodeGen_GPU_Host::CodeGen_GPU_Host(Target target) :
+    CodeGen_X86(target),
     dev_malloc_fn(NULL),
     dev_free_fn(NULL),
     copy_to_dev_fn(NULL),
     copy_to_host_fn(NULL),
     dev_run_fn(NULL),
     dev_sync_fn(NULL),
-    cgdev(make_dev(options)),
-    options(options) {
-
-    if (options & GPU_PTX) {
-        assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
-        #if !(WITH_PTX)
-        assert(false && "ptx not enabled for this build of Halide.");
-        #endif
-        if (options & GPU_debug) {
-            initmod = halide_internal_initmod_ptx_host_debug;
-            initmod_length = halide_internal_initmod_ptx_host_debug_length;
-        } else {
-            initmod = halide_internal_initmod_ptx_host;
-            initmod_length = halide_internal_initmod_ptx_host_length;
-        }
-    } else if (options & GPU_OpenCL) {
-        #if !(WITH_OPENCL)
-        assert(false && "OpenCL target not enabled for this build of Halide.");
-        #endif
-        initmod = halide_internal_initmod_opencl_host;
-        initmod_length = halide_internal_initmod_opencl_host_length;
-    }
+    cgdev(make_dev(target)) {
 }
 
-CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(uint32_t options)
+CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
 {
-    if (options & GPU_PTX) {
-        debug(1) << "Constructing PTX device codegen\n";
+    if (t.features & Target::CUDA) {
+        debug(1) << "Constructing CUDA device codegen\n";
         return new CodeGen_PTX_Dev();
-    } else if (options & GPU_OpenCL) {
+    } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();
     } else {
@@ -348,19 +327,7 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     // invocations for different kernels.
     cgdev->init_module();
 
-    StringRef sb;
-
-    assert(use_64_bit && !use_avx && "PTX Host only built for simple x86_64 for now");
-    sb = StringRef((char *)initmod, initmod_length);
-    MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
-
-    // Parse it
-    std::string errstr;
-    module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
-    if (!module) {
-        std::cerr << "Error parsing initial module: " << errstr << "\n";
-    }
-    assert(module && "llvm encountered an error in parsing a bitcode file.");
+    module = get_initial_module_for_target(target, context);
 
     // grab runtime helper functions
     dev_malloc_fn = module->getFunction("halide_dev_malloc");
@@ -392,11 +359,6 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
 
-    if (debug::debug_level >= 2) {
-        cgdev->dump();
-        module->dump();
-    }
-
     string kernel_src = cgdev->compile_to_src();
     debug(2) << kernel_src;
     llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size()+1);
@@ -409,9 +371,11 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
     Value *kernel_src_ptr = builder->CreateConstInBoundsGEP2_32(kernel_src_global, 0, 0);
     Value *init = module->getFunction("halide_init_kernels");
+    assert(init && "Could not find function halide_init_kernels in initial module");
     builder->CreateCall(init, kernel_src_ptr);
 
-    delete bitcode_buffer;
+    // Optimize the module
+    CodeGen::optimize_module();
 }
 
 void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
@@ -419,7 +383,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
     // fine. If not we need to tell llvm to load it.
-    if (options & GPU_PTX && !lib_cuda_linked) {
+    if (target.features & Target::CUDA && !lib_cuda_linked) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (dlsym(NULL, "cuInit")) {
@@ -447,7 +411,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
         cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
 
-    } else if (options & GPU_OpenCL) {
+    } else if (target.features & Target::OpenCL) {
         debug(0) << "TODO: cache results of linking OpenCL lib\n";
 
         // First check if libCuda has already been linked
@@ -472,7 +436,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
 }
 
 void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
-    if (options & GPU_PTX) {
+    if (target.features & Target::CUDA) {
         // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
         // CUDA behaves much better when you don't initialize >2 contexts.
         llvm::Function *fn = module->getFunction("halide_set_cuda_context");
@@ -491,7 +455,7 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         void (*cleanup_routine)() =
             reinterpret_bits<void (*)()>(f);
         cleanup_routines->push_back(cleanup_routine);
-    } else if (options & GPU_OpenCL) {
+    } else if (target.features & Target::OpenCL) {
         debug(0) << "TODO: set cleanup for OpenCL\n";
     }
 }

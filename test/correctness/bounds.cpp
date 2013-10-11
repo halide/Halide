@@ -14,13 +14,13 @@ int main(int argc, char **argv) {
     g(x, y) = min(x, y);
     h(x, y) = clamp(x+y, 20, 100);
 
-    std::string target = get_target();
-    if (target == "ptx" || target == "ptx-debug") {
+    Target target = get_target_from_environment();
+    if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 8, 8);
         g.cuda_tile(x, y, 8, 8);
         h.cuda_tile(x, y, 8, 8);
     }
-    if (target == "opencl") {
+    if (target.features & Target::OpenCL) {
         f.cuda_tile(x, y, 32, 1);
         g.cuda_tile(x, y, 32, 1);
         h.cuda_tile(x, y, 32, 1);

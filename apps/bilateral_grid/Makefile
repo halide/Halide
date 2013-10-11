@@ -11,10 +11,11 @@ endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
 
-ifeq ($(HL_TARGET),ptx)
+
+ifneq (,$(findstring ptx,$(HL_TARGET)))
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
-ifeq ($(HL_TARGET),ptx-debug)
+ifneq (,$(findstring cuda,$(HL_TARGET)))
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
 

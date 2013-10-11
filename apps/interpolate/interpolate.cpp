@@ -92,8 +92,8 @@ int main(int argc, char **argv) {
     std::cout << "Finished function setup." << std::endl;
 
     int sched;
-    std::string target = get_target();
-    if (target == "ptx" || target == "ptx-debug") {
+    Target target = get_target_from_environment();
+    if (target.features & Target::CUDA) {
         sched = 4;
     } else {
         sched = 2;

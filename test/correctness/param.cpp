@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
 
     f(x) = u;
 
-    std::string target = get_target();
-    if (target == "ptx" || target == "ptx-debug") {
+    Target target = get_target_from_environment();
+    if (target.features & Target::CUDA) {
         f.cuda_tile(x, 256);
     }
 
