@@ -3,11 +3,27 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-// OpenCL defines are included simply by embedding the standard Khronos cl.h,
-// cl_platform.h headers in the project. They are licensed permissively enough.
-#include "CL/cl.h"
+// TODO: On windows these need stdcall
+//    #define CL_API_CALL     __stdcall
+//    #define CL_CALLBACK     __stdcall
+#define CL_API_ENTRY
+#define CL_API_CALL
+#define CL_CALLBACK
+#define CL_API_SUFFIX__VERSION_1_0
+#define CL_API_SUFFIX__VERSION_1_1
+#define CL_API_SUFFIX__VERSION_1_2
+#define CL_EXT_SUFFIX__VERSION_1_0_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_0_DEPRECATED
+#define CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
+#define CL_EXT_SUFFIX__VERSION_1_2_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_2_DEPRECATED
+typedef int32_t cl_int;
+typedef uint32_t cl_uint;
+typedef int64_t cl_long;
+typedef uint64_t cl_ulong;
 
-#define WEAK __attribute__((weak))
+#include "CL/cl.h"
 
 extern "C" {
 
@@ -15,6 +31,7 @@ extern int64_t halide_current_time_ns();
 extern void free(void *);
 extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
+
 
 #ifndef DEBUG
 #define CHECK_ERR(e,str)
@@ -40,8 +57,8 @@ extern int snprintf(char *, size_t, const char *, ...);
     cuEventSynchronize(__end);                              \
     float msec;                                             \
     cuEventElapsedTime(&msec, __start, __end);              \
-    printf(stderr, "Do %s\n", str);                         \
-    printf("   (took %fms, t=%lld)\n", msec, (long long)halide_current_time_ns()); \
+    halide_printf("Do %s\n", str);                                     \
+    halide_printf("   (took %fms, t=%lld)\n", msec, (long long)halide_current_time_ns()); \
 } halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
 #else
 #define TIME_START()

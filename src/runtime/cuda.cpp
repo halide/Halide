@@ -13,7 +13,6 @@ extern int snprintf(char *, size_t, const char *, ...);
 #define CHECK_CALL(c,str) c
 #define TIME_CALL(c,str) c
 #else
-//#define CHECK_CALL(c) (halide_assert((c) == CUDA_SUCCESS))
 #define CHECK_CALL(c,str) do {\
     halide_printf("Do %s\n", str); \
     CUresult status = (c); \
@@ -32,11 +31,9 @@ extern int snprintf(char *, size_t, const char *, ...);
 } while(0)
 #endif //DEBUG
 
-#if defined(HALIDE_OS_Windows) && defined(HALIDE_ARCH_X86_32)
-#define CUDAAPI __stdcall
-#else
+// TODO: On windows this needs __stdcall
+//#define CUDAAPI __stdcall
 #define CUDAAPI
-#endif
 
 // API version > 3020
 #define cuCtxCreate                         cuCtxCreate_v2

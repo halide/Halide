@@ -241,17 +241,18 @@ Target get_target_from_environment() {
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
+DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(cuda_debug)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
-DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opencl_debug)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
+DECLARE_CPP_INITMOD(osx_io)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
@@ -284,7 +285,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
     } else if (t.os == Target::OSX) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
-        modules.push_back(get_initmod_posix_io(c, bits_64));
+        modules.push_back(get_initmod_osx_io(c, bits_64));
         modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
     } else if (t.os == Target::Android) {
         modules.push_back(get_initmod_android_clock(c, bits_64));
