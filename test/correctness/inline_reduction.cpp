@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
 
     // Test a complex summation
     Func input;
-    Var x, y;
+    Var x, y, z;
     input(x, y) = cast<float>(x*y+1);
 
     Func local_variance;
@@ -102,6 +102,33 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Verify that all inline reductions compile with implicit argument syntax.
+    Image<float> input_3d = lambda(x, y, z, x * 100.0f + y * 10.0f + ((z + 5 % 10))).realize(10, 10, 10);
+    RDom all_z(input_3d.min(2), input_3d.extent(2));
+
+    Func sum_implicit;
+    sum_implicit(_) = sum(input_3d(_, all_z));
+    Image<float> sum_implicit_im = sum_implicit.realize(10, 10);
+
+    Func product_implicit;
+    product_implicit(_) = product(input_3d(_, all_z));
+    Image<float> product_implicit_im = product_implicit.realize(10, 10);
+
+    Func min_implicit;
+    min_implicit(_) = minimum(input_3d(_, all_z));
+    Image<float> min_implicit_im = min_implicit.realize(10, 10);
+
+    Func max_implicit;
+    max_implicit(_, y) = maximum(input_3d(_, y, all_z));
+    Image<float> max_implicit_im = max_implicit.realize(10, 10);
+
+    Func argmin_implicit;
+    argmin_implicit(_) = argmin(input_3d(_, all_z))[0];
+    Image<int32_t> argmin_implicit_im = argmin_implicit.realize(10, 10);
+
+    Func argmax_implicit;
+    argmax_implicit(x, _) = argmax(input_3d(x, _, all_z))[0];
+    Image<int32_t> argmax_implicit_im = argmax_implicit.realize(10, 10);
 
     printf("Success!\n");
     return 0;

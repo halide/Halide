@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
     }
 
     bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input);
-
+    
     return 0;
 }
 

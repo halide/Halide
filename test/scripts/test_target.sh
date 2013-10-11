@@ -3,6 +3,7 @@ LLVM=$1
 export HL_TARGET=$2
 
 if [[ "$HL_TARGET" == x86-3* ]]; then
+    BITS=32
     UNAME=`uname`
     if [[ `uname` == Linux ]]; then
         export LD="ld -melf_i386"
@@ -18,6 +19,7 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
     export LIBPNG_LIBS="-Ltesting/deps -L../../testing/deps -lpng32 -lz32"
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 else
+    BITS=64
     # ptx falls into this category
     export LD="ld"
     export CC="gcc -m64"
@@ -35,12 +37,15 @@ echo Using CC = $CC
 echo Using CXX = $CXX
 make clean &&
 make -j8 build_tests || exit 1
-#make || exit 1
+make distrib || exit 1
+DATE=`date +%Y_%m_%d`
+HOST=`uname`
+mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${DATE}.tgz
 if [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
     echo "Halide builds but tests not run."
 else
-    make run_tests &&
+    make run_tests -j8 &&
     make test_apps &&
     echo "All tests pass"
 fi
