@@ -19,26 +19,6 @@
 #include <dlfcn.h>
 #include <unistd.h>
 
-#if WITH_PTX
-extern "C" unsigned char halide_internal_initmod_ptx_host[];
-extern "C" int halide_internal_initmod_ptx_host_length;
-extern "C" unsigned char halide_internal_initmod_ptx_host_debug[];
-extern "C" int halide_internal_initmod_ptx_host_debug_length;
-#else
-static void *halide_internal_initmod_ptx_host = 0;
-static int halide_internal_initmod_ptx_host_length = 0;
-static void *halide_internal_initmod_ptx_host_debug = 0;
-static int halide_internal_initmod_ptx_host_debug_length = 0;
-#endif
-
-#if WITH_OPENCL
-extern "C" unsigned char halide_internal_initmod_opencl_host[];
-extern "C" int halide_internal_initmod_opencl_host_length;
-#else
-static void * halide_internal_initmod_opencl_host = 0;
-static int halide_internal_initmod_opencl_host_length = 0;
-#endif
-
 namespace Halide {
 namespace Internal {
 

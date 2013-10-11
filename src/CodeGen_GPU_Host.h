@@ -71,11 +71,6 @@ protected:
 private:
     /** Child code generator for device kernels. */
     CodeGen_GPU_Dev *cgdev;
-
-    const void *initmod;
-    int initmod_length;
-
-    uint32_t options;
 };
 
 }}
