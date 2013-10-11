@@ -2,6 +2,13 @@
 
 #define INLINE inline __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow)) __attribute__((pure))
 
+#ifndef INT64_C
+#define INT64_C(c) (c ## LL)
+#endif
+#ifndef UINT64_C
+#define UINT64_C(c) (c ## ULL)
+#endif
+
 extern "C" {
 
 INLINE uint8_t maxval_u8() {return 0xff;}
