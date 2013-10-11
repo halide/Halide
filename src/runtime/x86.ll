@@ -44,7 +44,7 @@ define weak_odr <4 x float> @abs_f32x4(<4 x float> %x) nounwind uwtable readnone
   %masked = and <4 x i32> %arg, %mask
   %result = bitcast <4 x i32> %masked to <4 x float>
   ret <4 x float> %result
-} 
+}
 
 define weak_odr <2 x double> @abs_f64x2(<2 x double> %x) nounwind uwtable readnone alwaysinline {
   %arg = bitcast <2 x double> %x to <2 x i64>
@@ -52,4 +52,7 @@ define weak_odr <2 x double> @abs_f64x2(<2 x double> %x) nounwind uwtable readno
   %masked = and <2 x i64> %arg, %mask
   %result = bitcast <2 x i64> %masked to <2 x double>
   ret <2 x double> %result
-} 
+}
+
+
+

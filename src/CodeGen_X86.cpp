@@ -13,45 +13,6 @@
 #include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
-// Ugly but quite expedient.
-#define DECLARE_INITMOD(TARGET) \
-    extern "C" unsigned char halide_internal_initmod_##TARGET[]; \
-    extern "C" int halide_internal_initmod_##TARGET##_length;
-
-#define DECLARE_EMPTY_INITMOD(TARGET) \
-    static void *halide_internal_initmod_##TARGET = 0; \
-    static int halide_internal_initmod_##TARGET##_length = 0;
-
-#if WITH_X86
-DECLARE_INITMOD(x86_32)
-DECLARE_INITMOD(x86_32_sse41)
-DECLARE_INITMOD(x86_64)
-DECLARE_INITMOD(x86_64_sse41)
-DECLARE_INITMOD(x86_64_avx)
-#else
-DECLARE_EMPTY_INITMOD(x86_32)
-DECLARE_EMPTY_INITMOD(x86_32_sse41)
-DECLARE_EMPTY_INITMOD(x86_64)
-DECLARE_EMPTY_INITMOD(x86_64_sse41)
-DECLARE_EMPTY_INITMOD(x86_64_avx)
-#endif
-
-#if (WITH_NATIVE_CLIENT && WITH_X86)
-DECLARE_INITMOD(x86_32_nacl)
-DECLARE_INITMOD(x86_32_sse41_nacl)
-DECLARE_INITMOD(x86_64_nacl)
-DECLARE_INITMOD(x86_64_sse41_nacl)
-DECLARE_INITMOD(x86_64_avx_nacl)
-#else
-DECLARE_EMPTY_INITMOD(x86_32_nacl)
-DECLARE_EMPTY_INITMOD(x86_32_sse41_nacl)
-DECLARE_EMPTY_INITMOD(x86_64_nacl)
-DECLARE_EMPTY_INITMOD(x86_64_sse41_nacl)
-DECLARE_EMPTY_INITMOD(x86_64_avx_nacl)
-#endif
-
-#undef DECLARE_INITMOD
-
 namespace Halide {
 namespace Internal {
 
@@ -60,11 +21,8 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(uint32_t options) : CodeGen_Posix(),
-                                             use_64_bit(options & X86_64Bit),
-                                             use_sse_41(options & X86_SSE41),
-                                             use_avx   (options & X86_AVX),
-                                             use_nacl  (options & X86_NaCl) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(),
+                                     target(t) {
     #if !(WITH_X86)
     assert(false && "x86 not enabled for this build of Halide.");
     #endif
@@ -72,7 +30,7 @@ CodeGen_X86::CodeGen_X86(uint32_t options) : CodeGen_Posix(),
     assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
 
     #if !(WITH_NATIVE_CLIENT)
-    assert(!use_nacl && "llvm build not configured with native client enabled.");
+    assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
     #endif
 }
 
@@ -80,54 +38,12 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     init_module();
 
-    char* buf = NULL;
-    int len = 0;
-    const int options = (use_64_bit ? X86_64Bit : 0) |
-                        (use_sse_41 ? X86_SSE41 : 0) |
-                        (use_avx ? X86_AVX : 0) |
-                        (use_nacl ? X86_NaCl : 0);
-    switch (options) {
-        // Ugly but expedient.
-        #define CASE_INITMOD(OPTIONS, TARGET) \
-                case OPTIONS: \
-                    buf = (char*)halide_internal_initmod_##TARGET; \
-                    len = halide_internal_initmod_##TARGET##_length; \
-                    break; \
-                case OPTIONS | X86_NaCl: \
-                    buf = (char*)halide_internal_initmod_##TARGET##_nacl; \
-                    len = halide_internal_initmod_##TARGET##_nacl_length; \
-                    break;
-
-        CASE_INITMOD((0), x86_32)
-        CASE_INITMOD((X86_SSE41), x86_32_sse41)
-        CASE_INITMOD((X86_64Bit), x86_64)
-        CASE_INITMOD((X86_64Bit | X86_SSE41), x86_64_sse41)
-        CASE_INITMOD((X86_64Bit | X86_SSE41 | X86_AVX), x86_64_avx)
-
-        #undef CASE_INITMOD
-
-        default:
-            assert(false && "unsupported options / target combination");
-            break;
-    }
-
-    assert(len && "initial module for x86 is empty");
-    StringRef sb = StringRef(buf, len);
-    MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
-
-    // Parse it
-    std::string errstr;
-    module = ParseBitcodeFile(bitcode_buffer, *context, &errstr);
-    if (!module) {
-        std::cerr << "Error parsing initial module: " << errstr << "\n";
-    }
-    assert(module && "llvm encountered an error in parsing a bitcode file.");
+    module = get_initial_module_for_target(target, context);
 
     // Fix the target triple
-    // Let's see if this works to get native client support.
 
     #if WITH_NATIVE_CLIENT
-    if (use_nacl) {
+    if (target.os == Target::NaCl) {
         llvm::Triple triple(module->getTargetTriple());
         triple.setOS(llvm::Triple::NaCl);
         module->setTargetTriple(triple.str());
@@ -136,14 +52,11 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-    // For now we'll just leave it as whatever the module was
-    // compiled as. This assumes that we're not cross-compiling
-    // between different x86 operating systems
-    // module->setTargetTriple( ... );
-
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
-    delete bitcode_buffer;
+
+    // Optimize
+    CodeGen::optimize_module();
 }
 
 Expr _i64(Expr e) {
@@ -264,7 +177,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-        if (!use_sse_41 && pattern.needs_sse_41) continue;
+        if (!(target.features | Target::SSE41) && pattern.needs_sse_41) continue;
         if (expr_match(pattern.pattern, op, matches)) {
             if (pattern.extern_call) {
                 value = codegen(Call::make(pattern.type, pattern.intrin, matches, Call::Extern));
@@ -331,7 +244,7 @@ void CodeGen_X86::visit(const Div *op) {
         } else {
             value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
         }
-    } else if (use_avx && op->type == Float(32, 8) && is_one(op->a)) {
+    } else if ((target.features & Target::AVX) && op->type == Float(32, 8) && is_one(op->a)) {
         // Reciprocal and reciprocal square root
         if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8), Call::Extern), op->b, matches)) {
             value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
@@ -478,6 +391,7 @@ void CodeGen_X86::visit(const Div *op) {
 }
 
 void CodeGen_X86::visit(const Min *op) {
+    bool use_sse_41 = target.features & Target::SSE41;
     if (op->type == UInt(8, 16)) {
         value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
@@ -496,6 +410,7 @@ void CodeGen_X86::visit(const Min *op) {
 }
 
 void CodeGen_X86::visit(const Max *op) {
+    bool use_sse_41 = target.features & Target::SSE41;
     if (op->type == UInt(8, 16)) {
         value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
@@ -723,7 +638,7 @@ void CodeGen_X86::test() {
 
     Stmt s = Block::make(init, loop);
 
-    CodeGen_X86 cg;
+    CodeGen_X86 cg(get_host_target());
     cg.compile(s, "test1", args);
 
     //cg.compile_to_bitcode("test1.bc");
@@ -807,9 +722,9 @@ void CodeGen_X86::test() {
 }
 
 string CodeGen_X86::mcpu() const {
-    if (use_avx) return "corei7-avx";
+    if (target.features & Target::AVX) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-    if (use_sse_41) return "penryn";
+    if (target.features & Target::SSE41) return "penryn";
     // Default should not include SSSE3, hence "k8" rather than "core2"
     return "k8";
 }

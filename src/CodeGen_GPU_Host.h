@@ -11,15 +11,6 @@
 namespace Halide {
 namespace Internal {
 
-/** Bitmask flags for specifying code generation options to CodeGen_GPU. */
-enum CodeGen_GPU_Options {
-    GPU_PTX    = 0x1000000,  /// Compile for PTX
-    GPU_OpenCL = 0x2000000,  /// Compile for OpenCL
-    GPU_OpenGL = 0x4000000,  /// Compile for OpenGL
-    GPU_debug  = 0x8000000   /// Put synchronization and error checks around every gpu call
-};
-
-
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_GPU_Host : public CodeGen_X86 {
 public:
@@ -27,7 +18,7 @@ public:
     /** Create a GPU code generator. GPU target is selected via
      * CodeGen_GPU_Options. Processor features can be enabled using the
      * appropriate flags from CodeGen_X86_Options */
-    CodeGen_GPU_Host(uint32_t options = 0);
+    CodeGen_GPU_Host(Target);
 
     virtual ~CodeGen_GPU_Host();
 
@@ -75,7 +66,7 @@ protected:
 
     static bool lib_cuda_linked;
 
-    static CodeGen_GPU_Dev* make_dev(uint32_t options);
+    static CodeGen_GPU_Dev* make_dev(Target);
 
 private:
     /** Child code generator for device kernels. */

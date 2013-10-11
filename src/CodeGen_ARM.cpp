@@ -13,30 +13,6 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
-#if WITH_ARM
-extern "C" unsigned char halide_internal_initmod_arm[];
-extern "C" int halide_internal_initmod_arm_length;
-extern "C" unsigned char halide_internal_initmod_arm_android[];
-extern "C" int halide_internal_initmod_arm_android_length;
-extern "C" unsigned char halide_internal_initmod_arm_ios[];
-extern "C" int halide_internal_initmod_arm_ios_length;
-#else
-static void *halide_internal_initmod_arm = 0;
-static int halide_internal_initmod_arm_length = 0;
-static void *halide_internal_initmod_arm_android = 0;
-static int halide_internal_initmod_arm_android_length = 0;
-static void *halide_internal_initmod_arm_ios = 0;
-static int halide_internal_initmod_arm_ios_length = 0;
-#endif
-
-#if (WITH_NATIVE_CLIENT && WITH_ARM)
-extern "C" unsigned char halide_internal_initmod_arm_nacl[];
-extern "C" int halide_internal_initmod_arm_nacl_length;
-#else
-static void *halide_internal_initmod_arm_nacl = 0;
-static int halide_internal_initmod_arm_nacl_length = 0;
-#endif
-
 namespace Halide {
 namespace Internal {
 
@@ -48,10 +24,8 @@ using std::make_pair;
 
 using namespace llvm;
 
-CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
-                                             use_android(options & ARM_Android),
-                                             use_ios(options & ARM_IOS),
-                                             use_nacl(options & ARM_NaCl) {
+CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
+                                     target(t) {
     #if !(WITH_ARM)
     assert(false && "arm not enabled for this build of Halide.");
     #endif
@@ -59,7 +33,7 @@ CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
     assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
 
     #if !(WITH_NATIVE_CLIENT)
-    assert(!use_nacl && "llvm build not configured with native client enabled.");
+    assert(target.os != Target::NaCl && "llvm build not configured with native client enabled.");
     #endif
 }
 
@@ -67,51 +41,29 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     init_module();
 
-    StringRef sb;
+    module = get_initial_module_for_target(target, context);
 
-    if (use_android) {
-        assert(halide_internal_initmod_arm_android_length &&
-               "initial module for arm_android is empty");
-        sb = StringRef((char *)halide_internal_initmod_arm_android,
-                       halide_internal_initmod_arm_android_length);
-    } else if (use_ios) {
-        assert(halide_internal_initmod_arm_ios_length &&
-               "initial module for arm_ios is empty");
-        sb = StringRef((char *)halide_internal_initmod_arm_ios,
-                       halide_internal_initmod_arm_ios_length);
-    } else if (use_nacl) {
-        assert(halide_internal_initmod_arm_nacl_length &&
-               "initial module for arm_nacl is empty");
-        sb = StringRef((char *)halide_internal_initmod_arm_nacl,
-                       halide_internal_initmod_arm_nacl_length);
-    } else {
-        assert(halide_internal_initmod_arm_length &&
-               "initial module for arm is empty");
-        sb = StringRef((char *)halide_internal_initmod_arm,
-                       halide_internal_initmod_arm_length);
-    }
-    MemoryBuffer *bitcode_buffer = MemoryBuffer::getMemBuffer(sb);
-
-    // Parse it
-    module = ParseBitcodeFile(bitcode_buffer, *context);
-
-    // Fix the target triple. The initial module was probably compiled for x86
+    // Fix the target triple.
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    if (use_android) {
+    if (target.os == Target::Android) {
         module->setTargetTriple("arm-linux-eabi");
-    } else if (use_ios) {
+    } else if (target.os == Target::IOS) {
         module->setTargetTriple("armv7-apple-ios");
-    } else if (use_nacl) {
+    } else if (target.os == Target::NaCl) {
         module->setTargetTriple("arm-nacl");
-    } else {
+    } else if (target.os == Target::Linux) {
         module->setTargetTriple("arm-linux-gnueabihf");
+    } else {
+        assert(false && "No arm support for this OS");
     }
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
-    delete bitcode_buffer;
+
+    // Optimize
+    CodeGen::optimize_module();
 }
 
 namespace {
@@ -276,7 +228,6 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> a
 }
 
 void CodeGen_ARM::visit(const Cast *op) {
-
     vector<Expr> matches;
 
     struct Pattern {
@@ -1193,7 +1144,7 @@ string CodeGen_ARM::mattrs() const {
 }
 
 bool CodeGen_ARM::use_soft_float_abi() const {
-    return use_android || use_ios;
+    return (target.os == Target::Android) || (target.os == Target::IOS);
 }
 
 }}

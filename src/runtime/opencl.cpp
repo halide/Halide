@@ -1,15 +1,7 @@
-/*
- * Build standalone test (on Mac) with:
- *
- *   clang -framework OpenCL -DTEST_STUB runtime.opencl_host.cpp
- */
 
 #include "mini_stdint.h"
 #include "../buffer_t.h"
-
-// The OpenCL host extends the x86 target
-#define HALIDE_HAVE_COPY_TO_HOST
-#include "runtime.x86_64.cpp"
+#include "HalideRuntime.h"
 
 // OpenCL defines are included simply by embedding the standard Khronos cl.h,
 // cl_platform.h headers in the project. They are licensed permissively enough.
@@ -19,9 +11,12 @@
 
 extern "C" {
 
-// #define NDEBUG // disable logging/asserts for performance
+extern int64_t halide_current_time_ns();
+extern void free(void *);
+extern void *malloc(size_t);
+extern int snprintf(char *, size_t, const char *, ...);
 
-#ifdef NDEBUG
+#ifndef DEBUG
 #define CHECK_ERR(e,str)
 #define CHECK_CALL(c,str) (c)
 #define TIME_START()
@@ -52,27 +47,19 @@ extern "C" {
 #define TIME_START()
 #define TIME_CHECK(str)
 #endif
-#endif //NDEBUG
+#endif //DEBUG
 
-
-
-// Device, Context, Module, and Function for this entrypoint are tracked locally
-// and constructed lazily on first run.
-// TODO: make __f, __mod into arrays?
-// static vector<CUfunction> __f;
 }
 extern "C" {
 cl_context WEAK cl_ctx = 0;
 cl_command_queue WEAK cl_q = 0;
 
 static cl_program __mod;
-// static CUevent __start, __end;
 
 // Used to create buffer_ts to track internal allocations caused by our runtime
 buffer_t* WEAK __make_buffer(uint8_t* host, size_t elem_size,
-                        size_t dim0, size_t dim1,
-                        size_t dim2, size_t dim3)
-{
+                                     size_t dim0, size_t dim1,
+                                     size_t dim2, size_t dim3) {
     buffer_t* buf = (buffer_t*)malloc(sizeof(buffer_t));
     buf->host = host;
     buf->dev = 0;
@@ -86,12 +73,11 @@ buffer_t* WEAK __make_buffer(uint8_t* host, size_t elem_size,
     return buf;
 }
 
-WEAK void __release_buffer(buffer_t* buf)
-{
+WEAK void __release_buffer(buffer_t* buf) {
     free(buf);
 }
-WEAK buffer_t* __malloc_buffer(int32_t size)
-{
+
+WEAK buffer_t* __malloc_buffer(int32_t size) {
     return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
 }
 
@@ -110,7 +96,7 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
 
 WEAK void halide_dev_free(buffer_t* buf) {
 
-    #ifndef NDEBUG
+    #ifdef DEBUG
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
 
@@ -137,7 +123,7 @@ WEAK void halide_init_kernels(const char* src) {
 
         dev = devices[deviceCount-1];
 
-        #ifndef NDEBUG
+        #ifdef DEBUG
         halide_printf("Got device %lld, about to create context (t=%lld)\n",
                       (long long)dev, (long long)halide_current_time_ns());
         #endif
@@ -158,7 +144,7 @@ WEAK void halide_init_kernels(const char* src) {
 
     // Initialize a module for just this Halide module
     if (!__mod) {
-        #ifndef NDEBUG
+        #ifdef DEBUG
         halide_printf("-------\nCompiling kernel source:\n%s\n--------\n", src);
         #endif
 
@@ -186,7 +172,7 @@ WEAK void halide_dev_sync() {
 
 WEAK void halide_release() {
     // TODO: this is for timing; bad for release-mode performance
-    #ifndef NDEBUG
+    #ifdef DEBUG
     halide_printf("dev_sync on exit" );
     #endif
     halide_dev_sync();
@@ -202,7 +188,7 @@ WEAK void halide_release() {
 
 static cl_kernel __get_kernel(const char* entry_name) {
     cl_kernel f;
-    #ifdef NDEBUG
+    #ifndef DEBUG
     // char msg[1];
     #else
     char msg[256];
@@ -220,7 +206,7 @@ static cl_kernel __get_kernel(const char* entry_name) {
 
 static cl_mem __dev_malloc(size_t bytes) {
     cl_mem p;
-    #ifdef NDEBUG
+    #ifndef DEBUG
     // char msg[1];
     #else
     char msg[256];
@@ -229,16 +215,16 @@ static cl_mem __dev_malloc(size_t bytes) {
     #endif
     TIME_START();
     int err;
-    p = clCreateBuffer( cl_ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
+    p = clCreateBuffer(cl_ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
     TIME_CHECK(msg);
-    #ifndef NDEBUG
+    #ifdef DEBUG
     halide_printf("    returned: %p (err: %d)\n", (void*)p, err);
     #endif
     halide_assert(p);
     return p;
 }
 
-static inline size_t buf_size(buffer_t* buf) {
+static inline size_t __buf_size(buffer_t* buf) {
     size_t sz = buf->elem_size;
     if (buf->extent[0]) sz *= buf->extent[0];
     if (buf->extent[1]) sz *= buf->extent[1];
@@ -249,7 +235,7 @@ static inline size_t buf_size(buffer_t* buf) {
 }
 
 WEAK void halide_dev_malloc(buffer_t* buf) {
-    #ifndef NDEBUG
+    #ifdef DEBUG
     halide_printf("dev_malloc of %dx%dx%dx%d (%d bytes) (buf->dev = %p) buffer\n",
             buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
@@ -257,7 +243,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
         halide_assert(halide_validate_dev_pointer(buf));
         return;
     }
-    size_t size = buf_size(buf);
+    size_t size = __buf_size(buf);
     buf->dev = (uint64_t)__dev_malloc(size);
     halide_assert(buf->dev);
 }
@@ -265,8 +251,8 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
 WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         halide_assert(buf->host && buf->dev);
-        size_t size = buf_size(buf);
-        #ifdef NDEBUG
+        size_t size = __buf_size(buf);
+        #ifndef DEBUG
         // char msg[1];
         #else
         char msg[256];
@@ -286,8 +272,8 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         clFinish(cl_q); // block on completion before read back
         halide_assert(buf->host && buf->dev);
-        size_t size = buf_size(buf);
-        #ifdef NDEBUG
+        size_t size = __buf_size(buf);
+        #ifndef DEBUG
         char msg[1];
         #else
         char msg[256];
@@ -313,7 +299,7 @@ WEAK void halide_dev_run(
     void* args[])
 {
     cl_kernel f = __get_kernel(entry_name);
-    #ifdef NDEBUG
+    #ifndef DEBUG
     char msg[1];
     #else
     char msg[256];
@@ -445,3 +431,8 @@ int main(int argc, char* argv[]) {
 #endif
 
 } // extern "C" linkage
+
+#undef CHECK_ERR
+#undef CHECK_CALL
+#undef TIME_START
+#undef TIME_CHECK

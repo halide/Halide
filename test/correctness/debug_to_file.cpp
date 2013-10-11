@@ -12,8 +12,8 @@ int main(int argc, char **argv) {
         g(x, y) = cast<float>(f(x, y) + f(x+1, y));
         h(x, y) = f(x, y) + g(x, y);
 
-        std::string target = get_target();
-        if (target == "ptx" || target == "ptx-debug") {
+        Target target = get_target_from_environment();
+        if (target.features & Target::CUDA) {
             f.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("f.tmp");
             g.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("g.tmp");
             h.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("h.tmp");

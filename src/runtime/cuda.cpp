@@ -1,21 +1,13 @@
-/*
- * Build LL module with:
- *
- *   clang -I/usr/local/cuda/include -c -S -emit-llvm ptx_shim_tmpl.c -o ptx_shim_tmpl.ll
- */
-
 #include "mini_stdint.h"
 #include "../buffer_t.h"
-
-// The PTX host extends the x86 target
-#define HALIDE_HAVE_COPY_TO_HOST
-#include "runtime.x86_64.cpp"
-
-extern "C" int atoi(const char *);
-
-#define WEAK __attribute__((weak))
+#include "HalideRuntime.h"
 
 extern "C" {
+
+extern int atoi(const char *);
+extern char *getenv(const char *);
+extern int64_t halide_current_time_ns();
+extern int snprintf(char *, size_t, const char *, ...);
 
 #ifndef DEBUG
 #define CHECK_CALL(c,str) c
@@ -40,8 +32,7 @@ extern "C" {
 } while(0)
 #endif //DEBUG
 
-#ifndef __cuda_cuda_h__
-#ifdef HALIDE_OS_windows
+#if defined(HALIDE_OS_Windows) && defined(HALIDE_ARCH_X86_32)
 #define CUDAAPI __stdcall
 #else
 #define CUDAAPI
@@ -150,14 +141,9 @@ CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
 CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
 CUresult CUDAAPI cuPointerGetAttribute(void *result, int query, CUdeviceptr ptr);
 
-#endif //__cuda_cuda_h__
-
-// Device, Context, Module, and Function for this entrypoint are tracked locally
-// and constructed lazily on first run.
-// TODO: make __f, __mod into arrays?
-// static vector<CUfunction> __f;
 }
 extern "C" {
+
 // A cuda context defined in this module with weak linkage
 CUcontext WEAK weak_cuda_ctx = 0;
 
@@ -170,37 +156,6 @@ WEAK void halide_set_cuda_context(CUcontext *ctx_ptr) {
 
 static CUmodule __mod;
 static CUevent __start, __end;
-
-/*
-// Used to create buffer_ts to track internal allocations caused by our runtime
-// TODO: look into cuMemAllocHost for page-locked host memory, allowing easy transfer?
-// TODO: make Buffer args typed, so elem_size can be statically inferred?
-static buffer_t* __make_buffer(uint8_t* host, size_t elem_size,
-                        size_t dim0, size_t dim1,
-                        size_t dim2, size_t dim3)
-{
-    buffer_t* buf = (buffer_t*)malloc(sizeof(buffer_t));
-    buf->host = host;
-    buf->dev = 0;
-    buf->extent[0] = dim0;
-    buf->extent[1] = dim1;
-    buf->extent[2] = dim2;
-    buf->extent[3] = dim3;
-    buf->elem_size = elem_size;
-    buf->host_dirty = false;
-    buf->dev_dirty = false;
-    return buf;
-}
-
-static void __release_buffer(buffer_t* buf) {
-    free(buf);
-}
-
-static buffer_t* __malloc_buffer(int32_t size) {
-    return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
-}
-
-*/
 
 WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
     CUcontext ctx;
@@ -255,10 +210,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
             }
         }
 
-        if (status != CUDA_SUCCESS) {
-            halide_printf("Failed to get device\n");
-            exit(-1);
-        }
+        halide_assert(status == CUDA_SUCCESS && "Failed to get device\n");
 
         #ifdef DEBUG
         halide_printf("Got device %d, about to create context (t=%lld)\n", dev, (long long)halide_current_time_ns());
@@ -345,7 +297,7 @@ static CUfunction __get_kernel(const char* entry_name)
     return f;
 }
 
-static inline size_t buf_size(buffer_t* buf) {
+static size_t __buf_size(buffer_t* buf) {
     size_t sz = buf->elem_size;
     if (buf->extent[0]) sz *= buf->extent[0];
     if (buf->extent[1]) sz *= buf->extent[1];
@@ -361,7 +313,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
         return;
     }
 
-    size_t size = buf_size(buf);
+    size_t size = __buf_size(buf);
 
     #ifdef DEBUG
     halide_printf("dev_malloc allocating buffer of %zd bytes, %zdx%zdx%zdx%zd (%d bytes per element)\n",
@@ -381,7 +333,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
 WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         halide_assert(buf->host && buf->dev);
-        size_t size = buf_size(buf);
+        size_t size = __buf_size(buf);
         #ifdef DEBUG
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%lld)",
@@ -397,7 +349,7 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
         halide_assert(buf->dev);
         halide_assert(buf->host);
-        size_t size = buf_size(buf);
+        size_t size = __buf_size(buf);
         #ifdef DEBUG
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
@@ -407,7 +359,6 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
     }
     buf->dev_dirty = false;
 }
-#define _COPY_TO_HOST
 
 // Used to generate correct timings when tracing
 WEAK void halide_dev_sync() {
@@ -420,8 +371,7 @@ WEAK void halide_dev_run(
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
     size_t arg_sizes[],
-    void* args[])
-{
+    void* args[]) {
     CUfunction f = __get_kernel(entry_name);
 
     #ifdef DEBUG
@@ -449,3 +399,8 @@ WEAK void halide_dev_run(
 }
 
 } // extern "C" linkage
+
+#undef CHECK_ERR
+#undef CHECK_CALL
+#undef TIME_START
+#undef TIME_CHECK
