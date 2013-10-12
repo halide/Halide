@@ -28,42 +28,18 @@ WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= 1
 
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
-NATIVE_CLIENT_ARCHS =
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 
-ifneq ($(WITH_NATIVE_CLIENT), )
-
-ifneq ($(WITH_X86), )
-ifndef NATIVE_CLIENT_X86_INCLUDE
-$(error Compiling with x86 native client support but NATIVE_CLIENT_X86_INCLUDE not defined)
-endif
-NATIVE_CLIENT_ARCHS += x86_32_nacl x86_32_sse41_nacl x86_64_nacl x86_64_sse41_nacl x86_64_avx_nacl
-endif
-
-ifneq ($(WITH_ARM), )
-ifndef NATIVE_CLIENT_ARM_INCLUDE
-$(error Compiling with arm native client support but NATIVE_CLIENT_ARM_INCLUDE not defined)
-endif
-NATIVE_CLIENT_ARCHS += arm_nacl
-endif
-
-endif
-
-
 X86_CXX_FLAGS=$(if $(WITH_X86), -DWITH_X86=1, )
-X86_ARCHS=$(if $(WITH_X86), x86_32 x86_32_sse41 x86_64 x86_64_sse41 x86_64_avx, )
 X86_LLVM_CONFIG_LIB=$(if $(WITH_X86), x86, )
 
 ARM_CXX_FLAGS=$(if $(WITH_ARM), -DWITH_ARM=1, )
-ARM_ARCHS=$(if $(WITH_ARM), arm arm_android arm_ios , )
 ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
 
 PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
-PTX_ARCHS=$(if $(WITH_PTX), ptx_host ptx_host_debug ptx_dev, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
-OPENCL_ARCHS=$(if $(WITH_OPENCL), opencl_host, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
 CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE)
