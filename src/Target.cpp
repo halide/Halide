@@ -35,9 +35,10 @@ static void cpuid(int info[4], int infoType, int extra) {
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
-        "xchg{l}\t{%%}ebx, %1  \n\t"
+        "pushq {%%}rbx         \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
+        "popq {%%}rbx          \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
         : "0" (infoType), "2" (extra));
 }
@@ -99,7 +100,13 @@ Target get_host_target() {
 }
 
 Target get_target_from_environment() {
+
+    //Internal::debug(0) << "Getting host target \n";
+
     Target t = get_host_target();
+
+    //Internal::debug(0) << "Got host target \n";
+
     string target;
 #ifdef _WIN32
     char buf[128];
@@ -126,6 +133,7 @@ Target get_target_from_environment() {
     vector<string> tokens;
     size_t first_dash;
     while ((first_dash = rest.find('-')) != string::npos) {
+        //Internal::debug(0) << first_dash << ", " << rest << "\n";
         tokens.push_back(rest.substr(0, first_dash));
         rest = rest.substr(first_dash + 1);
     }
