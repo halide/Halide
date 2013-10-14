@@ -14,5 +14,5 @@ typedef struct buffer_t {
     bool dev_dirty;
 } buffer_t;
 #endif
-extern "C" void halide(const buffer_t *input, const buffer_t *result);
+extern "C" int halide(buffer_t *input, buffer_t *result);
 #endif

@@ -35,13 +35,13 @@ int main(int argc, char **argv) {
 
     tone_curve.compute_root();
     Var yi;
-    result.split(y, y, yi, 60).parallel(y).vectorize(x, 8);
+    result.split(y, y, yi, 60).vectorize(x, 8).parallel(y);
     curved.store_at(result, y).compute_at(result, yi);
 
     std::vector<Argument> args;
     args.push_back(input);
-    result.compile_to_assembly("halide.s", args, "halide");    
-    result.compile_to_header("halide.h", args, "halide");    
+    result.compile_to_assembly("halide.s", args, "halide");
+    result.compile_to_header("halide.h", args, "halide");
 
     return 0;
 }

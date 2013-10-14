@@ -222,6 +222,11 @@ Target get_target_from_environment() {
         }
     }
 
+    if (arch_specified && !bits_specified) {
+        std::cerr << "If architecture is specified (e.g. \"arm\"), then bit width must also be specified (e.g. \"arm-32\")\n";
+        assert(false);
+    }
+
     return t;
 }
 

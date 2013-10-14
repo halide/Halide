@@ -287,6 +287,8 @@ void CodeGen::optimize_module() {
                        "halide_shutdown_trace",
                        "halide_set_cuda_context",
                        "halide_release",
+                       "halide_current_time_ns",
+                       "halide_host_cpu_count",
                        ""};
 
     // First fix linkage types so that optimization is allowed to strip things out

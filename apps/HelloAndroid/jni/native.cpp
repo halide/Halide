@@ -12,9 +12,11 @@
 
 #define DEBUG 1
 
-extern "C" void halide_set_error_handler(void (*handler)(const char *));
+extern "C" void halide_set_error_handler(int (*handler)(const char *));
+extern "C" int halide_host_cpu_count();
+extern "C" int64_t halide_current_time_ns();
 
-void handler(char *msg) {
+int handler(const char *msg) {
     LOGE(msg);
 }
 
@@ -32,10 +34,11 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     static unsigned counter = 0;
     static unsigned times[16];
     if (first_call) {
-      LOGD("Resetting buffer format");
-      ANativeWindow_setBuffersGeometry(win, 640, 360, 0);
-      first_call = false;
-      for (int t = 0; t < 16; t++) times[t] = 0;
+        LOGD("According to Halide, host system has %d cpus\n", halide_host_cpu_count());
+        LOGD("Resetting buffer format");
+        ANativeWindow_setBuffersGeometry(win, 640, 360, 0);
+        first_call = false;
+        for (int t = 0; t < 16; t++) times[t] = 0;
     }
 
     ANativeWindow_Buffer buf;
@@ -66,19 +69,18 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     dstBuf.min[1] = 0;
     dstBuf.elem_size = 1;
 
-    timeval t1, t2;
-    gettimeofday(&t1, NULL);
+    int64_t t1 = halide_current_time_ns();
     halide(&srcBuf, &dstBuf);
-    gettimeofday(&t2, NULL);
-    unsigned elapsed = (t2.tv_sec - t1.tv_sec)*1000000 + (t2.tv_usec - t1.tv_usec);
+    int64_t t2 = halide_current_time_ns();
+    unsigned elapsed_us = (t2 - t1)/1000;
 
-    times[counter & 15] = elapsed;
+    times[counter & 15] = elapsed_us;
     counter++;
     unsigned min = times[0];
     for (int i = 1; i < 16; i++) {
         if (times[i] < min) min = times[i];
     }
-    LOGD("Time taken: %d (%d)", elapsed, min);
+    LOGD("Time taken: %d (%d)", elapsed_us, min);
 
     // Just copy over chrominance untouched
     memcpy(dst + 640*360, src + 640*480, 320*180);
