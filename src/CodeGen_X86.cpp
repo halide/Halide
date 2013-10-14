@@ -64,7 +64,12 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
             module->setTargetTriple("x86_64-apple-macosx");
         }
     } else if (target.os == Target::Windows) {
-        assert(false && "Not yet implemented: Target triple selection on windows");
+        std::cerr << "WARNING: Target triple selection on windows is untested\n";
+        if (target.bits == 32) {
+            module->setTargetTriple("i386-pc-win32-unknown");
+        } else {
+            module->setTargetTriple("x86_64-pc-win32-unknown");
+        }
     } else if (target.os == Target::Android) {
         std::cerr << "WARNING: x86 android is untested\n";
         if (target.bits == 32) {
