@@ -81,6 +81,37 @@ bool less_than_zero<unsigned char>(unsigned char val) {
     return false;
 }
 
+template<typename T>
+bool is_negative_one(T val) {
+    return (val == -1);
+}
+
+template<>
+bool is_negative_one(unsigned long long val) {
+    return false;
+}
+
+template<>
+bool is_negative_one(unsigned long val) {
+    return false;
+}
+
+template<>
+bool is_negative_one(unsigned int val) {
+    return false;
+}
+
+template<>
+bool is_negative_one(unsigned short val) {
+    return false;
+}
+
+template<>
+bool is_negative_one(unsigned char val) {
+    return false;
+}
+
+
 template<typename T,typename BIG,int bits>
 BIG maximum() {
     Type t = type_of<T>();
@@ -370,7 +401,7 @@ bool division() {
             if (b(i,j) == 0) {
                 b(i,j) = 1; // Replace zero with one
             }
-            if (a(i,j) == minval && less_than_zero(minval) && b(i,j) == -1) {
+            if (a(i,j) == minval && less_than_zero(minval) && is_negative_one(b(i,j))) {
                 a(i,j) = a(i,j) + 1; // Fix it into range.
             }
         }
@@ -450,7 +481,7 @@ bool mod() {
             if (b(i,j) == 0) {
                 b(i,j) = 1; // Replace zero with one
             }
-            if (a(i,j) == minval && less_than_zero(minval) && b(i,j) == -1) {
+            if (a(i,j) == minval && less_than_zero(minval) && is_negative_one(b(i,j))) {
                 a(i,j) = a(i,j) + 1; // Fix it into range.
             }
         }
