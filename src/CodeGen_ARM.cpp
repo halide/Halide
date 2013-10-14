@@ -313,16 +313,30 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     module = get_initial_module_for_target(target, context);
 
     // Fix the target triple.
+    if (target.bits == 64) {
+        std::cerr << "WARNING: 64-bit arm builds are completely untested\n";
+    }
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
     if (target.os == Target::Android) {
+        assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm android");
         module->setTargetTriple("arm-linux-eabi");
     } else if (target.os == Target::IOS) {
-        module->setTargetTriple("armv7-apple-ios");
+        // armv7 is 32-bit
+        if (target.bits == 32) {
+            module->setTargetTriple("armv7-apple-ios");
+        } else {
+            module->setTargetTriple("aarch64-apple-ios");
+        }
     } else if (target.os == Target::NaCl) {
+        assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm nacl");
         module->setTargetTriple("arm-nacl");
     } else if (target.os == Target::Linux) {
-        module->setTargetTriple("arm-linux-gnueabihf");
+        if (target.bits == 32) {
+            module->setTargetTriple("arm-linux-gnueabihf");
+        } else {
+            module->setTargetTriple("aarch64-linux-gnueabihf");
+        }
     } else {
         assert(false && "No arm support for this OS");
     }
