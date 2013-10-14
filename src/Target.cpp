@@ -32,6 +32,7 @@ static void cpuid(int info[4], int infoType, int extra) {
 // CPU feature detection code taken from ispc
 // (https://github.com/ispc/ispc/blob/master/builtins/dispatch.ll)
 
+#ifdef _LP64
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
@@ -42,9 +43,19 @@ static void cpuid(int info[4], int infoType, int extra) {
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
         : "0" (infoType), "2" (extra));
 }
-
+#else
+static void cpuid(int info[4], int infoType, int extra) {
+    // We save %ebx in case it's the PIC register
+    __asm__ __volatile__ (
+        "pushl {%%}ebx         \n\t"
+        "cpuid                 \n\t"
+        "xchg{l}\t{%%}ebx, %1  \n\t"
+        "popl {%%}ebx          \n\t"
+        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
+        : "0" (infoType), "2" (extra));
+}
 #endif
-
+#endif
 #endif
 }
 
