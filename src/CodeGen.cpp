@@ -804,17 +804,37 @@ void CodeGen::visit(const Mod *op) {
 }
 
 void CodeGen::visit(const Min *op) {
-    Expr a = Variable::make(op->a.type(), "a");
-    Expr b = Variable::make(op->a.type(), "b");
-    Expr equiv = Let::make("a", op->a, Let::make("b", op->b, Select::make(a < b, a, b)));
-    value = codegen(equiv);
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
+    Value *cmp;
+
+    Halide::Type t = op->a.type();
+    if (t.is_float()) {
+        cmp = builder->CreateFCmpOLT(a, b);
+    } else if (t.is_int()) {
+        cmp = builder->CreateICmpSLT(a, b);
+    } else {
+        cmp = builder->CreateICmpULT(a, b);
+    }
+
+    value = builder->CreateSelect(cmp, a, b);
 }
 
 void CodeGen::visit(const Max *op) {
-    Expr a = Variable::make(op->a.type(), "a");
-    Expr b = Variable::make(op->a.type(), "b");
-    Expr equiv = Let::make("a", op->a, Let::make("b", op->b, Select::make(a > b, a, b)));
-    value = codegen(equiv);
+    Value *a = codegen(op->a);
+    Value *b = codegen(op->b);
+    Value *cmp;
+
+    Halide::Type t = op->a.type();
+    if (t.is_float()) {
+        cmp = builder->CreateFCmpOLT(a, b);
+    } else if (t.is_int()) {
+        cmp = builder->CreateICmpSLT(a, b);
+    } else {
+        cmp = builder->CreateICmpULT(a, b);
+    }
+
+    value = builder->CreateSelect(cmp, b, a);
 }
 
 void CodeGen::visit(const EQ *op) {
@@ -842,6 +862,7 @@ void CodeGen::visit(const NE *op) {
 void CodeGen::visit(const LT *op) {
     Value *a = codegen(op->a);
     Value *b = codegen(op->b);
+
     Halide::Type t = op->a.type();
     if (t.is_float()) {
         value = builder->CreateFCmpOLT(a, b);
