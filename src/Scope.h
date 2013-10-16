@@ -23,51 +23,20 @@ template<typename T>
 class SmallStack {
 private:
     T _top;
-    SmallStack<T> *_rest;
+    std::vector<T> _rest;
     bool _empty;
 
 public:
-    SmallStack() : _rest(NULL),
-                   _empty(true) {}
-
-    ~SmallStack() {
-        if (_rest != NULL) {
-            assert(!_empty);
-            delete _rest;
-            _rest = NULL;
-        }
-    }
-
-    SmallStack(const SmallStack<T> &other) : _top(other._top),
-                                             _rest(NULL),
-                                             _empty(other._empty) {
-        if (other._rest != NULL) {
-            _rest = new SmallStack<T>(*other._rest);
-        }
-    }
-
-    SmallStack<T> &operator=(const SmallStack<T> &other) {
-        if (this == &other) return *this;
-        _top = other._top;
-        if (_rest) {
-            delete _rest;
-        }
-        _rest = other._rest;
-        _empty = other._empty;
-        return *this;
-    }
-
+    SmallStack() : _empty(true) {}
 
     void pop() {
         assert(!_empty);
-        if (_rest != NULL) {
-            _top = _rest->_top;
-            SmallStack<T> *new_rest = _rest->_rest;
-            _rest->_rest = NULL;
-            delete _rest;
-            _rest = new_rest;
-        } else {
+        if (_rest.empty()) {
             _empty = true;
+            _top = T();
+        } else {
+            _top = _rest.back();
+            _rest.pop_back();
         }
     }
 
@@ -76,12 +45,7 @@ public:
             _empty = false;
             _top = t;
         } else {
-            SmallStack<T> *new_rest = new SmallStack<T>();
-            new_rest->_rest = _rest;
-            new_rest->_top = _top;
-            new_rest->_empty = _empty;
-            _top = t;
-            _rest = new_rest;
+            _rest.push_back(t);
         }
     }
 
