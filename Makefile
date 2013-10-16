@@ -101,6 +101,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNT
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
 
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
+	cat $(BUILD_DIR)/initmod.*.cpp > msvc/initial\ modules/initmod.cpp
 	@-mkdir -p $(BIN_DIR)
 	$(LD) -r -o $(BUILD_DIR)/Halide.o $(OBJECTS) $(INITIAL_MODULES) $(LIBS)
 	rm -f $(BIN_DIR)/libHalide.a
