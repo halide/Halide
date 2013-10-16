@@ -392,7 +392,7 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
 }
 
 /** Return the sine of a floating-point expression. If the argument is
- * not floating-point, is it cast to Float(32). Does not vectorize
+ * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr sin(Expr x) {
     assert(x.defined() && "sin of undefined");
@@ -404,7 +404,7 @@ inline Expr sin(Expr x) {
 }
 
 /** Return the arcsine of a floating-point expression. If the argument
- * is not floating-point, is it cast to Float(32). Does not vectorize
+ * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr asin(Expr x) {
     assert(x.defined() && "asin of undefined");
@@ -416,7 +416,7 @@ inline Expr asin(Expr x) {
 }
 
 /** Return the cosine of a floating-point expression. If the argument
- * is not floating-point, is it cast to Float(32). Does not vectorize
+ * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr cos(Expr x) {
     assert(x.defined() && "cos of undefined");
@@ -428,7 +428,7 @@ inline Expr cos(Expr x) {
 }
 
 /** Return the arccosine of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). Does not
+ * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
 inline Expr acos(Expr x) {
     assert(x.defined() && "acos of undefined");
@@ -440,7 +440,7 @@ inline Expr acos(Expr x) {
 }
 
 /** Return the tangent of a floating-point expression. If the argument
- * is not floating-point, is it cast to Float(32). Does not vectorize
+ * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr tan(Expr x) {
     assert(x.defined() && "tan of undefined");
@@ -452,7 +452,7 @@ inline Expr tan(Expr x) {
 }
 
 /** Return the arctangent of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). Does not
+ * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
 inline Expr atan(Expr x) {
     assert(x.defined() && "atan of undefined");
@@ -463,8 +463,24 @@ inline Expr atan(Expr x) {
     }
 }
 
+/** Return the angle of a floating-point gradient. If the argument is
+ * not floating-point, it is cast to Float(32). Does not vectorize
+ * well. */
+inline Expr atan2(Expr y, Expr x) {
+    assert(x.defined() && y.defined() && "atan2 of undefined");
+
+    if (y.type() == Float(64)) {
+        x = cast<double>(x);
+        return Internal::Call::make(Float(64), "atan2_f64", vec(y, x), Internal::Call::Extern);
+    } else {
+        y = cast<float>(y);
+        x = cast<float>(x);
+        return Internal::Call::make(Float(32), "atan2_f32", vec(y, x), Internal::Call::Extern);
+    }
+}
+
 /** Return the hyperbolic sine of a floating-point expression.  If the
- *  argument is not floating-point, is it cast to Float(32). Does not
+ *  argument is not floating-point, it is cast to Float(32). Does not
  *  vectorize well. */
 inline Expr sinh(Expr x) {
     assert(x.defined() && "sinh of undefined");
@@ -476,7 +492,7 @@ inline Expr sinh(Expr x) {
 }
 
 /** Return the hyperbolic arcsinhe of a floating-point expression.  If
- * the argument is not floating-point, is it cast to Float(32). Does
+ * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
 inline Expr asinh(Expr x) {
     assert(x.defined() && "asinh of undefined");
@@ -488,7 +504,7 @@ inline Expr asinh(Expr x) {
 }
 
 /** Return the hyperbolic cosine of a floating-point expression.  If
- * the argument is not floating-point, is it cast to Float(32). Does
+ * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
 inline Expr cosh(Expr x) {
     assert(x.defined() && "cosh of undefined");
@@ -500,7 +516,7 @@ inline Expr cosh(Expr x) {
 }
 
 /** Return the hyperbolic arccosine of a floating-point expression.
- * If the argument is not floating-point, is it cast to
+ * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
 inline Expr acosh(Expr x) {
     assert(x.defined() && "acosh of undefined");
@@ -512,7 +528,7 @@ inline Expr acosh(Expr x) {
 }
 
 /** Return the hyperbolic tangent of a floating-point expression.  If
- * the argument is not floating-point, is it cast to Float(32). Does
+ * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
 inline Expr tanh(Expr x) {
     assert(x.defined() && "tanh of undefined");
@@ -524,7 +540,7 @@ inline Expr tanh(Expr x) {
 }
 
 /** Return the hyperbolic arctangent of a floating-point expression.
- * If the argument is not floating-point, is it cast to
+ * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
 inline Expr atanh(Expr x) {
     assert(x.defined() && "atanh of undefined");
@@ -536,7 +552,7 @@ inline Expr atanh(Expr x) {
 }
 
 /** Return the square root of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). Typically
+ * argument is not floating-point, it is cast to Float(32). Typically
  * vectorizes cleanly. */
 inline Expr sqrt(Expr x) {
     assert(x.defined() && "sqrt of undefined");
@@ -549,13 +565,13 @@ inline Expr sqrt(Expr x) {
 
 /** Return the square root of the sum of the squares of two
  * floating-point expressions. If the argument is not floating-point,
- * is it cast to Float(32). Vectorizes cleanly. */
+ * it is cast to Float(32). Vectorizes cleanly. */
 inline Expr hypot(Expr x, Expr y) {
     return sqrt(x*x + y*y);
 }
 
 /** Return the exponential of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). For
+ * argument is not floating-point, it is cast to Float(32). For
  * Float(64) arguments, this calls the system exp function, and does
  * not vectorize well. For Float(32) arguments, this function is
  * vectorizable, does the right thing for extremely small or extremely
@@ -572,7 +588,7 @@ inline Expr exp(Expr x) {
 }
 
 /** Return the logarithm of a floating-point expression. If the
- * argument is not floating-point, is it cast to Float(32). For
+ * argument is not floating-point, it is cast to Float(32). For
  * Float(64) arguments, this calls the system log function, and does
  * not vectorize well. For Float(32) arguments, this function is
  * vectorizable, does the right thing for inputs <= 0 (returns -inf or
@@ -638,7 +654,7 @@ inline Expr fast_pow(Expr x, Expr y) {
 
 /** Return the greatest whole number less than or equal to a
  * floating-point expression. If the argument is not floating-point,
- * is it cast to Float(32). The return value is still in floating
+ * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr floor(Expr x) {
     assert(x.defined() && "floor of undefined");
@@ -651,7 +667,7 @@ inline Expr floor(Expr x) {
 
 /** Return the least whole number greater than or equal to a
  * floating-point expression. If the argument is not floating-point,
- * is it cast to Float(32). The return value is still in floating
+ * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr ceil(Expr x) {
     assert(x.defined() && "ceil of undefined");
@@ -663,7 +679,7 @@ inline Expr ceil(Expr x) {
 }
 
 /** Return the whole number closest to a floating-point expression. If
- * the argument is not floating-point, is it cast to Float(32). The
+ * the argument is not floating-point, it is cast to Float(32). The
  * return value is still in floating point, despite being a whole
  * number. On ties, we round up. Vectorizes cleanly. */
 inline Expr round(Expr x) {
