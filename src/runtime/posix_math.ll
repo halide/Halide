@@ -185,6 +185,19 @@ define weak_odr double @atan_f64(double %x) nounwind uwtable readnone alwaysinli
        ret double %y
 }
 
+declare float @atan2f(float, float) nounwind readnone
+declare double @atan2(double, double) nounwind readnone
+
+define weak_odr float @atan2_f32(float %y, float %x) nounwind uwtable readnone alwaysinline {
+       %z = tail call float @atan2f(float %y, float %x) nounwind readnone
+       ret float %z
+}
+
+define weak_odr double @atan2_f64(double %y, double %x) nounwind uwtable readnone alwaysinline {
+       %z = tail call double @atan2(double %y, double %x) nounwind readnone
+       ret double %z
+}
+
 declare float @sinhf(float) nounwind readnone
 declare double @sinh(double) nounwind readnone
 
