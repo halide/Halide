@@ -124,9 +124,16 @@ private:
         }
 
         if (!could_overflow) {
-            min = min_a.defined() ? Cast::make(to, min_a) : Expr();
-            max = max_a.defined() ? Cast::make(to, max_a) : Expr();
+            // Start with the bounds of the narrow type.
+            bounds_of_type(from);
+            // If we have a better min or max for the arg use that.
+            if (min_a.defined()) min = min_a;
+            if (max_a.defined()) max = max_a;
+            // Then cast those bounds to the wider type.
+            if (min.defined()) min = Cast::make(to, min);
+            if (max.defined()) max = Cast::make(to, max);
         } else {
+            // This might overflow, so use the bounds of the destination type.
             bounds_of_type(to);
         }
     }
