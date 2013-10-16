@@ -143,6 +143,8 @@ CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
     assert(!use_nacl && "llvm build not configured with native client enabled.");
     #endif
 
+    // These patterns went away in llvm commit r189481
+    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 4
     casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
     casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
     casts.push_back(Pattern("vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256)));
@@ -151,6 +153,8 @@ CodeGen_ARM::CodeGen_ARM(uint32_t options) : CodeGen_Posix(),
     casts.push_back(Pattern("vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)));
     casts.push_back(Pattern("vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)));
     casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
+    #endif
+
     casts.push_back(Pattern("vrhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8) + 1)/2)));
     casts.push_back(Pattern("vrhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8) + 1)/2)));
     casts.push_back(Pattern("vrhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4) + 1)/2)));
