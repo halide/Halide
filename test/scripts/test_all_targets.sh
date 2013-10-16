@@ -69,16 +69,28 @@ if [[ ! -f testing/deps/libz32.a ]]; then
     cd ../../../
 fi
 
+if [[ `uname` == Darwin ]]; then
+    export CXX="clang++ -std=c++11 -stdlib=libc++"
+    export GXX="clang++ -std=c++11 -stdlib=libc++"
+    export CC="clang"
+else
+    export CXX="g++"
+    export GXX="g++"
+    export CC="gcc"
+fi
+
+
 # We also need the nacl sdk. For now we assume the existence under ~/nacl_sdk
 export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
 export NATIVE_CLIENT_ARM_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_arm_newlib/include/
 
 # link testing/reports/head to the current head
+rm -rf testing/reports/head/*
 rm -rf testing/reports/head
 ln -s ${HEAD} testing/reports/head
 
 # test several llvm variants
-for LLVM in trunk release-3.2 release-3.3 pnacl; do
+for LLVM in trunk pnacl release-3.2 release-3.3; do
 
     if [[ "$LLVM" == pnacl ]]; then
         LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
@@ -110,14 +122,14 @@ for LLVM in trunk release-3.2 release-3.3 pnacl; do
     if [ ! -f build-32/bin/llvm-config ]; then
         mkdir build-32
         cd build-32
-        CC=gcc CXX=g++ cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
+        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
         make -j8
         cd ..
     fi
     if [ ! -f build-64/bin/llvm-config ]; then
         mkdir build-64
         cd build-64
-        CC=gcc CXX=g++ cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
         make -j8
         cd ..
     fi
@@ -146,9 +158,9 @@ for LLVM in trunk release-3.2 release-3.3 pnacl; do
     fi
 done
 
-for LLVM in trunk release-3.2 release-3.3 pnacl; do
+for LLVM in trunk pnacl release-3.2 release-3.3; do
     if [[ "$LLVM" == pnacl ]]; then
-        TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
+        TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     else
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx"
     fi

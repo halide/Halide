@@ -11,9 +11,9 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
         # OS X auto-detects the output format correctly
         export LD="ld"
     fi
-    export CC="gcc -m32"
-    export CXX="g++ -m32"
-    export GXX="g++ -m32"
+    export CC="${CC} -m32"
+    export CXX="${CXX} -m32"
+    export GXX="${GXX} -m32"
     export CLANG=llvm/${LLVM}/build-32/bin/clang
     export LLVM_CONFIG=llvm/${LLVM}/build-32/bin/llvm-config
     export LIBPNG_LIBS="-Ltesting/deps -L../../testing/deps -lpng32 -lz32"
@@ -22,9 +22,9 @@ else
     BITS=64
     # ptx falls into this category
     export LD="ld"
-    export CC="gcc -m64"
-    export CXX="g++ -m64"
-    export GXX="g++ -m64"
+    export CC="${CC} -m64"
+    export CXX="${CXX} -m64"
+    export GXX="${GXX} -m64"
     export CLANG=llvm/${LLVM}/build-64/bin/clang
     export LLVM_CONFIG=llvm/${LLVM}/build-64/bin/llvm-config
     export LIBPNG_LIBS="-Ltesting/deps -L../../testing/deps -lpng64 -lz64"
