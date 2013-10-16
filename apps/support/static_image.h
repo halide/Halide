@@ -9,9 +9,15 @@
 #include <stdint.h>
 #include <memory>
 #include <limits>
+#include <stdlib.h>
 
+#if __cplusplus > 199711L
+#include <memory>
+using std::shared_ptr;
+#else
 #include <tr1/memory>
 using std::tr1::shared_ptr;
+#endif
 
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
