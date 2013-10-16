@@ -546,7 +546,7 @@ class Simplify : public IRMutator {
     void visit(const Div *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
 
         const Mul *mul_a = a.as<Mul>();
@@ -565,6 +565,10 @@ class Simplify : public IRMutator {
         } else if (sub_a) {
             mul_a_a = sub_a->a.as<Mul>();
             mul_a_b = sub_a->b.as<Mul>();
+        }
+
+        if (ramp_a) {
+            mul_a_a = ramp_a->base.as<Mul>();
         }
 
         if (is_zero(a)) {
@@ -590,6 +594,14 @@ class Simplify : public IRMutator {
                    const_int(ramp_a->stride, &ia) && ((ia % ib) == 0)) {
             // ramp(x, ia, w) / broadcast(ib, w) -> ramp(x/ib, ia/ib, w) when ib divides ia
             expr = mutate(Ramp::make(ramp_a->base/ib, ia/ib, ramp_a->width));
+        } else if (ramp_a && broadcast_b &&
+                   mul_a_a && const_int(mul_a_a->b, &ia) &&
+                   const_int(broadcast_b->value, &ib) &&
+                   const_int(ramp_a->stride, &ic) &&
+                   ia == ib &&
+                   (ic * (broadcast_b->width - 1)) < ia) {
+            // ramp(x*a, c, b) / broadcast(a, b) -> broadcast(x, b) when c*(b-1) < a
+            expr = mutate(Broadcast::make(mul_a_a->a, broadcast_b->width));
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
@@ -1753,6 +1765,11 @@ void simplify_test() {
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
           Expr(Broadcast::make(y/x, 4)));
     check(Expr(Ramp::make(x, 4, 4)) / 2, Ramp::make(x/2, 2, 4));
+
+    check(Expr(Ramp::make(4*x, 1, 4)) / 4, Broadcast::make(x, 4));
+    check(Expr(Ramp::make(x*4, 1, 3)) / 4, Broadcast::make(x, 3));
+    check(Expr(Ramp::make(x*8, 2, 4)) / 8, Broadcast::make(x, 4));
+    check(Expr(Ramp::make(x*8, 3, 3)) / 8, Broadcast::make(x, 3));
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
