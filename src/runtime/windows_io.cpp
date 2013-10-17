@@ -15,7 +15,7 @@ extern uint8_t *__iob_func();
 extern int vfprintf(void *stream, const char *format, __builtin_va_list ap);
 
 WEAK int halide_printf(const char * fmt, ...) {
-    uint8_t *stderr = __iob_func() + FILE_SIZE;
+    uint8_t *stderr = __iob_func() + FILE_SIZE*2;
     __builtin_va_list args;
     __builtin_va_start(args,fmt);
     int ret = vfprintf(stderr, fmt, args);
