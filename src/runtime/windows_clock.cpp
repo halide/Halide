@@ -2,8 +2,13 @@
 
 extern "C" {
 
+#ifdef BITS_64
+extern bool QueryPerformanceCounter(int64_t *);
+extern bool QueryPerformanceFrequency(int64_t *);
+#else
 extern __stdcall bool QueryPerformanceCounter(int64_t *);
 extern __stdcall bool QueryPerformanceFrequency(int64_t *);
+#endif
 
 WEAK bool halide_reference_clock_inited = false;
 WEAK int64_t halide_reference_clock = 0;
