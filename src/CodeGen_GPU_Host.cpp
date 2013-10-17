@@ -16,8 +16,19 @@
 #include "Simplify.h"
 #include "Tracing.h"
 
+#ifdef _MSC_VER
+// TODO: This is untested
+#define NOMINMAX
+#include <windows.h>
+static bool have_symbol(const char *s) {
+    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
+}
+#else
 #include <dlfcn.h>
-#include <unistd.h>
+static bool have_symbol(const char *s) {
+    return dlsym(NULL, s) != NULL;
+}
+#endif
 
 namespace Halide {
 namespace Internal {
@@ -110,7 +121,7 @@ private:
     Expr unify(Expr a, Expr b) {
         if (!a.defined()) return b;
         if (!b.defined()) return a;
-        return max(a, b);
+        return Halide::max(a, b);
     }
 
     void visit(const For *loop) {
@@ -366,7 +377,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
     if (target.features & Target::CUDA && !lib_cuda_linked) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
-        if (dlsym(NULL, "cuInit")) {
+        if (have_symbol("cuInit")) {
             debug(1) << "This program was linked to cuda already\n";
         } else {
             debug(1) << "Looking for cuda shared library...\n";
@@ -396,7 +407,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
-        if (dlsym(NULL, "clCreateContext")) {
+        if (have_symbol("clCreateContext")) {
             debug(1) << "This program was linked to OpenCL already\n";
         } else {
             debug(1) << "Looking for OpenCL shared library...\n";

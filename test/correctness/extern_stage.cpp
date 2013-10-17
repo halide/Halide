@@ -1,7 +1,13 @@
 #include <Halide.h>
 #include <stdio.h>
 
-extern "C" int flip_x(buffer_t *in1, buffer_t *in2, buffer_t *out) {
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+extern "C" DLLEXPORT int flip_x(buffer_t *in1, buffer_t *in2, buffer_t *out) {
     assert(in1->elem_size == 1);
     assert(in2->elem_size == 4);
     assert(out->elem_size == 1);

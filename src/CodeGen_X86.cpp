@@ -64,11 +64,19 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
             module->setTargetTriple("x86_64-apple-macosx");
         }
     } else if (target.os == Target::Windows) {
-        std::cerr << "WARNING: Target triple selection on windows is untested\n";
-        if (target.bits == 32) {
-            module->setTargetTriple("i386-pc-win32-unknown");
+        if (target.features & Target::JIT) {
+            if (target.bits == 32) {
+                module->setTargetTriple("i386-pc-win32-elf");
+            } else {
+                module->setTargetTriple("x86_64-pc-win32-elf");
+            }
         } else {
-            module->setTargetTriple("x86_64-pc-win32-unknown");
+            // Use COFF files instead of elf.
+            if (target.bits == 32) {
+                module->setTargetTriple("i386-pc-win32-unknown"); 
+            } else {
+                module->setTargetTriple("x86_64-pc-win32-unknown");
+            }
         }
     } else if (target.os == Target::Android) {
         std::cerr << "WARNING: x86 android is untested\n";
@@ -392,7 +400,7 @@ void CodeGen_X86::visit(const Div *op) {
             int shift_bits = op->type.bits;
             // For method 1, we can do the final shift here too
             if (method == 1) {
-                shift_bits += shift;
+                shift_bits += (int)shift;
             }
             Constant *shift_amount = ConstantInt::get(wider, shift_bits);
             val = builder->CreateLShr(val, shift_amount);

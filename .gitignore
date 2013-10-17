@@ -4,7 +4,8 @@ tmp/*
 doc/*
 include/*
 distrib/*
-
+msvc/*/Win32/*
+msvc/*/x64/*
 \#*\#
 .\#*
 *~

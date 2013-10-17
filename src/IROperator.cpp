@@ -31,7 +31,7 @@ bool is_const(Expr e, int value) {
     return false;
 }
 
-const int * EXPORT as_const_int(Expr e) {
+const int * as_const_int(Expr e) {
     const IntImm *i = e.as<IntImm>();
     return i ? &(i->value) : NULL;
 }
@@ -347,7 +347,7 @@ Expr halide_exp(Expr x_full) {
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
-    float one_over_ln2 = 1.0/logf(2.0);
+    float one_over_ln2 = 1.0f/logf(2.0f);
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);

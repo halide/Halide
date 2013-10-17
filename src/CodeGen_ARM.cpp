@@ -439,7 +439,7 @@ void CodeGen_ARM::visit(const Cast *op) {
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
             //debug(4) << "Match!\n";
-            if (pattern.type == Pattern::Pattern::Simple) {
+            if (pattern.type == Pattern::Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
                 return;
             } else { // must be a shift
@@ -585,7 +585,7 @@ void CodeGen_ARM::visit(const Div *op) {
         // Flip the numerator bits if the mask is high
         Value *flipped = builder->CreateXor(sign, val);
         // Grab the multiplier
-        Value *mult = codegen(make_const(op->type, multiplier));
+        Value *mult = codegen(make_const(op->type, (int)multiplier));
         // Widening multiply
         llvm::Type *narrower = llvm_type_of(op->type);
         llvm::Type *wider = llvm_type_of(Int(op->type.bits*2, op->type.width));
@@ -659,7 +659,7 @@ void CodeGen_ARM::visit(const Div *op) {
             int shift_bits = op->type.bits;
             // For method 1, we can do the final shift here too.
             if (method == 1) {
-                shift_bits += shift;
+                shift_bits += (int)shift;
             }
             Constant *shift_amount = ConstantInt::get(wider, shift_bits);
             val = builder->CreateLShr(val, shift_amount);

@@ -4,10 +4,17 @@
 using namespace Halide;
 
 // NB: You must compile with -rdynamic for llvm to be able to find the appropriate symbols
-// This is not supported by the C PseudoJIT backend.
+// This is not supported by the C backend.
+
+// On windows, you need to use declspec to do the same.
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
 
 int call_counter = 0;
-extern "C" float my_func(int x, float y) {
+extern "C" DLLEXPORT float my_func(int x, float y) {
     call_counter++;
     return x*y;
 }

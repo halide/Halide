@@ -5,7 +5,7 @@ using namespace Halide;
 
 int error_occurred = false;
 void halide_error(const char *msg) {
-    printf("Expected Halide error: %s\n", msg);
+    printf("Expected: %s\n", msg);
     error_occurred = true;
 }
 

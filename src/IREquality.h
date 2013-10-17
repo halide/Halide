@@ -13,16 +13,16 @@ namespace Internal {
 /** Compare IR nodes for equality of value. Traverses entire IR
  * tree. For equality of reference, use Expr::same_as */
 // @{
-bool equal(Expr a, Expr b);
-bool equal(Stmt a, Stmt b);
+EXPORT bool equal(Expr a, Expr b);
+EXPORT bool equal(Stmt a, Stmt b);
 // @}
 
 /** Computes a lexical ordering on IR nodes. Returns -1 if the first
  * expression is before the second, 0 if they're equal, and 1 if the
  * first expression is after the second. */
 // @{
-int deep_compare(Expr a, Expr b);
-int deep_compare(Stmt a, Stmt b);
+EXPORT int deep_compare(Expr a, Expr b);
+EXPORT int deep_compare(Stmt a, Stmt b);
 // @}
 
 /** A compare struct suitable for use in std::map and std::set that

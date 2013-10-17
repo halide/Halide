@@ -271,7 +271,7 @@ int Func::add_implicit_vars(vector<Var> &args) const {
     while (iter != args.end() && !iter->same_as(_))
         iter++;
     if (iter != args.end()) {
-        placeholder_pos = iter - args.begin();
+        placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
         while ((int)args.size() < dimensions()) {
@@ -313,7 +313,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
         iter++;
     }
     if (iter != args.end()) {
-        placeholder_pos = iter - args.begin();
+        placeholder_pos = (int)(iter - args.begin());
         int i = 0;
         iter = args.erase(iter);
         while ((int)args.size() < dimensions()) {
@@ -1785,7 +1785,10 @@ void *Func::compile_jit() {
                          << infer_args.arg_types[i].is_buffer << "\n";
     }
 
-    StmtCompiler cg(get_target_from_environment());
+    Target t = get_target_from_environment();
+    // TODO: Validate that we can reasonably jit to this target
+    t.features |= Target::JIT;
+    StmtCompiler cg(t);
     cg.compile(lowered, name(), infer_args.arg_types);
 
     if (debug::debug_level >= 3) {
@@ -1833,8 +1836,8 @@ void Func::test() {
 
 }
 
-Var _("_");
-Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
-    _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
+EXPORT Var _("_");
+EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
+           _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }

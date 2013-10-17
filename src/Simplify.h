@@ -17,7 +17,7 @@ namespace Internal {
  */
 // @{
 Stmt simplify(Stmt);
-Expr simplify(Expr);
+EXPORT Expr simplify(Expr);
 // @}     
    
 /** Implementations of division and mod that are specific to Halide.

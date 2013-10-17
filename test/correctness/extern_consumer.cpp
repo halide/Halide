@@ -3,9 +3,16 @@
 
 using namespace Halide;
 
-extern "C" int dump_to_file(buffer_t *input, const char *filename,
-                            int desired_min, int desired_extent,
-                            buffer_t *) {
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+extern "C" DLLEXPORT 
+int dump_to_file(buffer_t *input, const char *filename,
+                 int desired_min, int desired_extent,
+                 buffer_t *) {
     // Note the final output buffer argument is unused.
     if (input->host == NULL) {
         // Request some range of the input buffer
@@ -49,7 +56,7 @@ int main(int argc, char **argv) {
     sink.compile_jit();
 
     // Dump the first 10 squares to a file
-    filename.set("/tmp/halide_test_extern_consumer");
+    filename.set("halide_test_extern_consumer.txt");
     min.set(0);
     extent.set(10);
     sink.realize();
@@ -68,7 +75,7 @@ int main(int argc, char **argv) {
         "64\n"
         "81\n";
 
-    FILE *f = fopen("/tmp/halide_test_extern_consumer", "r");
+    FILE *f = fopen("halide_test_extern_consumer.txt", "r");
     char result[1024];
     size_t bytes_read = fread(&result[0], 1, 1023, f);
     result[bytes_read] = 0;

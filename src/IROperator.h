@@ -15,43 +15,43 @@ namespace Internal {
 /** Is the expression either an IntImm, a FloatImm, or a Cast of the
  * same, or a Ramp or Broadcast of the same. Doesn't do any constant
  * folding. */
-bool EXPORT is_const(Expr e);
+EXPORT bool is_const(Expr e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
  * Cast, or Broadcast of the same. */
-bool EXPORT is_const(Expr e, int v);
+EXPORT bool is_const(Expr e, int v);
 
 /** If an expression is an IntImm, return a pointer to its
  * value. Otherwise returns NULL. */
-const int * EXPORT as_const_int(Expr e);
+EXPORT const int *as_const_int(Expr e);
 
 /** If an expression is a FloatImm, return a pointer to its
  * value. Otherwise returns NULL. */
-const float * EXPORT as_const_float(Expr e);
+EXPORT const float *as_const_float(Expr e);
 
 /** Is the expression a constant integer power of two. Also returns
  * log base two of the expression if it is. */
-bool EXPORT is_const_power_of_two(Expr e, int *bits);
+EXPORT bool is_const_power_of_two(Expr e, int *bits);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly greater than zero (in all lanes, if a vector expression) */
-bool EXPORT is_positive_const(Expr e);
+EXPORT bool is_positive_const(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also
  * strictly less than zero (in all lanes, if a vector expression) */
-bool EXPORT is_negative_const(Expr e);
+EXPORT bool is_negative_const(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
-bool EXPORT is_zero(Expr e);
+EXPORT bool is_zero(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to one (in all lanes, if a vector expression) */
-bool EXPORT is_one(Expr e);
+EXPORT bool is_one(Expr e);
 
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
-bool EXPORT is_two(Expr e);
+EXPORT bool is_two(Expr e);
 
 /** Given an integer value, cast it into a designated integer type
  * and return the bits as int. Unsigned types are returned as bits in the int
@@ -61,10 +61,10 @@ bool EXPORT is_two(Expr e);
  * For example, int_cast_constant(UInt(16), -1) returns 65535
  * int_cast_constant(Int(8), 128) returns -128
  */
-int EXPORT int_cast_constant(Type t, int val);
+EXPORT int int_cast_constant(Type t, int val);
 
 /** Construct a const of the given type */
-Expr EXPORT make_const(Type t, int val);
+EXPORT Expr make_const(Type t, int val);
 
 /** Construct a boolean constant from a C++ boolean value.
  * May also be a vector if width is given.
@@ -74,24 +74,24 @@ Expr EXPORT make_const(Type t, int val);
  * is that C++ does not have a real bool type - it is in fact
  * close enough to char that C++ does not know how to distinguish them.
  * make_bool is the explicit coercion. */
-Expr make_bool(bool val, int width = 1);
+EXPORT Expr make_bool(bool val, int width = 1);
 
 /** Construct the representation of zero in the given type */
-Expr EXPORT make_zero(Type t);
+EXPORT Expr make_zero(Type t);
 
 /** Construct the representation of one in the given type */
-Expr EXPORT make_one(Type t);
+EXPORT Expr make_one(Type t);
 
 /** Construct the representation of two in the given type */
-Expr EXPORT make_two(Type t);
+EXPORT Expr make_two(Type t);
 
 /** Construct the constant boolean true. May also be a vector of
  * trues, if a width argument is given. */
-Expr EXPORT const_true(int width = 1);
+EXPORT Expr const_true(int width = 1);
 
 /** Construct the constant boolean false. May also be a vector of
  * falses, if a width argument is given. */
-Expr EXPORT const_false(int width = 1);
+EXPORT Expr const_false(int width = 1);
 
 /** Coerce the two expressions to have the same type, using C-style
  * casting rules. For the purposes of casting, a boolean type is
@@ -124,17 +124,17 @@ Expr EXPORT const_false(int width = 1);
  * in an Int(16).
  *
  */
-void EXPORT match_types(Expr &a, Expr &b);
+EXPORT void match_types(Expr &a, Expr &b);
 
 /** Halide's vectorizable transcendentals. */
 // @{
-Expr EXPORT halide_log(Expr a);
-Expr EXPORT halide_exp(Expr a);
+EXPORT Expr halide_log(Expr a);
+EXPORT Expr halide_exp(Expr a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
  * it by itself. */
-Expr EXPORT raise_to_integer_power(Expr a, int b);
+EXPORT Expr raise_to_integer_power(Expr a, int b);
 
 
 }

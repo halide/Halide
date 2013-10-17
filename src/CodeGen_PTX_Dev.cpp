@@ -140,6 +140,7 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
     assert(false && "simt_intrinsic called on bad variable name");
+    return "";
 }
 
 void CodeGen_PTX_Dev::visit(const For *loop) {

@@ -3,8 +3,14 @@
 
 using namespace Halide;
 
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 int count = 0;
-extern "C" int call_counter(int x, int y) {
+extern "C" DLLEXPORT int call_counter(int x, int y) {
     count++;
     return 0;
 }

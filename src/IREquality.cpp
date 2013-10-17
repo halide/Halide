@@ -114,7 +114,7 @@ public:
     template<typename T>
     void visit_binary_operator(const T *op) {
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
+        
         const T *e = expr.as<T>();
 
         expr = e->a;
@@ -468,7 +468,7 @@ int deep_compare(Stmt a, Stmt b) {
     return eq.result;
 }
 
-bool equal(Expr a, Expr b) {
+EXPORT bool equal(Expr a, Expr b) {
     return deep_compare(a, b) == 0;
 }
 

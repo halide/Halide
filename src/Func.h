@@ -74,8 +74,8 @@ public:
      * f(x, y) = g(x, y) defines f.
      */
     // @{
-    void operator=(const FuncRefVar &e);
-    void operator=(const FuncRefExpr &e);
+    EXPORT void operator=(const FuncRefVar &e);
+    EXPORT void operator=(const FuncRefExpr &e);
     // @}
 
     /** Use this FuncRefVar as a call to the function, and not as the
@@ -90,7 +90,7 @@ public:
     EXPORT Expr operator[](int) const;
 
     /** How many outputs does the function this refers to produce. */
-    size_t size() const;
+    EXPORT size_t size() const;
 };
 
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
@@ -150,8 +150,8 @@ public:
      * f(x, y) = g(x, y) defines f.
      */
     // @{
-    void operator=(const FuncRefVar &);
-    void operator=(const FuncRefExpr &);
+    EXPORT void operator=(const FuncRefVar &);
+    EXPORT void operator=(const FuncRefExpr &);
     // @}
 
     /** Use this as a call to the function, and not the left-hand-side
@@ -165,7 +165,7 @@ public:
     EXPORT Expr operator[](int) const;
 
     /** How many outputs does the function this refers to produce. */
-    size_t size() const;
+    EXPORT size_t size() const;
 };
 
 /** A wrapper around a schedule used for common schedule manipulations */
@@ -393,7 +393,7 @@ class Func {
     std::vector<std::pair<int, Internal::Parameter> > image_param_args;
 
 public:
-    static void test();
+    EXPORT static void test();
 
     /** Declare a new undefined function with the given name */
     EXPORT explicit Func(const std::string &name);
@@ -1056,8 +1056,8 @@ public:
      * if this is the output Func in a pipeline. Useful for making
      * static promises about strides, mins, and extents. */
     // @{
-    OutputImageParam output_buffer() const;
-    std::vector<OutputImageParam> output_buffers() const;
+    EXPORT OutputImageParam output_buffer() const;
+    EXPORT std::vector<OutputImageParam> output_buffers() const;
     // @}
 
     /** Casting a function to an expression is equivalent to calling

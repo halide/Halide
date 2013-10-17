@@ -3,13 +3,22 @@
 
 using namespace Halide;
 
-extern "C" int extern_error(buffer_t *out) {
+
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+extern "C" DLLEXPORT 
+int extern_error(buffer_t *out) {
     return -1;
 }
 
 bool error_occurred = false;
-extern "C" void my_halide_error(const char *msg) {
-    printf("Expected error: %s\n", msg);
+extern "C" DLLEXPORT
+void my_halide_error(const char *msg) {
+    printf("Expected: %s\n", msg);
     error_occurred = true;
 }
 

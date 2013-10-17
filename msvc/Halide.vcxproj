@@ -181,23 +181,23 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>Debug\halide_initial_modules.lib;..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -207,9 +207,8 @@ cd $(SolutionDir)</Command>
       <Message>Creating Halide.h</Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -218,22 +217,22 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\Debug\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)..\llvm\build\lib\Debug\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -243,9 +242,8 @@ cd $(SolutionDir)</Command>
       <Message>Creating Halide.h</Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -254,23 +252,23 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>Debug\halide_initial_modules.lib;..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -280,15 +278,14 @@ cd $(SolutionDir)</Command>
       <Message>Creating Halide.h</Message>
     </CustomBuildStep>
     <Lib>
-      <AdditionalDependencies>$(SolutionDir)$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\Debug\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)..\llvm\build\lib\Debug\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <ProjectReference>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -297,22 +294,22 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
-      <AdditionalDependencies>Debug\halide_initial_modules.lib;..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -322,15 +319,14 @@ cd $(SolutionDir)</Command>
       <Message>Creating Halide.h</Message>
     </CustomBuildStep>
     <Lib>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\Debug\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)..\llvm\build\lib\Debug\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <ProjectReference>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -339,11 +335,12 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
@@ -351,12 +348,11 @@ cd $(SolutionDir)</Command>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Release\halide_initial_modules.lib;..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -366,9 +362,8 @@ cd $(SolutionDir)</Command>
       <Message>Creating Halide.h</Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -377,23 +372,23 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -403,9 +398,8 @@ cd $(SolutionDir)</Command>
       <Message>Creating Halide.h</Message>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -414,11 +408,12 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <TargetMachine>MachineX86</TargetMachine>
@@ -426,12 +421,11 @@ cd $(SolutionDir)</Command>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Release/halide_initial_modules.lib;llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -444,12 +438,11 @@ cd $(SolutionDir)</Command>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
     <Lib>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -458,23 +451,23 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <AdditionalIncludeDirectories>$(SolutionDir)..\..\llvm\build\include;$(SolutionDir)..\..\llvm\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\llvm\build\include;$(SolutionDir)..\llvm\include</AdditionalIncludeDirectories>
+      <DisableSpecificWarnings>4267;4800</DisableSpecificWarnings>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>Release/halide_initial_modules.lib;llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>llvm/build/lib/Release/LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <CustomBuildStep>
-      <Command>cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
-cd $(SolutionDir)</Command>
+      <Command>
+      </Command>
     </CustomBuildStep>
     <CustomBuildStep>
       <Outputs>
@@ -487,12 +480,11 @@ cd $(SolutionDir)</Command>
       <LinkLibraryDependencies>true</LinkLibraryDependencies>
     </ProjectReference>
     <Lib>
-      <AdditionalDependencies>$(SolutionDir)$(Platform)\$(Configuration)\halide_initial_modules.lib;$(SolutionDir)..\..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(SolutionDir)..\llvm\build\lib\Release\LLVM*.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Lib>
     <PostBuildEvent>
-      <Command>@echo on
-cd $(SolutionDir)..\src
-$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h Deinterleave.h Derivative.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Log.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveDeadLets.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
+      <Command>cd $(SolutionDir)..\src
+$(SolutionDir)$(Platform)\$(Configuration)\build_halide_h.exe Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h integer_division_table.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h &gt; $(SolutionDir)$(Platform)\$(Configuration)\Halide.h
 cd $(SolutionDir)</Command>
     </PostBuildEvent>
     <PostBuildEvent>
@@ -500,24 +492,24 @@ cd $(SolutionDir)</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\Bounds.cpp">
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug-Static|x64'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release|x64'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-Static|x64'">C:\Users\abadams\projects\halide\cpp\msvc\llvm\llvm-3.2.src\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-    </ClCompile>
+    <ClCompile Include="..\src\Bounds.cpp" />
     <ClCompile Include="..\src\BoundsInference.cpp" />
     <ClCompile Include="..\src\CodeGen.cpp" />
+    <ClCompile Include="..\src\CodeGen_ARM.cpp" />
     <ClCompile Include="..\src\CodeGen_C.cpp" />
+    <ClCompile Include="..\src\CodeGen_GPU_Dev.cpp" />
+    <ClCompile Include="..\src\CodeGen_GPU_Host.cpp" />
+    <ClCompile Include="..\src\CodeGen_Internal.cpp" />
+    <ClCompile Include="..\src\CodeGen_OpenCL_Dev.cpp" />
     <ClCompile Include="..\src\CodeGen_Posix.cpp" />
+    <ClCompile Include="..\src\CodeGen_PTX_Dev.cpp" />
     <ClCompile Include="..\src\CodeGen_X86.cpp" />
+    <ClCompile Include="..\src\CSE.cpp" />
+    <ClCompile Include="..\src\Debug.cpp" />
     <ClCompile Include="..\src\DebugToFile.cpp" />
     <ClCompile Include="..\src\Deinterleave.cpp" />
     <ClCompile Include="..\src\Derivative.cpp" />
+    <ClCompile Include="..\src\EarlyFree.cpp" />
     <ClCompile Include="..\src\Func.cpp" />
     <ClCompile Include="..\src\Function.cpp" />
     <ClCompile Include="..\src\InlineReductions.cpp" />
@@ -529,13 +521,15 @@ cd $(SolutionDir)</Command>
     <ClCompile Include="..\src\IROperator.cpp" />
     <ClCompile Include="..\src\IRPrinter.cpp" />
     <ClCompile Include="..\src\IRVisitor.cpp" />
-    <ClCompile Include="..\src\Log.cpp" />
+    <ClCompile Include="..\src\JITCompiledModule.cpp" />
+    <ClCompile Include="..\src\Lerp.cpp" />
     <ClCompile Include="..\src\Lower.cpp" />
     <ClCompile Include="..\src\ModulusRemainder.cpp" />
+    <ClCompile Include="..\src\OneToOne.cpp" />
     <ClCompile Include="..\src\Parameter.cpp" />
+    <ClCompile Include="..\src\Profiling.cpp" />
     <ClCompile Include="..\src\RDom.cpp" />
     <ClCompile Include="..\src\Reduction.cpp" />
-    <ClCompile Include="..\src\RemoveDeadLets.cpp" />
     <ClCompile Include="..\src\RemoveTrivialForLoops.cpp" />
     <ClCompile Include="..\src\Simplify.cpp" />
     <ClCompile Include="..\src\SlidingWindow.cpp" />
@@ -543,10 +537,15 @@ cd $(SolutionDir)</Command>
     <ClCompile Include="..\src\StorageFlattening.cpp" />
     <ClCompile Include="..\src\StorageFolding.cpp" />
     <ClCompile Include="..\src\Substitute.cpp" />
+    <ClCompile Include="..\src\Target.cpp" />
     <ClCompile Include="..\src\Tracing.cpp" />
+    <ClCompile Include="..\src\Tuple.cpp" />
+    <ClCompile Include="..\src\Type.cpp" />
+    <ClCompile Include="..\src\UniquifyVariableNames.cpp" />
     <ClCompile Include="..\src\UnrollLoops.cpp" />
     <ClCompile Include="..\src\Util.cpp" />
     <ClCompile Include="..\src\VectorizeLoops.cpp" />
+    <ClCompile Include="initmod.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Argument.h" />
@@ -555,12 +554,21 @@ cd $(SolutionDir)</Command>
     <ClInclude Include="..\src\Buffer.h" />
     <ClInclude Include="..\src\buffer_t.h" />
     <ClInclude Include="..\src\CodeGen.h" />
+    <ClInclude Include="..\src\CodeGen_ARM.h" />
     <ClInclude Include="..\src\CodeGen_C.h" />
+    <ClInclude Include="..\src\CodeGen_GPU_Dev.h" />
+    <ClInclude Include="..\src\CodeGen_GPU_Host.h" />
+    <ClInclude Include="..\src\CodeGen_Internal.h" />
+    <ClInclude Include="..\src\CodeGen_OpenCL_Dev.h" />
     <ClInclude Include="..\src\CodeGen_Posix.h" />
+    <ClInclude Include="..\src\CodeGen_PTX_Dev.h" />
     <ClInclude Include="..\src\CodeGen_X86.h" />
+    <ClInclude Include="..\src\CSE.h" />
+    <ClInclude Include="..\src\Debug.h" />
     <ClInclude Include="..\src\DebugToFile.h" />
     <ClInclude Include="..\src\Deinterleave.h" />
     <ClInclude Include="..\src\Derivative.h" />
+    <ClInclude Include="..\src\EarlyFree.h" />
     <ClInclude Include="..\src\Extern.h" />
     <ClInclude Include="..\src\Func.h" />
     <ClInclude Include="..\src\Function.h" />
@@ -577,15 +585,17 @@ cd $(SolutionDir)</Command>
     <ClInclude Include="..\src\IRVisitor.h" />
     <ClInclude Include="..\src\JITCompiledModule.h" />
     <ClInclude Include="..\src\Lambda.h" />
-    <ClInclude Include="..\src\Log.h" />
+    <ClInclude Include="..\src\Lerp.h" />
+    <ClInclude Include="..\src\LLVM_Headers.h" />
     <ClInclude Include="..\src\Lower.h" />
     <ClInclude Include="..\src\MainPage.h" />
     <ClInclude Include="..\src\ModulusRemainder.h" />
+    <ClInclude Include="..\src\OneToOne.h" />
     <ClInclude Include="..\src\Param.h" />
     <ClInclude Include="..\src\Parameter.h" />
+    <ClInclude Include="..\src\Profiling.h" />
     <ClInclude Include="..\src\RDom.h" />
     <ClInclude Include="..\src\Reduction.h" />
-    <ClInclude Include="..\src\RemoveDeadLets.h" />
     <ClInclude Include="..\src\RemoveTrivialForLoops.h" />
     <ClInclude Include="..\src\Schedule.h" />
     <ClInclude Include="..\src\Scope.h" />
@@ -595,8 +605,11 @@ cd $(SolutionDir)</Command>
     <ClInclude Include="..\src\StorageFlattening.h" />
     <ClInclude Include="..\src\StorageFolding.h" />
     <ClInclude Include="..\src\Substitute.h" />
+    <ClInclude Include="..\src\Target.h" />
     <ClInclude Include="..\src\Tracing.h" />
+    <ClInclude Include="..\src\Tuple.h" />
     <ClInclude Include="..\src\Type.h" />
+    <ClInclude Include="..\src\UniquifyVariableNames.h" />
     <ClInclude Include="..\src\UnrollLoops.h" />
     <ClInclude Include="..\src\Util.h" />
     <ClInclude Include="..\src\Var.h" />

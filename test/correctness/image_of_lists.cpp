@@ -6,13 +6,20 @@
 using namespace Halide;
 
 
-extern "C" std::list<int> *list_create(int) {
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+
+extern "C" DLLEXPORT std::list<int> *list_create(int) {
     return new std::list<int>();
 }
 HalideExtern_1(std::list<int> *, list_create, int);
 
 
-extern "C" std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
+extern "C" DLLEXPORT std::list<int> *list_maybe_insert(std::list<int> *list, bool insert, int value) {
     if (insert) {
         list->push_back(value);
     }
