@@ -4,8 +4,14 @@
 
 using namespace Halide;
 
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 // Use an extern stage to do a sort
-extern "C" int sort_buffer(buffer_t *in, buffer_t *out) {
+extern "C" DLLEXPORT int sort_buffer(buffer_t *in, buffer_t *out) {
     if (!in->host) {
         in->min[0] = out->min[0];
         in->extent[0] = out->extent[0];

@@ -158,11 +158,11 @@ public:
 
 /** Placeholder for infered arguments.
  */
-extern Var _;
+EXPORT extern Var _;
 
 /** Predeclare the first ten implicit Vars so they can be used in scheduling.
  */
-extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
 
 }
 

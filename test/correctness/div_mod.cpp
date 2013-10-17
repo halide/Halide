@@ -198,13 +198,13 @@ Image<T> init(Type t, int unique, int width, int height) {
                         v = min;
                     }
                 }
-                result(i,j) = v;
+                result(i,j) = (T)v;
             }
         }
-        result(0,0) = min;
-        result(1,0) = max;
-        result(0,1) = (unique & 1) ? min : max;
-        result(1,1) = (unique & 1) ? max : min;
+        result(0,0) = (T)min;
+        result(1,0) = (T)max;
+        result(0,1) = (T)((unique & 1) ? min : max);
+        result(1,1) = (T)((unique & 1) ? max : min);
     }
     else if (t.is_uint()) {
         uint64_t max, v, vsalt;
@@ -221,13 +221,13 @@ Image<T> init(Type t, int unique, int width, int height) {
                         v = 0;
                     }
                 }
-                result(i,j) = v;
+                result(i,j) = (T)v;
             }
         }
-        result(0,0) = 0;
-        result(1,0) = max;
-        result(0,1) = (unique & 1) ? 0 : max;
-        result(1,1) = (unique & 1) ? max : 0;
+        result(0,0) = (T)0;
+        result(1,0) = (T)max;
+        result(0,1) = (T)((unique & 1) ? 0 : max);
+        result(1,1) = (T)((unique & 1) ? max : 0);
     }
     else if (t.is_float()) {
         uint64_t uv, vsalt;
@@ -246,13 +246,13 @@ Image<T> init(Type t, int unique, int width, int height) {
                         v = 0.0;
                     }
                 }
-                result(i,j) = v;
+                result(i,j) = (T)v;
             }
         }
-        result(0,0) = 0.0;
-        result(1,0) = 1.0;
-        result(0,1) = (unique & 1) ? 0.0 : 1.0;
-        result(1,1) = (unique & 1) ? 1.0 : 0.0;
+        result(0,0) = (T)(0.0);
+        result(1,0) = (T)(1.0);
+        result(0,1) = (T)((unique & 1) ? 0.0 : 1.0);
+        result(1,1) = (T)((unique & 1) ? 1.0 : 0.0);
     }
     else {
         printf ("Unknown data type in init.\n");
@@ -329,7 +329,7 @@ BIG halide_mod(BIG a, BIG b) {
         return a % b;
     }
     if (t.is_float()) {
-        return ((double)a - double(b)*floor(double(a)/double(b)));
+        return (BIG)((double)a - double(b)*floor(double(a)/double(b)));
     }
     BIG rem = (a % b + b) % b; // Halide definition of remainder
     return rem;
@@ -346,7 +346,7 @@ T new_mod(T a, T b) {
         return a % b;
     }
     if (t.is_float()) {
-        return ((double)a - double(b)*floor(double(a)/double(b)));
+        return (T)((double)a - double(b)*floor(double(a)/double(b)));
     }
     T rem = a % b;
     // Correction.  Ensures that remainder has the same sign as b.
@@ -429,7 +429,7 @@ bool division() {
         for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
             T arg_a = a(i,j);
             T arg_b = b(i,j);
-            T v = halide_div<T,BIG>(arg_a, arg_b);
+            T v = (T)halide_div<T,BIG>(arg_a, arg_b);
             Expr in_e = cast<T>((int) arg_a) / cast<T>((int) arg_b);
             Expr e = simplify(in_e);
             Expr eout = cast<T>((int) v);
@@ -495,7 +495,7 @@ bool mod() {
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
-            T v = halide_mod<T,BIG>(a(i,j), b(i,j));
+            T v = (T)halide_mod<T,BIG>(a(i,j), b(i,j));
             if (v != out(i,j) && (ecount++) < 10) {
                 printf ("halide mod (%d %% %d) yielded %d; expected %d\n", a(i,j), b(i,j), out(i,j), v);
                 success = false;
@@ -509,7 +509,7 @@ bool mod() {
         for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
             T arg_a = a(i,j);
             T arg_b = b(i,j);
-            T v = halide_mod<T,BIG>(arg_a, arg_b);
+            T v = (T)halide_mod<T,BIG>(arg_a, arg_b);
             Expr in_e = cast<T>((int) arg_a) % cast<T>((int) arg_b);
             Expr e = simplify(in_e);
             Expr eout = cast<T>((int) v);

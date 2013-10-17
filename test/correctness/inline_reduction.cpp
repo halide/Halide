@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
             float local_variance = 0;
             for (int rx = -1; rx < 2; rx++) {
                 for (int ry = -1; ry < 2; ry++) {
-                    float val = (x+rx)*(y+ry)+1;
+                    float val = (x + rx)*(y + ry) + 1.0f;
                     local_mean += val;
                     local_variance += val*val;
                 }
@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
             float correct_max = -1e10f;
             for (int rx = -1; rx < 2; rx++) {
                 for (int ry = -1; ry < 2; ry++) {
-                    float val = (x+rx)*(y+ry)+1;
+                    float val = (x + rx)*(y + ry) + 1.0f;
                     correct_prod *= val;
                     correct_min = std::min(correct_min, val);
                     correct_max = std::max(correct_max, val);                   

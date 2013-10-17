@@ -125,12 +125,12 @@ public:
 
     /** Get the dimensionality */
     int dimensions() const {
-        return args().size();
+        return (int)args().size();
     }
 
     /** Get the number of outputs */
     int outputs() const {
-        return output_types().size();
+        return (int)output_types().size();
     }
 
     /** Get the types of the outputs */

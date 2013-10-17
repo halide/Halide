@@ -19,7 +19,7 @@ extern "C" void *test_malloc(size_t x) {
     void * result = malloc(x);
     if (result != NULL) {
         total_allocated += x;
-	allocation_sizes[result] = x;
+        allocation_sizes[result] = x;
     }
 
     return result;

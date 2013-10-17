@@ -1,6 +1,10 @@
 #include <Halide.h>
 #include <stdio.h>
 
+#ifdef _MSC_VER
+#define M_PI 3.14159265358979310000
+#endif
+
 using namespace Halide;
 
 int main(int argc, char **argv) {
@@ -45,7 +49,7 @@ int main(int argc, char **argv) {
     double correct = M_PI;
     if (newton_result != correct ||
         secant_result != correct) {
-        printf("Incorrection results: %10.20f %10.20f %10.20f\n",
+        printf("Incorrect results: %10.20f %10.20f %10.20f\n",
                newton_result, secant_result, correct);
         return -1;
     }

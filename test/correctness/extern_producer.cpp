@@ -3,8 +3,15 @@
 
 using namespace Halide;
 
+
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
-extern "C" int make_data(buffer_t *out) {
+extern "C" DLLEXPORT int make_data(buffer_t *out) {
     assert(out->host && out->elem_size == 4 && out->stride[0] == 1);
     printf("Generating data over [%d %d] x [%d %d]\n",
            out->min[0], out->min[0] + out->extent[0],

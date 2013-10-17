@@ -43,16 +43,17 @@ bool relatively_equal(value_t a, value_t b) {
     if (a == b) {
         return true;
     } else if (!std::numeric_limits<value_t>::is_integer) {
-        value_t relative_error;
+        double da = (double)a, db = (double)b;
+        double relative_error;
 
         // This test seems a bit high.
-        if (fabs(b - a) < .0001)
+        if (fabs(db - da) < .0001)
           return true;
 
-        if (fabs(a) > fabs(b))
-            relative_error = fabs((b - a) / a);
+        if (fabs(da) > fabs(db))
+            relative_error = fabs((db - da) / da);
         else
-            relative_error = fabs((b - a) / b);
+            relative_error = fabs((db - da) / db);
 
         if (relative_error < .0000002)
           return true;

@@ -6,6 +6,16 @@
 
 using namespace Halide;
 
+#ifdef _MSC_VER
+bool is_finite(double x) {
+    return _finite(x);
+}
+#else
+bool is_finite(double x) {
+    return std::isfinite(x);
+}
+#endif
+
 // Make some functions for turning types into strings
 template<typename A>
 const char *string_of_type();
@@ -261,7 +271,7 @@ bool test(int vec_width) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            float correct = hypot(1.1f, (float)input(x, y));
+            float correct = hypotf(1.1f, (float)input(x, y));
             if (!close_enough(im8(x, y), correct)) {
                 printf("im8(%d, %d) = %f instead of %f\n",
                        x, y, (double)im8(x, y), correct);
@@ -405,12 +415,12 @@ bool test(int vec_width) {
         Image<float> im19 = f19.realize(W, H);
         Image<float> im20 = f20.realize(W, H);
 
-        float worst_log_error = 1e20;
-        float worst_exp_error = 1e20;
-        float worst_pow_error = 1e20;
-        float worst_fast_log_error = 1e20;
-        float worst_fast_exp_error = 1e20;
-        float worst_fast_pow_error = 1e20;
+        float worst_log_error = 1e20f;
+        float worst_exp_error = 1e20f;
+        float worst_pow_error = 1e20f;
+        float worst_fast_log_error = 1e20f;
+        float worst_fast_exp_error = 1e20f;
+        float worst_fast_pow_error = 1e20f;
 
         int worst_log_mantissa = 0;
         int worst_exp_mantissa = 0;
@@ -452,13 +462,13 @@ bool test(int vec_width) {
                 if (a >= 0)
                     worst_pow_mantissa = std::max(worst_pow_mantissa, pow_mantissa_error);
 
-                if (std::isfinite(correct_log))
+                if (is_finite(correct_log))
                     worst_fast_log_mantissa = std::max(worst_fast_log_mantissa, fast_log_mantissa_error);
 
-                if (std::isfinite(correct_exp))
+                if (is_finite(correct_exp))
                     worst_fast_exp_mantissa = std::max(worst_fast_exp_mantissa, fast_exp_mantissa_error);
 
-                if (std::isfinite(correct_pow) && a > 0)
+                if (is_finite(correct_pow) && a > 0)
                     worst_fast_pow_mantissa = std::max(worst_fast_pow_mantissa, fast_pow_mantissa_error);
 
                 if (log_mantissa_error > 8) {
@@ -473,15 +483,15 @@ bool test(int vec_width) {
                     printf("pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im17(x, y), correct_pow, correct_pow_mantissa, pow_mantissa);
                 }
-                if (std::isfinite(correct_log) && fast_log_mantissa_error > 64) {
+                if (is_finite(correct_log) && fast_log_mantissa_error > 64) {
                     printf("fast_log(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, im18(x, y), correct_log, correct_log_mantissa, fast_log_mantissa);
                 }
-                if (std::isfinite(correct_exp) && fast_exp_mantissa_error > 64) {
+                if (is_finite(correct_exp) && fast_exp_mantissa_error > 64) {
                     printf("fast_exp(%f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            b, im19(x, y), correct_exp, correct_exp_mantissa, fast_exp_mantissa);
                 }
-                if (a >= 0 && std::isfinite(correct_pow) && fast_pow_mantissa_error > 128) {
+                if (a >= 0 && is_finite(correct_pow) && fast_pow_mantissa_error > 128) {
                     printf("fast_pow(%f, %f) = %1.10f instead of %1.10f (mantissa: %d vs %d)\n",
                            a, b/16.0f, im20(x, y), correct_pow, correct_pow_mantissa, fast_pow_mantissa);
                 }
@@ -527,7 +537,7 @@ bool test(int vec_width) {
 
             double lerped = (a*(1.0-w) + b*w);
             if (!t.is_float()) {
-                lerped = floorf(lerped + 0.5);
+                lerped = floor(lerped + 0.5);
             }
             A correct = (A)(lerped);
             if (im21(x, y) != correct) {

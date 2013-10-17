@@ -122,7 +122,8 @@
     </Link>
     <CustomBuildStep />
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
     <CustomBuildStep>
@@ -139,7 +140,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
     <CustomBuildStep>
@@ -157,7 +159,8 @@
     </Link>
     <CustomBuildStep />
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
     <CustomBuildStep>
@@ -174,7 +177,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
     <CustomBuildStep>
@@ -196,7 +200,8 @@
     </Link>
     <CustomBuildStep />
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
     <CustomBuildStep>
@@ -221,7 +226,8 @@
       </Command>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
@@ -239,7 +245,8 @@
     </Link>
     <CustomBuildStep />
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
     <CustomBuildStep>
@@ -264,7 +271,8 @@
       </Command>
     </CustomBuildStep>
     <PostBuildEvent>
-      <Command>cd $(SolutionDir)$(Platform)\$(Configuration)
+      <Command>@echo on
+cd $(SolutionDir)$(Platform)\$(Configuration)
 ..\..\tests\run_all_tests.bat</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
