@@ -16,16 +16,7 @@ namespace {
 
 #ifdef _MSC_VER
 static void cpuid(int info[4], int infoType, int extra) {
-    _asm {
-        mov edi, info;
-        mov eax, infoType;
-        mov ecx, extra;
-        cpuid;
-        mov [edi], eax;
-        mov [edi+4], ebx;
-        mov [edi+8], ecx;
-        mov [edi+12], edx;
-    }
+    __cpuidex(info, infoType, extra);
 }
 
 #else
