@@ -43,10 +43,10 @@ public:
     void push(const T &t) {
         if (_empty) {
             _empty = false;
-            _top = t;
         } else {
-            _rest.push_back(t);
+            _rest.push_back(_top);
         }
+        _top = t;
     }
 
     T top() const {
