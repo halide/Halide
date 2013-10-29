@@ -56,21 +56,23 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     builder->SetInsertPoint(entry_block);
 
     // Put the arguments in the symbol table
+    vector<string> arg_sym_names;
     {
         size_t i = 0;
         for (llvm::Function::arg_iterator iter = function->arg_begin();
              iter != function->arg_end();
              iter++) {
 
+            string arg_sym_name = args[i].name;
             if (args[i].is_buffer) {
                 // HACK: codegen expects a load from foo to use base
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
-                sym_push(args[i].name + ".host", iter);
-            } else {
-                sym_push(args[i].name, iter);
+                arg_sym_name += ".host";
             }
-            iter->setName(args[i].name);
+            sym_push(arg_sym_name, iter);
+            iter->setName(arg_sym_name);
+            arg_sym_names.push_back(arg_sym_name);
 
             i++;
         }
@@ -82,7 +84,7 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     BasicBlock *body_block = BasicBlock::Create(*context, "body", function);
     builder->SetInsertPoint(body_block);
 
-    debug(1) << "Generating llvm bitcode...\n";
+    debug(1) << "Generating llvm bitcode for kernel...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
     stmt.accept(this);
@@ -110,6 +112,11 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
 
     // Optimize it - this really only optimizes the current function
     optimize_module();
+
+    // Clear the symbol table
+    for (size_t i = 0; i < arg_sym_names.size(); i++) {
+        sym_pop(arg_sym_names[i]);
+    }
 }
 
 void CodeGen_PTX_Dev::init_module() {
