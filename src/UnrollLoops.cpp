@@ -14,7 +14,11 @@ class UnrollLoops : public IRMutator {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             assert(extent && "Can only unroll for loops over a constant extent");
             Stmt body = mutate(for_loop->body);
-                
+
+            if (extent->value == 1) {
+                std::cerr << "Warning: Unrolling a for loop of extent 1: " << for_loop->name << "\n";
+            }
+
             Stmt block;
             // Make n copies of the body, each wrapped in a let that defines the loop var for that body
             for (int i = extent->value-1; i >= 0; i--) {
