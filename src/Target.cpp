@@ -128,6 +128,9 @@ Target get_target_from_environment() {
     }
 #endif
 
+    if (target.empty()) return t;
+
+    uint64_t host_features = t.features;
     t.features = 0;
 
     // HL_TARGET should be arch-os-feature1-feature2...
@@ -176,6 +179,11 @@ Target get_target_from_environment() {
         } else if (tok == "ios") {
             t.os = Target::IOS;
             is_os = true;
+        } else if (tok == "host") {
+            t.features |= host_features;
+            is_os = true;
+            is_arch = true;
+            is_bits = true;
         } else if (tok == "sse41") {
             t.features |= Target::SSE41;
         } else if (tok == "avx") {
@@ -191,9 +199,14 @@ Target get_target_from_environment() {
         } else {
             std::cerr << "Did not understand HL_TARGET=" << target << "\n"
                       << "Expected format is arch-os-feature1-feature2-... "
-                      << "Where arch is host, x86-32, x86-64, arm-32, arm-64, "
-                      << "and os is host, linux, windows, osx, nacl, ios, android. "
-                      << "Features include sse41, avx, avx2, cuda, and opencl.\n";
+                      << "Where arch is x86-32, x86-64, arm-32, arm-64, "
+                      << "and os is linux, windows, osx, nacl, ios, or android. "
+                      << "If arch or os are omitted, they default to the host. "
+                      << "Features include sse41, avx, avx2, cuda, opencl, and gpu_debug.\n"
+                      << "HL_TARGET can also include \"host\", which sets the "
+                      << "host's architecture, os, and feature set, with the "
+                      << "exception of the GPU runtimes, which default to off\n";
+
             assert(false);
         }
 
@@ -220,9 +233,6 @@ Target get_target_from_environment() {
 
     return t;
 }
-
-//RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock posix_error_handler posix_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image
-//RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41
 
 #define DECLARE_INITMOD(mod)                                            \
     extern "C" unsigned char halide_internal_initmod_##mod[];           \
