@@ -1,5 +1,6 @@
 #include "RemoveTrivialForLoops.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -9,8 +10,12 @@ class RemoveTrivialForLoops : public IRMutator {
 
     void visit(const For *for_loop) {
         Stmt body = mutate(for_loop->body);
-        const IntImm *extent = for_loop->extent.as<IntImm>();
-        if (extent && extent->value == 1) {
+        if (is_one(for_loop->extent)) {
+            if (for_loop->for_type == For::Parallel) {
+                std::cerr << "Warning: Parallel for loop over "
+                          << for_loop->name << " has extent one. "
+                          << "Can't do one piece of work in parallel.\n";
+            }
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (body.same_as(for_loop->body)) {
             stmt = for_loop;
