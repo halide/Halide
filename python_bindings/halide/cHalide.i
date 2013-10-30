@@ -52,4 +52,5 @@ namespace std {
    %template(ListInt) vector<int>;
    %template(ListString) vector<std::string>;
    %template(ListArgument) vector<Argument>;
+   %template(ListBuffer) vector<Buffer>;
 };
