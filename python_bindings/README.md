@@ -35,7 +35,7 @@ Detailed installation:
 You can build Halide by using 'make' in the parent directory. This is done automatically by the Makefile for the Python bindings. The following make options are then provided for the Python bindings:
 
     sudo make clean           % Clean in case any problems occurred
-    make build                % Build in place
+    make                      % Build in place
     make test                 % Run unit tests
     sudo make install         % Build and install
 

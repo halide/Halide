@@ -681,8 +681,10 @@ class Image(object):
                 typeval = contents.type()
             elif isinstance(contents, numpy.ndarray):
                 typeval = _numpy_to_type(contents)
+            elif isinstance(contents, Realization):
+                typeval = contents.as_vector()[0].type()
             else:
-                raise ValueError('unknown halide.Image constructor')
+                raise ValueError('unknown halide.Image constructor %r' % contents)
                 
         assert isinstance(typeval, TypeType), typeval
         sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
@@ -723,7 +725,7 @@ class Image(object):
             if scale is not None:
                 contents = numpy.asarray(numpy.asarray(contents,'float')*float(scale), target_dtype)
             return _numpy_to_image(contents, target_dtype, C)
-        elif isinstance(contents, ImageTypes+(ImageParamType,BufferType)):
+        elif isinstance(contents, ImageTypes+(ImageParamType,BufferType,Realization)):
             return C(contents)
         elif isinstance(contents, tuple) or isinstance(contents, list) or isinstance(contents, (int, long)):
             if isinstance(contents, (int, long)):
@@ -1473,7 +1475,6 @@ def test_image_constructors():
 
     I = builtin_image('rgb.png')
     A = numpy.asarray(I)
-    B = Buffer(UInt(8), 5, 5, 3)
 
     filename = tempfile.mktemp(suffix='.png')
     try:
@@ -1487,6 +1488,8 @@ def test_image_constructors():
 
         check(Image(I), UInt(8))
         check(Image(A), UInt(8))
+        B = Buffer(UInt(8), 5, 5, 3)
+
         check(Image(B), UInt(8))
 #        check(Image(I8), UInt())
 #        check(Image(I16))
@@ -1497,7 +1500,9 @@ def test_image_constructors():
             check(Image(typeval, A), typeval)
             check(Image(typeval, filename), typeval)
             check(Image(typeval, unicode(filename)), typeval)
-            check(Image(typeval, B), typeval)
+            if typeval is not None:
+                B = Buffer(typeval, 5, 5, 3)
+                check(Image(typeval, B), typeval)
             #check(Image(typeval, I8))
             #check(Image(typeval, I16))
             #check(Image(typeval, Ip))
