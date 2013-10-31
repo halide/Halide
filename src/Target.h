@@ -32,6 +32,9 @@ EXPORT Target get_target_from_environment();
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *);
 
+/** Create an llvm module containing the support code for ptx device. */
+llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c);
+
 }
 
 

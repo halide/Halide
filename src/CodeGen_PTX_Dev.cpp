@@ -8,6 +8,7 @@
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
+#include "Target.h"
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
@@ -123,7 +124,7 @@ void CodeGen_PTX_Dev::init_module() {
 
     CodeGen::init_module();
 
-    module = new llvm::Module("<halide_ptx>", *context);
+    module = get_initial_module_for_ptx_device(context);
 
     owns_module = true;
 }
@@ -271,7 +272,7 @@ string CodeGen_PTX_Dev::compile_to_src() {
     // Allocate target machine
     const std::string MArch = march();
     const std::string MCPU = mcpu();
-    const Target* TheTarget = 0;
+    const llvm::Target* TheTarget = 0;
 
     std::string errStr;
     TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), errStr);

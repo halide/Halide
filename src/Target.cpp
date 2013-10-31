@@ -383,5 +383,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     return modules[0];
 }
 
+llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
+    return get_initmod_ptx_dev_ll(c);
 }
 
+}
