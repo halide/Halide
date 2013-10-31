@@ -200,7 +200,7 @@ WEAK void halide_init_kernels(const char* ptx_src) {
         if (device_str) {
             status = cuDeviceGet(&dev, atoi(device_str));
         } else {
-            for (int id = 2; id >= 0; id--) {
+            for (int id = deviceCount - 1; id >= 0; id--) {
                 // Try to get a device >0 first, since 0 should be our display device
                 status = cuDeviceGet(&dev, id);
                 if (status == CUDA_SUCCESS) break;
