@@ -347,6 +347,9 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     if (t.arch == Target::X86) {
         modules.push_back(get_initmod_x86_ll(c));
     }
+    if (t.arch == Target::ARM) {
+        modules.push_back(get_initmod_arm_ll(c));
+    }
     if (t.features & Target::SSE41) {
         modules.push_back(get_initmod_x86_sse41_ll(c));
     }
