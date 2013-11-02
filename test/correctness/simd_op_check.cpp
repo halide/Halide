@@ -318,9 +318,9 @@ void check_sse_all() {
 
     // SSSE 3
     if (use_ssse3) {
-    check("pabsb", 16, abs(i8_1));
-    check("pabsw", 8, abs(i16_1));
-    check("pabsd", 4, abs(i32_1));
+        check("pabsb", 16, abs(i8_1));
+        check("pabsw", 8, abs(i16_1));
+        check("pabsd", 4, abs(i32_1));
     }
 
     // SSE 4.1

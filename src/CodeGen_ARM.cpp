@@ -118,7 +118,11 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
     #endif
 
-    // These patterns went away in llvm commit r189481
+    // These patterns went away in llvm commit r189481, which is
+    // unfortunate, because they don't always get generated
+    // automatically. It also means that vshiftn catches these
+    // patterns instead of letting them fall through to the natural
+    // bitcode that triggers llvm's recognition.
     #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 4
     casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
     casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
@@ -130,80 +134,87 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
     #endif
 
-    casts.push_back(Pattern("vrhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8) + 1)/2)));
-    casts.push_back(Pattern("vrhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8) + 1)/2)));
-    casts.push_back(Pattern("vrhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4) + 1)/2)));
-    casts.push_back(Pattern("vrhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4) + 1)/2)));
-    casts.push_back(Pattern("vrhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2) + 1)/2)));
-    casts.push_back(Pattern("vrhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2) + 1)/2)));
-    casts.push_back(Pattern("vrhadds.v16i8",   _i8((_i16(wild_i8x16) + _i16(wild_i8x16) + 1)/2)));
-    casts.push_back(Pattern("vrhaddu.v16i8",   _u8((_u16(wild_u8x16) + _u16(wild_u8x16) + 1)/2)));
-    casts.push_back(Pattern("vrhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8) + 1)/2)));
-    casts.push_back(Pattern("vrhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8) + 1)/2)));
-    casts.push_back(Pattern("vrhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4) + 1)/2)));
-    casts.push_back(Pattern("vrhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4) + 1)/2)));
+    // Generate the cast patterns that can take vector or scalar
+    // types.  We need to iterate over all 64 and 128 bit integer
+    // types relevant for neon.
+    Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
+                    Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
+                    Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
+    for (int i = 0; i < 12; i++) {
+        Type t = types[i];
+        std::ostringstream oss;
+        oss << (t.is_int() ? 's' : 'u') << ".v" << t.width << "i" << t.bits;
+        string t_str = oss.str();
 
-    casts.push_back(Pattern("vhadds.v8i8", _i8((_i16(wild_i8x8) + _i16(wild_i8x8))/2)));
-    casts.push_back(Pattern("vhaddu.v8i8", _u8((_u16(wild_u8x8) + _u16(wild_u8x8))/2)));
-    casts.push_back(Pattern("vhadds.v4i16", _i16((_i32(wild_i16x4) + _i32(wild_i16x4))/2)));
-    casts.push_back(Pattern("vhaddu.v4i16", _u16((_u32(wild_u16x4) + _u32(wild_u16x4))/2)));
-    casts.push_back(Pattern("vhadds.v2i32", _i32((_i64(wild_i32x2) + _i64(wild_i32x2))/2)));
-    casts.push_back(Pattern("vhaddu.v2i32", _u32((_u64(wild_u32x2) + _u64(wild_u32x2))/2)));
-    casts.push_back(Pattern("vhadds.v16i8", _i8((_i16(wild_i8x16) + _i16(wild_i8x16))/2)));
-    casts.push_back(Pattern("vhaddu.v16i8", _u8((_u16(wild_u8x16) + _u16(wild_u8x16))/2)));
-    casts.push_back(Pattern("vhadds.v8i16", _i16((_i32(wild_i16x8) + _i32(wild_i16x8))/2)));
-    casts.push_back(Pattern("vhaddu.v8i16", _u16((_u32(wild_u16x8) + _u32(wild_u16x8))/2)));
-    casts.push_back(Pattern("vhadds.v4i32", _i32((_i64(wild_i32x4) + _i64(wild_i32x4))/2)));
-    casts.push_back(Pattern("vhaddu.v4i32", _u32((_u64(wild_u32x4) + _u64(wild_u32x4))/2)));
-    casts.push_back(Pattern("vhsubs.v8i8", _i8((_i16(wild_i8x8) - _i16(wild_i8x8))/2)));
-    casts.push_back(Pattern("vhsubu.v8i8", _u8((_u16(wild_u8x8) - _u16(wild_u8x8))/2)));
-    casts.push_back(Pattern("vhsubs.v4i16", _i16((_i32(wild_i16x4) - _i32(wild_i16x4))/2)));
-    casts.push_back(Pattern("vhsubu.v4i16", _u16((_u32(wild_u16x4) - _u32(wild_u16x4))/2)));
-    casts.push_back(Pattern("vhsubs.v2i32", _i32((_i64(wild_i32x2) - _i64(wild_i32x2))/2)));
-    casts.push_back(Pattern("vhsubu.v2i32", _u32((_u64(wild_u32x2) - _u64(wild_u32x2))/2)));
-    casts.push_back(Pattern("vhsubs.v16i8", _i8((_i16(wild_i8x16) - _i16(wild_i8x16))/2)));
-    casts.push_back(Pattern("vhsubu.v16i8", _u8((_u16(wild_u8x16) - _u16(wild_u8x16))/2)));
-    casts.push_back(Pattern("vhsubs.v8i16", _i16((_i32(wild_i16x8) - _i32(wild_i16x8))/2)));
-    casts.push_back(Pattern("vhsubu.v8i16", _u16((_u32(wild_u16x8) - _u32(wild_u16x8))/2)));
-    casts.push_back(Pattern("vhsubs.v4i32", _i32((_i64(wild_i32x4) - _i64(wild_i32x4))/2)));
-    casts.push_back(Pattern("vhsubu.v4i32", _u32((_u64(wild_u32x4) - _u64(wild_u32x4))/2)));
+        // Wider versions of the type
+        Type w = t;
+        w.bits *= 2;
+        Type ws = Int(t.bits*2, t.width);
 
-    casts.push_back(Pattern("vqadds.v8i8", _i8q(_i16(wild_i8x8) + _i16(wild_i8x8))));
-    casts.push_back(Pattern("vqaddu.v8i8", _u8q(_u16(wild_u8x8) + _u16(wild_u8x8))));
-    casts.push_back(Pattern("vqadds.v4i16", _i16q(_i32(wild_i16x4) + _i32(wild_i16x4))));
-    casts.push_back(Pattern("vqaddu.v4i16", _u16q(_u32(wild_u16x4) + _u32(wild_u16x4))));
-    casts.push_back(Pattern("vqadds.v2i32", _i32q(_i64(wild_i32x2) + _i64(wild_i32x2))));
-    casts.push_back(Pattern("vqaddu.v2i32", _u32q(_u64(wild_u32x2) + _u64(wild_u32x2))));
-    casts.push_back(Pattern("vqadds.v16i8", _i8q(_i16(wild_i8x16) + _i16(wild_i8x16))));
-    casts.push_back(Pattern("vqaddu.v16i8", _u8q(_u16(wild_u8x16) + _u16(wild_u8x16))));
-    casts.push_back(Pattern("vqadds.v8i16", _i16q(_i32(wild_i16x8) + _i32(wild_i16x8))));
-    casts.push_back(Pattern("vqaddu.v8i16", _u16q(_u32(wild_u16x8) + _u32(wild_u16x8))));
-    casts.push_back(Pattern("vqadds.v4i32", _i32q(_i64(wild_i32x4) + _i64(wild_i32x4))));
-    casts.push_back(Pattern("vqaddu.v4i32", _u32q(_u64(wild_u32x4) + _u64(wild_u32x4))));
+        // Vector wildcard for this type
+        Expr vector = Variable::make(t, "*");
+        Expr w_vector = cast(w, vector);
+        Expr ws_vector = cast(ws, vector);
 
-        // N.B. Saturating subtracts of unsigned types are expressed
-        // by widening to a *signed* type
-    casts.push_back(Pattern("vqsubs.v8i8", _i8q(_i16(wild_i8x8) - _i16(wild_i8x8))));
-    casts.push_back(Pattern("vqsubu.v8i8", _u8q(_i16(wild_u8x8) - _i16(wild_u8x8))));
-    casts.push_back(Pattern("vqsubs.v4i16", _i16q(_i32(wild_i16x4) - _i32(wild_i16x4))));
-    casts.push_back(Pattern("vqsubu.v4i16", _u16q(_i32(wild_u16x4) - _i32(wild_u16x4))));
-    casts.push_back(Pattern("vqsubs.v2i32", _i32q(_i64(wild_i32x2) - _i64(wild_i32x2))));
-    casts.push_back(Pattern("vqsubu.v2i32", _u32q(_i64(wild_u32x2) - _i64(wild_u32x2))));
-    casts.push_back(Pattern("vqsubs.v16i8", _i8q(_i16(wild_i8x16) - _i16(wild_i8x16))));
-    casts.push_back(Pattern("vqsubu.v16i8", _u8q(_i16(wild_u8x16) - _i16(wild_u8x16))));
-    casts.push_back(Pattern("vqsubs.v8i16", _i16q(_i32(wild_i16x8) - _i32(wild_i16x8))));
-    casts.push_back(Pattern("vqsubu.v8i16", _u16q(_i32(wild_u16x8) - _i32(wild_u16x8))));
-    casts.push_back(Pattern("vqsubs.v4i32", _i32q(_i64(wild_i32x4) - _i64(wild_i32x4))));
-    casts.push_back(Pattern("vqsubu.v4i32", _u32q(_i64(wild_u32x4) - _i64(wild_u32x4))));
+        // Scalar wildcard for this type
+        Expr scalar = Variable::make(t.element_of(), "*");
+        Expr w_scalar = cast(w, scalar);
+        Expr ws_scalar = cast(ws, scalar);
 
-    // Technically, the unsigned ones only need to saturate below, and
-    // sometimes the Halide optimizer recognizes that.
-    casts.push_back(Pattern("vqsubu.v8i8", _u8(max(_i16(wild_u8x8) - _i16(wild_u8x8), 0))));
-    casts.push_back(Pattern("vqsubu.v4i16", _u16(max(_i32(wild_u16x4) - _i32(wild_u16x4), 0))));
-    casts.push_back(Pattern("vqsubu.v2i32", _u32(max(_i64(wild_u32x2) - _i64(wild_u32x2), 0))));
-    casts.push_back(Pattern("vqsubu.v16i8", _u8(max(_i16(wild_u8x16) - _i16(wild_u8x16), 0))));
-    casts.push_back(Pattern("vqsubu.v8i16", _u16(max(_i32(wild_u16x8) - _i32(wild_u16x8), 0))));
-    casts.push_back(Pattern("vqsubu.v4i32", _u32(max(_i64(wild_u32x4) - _i64(wild_u32x4), 0))));
+        // Bounds of the type stored in the wider vector type
+        Expr tmin = simplify(cast(w, t.imin()));
+        Expr tmax = simplify(cast(w, t.imax()));
+        Expr tsmin = simplify(cast(ws, t.imin()));
+        Expr tsmax = simplify(cast(ws, t.imax()));
+
+        // Can't fit uint32 max into an intimm
+        if (t.element_of() == UInt(32)) {
+            tmax = simplify(cast(w, t.max()));
+            tsmax = simplify(cast(ws, t.max()));
+        }
+
+        // Rounding-up averaging
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2)));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_scalar + 1))/2)));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_scalar + 1) + w_vector)/2)));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_scalar + w_vector) + 1)/2)));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + w_scalar) + 1)/2)));
+
+        // Rounding down averaging
+        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2)));
+        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_scalar)/2)));
+        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_scalar + w_vector)/2)));
+
+        // Halving subtract
+        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2)));
+        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_scalar)/2)));
+        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_scalar - w_vector)/2)));
+
+        // Saturating add
+        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax))));
+        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_scalar, tmin, tmax))));
+        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_scalar + w_vector, tmin, tmax))));
+
+        // In the unsigned case, the saturation below in unnecessary
+        if (t.is_uint()) {
+            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax))));
+            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_scalar, tmax))));
+            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_scalar + w_vector, tmax))));
+        }
+
+        // Saturating subtract
+        // N.B. Saturating subtracts always widen to a signed type
+        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax))));
+        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_scalar, tsmin, tsmax))));
+        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_scalar - ws_vector, tsmin, tsmax))));
+
+        // In the unsigned case, we may detect that the top of the clamp is unnecessary
+        if (t.is_uint()) {
+            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0))));
+            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_scalar - ws_vector, 0))));
+            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_scalar, 0))));
+        }
+    }
 
     casts.push_back(Pattern("vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), Pattern::RightShift));
@@ -275,30 +286,30 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     left_shifts.push_back(Pattern("vshiftu.v4i16", wild_u16x4*wild_u16x4, Pattern::LeftShift));
     left_shifts.push_back(Pattern("vshiftu.v2i32", wild_u32x2*wild_u32x2, Pattern::LeftShift));
 
-    averagings.push_back(Pattern("vhadds.v8i8", (wild_i8x8 + wild_i8x8)/2));
-    averagings.push_back(Pattern("vhaddu.v8i8", (wild_u8x8 + wild_u8x8)/2));
-    averagings.push_back(Pattern("vhadds.v4i16", (wild_i16x4 + wild_i16x4)/2));
-    averagings.push_back(Pattern("vhaddu.v4i16", (wild_u16x4 + wild_u16x4)/2));
-    averagings.push_back(Pattern("vhadds.v2i32", (wild_i32x2 + wild_i32x2)/2));
-    averagings.push_back(Pattern("vhaddu.v2i32", (wild_u32x2 + wild_u32x2)/2));
-    averagings.push_back(Pattern("vhadds.v16i8", (wild_i8x16 + wild_i8x16)/2));
-    averagings.push_back(Pattern("vhaddu.v16i8", (wild_u8x16 + wild_u8x16)/2));
-    averagings.push_back(Pattern("vhadds.v8i16", (wild_i16x8 + wild_i16x8)/2));
-    averagings.push_back(Pattern("vhaddu.v8i16", (wild_u16x8 + wild_u16x8)/2));
-    averagings.push_back(Pattern("vhadds.v4i32", (wild_i32x4 + wild_i32x4)/2));
-    averagings.push_back(Pattern("vhaddu.v4i32", (wild_u32x4 + wild_u32x4)/2));
-    averagings.push_back(Pattern("vhsubs.v8i8", (wild_i8x8 - wild_i8x8)/2));
-    averagings.push_back(Pattern("vhsubu.v8i8", (wild_u8x8 - wild_u8x8)/2));
-    averagings.push_back(Pattern("vhsubs.v4i16", (wild_i16x4 - wild_i16x4)/2));
-    averagings.push_back(Pattern("vhsubu.v4i16", (wild_u16x4 - wild_u16x4)/2));
-    averagings.push_back(Pattern("vhsubs.v2i32", (wild_i32x2 - wild_i32x2)/2));
-    averagings.push_back(Pattern("vhsubu.v2i32", (wild_u32x2 - wild_u32x2)/2));
-    averagings.push_back(Pattern("vhsubs.v16i8", (wild_i8x16 - wild_i8x16)/2));
-    averagings.push_back(Pattern("vhsubu.v16i8", (wild_u8x16 - wild_u8x16)/2));
-    averagings.push_back(Pattern("vhsubs.v8i16", (wild_i16x8 - wild_i16x8)/2));
-    averagings.push_back(Pattern("vhsubu.v8i16", (wild_u16x8 - wild_u16x8)/2));
-    averagings.push_back(Pattern("vhsubs.v4i32", (wild_i32x4 - wild_i32x4)/2));
-    averagings.push_back(Pattern("vhsubu.v4i32", (wild_u32x4 - wild_u32x4)/2));
+    averagings.push_back(Pattern("vhadds.v8i8", (wild_i8x8 + wild_i8x8)));
+    averagings.push_back(Pattern("vhaddu.v8i8", (wild_u8x8 + wild_u8x8)));
+    averagings.push_back(Pattern("vhadds.v4i16", (wild_i16x4 + wild_i16x4)));
+    averagings.push_back(Pattern("vhaddu.v4i16", (wild_u16x4 + wild_u16x4)));
+    averagings.push_back(Pattern("vhadds.v2i32", (wild_i32x2 + wild_i32x2)));
+    averagings.push_back(Pattern("vhaddu.v2i32", (wild_u32x2 + wild_u32x2)));
+    averagings.push_back(Pattern("vhadds.v16i8", (wild_i8x16 + wild_i8x16)));
+    averagings.push_back(Pattern("vhaddu.v16i8", (wild_u8x16 + wild_u8x16)));
+    averagings.push_back(Pattern("vhadds.v8i16", (wild_i16x8 + wild_i16x8)));
+    averagings.push_back(Pattern("vhaddu.v8i16", (wild_u16x8 + wild_u16x8)));
+    averagings.push_back(Pattern("vhadds.v4i32", (wild_i32x4 + wild_i32x4)));
+    averagings.push_back(Pattern("vhaddu.v4i32", (wild_u32x4 + wild_u32x4)));
+    averagings.push_back(Pattern("vhsubs.v8i8", (wild_i8x8 - wild_i8x8)));
+    averagings.push_back(Pattern("vhsubu.v8i8", (wild_u8x8 - wild_u8x8)));
+    averagings.push_back(Pattern("vhsubs.v4i16", (wild_i16x4 - wild_i16x4)));
+    averagings.push_back(Pattern("vhsubu.v4i16", (wild_u16x4 - wild_u16x4)));
+    averagings.push_back(Pattern("vhsubs.v2i32", (wild_i32x2 - wild_i32x2)));
+    averagings.push_back(Pattern("vhsubu.v2i32", (wild_u32x2 - wild_u32x2)));
+    averagings.push_back(Pattern("vhsubs.v16i8", (wild_i8x16 - wild_i8x16)));
+    averagings.push_back(Pattern("vhsubu.v16i8", (wild_u8x16 - wild_u8x16)));
+    averagings.push_back(Pattern("vhsubs.v8i16", (wild_i16x8 - wild_i16x8)));
+    averagings.push_back(Pattern("vhsubu.v8i16", (wild_u16x8 - wild_u16x8)));
+    averagings.push_back(Pattern("vhsubs.v4i32", (wild_i32x4 - wild_i32x4)));
+    averagings.push_back(Pattern("vhsubu.v4i32", (wild_u32x4 - wild_u32x4)));
 
     negations.push_back(Pattern("vqneg.v8i8", -max(wild_i8x8, -127)));
     negations.push_back(Pattern("vqneg.v16i8", -max(wild_i8x16, -127)));
@@ -345,6 +356,10 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
         assert(false && "No arm support for this OS");
     }
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+
+    // Rewrite broadcast(cast(foo)) to cast(broadcast(foo)) to aid peephole matching.
+    //stmt = move_broadcasts_inside_casts(stmt);
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
@@ -438,6 +453,13 @@ void CodeGen_ARM::visit(const Cast *op) {
         const Pattern &pattern = casts[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
+            // Broadcast any scalar args
+            for (size_t i = 0; i < matches.size(); i++) {
+                if (op->type.is_vector() && matches[i].type().is_scalar()) {
+                    matches[i] = Broadcast::make(matches[i], op->type.width);
+                }
+            }
+
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
@@ -518,7 +540,7 @@ void CodeGen_ARM::visit(const Div *op) {
     if (is_two(op->b) && (op->a.as<Add>() || op->a.as<Sub>())) {
         vector<Expr> matches;
         for (size_t i = 0; i < averagings.size(); i++) {
-            if (expr_match(averagings[i].pattern, op, matches)) {
+            if (expr_match(averagings[i].pattern, op->a, matches)) {
                 value = call_intrin(matches[0].type(), averagings[i].intrin, matches);
                 return;
             }
@@ -823,17 +845,30 @@ void CodeGen_ARM::visit(const Max *op) {
 void CodeGen_ARM::visit(const LT *op) {
     const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
 
+    // Check if they're hidden behind a broadcast
+    const Broadcast *ba = op->a.as<Broadcast>(), *bb = op->b.as<Broadcast>();
+    if (ba) a = ba->value.as<Call>();
+    if (bb) b = bb->value.as<Call>();
+
     if (a && b) {
+        Expr va = a->args[0], vb = b->args[0];
+        if (va.type().width != op->type.width) {
+            va = Broadcast::make(va, op->type.width);
+        }
+        if (vb.type().width != op->type.width) {
+            vb = Broadcast::make(vb, op->type.width);
+        }
+
         Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
-        if (a->type == Float(32, 4) &&
+        if (va.type() == Float(32, 4) &&
             a->name == "abs_f32" &&
             b->name == "abs_f32") {
-            value = call_intrin(Int(32, 4), "vacgtq", vec(b->args[0], a->args[0]));
+            value = call_intrin(Int(32, 4), "vacgtq", vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
-        } else if (a->type == Float(32, 2) &&
+        } else if (va.type() == Float(32, 2) &&
             a->name == "abs_f32" &&
             b->name == "abs_f32") {
-            value = call_intrin(Int(32, 2), "vacgtd", vec(b->args[0], a->args[0]));
+            value = call_intrin(Int(32, 2), "vacgtd", vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -847,17 +882,30 @@ void CodeGen_ARM::visit(const LT *op) {
 void CodeGen_ARM::visit(const LE *op) {
     const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
 
+    // Check if they're hidden behind a broadcast
+    const Broadcast *ba = op->a.as<Broadcast>(), *bb = op->b.as<Broadcast>();
+    if (ba) a = ba->value.as<Call>();
+    if (bb) b = bb->value.as<Call>();
+
     if (a && b) {
+        Expr va = a->args[0], vb = b->args[0];
+        if (va.type().width != op->type.width) {
+            va = Broadcast::make(va, op->type.width);
+        }
+        if (vb.type().width != op->type.width) {
+            vb = Broadcast::make(vb, op->type.width);
+        }
+
         Constant *zero = ConstantVector::getSplat(op->type.width, ConstantInt::get(i32, 0));
-        if (a->type == Float(32, 4) &&
+        if (va.type() == Float(32, 4) &&
             a->name == "abs_f32" &&
             b->name == "abs_f32") {
-            value = call_intrin(Int(32, 4), "vacgeq", vec(b->args[0], a->args[0]));
+            value = call_intrin(Int(32, 4), "vacgeq", vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
-        } else if (a->type == Float(32, 2) &&
+        } else if (va.type() == Float(32, 2) &&
             a->name == "abs_f32" &&
             b->name == "abs_f32") {
-            value = call_intrin(Int(32, 2), "vacged", vec(b->args[0], a->args[0]));
+            value = call_intrin(Int(32, 2), "vacged", vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -866,6 +914,41 @@ void CodeGen_ARM::visit(const LE *op) {
         CodeGen::visit(op);
     }
 
+}
+
+namespace {
+
+// Try to losslessly narrow an integer expression to half the bit-width
+Expr try_narrow(Expr a) {
+    if (const Cast *c = a.as<Cast>()) {
+        Type old_type = c->value.type();
+        Type new_type = a.type();
+        old_type.bits *= 2;
+        if (old_type == new_type) {
+            return c->value;
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const Broadcast *b = a.as<Broadcast>()) {
+        Expr n = try_narrow(b->value);
+        if (n.defined()) {
+            return Broadcast::make(n, b->width);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const IntImm *i = a.as<IntImm>()) {
+        if (i->value <= Int(16).imax() &&
+            i->value >= Int(16).imin()) {
+            return cast(Int(16), a);
+        }
+    }
+
+    return Expr();
+}
 }
 
 void CodeGen_ARM::visit(const Select *op) {
@@ -893,19 +976,17 @@ void CodeGen_ARM::visit(const Select *op) {
         // If cmp->a and cmp->b are both widening casts of a narrower
         // int, we can use vadbl instead of vabd. llvm reaches vabdl
         // by expecting you to widen the result of a narrower vabd.
-        const Cast *ca = cmp->a.as<Cast>();
-        const Cast *cb = cmp->b.as<Cast>();
-        if (ca && cb && vec_bits == 128 &&
-            ca->value.type().bits * 2 == t.bits &&
-            cb->value.type().bits * 2 == t.bits &&
-            ca->value.type().t == t.t &&
-            cb->value.type().t == t.t) {
+        Expr na = try_narrow(cmp->a);
+        Expr nb = try_narrow(cmp->b);
+        if (na.defined() && nb.defined() && vec_bits == 128) {
             ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits/2;
-            value = call_intrin(ca->value.type(), ss.str(), vec(ca->value, cb->value));
+            value = call_intrin(na.type(), ss.str(), vec(na, nb));
             value = builder->CreateIntCast(value, llvm_type_of(t), false);
-        } else {
+        } else if (t.bits <= 32) {
             ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
             value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
+        } else {
+            CodeGen::visit(op);
         }
 
         return;
