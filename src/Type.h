@@ -24,25 +24,35 @@ struct Type {
           Handle //!< opaque pointer type (void *)
     } code;
 
-    /** How many bits per element? */
+    /** The number of bits of precision of a single scalar value of this type. */
     int bits;
 
-    /** How many bytes per element? */
+    /** The number of bytes required to store a single scalar value of this type. Ignores vector width. */
     int bytes() const {return (bits + 7) / 8;}
 
     /** How many elements (if a vector type). Should be 1 for scalar types. */
     int width;
 
-    /** Some helper functions to ask common questions about a type. */
-    // @{
+    /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code == UInt && bits == 1;}
+
+    /** Is this type a vector type? (width > 1) */
     bool is_vector() const {return width > 1;}
+
+    /** Is this type a scalar type? (width == 1) */
     bool is_scalar() const {return width == 1;}
+
+    /** Is this type a floating point type (float or double). */
     bool is_float() const {return code == Float;}
+
+    /** Is this type a signed integer type? */
     bool is_int() const {return code == Int;}
+
+    /** Is this type an unsigned integer type? */
     bool is_uint() const {return code == UInt;}
+
+    /** Is this type an opaque handle type (void *) */
     bool is_handle() const {return code == Handle;}
-    // @}
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
@@ -123,6 +133,7 @@ inline Type Handle(int width = 1) {
     return t;
 }
 
+namespace {
 template<typename T>
 struct type_of_helper;
 
@@ -187,6 +198,7 @@ template<>
 struct type_of_helper<bool> {
     operator Type() {return Bool();}
 };
+}
 
 /** Construct the halide equivalent of a C type */
 template<typename T> Type type_of() {

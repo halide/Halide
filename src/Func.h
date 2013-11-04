@@ -772,8 +772,20 @@ public:
                            int x_size, int y_size, int z_size);
     // @}
 
-    /** Scheduling calls that control how the storage for the function
-     * is laid out. Right now you can only reorder the dimensions. */
+    /** Specify how the storage for the function is laid out. These
+     * calls let you specify the nesting order of the dimensions. For
+     * example, foo.reorder_storage(y, x) tells Halide to use
+     * column-major storage for any realizations of foo, without
+     * changing how you refer to foo in the code. You may want to do
+     * this if you intend to vectorize across y. When representing
+     * color images, foo.reorder_storage(c, x, y) specifies packed
+     * storage (red, green, and blue values adjacent in memory), and
+     * foo.reorder_storage(x, y, c) specifies planar storage (entire
+     * red, green, and blue images one after the other in memory).
+     *
+     * If you leave out some dimensions, those remain in the same
+     * positions in the nesting order while the specified variables
+     * are reordered around them. */
     // @{
     EXPORT Func &reorder_storage(Var x, Var y);
     EXPORT Func &reorder_storage(Var x, Var y, Var z);
