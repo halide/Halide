@@ -42,7 +42,7 @@ PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
-CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE)
+CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE) -DCOMPILING_HALIDE
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -130,11 +130,11 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -fno-blocks -m64 -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
+	$(CLANG) -nobuiltininc -fno-blocks -m64 -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -fno-blocks -m32 -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
+	$(CLANG) -nobuiltininc -fno-blocks -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
 	cp src/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
