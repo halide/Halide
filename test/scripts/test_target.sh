@@ -40,7 +40,9 @@ make -j8 build_tests || exit 1
 make distrib || exit 1
 DATE=`date +%Y_%m_%d`
 HOST=`uname`
-mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${DATE}.tgz
+COMMIT=`git rev-parse HEAD`
+mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${COMMIT}_${DATE}.tgz
+chmod a+r distrib/*
 if [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
     echo "Halide builds but tests not run."
