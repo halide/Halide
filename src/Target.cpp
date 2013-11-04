@@ -297,6 +297,8 @@ DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
 
+namespace Internal {
+
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
@@ -388,6 +390,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
     return get_initmod_ptx_dev_ll(c);
+}
+
 }
 
 }
