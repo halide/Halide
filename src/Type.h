@@ -21,8 +21,8 @@ struct Type {
     enum {Int,  //!< signed integers
           UInt, //!< unsigned integers
           Float, //!< floating point numbers
-          Handle //!< opaque pointer type (i.e. void *)
-    } t;
+          Handle //!< opaque pointer type (void *)
+    } code;
 
     /** How many bits per element? */
     int bits;
@@ -35,53 +35,39 @@ struct Type {
 
     /** Some helper functions to ask common questions about a type. */
     // @{
-    bool is_bool() const {return t == UInt && bits == 1;}
+    bool is_bool() const {return code == UInt && bits == 1;}
     bool is_vector() const {return width > 1;}
     bool is_scalar() const {return width == 1;}
-    bool is_float() const {return t == Float;}
-    bool is_int() const {return t == Int;}
-    bool is_uint() const {return t == UInt;}
-    bool is_handle() const {return t == Handle;}
+    bool is_float() const {return code == Float;}
+    bool is_int() const {return code == Int;}
+    bool is_uint() const {return code == UInt;}
+    bool is_handle() const {return code == Handle;}
     // @}
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return t == other.t && bits == other.bits && width == other.width;
+        return code == other.code && bits == other.bits && width == other.width;
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return t != other.t || bits != other.bits || width != other.width;
+        return code != other.code || bits != other.bits || width != other.width;
     }
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        Type type = {t, bits, w};
+        Type type = {code, bits, w};
         return type;
     }
 
     /** Produce the type of a single element of this vector type */
     Type element_of() const {
-        Type type = {t, bits, 1};
+        Type type = {code, bits, 1};
         return type;
     }
 
     /** Can this type represent all values of another type? */
-    bool can_represent(Type other) const {
-        if (width != other.width) return false;
-        if (is_int()) {
-            return ((other.is_int() && other.bits <= bits) ||
-                    (other.is_uint() && other.bits < bits));
-        } else if (is_uint()) {
-            return other.is_uint() && other.bits <= bits;
-        } else if (is_float()) {
-            return ((other.is_float() && other.bits <= bits) ||
-                    (bits == 64 && other.bits <= 32) ||
-                    (bits == 32 && other.bits <= 16));
-        } else {
-            return false;
-        }
-    }
+    bool can_represent(Type other) const;
 
     /** Return an integer which is the maximum value of this type. */
     int imax() const;
@@ -99,7 +85,7 @@ struct Type {
 /** Constructing a signed integer type */
 inline Type Int(int bits, int width = 1) {
     Type t;
-    t.t = Type::Int;
+    t.code = Type::Int;
     t.bits = bits;
     t.width = width;
     return t;
@@ -108,7 +94,7 @@ inline Type Int(int bits, int width = 1) {
 /** Constructing an unsigned integer type */
 inline Type UInt(int bits, int width = 1) {
     Type t;
-    t.t = Type::UInt;
+    t.code = Type::UInt;
     t.bits = bits;
     t.width = width;
     return t;
@@ -117,7 +103,7 @@ inline Type UInt(int bits, int width = 1) {
 /** Construct a floating-point type */
 inline Type Float(int bits, int width = 1) {
     Type t;
-    t.t = Type::Float;
+    t.code = Type::Float;
     t.bits = bits;
     t.width = width;
     return t;
@@ -131,7 +117,7 @@ inline Type Bool(int width = 1) {
 /** Construct a handle type */
 inline Type Handle(int width = 1) {
     Type t;
-    t.t = Type::Handle;
+    t.code = Type::Handle;
     t.bits = 64; // All handles are 64-bit for now
     t.width = width;
     return t;

@@ -1416,7 +1416,7 @@ void CodeGen::visit(const Call *op) {
             vector<Value *> args(9);
             args[0] = name;
             args[1] = event_type;
-            args[2] = ConstantInt::get(i32, type.t);
+            args[2] = ConstantInt::get(i32, type.code);
             args[3] = ConstantInt::get(i32, type.bits);
             args[4] = ConstantInt::get(i32, type.width);
             args[5] = value_index;
