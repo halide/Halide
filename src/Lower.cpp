@@ -1279,18 +1279,17 @@ Stmt add_image_checks(Stmt s, Function f) {
 
         maybe_return_condition = maybe_return_condition || inference_mode;
 
+        // Come up with a name to refer to this buffer in the error messages
+        string error_name = (is_output_buffer ? "Output" : "Input");
+        error_name += " buffer " + name;
+
         // Check the elem size matches the internally-understood type
         {
             string elem_size_name = name + ".elem_size";
             Expr elem_size = Variable::make(Int(32), elem_size_name);
             int correct_size = type.bytes();
             ostringstream error_msg;
-            if (is_output_buffer) {
-                error_msg << "Output ";
-            } else {
-                error_msg << "Input ";
-            }
-            error_msg << "buffer " << name << " has type " << type
+            error_msg << error_name << " has type " << type
                       << ", but elem_size of the buffer_t passed in is not " << correct_size;
             asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error_msg.str()));
         }
@@ -1311,8 +1310,8 @@ Stmt add_image_checks(Stmt s, Function f) {
                           << " is unbounded in dimension " << j << std::endl;
                 assert(false);
             }
-            string error_msg_extent = name + " is accessed beyond the extent in dimension " + dim;
-            string error_msg_min = name + " is accessed before the min in dimension " + dim;
+            string error_msg_extent = error_name + " is accessed beyond the extent in dimension " + dim;
+            string error_msg_min = error_name + " is accessed before the min in dimension " + dim;
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
             Expr min_required_var = Variable::make(Int(32), min_required_name);
