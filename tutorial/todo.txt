@@ -1,3 +1,4 @@
+- add stencil to lesson02 - show need for clamp on input to avoid bounds assertions
 - reductions
 - debug_to_file
 - scheduling
