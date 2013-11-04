@@ -26,7 +26,7 @@ struct Target {
 EXPORT Target get_host_target();
 
 /** Return the target that Halide will use. If HL_TARGET is set it
- * uses that. Otherwise calls \ref get_native_target */
+ * uses that. Otherwise calls \ref get_host_target */
 EXPORT Target get_target_from_environment();
 
 /** Create an llvm module containing the support code for a given target. */

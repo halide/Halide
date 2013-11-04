@@ -2,7 +2,7 @@
 #define HALIDE_VAR_H
 
 /** \file
- * Defines the Var - the front-end variable 
+ * Defines the Var - the front-end variable
  */
 
 #include <string>
@@ -41,7 +41,7 @@ public:
      * to the left-hand-side of the definition where the placeholder
      * ('_') appears. A Func without any argument list can be used as
      * an Expr and all arguments will be implicit.
-     * 
+     *
      * For example, consider the definition:
      *
      \code
@@ -49,14 +49,14 @@ public:
      Var x, y;
      f(x, y) = 3;
      \endcode
-     * 
+     *
      * A call to f with fewer than two arguments and a placeholder
      * will have implicit arguments injected automatically, so f(2, _)
      * is equivalent to f(2, _0), where _0 = Var::implicit(0), and f(_)
      * (and indeed f when cast to an Expr) is equivalent to f(_0, _1).
      * The following definitions are all equivalent, differing only in the
      * variable names.
-     * 
+     *
      \code
      g = f*3;
      g(_) = f(_)*3;
@@ -83,7 +83,7 @@ public:
      \code
      g(x, y, _0, _1) = f(_0, _1)*3;
      \endcode
-     * 
+     *
      * Expressions requiring differing numbers of implicit variables
      * can be combined. The left-hand-side of a definition injects
      * enough implicit variables to cover all of them:
@@ -93,7 +93,7 @@ public:
      h(x) = x*3;
      g(x) = h + (f + f(x)) * f(x, y);
      \endcode
-     * 
+     *
      * expands to:
      *
      \code
@@ -118,7 +118,7 @@ public:
         str << "_" << n;
         return Var(str.str());
     }
-   
+
     /** Return whether a variable name is of the form for an implicit argument.
      * TODO: This is almost guaranteed to incorrectly fire on user
      * declared variables at some point. We should likely prevent
@@ -129,14 +129,15 @@ public:
             name.find_first_not_of("0123456789", 1) == std::string::npos;
     }
 
-    /** Return the argument index, i.e. slot number in a call, for an
-     *  argument given its name. Returns -1 if the variable is not of
-     *  implicit form.
+    /** Return the argument index for a placeholder argument given its
+     *  name. Returns 0 for \ref _0, 1 for \ref _1, etc. Returns -1 if
+     *  the variable is not of implicit form.
      */
     static int implicit_index(const std::string &name) {
         return is_implicit(name) ? atoi(name.c_str() + 1) : -1;
     }
 
+    /** Test if a var is the placeholder variable \ref _ */
     static bool is_placeholder(const std::string &name) {
         return name == "_";
     }
@@ -151,18 +152,18 @@ public:
  * implicits code will continue to compile with a warning. This makes
  * it easier to convert to the new required placeholder ('_') style.
  * Both variants will work during the transition period. The code under
- * these #ifdef blocks can be completely removed after we finalize the
+ * these ifdef blocks can be completely removed after we finalize the
  * language change.
  */
 #define HALIDE_WARNINGS_FOR_OLD_IMPLICITS 1
 
-/** Placeholder for infered arguments.
- */
+/** A placeholder variable for infered arguments. See \ref Var::implicit */
 EXPORT extern Var _;
 
-/** Predeclare the first ten implicit Vars so they can be used in scheduling.
- */
+/* The first ten implicit Vars for use in scheduling. See \ref Var::implicit */
+// @{
 EXPORT extern Var _0, _1, _2, _3, _4, _5, _6, _7, _8, _9;
+// @}
 
 }
 
