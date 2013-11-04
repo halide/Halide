@@ -621,8 +621,8 @@ struct Broadcast : public ExprNode<Broadcast> {
 };
 
 /** A let expression, like you might find in a functional
- * language. Within the expression \ref body, instances of the Var
- * node \ref name refer to \ref value. */
+ * language. Within the expression \ref Let::body, instances of the Var
+ * node \ref Let::name refer to \ref Let::value. */
 struct Let : public ExprNode<Let> {
     std::string name;
     Expr value, body;
