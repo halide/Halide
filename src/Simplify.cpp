@@ -356,12 +356,10 @@ class Simplify : public IRMutator {
         const Mul *mul_b = b.as<Mul>();
 
         const Min *min_b = b.as<Min>();
-        const Max *max_b = b.as<Max>();
         const Add *add_b_a = min_b ? min_b->a.as<Add>() : NULL;
         const Add *add_b_b = min_b ? min_b->b.as<Add>() : NULL;
 
         const Min *min_a = a.as<Min>();
-        const Max *max_a = a.as<Max>();
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
 
@@ -475,19 +473,6 @@ class Simplify : public IRMutator {
         } else if (min_a && add_a_b && equal(b, add_a_b->b)) {
             // min(c, b + a) - a -> min(b, c-a)
             expr = mutate(min(add_a_b->a, min_a->a - b));
-
-        } else if (false && !op->type.is_uint() && max_a && min_b &&
-                   ((equal(max_a->a, min_b->a) && equal(max_a->b, min_b->b)) ||
-                    (equal(max_a->a, min_b->b) && equal(max_a->b, min_b->a)))) {
-            Expr diff = max_a->a - max_a->b;
-            // max(a, b) - min(a, b) -> max(a - b, -(a - b))
-            expr = abs(diff);
-        } else if (false && !op->type.is_uint() && min_a && max_b &&
-                   ((equal(min_a->a, max_b->a) && equal(min_a->b, max_b->b)) ||
-                    (equal(min_a->a, max_b->b) && equal(min_a->b, max_b->a)))) {
-            // min(a, b) - max(a, b) -> min(a - b, -(a - b))
-            Expr diff = min_a->a - min_a->b;
-            expr = -abs(mutate(diff));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -879,16 +864,6 @@ class Simplify : public IRMutator {
         } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
-
-
-        } else if (false && add_a && add_b && const_int(add_a->b, &ia) && const_int(add_b->b, &ib)) {
-            // Shuffle constants outside
-            // min(x + 2, y + 3) -> min(x, y + 1) + 2
-            expr = mutate(Min::make(add_a->a, add_b->a + (ib - ia)) + ia);
-        } else if (false && add_a && const_int(add_a->b, &ia) && const_int(b, &ib)) {
-            // min(x + 3, 5) -> min(x, 2) + 3
-            expr = mutate(Min::make(add_a->a, ib - ia) + ia);
-
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
