@@ -19,7 +19,6 @@
  *
  * To learn Halide, we recommend you start with the <a href=examples.html>tutorials</a>.
  *
- *
  * You can also look in the test folder for many small examples that
  * use Halide's various features, and in the apps folder for some
  * larger examples that statically compile halide pipelines. In

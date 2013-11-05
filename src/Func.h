@@ -374,7 +374,7 @@ class Func {
     int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *);
     // @}
 
-    /** The current custom tracing functions. May be NULL. */
+    /** The current custom tracing function. May be NULL. */
     // @{
     void (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
     // @}
@@ -407,40 +407,36 @@ public:
      * not contain free variables). */
     EXPORT explicit Func(Expr e);
 
-    /** Generate a new uniquely-named function that returns the given
-     * buffer. Has the same dimensionality as the buffer. Useful for
-     * passing Images to c++ functions that expect Funcs */
-    //@{
-    //EXPORT Func(Buffer image);
-    /*
-    template<typename T> Func(Image<T> image) {
-        (*this) = Func(Buffer(image));
-    }
-    */
-    //@}
-
     /** Evaluate this function over some rectangular domain and return
-     * the resulting buffer or buffers. The buffer should probably be
-     * instantly wrapped in an Image class of the appropriate
-     * type. That is, do this:
+     * the resulting buffer or buffers. Performs compilation if the
+     * Func has not previously been realized and jit_compile has not
+     * been called. The returned Buffer should probably be instantly
+     * wrapped in an Image class of the appropriate type. That is, do
+     * this:
      *
-     * f(x) = sin(x);
-     * Image<float> im = f.realize(...);
+     \code
+     f(x) = sin(x);
+     Image<float> im = f.realize(...);
+     \endcode
      *
      * not this:
      *
-     * f(x) = sin(x)
-     * Buffer im = f.realize(...)
+     \code
+     f(x) = sin(x)
+     Buffer im = f.realize(...)
+     \endcode
      *
      * If your Func has multiple values, because you defined it using
      * a Tuple, then casting the result of a realize call to a buffer
-     * or image will produce a run-time errorInstead you should do the
+     * or image will produce a run-time error. Instead you should do the
      * following:
      *
-     * f(x) = Tuple(x, sin(x));
-     * Realization r = f.realize(...);
-     * Image<int> im0 = r[0];
-     * Image<float> im1 = r[1];
+     \code
+     f(x) = Tuple(x, sin(x));
+     Realization r = f.realize(...);
+     Image<int> im0 = r[0];
+     Image<float> im1 = r[1];
+     \endcode
      *
      */
     EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
@@ -475,7 +471,8 @@ public:
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
-     * as this halide function. You probably don't want to use this directly - instead call compile_to_file.  */
+     * as this halide function. You probably don't want to use this
+     * directly; call compile_to_file instead. */
     EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
 
     /** Emit a header file with the given filename for this
@@ -483,8 +480,8 @@ public:
      * signature given by the second argument, and a name given by the
      * third. The name defaults to the same name as this halide
      * function. You don't actually have to have defined this function
-     * yet to call this. You probably don't want to use this directly
-     * - instead call compile_to_file. */
+     * yet to call this. You probably don't want to use this directly;
+     * call compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
 
     /** Statically compile this function to text assembly equivalent
@@ -531,7 +528,7 @@ public:
      * statically, you can also just define your own function with
      * signature
      \code
-     extern "C" halide_error(const char *)
+     extern "C" void halide_error(const char *);
      \endcode
      * This will clobber Halide's version.
      */
@@ -602,10 +599,9 @@ public:
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
 
-    /** When this function is compiled, include code that dumps its values
-     * to a file after it is realized, for the purpose of debugging.
-     * The file covers the realized extent at the point in the schedule that
-     * debug_to_file appears.
+    /** When this function is compiled, include code that dumps its
+     * values to a file after it is realized, for the purpose of
+     * debugging.
      *
      * If filename ends in ".tif" or ".tiff" (case insensitive) the file
      * is in TIFF format and can be read by standard tools. Oherwise, the
@@ -664,10 +660,13 @@ public:
     /** Is this function a reduction? */
     EXPORT bool is_reduction() const;
 
-    /** Is this function external? */
+    /** Is this function an external stage? That is, was it defined using define_extern? */
     EXPORT bool is_extern() const;
 
-    /** Add an extern definition for this Func. */
+    /** Add an extern definition for this Func. This lets you define a
+     * Func that represents an external pipeline stage. You can, for
+     * example, use it to wrap a call to an extern library such as
+     * fftw. */
     // @{
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
@@ -685,7 +684,8 @@ public:
     /** Get the types of the outputs of this Func. */
     EXPORT const std::vector<Type> &output_types() const;
 
-    /** Get the number of outputs of this Func. */
+    /** Get the number of outputs of this Func. Corresponds to the
+     * size of the Tuple this Func was defined to return. */
     EXPORT int outputs() const;
 
     /** Get the name of the extern function called for an extern
@@ -1043,18 +1043,17 @@ public:
     EXPORT ScheduleHandle update();
 
     /** Trace all loads from this Func by emitting calls to
-     * halide_trace_load. If the Func is inlined, this has no
+     * halide_trace. If the Func is inlined, this has no
      * effect. */
     EXPORT Func &trace_loads();
 
     /** Trace all stores to the buffer backing this Func by emitting
-     * calls to halide_trace_store. If the Func is inlined, this call
+     * calls to halide_trace. If the Func is inlined, this call
      * has no effect. */
     EXPORT Func &trace_stores();
 
     /** Trace all realizations of this Func by emitting calls to
-     * halide_trace_produce, halide_trace_update,
-     * halide_trace_consume, and halide_trace_dispose. */
+     * halide_trace. */
     EXPORT Func &trace_realizations();
 
     /** Get a handle on the internal halide function that this Func
