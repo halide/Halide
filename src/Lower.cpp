@@ -25,6 +25,7 @@
 #include "DebugToFile.h"
 #include "EarlyFree.h"
 #include "UniquifyVariableNames.h"
+#include "SkipStages.h"
 #include "CSE.h"
 
 namespace Halide {
@@ -1576,6 +1577,14 @@ Stmt lower(Function f) {
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, order[order.size()-1], env);
     debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
+
+    debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
+    s = simplify(s, false);
+    debug(2) << "Simplified: \n" << s << "\n\n";
+
+    debug(1) << "Dynamically skipping stages...\n";
+    s = skip_stages(s, order);
+    debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, env);
