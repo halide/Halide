@@ -15,6 +15,10 @@
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
+#ifndef COMPILING_HALIDE
+#include <stdint.h>
+#endif
+
 /**
  * The raw representation of an image passed around by generated
  * Halide code. It includes some stuff to track whether the image is
