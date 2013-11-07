@@ -284,6 +284,7 @@ DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
+DECLARE_CPP_INITMOD(nacl_io)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
@@ -332,7 +333,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
     } else if (t.os == Target::NaCl) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
-        modules.push_back(get_initmod_posix_io(c, bits_64));
+        modules.push_back(get_initmod_nacl_io(c, bits_64));
         modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
     }
