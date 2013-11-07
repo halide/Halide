@@ -1451,6 +1451,27 @@ void CodeGen::visit(const Call *op) {
             assert(op->args.size() == 3);
 
             value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if (op->name == Call::popcount) {
+            assert(op->args.size() == 1);
+            std::vector<llvm::Type*> arg_type(1);
+            arg_type[0] = llvm_type_of(op->args[0].type());
+            llvm::Function *fn = Intrinsic::getDeclaration(module,
+                Intrinsic::ctpop, arg_type);
+            CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
+            value = call;
+        } else if (op->name == Call::count_leading_zeros ||
+                   op->name == Call::count_trailing_zeros) {
+            assert(op->args.size() == 1);
+            std::vector<llvm::Type*> arg_type(1);
+            arg_type[0] = llvm_type_of(op->args[0].type());
+            llvm::Function *fn = Intrinsic::getDeclaration(module,
+                (op->name == Call::count_leading_zeros) ? Intrinsic::ctlz :
+                                                          Intrinsic::cttz,
+                arg_type);
+            llvm::Value *zero_is_undef = llvm::ConstantInt::getTrue(*context);
+            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_undef };
+            CallInst *call = builder->CreateCall(fn, args);
+            value = call;
         } else {
             std::cerr << "Unknown intrinsic: " << op->name << "\n";
             assert(false);
