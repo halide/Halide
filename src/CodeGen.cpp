@@ -74,6 +74,12 @@ using std::stack;
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
+#if WITH_ARM64
+#define InitializeAArch64Target()       InitializeTarget(AArch64)
+#define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
+#define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
+#endif
+
 CodeGen::CodeGen() :
     module(NULL), owns_module(false),
     function(NULL), context(NULL),
@@ -150,6 +156,7 @@ CodeGen::~CodeGen() {
 bool CodeGen::llvm_initialized = false;
 bool CodeGen::llvm_X86_enabled = false;
 bool CodeGen::llvm_ARM_enabled = false;
+bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
