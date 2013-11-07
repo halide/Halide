@@ -895,25 +895,25 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
                                 Internal::Call::Intrinsic);
 }
 
-/** Count the number of set bits an expression. */
+/** Count the number of set bits in an expression. */
 inline Expr popcount(Expr x) {
     assert(x.defined() && "popcount of undefined");
     return Internal::Call::make(x.type(), Internal::Call::popcount,
                                 vec(x), Internal::Call::Intrinsic);
 }
 
-/** Count the number of leading zero bit in an expression. The result is
+/** Count the number of leading zero bits in an expression. The result is
  *  undefined if the value of the expression is zero. */
 inline Expr count_leading_zeros(Expr x) {
-    assert(x.defined() && "popcount of undefined");
+    assert(x.defined() && "count leading zeros of undefined");
     return Internal::Call::make(x.type(), Internal::Call::count_leading_zeros,
                                 vec(x), Internal::Call::Intrinsic);
 }
 
-/** Count the number of trailing zero bit in an expression. The result is
+/** Count the number of trailing zero bits in an expression. The result is
  *  undefined if the value of the expression is zero. */
 inline Expr count_trailing_zeros(Expr x) {
-    assert(x.defined() && "popcount of undefined");
+    assert(x.defined() && "count trailing zeros of undefined");
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
                                 vec(x), Internal::Call::Intrinsic);
 }
