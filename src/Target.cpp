@@ -227,8 +227,15 @@ Target get_target_from_environment() {
     }
 
     if (arch_specified && !bits_specified) {
-        std::cerr << "If architecture is specified (e.g. \"arm\"), then bit width must also be specified (e.g. \"arm-32\")\n";
-        assert(false);
+        std::cerr << "WARNING: If architecture is specified (e.g. \"arm\"), "
+                  << "then bit width should also be specified (e.g. \"arm-32\"). "
+                  << "In the future this will be an error. ";
+        if (t.arch == Target::X86) {
+            std::cerr << "For x86 we default to the bit width of the host: " << t.bits << "\n;";
+        } else {
+            std::cerr << "For this target we default to 32-bits\n";
+            t.bits = 32;
+        }
     }
 
     return t;
