@@ -144,6 +144,7 @@ $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	$(CLANG) -nobuiltininc -fno-blocks -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
+	@-mkdir -p $(BUILD_DIR)
 	cp src/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
 
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
