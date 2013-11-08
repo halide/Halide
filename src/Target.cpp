@@ -393,7 +393,58 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         }
     }
 
-    return modules[0];
+    // Now remark most weak symbols as linkonce. They are only weak to
+    // prevent llvm from stripping them during initial module
+    // assembly. This means they can be stripped later.
+
+    // The symbols that we actually might want to override as a user
+    // must remain weak.
+    string retain[] = {"halide_copy_to_host",
+                       "halide_copy_to_dev",
+                       "halide_dev_free",
+                       "halide_set_error_handler",
+                       "halide_set_custom_allocator",
+                       "halide_set_custom_trace",
+                       "halide_set_custom_do_par_for",
+                       "halide_set_custom_do_task",
+                       "halide_shutdown_thread_pool",
+                       "halide_shutdown_trace",
+                       "halide_set_cuda_context",
+                       "halide_release",
+                       "halide_current_time_ns",
+                       "halide_host_cpu_count",
+                       ""};
+
+    llvm::Module *module = modules[0];
+
+    for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
+        llvm::Function *f = (llvm::Function *)(iter);
+        bool can_strip = true;
+        for (size_t i = 0; !retain[i].empty(); i++) {
+            if (f->getName() == retain[i]) {
+                can_strip = false;
+            }
+        }
+
+        if (can_strip) {
+            llvm::GlobalValue::LinkageTypes t = f->getLinkage();
+            if (t == llvm::GlobalValue::WeakAnyLinkage) {
+                f->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+                f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+            }
+        }
+
+    }
+
+    // Now remove the force-usage global that prevented clang from
+    // dropping functions from the initial module.
+    llvm::GlobalValue *llvm_used = module->getNamedGlobal("llvm.used");
+    if (llvm_used) {
+        llvm_used->eraseFromParent();
+    }
+
+    return module;
 }
 
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
