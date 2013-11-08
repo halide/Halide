@@ -73,10 +73,12 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -std=c++11 -stdlib=libc++"
     export GXX="clang++ -std=c++11 -stdlib=libc++"
     export CC="clang"
+    export LLVMS="trunk pnacl release-3.3"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
+    export LLVMS="trunk pnacl release-3.2 release-3.3"
 fi
 
 
@@ -90,7 +92,7 @@ rm -rf testing/reports/head
 ln -s ${HEAD} testing/reports/head
 
 # test several llvm variants
-for LLVM in trunk pnacl release-3.2 release-3.3; do
+for LLVM in ${LLVMS}; do
 
     if [[ "$LLVM" == pnacl ]]; then
         LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
@@ -162,7 +164,7 @@ for LLVM in trunk pnacl release-3.2 release-3.3; do
     fi
 done
 
-for LLVM in trunk pnacl release-3.2 release-3.3; do
+for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     else
