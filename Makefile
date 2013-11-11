@@ -1,7 +1,9 @@
 # 'make' builds libHalide.a, the internal test suite, and runs the internal test suite
 # 'make run_tests' builds and runs all the end-to-end tests in the test subdirectory
-# 'make {correctness,error,performance}_foo' builds and runs test/{...}/foo.cpp for any
+# 'make {error,performance}_foo' builds and runs test/{...}/foo.cpp for any
 #     cpp file in the corresponding subdirectoy of the test folder
+# 'make test_foo' builds and runs test/correctness/foo.cpp for any
+#     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
 CXX ?= g++
@@ -24,6 +26,7 @@ LLVM_CXX_FLAGS += -I$(shell $(LLVM_CONFIG) --src-root)/include
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
+WITH_ARM64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= 1
 
@@ -42,14 +45,18 @@ PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
+ARM64_CXX_FLAGS=$(if ($WITH_ARM64), -DWITH_ARM64=1, )
+ARM64_LLVM_CONFIG_LIB=$(if $(WITH_ARM64), aarch64, )
+
 CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE) -DCOMPILING_HALIDE
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
+CXX_FLAGS += $(ARM64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
-LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB))
+LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 
 TEST_CXX_FLAGS ?=
 UNAME = $(shell uname)
@@ -92,7 +99,7 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io osx_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug windows_io
+RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io nacl_io osx_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug windows_io
 RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o)
@@ -137,6 +144,7 @@ $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	$(CLANG) -nobuiltininc -fno-blocks -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
+	@-mkdir -p $(BUILD_DIR)
 	cp src/runtime/$*.ll $(BUILD_DIR)/initmod.$*_ll.ll
 
 $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok

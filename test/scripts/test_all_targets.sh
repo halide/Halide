@@ -73,10 +73,12 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -std=c++11 -stdlib=libc++"
     export GXX="clang++ -std=c++11 -stdlib=libc++"
     export CC="clang"
+    export LLVMS="trunk pnacl release-3.3"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
+    export LLVMS="trunk pnacl release-3.2 release-3.3"
 fi
 
 
@@ -90,20 +92,24 @@ rm -rf testing/reports/head
 ln -s ${HEAD} testing/reports/head
 
 # test several llvm variants
-for LLVM in trunk pnacl release-3.2 release-3.3; do
+for LLVM in ${LLVMS}; do
 
     if [[ "$LLVM" == pnacl ]]; then
         LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
         CLANG_REPO=http://git.chromium.org/native_client/pnacl-clang.git
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
     elif [[ "$LLVM" == trunk ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
     elif [[ "$LLVM" == release-3.2 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_32
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_32
+        LLVM_TARGETS="X86;ARM;NVPTX"
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
     fi
 
     # Check out llvm if necessary
@@ -122,14 +128,14 @@ for LLVM in trunk pnacl release-3.2 release-3.3; do
     if [ ! -f build-32/bin/llvm-config ]; then
         mkdir build-32
         cd build-32
-        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
+        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS} -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_32_BITS=ON ..
         make -j8
         cd ..
     fi
     if [ ! -f build-64/bin/llvm-config ]; then
         mkdir build-64
         cd build-64
-        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+        cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS} -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
         make -j8
         cd ..
     fi
@@ -158,7 +164,7 @@ for LLVM in trunk pnacl release-3.2 release-3.3; do
     fi
 done
 
-for LLVM in trunk pnacl release-3.2 release-3.3; do
+for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     else

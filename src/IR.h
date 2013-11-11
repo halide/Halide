@@ -946,6 +946,9 @@ struct Call : public ExprNode<Call> {
         create_buffer_t,
         extract_buffer_min,
         extract_buffer_extent,
+        popcount,
+        count_leading_zeros,
+        count_trailing_zeros,
         trace;
 
     // If it's a call to another halide function, this call node
