@@ -92,6 +92,9 @@ const string Call::lerp = "lerp";
 const string Call::create_buffer_t = "create_buffer_t";
 const string Call::extract_buffer_min = "extract_buffer_min";
 const string Call::extract_buffer_extent = "extract_buffer_extent";
+const string Call::popcount = "popcount";
+const string Call::count_leading_zeros = "count_leading_zeros";
+const string Call::count_trailing_zeros = "count_trailing_zeros";
 const string Call::trace = "trace";
 
 }

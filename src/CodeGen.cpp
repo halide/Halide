@@ -74,6 +74,12 @@ using std::stack;
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
+#if WITH_ARM64
+#define InitializeAArch64Target()       InitializeTarget(AArch64)
+#define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
+#define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
+#endif
+
 CodeGen::CodeGen() :
     module(NULL), owns_module(false),
     function(NULL), context(NULL),
@@ -150,6 +156,7 @@ CodeGen::~CodeGen() {
 bool CodeGen::llvm_initialized = false;
 bool CodeGen::llvm_X86_enabled = false;
 bool CodeGen::llvm_ARM_enabled = false;
+bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
@@ -273,55 +280,7 @@ JITCompiledModule CodeGen::compile_to_function_pointers() {
 
 void CodeGen::optimize_module() {
 
-    // Ensure that certain symbols stay in the initial module even if
-    // they are unused.
-    string retain[] = {"halide_copy_to_host",
-                       "halide_copy_to_dev",
-                       "halide_dev_free",
-                       "halide_set_error_handler",
-                       "halide_set_custom_allocator",
-                       "halide_set_custom_trace",
-                       "halide_set_custom_do_par_for",
-                       "halide_set_custom_do_task",
-                       "halide_shutdown_thread_pool",
-                       "halide_shutdown_trace",
-                       "halide_set_cuda_context",
-                       "halide_release",
-                       "halide_current_time_ns",
-                       "halide_host_cpu_count",
-                       ""};
-
-    // First fix linkage types so that optimization is allowed to strip things out
-    for (Module::iterator iter = module->begin(); iter != module->end(); iter++) {
-        llvm::Function *f = (llvm::Function *)(iter);
-        // Rewrite weak linkage to linkonce linkage, even though it's
-        // marked as weak(_odr). We only marked it weak so that clang
-        // wouldn't remove it during initial module assembly.
-
-        bool can_strip = true;
-        for (size_t i = 0; !retain[i].empty(); i++) {
-            if (f->getName() == retain[i]) {
-                can_strip = false;
-            }
-        }
-
-        if (can_strip) {
-            llvm::GlobalValue::LinkageTypes t = f->getLinkage();
-            if (t == llvm::GlobalValue::WeakAnyLinkage) {
-                f->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
-                f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-            }
-        }
-
-    }
-
-    // Drop the force-usage global. It's only there so that clang
-    // doesn't drop some symbols during initial module assembly.
-    llvm::GlobalValue *llvm_used = module->getNamedGlobal("llvm.used");
-    if (llvm_used) {
-        llvm_used->eraseFromParent();
-    }
+    debug(3) << "Optimizing module\n";
 
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
@@ -1444,6 +1403,27 @@ void CodeGen::visit(const Call *op) {
             assert(op->args.size() == 3);
 
             value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
+        } else if (op->name == Call::popcount) {
+            assert(op->args.size() == 1);
+            std::vector<llvm::Type*> arg_type(1);
+            arg_type[0] = llvm_type_of(op->args[0].type());
+            llvm::Function *fn = Intrinsic::getDeclaration(module,
+                Intrinsic::ctpop, arg_type);
+            CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
+            value = call;
+        } else if (op->name == Call::count_leading_zeros ||
+                   op->name == Call::count_trailing_zeros) {
+            assert(op->args.size() == 1);
+            std::vector<llvm::Type*> arg_type(1);
+            arg_type[0] = llvm_type_of(op->args[0].type());
+            llvm::Function *fn = Intrinsic::getDeclaration(module,
+                (op->name == Call::count_leading_zeros) ? Intrinsic::ctlz :
+                                                          Intrinsic::cttz,
+                arg_type);
+            llvm::Value *zero_is_undef = llvm::ConstantInt::getTrue(*context);
+            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_undef };
+            CallInst *call = builder->CreateCall(fn, args);
+            value = call;
         } else {
             std::cerr << "Unknown intrinsic: " << op->name << "\n";
             assert(false);

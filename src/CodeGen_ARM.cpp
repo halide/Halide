@@ -112,7 +112,11 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     assert(false && "arm not enabled for this build of Halide.");
     #endif
 
-    assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
+    if (t.bits == 32) {
+        assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
+    } else {
+        assert(llvm_AArch64_enabled && "llvm build not configured with AArch64 target enabled.");
+    }
 
     #if !(WITH_NATIVE_CLIENT)
     assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
@@ -329,6 +333,9 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
 
     // Fix the target triple.
     if (target.bits == 64) {
+        #if !(WITH_ARM64)
+        assert(false && "AArch64 llvm target not enabled in this build of Halide");
+        #endif
         std::cerr << "WARNING: 64-bit arm builds are completely untested\n";
     }
 
@@ -356,10 +363,6 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
         assert(false && "No arm support for this OS");
     }
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-
-    // Rewrite broadcast(cast(foo)) to cast(broadcast(foo)) to aid peephole matching.
-    //stmt = move_broadcasts_inside_casts(stmt);
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
@@ -1217,7 +1220,11 @@ void CodeGen_ARM::visit(const Call *op) {
 }
 
 string CodeGen_ARM::mcpu() const {
-    return "cortex-a9";
+    if (target.bits == 32) {
+        return "cortex-a9";
+    } else {
+        return "generic";
+    }
 }
 
 string CodeGen_ARM::mattrs() const {
