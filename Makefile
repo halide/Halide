@@ -105,7 +105,7 @@ RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o)
 
 .PHONY: all
-all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal msvc/initmod.cpp
+all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
 
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
