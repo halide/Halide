@@ -1252,6 +1252,33 @@ void CodeGen::visit(const Call *op) {
             } else {
                 value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
             }
+        } else if (op->name == Call::abs) {
+            assert(op->args.size() == 1);
+            // Check if an abs for this type exists in the initial module
+            Type t = op->args[0].type();
+            ostringstream type_name;
+            type_name << (t.is_float() ? 'f' : 'i') << t.bits;
+            if (t.is_vector()) {
+                type_name << 'x' << t.bits;
+            }
+            llvm::Function *builtin_abs = module->getFunction("abs_" + type_name.str());
+            Value *arg = codegen(op->args[0]);
+            if (builtin_abs) {
+                value = builder->CreateCall(builtin_abs, vec(arg));
+            } else {
+                // Generate select(x >= 0, x, -x) instead
+                Value *zero = Constant::getNullValue(arg->getType());
+                Value *cmp, *neg;
+                if (t.is_float()) {
+                    cmp = builder->CreateFCmpOGE(arg, zero);
+                    neg = builder->CreateFSub(zero, arg);
+                } else {
+                    assert(t.is_int());
+                    cmp = builder->CreateICmpSGE(arg, zero);
+                    neg = builder->CreateSub(zero, arg);
+                }
+                value = builder->CreateSelect(cmp, arg, neg);
+            }
         } else if (op->name == Call::create_buffer_t) {
             // Make some memory for this buffer_t
             const Call *c = op->args[0].as<Call>();

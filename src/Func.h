@@ -1101,7 +1101,7 @@ public:
  * \ref Func::realize */
 template<typename T>
 T evaluate(Expr e) {
-    assert(e.type() == type_of<T>());
+    assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = e;
     Image<T> im = f.realize();
@@ -1112,8 +1112,8 @@ T evaluate(Expr e) {
 // @{
 template<typename A, typename B>
 void evaluate(Tuple t, A *a, B *b) {
-    assert(t[0].type() == type_of<A>());
-    assert(t[1].type() == type_of<B>());
+    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = t;
     Realization r = f.realize();
@@ -1123,9 +1123,9 @@ void evaluate(Tuple t, A *a, B *b) {
 
 template<typename A, typename B, typename C>
 void evaluate(Tuple t, A *a, B *b, C *c) {
-    assert(t[0].type() == type_of<A>());
-    assert(t[1].type() == type_of<B>());
-    assert(t[2].type() == type_of<C>());
+    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = t;
     Realization r = f.realize();
@@ -1136,10 +1136,10 @@ void evaluate(Tuple t, A *a, B *b, C *c) {
 
 template<typename A, typename B, typename C, typename D>
 void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
-    assert(t[0].type() == type_of<A>());
-    assert(t[1].type() == type_of<B>());
-    assert(t[2].type() == type_of<C>());
-    assert(t[3].type() == type_of<D>());
+    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = t;
     Realization r = f.realize();
