@@ -21,11 +21,6 @@ INLINE int32_t minval_s32() {return 0x80000000;}
 INLINE int64_t maxval_s64() {return INT64_C(0x7fffffffffffffff);}
 INLINE int64_t minval_s64() {return INT64_C(0x8000000000000000);}
 
-INLINE int8_t abs_i8(int8_t a) {return a >= 0 ? a : -a;}
-INLINE int16_t abs_i16(int16_t a) {return a >= 0 ? a : -a;}
-INLINE int32_t abs_i32(int32_t a) {return a >= 0 ? a : -a;}
-INLINE int64_t abs_i64(int64_t a) {return a >= 0 ? a : -a;}
-
 INLINE float float_from_bits(uint32_t bits) {
     union {
         uint32_t as_uint;

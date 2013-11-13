@@ -286,7 +286,7 @@ int Func::add_implicit_vars(vector<Var> &args) const {
         // the provided arguments.
         placeholder_pos = args.size();
         if ((int)args.size() < dimensions()) {
-            std::cout << "Implicit arguments without placeholders are deprecated. Adding " <<
+            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
               dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
             int i = 0;
@@ -328,7 +328,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
         // the provided arguments.
         placeholder_pos = args.size();
         if ((int)args.size() < dimensions()) {
-            std::cout << "Implicit arguments without placeholders are deprecated. Adding " <<
+            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
               dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
             int i = 0;
