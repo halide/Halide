@@ -39,6 +39,13 @@ int main(int argc, char **argv) {
     Func f4 = lambda(x, input(reflect_x));
     check(f4, input, 0, 101);
 
+    // Verify an undefined bound on one side of the range still result in
+    // correct bounds from abs and not an undefined error in the logic or
+    // failure to bound the negative branch to zero.
+    Func f5;
+    f5 = lambda(x, input(cast<int>(clamp(abs(1.0f / (x + .1f)), -50, 50))));
+    check(f5, input, 0, 51);
+
     printf("Success!\n");
     return 0;
 }

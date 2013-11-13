@@ -604,10 +604,12 @@ private:
         } else if (op->call_type == Call::Intrinsic && op->name == Call::abs) {
             Expr min_a = min, max_a = max;
             min = make_zero(op->type);
-            if (op->type.is_uint()) {
-                max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
-            } else {
-                max = Max::make(0-min_a, max_a);
+            if (min_a.defined() && max_a.defined()) {
+                if (op->type.is_uint()) {
+                    max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
+                } else {
+                    max = Max::make(0-min_a, max_a);
+                }
             }
         } else {
             // Just use the bounds of the type
