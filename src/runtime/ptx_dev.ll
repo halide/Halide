@@ -22,47 +22,277 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 ;declare void @llvm.ptx.red.global.add.f32(float*, float)
 ;declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
-declare float @llvm.nvvm.floor.f(float) nounwind readnone
-declare float @llvm.nvvm.ceil.f(float) nounwind readnone
-declare float @llvm.nvvm.sqrt.f(float) nounwind readnone
-declare float @llvm.nvvm.sin.approx.f(float) nounwind readnone
-declare float @llvm.nvvm.cos.approx.f(float) nounwind readnone
+declare float @__nv_sqrtf(float) nounwind readnone
+declare double @__nv_sqrt(double) nounwind readnone
 
-define internal ptx_device float @floor_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @llvm.nvvm.floor.f(float %x) nounwind readnone
+define weak_odr float @sqrt_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_sqrtf(float %x) nounwind readnone
        ret float %y
 }
 
-define internal ptx_device float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @llvm.nvvm.ceil.f(float %x) nounwind readnone
+define weak_odr double @sqrt_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_sqrt(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_sinf(float) nounwind readnone
+declare double @__nv_sin(double) nounwind readnone
+
+define weak_odr float @sin_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_sinf(float %x) nounwind readnone
        ret float %y
 }
 
-define internal ptx_device float @sqrt_f32(float %x) alwaysinline {
-    %res = call float @llvm.nvvm.sqrt.f(float %x)
-    ret float %res
+define weak_odr double @sin_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_sin(double %x) nounwind readnone
+       ret double %y
 }
 
-define internal ptx_device float @sin_f32(float %x) alwaysinline {
-    %res = call float @llvm.nvvm.sin.approx.f(float %x)
-    ret float %res
-}
+declare float @__nv_cosf(float) nounwind readnone
+declare double @__nv_cos(double) nounwind readnone
 
-define internal ptx_device float @cos_f32(float %x) alwaysinline {
-    %res = call float @llvm.nvvm.cos.approx.f(float %x)
-    ret float %res
-}
-
-
-declare float @llvm.nvvm.fabs.f(float) nounwind readnone
-declare double @llvm.nvvm.fabs.d(double) nounwind readnone
-
-define internal float @abs_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call float @llvm.nvvm.fabs.f(float %x) nounwind readnone
+define weak_odr float @cos_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_cosf(float %x) nounwind readnone
        ret float %y
 }
 
-define internal double @abs_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %y = tail call double @llvm.nvvm.fabs.d(double %x) nounwind readnone
+define weak_odr double @cos_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_cos(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_expf(float) nounwind readnone
+declare double @__nv_exp(double) nounwind readnone
+
+define weak_odr float @exp_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_expf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @exp_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_exp(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_logf(float) nounwind readnone
+declare double @__nv_log(double) nounwind readnone
+
+define weak_odr float @log_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_logf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @log_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_log(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_fabsf(float) nounwind readnone
+declare double @__nv_fabs(double) nounwind readnone
+
+define weak_odr float @abs_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_fabsf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @abs_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_fabs(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_floorf(float) nounwind readnone
+declare double @__nv_floor(double) nounwind readnone
+
+define weak_odr float @floor_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_floorf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @floor_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_floor(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_ceilf(float) nounwind readnone
+declare double @__nv_ceil(double) nounwind readnone
+
+define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_ceilf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @ceil_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_ceil(double %x) nounwind readnone
+       ret double %y
+}
+
+; declare float @__nv_nearbyintf(float) nounwind readnone
+; declare double @__nv_nearbyint(double) nounwind readnone
+declare float @__nv_roundf(float) nounwind readnone
+declare double @__nv_round(double) nounwind readnone
+
+define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_roundf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_round(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_powf(float, float) nounwind readnone
+declare double @__nv_pow(double, double) nounwind readnone
+
+define weak_odr float @pow_f32(float %x, float %y) nounwind uwtable readnone alwaysinline {
+       %z = tail call float @__nv_powf(float %x, float %y) nounwind readnone
+       ret float %z
+}
+
+define weak_odr double @pow_f64(double %x, double %y) nounwind uwtable readnone alwaysinline {
+       %z = tail call double @__nv_pow(double %x, double %y) nounwind readnone
+       ret double %z
+}
+
+declare float @__nv_asinf(float) nounwind readnone
+declare double @__nv_asin(double) nounwind readnone
+
+define weak_odr float @asin_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_asinf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @asin_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_asin(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_acosf(float) nounwind readnone
+declare double @__nv_acos(double) nounwind readnone
+
+define weak_odr float @acos_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_acosf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @acos_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_acos(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_tanf(float) nounwind readnone
+declare double @__nv_tan(double) nounwind readnone
+
+define weak_odr float @tan_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_tanf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @tan_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_tan(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_atanf(float) nounwind readnone
+declare double @__nv_atan(double) nounwind readnone
+
+define weak_odr float @atan_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_atanf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @atan_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_atan(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_atan2f(float, float) nounwind readnone
+declare double @__nv_atan2(double, double) nounwind readnone
+
+define weak_odr float @atan2_f32(float %y, float %x) nounwind uwtable readnone alwaysinline {
+       %z = tail call float @__nv_atan2f(float %y, float %x) nounwind readnone
+       ret float %z
+}
+
+define weak_odr double @atan2_f64(double %y, double %x) nounwind uwtable readnone alwaysinline {
+       %z = tail call double @__nv_atan2(double %y, double %x) nounwind readnone
+       ret double %z
+}
+
+declare float @__nv_sinhf(float) nounwind readnone
+declare double @__nv_sinh(double) nounwind readnone
+
+define weak_odr float @sinh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_sinhf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @sinh_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_sinh(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_asinhf(float) nounwind readnone
+declare double @__nv_asinh(double) nounwind readnone
+
+define weak_odr float @asinh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_asinhf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @asinh_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_asinh(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_coshf(float) nounwind readnone
+declare double @__nv_cosh(double) nounwind readnone
+
+define weak_odr float @__nv_cosh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_coshf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @cosh_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_cosh(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_acoshf(float) nounwind readnone
+declare double @__nv_acosh(double) nounwind readnone
+
+define weak_odr float @acosh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_acoshf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @acosh_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_acosh(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_tanhf(float) nounwind readnone
+declare double @__nv_tanh(double) nounwind readnone
+
+define weak_odr float @tanh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_tanhf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @tanh_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_tanh(double %x) nounwind readnone
+       ret double %y
+}
+
+declare float @__nv_atanhf(float) nounwind readnone
+declare double @__nv_atanh(double) nounwind readnone
+
+define weak_odr float @atanh_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @__nv_atanhf(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @atanh_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @__nv_atanh(double %x) nounwind readnone
        ret double %y
 }
