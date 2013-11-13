@@ -610,6 +610,9 @@ private:
                 } else {
                     max = Max::make(0-min_a, max_a);
                 }
+            } else {
+                // If the argument is unbounded on one side, then the max is unbounded.
+                max = Expr();
             }
         } else {
             // Just use the bounds of the type
