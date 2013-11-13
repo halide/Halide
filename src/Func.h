@@ -640,27 +640,35 @@ public:
     EXPORT bool defined() const;
 
     /** Get the left-hand-side of the reduction definition. An empty
-     * vector if there's no reduction definition. */
-    EXPORT const std::vector<Expr> &reduction_args() const;
+     * vector if there's no reduction definition. If there are
+     * multiple reduction definitions for this function, use the
+     * argument to select which one you want. */
+    EXPORT const std::vector<Expr> &reduction_args(int idx = 0) const;
 
-    /** Get the right-hand-side of the reduction definition. An error
-     * if there's no reduction definition. */
-    EXPORT Expr reduction_value() const;
+    /** Get the right-hand-side of a reduction definition. An error if
+     * there's no reduction definition. If there are multiple
+     * reduction definitions for this function, use the argument to
+     * select which one you want. */
+    EXPORT Expr reduction_value(int idx = 0) const;
 
-    /** Get the right-hand-side of the reduction definition for
+    /** Get the right-hand-side of a reduction definition for
      * functions that returns multiple values. An error if there's no
      * reduction definition. Returns a Tuple with one element for
      * functions that return a single value. */
-    EXPORT Tuple reduction_values() const;
+    EXPORT Tuple reduction_values(int idx = 0) const;
 
-    /** Get the reduction domain for the reduction definition. Returns
-     * an undefined RDom if there's no reduction definition. */
-    EXPORT RDom reduction_domain() const;
+    /** Get the reduction domain for a reduction definition. */
+    EXPORT RDom reduction_domain(int idx = 0) const;
 
-    /** Is this function a reduction? */
+    /** Is this function a reduction (i.e. does it have at least one
+     * reduction definition)? */
     EXPORT bool is_reduction() const;
 
-    /** Is this function an external stage? That is, was it defined using define_extern? */
+    /** How many reduction definitions does this function have? */
+    EXPORT int num_reduction_definitions() const;
+
+    /** Is this function an external stage? That is, was it defined
+     * using define_extern? */
     EXPORT bool is_extern() const;
 
     /** Add an extern definition for this Func. This lets you define a
@@ -1037,10 +1045,10 @@ public:
      */
     EXPORT Func &compute_inline();
 
-    /** Get a handle on the update step of a reduction for the
+    /** Get a handle on an update step of a reduction for the
      * purposes of scheduling it. Only the pure dimensions of the
      * update step can be meaningfully manipulated (see \ref RDom) */
-    EXPORT ScheduleHandle update();
+    EXPORT ScheduleHandle update(int idx = 0);
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no

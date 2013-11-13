@@ -3,8 +3,12 @@
 #include "Function.h"
 #include "Scope.h"
 #include "IRPrinter.h"
+#include "IREquality.h"
+#include "Simplify.h"
+#include "ModulusRemainder.h"
 #include "Debug.h"
 #include "CSE.h"
+#include "IROperator.h"
 #include <set>
 
 namespace Halide {
@@ -162,7 +166,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) {
     assertf(!name().empty(), "A function needs a name", name());
     assertf(has_pure_definition(), "Can't add a reduction definition without a regular definition first", name());
-    assertf(!has_reduction_definition(), "Function already has a reduction definition", name());
+    //assertf(!has_reduction_definition(), "Function already has a reduction definition", name());
     for (size_t i = 0; i < values.size(); i++) {
         assertf(values[i].defined(), "Undefined expression in right-hand-side of reduction", name());
     }
@@ -216,11 +220,12 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
         args[i].accept(&check);
     }
 
-    assertf(check.reduction_domain.defined(), "No reduction domain referenced in reduction definition", name());
+    //assertf(check.reduction_domain.defined(), "No reduction domain referenced in reduction definition", name());
 
-    contents.ptr->reduction_args = args;
-    contents.ptr->reduction_values = values;
-    contents.ptr->reduction_domain = check.reduction_domain;
+    ReductionDefinition r;
+    r.args = args;
+    r.values = values;
+    r.domain = check.reduction_domain;
 
     // The reduction value and args probably refer back to the
     // function itself, introducing circular references and hence
@@ -244,14 +249,19 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // First add the pure args in order
     for (size_t i = 0; i < pure_args.size(); i++) {
         Schedule::Dim d = {pure_args[i], For::Serial};
-        contents.ptr->reduction_schedule.dims.push_back(d);
+        r.schedule.dims.push_back(d);
     }
 
     // Then add the reduction domain outside of that
-    for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
-        Schedule::Dim d = {check.reduction_domain.domain()[i].var, For::Serial};
-        contents.ptr->reduction_schedule.dims.push_back(d);
+    if (r.domain.defined()) {
+        for (size_t i = 0; i < r.domain.domain().size(); i++) {
+            Schedule::Dim d = {r.domain.domain()[i].var, For::Serial};
+            r.schedule.dims.push_back(d);
+        }
     }
+
+    contents.ptr->reductions.push_back(r);
+
 }
 
 void Function::define_extern(const std::string &function_name,
@@ -314,7 +324,29 @@ Expr Function::min_extent_updated(const string &d) const {
     if (!has_reduction_definition()) {
         return 1;
     } else {
-        return compute_min_extent(d, reduction_schedule());
+        // We want something close to the LCM of the min extents of
+        // the reduction schedules. To compute this reasonably, we
+        // pull out the const integer factors and take the exact LCM,
+        // then multiply it by the non-integer factors.
+        int integer_part = 1;
+        std::set<Expr, ExprDeepCompare> exprs;
+        for (size_t i = 0; i < reductions().size(); i++) {
+            Expr e = compute_min_extent(d, reductions()[i].schedule);
+            e = simplify(e);
+            if (const IntImm *int_imm = e.as<IntImm>()) {
+                integer_part = lcm(int_imm->value, integer_part);
+            } else {
+                exprs.insert(e);
+            }
+        }
+
+        Expr result = integer_part;
+        for (std::set<Expr, ExprDeepCompare>::iterator iter = exprs.begin();
+             iter != exprs.end(); ++iter) {
+            result *= (*iter);
+        }
+
+        return result;
     }
 }
 
