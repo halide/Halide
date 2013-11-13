@@ -41,6 +41,7 @@ ARM_LLVM_CONFIG_LIB=$(if $(WITH_ARM), arm, )
 
 PTX_CXX_FLAGS=$(if $(WITH_PTX), -DWITH_PTX=1, )
 PTX_LLVM_CONFIG_LIB=$(if $(WITH_PTX), nvptx, )
+PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevice.compute_30.10.bc libdevice.compute_35.10.bc, )
 
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
@@ -102,7 +103,7 @@ HEADERS = $(HEADER_FILES:%.h=src/%.h)
 RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io nacl_io osx_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug windows_io
 RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev x86_avx x86 x86_sse41
 
-INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o)
+INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal msvc/initmod.cpp
@@ -153,9 +154,15 @@ $(BUILD_DIR)/initmod.%.bc: $(BUILD_DIR)/initmod.%.ll $(BUILD_DIR)/llvm_ok
 $(BUILD_DIR)/initmod.%.cpp: $(BIN_DIR)/bitcode2cpp $(BUILD_DIR)/initmod.%.bc
 	./$(BIN_DIR)/bitcode2cpp $* < $(BUILD_DIR)/initmod.$*.bc > $@
 
+$(BUILD_DIR)/initmod_ptx.%_ll.cpp: $(BIN_DIR)/bitcode2cpp src/runtime/nvidia_libdevice_bitcode/libdevice.%.bc
+	./$(BIN_DIR)/bitcode2cpp ptx_$(basename $*)_ll < src/runtime/nvidia_libdevice_bitcode/libdevice.$*.bc > $@
+
 $(BIN_DIR)/bitcode2cpp: src/bitcode2cpp.cpp
 	@-mkdir -p $(BIN_DIR)
 	$(CXX) $< -o $@
+
+$(BUILD_DIR)/initmod_ptx.%_ll.o: $(BUILD_DIR)/initmod_ptx.%_ll.cpp
+	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o
 
 $(BUILD_DIR)/initmod.%.o: $(BUILD_DIR)/initmod.%.cpp
 	$(CXX) -c $< -o $@ -MMD -MP -MF $(BUILD_DIR)/$*.d -MT $(BUILD_DIR)/$*.o

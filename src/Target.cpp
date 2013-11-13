@@ -301,9 +301,84 @@ DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(ptx_dev)
+#if WITH_PTX
+DECLARE_LL_INITMOD(ptx_compute_20)
+DECLARE_LL_INITMOD(ptx_compute_30)
+DECLARE_LL_INITMOD(ptx_compute_35)
+#endif
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
+
+namespace {
+
+// Link all modules together and with the result in modules[0],
+// all other input modules are destroyed.
+void link_modules(std::vector<llvm::Module *> &modules) {
+    // Link them all together
+    for (size_t i = 1; i < modules.size(); i++) {
+        string err_msg;
+        bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
+                                                llvm::Linker::DestroySource, &err_msg);
+        if (failed) {
+            std::cerr << "Failure linking initial modules: " << err_msg << "\n";
+            assert(false);
+        }
+    }
+
+    // Now remark most weak symbols as linkonce. They are only weak to
+    // prevent llvm from stripping them during initial module
+    // assembly. This means they can be stripped later.
+
+    // The symbols that we actually might want to override as a user
+    // must remain weak.
+    string retain[] = {"halide_copy_to_host",
+                       "halide_copy_to_dev",
+                       "halide_dev_free",
+                       "halide_set_error_handler",
+                       "halide_set_custom_allocator",
+                       "halide_set_custom_trace",
+                       "halide_set_custom_do_par_for",
+                       "halide_set_custom_do_task",
+                       "halide_shutdown_thread_pool",
+                       "halide_shutdown_trace",
+                       "halide_set_cuda_context",
+                       "halide_release",
+                       "halide_current_time_ns",
+                       "halide_host_cpu_count",
+                       ""};
+
+    llvm::Module *module = modules[0];
+
+    for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
+        llvm::Function *f = (llvm::Function *)(iter);
+        bool can_strip = true;
+        for (size_t i = 0; !retain[i].empty(); i++) {
+            if (f->getName() == retain[i]) {
+                can_strip = false;
+            }
+        }
+
+        if (can_strip) {
+            llvm::GlobalValue::LinkageTypes t = f->getLinkage();
+            if (t == llvm::GlobalValue::WeakAnyLinkage) {
+                f->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+                f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+            }
+        }
+
+    }
+
+    // Now remove the force-usage global that prevented clang from
+    // dropping functions from the initial module.
+    llvm::GlobalValue *llvm_used = module->getNamedGlobal("llvm.used");
+    if (llvm_used) {
+        llvm_used->eraseFromParent();
+    }
+}
+
+}
 
 namespace Internal {
 
@@ -382,73 +457,21 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_nogpu(c, bits_64));
     }
 
-    // Link them all together
-    for (size_t i = 1; i < modules.size(); i++) {
-        string err_msg;
-        bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
-                                                llvm::Linker::DestroySource, &err_msg);
-        if (failed) {
-            std::cerr << "Failure linking initial modules: " << err_msg << "\n";
-            assert(false);
-        }
-    }
+    link_modules(modules);
 
-    // Now remark most weak symbols as linkonce. They are only weak to
-    // prevent llvm from stripping them during initial module
-    // assembly. This means they can be stripped later.
-
-    // The symbols that we actually might want to override as a user
-    // must remain weak.
-    string retain[] = {"halide_copy_to_host",
-                       "halide_copy_to_dev",
-                       "halide_dev_free",
-                       "halide_set_error_handler",
-                       "halide_set_custom_allocator",
-                       "halide_set_custom_trace",
-                       "halide_set_custom_do_par_for",
-                       "halide_set_custom_do_task",
-                       "halide_shutdown_thread_pool",
-                       "halide_shutdown_trace",
-                       "halide_set_cuda_context",
-                       "halide_release",
-                       "halide_current_time_ns",
-                       "halide_host_cpu_count",
-                       ""};
-
-    llvm::Module *module = modules[0];
-
-    for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
-        llvm::Function *f = (llvm::Function *)(iter);
-        bool can_strip = true;
-        for (size_t i = 0; !retain[i].empty(); i++) {
-            if (f->getName() == retain[i]) {
-                can_strip = false;
-            }
-        }
-
-        if (can_strip) {
-            llvm::GlobalValue::LinkageTypes t = f->getLinkage();
-            if (t == llvm::GlobalValue::WeakAnyLinkage) {
-                f->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
-            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
-                f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
-            }
-        }
-
-    }
-
-    // Now remove the force-usage global that prevented clang from
-    // dropping functions from the initial module.
-    llvm::GlobalValue *llvm_used = module->getNamedGlobal("llvm.used");
-    if (llvm_used) {
-        llvm_used->eraseFromParent();
-    }
-
-    return module;
+    return modules[0];
 }
 
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
-    return get_initmod_ptx_dev_ll(c);
+  std::vector<llvm::Module *> modules;
+  modules.push_back(get_initmod_ptx_dev_ll(c));
+
+  // TODO: select this based on sm_ version in Target
+  modules.push_back(get_initmod_ptx_compute_20_ll(c));
+
+  link_modules(modules);
+
+  return modules[0];  
 }
 
 }
