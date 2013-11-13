@@ -2,13 +2,13 @@
 #define HALIDE_SIMPLIFY_H
 
 /** \file
- * Methods for simplifying halide statements and expressions 
+ * Methods for simplifying halide statements and expressions
  */
 
 #include "IR.h"
 #include <cmath>
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Perform a a wide range of simplifications to expressions and
@@ -16,10 +16,10 @@ namespace Internal {
  * values, arithmetic rearranging, etc.
  */
 // @{
-Stmt simplify(Stmt);
-EXPORT Expr simplify(Expr);
-// @}     
-   
+Stmt simplify(Stmt, bool remove_dead_lets = true);
+EXPORT Expr simplify(Expr, bool remove_dead_lets = true);
+// @}
+
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to simplify
  * Halide expressions. */
@@ -33,14 +33,14 @@ inline T mod_imp(T a, T b) {
     return rem;
 }
 // Special cases for float, double.
-template<> inline float mod_imp<float>(float a, float b) { 
+template<> inline float mod_imp<float>(float a, float b) {
     float f = a - b * (floorf(a / b));
     // The remainder has the same sign as b.
-    return f; 
+    return f;
 }
 template<> inline double mod_imp<double>(double a, double b) {
     double f = a - b * (std::floor(a / b));
-    return f; 
+    return f;
 }
 
 // Division that rounds the quotient down for integers.
@@ -58,7 +58,7 @@ inline T div_imp(T a, T b) {
     } else {
         quotient = a / b;
     }
-    return quotient; 
+    return quotient;
 }
 
 void simplify_test();
