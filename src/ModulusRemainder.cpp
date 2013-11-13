@@ -164,6 +164,10 @@ int gcd(int a, int b) {
     return a;
 }
 
+int lcm(int a, int b) {
+    return (a*b)/gcd(a, b);
+}
+
 int mod(int a, int m) {
     if (m == 0) return a;
     a = a % m;
