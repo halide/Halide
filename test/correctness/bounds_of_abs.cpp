@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     Func f4 = lambda(x, input(reflect_x));
     check(f4, input, 0, 101);
 
-    // Verify an undefined bound on one side of the range still result in
+    // Verify an undefined bound on one side of the range still results in
     // correct bounds from abs and not an undefined error in the logic or
     // failure to bound the negative branch to zero.
     Func f5;
