@@ -27,23 +27,21 @@ static void cpuid(int info[4], int infoType, int extra) {
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
-        "pushq {%%}rbx         \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        "popq {%%}rbx          \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "0" (infoType), "2" (extra)
+        : "%rbx");
 }
 #else
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
-        "pushl {%%}ebx         \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        "popl {%%}ebx          \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "0" (infoType), "2" (extra)
+        : "%ebx");
 }
 #endif
 #endif
