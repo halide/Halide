@@ -176,150 +176,45 @@ class ScheduleHandle {
 public:
     ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
 
-    /** Split a dimension into inner and outer subdimensions with the
-     * given names, where the inner dimension iterates from 0 to
-     * factor-1. The inner and outer subdimensions can then be dealt
-     * with using the other scheduling calls. It's ok to reuse the old
-     * variable name as either the inner or outer variable. */
+    /** Scheduling calls that control how the domain of this update is
+     * traversed. See the documentation for Func for the meanings. */
+    // @{
+
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
-
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
-
-    /** Mark a dimension to be traversed in parallel */
     EXPORT ScheduleHandle &parallel(Var var);
-
-    /** Mark a dimension to be computed all-at-once as a single
-     * vector. The dimension should have constant extent -
-     * e.g. because it is the inner dimension following a split by a
-     * constant factor. For most uses of vectorize you want the two
-     * argument form. The variable to be vectorized should be the
-     * innermost one. */
     EXPORT ScheduleHandle &vectorize(Var var);
-
-    /** Mark a dimension to be completely unrolled. The dimension
-     * should have constant extent - e.g. because it is the inner
-     * dimension following a split by a constant factor. For most uses
-     * of unroll you want the two-argument form. */
     EXPORT ScheduleHandle &unroll(Var var);
-
-    /** Split a dimension by the given factor, then vectorize the
-     * inner dimension. This is how you vectorize a loop of unknown
-     * size. The variable to be vectorized should be the innermost
-     * one. After this call, var refers to the outer dimension of the
-     * split. */
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
-
-    /** Split a dimension by the given factor, then unroll the inner
-     * dimension. This is how you unroll a loop of unknown size by
-     * some constant factor. After this call, var refers to the outer
-     * dimension of the split. */
     EXPORT ScheduleHandle &unroll(Var var, int factor);
-
-    /** Statically declare that the range over which a function should
-     * be evaluated is given by the second and third arguments. This
-     * can let Halide perform some optimizations. E.g. if you know
-     * there are going to be 4 color channels, you can completely
-     * vectorize the color channel dimension without the overhead of
-     * splitting it up. If bounds inference decides that it requires
-     * more of this function than the bounds you have stated, a
-     * runtime error will occur when you try to run your pipeline. */
     EXPORT ScheduleHandle &bound(Var var, Expr min, Expr extent);
-
-    /** Split two dimensions at once by the given factors, and then
-     * reorder the resulting dimensions to be xi, yi, xo, yo from
-     * innermost outwards. This gives a tiled traversal. */
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
-
-    /** A shorter form of tile, which reuses the old variable names as
-     * the new outer dimensions */
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
-
-    /** Reorder variables to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(const std::vector<Var> &vars);
-
-    /** Reorder two dimensions so that x is traversed inside y. Does
-     * not affect the nesting order of other dimensions. E.g, if you
-     * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
-     * traversed in the order (w, y, z, x), from innermost
-     * outwards. */
     EXPORT ScheduleHandle &reorder(Var x, Var y);
-
-    /** Reorder three dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z);
-
-    /** Reorder four dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w);
-
-    /** Reorder five dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
-
-    /** Reorder six dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
-
-    /** Reorder seven dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
-
-    /** Reorder eight dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
-
-    /** Reorder nine dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
-
-    /** Reorder ten dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
-
-    /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
-    /** Tell Halide that the following dimensions correspond to cuda
-     * thread indices. This is useful if you compute a producer
-     * function within the block indices of a consumer function, and
-     * want to control how that function's dimensions map to cuda
-     * threads. If the selected target is not ptx, this just marks
-     * those dimensions as parallel. */
-    // @{
     EXPORT ScheduleHandle &cuda_threads(Var thread_x);
     EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y);
     EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
-    // @}
 
-    /** Tell Halide that the following dimensions correspond to cuda
-     * block indices. This is useful for scheduling stages that will
-     * run serially within each cuda block. If the selected target is
-     * not ptx, this just marks those dimensions as parallel. */
-    // @{
     EXPORT ScheduleHandle &cuda_blocks(Var block_x);
     EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y);
     EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z);
-    // @}
 
-    /** Tell Halide that the following dimensions correspond to cuda
-     * block indices and thread indices. If the selected target is not
-     * ptx, these just mark the given dimensions as parallel. The
-     * dimensions are consumed by this call, so do all other
-     * unrolling, reordering, etc first. */
-    // @{
     EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x);
     EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
                                 Var thread_x, Var thread_y);
     EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
                                 Var thread_x, Var thread_y, Var thread_z);
-    // @}
-
-    /** Short-hand for tiling a domain and mapping the tile indices
-     * to cuda block indices and the coordinates within each tile to
-     * cuda thread indices. Consumes the variables given, so do all
-     * other scheduling first. */
-    // @{
     EXPORT ScheduleHandle &cuda_tile(Var x, int x_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
@@ -737,47 +632,158 @@ public:
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
     // @}
 
-    /** Scheduling calls that control how the domain of this function
-     * is traversed. See the documentation for ScheduleHandle for the
-     * meanings. */
-    // @{
+    /** Split a dimension into inner and outer subdimensions with the
+     * given names, where the inner dimension iterates from 0 to
+     * factor-1. The inner and outer subdimensions can then be dealt
+     * with using the other scheduling calls. It's ok to reuse the old
+     * variable name as either the inner or outer variable. */
     EXPORT Func &split(Var old, Var outer, Var inner, Expr factor);
+
+    /** Join two dimensions into a single fused dimenion. The fused
+     * dimension covers the product of the extents of the inner and
+     * outer dimensions given. */
     EXPORT Func &fuse(Var inner, Var outer, Var fused);
+
+
+    /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
+
+    /** Mark a dimension to be computed all-at-once as a single
+     * vector. The dimension should have constant extent -
+     * e.g. because it is the inner dimension following a split by a
+     * constant factor. For most uses of vectorize you want the two
+     * argument form. The variable to be vectorized should be the
+     * innermost one. */
     EXPORT Func &vectorize(Var var);
+
+    /** Mark a dimension to be completely unrolled. The dimension
+     * should have constant extent - e.g. because it is the inner
+     * dimension following a split by a constant factor. For most uses
+     * of unroll you want the two-argument form. */
     EXPORT Func &unroll(Var var);
+
+    /** Split a dimension by the given factor, then vectorize the
+     * inner dimension. This is how you vectorize a loop of unknown
+     * size. The variable to be vectorized should be the innermost
+     * one. After this call, var refers to the outer dimension of the
+     * split. */
     EXPORT Func &vectorize(Var var, int factor);
+
+    /** Split a dimension by the given factor, then unroll the inner
+     * dimension. This is how you unroll a loop of unknown size by
+     * some constant factor. After this call, var refers to the outer
+     * dimension of the split. */
     EXPORT Func &unroll(Var var, int factor);
+
+    /** Statically declare that the range over which a function should
+     * be evaluated is given by the second and third arguments. This
+     * can let Halide perform some optimizations. E.g. if you know
+     * there are going to be 4 color channels, you can completely
+     * vectorize the color channel dimension without the overhead of
+     * splitting it up. If bounds inference decides that it requires
+     * more of this function than the bounds you have stated, a
+     * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Split two dimensions at once by the given factors, and then
+     * reorder the resulting dimensions to be xi, yi, xo, yo from
+     * innermost outwards. This gives a tiled traversal. */
     EXPORT Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+
+    /** A shorter form of tile, which reuses the old variable names as
+     * the new outer dimensions */
     EXPORT Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+
+    /** Reorder variables to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(const std::vector<Var> &vars);
+
+    /** Reorder two dimensions so that x is traversed inside y. Does
+     * not affect the nesting order of other dimensions. E.g, if you
+     * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
+     * traversed in the order (w, y, z, x), from innermost
+     * outwards. */
     EXPORT Func &reorder(Var x, Var y);
+
+    /** Reorder three dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z);
+
+    /** Reorder four dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
+
+    /** Reorder five dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
+
+    /** Reorder six dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
+
+    /** Reorder seven dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
+
+    /** Reorder eight dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
+
+    /** Reorder nine dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
+
+    /** Reorder ten dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
+
+    /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * thread indices. This is useful if you compute a producer
+     * function within the block indices of a consumer function, and
+     * want to control how that function's dimensions map to cuda
+     * threads. If the selected target is not ptx, this just marks
+     * those dimensions as parallel. */
+    // @{
     EXPORT Func &cuda_threads(Var thread_x);
     EXPORT Func &cuda_threads(Var thread_x, Var thread_y);
     EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * block indices. This is useful for scheduling stages that will
+     * run serially within each cuda block. If the selected target is
+     * not ptx, this just marks those dimensions as parallel. */
+    // @{
     EXPORT Func &cuda_blocks(Var block_x);
     EXPORT Func &cuda_blocks(Var block_x, Var block_y);
     EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z);
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * block indices and thread indices. If the selected target is not
+     * ptx, these just mark the given dimensions as parallel. The
+     * dimensions are consumed by this call, so do all other
+     * unrolling, reordering, etc first. */
+    // @{
     EXPORT Func &cuda(Var block_x, Var thread_x);
     EXPORT Func &cuda(Var block_x, Var block_y,
-                      Var thread_x, Var thread_y);
+                                Var thread_x, Var thread_y);
     EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
-                      Var thread_x, Var thread_y, Var thread_z);
+                                Var thread_x, Var thread_y, Var thread_z);
+    // @}
+
+    /** Short-hand for tiling a domain and mapping the tile indices
+     * to cuda block indices and the coordinates within each tile to
+     * cuda thread indices. Consumes the variables given, so do all
+     * other scheduling first. */
+    // @{
     EXPORT Func &cuda_tile(Var x, int x_size);
-    EXPORT Func &cuda_tile(Var x, Var y,
-                           int x_size, int y_size);
+    EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size);
     EXPORT Func &cuda_tile(Var x, Var y, Var z,
-                           int x_size, int y_size, int z_size);
+                                     int x_size, int y_size, int z_size);
     // @}
 
     /** Specify how the storage for the function is laid out. These

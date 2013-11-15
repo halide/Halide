@@ -58,4 +58,5 @@
  * \example tutorial/lesson_02.cpp
  * \example tutorial/lesson_03.cpp
  * \example tutorial/lesson_04.cpp
+ * \example tutorial/lesson_05.cpp
  */
