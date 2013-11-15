@@ -1,0 +1,66 @@
+// Halide tutorial lesson 4
+
+// This lesson demonstrates how to follow what Halide is doing at runtime.
+
+// On linux, you can compile and run it like so:
+// g++ lesson_04.cpp -I ../include -L ../bin -rdynamic -lHalide -lpthread -ldl -o lesson_04
+// LD_LIBRARY_PATH=../bin ./lesson_04
+
+// On os x:
+// g++ lesson_04.cpp -I ../include -L ../bin -lHalide -o lesson_04
+// DYLD_LIBRARY_PATH=../bin ./lesson_04
+
+#include <Halide.h>
+#include <stdio.h>
+using namespace Halide;
+
+int main(int argc, char **argv) {
+
+    Func gradient("gradient");
+    Var x("x"), y("y");
+
+    // We'll define our gradient function as before.
+    gradient(x, y) = x + y;
+
+    // And tell Halide that we'd like to be notified of all
+    // evaluations.
+    gradient.trace_stores();
+
+    // Realize the function over an 8x8 region.
+    printf("Evaluating gradient\n");
+    Image<int> output = gradient.realize(8, 8);
+
+    // This will print out all the times gradient(x, y) gets
+    // evaluated.
+
+    // Now that we can snoop on what Halide is doing, let's try our
+    // first scheduling primitive. We'll make a new version of
+    // gradient that processes each scanline in parallel.
+    Func parallel_gradient("parallel_gradient");
+    parallel_gradient(x, y) = x + y;
+
+    // We'll also trace this function.
+    parallel_gradient.trace_stores();
+
+    // Things are the same so far. We've defined the algorithm, but
+    // haven't said anything about how to schedule it. In general,
+    // exploring different scheduling decisions doesn't change the code
+    // that describes the algorithm.
+
+    // Now we tell Halide to use a parallel for loop over the y
+    // coordinate. On linux we run this using a thread pool and a task
+    // queue. On os x we call into grand central dispatch, which does
+    // the same thing for us.
+    parallel_gradient.parallel(y);
+
+    // This time the printfs should come out of order, because each
+    // scanline is potentially being processed in a different
+    // thread. The number of threads should adapt to your system, but
+    // on linux you can control it manually using the environment
+    // variable HL_NUMTHREADS.
+    printf("\nEvaluating parallel_gradient\n");
+    parallel_gradient.realize(8, 8);
+
+    printf("Success!\n");
+    return 0;
+}

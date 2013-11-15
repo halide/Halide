@@ -13,7 +13,7 @@ using std::string;
 using std::ostringstream;
 
 ostream &operator<<(ostream &out, Type type) {
-    switch (type.t) {
+    switch (type.code) {
     case Type::Int:
         out << "int";
         break;

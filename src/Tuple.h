@@ -83,16 +83,16 @@ class Realization {
 private:
     std::vector<Buffer> buffers;
 public:
-    /** The number of elements in the tuple. */
+    /** The number of buffers in the Realization. */
     size_t size() const { return buffers.size(); }
 
-    /** Get a reference to an element. */
+    /** Get a reference to one of the buffers. */
     Buffer &operator[](size_t x) {
         assert(x < buffers.size() && "Realization access out of bounds");
         return buffers[x];
     }
 
-    /** Get a copy of an element. */
+    /** Get one of the buffers. */
     Buffer operator[](size_t x) const {
         assert((x < buffers.size()) && "Realization access out of bounds");
         return buffers[x];

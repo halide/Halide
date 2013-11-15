@@ -21,50 +21,63 @@ struct Type {
     enum {Int,  //!< signed integers
           UInt, //!< unsigned integers
           Float, //!< floating point numbers
-          Handle //!< opaque pointer type (i.e. void *)
-    } t;
+          Handle //!< opaque pointer type (void *)
+    } code;
 
-    /** How many bits per element? */
+    /** The number of bits of precision of a single scalar value of this type. */
     int bits;
 
-    /** How many bytes per element? */
+    /** The number of bytes required to store a single scalar value of this type. Ignores vector width. */
     int bytes() const {return (bits + 7) / 8;}
 
     /** How many elements (if a vector type). Should be 1 for scalar types. */
     int width;
 
-    /** Some helper functions to ask common questions about a type. */
-    // @{
-    bool is_bool() const {return t == UInt && bits == 1;}
+    /** Is this type boolean (represented as UInt(1))? */
+    bool is_bool() const {return code == UInt && bits == 1;}
+
+    /** Is this type a vector type? (width > 1) */
     bool is_vector() const {return width > 1;}
+
+    /** Is this type a scalar type? (width == 1) */
     bool is_scalar() const {return width == 1;}
-    bool is_float() const {return t == Float;}
-    bool is_int() const {return t == Int;}
-    bool is_uint() const {return t == UInt;}
-    bool is_handle() const {return t == Handle;}
-    // @}
+
+    /** Is this type a floating point type (float or double). */
+    bool is_float() const {return code == Float;}
+
+    /** Is this type a signed integer type? */
+    bool is_int() const {return code == Int;}
+
+    /** Is this type an unsigned integer type? */
+    bool is_uint() const {return code == UInt;}
+
+    /** Is this type an opaque handle type (void *) */
+    bool is_handle() const {return code == Handle;}
 
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return t == other.t && bits == other.bits && width == other.width;
+        return code == other.code && bits == other.bits && width == other.width;
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return t != other.t || bits != other.bits || width != other.width;
+        return code != other.code || bits != other.bits || width != other.width;
     }
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        Type type = {t, bits, w};
+        Type type = {code, bits, w};
         return type;
     }
 
     /** Produce the type of a single element of this vector type */
     Type element_of() const {
-        Type type = {t, bits, 1};
+        Type type = {code, bits, 1};
         return type;
     }
+
+    /** Can this type represent all values of another type? */
+    bool can_represent(Type other) const;
 
     /** Return an integer which is the maximum value of this type. */
     int imax() const;
@@ -82,7 +95,7 @@ struct Type {
 /** Constructing a signed integer type */
 inline Type Int(int bits, int width = 1) {
     Type t;
-    t.t = Type::Int;
+    t.code = Type::Int;
     t.bits = bits;
     t.width = width;
     return t;
@@ -91,7 +104,7 @@ inline Type Int(int bits, int width = 1) {
 /** Constructing an unsigned integer type */
 inline Type UInt(int bits, int width = 1) {
     Type t;
-    t.t = Type::UInt;
+    t.code = Type::UInt;
     t.bits = bits;
     t.width = width;
     return t;
@@ -100,7 +113,7 @@ inline Type UInt(int bits, int width = 1) {
 /** Construct a floating-point type */
 inline Type Float(int bits, int width = 1) {
     Type t;
-    t.t = Type::Float;
+    t.code = Type::Float;
     t.bits = bits;
     t.width = width;
     return t;
@@ -114,12 +127,13 @@ inline Type Bool(int width = 1) {
 /** Construct a handle type */
 inline Type Handle(int width = 1) {
     Type t;
-    t.t = Type::Handle;
+    t.code = Type::Handle;
     t.bits = 64; // All handles are 64-bit for now
     t.width = width;
     return t;
 }
 
+namespace {
 template<typename T>
 struct type_of_helper;
 
@@ -184,6 +198,7 @@ template<>
 struct type_of_helper<bool> {
     operator Type() {return Bool();}
 };
+}
 
 /** Construct the halide equivalent of a C type */
 template<typename T> Type type_of() {

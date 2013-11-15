@@ -621,8 +621,8 @@ struct Broadcast : public ExprNode<Broadcast> {
 };
 
 /** A let expression, like you might find in a functional
- * language. Within the expression \ref body, instances of the Var
- * node \ref name refer to \ref value. */
+ * language. Within the expression \ref Let::body, instances of the Var
+ * node \ref Let::name refer to \ref Let::value. */
 struct Let : public ExprNode<Let> {
     std::string name;
     Expr value, body;
@@ -940,12 +940,16 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         shift_left,
         shift_right,
+        abs,
         rewrite_buffer,
         profiling_timer,
         lerp,
         create_buffer_t,
         extract_buffer_min,
         extract_buffer_extent,
+        popcount,
+        count_leading_zeros,
+        count_trailing_zeros,
         trace;
 
     // If it's a call to another halide function, this call node

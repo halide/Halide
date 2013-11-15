@@ -47,6 +47,11 @@ struct ExternFuncArgument {
 
 namespace Internal {
 
+struct ReductionDefinition {
+    std::vector<Expr> values, args;
+    Schedule schedule;
+    ReductionDomain domain;
+};
 
 struct FunctionContents {
     mutable RefCount ref_count;
@@ -56,10 +61,7 @@ struct FunctionContents {
     std::vector<Type> output_types;
     Schedule schedule;
 
-    std::vector<Expr> reduction_values;
-    std::vector<Expr> reduction_args;
-    Schedule reduction_schedule;
-    ReductionDomain reduction_domain;
+    std::vector<ReductionDefinition> reductions;
 
     std::string debug_file;
 
@@ -167,33 +169,18 @@ public:
 
     /** Get a mutable handle to the schedule for the reduction
      * stage */
-    Schedule &reduction_schedule() {
-        return contents.ptr->reduction_schedule;
+    Schedule &reduction_schedule(int idx = 0) {
+        return contents.ptr->reductions[idx].schedule;
     }
 
-    /** Get a const handle to the schedule for the reduction stage */
-    const Schedule &reduction_schedule() const {
-        return contents.ptr->reduction_schedule;
-    }
-
-    /** Get the right-hand-side of the reduction definition */
-    const std::vector<Expr> &reduction_values() const {
-        return contents.ptr->reduction_values;
+    /** Get a const reference to this function's reduction definitions. */
+    const std::vector<ReductionDefinition> &reductions() const {
+        return contents.ptr->reductions;
     }
 
     /** Does this function have a reduction definition */
     bool has_reduction_definition() const {
-        return !contents.ptr->reduction_values.empty();
-    }
-
-    /** Get the left-hand-side of the reduction definition */
-    const std::vector<Expr> &reduction_args() const {
-        return contents.ptr->reduction_args;
-    }
-
-    /** Get the reduction domain for the reduction definition */
-    ReductionDomain reduction_domain() const {
-        return contents.ptr->reduction_domain;
+        return !contents.ptr->reductions.empty();
     }
 
     /** Check if the function has an extern definition */

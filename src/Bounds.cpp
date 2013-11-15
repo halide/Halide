@@ -94,7 +94,7 @@ private:
             if (const IntImm *min_int = min_a.as<IntImm>()) {
                 if (const IntImm *max_int = max_a.as<IntImm>()) {
                     if (to.is_uint() && to.bits <= 32 &&
-                        min_int->value > 0 &&
+                        min_int->value >= 0 &&
                         (to.bits == 32 || (max_int->value < (1 << to.bits)))) {
                         could_overflow = false;
                     } else if (to.is_int() && to.bits <= 32 &&
@@ -169,6 +169,27 @@ private:
         } else {
             max = (max_b.defined() && max_a.defined()) ? Add::make(max_a, max_b) : Expr();
         }
+
+        // Check for overflow for (u)int8 and (u)int16
+        if (!op->type.is_float() && op->type.bits < 32) {
+            if (max.defined()) {
+                Expr test = (cast<int>(max_a) + cast<int>(max_b) == cast<int>(max));
+                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
+                if (!is_one(simplify(test))) {
+                    bounds_of_type(op->type);
+                    return;
+                }
+            }
+            if (min.defined()) {
+                Expr test = (cast<int>(min_a) + cast<int>(min_b) == cast<int>(min));
+                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
+                if (!is_one(simplify(test))) {
+                    bounds_of_type(op->type);
+                    return;
+                }
+            }
+        }
+
     }
 
     void visit(const Sub *op) {
@@ -188,6 +209,37 @@ private:
             max = min;
         } else {
             max = (min_b.defined() && max_a.defined()) ? Sub::make(max_a, min_b) : Expr();
+        }
+
+        // Check for overflow for (u)int8 and (u)int16
+        if (!op->type.is_float() && op->type.bits < 32) {
+            if (max.defined()) {
+                Expr test = (cast<int>(max_a) - cast<int>(min_b) == cast<int>(max));
+                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
+                if (!is_one(simplify(test))) {
+                    bounds_of_type(op->type);
+                    return;
+                }
+            }
+            if (min.defined()) {
+                Expr test = (cast<int>(min_a) - cast<int>(max_b) == cast<int>(min));
+                //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
+                if (!is_one(simplify(test))) {
+                    bounds_of_type(op->type);
+                    return;
+                }
+            }
+        }
+
+        // Check underflow for uint
+        if (op->type.is_uint()) {
+            if (min.defined()) {
+                Expr test = (max_b <= min_a);
+                if (!is_one(simplify(test))) {
+                    bounds_of_type(op->type);
+                    return;
+                }
+            }
         }
     }
 
@@ -217,7 +269,7 @@ private:
             // A is constant
             if (is_zero(min_a)) {
                 min = max = min_a;
-            } else if (is_positive_const(min_a)) {
+            } else if (is_positive_const(min_a) || op->type.is_uint()) {
                 min = min_b * min_a;
                 max = max_b * min_a;
             } else if (is_negative_const(min_a)) {
@@ -227,7 +279,7 @@ private:
                 // Sign of a is unknown
                 Expr a = min_a * min_b;
                 Expr b = min_a * max_b;
-                Expr cmp = min_a > make_zero(min_a.type());
+                Expr cmp = min_a >= make_zero(min_a.type());
                 min = select(cmp, a, b);
                 max = select(cmp, b, a);
             }
@@ -235,7 +287,7 @@ private:
             // B is constant
             if (is_zero(min_b)) {
                 min = max = min_a;
-            } else if (is_positive_const(min_b)) {
+            } else if (is_positive_const(min_b) || op->type.is_uint()) {
                 min = min_a * min_b;
                 max = max_a * min_b;
             } else if (is_negative_const(min_b)) {
@@ -245,7 +297,7 @@ private:
                 // Sign of b is unknown
                 Expr a = min_b * min_a;
                 Expr b = min_b * max_a;
-                Expr cmp = min_b > make_zero(min_b.type());
+                Expr cmp = min_b >= make_zero(min_b.type());
                 min = select(cmp, a, b);
                 max = select(cmp, b, a);
             }
@@ -259,6 +311,19 @@ private:
             min = Min::make(Min::make(a, b), Min::make(c, d));
             max = Max::make(Max::make(a, b), Max::make(c, d));
         }
+
+        if (op->type.bits < 32 && !op->type.is_float()) {
+            // Try to prove it can't overflow
+            Expr test1 = (cast<int>(min_a) * cast<int>(min_b) == cast<int>(min_a * min_b));
+            Expr test2 = (cast<int>(min_a) * cast<int>(max_b) == cast<int>(min_a * max_b));
+            Expr test3 = (cast<int>(max_a) * cast<int>(min_b) == cast<int>(max_a * min_b));
+            Expr test4 = (cast<int>(max_a) * cast<int>(max_b) == cast<int>(max_a * max_b));
+            if (!is_one(simplify(test1 && test2 && test3 && test4))) {
+                bounds_of_type(op->type);
+                return;
+            }
+        }
+
     }
 
     void visit(const Div *op) {
@@ -536,6 +601,19 @@ private:
         if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
             min = max = Call::make(op->type, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::abs) {
+            Expr min_a = min, max_a = max;
+            min = make_zero(op->type);
+            if (min_a.defined() && max_a.defined()) {
+                if (op->type.is_uint()) {
+                    max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
+                } else {
+                    max = Max::make(0-min_a, max_a);
+                }
+            } else {
+                // If the argument is unbounded on one side, then the max is unbounded.
+                max = Expr();
+            }
         } else {
             // Just use the bounds of the type
             bounds_of_type(op->type);
@@ -830,13 +908,15 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
     if (result.max.defined()) result.max = simplify(result.max);
     bool success = true;
     if (!equal(result.min, correct_min)) {
-        std::cout << "Incorrect min: " << result.min << std::endl
-                  << "Should have been: " << correct_min << std::endl;
+        std::cout << "In bounds of " << e << ":\n"
+                  << "Incorrect min: " << result.min << '\n'
+                  << "Should have been: " << correct_min << '\n';
         success = false;
     }
     if (!equal(result.max, correct_max)) {
-        std::cout << "Incorrect max: " << result.max << std::endl
-                  << "Should have been: " << correct_max << std::endl;
+        std::cout << "In bounds of " << e << ":\n"
+                  << "Incorrect max: " << result.max << '\n'
+                  << "Should have been: " << correct_max << '\n';
         success = false;
     }
     if (!success) {
@@ -858,12 +938,24 @@ void bounds_test() {
     check(scope, x*(5-x), -50, 50); // We don't expect bounds analysis to understand correlated terms
     check(scope, Select::make(x < 4, x, x+100), 0, 110);
     check(scope, x+y, y, y+10);
-    check(scope, x*y, select(0 < y, 0, y*10), select(0 < y, y*10, 0));
+    check(scope, x*y, select(y < 0, y*10, 0), select(y < 0, 0, y*10));
     check(scope, x/(x+y), Expr(), Expr());
     check(scope, 11/(x+1), 1, 11);
     check(scope, Load::make(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+
+    // Check some operations that may overflow
+    check(scope, (cast<uint8_t>(x)+250), cast<uint8_t>(0), cast<uint8_t>(255));
+    check(scope, (cast<uint8_t>(x)+10)*20, cast<uint8_t>(0), cast<uint8_t>(255));
+    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)+5), cast<uint8_t>(0), cast<uint8_t>(255));
+    check(scope, (cast<uint8_t>(x)+10)-(cast<uint8_t>(x)+5), cast<uint8_t>(0), cast<uint8_t>(255));
+
+    // Check some operations that we should be able to prove do not overflow
+    check(scope, (cast<uint8_t>(x)+240), cast<uint8_t>(240), cast<uint8_t>(250));
+    check(scope, (cast<uint8_t>(x)+10)*10, cast<uint8_t>(100), cast<uint8_t>(200));
+    check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), cast<uint8_t>(0), cast<uint8_t>(200));
+    check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), cast<uint8_t>(5), cast<uint8_t>(25));
 
     vector<Expr> input_site_1 = vec(2*x);
     vector<Expr> input_site_2 = vec(2*x+1);

@@ -382,7 +382,7 @@ bool test(int vec_width) {
     if (!type_of<A>().is_uint()) {
         if (verbose) printf("Absolute value\n");
         Func f14;
-        f14(x, y) = abs(input(x, y));
+        f14(x, y) = cast<A>(abs(input(x, y)));
         Image<A> im14 = f14.realize(W, H);
 
         for (int y = 0; y < H; y++) {

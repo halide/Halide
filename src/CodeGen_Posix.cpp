@@ -150,11 +150,21 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     llvm::Type *llvm_type = llvm_type_of(type);
 
     if (allocation.stack_size) {
-        // Do a new 32-byte aligned alloca
-        allocation.saved_stack = save_stack();
+        // Do a new 32-byte aligned alloca at the function entry block
+        allocation.saved_stack = NULL; //save_stack();
+
+        // We used to do the alloca locally and save and restore the
+        // stack pointer, but this makes llvm generate streams of
+        // spill/reloads.
+
+        llvm::BasicBlock *here = builder->GetInsertBlock();
+        builder->SetInsertPoint(here->getParent()->getEntryBlock().getFirstNonPHI());
         Value *size = ConstantInt::get(i32, allocation.stack_size/32);
         Value *ptr = builder->CreateAlloca(i32x8, size, name);
         allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
+
+        builder->SetInsertPoint(here);
+
     } else {
         allocation.saved_stack = NULL;
         Value *llvm_size = codegen(size * type.bytes());

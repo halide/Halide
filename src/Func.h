@@ -176,150 +176,45 @@ class ScheduleHandle {
 public:
     ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
 
-    /** Split a dimension into inner and outer subdimensions with the
-     * given names, where the inner dimension iterates from 0 to
-     * factor-1. The inner and outer subdimensions can then be dealt
-     * with using the other scheduling calls. It's ok to reuse the old
-     * variable name as either the inner or outer variable. */
+    /** Scheduling calls that control how the domain of this update is
+     * traversed. See the documentation for Func for the meanings. */
+    // @{
+
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
-
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
-
-    /** Mark a dimension to be traversed in parallel */
     EXPORT ScheduleHandle &parallel(Var var);
-
-    /** Mark a dimension to be computed all-at-once as a single
-     * vector. The dimension should have constant extent -
-     * e.g. because it is the inner dimension following a split by a
-     * constant factor. For most uses of vectorize you want the two
-     * argument form. The variable to be vectorized should be the
-     * innermost one. */
     EXPORT ScheduleHandle &vectorize(Var var);
-
-    /** Mark a dimension to be completely unrolled. The dimension
-     * should have constant extent - e.g. because it is the inner
-     * dimension following a split by a constant factor. For most uses
-     * of unroll you want the two-argument form. */
     EXPORT ScheduleHandle &unroll(Var var);
-
-    /** Split a dimension by the given factor, then vectorize the
-     * inner dimension. This is how you vectorize a loop of unknown
-     * size. The variable to be vectorized should be the innermost
-     * one. After this call, var refers to the outer dimension of the
-     * split. */
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
-
-    /** Split a dimension by the given factor, then unroll the inner
-     * dimension. This is how you unroll a loop of unknown size by
-     * some constant factor. After this call, var refers to the outer
-     * dimension of the split. */
     EXPORT ScheduleHandle &unroll(Var var, int factor);
-
-    /** Statically declare that the range over which a function should
-     * be evaluated is given by the second and third arguments. This
-     * can let Halide perform some optimizations. E.g. if you know
-     * there are going to be 4 color channels, you can completely
-     * vectorize the color channel dimension without the overhead of
-     * splitting it up. If bounds inference decides that it requires
-     * more of this function than the bounds you have stated, a
-     * runtime error will occur when you try to run your pipeline. */
     EXPORT ScheduleHandle &bound(Var var, Expr min, Expr extent);
-
-    /** Split two dimensions at once by the given factors, and then
-     * reorder the resulting dimensions to be xi, yi, xo, yo from
-     * innermost outwards. This gives a tiled traversal. */
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
-
-    /** A shorter form of tile, which reuses the old variable names as
-     * the new outer dimensions */
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
-
-    /** Reorder variables to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(const std::vector<Var> &vars);
-
-    /** Reorder two dimensions so that x is traversed inside y. Does
-     * not affect the nesting order of other dimensions. E.g, if you
-     * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
-     * traversed in the order (w, y, z, x), from innermost
-     * outwards. */
     EXPORT ScheduleHandle &reorder(Var x, Var y);
-
-    /** Reorder three dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z);
-
-    /** Reorder four dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w);
-
-    /** Reorder five dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
-
-    /** Reorder six dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
-
-    /** Reorder seven dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
-
-    /** Reorder eight dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
-
-    /** Reorder nine dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
-
-    /** Reorder ten dimensions to have the given nesting order, from
-     * innermost out */
     EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
-
-    /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
-    /** Tell Halide that the following dimensions correspond to cuda
-     * thread indices. This is useful if you compute a producer
-     * function within the block indices of a consumer function, and
-     * want to control how that function's dimensions map to cuda
-     * threads. If the selected target is not ptx, this just marks
-     * those dimensions as parallel. */
-    // @{
     EXPORT ScheduleHandle &cuda_threads(Var thread_x);
     EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y);
     EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
-    // @}
 
-    /** Tell Halide that the following dimensions correspond to cuda
-     * block indices. This is useful for scheduling stages that will
-     * run serially within each cuda block. If the selected target is
-     * not ptx, this just marks those dimensions as parallel. */
-    // @{
     EXPORT ScheduleHandle &cuda_blocks(Var block_x);
     EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y);
     EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z);
-    // @}
 
-    /** Tell Halide that the following dimensions correspond to cuda
-     * block indices and thread indices. If the selected target is not
-     * ptx, these just mark the given dimensions as parallel. The
-     * dimensions are consumed by this call, so do all other
-     * unrolling, reordering, etc first. */
-    // @{
     EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x);
     EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
                                 Var thread_x, Var thread_y);
     EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
                                 Var thread_x, Var thread_y, Var thread_z);
-    // @}
-
-    /** Short-hand for tiling a domain and mapping the tile indices
-     * to cuda block indices and the coordinates within each tile to
-     * cuda thread indices. Consumes the variables given, so do all
-     * other scheduling first. */
-    // @{
     EXPORT ScheduleHandle &cuda_tile(Var x, int x_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
@@ -374,7 +269,7 @@ class Func {
     int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *);
     // @}
 
-    /** The current custom tracing functions. May be NULL. */
+    /** The current custom tracing function. May be NULL. */
     // @{
     void (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
     // @}
@@ -407,40 +302,36 @@ public:
      * not contain free variables). */
     EXPORT explicit Func(Expr e);
 
-    /** Generate a new uniquely-named function that returns the given
-     * buffer. Has the same dimensionality as the buffer. Useful for
-     * passing Images to c++ functions that expect Funcs */
-    //@{
-    //EXPORT Func(Buffer image);
-    /*
-    template<typename T> Func(Image<T> image) {
-        (*this) = Func(Buffer(image));
-    }
-    */
-    //@}
-
     /** Evaluate this function over some rectangular domain and return
-     * the resulting buffer or buffers. The buffer should probably be
-     * instantly wrapped in an Image class of the appropriate
-     * type. That is, do this:
+     * the resulting buffer or buffers. Performs compilation if the
+     * Func has not previously been realized and jit_compile has not
+     * been called. The returned Buffer should probably be instantly
+     * wrapped in an Image class of the appropriate type. That is, do
+     * this:
      *
-     * f(x) = sin(x);
-     * Image<float> im = f.realize(...);
+     \code
+     f(x) = sin(x);
+     Image<float> im = f.realize(...);
+     \endcode
      *
      * not this:
      *
-     * f(x) = sin(x)
-     * Buffer im = f.realize(...)
+     \code
+     f(x) = sin(x)
+     Buffer im = f.realize(...)
+     \endcode
      *
      * If your Func has multiple values, because you defined it using
      * a Tuple, then casting the result of a realize call to a buffer
-     * or image will produce a run-time errorInstead you should do the
+     * or image will produce a run-time error. Instead you should do the
      * following:
      *
-     * f(x) = Tuple(x, sin(x));
-     * Realization r = f.realize(...);
-     * Image<int> im0 = r[0];
-     * Image<float> im1 = r[1];
+     \code
+     f(x) = Tuple(x, sin(x));
+     Realization r = f.realize(...);
+     Image<int> im0 = r[0];
+     Image<float> im1 = r[1];
+     \endcode
      *
      */
     EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
@@ -475,7 +366,8 @@ public:
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
-     * as this halide function. You probably don't want to use this directly - instead call compile_to_file.  */
+     * as this halide function. You probably don't want to use this
+     * directly; call compile_to_file instead. */
     EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
 
     /** Emit a header file with the given filename for this
@@ -483,8 +375,8 @@ public:
      * signature given by the second argument, and a name given by the
      * third. The name defaults to the same name as this halide
      * function. You don't actually have to have defined this function
-     * yet to call this. You probably don't want to use this directly
-     * - instead call compile_to_file. */
+     * yet to call this. You probably don't want to use this directly;
+     * call compile_to_file instead. */
     EXPORT void compile_to_header(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
 
     /** Statically compile this function to text assembly equivalent
@@ -531,7 +423,7 @@ public:
      * statically, you can also just define your own function with
      * signature
      \code
-     extern "C" halide_error(const char *)
+     extern "C" void halide_error(const char *);
      \endcode
      * This will clobber Halide's version.
      */
@@ -602,10 +494,9 @@ public:
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
 
-    /** When this function is compiled, include code that dumps its values
-     * to a file after it is realized, for the purpose of debugging.
-     * The file covers the realized extent at the point in the schedule that
-     * debug_to_file appears.
+    /** When this function is compiled, include code that dumps its
+     * values to a file after it is realized, for the purpose of
+     * debugging.
      *
      * If filename ends in ".tif" or ".tiff" (case insensitive) the file
      * is in TIFF format and can be read by standard tools. Oherwise, the
@@ -644,30 +535,41 @@ public:
     EXPORT bool defined() const;
 
     /** Get the left-hand-side of the reduction definition. An empty
-     * vector if there's no reduction definition. */
-    EXPORT const std::vector<Expr> &reduction_args() const;
+     * vector if there's no reduction definition. If there are
+     * multiple reduction definitions for this function, use the
+     * argument to select which one you want. */
+    EXPORT const std::vector<Expr> &reduction_args(int idx = 0) const;
 
-    /** Get the right-hand-side of the reduction definition. An error
-     * if there's no reduction definition. */
-    EXPORT Expr reduction_value() const;
+    /** Get the right-hand-side of a reduction definition. An error if
+     * there's no reduction definition. If there are multiple
+     * reduction definitions for this function, use the argument to
+     * select which one you want. */
+    EXPORT Expr reduction_value(int idx = 0) const;
 
-    /** Get the right-hand-side of the reduction definition for
+    /** Get the right-hand-side of a reduction definition for
      * functions that returns multiple values. An error if there's no
      * reduction definition. Returns a Tuple with one element for
      * functions that return a single value. */
-    EXPORT Tuple reduction_values() const;
+    EXPORT Tuple reduction_values(int idx = 0) const;
 
-    /** Get the reduction domain for the reduction definition. Returns
-     * an undefined RDom if there's no reduction definition. */
-    EXPORT RDom reduction_domain() const;
+    /** Get the reduction domain for a reduction definition. */
+    EXPORT RDom reduction_domain(int idx = 0) const;
 
-    /** Is this function a reduction? */
+    /** Is this function a reduction (i.e. does it have at least one
+     * reduction definition)? */
     EXPORT bool is_reduction() const;
 
-    /** Is this function external? */
+    /** How many reduction definitions does this function have? */
+    EXPORT int num_reduction_definitions() const;
+
+    /** Is this function an external stage? That is, was it defined
+     * using define_extern? */
     EXPORT bool is_extern() const;
 
-    /** Add an extern definition for this Func. */
+    /** Add an extern definition for this Func. This lets you define a
+     * Func that represents an external pipeline stage. You can, for
+     * example, use it to wrap a call to an extern library such as
+     * fftw. */
     // @{
     EXPORT void define_extern(const std::string &function_name,
                               const std::vector<ExternFuncArgument> &params,
@@ -685,7 +587,8 @@ public:
     /** Get the types of the outputs of this Func. */
     EXPORT const std::vector<Type> &output_types() const;
 
-    /** Get the number of outputs of this Func. */
+    /** Get the number of outputs of this Func. Corresponds to the
+     * size of the Tuple this Func was defined to return. */
     EXPORT int outputs() const;
 
     /** Get the name of the extern function called for an extern
@@ -729,51 +632,174 @@ public:
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
     // @}
 
-    /** Scheduling calls that control how the domain of this function
-     * is traversed. See the documentation for ScheduleHandle for the
-     * meanings. */
-    // @{
+    /** Split a dimension into inner and outer subdimensions with the
+     * given names, where the inner dimension iterates from 0 to
+     * factor-1. The inner and outer subdimensions can then be dealt
+     * with using the other scheduling calls. It's ok to reuse the old
+     * variable name as either the inner or outer variable. */
     EXPORT Func &split(Var old, Var outer, Var inner, Expr factor);
+
+    /** Join two dimensions into a single fused dimenion. The fused
+     * dimension covers the product of the extents of the inner and
+     * outer dimensions given. */
     EXPORT Func &fuse(Var inner, Var outer, Var fused);
+
+
+    /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
+
+    /** Mark a dimension to be computed all-at-once as a single
+     * vector. The dimension should have constant extent -
+     * e.g. because it is the inner dimension following a split by a
+     * constant factor. For most uses of vectorize you want the two
+     * argument form. The variable to be vectorized should be the
+     * innermost one. */
     EXPORT Func &vectorize(Var var);
+
+    /** Mark a dimension to be completely unrolled. The dimension
+     * should have constant extent - e.g. because it is the inner
+     * dimension following a split by a constant factor. For most uses
+     * of unroll you want the two-argument form. */
     EXPORT Func &unroll(Var var);
+
+    /** Split a dimension by the given factor, then vectorize the
+     * inner dimension. This is how you vectorize a loop of unknown
+     * size. The variable to be vectorized should be the innermost
+     * one. After this call, var refers to the outer dimension of the
+     * split. */
     EXPORT Func &vectorize(Var var, int factor);
+
+    /** Split a dimension by the given factor, then unroll the inner
+     * dimension. This is how you unroll a loop of unknown size by
+     * some constant factor. After this call, var refers to the outer
+     * dimension of the split. */
     EXPORT Func &unroll(Var var, int factor);
+
+    /** Statically declare that the range over which a function should
+     * be evaluated is given by the second and third arguments. This
+     * can let Halide perform some optimizations. E.g. if you know
+     * there are going to be 4 color channels, you can completely
+     * vectorize the color channel dimension without the overhead of
+     * splitting it up. If bounds inference decides that it requires
+     * more of this function than the bounds you have stated, a
+     * runtime error will occur when you try to run your pipeline. */
     EXPORT Func &bound(Var var, Expr min, Expr extent);
+
+    /** Split two dimensions at once by the given factors, and then
+     * reorder the resulting dimensions to be xi, yi, xo, yo from
+     * innermost outwards. This gives a tiled traversal. */
     EXPORT Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+
+    /** A shorter form of tile, which reuses the old variable names as
+     * the new outer dimensions */
     EXPORT Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+
+    /** Reorder variables to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(const std::vector<Var> &vars);
+
+    /** Reorder two dimensions so that x is traversed inside y. Does
+     * not affect the nesting order of other dimensions. E.g, if you
+     * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
+     * traversed in the order (w, y, z, x), from innermost
+     * outwards. */
     EXPORT Func &reorder(Var x, Var y);
+
+    /** Reorder three dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z);
+
+    /** Reorder four dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w);
+
+    /** Reorder five dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
+
+    /** Reorder six dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
+
+    /** Reorder seven dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
+
+    /** Reorder eight dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
+
+    /** Reorder nine dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
+
+    /** Reorder ten dimensions to have the given nesting order, from
+     * innermost out */
     EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
+
+    /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * thread indices. This is useful if you compute a producer
+     * function within the block indices of a consumer function, and
+     * want to control how that function's dimensions map to cuda
+     * threads. If the selected target is not ptx, this just marks
+     * those dimensions as parallel. */
+    // @{
     EXPORT Func &cuda_threads(Var thread_x);
     EXPORT Func &cuda_threads(Var thread_x, Var thread_y);
     EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to cuda
+     * block indices. This is useful for scheduling stages that will
+     * run serially within each cuda block. If the selected target is
+     * not ptx, this just marks those dimensions as parallel. */
+    // @{
     EXPORT Func &cuda_blocks(Var block_x);
     EXPORT Func &cuda_blocks(Var block_x, Var block_y);
     EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z);
-    EXPORT Func &cuda(Var block_x, Var thread_x);
-    EXPORT Func &cuda(Var block_x, Var block_y,
-                      Var thread_x, Var thread_y);
-    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
-                      Var thread_x, Var thread_y, Var thread_z);
-    EXPORT Func &cuda_tile(Var x, int x_size);
-    EXPORT Func &cuda_tile(Var x, Var y,
-                           int x_size, int y_size);
-    EXPORT Func &cuda_tile(Var x, Var y, Var z,
-                           int x_size, int y_size, int z_size);
     // @}
 
-    /** Scheduling calls that control how the storage for the function
-     * is laid out. Right now you can only reorder the dimensions. */
+    /** Tell Halide that the following dimensions correspond to cuda
+     * block indices and thread indices. If the selected target is not
+     * ptx, these just mark the given dimensions as parallel. The
+     * dimensions are consumed by this call, so do all other
+     * unrolling, reordering, etc first. */
+    // @{
+    EXPORT Func &cuda(Var block_x, Var thread_x);
+    EXPORT Func &cuda(Var block_x, Var block_y,
+                                Var thread_x, Var thread_y);
+    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
+                                Var thread_x, Var thread_y, Var thread_z);
+    // @}
+
+    /** Short-hand for tiling a domain and mapping the tile indices
+     * to cuda block indices and the coordinates within each tile to
+     * cuda thread indices. Consumes the variables given, so do all
+     * other scheduling first. */
+    // @{
+    EXPORT Func &cuda_tile(Var x, int x_size);
+    EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size);
+    EXPORT Func &cuda_tile(Var x, Var y, Var z,
+                                     int x_size, int y_size, int z_size);
+    // @}
+
+    /** Specify how the storage for the function is laid out. These
+     * calls let you specify the nesting order of the dimensions. For
+     * example, foo.reorder_storage(y, x) tells Halide to use
+     * column-major storage for any realizations of foo, without
+     * changing how you refer to foo in the code. You may want to do
+     * this if you intend to vectorize across y. When representing
+     * color images, foo.reorder_storage(c, x, y) specifies packed
+     * storage (red, green, and blue values adjacent in memory), and
+     * foo.reorder_storage(x, y, c) specifies planar storage (entire
+     * red, green, and blue images one after the other in memory).
+     *
+     * If you leave out some dimensions, those remain in the same
+     * positions in the nesting order while the specified variables
+     * are reordered around them. */
     // @{
     EXPORT Func &reorder_storage(Var x, Var y);
     EXPORT Func &reorder_storage(Var x, Var y, Var z);
@@ -1025,24 +1051,23 @@ public:
      */
     EXPORT Func &compute_inline();
 
-    /** Get a handle on the update step of a reduction for the
+    /** Get a handle on an update step of a reduction for the
      * purposes of scheduling it. Only the pure dimensions of the
      * update step can be meaningfully manipulated (see \ref RDom) */
-    EXPORT ScheduleHandle update();
+    EXPORT ScheduleHandle update(int idx = 0);
 
     /** Trace all loads from this Func by emitting calls to
-     * halide_trace_load. If the Func is inlined, this has no
+     * halide_trace. If the Func is inlined, this has no
      * effect. */
     EXPORT Func &trace_loads();
 
     /** Trace all stores to the buffer backing this Func by emitting
-     * calls to halide_trace_store. If the Func is inlined, this call
+     * calls to halide_trace. If the Func is inlined, this call
      * has no effect. */
     EXPORT Func &trace_stores();
 
     /** Trace all realizations of this Func by emitting calls to
-     * halide_trace_produce, halide_trace_update,
-     * halide_trace_consume, and halide_trace_dispose. */
+     * halide_trace. */
     EXPORT Func &trace_realizations();
 
     /** Get a handle on the internal halide function that this Func
@@ -1090,7 +1115,7 @@ public:
  * \ref Func::realize */
 template<typename T>
 T evaluate(Expr e) {
-    assert(e.type() == type_of<T>());
+    assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = e;
     Image<T> im = f.realize();
@@ -1101,8 +1126,8 @@ T evaluate(Expr e) {
 // @{
 template<typename A, typename B>
 void evaluate(Tuple t, A *a, B *b) {
-    assert(t[0].type() == type_of<A>());
-    assert(t[1].type() == type_of<B>());
+    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = t;
     Realization r = f.realize();
@@ -1112,9 +1137,9 @@ void evaluate(Tuple t, A *a, B *b) {
 
 template<typename A, typename B, typename C>
 void evaluate(Tuple t, A *a, B *b, C *c) {
-    assert(t[0].type() == type_of<A>());
-    assert(t[1].type() == type_of<B>());
-    assert(t[2].type() == type_of<C>());
+    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = t;
     Realization r = f.realize();
@@ -1125,10 +1150,10 @@ void evaluate(Tuple t, A *a, B *b, C *c) {
 
 template<typename A, typename B, typename C, typename D>
 void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
-    assert(t[0].type() == type_of<A>());
-    assert(t[1].type() == type_of<B>());
-    assert(t[2].type() == type_of<C>());
-    assert(t[3].type() == type_of<D>());
+    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
+    assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
     Func f;
     f(_) = t;
     Realization r = f.realize();

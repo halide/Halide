@@ -27,21 +27,19 @@ static void cpuid(int info[4], int infoType, int extra) {
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
-        "pushq {%%}rbx         \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        "popq {%%}rbx          \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra));
+        : "0" (infoType), "2" (extra)
+        : "%rbx");
 }
 #else
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
-        "pushl {%%}ebx         \n\t"
+        "xchg{l}\t{%%}ebx, %1  \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
-        "popl {%%}ebx          \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
         : "0" (infoType), "2" (extra));
 }
@@ -229,8 +227,15 @@ Target get_target_from_environment() {
     }
 
     if (arch_specified && !bits_specified) {
-        std::cerr << "If architecture is specified (e.g. \"arm\"), then bit width must also be specified (e.g. \"arm-32\")\n";
-        assert(false);
+        std::cerr << "WARNING: If architecture is specified (e.g. \"arm\"), "
+                  << "then bit width should also be specified (e.g. \"arm-32\"). "
+                  << "In the future this will be an error. ";
+        if (t.arch == Target::X86) {
+            std::cerr << "For x86 we default to the bit width of the host: " << t.bits << "\n;";
+        } else {
+            std::cerr << "For this target we default to 32-bits\n";
+            t.bits = 32;
+        }
     }
 
     return t;
@@ -286,6 +291,7 @@ DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
+DECLARE_CPP_INITMOD(nacl_io)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
@@ -299,6 +305,8 @@ DECLARE_LL_INITMOD(spir_dev)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
+
+namespace Internal {
 
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
@@ -333,7 +341,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
     } else if (t.os == Target::NaCl) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
-        modules.push_back(get_initmod_posix_io(c, bits_64));
+        modules.push_back(get_initmod_nacl_io(c, bits_64));
         modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
     }
@@ -349,6 +357,9 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     // These modules are optional
     if (t.arch == Target::X86) {
         modules.push_back(get_initmod_x86_ll(c));
+    }
+    if (t.arch == Target::ARM) {
+        modules.push_back(get_initmod_arm_ll(c));
     }
     if (t.features & Target::SSE41) {
         modules.push_back(get_initmod_x86_sse41_ll(c));
@@ -383,7 +394,58 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         }
     }
 
-    return modules[0];
+    // Now remark most weak symbols as linkonce. They are only weak to
+    // prevent llvm from stripping them during initial module
+    // assembly. This means they can be stripped later.
+
+    // The symbols that we actually might want to override as a user
+    // must remain weak.
+    string retain[] = {"halide_copy_to_host",
+                       "halide_copy_to_dev",
+                       "halide_dev_free",
+                       "halide_set_error_handler",
+                       "halide_set_custom_allocator",
+                       "halide_set_custom_trace",
+                       "halide_set_custom_do_par_for",
+                       "halide_set_custom_do_task",
+                       "halide_shutdown_thread_pool",
+                       "halide_shutdown_trace",
+                       "halide_set_cuda_context",
+                       "halide_release",
+                       "halide_current_time_ns",
+                       "halide_host_cpu_count",
+                       ""};
+
+    llvm::Module *module = modules[0];
+
+    for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
+        llvm::Function *f = (llvm::Function *)(iter);
+        bool can_strip = true;
+        for (size_t i = 0; !retain[i].empty(); i++) {
+            if (f->getName() == retain[i]) {
+                can_strip = false;
+            }
+        }
+
+        if (can_strip) {
+            llvm::GlobalValue::LinkageTypes t = f->getLinkage();
+            if (t == llvm::GlobalValue::WeakAnyLinkage) {
+                f->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+            } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+                f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+            }
+        }
+
+    }
+
+    // Now remove the force-usage global that prevented clang from
+    // dropping functions from the initial module.
+    llvm::GlobalValue *llvm_used = module->getNamedGlobal("llvm.used");
+    if (llvm_used) {
+        llvm_used->eraseFromParent();
+    }
+
+    return module;
 }
 
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
@@ -392,6 +454,8 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
 
 llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c) {
     return get_initmod_spir_dev_ll(c);
+}
+
 }
 
 }
