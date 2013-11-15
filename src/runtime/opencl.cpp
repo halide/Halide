@@ -8,9 +8,9 @@
 #define CL_API_CALL     __stdcall
 #define CL_CALLBACK     __stdcall
 #else
-#define cl_api_entry
-#define cl_api_call
-#define cl_callback
+#define CL_API_ENTRY
+#define CL_API_CALL
+#define CL_CALLBACK
 #endif
 #define CL_API_SUFFIX__VERSION_1_0
 #define CL_API_SUFFIX__VERSION_1_1
