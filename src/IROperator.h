@@ -350,23 +350,20 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
 }
 
 /** Returns the absolute value of a signed integer or floating-point
- * expression. Vectorizes cleanly. */
+ * expression. Vectorizes cleanly. Unlike in C, abs of a signed
+ * integer returns an unsigned integer of the same bit width. This
+ * means that abs of the most negative integer doesn't overflow. */
 inline Expr abs(Expr a) {
     assert(a.defined() && "abs of undefined");
-    if (a.type() == Int(8))
-        return Internal::Call::make(Int(8), "abs_i8", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(16))
-        return Internal::Call::make(Int(16), "abs_i16", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(32))
-        return Internal::Call::make(Int(32), "abs_i32", vec(a), Internal::Call::Extern);
-    if (a.type() == Int(64))
-        return Internal::Call::make(Int(64), "abs_i64", vec(a), Internal::Call::Extern);
-    if (a.type() == Float(32))
-        return Internal::Call::make(Float(32), "abs_f32", vec(a), Internal::Call::Extern);
-    if (a.type() == Float(64))
-        return Internal::Call::make(Float(64), "abs_f64", vec(a), Internal::Call::Extern);
-    assert(false && "Invalid type for abs");
-    return 0; // prevent "control reaches end of non-void function" error
+    Type t = a.type();
+    if (t.is_int()) {
+        t.code = Type::UInt;
+    } else if (t.is_uint()) {
+        std::cerr << "Warning: abs of an unsigned type is a no-op\n";
+        return a;
+    }
+    return Internal::Call::make(t, Internal::Call::abs,
+                                vec(a), Internal::Call::Intrinsic);
 }
 
 /** Returns an expression similar to the ternary operator in C, except
@@ -893,6 +890,29 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
                                 vec(zero_val, one_val, weight),
                                 Internal::Call::Intrinsic);
+}
+
+/** Count the number of set bits in an expression. */
+inline Expr popcount(Expr x) {
+    assert(x.defined() && "popcount of undefined");
+    return Internal::Call::make(x.type(), Internal::Call::popcount,
+                                vec(x), Internal::Call::Intrinsic);
+}
+
+/** Count the number of leading zero bits in an expression. The result is
+ *  undefined if the value of the expression is zero. */
+inline Expr count_leading_zeros(Expr x) {
+    assert(x.defined() && "count leading zeros of undefined");
+    return Internal::Call::make(x.type(), Internal::Call::count_leading_zeros,
+                                vec(x), Internal::Call::Intrinsic);
+}
+
+/** Count the number of trailing zero bits in an expression. The result is
+ *  undefined if the value of the expression is zero. */
+inline Expr count_trailing_zeros(Expr x) {
+    assert(x.defined() && "count trailing zeros of undefined");
+    return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
+                                vec(x), Internal::Call::Intrinsic);
 }
 
 }

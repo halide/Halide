@@ -46,6 +46,9 @@ void modulus_remainder_test();
 /** The greatest common divisor of two integers */
 int gcd(int, int);
 
+/** The least common multiple of two integers */
+int lcm(int, int);
+
 }
 }
 

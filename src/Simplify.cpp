@@ -42,6 +42,10 @@ int do_indirect_int_cast(Type t, int x) {
 }
 
 class Simplify : public IRMutator {
+public:
+    Simplify(bool r) : remove_dead_lets(r) {}
+private:
+    bool remove_dead_lets;
 
     struct VarInfo {
         Expr replacement;
@@ -356,12 +360,10 @@ class Simplify : public IRMutator {
         const Mul *mul_b = b.as<Mul>();
 
         const Min *min_b = b.as<Min>();
-        const Max *max_b = b.as<Max>();
         const Add *add_b_a = min_b ? min_b->a.as<Add>() : NULL;
         const Add *add_b_b = min_b ? min_b->b.as<Add>() : NULL;
 
         const Min *min_a = a.as<Min>();
-        const Max *max_a = a.as<Max>();
         const Add *add_a_a = min_a ? min_a->a.as<Add>() : NULL;
         const Add *add_a_b = min_a ? min_a->b.as<Add>() : NULL;
 
@@ -475,19 +477,6 @@ class Simplify : public IRMutator {
         } else if (min_a && add_a_b && equal(b, add_a_b->b)) {
             // min(c, b + a) - a -> min(b, c-a)
             expr = mutate(min(add_a_b->a, min_a->a - b));
-
-        } else if (false && !op->type.is_uint() && max_a && min_b &&
-                   ((equal(max_a->a, min_b->a) && equal(max_a->b, min_b->b)) ||
-                    (equal(max_a->a, min_b->b) && equal(max_a->b, min_b->a)))) {
-            Expr diff = max_a->a - max_a->b;
-            // max(a, b) - min(a, b) -> max(a - b, -(a - b))
-            expr = abs(diff);
-        } else if (false && !op->type.is_uint() && min_a && max_b &&
-                   ((equal(min_a->a, max_b->a) && equal(min_a->b, max_b->b)) ||
-                    (equal(min_a->a, max_b->b) && equal(min_a->b, max_b->a)))) {
-            // min(a, b) - max(a, b) -> min(a - b, -(a - b))
-            Expr diff = min_a->a - min_a->b;
-            expr = -abs(mutate(diff));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -571,6 +560,24 @@ class Simplify : public IRMutator {
             mul_a_a = ramp_a->base.as<Mul>();
         }
 
+        if (op->type == Int(32) && const_int(b, &ib) && !is_const(a)) {
+            // Check for bounded numerators divided by constant
+            // denominators.
+            Interval bounds = bounds_of_expr_in_scope(a, bounds_info);
+            if (bounds.min.defined() &&
+                bounds.max.defined()) {
+                bounds.min = mutate(bounds.min);
+                bounds.max = mutate(bounds.max);
+                int num_min = 0, num_max = 0;
+                if (const_int(bounds.min, &num_min) &&
+                    const_int(bounds.max, &num_max) &&
+                    div_imp(num_max, ib) == div_imp(num_min, ib)) {
+                    expr = div_imp(num_max, ib);
+                    return;
+                }
+            }
+        }
+
         if (is_zero(a)) {
             expr = a;
         } else if (is_one(b)) {
@@ -600,8 +607,16 @@ class Simplify : public IRMutator {
                    const_int(ramp_a->stride, &ic) &&
                    ia == ib &&
                    (ic * (broadcast_b->width - 1)) < ia) {
-            // ramp(x*a, c, b) / broadcast(a, b) -> broadcast(x, b) when c*(b-1) < a
+            // ramp(x*a, c, w) / broadcast(a, w) -> broadcast(x, w) when c*(w-1) < a
             expr = mutate(Broadcast::make(mul_a_a->a, broadcast_b->width));
+        } else if (ramp_a && broadcast_b &&
+                   mul_a_a && const_int(mul_a_a->b, &ia) &&
+                   const_int(broadcast_b->value, &ib) &&
+                   const_int(ramp_a->stride, &ic) &&
+                   (ib % ia) == 0 &&
+                   (ic * (broadcast_b->width - 1)) < ia) {
+            // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides d
+            expr = mutate(Broadcast::make(mul_a_a->a / (ib / ia), broadcast_b->width));
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
@@ -879,16 +894,6 @@ class Simplify : public IRMutator {
         } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
-
-
-        } else if (false && add_a && add_b && const_int(add_a->b, &ia) && const_int(add_b->b, &ib)) {
-            // Shuffle constants outside
-            // min(x + 2, y + 3) -> min(x, y + 1) + 2
-            expr = mutate(Min::make(add_a->a, add_b->a + (ib - ia)) + ia);
-        } else if (false && add_a && const_int(add_a->b, &ia) && const_int(b, &ib)) {
-            // min(x + 3, 5) -> min(x, 2) + 3
-            expr = mutate(Min::make(add_a->a, ib - ia) + ia);
-
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1307,6 +1312,9 @@ class Simplify : public IRMutator {
             expr = false_value;
         } else if (equal(true_value, false_value)) {
             expr = true_value;
+        } else if (const Broadcast *b = condition.as<Broadcast>()) {
+            // Select of broadcast -> scalar select
+            expr = mutate(Select::make(b->value, true_value, false_value));
         } else if (const NE *ne = condition.as<NE>()) {
             // Normalize select(a != b, c, d) to select(a == b, d, c)
             expr = mutate(Select::make(ne->a == ne->b, false_value, true_value));
@@ -1323,7 +1331,16 @@ class Simplify : public IRMutator {
     }
 
     void visit(const Load *op) {
-        IRMutator::visit(op);
+        // Load of a broadcast should be broadcast of the load
+        Expr index = mutate(op->index);
+        if (const Broadcast *b = index.as<Broadcast>()) {
+            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
+            expr = Broadcast::make(load, b->width);
+        } else if (index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param);
+        }
     }
 
     void visit(const Ramp *op) {
@@ -1478,7 +1495,7 @@ class Simplify : public IRMutator {
             result = T::make(new_name, new_value, result);
         }
 
-        if (info.old_uses > 0) {
+        if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
             result = T::make(op->name, value, result);
         }
@@ -1618,12 +1635,12 @@ class Simplify : public IRMutator {
     }
 };
 
-Expr simplify(Expr e) {
-    return Simplify().mutate(e);
+Expr simplify(Expr e, bool remove_dead_lets) {
+    return Simplify(remove_dead_lets).mutate(e);
 }
 
-Stmt simplify(Stmt s) {
-    return Simplify().mutate(s);
+Stmt simplify(Stmt s, bool remove_dead_lets) {
+    return Simplify(remove_dead_lets).mutate(s);
 }
 
 void check(Expr a, Expr b) {

@@ -99,4 +99,21 @@ Expr Type::min() const {
 
 }
 
+bool Type::can_represent(Type other) const {
+    if (width != other.width) return false;
+    if (is_int()) {
+        return ((other.is_int() && other.bits <= bits) ||
+                (other.is_uint() && other.bits < bits));
+    } else if (is_uint()) {
+        return other.is_uint() && other.bits <= bits;
+    } else if (is_float()) {
+        return ((other.is_float() && other.bits <= bits) ||
+                (bits == 64 && other.bits <= 32) ||
+                (bits == 32 && other.bits <= 16));
+    } else {
+        return false;
+    }
+}
+
+
 }

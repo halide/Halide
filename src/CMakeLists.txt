@@ -48,6 +48,10 @@ if (TARGET_SPIR)
   add_definitions("-DWITH_SPIR=1")
 endif()
 
+if (TARGET_ARM64)
+  add_definitions("-DWITH_ARM64=1")
+endif()
+
 set(RUNTIME_CPP
   android_io 
   cuda 
@@ -64,6 +68,7 @@ set(RUNTIME_CPP
   windows_clock 
   posix_error_handler 
   posix_io 
+  nacl_io 
   osx_io 
   posix_math 
   posix_thread_pool 
@@ -100,13 +105,15 @@ set (RUNTIME_DEPENDS
   ${RUNTIME_LL_DEPENDS})
 
 # Commands to build initial module objects.
+set (INITMOD_DIR "${CMAKE_CFG_INTDIR}/initmod")
+file (MAKE_DIRECTORY ${INITMOD_DIR})
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    set(INITMOD "${CMAKE_CFG_INTDIR}/initmod.${i}_${j}.cpp")
+    set(INITMOD "${INITMOD_DIR}/${i}_${j}.cpp")
     add_custom_command(OUTPUT ${INITMOD}
-                       COMMAND ${CLANG} -fno-blocks -m${j} -DBITS_${j} -emit-llvm -O3 -S ${NATIVE_RUNTIME_DIR}${i}.cpp -o ${NATIVE_INT_DIR}initmod.${i}_${j}.ll
+                       COMMAND ${CLANG} -fno-blocks -m${j} -DCOMPILING_HALIDE -DBITS_${j} -emit-llvm -O3 -S ${NATIVE_RUNTIME_DIR}${i}.cpp -o ${NATIVE_INT_DIR}initmod.${i}_${j}.ll
                        COMMAND "${LLVM_AS}" "${NATIVE_INT_DIR}initmod.${i}_${j}.ll" -o ${NATIVE_INT_DIR}initmod.${i}_${j}.bc
                        COMMAND bitcode2cpp ${i}_${j} < "${NATIVE_INT_DIR}initmod.${i}_${j}.bc" > ${INITMOD}
                        DEPENDS ${RUNTIME_DEPENDS} "${NATIVE_INT_DIR}clang_ok" "${NATIVE_INT_DIR}llvm_ok"
@@ -115,7 +122,7 @@ foreach (i ${RUNTIME_CPP} )
   endforeach()
 endforeach()
 foreach (i ${RUNTIME_LL} )
-  set(INITMOD "${CMAKE_CFG_INTDIR}/initmod.${i}.cpp")
+  set(INITMOD "${INITMOD_DIR}/${i}.cpp")
   add_custom_command(OUTPUT ${INITMOD}
                      COMMAND "${LLVM_AS}" "${NATIVE_RUNTIME_DIR}${i}.ll" -o ${NATIVE_INT_DIR}initmod.${i}.bc
                      COMMAND bitcode2cpp ${i}_ll < "${NATIVE_INT_DIR}initmod.${i}.bc" > ${INITMOD}
@@ -195,7 +202,8 @@ set(HEADER_FILES
   CSE.h
   Tuple.h
   Lerp.h
-  Target.h)
+  Target.h
+  SkipStages.h)
   
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -203,6 +211,8 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/include/Halide.h
   COMMAND build_halide_h ${HEADER_FILES} > ${NATIVE_INCLUDE_PATH}Halide.h
   WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
   DEPENDS build_halide_h ${HEADER_FILES})
+
+add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen.cpp 
@@ -259,6 +269,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Tuple.cpp 
   Lerp.cpp 
   Target.cpp
+  SkipStages.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
   

@@ -51,9 +51,9 @@ public:
     }
 
     int compare_types(Type a, Type b) {
-        if (a.t < b.t) {
+        if (a.code < b.code) {
             result = -1;
-        } else if (a.t > b.t) {
+        } else if (a.code > b.code) {
             result = 1;
         } else if (a.bits < b.bits) {
             result = -1;
@@ -114,7 +114,7 @@ public:
     template<typename T>
     void visit_binary_operator(const T *op) {
         if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-        
+
         const T *e = expr.as<T>();
 
         expr = e->a;

@@ -26,8 +26,10 @@ struct Target {
 EXPORT Target get_host_target();
 
 /** Return the target that Halide will use. If HL_TARGET is set it
- * uses that. Otherwise calls \ref get_native_target */
+ * uses that. Otherwise calls \ref get_host_target */
 EXPORT Target get_target_from_environment();
+
+namespace Internal {
 
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *);
@@ -37,6 +39,8 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c);
 
 /** Create an llvm module containing the support code for SPIR device code. */
 llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c);
+
+}
 
 }
 

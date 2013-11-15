@@ -336,7 +336,7 @@ EXTRACT_ANON_NSPACES   = NO
 # various overviews, but no documentation section is generated.
 # This option has no effect if EXTRACT_ALL is enabled.
 
-HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_MEMBERS     = YES
 
 # If the HIDE_UNDOC_CLASSES tag is set to YES, Doxygen will hide all
 # undocumented classes that are normally visible in the class hierarchy.
@@ -631,7 +631,7 @@ EXCLUDE_SYMBOLS        =
 # directories that contain example code fragments that are included (see
 # the \include command).
 
-EXAMPLE_PATH           = 
+EXAMPLE_PATH           = tutorial
 
 # If the value of the EXAMPLE_PATH tag contains directories, you can use the
 # EXAMPLE_PATTERNS tag to specify one or more wildcard pattern (like *.cpp
@@ -651,7 +651,7 @@ EXAMPLE_RECURSIVE      = NO
 # directories that contain image that are included in the documentation (see
 # the \image command).
 
-IMAGE_PATH             = 
+IMAGE_PATH             =
 
 # The INPUT_FILTER tag can be used to specify a program that doxygen should
 # invoke to filter for each input file. Doxygen will invoke the filter program
@@ -662,7 +662,7 @@ IMAGE_PATH             =
 # If FILTER_PATTERNS is specified, this tag will be
 # ignored.
 
-INPUT_FILTER           = 
+INPUT_FILTER           =
 
 # The FILTER_PATTERNS tag can be used to specify filters on a per file pattern
 # basis.
@@ -800,13 +800,13 @@ HTML_FOOTER            =
 # the style sheet file to the HTML output directory, so don't put your own
 # stylesheet in the HTML output directory as well, or it will be erased!
 
-HTML_STYLESHEET        = 
+HTML_STYLESHEET        =
 
 # If the HTML_TIMESTAMP tag is set to YES then the footer of each generated HTML
 # page will contain the date and time when the page was generated. Setting
 # this to NO can help when comparing the output of multiple runs.
 
-#HTML_TIMESTAMP         = NO  # Only supported in doxygen >= 1.6.2 (maybe, can't confirm)
+HTML_TIMESTAMP         = NO  # Only supported in doxygen >= 1.6.2 (maybe, can't confirm)
 
 # If the HTML_ALIGN_MEMBERS tag is set to YES, the members of classes,
 # files or namespaces will be aligned in HTML using tables. If set to
@@ -903,19 +903,19 @@ GENERATE_QHP           = NO
 # be used to specify the file name of the resulting .qch file.
 # The path specified is relative to the HTML output folder.
 
-QCH_FILE               = 
+QCH_FILE               =
 
 # The QHP_NAMESPACE tag specifies the namespace to use when generating
 # Qt Help Project output. For more information please see
 # http://doc.trolltech.com/qthelpproject.html#namespace
 
-QHP_NAMESPACE          = 
+QHP_NAMESPACE          =
 
 # The QHP_VIRTUAL_FOLDER tag specifies the namespace to use when generating
 # Qt Help Project output. For more information please see
 # http://doc.trolltech.com/qthelpproject.html#virtual-folders
 
-QHP_VIRTUAL_FOLDER     = 
+QHP_VIRTUAL_FOLDER     =
 
 # If QHP_CUST_FILTER_NAME is set, it specifies the name of a custom filter to add.
 # For more information please see
