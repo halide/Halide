@@ -115,7 +115,7 @@ void CodeGen_OpenCL_Dev::compile(Stmt s, string name, const vector<Argument> &ar
 }
 
 namespace {
-const string preamble = ""; // nothing for now
+const string preamble = "/*OpenCL C*/"; // This identifies the program as OpenCL C (as opposed to SPIR).
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const vector<Argument> &args) {
@@ -157,8 +157,9 @@ void CodeGen_OpenCL_Dev::init_module() {
     cur_kernel_name = "";
 }
 
-string CodeGen_OpenCL_Dev::compile_to_src() {
-    return src_stream.str();
+vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
+    string str = src_stream.str();
+    return vector<char>(str.begin(), str.end()+1);
 }
 
 string CodeGen_OpenCL_Dev::get_current_kernel_name() {

@@ -44,6 +44,10 @@ if (TARGET_OPENCL)
   add_definitions("-DWITH_OPENCL=1")
 endif()
 
+if (TARGET_SPIR)
+  add_definitions("-DWITH_SPIR=1")
+endif()
+
 set(RUNTIME_CPP
   android_io 
   cuda 
@@ -52,7 +56,8 @@ set(RUNTIME_CPP
   ios_io 
   android_clock 
   linux_clock 
-  nogpu opencl 
+  nogpu 
+  opencl 
   posix_allocator 
   posix_clock 
   osx_clock 
@@ -74,6 +79,7 @@ set (RUNTIME_LL
   arm 
   posix_math 
   ptx_dev 
+  spir_dev
   x86_avx 
   x86 
   x86_sse41)
@@ -139,6 +145,7 @@ set(HEADER_FILES
   CodeGen_PTX_Dev.h
   CodeGen_OpenCL_Dev.h
   CodeGen_GPU_Dev.h
+  CodeGen_SPIR_Dev.h
   Deinterleave.h
   Derivative.h
   OneToOne.h
@@ -204,6 +211,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Host.cpp 
   CodeGen_PTX_Dev.cpp 
   CodeGen_OpenCL_Dev.cpp 
+  CodeGen_SPIR_Dev.cpp 
   CodeGen_GPU_Dev.cpp 
   CodeGen_Posix.cpp 
   CodeGen_ARM.cpp 
