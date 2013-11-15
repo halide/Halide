@@ -75,15 +75,8 @@ endif()
 
 set (PROJECT_LIBS )
 if (WIN32)
-  list(APPEND PROJECT_LIBS Kernel32 OpenCL)
+  list(APPEND PROJECT_LIBS Kernel32)
 endif()
-
-set(OPENCL_INCLUDE $ENV{INTELOCLSDKROOT}/include
-  CACHE PATH "Path to OpenCL include directory")
-set(OPENCL_LIB $ENV{INTELOCLSDKROOT}/lib/x86
-  CACHE PATH "Path to OpenCL lib directory")
-  
-link_directories (${OPENCL_LIB})
 
 function(halide_project name folder)
   add_executable(${name} ${ARGN})
