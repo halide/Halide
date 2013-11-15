@@ -54,9 +54,9 @@
  */
 
 /**
- * \example tutorial/lesson_01.cpp
- * \example tutorial/lesson_02.cpp
- * \example tutorial/lesson_03.cpp
- * \example tutorial/lesson_04.cpp
- * \example tutorial/lesson_05.cpp
+ * \example tutorial/lesson_01_basics.cpp
+ * \example tutorial/lesson_02_input_image.cpp
+ * \example tutorial/lesson_03_debugging_1.cpp
+ * \example tutorial/lesson_04_debugging_2.cpp
+ * \example tutorial/lesson_05_scheduling_1.cpp
  */
