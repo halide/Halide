@@ -5,7 +5,7 @@
 #include "Var.h"
 #include <sstream>
 #include <iostream>
-#include <numeric>
+#include <limits>
 #include <cmath>
 #include "Debug.h"
 #include "Lerp.h"
