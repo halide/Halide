@@ -1,8 +1,8 @@
-#ifndef HALIDE_CODEGEN_PTX_DEV_H
-#define HALIDE_CODEGEN_PTX_DEV_H
+#ifndef HALIDE_CODEGEN_SPIR_DEV_H
+#define HALIDE_CODEGEN_SPIR_DEV_H
 
 /** \file
- * Defines the code-generator for producing CUDA host code
+ * Defines the code-generator for producing SPIR device code
  */
 
 #include "CodeGen.h"
@@ -16,12 +16,12 @@ namespace Halide {
 namespace Internal {
 
 /** A code generator that emits GPU code from a given Halide stmt. */
-class CodeGen_PTX_Dev : public CodeGen, public CodeGen_GPU_Dev {
+class CodeGen_SPIR_Dev : public CodeGen, public CodeGen_GPU_Dev {
 public:
     friend class CodeGen_GPU_Host;
 
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev();
+    CodeGen_SPIR_Dev();
         
     void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
 

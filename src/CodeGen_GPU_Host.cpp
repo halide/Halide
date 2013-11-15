@@ -1,6 +1,7 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
 #include <iostream>
 #include "buffer_t.h"
@@ -298,7 +299,10 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
         return new CodeGen_PTX_Dev();
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        return new CodeGen_OpenCL_Dev();
+        return new CodeGen_OpenCL_Dev();    
+    } else if (t.features & Target::SPIR) {
+        debug(1) << "Constructing SPIR device codegen\n";
+        return new CodeGen_SPIR_Dev();
     } else {
         assert(false && "Requested unknown GPU target");
         return NULL;
@@ -349,21 +353,24 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
-
-    string kernel_src = cgdev->compile_to_src();
-    debug(2) << kernel_src;
-    llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size()+1);
+        
+    std::vector<char> kernel_src = cgdev->compile_to_src();
+    //debug(2) << kernel_src;
+    llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size());
     GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type,
                                                          true, GlobalValue::PrivateLinkage, 0,
                                                          "halide_kernel_src");
-    kernel_src_global->setInitializer(ConstantDataArray::getString(*context, kernel_src));
+    kernel_src_global->setInitializer(ConstantDataArray::get(
+        *context, 
+        ArrayRef<unsigned char>((unsigned char *)&kernel_src[0], kernel_src.size())));
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
     Value *kernel_src_ptr = builder->CreateConstInBoundsGEP2_32(kernel_src_global, 0, 0);
+    Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     assert(init && "Could not find function halide_init_kernels in initial module");
-    builder->CreateCall(init, kernel_src_ptr);
+    builder->CreateCall2(init, kernel_src_ptr, kernel_size);
 
     // Optimize the module
     CodeGen::optimize_module();
@@ -402,7 +409,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
         cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
 
-    } else if (target.features & Target::OpenCL) {
+    } else if (target.features & (Target::OpenCL | Target::SPIR)) {
         debug(0) << "TODO: cache results of linking OpenCL lib\n";
 
         // First check if libCuda has already been linked
@@ -446,7 +453,7 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         void (*cleanup_routine)() =
             reinterpret_bits<void (*)()>(f);
         cleanup_routines->push_back(cleanup_routine);
-    } else if (target.features & Target::OpenCL) {
+    } else if (target.features & (Target::OpenCL | Target::SPIR)) {
         debug(0) << "TODO: set cleanup for OpenCL\n";
     }
 }
@@ -534,12 +541,13 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         // build the kernel arguments array
         vector<Argument> closure_args = c.arguments();
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
+        llvm::Type *size_t_t = sizeof(size_t) == 4 ? i32 : i64; // size_t
         int num_args = (int)closure_args.size();
         Value *saved_stack = save_stack();
         Value *gpu_args_arr = builder->CreateAlloca(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
                                                     NULL,
                                                     kernel_name + "_args");
-        Value *gpu_arg_sizes_arr = builder->CreateAlloca(ArrayType::get(i64, num_args+1), // NULL-terminated list of size_t's
+        Value *gpu_arg_sizes_arr = builder->CreateAlloca(ArrayType::get(size_t_t, num_args+1), // NULL-terminated list of size_t's
                                                          NULL,
                                                          kernel_name + "_arg_sizes");
 
@@ -570,14 +578,14 @@ void CodeGen_GPU_Host::visit(const For *loop) {
 
             // store the size of the argument
             // TODO: support non-64-bit hosts for CUDA, OpenCL
-            int size_bits = (closure_args[i].is_buffer) ? 64 : closure_args[i].type.bits;
-            builder->CreateStore(ConstantInt::get(i64, size_bits/8),
+            int size_bits = (closure_args[i].is_buffer) ? sizeof(void*)*8 : closure_args[i].type.bits;
+            builder->CreateStore(ConstantInt::get(size_t_t, size_bits/8),
                                  builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
         }
         // NULL-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
                              builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
-        builder->CreateStore(ConstantInt::get(i64, 0),
+        builder->CreateStore(ConstantInt::get(size_t_t, 0),
                              builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
 
         // Figure out how much shared memory we need to allocate, and
