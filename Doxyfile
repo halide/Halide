@@ -806,7 +806,7 @@ HTML_STYLESHEET        =
 # page will contain the date and time when the page was generated. Setting
 # this to NO can help when comparing the output of multiple runs.
 
-#HTML_TIMESTAMP         = NO  # Only supported in doxygen >= 1.6.2 (maybe, can't confirm)
+HTML_TIMESTAMP         = NO  # Only supported in doxygen >= 1.6.2 (maybe, can't confirm)
 
 # If the HTML_ALIGN_MEMBERS tag is set to YES, the members of classes,
 # files or namespaces will be aligned in HTML using tables. If set to
