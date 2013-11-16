@@ -159,7 +159,9 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
-    return vector<char>(str.begin(), str.end()+1);
+    vector<char> buffer(str.begin(), str.end());
+    buffer.push_back(0);
+    return buffer;
 }
 
 string CodeGen_OpenCL_Dev::get_current_kernel_name() {

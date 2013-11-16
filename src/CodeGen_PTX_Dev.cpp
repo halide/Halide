@@ -361,7 +361,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     ostream.flush();
 
     string str = outs.str();
-    return vector<char>(str.begin(), str.end()+1);
+    vector<char> buffer(str.begin(), str.end());
+    buffer.push_back(0);
+    return buffer;
 }
 
 
