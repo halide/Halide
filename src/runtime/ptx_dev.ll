@@ -22,6 +22,18 @@ declare  i32 @llvm.nvvm.read.ptx.sreg.warpsize()
 ;declare void @llvm.ptx.red.global.add.f32(float*, float)
 ;declare void @llvm.ptx.red.shared.add.s32(i32 addrspace(4)*, i32)
 
+define weak_odr float @nan_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0xFFF0000000000000;
+}
+
+define weak_odr float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0xFFF0000000000000;
+}
+
+define weak_odr float @inf_f32() nounwind uwtable readnone alwaysinline {
+       ret float 0x7FF0000000000000;
+}
+
 declare float @__nv_sqrtf(float) nounwind readnone
 declare double @__nv_sqrt(double) nounwind readnone
 
@@ -248,7 +260,7 @@ define weak_odr double @asinh_f64(double %x) nounwind uwtable readnone alwaysinl
 declare float @__nv_coshf(float) nounwind readnone
 declare double @__nv_cosh(double) nounwind readnone
 
-define weak_odr float @__nv_cosh_f32(float %x) nounwind uwtable readnone alwaysinline {
+define weak_odr float @cosh_f32(float %x) nounwind uwtable readnone alwaysinline {
        %y = tail call float @__nv_coshf(float %x) nounwind readnone
        ret float %y
 }
