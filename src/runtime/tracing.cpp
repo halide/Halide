@@ -109,59 +109,80 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
                                          "Consume",
                                          "End consume"};
 
+            // Only print out the value on stores and loads.
+            bool print_value = (event < 2);
+
             if (buf_ptr < buf_end) {
                 buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%s %s.%d[", event_types[event], func, value_idx);
             }
+            if (width > 1) {
+                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "<");
+            }
             for (int i = 0; i < num_int_args && buf_ptr < buf_end; i++) {
                 if (i > 0) {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", %d", int_args[i]);
+                    if ((width > 1) && (i % width) == 0) {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">, <");
+                    } else {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
+                    }
+                }
+                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", int_args[i]);
+            }
+            if (buf_ptr < buf_end) {
+                if (width > 1) {
+                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">]");
                 } else {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", int_args[i]);
-                }
-            }
-            if (buf_ptr < buf_end) {
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "] = (");
-            }
-
-            for (int i = 0; i < width && buf_ptr < buf_end; i++) {
-                if (i > 0) {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
-                }
-                if (type_code == 0) {
-                    if (print_bits == 8) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int8_t *)(value))[i]);
-                    } else if (print_bits == 16) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int16_t *)(value))[i]);
-                    } else if (print_bits == 32) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int32_t *)(value))[i]);
-                    } else {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", (int32_t)((int64_t *)(value))[i]);
-                    }
-                } else if (type_code == 1) {
-                    if (print_bits == 8) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint8_t *)(value))[i]);
-                        if (buf_ptr > buf_end) buf_ptr = buf_end;
-                    } else if (print_bits == 16) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint16_t *)(value))[i]);
-                    } else if (print_bits == 32) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint32_t *)(value))[i]);
-                    } else {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", (uint32_t)((uint64_t *)(value))[i]);
-                    }
-                } else if (type_code == 2) {
-                    halide_assert(print_bits >= 32 && "Tracing a bad type");
-                    if (print_bits == 32) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(value))[i]);
-                    } else {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((double *)(value))[i]);
-                    }
-                } else if (type_code == 3) {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(value))[i]);
+                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "]");
                 }
             }
 
-            if (buf_ptr < buf_end) {
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ")");
+            if (print_value) {
+                if (buf_ptr < buf_end) {
+                    if (width > 1) {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, " = <");
+                    } else {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, " = ");
+                    }
+                }
+                for (int i = 0; i < width && buf_ptr < buf_end; i++) {
+                    if (i > 0) {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
+                    }
+                    if (type_code == 0) {
+                        if (print_bits == 8) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int8_t *)(value))[i]);
+                        } else if (print_bits == 16) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int16_t *)(value))[i]);
+                        } else if (print_bits == 32) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int32_t *)(value))[i]);
+                        } else {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", (int32_t)((int64_t *)(value))[i]);
+                        }
+                    } else if (type_code == 1) {
+                        if (print_bits == 8) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint8_t *)(value))[i]);
+                            if (buf_ptr > buf_end) buf_ptr = buf_end;
+                        } else if (print_bits == 16) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint16_t *)(value))[i]);
+                        } else if (print_bits == 32) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint32_t *)(value))[i]);
+                        } else {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", (uint32_t)((uint64_t *)(value))[i]);
+                        }
+                    } else if (type_code == 2) {
+                        halide_assert(print_bits >= 32 && "Tracing a bad type");
+                        if (print_bits == 32) {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(value))[i]);
+                        } else {
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((double *)(value))[i]);
+                        }
+                    } else if (type_code == 3) {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(value))[i]);
+                    }
+                }
+                if (width > 1 && buf_ptr < buf_end) {
+                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">");
+                }
             }
 
             halide_printf("%s\n", buf);

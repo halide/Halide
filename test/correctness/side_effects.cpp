@@ -100,8 +100,7 @@ int main(int argc, char **argv) {
 
     RDom r(-45, 71, -10, 21);
     Func render;
-    render() = 0;
-    render() = draw_pixel(r.x, r.y, count(r.x, r.y));
+    render() += draw_pixel(r.x, r.y, count(r.x, r.y));
 
     mandelbrot.compute_at(render, r.x);
 

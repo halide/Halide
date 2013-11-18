@@ -105,31 +105,40 @@ Tuple Func::values() const {
 
 /** Get the left-hand-side of the reduction definition. An empty
  * vector if there's no reduction definition. */
-const std::vector<Expr> &Func::reduction_args() const {
-    return func.reduction_args();
+const std::vector<Expr> &Func::reduction_args(int idx) const {
+    assert(is_reduction() && "Can't call Func::reduction_args() on a func with no reduction definition. "
+           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
+    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    return func.reductions()[idx].args;
 }
 
 /** Get the right-hand-side of the reduction definition. An error if
  * there is no reduction definition. */
-Expr Func::reduction_value() const {
+Expr Func::reduction_value(int idx) const {
     assert(is_reduction() && "Can't call Func::reduction_value() on a func with no reduction definition. "
            "Use Func::is_reduction() to check for the existence of a reduction definition\n");
-    assert(func.reduction_values().size() == 1 &&
+    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    assert(func.reductions()[idx].values.size() == 1 &&
            "Can't call Func::reduction_value() on a func with multiple values");
-    return func.reduction_values()[0];
+    return func.reductions()[idx].values[0];
 }
 
 /** The reduction values returned by a Func, in Tuple form. */
-Tuple Func::reduction_values() const {
+Tuple Func::reduction_values(int idx) const {
     assert(is_reduction() && "Can't call Func::reduction_values() on a func with no reduction definition. "
            "Use Func::is_reduction() to check for the existence of a reduction definition\n");
-    return Tuple(func.reduction_values());
+    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    return Tuple(func.reductions()[idx].values);
 }
 
-/** Get the reduction domain for the reduction definition. Returns
- * an undefined RDom if there's no reduction definition. */
-RDom Func::reduction_domain() const {
-    return func.reduction_domain();
+/** Get the reduction domain for the reduction definition. Returns an
+ * undefined RDom if there's no reduction definition, or if the
+ * reduction definition has no domain. */
+RDom Func::reduction_domain(int idx) const {
+    assert(is_reduction() && "Can't call Func::reduction_domain() on a func with no reduction definition. "
+           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
+    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    return func.reductions()[idx].domain;
 }
 
 bool Func::defined() const {
@@ -141,26 +150,31 @@ bool Func::is_reduction() const {
     return func.has_reduction_definition();
 }
 
+/** How many reduction definitions are there? */
+int Func::num_reduction_definitions() const {
+    return (int)func.reductions().size();
+}
+
 /** Is this function external? */
 EXPORT bool Func::is_extern() const {
     return func.has_extern_definition();
 }
 
 /** Add an extern definition for this Func. */
-EXPORT void Func::define_extern(const std::string &function_name,
-                                const std::vector<ExternFuncArgument> &args,
-                                const std::vector<Type> &types,
-                                int dimensionality) {
+void Func::define_extern(const std::string &function_name,
+                         const std::vector<ExternFuncArgument> &args,
+                         const std::vector<Type> &types,
+                         int dimensionality) {
     func.define_extern(function_name, args, types, dimensionality);
 }
 
 /** Get the types of the buffers returned by an extern definition. */
-EXPORT const std::vector<Type> &Func::output_types() const {
+const std::vector<Type> &Func::output_types() const {
     return func.output_types();
 }
 
 /** Get the number of outputs this function has. */
-EXPORT int Func::outputs() const {
+int Func::outputs() const {
     return func.outputs();
 }
 
@@ -1010,8 +1024,8 @@ void Func::debug_to_file(const string &filename) {
     func.debug_file() = filename;
 }
 
-ScheduleHandle Func::update() {
-    return ScheduleHandle(func.reduction_schedule());
+ScheduleHandle Func::update(int idx) {
+    return ScheduleHandle(func.reduction_schedule(idx));
 }
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
