@@ -4,6 +4,7 @@
 #include "IRPrinter.h"
 #include "Deinterleave.h"
 #include "Substitute.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,6 +17,7 @@ class VectorizeLoops : public IRMutator {
         string var;
         Expr replacement;
         Scope<Expr> scope;
+        Scope<int> internal_allocations;
 
         Expr widen(Expr e, int width) {
             if (e.type().width == width) return e;
@@ -97,6 +99,20 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Load *op) {
             Expr index = mutate(op->index);
+
+            // Internal allocations always get vectorized.
+            if (internal_allocations.contains(op->name)) {
+                int width = replacement.type().width;
+                if (index.type().is_scalar()) {
+                    index = Ramp::make(Mul::make(index, width), 1, width);
+                } else {
+                    index = Mul::make(index, Broadcast::make(width, width));
+                    index = Add::make(index, Ramp::make(0, 1, width));
+                }
+            }
+
+
+
             if (index.same_as(op->index)) {
                 expr = op;
             } else {
@@ -209,6 +225,18 @@ class VectorizeLoops : public IRMutator {
         void visit(const Store *op) {
             Expr value = mutate(op->value);
             Expr index = mutate(op->index);
+
+            // Internal allocations always get vectorized.
+            if (internal_allocations.contains(op->name)) {
+                int width = replacement.type().width;
+                if (index.type().is_scalar()) {
+                    index = Ramp::make(Mul::make(index, width), 1, width);
+                } else {
+                    index = Mul::make(index, Broadcast::make(width, width));
+                    index = Add::make(index, Ramp::make(0, 1, width));
+                }
+            }
+
             if (value.same_as(op->value) && index.same_as(op->index)) {
                 stmt = op;
             } else {
@@ -244,17 +272,53 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
-        /*
-        void visit(const AssertStmt *op) {
-            Expr cond = mutate(op->condition);
-            int width = cond.type().width;
-            if (width > 1) {
-                // Assert that all of the return values are true
-                Expr check_all = Call::make(Bool(), Call::horizontal_and, vec(cond), Call::Intrinsic);
-                stmt = AssertStmt::make(check_all, op->message);
+        void visit(const For *op) {
+            Expr min = mutate(op->min);
+            Expr extent = mutate(op->extent);
+            assert(extent.type().is_scalar() && "Vectorizing a for loop with an extent that varies per vector lane. You're probably scheduling something inside a vectorized dimension.");
+
+            if (min.type().is_vector()) {
+                // for (x from vector_min to scalar_extent)
+                // becomes
+                // for (x.scalar from 0 to scalar_extent) {
+                //   let x = vector_min + broadcast(scalar_extent)
+                // }
+
+                Expr var = Variable::make(Int(32), op->name + ".scalar");
+                Expr value = Add::make(min, Broadcast::make(var, min.type().width));
+                Stmt body = LetStmt::make(op->name, value, op->body);
+                Stmt transformed = For::make(op->name + ".scalar", 0, extent, op->for_type, body);
+                stmt = mutate(transformed);
+                return;
+            }
+
+            Stmt body = mutate(op->body);
+
+            if (min.same_as(op->min) &&
+                extent.same_as(op->extent) &&
+                body.same_as(op->body)) {
+                stmt = op;
+            } else {
+                stmt = For::make(op->name, min, extent, op->for_type, body);
             }
         }
-        */
+
+        void visit(const Allocate *op) {
+            Expr size = mutate(op->size);
+            // Only support scalar sizes for now. For vector sizes, we
+            // would need to take the horizontal max to convert to a
+            // scalar size.
+            assert(size.type().is_scalar() && "Cannot vectorize an allocation with a varying size per vector lane");
+            int width = replacement.type().width;
+
+            // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
+            // foo[x] -> foo[x*width + ramp(0, 1, width)]
+            internal_allocations.push(op->name, 0);
+            Stmt body = mutate(op->body);
+            internal_allocations.pop(op->name);
+            stmt = Allocate::make(op->name, op->type, size * width, body);
+
+        }
 
         Stmt scalarize(Stmt s) {
             Stmt result;
