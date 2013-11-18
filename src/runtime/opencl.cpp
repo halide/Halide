@@ -122,9 +122,13 @@ WEAK void halide_dev_free(buffer_t* buf) {
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
 
-    halide_assert(halide_validate_dev_pointer(buf));
-    CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
-    buf->dev = 0;
+    // TODO: Is this check covering up a bug? Halide might just be calling dev_free on all buffers, even if they are not device buffers.
+    if (buf->dev != 0)
+    {
+        halide_assert(halide_validate_dev_pointer(buf));
+        CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
+        buf->dev = 0;
+    }
 }
 
 
@@ -217,7 +221,9 @@ WEAK void halide_init_kernels(const char* src, int size) {
         cl_q = clCreateCommandQueue(cl_ctx, dev, 0, &err);
         CHECK_ERR( err, "clCreateCommandQueue" );
     } else {
-        //CHECK_CALL( cuCtxPushCurrent(cuda_ctx), "cuCtxPushCurrent" );
+        // Maintain ref count of context.
+        clRetainContext(cl_ctx);
+        clRetainCommandQueue(cl_q);
     }
 
     // Initialize a module for just this Halide module
@@ -270,14 +276,16 @@ WEAK void halide_release() {
     halide_printf("dev_sync on exit" );
     #endif
     halide_dev_sync();
-
-    // TODO: destroy context if we own it
-
+    
     // Unload the module
     if (__mod) {
         CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
         __mod = 0;
     }
+
+    // Unload context (ref counted).
+    CHECK_CALL( clReleaseCommandQueue(cl_q), "clReleaseCommandQueue" );
+    CHECK_CALL( clReleaseContext(cl_ctx), "clReleaseContext" );
 }
 
 static cl_kernel __get_kernel(const char* entry_name) {

@@ -410,8 +410,6 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
 
     } else if (target.features & (Target::OpenCL | Target::SPIR)) {
-        debug(0) << "TODO: cache results of linking OpenCL lib\n";
-
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (have_symbol("clCreateContext")) {
@@ -454,7 +452,14 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
             reinterpret_bits<void (*)()>(f);
         cleanup_routines->push_back(cleanup_routine);
     } else if (target.features & (Target::OpenCL | Target::SPIR)) {
-        debug(0) << "TODO: set cleanup for OpenCL\n";
+        // When the module dies, we need to call halide_release
+        llvm::Function *fn = module->getFunction("halide_release");
+        assert(fn && "Could not find halide_release in module");
+        void *f = ee->getPointerToFunction(fn);
+        assert(f && "Could not find compiled form of halide_release in module");
+        void (*cleanup_routine)() =
+            reinterpret_bits<void (*)()>(f);
+        cleanup_routines->push_back(cleanup_routine);
     }
 }
 
