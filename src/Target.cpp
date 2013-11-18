@@ -460,6 +460,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     return modules[0];
 }
 
+#if WITH_PTX
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
@@ -472,9 +473,10 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
         llvm::Function *f = (llvm::Function *)(iter);
 
 	// This is intended to set all definitions (not extern declarations)
-	// to "available externally" which sould guarantee they do not exist
-	// after the resulting module is finalazed to code. That is they must
+	// to "available externally" which should guarantee they do not exist
+	// after the resulting module is finalized to code. That is they must
 	// be inlined to be used.
+
 	if (f->hasFnAttribute(llvm::Attribute::AlwaysInline)) {
 	    f->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
         }
@@ -486,6 +488,7 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
 
     return modules[0];
 }
+#endif
 
 }
 
