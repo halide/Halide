@@ -233,7 +233,9 @@ void CodeGen_SPIR_Dev::visit(const Allocate *alloc) {
 
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
-
+    
+    // Optimize it - this really only optimizes the current function
+    optimize_module();
 }
 
 void CodeGen_SPIR_Dev::visit(const Free *f) {
@@ -258,9 +260,6 @@ bool CodeGen_SPIR_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_SPIR_Dev::compile_to_src() {
     
-    // Optimize it - this really only optimizes the current function
-    optimize_module();
-
     SmallVector<char, 1024> buffer;
     raw_svector_ostream stream(buffer);
     WriteBitcodeToFile(module, stream);
