@@ -615,19 +615,20 @@ private:
 
         Stmt body = for_loop->body;
 
-        // Can't schedule things inside a vector for loop
-        if (for_loop->for_type != For::Vectorized) {
-            body = mutate(for_loop->body);
-        } else if ((func.has_extern_definition() ||
-                    func.has_reduction_definition()) &&
-                   func.schedule().compute_level.is_inline() &&
-                   function_is_called_in_stmt(func, for_loop)) {
-            // If we're trying to inline a reduction or extern function, schedule it here and bail out
+        // Can't schedule extern things inside a vector for loop
+        if (func.has_extern_definition() &&
+            func.schedule().compute_level.is_inline() &&
+            for_loop->for_type == For::Vectorized &&
+            function_is_called_in_stmt(func, for_loop)) {
+
+            // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
             stmt = build_realize(build_pipeline(for_loop));
             found_store_level = found_compute_level = true;
             return;
         }
+
+        body = mutate(for_loop->body);
 
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
