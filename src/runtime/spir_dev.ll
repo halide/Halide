@@ -16,72 +16,72 @@ declare spir_func float @_Z10native_sinf(float) nounwind readnone
 declare spir_func float @_Z10native_cosf(float) nounwind readnone
 
 define weak_odr spir_func void @halide.spir.barrier() alwaysinline {
-	; CLK_LOCAL_MEM_FENCE = 1, CLK_GLOBAL_MEM_FENCE = 2
-	call void @_Z7barrierj(i32 3)
-	ret void
+    ; CLK_LOCAL_MEM_FENCE = 1, CLK_GLOBAL_MEM_FENCE = 2
+    call void @_Z7barrierj(i32 3)
+    ret void
 }
 
 define weak_odr spir_func i32 @halide.spir.lid.x() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z12get_local_idj(i32 0) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.lid.y() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z12get_local_idj(i32 1) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.lid.z() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z12get_local_idj(i32 2) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 
 define weak_odr spir_func i32 @halide.spir.lsz.x() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z14get_local_sizej(i32 0) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.lsz.y() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z14get_local_sizej(i32 1) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.lsz.z() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z14get_local_sizej(i32 2) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 
 define weak_odr spir_func i32 @halide.spir.gid.x() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z12get_group_idj(i32 0) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.gid.y() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z12get_group_idj(i32 1) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.gid.z() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z12get_group_idj(i32 2) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 
 define weak_odr spir_func i32 @halide.spir.gsz.x() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z14get_num_groupsj(i32 0) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.gsz.y() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z14get_num_groupsj(i32 1) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 define weak_odr spir_func i32 @halide.spir.gsz.z() nounwind uwtable readnone alwaysinline {
     %x = tail call i64 @_Z14get_num_groupsj(i32 2) nounwind readnone
-	%y = trunc i64 %x to i32
+    %y = trunc i64 %x to i32
     ret i32 %y
 }
 
