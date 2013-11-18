@@ -355,7 +355,6 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     CodeGen::compile(stmt, name, args);
         
     std::vector<char> kernel_src = cgdev->compile_to_src();
-    //debug(2) << kernel_src;
     llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size());
     GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type,
                                                          true, GlobalValue::PrivateLinkage, 0,
