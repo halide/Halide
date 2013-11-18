@@ -14,7 +14,9 @@
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
+#if WITH_PTX
 namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+#endif
 
 namespace Halide {
 namespace Internal {
@@ -128,7 +130,9 @@ void CodeGen_PTX_Dev::init_module() {
 
     CodeGen::init_module();
 
+    #if WITH_PTX
     module = get_initial_module_for_ptx_device(context);
+    #endif
 
     owns_module = true;
 }
@@ -356,10 +360,12 @@ string CodeGen_PTX_Dev::compile_to_src() {
     // passes.
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
-   
+
+    #if WITH_PTX
     StringMap<int> reflect_mapping;
     reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
     PM.add(createNVVMReflectPass(reflect_mapping));
+    #endif
 
     // Inlining functions is essential to PTX
     PM.add(createAlwaysInlinerPass());
