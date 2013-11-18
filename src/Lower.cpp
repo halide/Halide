@@ -25,6 +25,7 @@
 #include "DebugToFile.h"
 #include "EarlyFree.h"
 #include "UniquifyVariableNames.h"
+#include "SkipStages.h"
 #include "CSE.h"
 
 namespace Halide {
@@ -376,32 +377,45 @@ Stmt build_produce(Function f) {
 
 // Build the loop nest that updates a function (assuming it's a reduction).
 Stmt build_update(Function f) {
-    if (!f.has_reduction_definition()) return Stmt();
 
     string prefix = f.name() + ".";
 
-    vector<Expr> site;
-    vector<Expr> values(f.reduction_values().size());
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i] = qualify_expr(prefix, f.reduction_values()[i]);
+    Stmt updates;
+
+    for (size_t i = 0; i < f.reductions().size(); i++) {
+        ReductionDefinition r = f.reductions()[i];
+
+        vector<Expr> site;
+        vector<Expr> values(r.values.size());
+        for (size_t i = 0; i < values.size(); i++) {
+            values[i] = qualify_expr(prefix, r.values[i]);
+        }
+
+        for (size_t i = 0; i < r.args.size(); i++) {
+            site.push_back(qualify_expr(prefix, r.args[i]));
+            debug(2) << "Reduction site " << i << " = " << site[i] << "\n";
+        }
+
+        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
+
+        // Now define the bounds on the reduction domain
+        if (r.domain.defined()) {
+            const vector<ReductionVariable> &dom = r.domain.domain();
+            for (size_t i = 0; i < dom.size(); i++) {
+                string p = prefix + dom[i].var;
+                loop = LetStmt::make(p + ".min_produced", dom[i].min, loop);
+                loop = LetStmt::make(p + ".extent_produced", dom[i].extent, loop);
+            }
+        }
+
+        if (updates.defined()) {
+            updates = Block::make(updates, loop);
+        } else {
+            updates = loop;
+        }
     }
 
-    for (size_t i = 0; i < f.reduction_args().size(); i++) {
-        site.push_back(qualify_expr(prefix, f.reduction_args()[i]));
-        debug(2) << "Reduction site " << i << " = " << site[i] << "\n";
-    }
-
-    Stmt loop = build_provide_loop_nest(f, prefix, site, values, f.reduction_schedule(), true);
-
-    // Now define the bounds on the reduction domain
-    const vector<ReductionVariable> &dom = f.reduction_domain().domain();
-    for (size_t i = 0; i < dom.size(); i++) {
-        string p = prefix + dom[i].var;
-        loop = LetStmt::make(p + ".min_produced", dom[i].min, loop);
-        loop = LetStmt::make(p + ".extent_produced", dom[i].extent, loop);
-    }
-
-    return loop;
+    return updates;
 }
 
 pair<Stmt, Stmt> build_realization(Function func) {
@@ -855,18 +869,21 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
     }
 
     // Consider reductions
-    if (f.has_reduction_definition()) {
-        for (size_t i = 0; i < f.reduction_values().size(); i++) {
-            f.reduction_values()[i].accept(&calls);
+    for (size_t j = 0; j < f.reductions().size(); j++) {
+        ReductionDefinition r = f.reductions()[j];
+        for (size_t i = 0; i < r.values.size(); i++) {
+            r.values[i].accept(&calls);
         }
-        for (size_t i = 0; i < f.reduction_args().size(); i++) {
-            f.reduction_args()[i].accept(&calls);
+        for (size_t i = 0; i < r.args.size(); i++) {
+            r.args[i].accept(&calls);
         }
 
-        ReductionDomain d = f.reduction_domain();
-        for (size_t i = 0; i < d.domain().size(); i++) {
-            d.domain()[i].min.accept(&calls);
-            d.domain()[i].extent.accept(&calls);
+        ReductionDomain d = r.domain;
+        if (r.domain.defined()) {
+            for (size_t i = 0; i < d.domain().size(); i++) {
+                d.domain()[i].min.accept(&calls);
+                d.domain()[i].extent.accept(&calls);
+            }
         }
     }
 
@@ -1576,6 +1593,14 @@ Stmt lower(Function f) {
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, order[order.size()-1], env);
     debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
+
+    debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
+    s = simplify(s, false);
+    debug(2) << "Simplified: \n" << s << "\n\n";
+
+    debug(1) << "Dynamically skipping stages...\n";
+    s = skip_stages(s, order);
+    debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, env);

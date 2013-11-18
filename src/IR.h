@@ -940,6 +940,7 @@ struct Call : public ExprNode<Call> {
         bitwise_or,
         shift_left,
         shift_right,
+        abs,
         rewrite_buffer,
         profiling_timer,
         lerp,
