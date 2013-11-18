@@ -192,6 +192,8 @@ Target get_target_from_environment() {
             t.features |= Target::CUDA;
         } else if (tok == "opencl") {
             t.features |= Target::OpenCL;
+        } else if (tok == "spir") {
+            t.features |= Target::SPIR;
         } else if (tok == "gpu_debug") {
             t.features |= Target::GPUDebug;
         } else {
@@ -299,6 +301,7 @@ DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(ptx_dev)
+DECLARE_LL_INITMOD(spir_dev)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -370,7 +373,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         } else {
             modules.push_back(get_initmod_cuda(c, bits_64));
         }
-    } else if (t.features & Target::OpenCL) {
+    } else if (t.features & (Target::OpenCL | Target::SPIR)) {
         if (t.features & Target::GPUDebug) {
             modules.push_back(get_initmod_opencl_debug(c, bits_64));
         } else {
@@ -447,6 +450,10 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
     return get_initmod_ptx_dev_ll(c);
+}
+
+llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c) {
+    return get_initmod_spir_dev_ll(c);
 }
 
 }

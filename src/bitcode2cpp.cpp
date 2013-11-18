@@ -14,6 +14,7 @@ int main(int argc, const char **argv) {
     setmode(fileno(stdin), O_BINARY); // On windows bad things will happen unless we read stdin in binary mode
 #endif
     const char *target = argv[1];
+    printf("extern \"C\" {\n");
     printf("unsigned char halide_internal_initmod_%s[] = {\n", target);
     int count = 0;
     while (1) {
@@ -24,5 +25,6 @@ int main(int argc, const char **argv) {
     }
     printf("0};\n");
     printf("int halide_internal_initmod_%s_length = %d;\n", target, count);
+    printf("}\n"); // extern "C"
     return 0;
 }
