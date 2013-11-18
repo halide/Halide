@@ -212,7 +212,7 @@ WEAK void halide_init_kernels(const char* src, int size) {
 
         // Create context
         cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
-        cl_ctx = clCreateContext(NULL, 1, &dev, NULL, NULL, &err);
+        cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
         CHECK_ERR( err, "clCreateContext" );
         // cuEventCreate(&__start, 0);
         // cuEventCreate(&__end, 0);
@@ -338,8 +338,8 @@ static inline size_t __buf_size(buffer_t* buf) {
 
 WEAK void halide_dev_malloc(buffer_t* buf) {
     #ifdef DEBUG
-    halide_printf("dev_malloc of %d bytes (%dx%dx%dx%d %d bytes) (buf->dev = %p) buffer\n",
-            (int)__buf_size(buf), buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
+    halide_printf("dev_malloc of %lld bytes (%dx%dx%dx%d %d bytes) (buf->dev = %p) buffer\n",
+            (long long)__buf_size(buf), buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
     if (buf->dev) {
         halide_assert(halide_validate_dev_pointer(buf));
@@ -400,9 +400,12 @@ WEAK void halide_dev_run(
 {
     cl_kernel f = __get_kernel(entry_name);
     #ifndef DEBUG
+    char msg[1];
     #else
-    halide_printf(
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)\n",
+    char msg[256];
+    snprintf(
+        msg, 256,
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)",
         entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
         (long long)halide_current_time_ns()
     );
@@ -434,7 +437,7 @@ WEAK void halide_dev_run(
         0, NULL, NULL
     );
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
-    TIME_CHECK("");
+    TIME_CHECK(msg);
     halide_printf("clEnqueueNDRangeKernel: %d\n", err);
 }
 
