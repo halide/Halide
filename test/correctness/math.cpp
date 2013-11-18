@@ -2,6 +2,7 @@
 #include <math.h>
 #include <Halide.h>
 #include <iostream>
+#include <limits>
 
 using namespace Halide;
 
@@ -113,7 +114,7 @@ fun_2_all_types(atan2)
 template <typename T>
 struct TestArgs {
     Image<T> data;
-    
+
     TestArgs(int steps, T start, T end)
       : data(steps) {
         for (int i = 0; i < steps; i++) {
@@ -148,7 +149,7 @@ struct TestArgs {
     TestArgs<double> name##_double_args(steps, start, end);       \
     test_double_##name(name##_double_args);                       \
     }
-    
+
 #define call_2(name, steps, start1, end1, start2, end2)                     \
     {                                                                       \
     printf("Testing " #name "\n");                                          \
