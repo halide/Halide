@@ -155,6 +155,9 @@ static CUmodule __mod;
 static CUevent __start, __end;
 
 WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
+    if (buf->dev == 0)
+      return true;
+
     CUcontext ctx;
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, buf->dev);
     if (result) {
@@ -165,6 +168,8 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
 }
 
 WEAK void halide_dev_free(buffer_t* buf) {
+    if (buf->dev == 0)
+      return;
 
     #ifdef DEBUG
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
