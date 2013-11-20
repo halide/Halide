@@ -27,6 +27,7 @@
 #include "UniquifyVariableNames.h"
 #include "SkipStages.h"
 #include "CSE.h"
+#include "SpecializeClampedRamps.h"
 
 namespace Halide {
 namespace Internal {
@@ -1627,6 +1628,11 @@ Stmt lower(Function f) {
     s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(2) << "Simplified: \n" << s << "\n\n";
+
+    debug(1) << "Specializing clamped ramps...\n";
+    s = specialize_clamped_ramps(s);
+    s = simplify(s);
+    debug(2) << "Specialized clamped ramps: \n" << s << "\n\n";
 
     debug(1) << "Detecting vector interleavings...\n";
     s = rewrite_interleavings(s);
