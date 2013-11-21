@@ -1206,7 +1206,10 @@ private:
             // Subtract a term from both sides
             expr = mutate(make_zero(add_b->b.type()) < add_b->b);
         } else if (add_b && equal(add_b->b, a)) {
-            expr = mutate(make_zero(add_b->a.type()) < add_b->a);
+            expr = mutate(make_zero(add_b->a.type()) < add_b->a);            
+        } else if (add_b && const_int(a, &ia) && const_int(add_b->b, &ib)) {
+            // ia < x + ib
+            expr = mutate((ia - ib) < add_b->a);
         } else if (sub_b && equal(sub_b->a, a)) {
             // Add a term to both sides
             expr = mutate(sub_b->b < make_zero(sub_b->b.type()));
@@ -1237,6 +1240,11 @@ private:
     void visit(const And *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
+        const LE *le_a = a.as<LE>();
+        const LE *le_b = b.as<LE>();
+        const LT *lt_a = a.as<LT>();
+        const LT *lt_b = b.as<LT>();
+
         if (is_one(a)) {
             expr = b;
         } else if (is_one(b)) {
@@ -1245,6 +1253,18 @@ private:
             expr = a;
         } else if (is_zero(b)) {
             expr = b;
+        } else if (le_a && le_b && equal(le_a->a, le_b->a)) {
+            // (x <= foo && x <= bar) -> x <= min(foo, bar)
+            expr = mutate(le_a->a <= min(le_a->b, le_b->b));
+        } else if (le_a && le_b && equal(le_a->b, le_b->b)) {
+            // (foo <= x && bar <= x) -> max(foo, bar) <= x
+            expr = mutate(max(le_a->a, le_b->a) <= le_a->b);
+        } else if (lt_a && lt_b && equal(lt_a->a, lt_b->a)) {
+            // (x <= foo && x <= bar) -> x <= min(foo, bar)
+            expr = mutate(lt_a->a <= min(lt_a->b, lt_b->b));
+        } else if (lt_a && lt_b && equal(lt_a->b, lt_b->b)) {
+            // (foo <= x && bar <= x) -> max(foo, bar) <= x
+            expr = mutate(max(lt_a->a, lt_b->a) <= lt_a->b);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {

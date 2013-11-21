@@ -104,6 +104,8 @@ WEAK buffer_t* __malloc_buffer(int32_t size) {
 }
 
 WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
+    if (buf->dev == 0)
+      return true;
 
     size_t real_size;
     cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
@@ -117,6 +119,8 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
 }
 
 WEAK void halide_dev_free(buffer_t* buf) {
+    if (buf->dev == 0)
+      return;
 
     #ifdef DEBUG
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);

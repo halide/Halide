@@ -47,9 +47,6 @@ protected:
     void visit(const Max *);
     // @}
 
-    /** Functions for clamped vector load */
-    void visit(const Load *);
-
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
