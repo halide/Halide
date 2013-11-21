@@ -89,7 +89,7 @@ Target get_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info[2] & (1 << 5);
+        bool have_avx2 = info[1] & (1 << 5);
         if (have_avx2) {
             features |= Target::AVX2;
         }
