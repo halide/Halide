@@ -39,8 +39,9 @@ int main(int argc, char **argv) {
     // Compute the output in tiles of the appropriate size
     output.tile(x, y, xi, yi, tile_size, tile_size);
 
-    // Vectorize within tiles, parallelize across tiles.
-    output.vectorize(xi, 4).fuse(x, y, t).parallel(t);
+    // Vectorize within tiles. We would also parallelize across tiles,
+    // but that introduces a race condition in the call_count.
+    output.vectorize(xi, 4).fuse(x, y, t);
 
     // Compute brighter per output tile
     brighter.compute_at(output, t);
