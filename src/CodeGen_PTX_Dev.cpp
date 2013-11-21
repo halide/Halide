@@ -12,6 +12,12 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
+// This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
+// hardcoding a path to the .h file.
+#if WITH_PTX
+namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -124,7 +130,9 @@ void CodeGen_PTX_Dev::init_module() {
 
     CodeGen::init_module();
 
+    #if WITH_PTX
     module = get_initial_module_for_ptx_device(context);
+    #endif
 
     owns_module = true;
 }
@@ -335,6 +343,29 @@ string CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(*TD));
     else
         PM.add(new DataLayout(module));
+
+    // NVidia's libdevice library uses a __nvvm_reflect to choose
+    // how to handle denormalized numbers. (The pass replaces calls
+    // to __nvvm_reflect with a constant via a map lookup. The inliner
+    // pass then resolves these situations to fast code, often a single
+    // instruction per decision point.)
+    //
+    // The default is (more) IEEE like handling. FTZ mode flushes them
+    // to zero. (This may only apply to single-precision.)
+    //
+    // The libdevice documentation covers other options for math accuracy
+    // such as replacing division with multiply by the reciprocal and
+    // use of fused-multiply-add, but they do not seem to be controlled
+    // by this __nvvvm_reflect mechanism and may be flags to earlier compiler
+    // passes.
+    #define kDefaultDenorms 0
+    #define kFTZDenorms     1
+
+    #if WITH_PTX
+    StringMap<int> reflect_mapping;
+    reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
+    PM.add(createNVVMReflectPass(reflect_mapping));
+    #endif
 
     // Inlining functions is essential to PTX
     PM.add(createAlwaysInlinerPass());
