@@ -15,6 +15,9 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, 256);
+    } 
+    if (target.features & (Target::OpenCL | Target::SPIR)) {
+        f.cuda_tile(x, 256);
     }
 
     u.set(17.0f);

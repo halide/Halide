@@ -5,6 +5,7 @@
 #include "Var.h"
 #include <sstream>
 #include <iostream>
+#include <limits>
 #include <cmath>
 #include "Debug.h"
 #include "Lerp.h"
@@ -463,13 +464,18 @@ void CodeGen_C::visit(const IntImm *op) {
     id = oss.str();
 }
 
-#ifdef _MSC_VER
-#define isnan(x) _isnanf(x)
-#define isinf(x) (!_finitef(x))
-#else
-#define isnan(x) std::isnan(x)
-#define isinf(x) std::isinf(x)
-#endif
+
+// NaN is the only float/double for which this is true... and surprisingly, there doesn't seem to be a portable isnan function (dsharlet).
+template <typename T>
+static bool isnan(T x) { return x != x; }
+
+template <typename T>
+static bool isinf(T x) 
+{ 
+    return std::numeric_limits<T>::has_infinity && (
+        x == std::numeric_limits<T>::infinity() ||
+        x == -std::numeric_limits<T>::infinity()); 
+}
 
 void CodeGen_C::visit(const FloatImm *op) {
     if (isnan(op->value)) {
