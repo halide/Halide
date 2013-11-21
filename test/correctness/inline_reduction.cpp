@@ -15,10 +15,10 @@ int main(int argc, char **argv) {
     Func local_variance;
     Expr input_val = input(x+r.x, y+r.y);
     Expr local_mean = sum(input_val) / 9.0f;
-    local_variance(x, y) = sum(input_val*input_val)/81.0f - local_mean*local_mean;    
+    local_variance(x, y) = sum(input_val*input_val)/81.0f - local_mean*local_mean;
 
     Image<float> result = local_variance.realize(10, 10);
-    
+
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
             float local_mean = 0;
@@ -41,21 +41,26 @@ int main(int argc, char **argv) {
         }
     }
 
-    
-    // Test the other reductions
+
+    // Test the other reductions.
     Func local_product, local_max, local_min;
     local_product(x, y) = product(input_val);
     local_max(x, y) = maximum(input_val);
     local_min(x, y) = minimum(input_val);
 
     // Try a separable form of minimum too, so we test two reductions
-    // in one pipeline
+    // in one pipeline.
     Func min_x, min_y;
     RDom kx(-1, 3), ky(-1, 3);
     min_x(x, y) = minimum(input(x+kx, y));
     min_y(x, y) = minimum(min_x(x, y+ky));
 
-    
+    // Vectorize them all, to make life more interesting.
+    local_product.vectorize(x, 4);
+    local_max.vectorize(x, 4);
+    local_min.vectorize(x, 4);
+    min_y.vectorize(x, 4);
+
     Image<float> prod_im = local_product.realize(10, 10);
     Image<float> max_im = local_max.realize(10, 10);
     Image<float> min_im = local_min.realize(10, 10);
@@ -71,7 +76,7 @@ int main(int argc, char **argv) {
                     float val = (x + rx)*(y + ry) + 1.0f;
                     correct_prod *= val;
                     correct_min = std::min(correct_min, val);
-                    correct_max = std::max(correct_max, val);                   
+                    correct_max = std::max(correct_max, val);
                 }
             }
 
@@ -132,5 +137,5 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
     return 0;
-    
+
 }

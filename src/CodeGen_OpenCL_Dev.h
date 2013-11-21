@@ -25,7 +25,7 @@ public:
      * for a single pipeline. */
     void init_module();
 
-    std::string compile_to_src();
+    std::vector<char> compile_to_src();
 
     std::string get_current_kernel_name();
 

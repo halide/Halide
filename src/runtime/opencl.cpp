@@ -3,12 +3,15 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-// TODO: On windows these need stdcall
-//    #define CL_API_CALL     __stdcall
-//    #define CL_CALLBACK     __stdcall
+#ifdef _WIN32
+#define CL_API_ENTRY
+#define CL_API_CALL     __stdcall
+#define CL_CALLBACK     __stdcall
+#else
 #define CL_API_ENTRY
 #define CL_API_CALL
 #define CL_CALLBACK
+#endif
 #define CL_API_SUFFIX__VERSION_1_0
 #define CL_API_SUFFIX__VERSION_1_1
 #define CL_API_SUFFIX__VERSION_1_2
@@ -31,6 +34,8 @@ extern int64_t halide_current_time_ns();
 extern void free(void *);
 extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
+extern char *getenv(const char *);
+extern const char * strstr(const char *, const char *);
 
 
 #ifndef DEBUG
@@ -99,6 +104,8 @@ WEAK buffer_t* __malloc_buffer(int32_t size) {
 }
 
 WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
+    if (buf->dev == 0)
+      return true;
 
     size_t real_size;
     cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
@@ -106,32 +113,88 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
         halide_printf("Bad device pointer %p: clGetMemObjectInfo returned %d\n", (void *)buf->dev, result);
         return false;
     }
-    halide_printf("validate %p: asked for %zu, actual allocated %zu\n", (void*)buf->dev, size, real_size);
+    halide_printf("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
     if (size) halide_assert(real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
 
 WEAK void halide_dev_free(buffer_t* buf) {
+    if (buf->dev == 0)
+      return;
 
     #ifdef DEBUG
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
 
-    halide_assert(halide_validate_dev_pointer(buf));
-    CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
-    buf->dev = 0;
+    // TODO: Is this check covering up a bug? Halide might just be calling dev_free on all buffers, even if they are not device buffers.
+    if (buf->dev != 0)
+    {
+        halide_assert(halide_validate_dev_pointer(buf));
+        CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
+        buf->dev = 0;
+    }
 }
 
-WEAK void halide_init_kernels(const char* src) {
+
+
+
+const char * get_opencl_platform() {
+    char *platform = getenv("HL_OCL_PLATFORM");
+    if (platform) return platform;
+    else return "";
+}
+
+WEAK void halide_init_kernels(const char* src, int size) {
     int err;
     cl_device_id dev;
     // Initialize one shared context for all Halide compiled instances
     if (!cl_ctx) {
+        const cl_uint maxPlatforms = 4;
+        cl_platform_id platforms[maxPlatforms];
+        cl_uint platformCount = 0;
+
+        err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
+        CHECK_ERR( err, "clGetPlatformIDs" );
+
+        cl_platform_id platform = NULL;
+
+        const char * name = get_opencl_platform();
+        if (name != NULL) {
+            for (cl_uint i = 0; i < platformCount; ++i) {
+                const cl_uint maxPlatformName = 256;
+                char platformName[maxPlatformName];
+                err = clGetPlatformInfo( platforms[i], CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
+                if (err != CL_SUCCESS) continue;
+
+                if (strstr(platformName, name))
+                {
+                    platform = platforms[i];
+                    break;
+                }
+            }
+        } else if (platformCount > 0) {
+            platform = platforms[0];
+        }
+        if (platform == NULL){
+            halide_printf("Failed to find OpenCL platform\n");
+            return;
+        }
+
+        #ifdef DEBUG
+        const cl_uint maxPlatformName = 256;
+        char platformName[maxPlatformName];
+        err = clGetPlatformInfo( platform, CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
+        CHECK_ERR( err, "clGetPlatformInfo" );
+
+        halide_printf("Got platform '%s', about to create context (t=%lld)\n",
+                      platformName, (long long)halide_current_time_ns());
+        #endif
+
         // Make sure we have a device
         const cl_uint maxDevices = 4;
         cl_device_id devices[maxDevices];
         cl_uint deviceCount = 0;
-        err = clGetDeviceIDs( NULL, CL_DEVICE_TYPE_ALL, maxDevices, devices, &deviceCount );
+        err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, maxDevices, devices, &deviceCount );
         CHECK_ERR( err, "clGetDeviceIDs" );
         if (deviceCount == 0) {
             halide_printf("Failed to get device\n");
@@ -141,13 +204,19 @@ WEAK void halide_init_kernels(const char* src) {
         dev = devices[deviceCount-1];
 
         #ifdef DEBUG
-        halide_printf("Got device %lld, about to create context (t=%lld)\n",
-                      (long long)dev, (long long)halide_current_time_ns());
+        const cl_uint maxDeviceName = 256;
+        char deviceName[maxDeviceName];
+        err = clGetDeviceInfo( dev, CL_DEVICE_NAME, maxDeviceName, deviceName, NULL );
+        CHECK_ERR( err, "clGetDeviceInfo" );
+
+        halide_printf("Got device '%s', about to create context (t=%lld)\n",
+                      deviceName, (long long)halide_current_time_ns());
         #endif
 
 
         // Create context
-        cl_ctx = clCreateContext(0, 1, &dev, NULL, NULL, &err);
+        cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
+        cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
         CHECK_ERR( err, "clCreateContext" );
         // cuEventCreate(&__start, 0);
         // cuEventCreate(&__end, 0);
@@ -156,20 +225,35 @@ WEAK void halide_init_kernels(const char* src) {
         cl_q = clCreateCommandQueue(cl_ctx, dev, 0, &err);
         CHECK_ERR( err, "clCreateCommandQueue" );
     } else {
-        //CHECK_CALL( cuCtxPushCurrent(cuda_ctx), "cuCtxPushCurrent" );
+        // Maintain ref count of context.
+        clRetainContext(cl_ctx);
+        clRetainCommandQueue(cl_q);
     }
 
     // Initialize a module for just this Halide module
-    if (!__mod) {
+    if ((!__mod) && (size > 1)) {
         #ifdef DEBUG
-        halide_printf("-------\nCompiling kernel source:\n%s\n--------\n", src);
+        halide_printf("Compiling kernel (%i bytes)\n", size);
         #endif
 
         // Create module
-        __mod = clCreateProgramWithSource(cl_ctx, 1, (const char**)&src, NULL, &err );
-        CHECK_ERR( err, "clCreateProgramWithSource" );
 
-        err = clBuildProgram( __mod, 0, NULL, NULL, NULL, NULL );
+        cl_device_id devices[] = { dev };
+        size_t lengths[] = { size };
+
+        if (strstr(src, "/*OpenCL C*/")) {
+            // Program is OpenCL C.
+            const char * sources[] = { src };
+            __mod = clCreateProgramWithSource(cl_ctx, 1, &sources[0], NULL, &err );
+            CHECK_ERR( err, "clCreateProgramWithSource" );
+        } else {
+            // Program is SPIR binary.
+            const unsigned char * binaries[] = { (unsigned char *)src };
+            __mod = clCreateProgramWithBinary(cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
+            CHECK_ERR( err, "clCreateProgramWithBinary" );
+        }
+
+        err = clBuildProgram( __mod, 1, &dev, NULL, NULL, NULL );
         if (err != CL_SUCCESS) {
             size_t len;
             char buffer[2048];
@@ -194,13 +278,15 @@ WEAK void halide_release() {
     #endif
     halide_dev_sync();
 
-    // TODO: destroy context if we own it
-
     // Unload the module
     if (__mod) {
         CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
         __mod = 0;
     }
+
+    // Unload context (ref counted).
+    CHECK_CALL( clReleaseCommandQueue(cl_q), "clReleaseCommandQueue" );
+    CHECK_CALL( clReleaseContext(cl_ctx), "clReleaseContext" );
 }
 
 static cl_kernel __get_kernel(const char* entry_name) {
@@ -227,8 +313,8 @@ static cl_mem __dev_malloc(size_t bytes) {
     // char msg[1];
     #else
     char msg[256];
-    snprintf(msg, 256, "dev_malloc (%zu bytes) (t=%lld)",
-             bytes, (long long)halide_current_time_ns() );
+    snprintf(msg, 256, "dev_malloc (%lld bytes) (t=%lld)",
+             (long long)bytes, (long long)halide_current_time_ns() );
     #endif
     TIME_START();
     int err;
@@ -253,8 +339,8 @@ static inline size_t __buf_size(buffer_t* buf) {
 
 WEAK void halide_dev_malloc(buffer_t* buf) {
     #ifdef DEBUG
-    halide_printf("dev_malloc of %dx%dx%dx%d (%d bytes) (buf->dev = %p) buffer\n",
-            buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
+    halide_printf("dev_malloc of %lld bytes (%dx%dx%dx%d %d bytes) (buf->dev = %p) buffer\n",
+            (long long)__buf_size(buf), buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
     #endif
     if (buf->dev) {
         halide_assert(halide_validate_dev_pointer(buf));
@@ -269,12 +355,10 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         halide_assert(buf->host && buf->dev);
         size_t size = __buf_size(buf);
-        #ifndef DEBUG
-        // char msg[1];
-        #else
+        #ifdef DEBUG
         char msg[256];
-        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%lld)",
-                 size, buf->host, (void*)buf->dev, (long long)halide_current_time_ns() );
+        snprintf(msg, 256, "copy_to_dev (%lld bytes) %p -> %p (t=%lld)",
+                 (long long)size, buf->host, (void*)buf->dev, (long long)halide_current_time_ns() );
         #endif
         halide_assert(halide_validate_dev_pointer(buf));
         TIME_START();
@@ -294,7 +378,7 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
         char msg[1];
         #else
         char msg[256];
-        snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+        snprintf(msg, 256, "copy_to_host (%lld bytes) %p -> %p", (long long)size, (void*)buf->dev, buf->host );
         #endif
         halide_assert(halide_validate_dev_pointer(buf, size));
         TIME_START();
@@ -339,11 +423,10 @@ WEAK void halide_dev_run(
     }
     // Set the shared mem buffer last
     // Always set at least 1 byte of shmem, to keep the launch happy
-    CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
+    //CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
 
     // Launch kernel
     TIME_START();
-    halide_printf("%s\n", msg);
     int err =
     clEnqueueNDRangeKernel(
         cl_q,
@@ -407,7 +490,7 @@ int f( buffer_t *input, buffer_t *result, int N )
 }
 
 int main(int argc, char* argv[]) {
-    halide_init_kernels(src);
+    halide_init_kernels(src, 0);
 
     const int N = 2048;
     buffer_t in, out;
