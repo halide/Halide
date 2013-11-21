@@ -152,12 +152,12 @@ WEAK void halide_init_kernels(const char* src, int size) {
         const cl_uint maxPlatforms = 4;
         cl_platform_id platforms[maxPlatforms];
         cl_uint platformCount = 0;
-        
-        err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount ); 
+
+        err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
         CHECK_ERR( err, "clGetPlatformIDs" );
-        
+
         cl_platform_id platform = NULL;
-        
+
         const char * name = get_opencl_platform();
         if (name != NULL) {
             for (cl_uint i = 0; i < platformCount; ++i) {
@@ -179,7 +179,7 @@ WEAK void halide_init_kernels(const char* src, int size) {
             halide_printf("Failed to find OpenCL platform\n");
             return;
         }
-        
+
         #ifdef DEBUG
         const cl_uint maxPlatformName = 256;
         char platformName[maxPlatformName];
@@ -231,7 +231,7 @@ WEAK void halide_init_kernels(const char* src, int size) {
     }
 
     // Initialize a module for just this Halide module
-    if (!__mod) {
+    if ((!__mod) && (size > 1)) {
         #ifdef DEBUG
         halide_printf("Compiling kernel (%i bytes)\n", size);
         #endif
@@ -241,15 +241,12 @@ WEAK void halide_init_kernels(const char* src, int size) {
         cl_device_id devices[] = { dev };
         size_t lengths[] = { size };
 
-        if (strstr(src, "/*OpenCL C*/"))
-        {
+        if (strstr(src, "/*OpenCL C*/")) {
             // Program is OpenCL C.
             const char * sources[] = { src };
-            __mod = clCreateProgramWithSource(cl_ctx, 1, &sources[0], lengths, &err );
+            __mod = clCreateProgramWithSource(cl_ctx, 1, &sources[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithSource" );
-        }
-        else
-        {
+        } else {
             // Program is SPIR binary.
             const unsigned char * binaries[] = { (unsigned char *)src };
             __mod = clCreateProgramWithBinary(cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
@@ -280,7 +277,7 @@ WEAK void halide_release() {
     halide_printf("dev_sync on exit" );
     #endif
     halide_dev_sync();
-    
+
     // Unload the module
     if (__mod) {
         CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );

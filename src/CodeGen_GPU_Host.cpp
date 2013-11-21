@@ -299,7 +299,7 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
         return new CodeGen_PTX_Dev();
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        return new CodeGen_OpenCL_Dev();    
+        return new CodeGen_OpenCL_Dev();
     } else if (t.features & Target::SPIR) {
         debug(1) << "Constructing SPIR device codegen\n";
         return new CodeGen_SPIR_Dev();
@@ -353,15 +353,15 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args);
-        
+
     std::vector<char> kernel_src = cgdev->compile_to_src();
+
     llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size());
     GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type,
-                                                         true, GlobalValue::PrivateLinkage, 0,
-                                                         "halide_kernel_src");
-    kernel_src_global->setInitializer(ConstantDataArray::get(
-        *context, 
-        ArrayRef<unsigned char>((unsigned char *)&kernel_src[0], kernel_src.size())));
+                                                           true, GlobalValue::PrivateLinkage, 0,
+                                                           "halide_kernel_src");
+    ArrayRef<unsigned char> src_array((unsigned char *)&kernel_src[0], kernel_src.size());
+    kernel_src_global->setInitializer(ConstantDataArray::get(*context, src_array));
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
