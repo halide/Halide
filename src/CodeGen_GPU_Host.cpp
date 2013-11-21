@@ -542,16 +542,18 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
+        llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
+
         // build the kernel arguments array
         vector<Argument> closure_args = c.arguments();
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
-        llvm::Type *size_t_t = sizeof(size_t) == 4 ? i32 : i64; // size_t
         int num_args = (int)closure_args.size();
         Value *saved_stack = save_stack();
         Value *gpu_args_arr = builder->CreateAlloca(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
                                                     NULL,
                                                     kernel_name + "_args");
-        Value *gpu_arg_sizes_arr = builder->CreateAlloca(ArrayType::get(size_t_t, num_args+1), // NULL-terminated list of size_t's
+
+        Value *gpu_arg_sizes_arr = builder->CreateAlloca(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
                                                          NULL,
                                                          kernel_name + "_arg_sizes");
 
@@ -581,15 +583,14 @@ void CodeGen_GPU_Host::visit(const For *loop) {
                                  builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
 
             // store the size of the argument
-            // TODO: support non-64-bit hosts for CUDA, OpenCL
-            int size_bits = (closure_args[i].is_buffer) ? sizeof(void*)*8 : closure_args[i].type.bits;
-            builder->CreateStore(ConstantInt::get(size_t_t, size_bits/8),
+            int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
+            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
                                  builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
         }
         // NULL-terminate the lists
         builder->CreateStore(ConstantPointerNull::get(arg_t),
                              builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
-        builder->CreateStore(ConstantInt::get(size_t_t, 0),
+        builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
 
         // Figure out how much shared memory we need to allocate, and
