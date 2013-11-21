@@ -48,7 +48,12 @@ extern int snprintf(char *, size_t, const char *, ...);
 #define cuStreamDestroy                     cuStreamDestroy_v2
 #define cuEventDestroy                      cuEventDestroy_v2
 
-typedef unsigned long long CUdeviceptr; // hard code 64-bits for now
+#ifdef BITS_64
+typedef unsigned long long CUdeviceptr;
+#else
+typedef unsigned int CUdeviceptr;
+#endif
+
 typedef int CUdevice;                                     /**< CUDA device */
 typedef struct CUctx_st *CUcontext;                       /**< CUDA context */
 typedef struct CUmod_st *CUmodule;                        /**< CUDA module */
@@ -155,6 +160,16 @@ static CUmodule __mod;
 static CUevent __start, __end;
 
 WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
+// The technique using cuPointerGetAttribute and CU_POINTER_ATTRIBUTE_CONTEXT
+// requires unified virtual addressing is enabled and that is not the case
+// for 32-bit processes on Mac OS X. So for now, as a total hack, just return true
+// in 32-bit. This could of course be wrong the other way for cards that only
+// support 32-bit addressing in 64-bit processes, but I expect those cards do not
+// support unified addressing at all.
+// TODO: figure out a way to validate pointers in all cases if strictly necessary.
+#ifdef BITS_32
+    return true;
+#else
     if (buf->dev == 0)
       return true;
 
@@ -165,6 +180,7 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
         return false;
     }
     return true;
+#endif
 }
 
 WEAK void halide_dev_free(buffer_t* buf) {
@@ -327,6 +343,7 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
 
     CUdeviceptr p;
     TIME_CALL( cuMemAlloc(&p, size), "dev_malloc");
+
     buf->dev = (uint64_t)p;
     halide_assert(buf->dev);
 
