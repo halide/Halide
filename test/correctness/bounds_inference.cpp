@@ -19,6 +19,11 @@ int main(int argc, char **argv) {
         g.cuda_tile(x, 128);
         h.cuda_tile(x, 128);
     }
+    if (target.features & (Target::OpenCL | Target::SPIR)) {
+        f.cuda_tile(x, y, 16, 16);
+        g.cuda_tile(x, 128);
+        h.cuda_tile(x, 128);
+    }
 
 
     Image<int> out = f.realize(32, 32);

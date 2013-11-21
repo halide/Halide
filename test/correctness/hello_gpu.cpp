@@ -5,6 +5,7 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+
     Var x("x"), y("y");
     Func f("f");
 
@@ -14,6 +15,9 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.features & Target::CUDA) {
+        f.cuda_tile(x, y, 8, 8);
+    } 
+    if (target.features & (Target::OpenCL | Target::SPIR)) {
         f.cuda_tile(x, y, 8, 8);
     }
 
