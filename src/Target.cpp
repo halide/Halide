@@ -89,7 +89,7 @@ Target get_host_target() {
         // Call cpuid with eax=7, ecx=0
         int info2[4];
         cpuid(info2, 7, 0);
-        bool have_avx2 = info[2] & (1 << 5);
+        bool have_avx2 = info[1] & (1 << 5);
         if (have_avx2) {
             features |= Target::AVX2;
         }
@@ -192,6 +192,8 @@ Target get_target_from_environment() {
             t.features |= Target::CUDA;
         } else if (tok == "opencl") {
             t.features |= Target::OpenCL;
+        } else if (tok == "spir") {
+            t.features |= Target::SPIR;
         } else if (tok == "gpu_debug") {
             t.features |= Target::GPUDebug;
         } else {
@@ -304,6 +306,7 @@ DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
+DECLARE_LL_INITMOD(spir_dev)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -445,7 +448,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         } else {
             modules.push_back(get_initmod_cuda(c, bits_64));
         }
-    } else if (t.features & Target::OpenCL) {
+    } else if (t.features & (Target::OpenCL | Target::SPIR)) {
         if (t.features & Target::GPUDebug) {
             modules.push_back(get_initmod_opencl_debug(c, bits_64));
         } else {
@@ -489,6 +492,10 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
     return modules[0];
 }
 #endif
+
+llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c) {
+    return get_initmod_spir_dev_ll(c);
+}
 
 }
 

@@ -24,7 +24,7 @@ struct CodeGen_GPU_Dev {
      * for a single pipeline. */
     virtual void init_module() = 0;
 
-    virtual std::string compile_to_src() = 0;
+    virtual std::vector<char> compile_to_src() = 0;
 
     virtual std::string get_current_kernel_name() = 0;
 

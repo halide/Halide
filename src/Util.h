@@ -18,14 +18,14 @@
 #include <cstring>
 
 // by default, the symbol EXPORT does nothing. In windows dll builds we can define it to __declspec(dllexport)
-#ifdef _WINDOWS_DLL
+#if defined(_WIN32) && defined(Halide_SHARED)
+#ifdef Halide_EXPORTS
 #define EXPORT __declspec(dllexport)
 #else
-#ifdef _WIN32
 #define EXPORT __declspec(dllimport)
+#endif
 #else
 #define EXPORT
-#endif
 #endif
 
 namespace Halide {
