@@ -222,7 +222,7 @@ WEAK void halide_init_kernels(const char* ptx_src, int size) {
             status = cuDeviceGet(&dev, atoi(device_str));
         } else {
             // Try to get a device >0 first, since 0 should be our display device
-	    // For now, don't try devices > 2 to maintain compatibility with previous behavior.
+            // For now, don't try devices > 2 to maintain compatibility with previous behavior.
             if (deviceCount > 2)
                 deviceCount = 2;
             for (int id = deviceCount - 1; id >= 0; id--) {

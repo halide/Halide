@@ -542,7 +542,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
         Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
 
-	llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
+        llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
 
         // build the kernel arguments array
         vector<Argument> closure_args = c.arguments();
