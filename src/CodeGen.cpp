@@ -1259,7 +1259,7 @@ void CodeGen::visit(const Call *op) {
             ostringstream type_name;
             type_name << (t.is_float() ? 'f' : 'i') << t.bits;
             if (t.is_vector()) {
-                type_name << 'x' << t.bits;
+                type_name << 'x' << t.width;
             }
             llvm::Function *builtin_abs = module->getFunction("abs_" + type_name.str());
             Value *arg = codegen(op->args[0]);
