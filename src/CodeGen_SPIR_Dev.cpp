@@ -29,14 +29,16 @@ CodeGen_SPIR_Dev::CodeGen_SPIR_Dev() : CodeGen() {
 void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
 
     // Now deduce the types of the arguments to our function
-    vector<llvm::Type *> arg_types(args.size());
+    vector<llvm::Type *> arg_types(args.size()+1);
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo(1);
+            arg_types[i] = llvm_type_of(UInt(8))->getPointerTo(1); // __global = addrspace(1)
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }
     }
+    // Add local (shared) memory buffer parameter.
+    arg_types[args.size()] = llvm_type_of(UInt(8))->getPointerTo(3); // __local = addrspace(3)
 
     // Make our function
     function_name = name;
@@ -50,31 +52,31 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
             function->setDoesNotAlias(i+1);
         }
     }
+    // Mark the local memory as no alias (probably not necessary?)
+    function->setDoesNotAlias(args.size());
 
 
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
-
+    
     // Put the arguments in the symbol table
     {
-        size_t i = 0;
-        for (llvm::Function::arg_iterator iter = function->arg_begin();
-             iter != function->arg_end();
-             iter++) {
-
-            if (args[i].is_buffer) {
+        llvm::Function::arg_iterator arg = function->arg_begin();
+        for (std::vector<Argument>::const_iterator iter = args.begin(); 
+            iter != args.end(); 
+            ++iter, ++arg) {
+            if (iter->is_buffer) {
                 // HACK: codegen expects a load from foo to use base
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
-                sym_push(args[i].name + ".host", iter);
+                sym_push(iter->name + ".host", arg);
             } else {
-                sym_push(args[i].name, iter);
+                sym_push(iter->name, arg);
             }
-            iter->setName(args[i].name);
-
-            i++;
+            arg->setName(iter->name);
         }
+        arg->setName("shared");
     }
 
     // We won't end the entry block yet, because we'll want to add
