@@ -52,7 +52,8 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
             function->setDoesNotAlias(i+1);
         }
     }
-    function->setDoesNotAlias(args.size()+1);
+    // Mark the local memory as no alias (probably not necessary?)
+    function->setDoesNotAlias(args.size());
 
 
     // Make the initial basic block
