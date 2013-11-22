@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 8, 8);
     } 
-    if (target.features & (Target::OpenCL | Target::SPIR)) {
+    if (target.features & Target::OpenCL) {
         f.cuda_tile(x, y, 8, 8);
     }
 

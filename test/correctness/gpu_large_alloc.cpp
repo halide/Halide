@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         f.compute_root().cuda_tile(x, y, 16, 16);
         g.compute_root().cuda_tile(x, y, 16, 16);
     }
-    if (target.features & (Target::OpenCL | Target::SPIR)) {
+    if (target.features & Target::OpenCL) {
         f.compute_root().cuda_tile(x, y, 16, 16);
         g.compute_root().cuda_tile(x, y, 16, 16);
     }

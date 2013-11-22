@@ -20,7 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_SPIR_Dev::CodeGen_SPIR_Dev() : CodeGen() {
+CodeGen_SPIR_Dev::CodeGen_SPIR_Dev(int bits) : CodeGen(), bits(bits) {
     #if !(WITH_SPIR)
     assert(false && "spir not enabled for this build of Halide.");
     #endif
@@ -110,17 +110,11 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     debug(2) << "Done generating llvm bitcode\n";
 }
 
-const std::string spirDataLayout = "e-p:32:32:32-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024";
-const std::string spir64DataLayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024";
-
 void CodeGen_SPIR_Dev::init_module() {
 
     CodeGen::init_module();
 
-    module = get_initial_module_for_spir_device(context);
-
-    module->setTargetTriple(Triple::normalize(march()+"-unknown-unknown"));
-    module->setDataLayout(spirDataLayout);
+    module = get_initial_module_for_spir_device(context, bits);
 
     // Fix the target triple
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -245,7 +239,7 @@ void CodeGen_SPIR_Dev::visit(const Free *f) {
 }
 
 string CodeGen_SPIR_Dev::march() const {
-    return "spir";
+    return bits == 32 ? "spir" : "spir64";
 }
 
 string CodeGen_SPIR_Dev::mcpu() const {
