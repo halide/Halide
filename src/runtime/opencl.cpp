@@ -423,7 +423,7 @@ WEAK void halide_dev_run(
     }
     // Set the shared mem buffer last
     // Always set at least 1 byte of shmem, to keep the launch happy
-    //CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
+    CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
 
     // Launch kernel
     TIME_START();
