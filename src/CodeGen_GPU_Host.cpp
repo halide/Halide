@@ -297,12 +297,15 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
     if (t.features & Target::CUDA) {
         debug(1) << "Constructing CUDA device codegen\n";
         return new CodeGen_PTX_Dev();
+    } else if (t.features & Target::SPIR64) {
+        debug(1) << "Constructing SPIR64 device codegen\n";
+        return new CodeGen_SPIR_Dev(64);
+    } else if (t.features & Target::SPIR) {
+        debug(1) << "Constructing SPIR device codegen\n";
+        return new CodeGen_SPIR_Dev(32);
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();
-    } else if (t.features & Target::SPIR) {
-        debug(1) << "Constructing SPIR device codegen\n";
-        return new CodeGen_SPIR_Dev();
     } else {
         assert(false && "Requested unknown GPU target");
         return NULL;
@@ -408,7 +411,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
 
         cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
 
-    } else if (target.features & (Target::OpenCL | Target::SPIR)) {
+    } else if (target.features & Target::OpenCL) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (have_symbol("clCreateContext")) {
@@ -450,7 +453,7 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         void (*cleanup_routine)() =
             reinterpret_bits<void (*)()>(f);
         cleanup_routines->push_back(cleanup_routine);
-    } else if (target.features & (Target::OpenCL | Target::SPIR)) {
+    } else if (target.features & Target::OpenCL) {
         // When the module dies, we need to call halide_release
         llvm::Function *fn = module->getFunction("halide_release");
         assert(fn && "Could not find halide_release in module");

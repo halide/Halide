@@ -113,7 +113,9 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
         halide_printf("Bad device pointer %p: clGetMemObjectInfo returned %d\n", (void *)buf->dev, result);
         return false;
     }
+    #ifdef DEBUG
     halide_printf("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
+    #endif
     if (size) halide_assert(real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
@@ -258,9 +260,11 @@ WEAK void halide_init_kernels(const char* src, int size) {
             size_t len;
             char buffer[2048];
 
-            halide_printf("Error: Failed to build program executable!\n");
-            clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len);
-            halide_printf("%s\n", buffer);
+            halide_printf("Error: Failed to build program executable! err = %d\n", err);
+            if (clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len) == CL_SUCCESS)
+                halide_printf("%s\n", buffer);
+            else
+                halide_printf("clGetProgramBuildInfo failed to get build log!\n");
             halide_assert(err == CL_SUCCESS);
         }
     }
@@ -375,14 +379,16 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
         halide_assert(buf->host && buf->dev);
         size_t size = __buf_size(buf);
         #ifndef DEBUG
-        char msg[1];
+        char msg[1] = { 0 };
         #else
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%lld bytes) %p -> %p", (long long)size, (void*)buf->dev, buf->host );
         #endif
         halide_assert(halide_validate_dev_pointer(buf, size));
         TIME_START();
+        #ifdef DEBUG
         halide_printf("%s\n", msg);
+        #endif
         int err = clEnqueueReadBuffer( cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, msg );
         TIME_CHECK(msg);
@@ -439,7 +445,6 @@ WEAK void halide_dev_run(
     );
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
     TIME_CHECK(msg);
-    halide_printf("clEnqueueNDRangeKernel: %d\n", err);
 }
 
 #ifdef TEST_STUB

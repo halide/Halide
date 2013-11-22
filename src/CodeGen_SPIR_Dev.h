@@ -20,13 +20,13 @@ class CodeGen_SPIR_Dev : public CodeGen, public CodeGen_GPU_Dev {
 public:
     friend class CodeGen_GPU_Host;
 
-    /** Create a PTX device code generator. */
-    CodeGen_SPIR_Dev();
+    /** Create a SPIR device code generator. */
+    CodeGen_SPIR_Dev(int bits);
         
     void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
 
-    /** (Re)initialize the PTX module. This is separate from compile, since 
-     * a PTX device module will often have many kernels compiled into it for
+    /** (Re)initialize the SPIR module. This is separate from compile, since 
+     * a SPIR device module will often have many kernels compiled into it for
      * a single pipeline. */
     void init_module();
 
@@ -51,6 +51,9 @@ protected:
     void visit(const Free *);
     void visit(const Pipeline *);
     // @}
+    
+    /** Remmeber the requested bitness for the generated code. */
+    int bits;
 
     std::string march() const;
     std::string mcpu() const;
@@ -58,7 +61,7 @@ protected:
     bool use_soft_float_abi() const;
 
     /** Map from simt variable names (e.g. foo.blockidx) to the llvm
-     * ptx intrinsic functions to call to get them. */
+     * SPIR intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
 };
 
