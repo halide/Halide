@@ -113,7 +113,9 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
         halide_printf("Bad device pointer %p: clGetMemObjectInfo returned %d\n", (void *)buf->dev, result);
         return false;
     }
+    #ifdef DEBUG
     halide_printf("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
+    #endif
     if (size) halide_assert(real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
@@ -439,7 +441,6 @@ WEAK void halide_dev_run(
     );
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
     TIME_CHECK(msg);
-    halide_printf("clEnqueueNDRangeKernel: %d\n", err);
 }
 
 #ifdef TEST_STUB
