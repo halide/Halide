@@ -203,7 +203,8 @@ set(HEADER_FILES
   Tuple.h
   Lerp.h
   Target.h
-  SkipStages.h)
+  SkipStages.h
+  SpecializeClampedRamps.h)
   
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -270,6 +271,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Lerp.cpp 
   Target.cpp
   SkipStages.cpp
+  SpecializeClampedRamps.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
   
