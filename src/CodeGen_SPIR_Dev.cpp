@@ -108,6 +108,9 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     // Finally, verify the module is ok
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
+
+    // Optimize it - this really only optimizes the current function
+    optimize_module();
 }
 
 void CodeGen_SPIR_Dev::init_module() {
@@ -229,9 +232,6 @@ void CodeGen_SPIR_Dev::visit(const Allocate *alloc) {
 
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
-    
-    // Optimize it - this really only optimizes the current function
-    optimize_module();
 }
 
 void CodeGen_SPIR_Dev::visit(const Free *f) {
