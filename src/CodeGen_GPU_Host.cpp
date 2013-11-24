@@ -398,6 +398,10 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
             }
             if (!error.empty()) {
                 error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
+            }
+            if (!error.empty()) {
+                error.clear();
                 llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
             }
             assert(error.empty() && "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll");
@@ -412,7 +416,7 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
         cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
 
     } else if (target.features & Target::OpenCL) {
-        // First check if libCuda has already been linked
+        // First check if libOpenCL has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (have_symbol("clCreateContext")) {
             debug(1) << "This program was linked to OpenCL already\n";

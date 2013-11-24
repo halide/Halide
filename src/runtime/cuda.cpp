@@ -319,13 +319,14 @@ static CUfunction __get_kernel(const char* entry_name)
 }
 
 static size_t __buf_size(buffer_t* buf) {
-    size_t sz = buf->elem_size;
-    if (buf->extent[0]) sz *= buf->extent[0];
-    if (buf->extent[1]) sz *= buf->extent[1];
-    if (buf->extent[2]) sz *= buf->extent[2];
-    if (buf->extent[3]) sz *= buf->extent[3];
-    halide_assert(sz);
-    return sz;
+    size_t size = 0;
+    for (int i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
+        size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
+        if (total_dim_size > size)
+            size = total_dim_size;
+     }
+    halide_assert(size);
+    return size;
 }
 
 WEAK void halide_dev_malloc(buffer_t* buf) {
