@@ -343,6 +343,12 @@ static size_t __buf_size(buffer_t* buf) {
 }
 
 WEAK void halide_dev_malloc(buffer_t* buf) {
+    if (buf->dev) {
+        halide_assert(halide_validate_dev_pointer(buf));
+        return;
+    }
+
+    size_t size = __buf_size(buf);
     #ifdef DEBUG
     halide_printf("dev_malloc allocating buffer of %zd bytes, extents: %zdx%zdx%zdx%zd strides: %zdx%zdx%zdx%zd (%d bytes per element)\n",
 		  size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
@@ -350,11 +356,6 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
 		  buf->elem_size);
     #endif
 
-    if (buf->dev) {
-        halide_assert(halide_validate_dev_pointer(buf));
-        return;
-    }
-    size_t size = __buf_size(buf);
     buf->dev = (uint64_t)__dev_malloc(size);
     halide_assert(buf->dev);
 }
