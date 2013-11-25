@@ -115,7 +115,7 @@ void CodeGen_OpenCL_Dev::compile(Stmt s, string name, const vector<Argument> &ar
 }
 
 namespace {
-const string preamble = "/*OpenCL C*/"; // This identifies the program as OpenCL C (as opposed to SPIR).
+const string preamble = "/*OpenCL C*/\n"; // This identifies the program as OpenCL C (as opposed to SPIR).
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const vector<Argument> &args) {
@@ -124,21 +124,21 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const ve
     stream << preamble;
 
     // Emit the function prototype
-    stream << "__kernel void " << name << "(";
+    stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << "__global " << print_type(args[i].type) << " *"
+            stream << " __global " << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
         } else {
-            stream << "const "
+            stream << " const "
                    << print_type(args[i].type)
                    << " "
                    << print_name(args[i].name);
         }
 
-        if (i < args.size()-1) stream << ", ";
+        if (i < args.size()-1) stream << ",\n";
     }
-    stream << ", " << "__local uchar* shared";
+    stream << ",\n" << "__local uchar* shared";
 
     stream << ") {\n";
 
