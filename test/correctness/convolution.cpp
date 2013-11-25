@@ -76,6 +76,15 @@ int main(int argc, char **argv) {
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.cuda_tile(x, y, 16, 16);
+    } else if (target.features & Target::OpenCL) {
+        // Initialization (basically memset) done in a cuda kernel
+        blur1.cuda_tile(x, y, 16, 16);
+
+        // Summation is done as an outermost loop is done on the cpu
+        blur1.update().cuda_tile(x, y, 16, 16);
+
+        // Summation is done as a sequential loop within each gpu thread
+        blur2.cuda_tile(x, y, 16, 16);
     } else {
         // Take this opportunity to test scheduling the pure dimensions in a reduction
         Var xi("xi"), yi("yi");
