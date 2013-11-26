@@ -13,6 +13,22 @@
 #include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
+// Native client llvm relies on global flags to control sandboxing on
+// arm, because they expect you to be coming from the command line.
+#if WITH_NATIVE_CLIENT
+#include <llvm/Support/CommandLine.h>
+namespace llvm {
+extern cl::opt<bool> FlagSfiData,
+    FlagSfiLoad,
+    FlagSfiStore,
+    FlagSfiStack,
+    FlagSfiBranch,
+    FlagSfiDisableCP,
+    FlagSfiZeroMask;
+}
+extern llvm::cl::opt<bool> ReserveR9;
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -23,7 +39,6 @@ using std::pair;
 using std::make_pair;
 
 using namespace llvm;
-
 
 namespace {
 // cast operators
@@ -352,7 +367,19 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
         }
     } else if (target.os == Target::NaCl) {
         assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm nacl");
-        module->setTargetTriple("arm-nacl-eabi");
+        module->setTargetTriple("arm-unknown-nacl-eabi");
+        #if WITH_NATIVE_CLIENT
+        // The ARM Nacl backend relies on global switches being set to do
+        // the sandboxing, so set them here.
+        llvm::FlagSfiData = true;
+        llvm::FlagSfiLoad = true;
+        llvm::FlagSfiStore = true;
+        llvm::FlagSfiStack = true;
+        llvm::FlagSfiBranch = true;
+        llvm::FlagSfiDisableCP = true;
+        llvm::FlagSfiZeroMask = false;
+        ReserveR9 = true;
+        #endif
     } else if (target.os == Target::Linux) {
         if (target.bits == 32) {
             module->setTargetTriple("arm-linux-gnueabihf");
