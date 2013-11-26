@@ -36,7 +36,9 @@ void Closure::visit(const Load *op) {
     op->index.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding " << op->name << " to closure\n";
-        reads[op->name] = op->type;
+        BufferRef & ref = buffers[op->name];
+        ref.type = op->type; // TODO: Validate type is the same as existing refs?
+        ref.read = true;
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";
     }
@@ -47,7 +49,9 @@ void Closure::visit(const Store *op) {
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding " << op->name << " to closure\n";
-        writes[op->name] = op->value.type();
+        BufferRef & ref = buffers[op->name];
+        ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
+        ref.write = true;
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";
     }
@@ -80,19 +84,12 @@ Closure Closure::make(Stmt s, const string &loop_variable, bool track_buffers, l
 
 vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
     vector<llvm::Type *> res;
-    map<string, Type>::const_iterator iter;
-    for (iter = vars.begin(); iter != vars.end(); ++iter) {
+    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         res.push_back(llvm_type_of(context, iter->second));
     }
-    for (iter = reads.begin(); iter != reads.end(); ++iter) {
-        res.push_back(llvm_type_of(context, iter->second)->getPointerTo());
+    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
+        res.push_back(llvm_type_of(context, iter->second.type)->getPointerTo());
         // Some backends (ptx) track more than a host pointer
-        if (track_buffers) {
-            res.push_back(buffer_t->getPointerTo());
-        }
-    }
-    for (iter = writes.begin(); iter != writes.end(); ++iter) {
-        res.push_back(llvm_type_of(context, iter->second)->getPointerTo());
         if (track_buffers) {
             res.push_back(buffer_t->getPointerTo());
         }
@@ -102,20 +99,14 @@ vector<llvm::Type*> Closure::llvm_types(LLVMContext *context) {
 
 vector<string> Closure::names() {
     vector<string> res;
-    map<string, Type>::const_iterator iter;
-    for (iter = vars.begin(); iter != vars.end(); ++iter) {
+    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "vars:  " << iter->first << "\n";
         res.push_back(iter->first);
     }
-    for (iter = reads.begin(); iter != reads.end(); ++iter) {
-        debug(2) << "reads: " << iter->first << "\n";
+    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
+        debug(2) << "buffers: " << iter->first << "\n";
         res.push_back(iter->first + ".host");
         // Some backends (ptx) track a whole buffer as well as a host pointer
-        if (track_buffers) res.push_back(iter->first + ".buffer");
-    }
-    for (iter = writes.begin(); iter != writes.end(); ++iter) {
-        debug(2) << "writes: " << iter->first << "\n";
-        res.push_back(iter->first + ".host");
         if (track_buffers) res.push_back(iter->first + ".buffer");
     }
     return res;
