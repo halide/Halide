@@ -352,7 +352,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
         }
     } else if (target.os == Target::NaCl) {
         assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm nacl");
-        module->setTargetTriple("arm-nacl");
+        module->setTargetTriple("arm-nacl-eabi");
     } else if (target.os == Target::Linux) {
         if (target.bits == 32) {
             module->setTargetTriple("arm-linux-gnueabihf");
