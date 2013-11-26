@@ -301,9 +301,8 @@ inline void destroy<BufferContents>(const BufferContents *p) {
     if (p->source_module.free_dev_buffer) {
         p->source_module.free_dev_buffer(const_cast<buffer_t *>(&p->buf));
     }
-    if (p->allocation) {
-        free(p->allocation);
-    }
+    free(p->allocation);
+
     delete p;
 }
 

@@ -331,26 +331,31 @@ static cl_mem __dev_malloc(size_t bytes) {
     return p;
 }
 
-static inline size_t __buf_size(buffer_t* buf) {
-    size_t sz = buf->elem_size;
-    if (buf->extent[0]) sz *= buf->extent[0];
-    if (buf->extent[1]) sz *= buf->extent[1];
-    if (buf->extent[2]) sz *= buf->extent[2];
-    if (buf->extent[3]) sz *= buf->extent[3];
-    halide_assert(sz);
-    return sz;
+static size_t __buf_size(buffer_t* buf) {
+    size_t size = 0;
+    for (int i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
+        size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
+        if (total_dim_size > size)
+            size = total_dim_size;
+     }
+    halide_assert(size);
+    return size;
 }
 
 WEAK void halide_dev_malloc(buffer_t* buf) {
-    #ifdef DEBUG
-    halide_printf("dev_malloc of %lld bytes (%dx%dx%dx%d %d bytes) (buf->dev = %p) buffer\n",
-            (long long)__buf_size(buf), buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3], buf->elem_size, (void*)buf->dev);
-    #endif
     if (buf->dev) {
         halide_assert(halide_validate_dev_pointer(buf));
         return;
     }
+
     size_t size = __buf_size(buf);
+    #ifdef DEBUG
+    halide_printf("dev_malloc allocating buffer of %zd bytes, extents: %zdx%zdx%zdx%zd strides: %zdx%zdx%zdx%zd (%d bytes per element)\n",
+		  size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
+                  buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3],
+		  buf->elem_size);
+    #endif
+
     buf->dev = (uint64_t)__dev_malloc(size);
     halide_assert(buf->dev);
 }

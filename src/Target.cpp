@@ -338,6 +338,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // must remain weak.
     string retain[] = {"halide_copy_to_host",
                        "halide_copy_to_dev",
+                       "halide_dev_malloc",
                        "halide_dev_free",
                        "halide_set_error_handler",
                        "halide_set_custom_allocator",
@@ -347,6 +348,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_shutdown_thread_pool",
                        "halide_shutdown_trace",
                        "halide_set_cuda_context",
+                       "halide_dev_sync",
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",

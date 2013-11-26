@@ -120,7 +120,7 @@ void CodeGen::init_module() {
         delete module;
         delete context;
     }
-    if (builder) delete builder;
+    delete builder;
 
     context = new LLVMContext();
     builder = new IRBuilder<>(*context);
