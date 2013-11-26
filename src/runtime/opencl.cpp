@@ -1,4 +1,3 @@
-
 #include "mini_stdint.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
@@ -78,31 +77,6 @@ cl_command_queue WEAK cl_q = 0;
 
 static cl_program __mod;
 
-// Used to create buffer_ts to track internal allocations caused by our runtime
-buffer_t* WEAK __make_buffer(uint8_t* host, size_t elem_size,
-                                     size_t dim0, size_t dim1,
-                                     size_t dim2, size_t dim3) {
-    buffer_t* buf = (buffer_t*)malloc(sizeof(buffer_t));
-    buf->host = host;
-    buf->dev = 0;
-    buf->extent[0] = dim0;
-    buf->extent[1] = dim1;
-    buf->extent[2] = dim2;
-    buf->extent[3] = dim3;
-    buf->elem_size = elem_size;
-    buf->host_dirty = false;
-    buf->dev_dirty = false;
-    return buf;
-}
-
-WEAK void __release_buffer(buffer_t* buf) {
-    free(buf);
-}
-
-WEAK buffer_t* __malloc_buffer(int32_t size) {
-    return __make_buffer((uint8_t*)malloc(size), sizeof(uint8_t), size, 1, 1, 1);
-}
-
 WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
     if (buf->dev == 0)
       return true;
@@ -121,6 +95,9 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
 }
 
 WEAK void halide_dev_free(buffer_t* buf) {
+    // halide_dev_free, at present, can be exposed to clients and they
+    // should be allowed to call halide_dev_free on any buffer_t
+    // including ones that have never been used with a GPU.
     if (buf->dev == 0)
       return;
 
@@ -128,17 +105,10 @@ WEAK void halide_dev_free(buffer_t* buf) {
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
 
-    // TODO: Is this check covering up a bug? Halide might just be calling dev_free on all buffers, even if they are not device buffers.
-    if (buf->dev != 0)
-    {
-        halide_assert(halide_validate_dev_pointer(buf));
-        CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
-        buf->dev = 0;
-    }
+    halide_assert(halide_validate_dev_pointer(buf));
+    CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
+    buf->dev = 0;
 }
-
-
-
 
 const char * get_opencl_platform() {
     char *platform = getenv("HL_OCL_PLATFORM");

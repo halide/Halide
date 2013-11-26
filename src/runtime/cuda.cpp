@@ -184,6 +184,9 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
 }
 
 WEAK void halide_dev_free(buffer_t* buf) {
+    // halide_dev_free, at present, can be exposed to clients and they
+    // should be allowed to call halide_dev_free on any buffer_t
+    // including ones that have never been used with a GPU.
     if (buf->dev == 0)
       return;
 
