@@ -255,18 +255,17 @@ private:
 
 vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
     vector<Argument> res;
-    map<string, Type>::const_iterator iter;
-    for (iter = vars.begin(); iter != vars.end(); ++iter) {
+    for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "var: " << iter->first << "\n";
         res.push_back(Argument(iter->first, false, iter->second));
     }
-    for (iter = reads.begin(); iter != reads.end(); ++iter) {
-        debug(2) << "read: " << iter->first << "\n";
-        res.push_back(Argument(iter->first, true, iter->second));
-    }
-    for (iter = writes.begin(); iter != writes.end(); ++iter) {
-        debug(2) << "write: " << iter->first << "\n";
-        res.push_back(Argument(iter->first, true, iter->second));
+    for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
+        debug(2) << "buffer: " << iter->first;
+        if (iter->second.read) debug(2) << " (read)";
+        if (iter->second.write) debug(2) << " (write)";
+        debug(2) << "\n";
+
+        res.push_back(Argument(iter->first, true, iter->second.type));
     }
     return res;
 }
@@ -517,31 +516,27 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         }
 
         // compile the kernel
-        string kernel_name = "kernel_" + loop->name;
+        string kernel_name = unique_name("kernel_" + loop->name);
         for (size_t i = 0; i < kernel_name.size(); i++) {
             if (kernel_name[i] == '.') kernel_name[i] = '_';
         }
         cgdev->compile(loop, kernel_name, c.arguments());
 
-        map<string, Type>::iterator it;
-        for (it = c.reads.begin(); it != c.reads.end(); ++it) {
+        map<string, Closure::BufferRef>::iterator it;
+        for (it = c.buffers.begin(); it != c.buffers.end(); ++it) {
             // While internal buffers have all had their device
             // allocations done via static analysis, external ones
             // need to be dynamically checked
             Value *buf = sym_get(it->first + ".buffer");
             debug(4) << "halide_dev_malloc " << it->first << "\n";
             builder->CreateCall(dev_malloc_fn, buf);
-
+            
             // Anything dirty on the cpu that gets read on the gpu
             // needs to be copied over
-            debug(4) << "halide_copy_to_dev " << it->first << "\n";
-            builder->CreateCall(copy_to_dev_fn, buf);
-        }
-
-        for (it = c.writes.begin(); it != c.writes.end(); ++it) {
-            Value *buf = sym_get(it->first + ".buffer");
-            debug(4) << "halide_dev_malloc " << it->first << "\n";
-            builder->CreateCall(dev_malloc_fn, buf);
+            if (it->second.read) {
+                debug(4) << "halide_copy_to_dev " << it->first << "\n";
+                builder->CreateCall(copy_to_dev_fn, buf);
+            }
         }
 
         // get the actual name of the generated kernel for this loop
@@ -616,10 +611,12 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         builder->CreateCall(dev_run_fn, launch_args);
 
         // mark written buffers dirty
-        for (it = c.writes.begin(); it != c.writes.end(); ++it) {
-            debug(4) << "setting dev_dirty " << it->first << " (write)\n";
-            Value *buf = sym_get(it->first + ".buffer");
-            builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
+        for (it = c.buffers.begin(); it != c.buffers.end(); ++it) {
+            if (it->second.write) {
+                debug(4) << "setting dev_dirty " << it->first << " (write)\n";
+                Value *buf = sym_get(it->first + ".buffer");
+                builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
+            }
         }
 
         // Pop the shared memory allocations from the symbol table
@@ -791,4 +788,9 @@ void CodeGen_GPU_Host::visit(const Call *call) {
     CodeGen::visit(call);
 }
 
+string CodeGen_GPU_Host::unique_name(const string &name) {
+    std::stringstream unique;
+    unique << name << unique_names[name]++;
+    return unique.str();
+}
 }}
