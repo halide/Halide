@@ -35,6 +35,8 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev() : CodeGen() {
 
 void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
 
+    debug(2) << "In CodeGen_PTX_Dev::compile\n";
+
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -115,10 +117,8 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
 
     // Finally, verify the module is ok
     verifyModule(*module);
-    debug(2) << "Done generating llvm bitcode\n";
 
-    // Optimize it - this really only optimizes the current function
-    optimize_module();
+    debug(2) << "Done generating llvm bitcode for PTX\n";
 
     // Clear the symbol table
     for (size_t i = 0; i < arg_sym_names.size(); i++) {
@@ -268,6 +268,12 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
+    #if WITH_PTX
+
+    debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
+
+    optimize_module();
+
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
     /*int argc = sizeof(argv)/sizeof(char*);*/
@@ -311,7 +317,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.TrapFuncName = "";
     Options.EnableSegmentedStacks = false;
 
-    CodeGenOpt::Level OLvl = CodeGenOpt::Default;
+    CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
     const std::string FeaturesStr = "";
     std::auto_ptr<TargetMachine>
@@ -361,11 +367,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #define kDefaultDenorms 0
     #define kFTZDenorms     1
 
-    #if WITH_PTX
     StringMap<int> reflect_mapping;
     reflect_mapping[StringRef("__CUDA_FTZ")] = kFTZDenorms;
     PM.add(createNVVMReflectPass(reflect_mapping));
-    #endif
 
     // Inlining functions is essential to PTX
     PM.add(createAlwaysInlinerPass());
@@ -391,10 +395,21 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     ostream.flush();
 
+    if (debug::debug_level >= 2) {
+        module->dump();
+    }
+    debug(2) << "Done with CodeGen_PTX_Dev::compile_to_src";
+
+
     string str = outs.str();
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
+#else // WITH_PTX
+    vector<char> empty();
+    return empty();
+#endif
+
 }
 
 
