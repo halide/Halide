@@ -33,7 +33,7 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev() : CodeGen() {
     assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
 }
 
-void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
+void CodeGen_PTX_Dev::add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args) {
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -117,8 +117,7 @@ void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Arg
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
 
-    // Optimize it - this really only optimizes the current function
-    optimize_module();
+    // Don't optimize yet, because we may add more kernels to this module.
 
     // Clear the symbol table
     for (size_t i = 0; i < arg_sym_names.size(); i++) {
@@ -273,6 +272,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
+    // Generic llvm optimizations on the module.
+    optimize_module();
+
     // Set up TargetTriple
     module->setTargetTriple(Triple::normalize(march()+"--"));
     Triple TheTriple(module->getTargetTriple());
@@ -311,7 +313,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.TrapFuncName = "";
     Options.EnableSegmentedStacks = false;
 
-    CodeGenOpt::Level OLvl = CodeGenOpt::Default;
+    CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
     const std::string FeaturesStr = "";
     std::auto_ptr<TargetMachine>

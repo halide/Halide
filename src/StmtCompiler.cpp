@@ -27,8 +27,10 @@ StmtCompiler::StmtCompiler(Target target) {
     }
 }
 
-void StmtCompiler::compile(Stmt stmt, string name, const vector<Argument> &args) {
-    contents.ptr->compile(stmt, name, args);
+void StmtCompiler::compile(Stmt stmt, string name,
+                           const vector<Argument> &args,
+                           const vector<Buffer> &images_to_embed) {
+    contents.ptr->compile(stmt, name, args, images_to_embed);
 }
 
 void StmtCompiler::compile_to_bitcode(const string &filename) {

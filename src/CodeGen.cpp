@@ -87,7 +87,7 @@ CodeGen::CodeGen() :
     value(NULL),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
-    buffer_t(NULL), need_stack_restore(false) {
+    buffer_t_type(NULL), need_stack_restore(false) {
 
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
@@ -159,8 +159,11 @@ bool CodeGen::llvm_ARM_enabled = false;
 bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
 
-void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
-    assert(module && context && builder && "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
+void CodeGen::compile(Stmt stmt, string name,
+                      const vector<Argument> &args,
+                      const vector<Buffer> &images_to_embed) {
+    assert(module && context && builder &&
+           "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
     owns_module = true;
 
     // Start the module off with a definition of a buffer_t
@@ -170,7 +173,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            arg_types[i] = buffer_t->getPointerTo();
+            arg_types[i] = buffer_t_type->getPointerTo();
         } else {
             arg_types[i] = llvm_type_of(args[i].type);
         }
@@ -210,6 +213,64 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         }
     }
 
+    // Embed the constant images as globals.
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+        Buffer buffer = images_to_embed[i];
+        assert(buffer.defined());
+        buffer_t b = *(buffer.raw_buffer());
+        assert(b.host && "Can only embed buffers that exist on the host at compile time\n");
+
+        // Figure out the offset of the last pixel.
+        size_t num_elems = 1;
+        for (int d = 0; b.extent[d]; d++) {
+            num_elems += b.stride[d] * (b.extent[d] - 1);
+        }
+
+        vector<char> array;
+        array.insert(array.end(), b.host, b.host + num_elems * b.elem_size);
+
+        Constant *host = create_constant_binary_blob(array, buffer.name() + ".data");
+
+        // Embed the buffer_t and make it point to the data array.
+        vector<Constant *> fields;
+
+        llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
+
+        fields.push_back(ConstantInt::get(i64, 0)); // dev
+        fields.push_back(host);
+        fields.push_back(ConstantArray::get(i32_array, vec(
+                                            ConstantInt::get(i32, b.extent[0]),
+                                            ConstantInt::get(i32, b.extent[1]),
+                                            ConstantInt::get(i32, b.extent[2]),
+                                            ConstantInt::get(i32, b.extent[3]))));
+        fields.push_back(ConstantArray::get(i32_array, vec(
+                                            ConstantInt::get(i32, b.stride[0]),
+                                            ConstantInt::get(i32, b.stride[1]),
+                                            ConstantInt::get(i32, b.stride[2]),
+                                            ConstantInt::get(i32, b.stride[3]))));
+        fields.push_back(ConstantArray::get(i32_array, vec(
+                                            ConstantInt::get(i32, b.min[0]),
+                                            ConstantInt::get(i32, b.min[1]),
+                                            ConstantInt::get(i32, b.min[2]),
+                                            ConstantInt::get(i32, b.min[3]))));
+        fields.push_back(ConstantInt::get(i32, b.elem_size));
+        assert(!b.dev_dirty && "Can't embed an image with a dirty device pointer\n");
+        fields.push_back(ConstantInt::get(i8, 0));
+        fields.push_back(ConstantInt::get(i8, 0));
+
+        Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
+
+        GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
+                                                    true, GlobalValue::PrivateLinkage,
+                                                    0, buffer.name() + ".buffer");
+        global->setInitializer(buffer_struct);
+
+        // Finally, dump it in the symbol table
+        Constant *zero = ConstantInt::get(i32, 0);
+        Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
+        unpack_buffer(buffer.name(), global_ptr);
+    }
+
     debug(1) << "Generating llvm bitcode...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
@@ -240,7 +301,7 @@ void CodeGen::compile(Stmt stmt, string name, const vector<Argument> &args) {
         ptr = builder->CreateLoad(ptr);
         if (args[i].is_buffer) {
             // Cast the argument to a buffer_t *
-            wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t->getPointerTo());
+            wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo());
         } else {
             // Cast to the appropriate type and load
             ptr = builder->CreatePointerCast(ptr, arg_types[i]->getPointerTo());
@@ -489,8 +550,8 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
 
 // Add a definition of buffer_t to the module if it isn't already there
 void CodeGen::define_buffer_t() {
-    buffer_t = module->getTypeByName("struct.buffer_t");
-    assert(buffer_t && "Did not find buffer_t in initial module");
+    buffer_t_type = module->getTypeByName("struct.buffer_t");
+    assert(buffer_t_type && "Did not find buffer_t in initial module");
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
@@ -1283,7 +1344,7 @@ void CodeGen::visit(const Call *op) {
             // Make some memory for this buffer_t
             const Call *c = op->args[0].as<Call>();
 
-            Value *buffer = builder->CreateAlloca(buffer_t, ConstantInt::get(i32, 1));
+            Value *buffer = builder->CreateAlloca(buffer_t_type, ConstantInt::get(i32, 1));
             need_stack_restore = true;
 
             // Populate the fields
@@ -1330,14 +1391,14 @@ void CodeGen::visit(const Call *op) {
             const IntImm *idx = op->args[1].as<IntImm>();
             assert(idx);
             Value *buffer = codegen(op->args[0]);
-            buffer = builder->CreatePointerCast(buffer, buffer_t->getPointerTo());
+            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
             value = buffer_min(buffer, idx->value);
         } else if (op->name == Call::extract_buffer_extent) {
             assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
             assert(idx);
             Value *buffer = codegen(op->args[0]);
-            buffer = builder->CreatePointerCast(buffer, buffer_t->getPointerTo());
+            buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
             value = buffer_extent(buffer, idx->value);
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
@@ -1592,19 +1653,34 @@ void CodeGen::visit(const AssertStmt *op) {
     create_assertion(codegen(op->condition), op->message);
 }
 
-Value *CodeGen::create_string_constant(const string &s) {
-    map<string, Value *>::iterator iter = string_constants.find(s);
+Constant *CodeGen::create_string_constant(const string &s) {
+    map<string, Constant *>::iterator iter = string_constants.find(s);
     if (iter == string_constants.end()) {
-        llvm::Type *str_type = ArrayType::get(i8, s.size()+1);
-        GlobalVariable *str_global = new GlobalVariable(*module, str_type,
-                                                        true, GlobalValue::PrivateLinkage, 0);
-        str_global->setInitializer(ConstantDataArray::getString(*context, s));
-        llvm::Value *val = builder->CreateConstInBoundsGEP2_32(str_global, 0, 0);
+        vector<char> data;
+        data.reserve(s.size()+1);
+        data.insert(data.end(), s.begin(), s.end());
+        data.push_back(0);
+        Constant *val = create_constant_binary_blob(data, "str");
         string_constants[s] = val;
         return val;
     } else {
         return iter->second;
     }
+}
+
+Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const string &name) {
+
+    llvm::Type *type = ArrayType::get(i8, data.size());
+    GlobalVariable *global = new GlobalVariable(*module, type,
+                                                true, GlobalValue::PrivateLinkage,
+                                                0, name);
+    ArrayRef<unsigned char> data_array((unsigned char *)&data[0], data.size());
+    global->setInitializer(ConstantDataArray::get(*context, data_array));
+    global->setAlignment(32);
+
+    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero, zero));
+    return ptr;
 }
 
 void CodeGen::create_assertion(Value *cond, const string &message) {
@@ -1735,7 +1811,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t);
+        Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t_type);
 
 	Value *saved_stack = save_stack();
 

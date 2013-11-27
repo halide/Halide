@@ -30,7 +30,9 @@ public:
 
     /** Emit source code equivalent to the given statement, wrapped in
      * a function with the given type signature */
-    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void compile(Stmt stmt, std::string name,
+                 const std::vector<Argument> &args,
+                 const std::vector<Buffer> &images_to_embed);
 
     /** Emit a header file defining a halide pipeline with the given
      * type signature */
@@ -66,6 +68,9 @@ protected:
 
     /** Close a C scope (i.e. throw in an end brace, decrease the indent) */
     void close_scope(const std::string &comment);
+
+    /** Unpack a buffer into its constituent parts */
+    void unpack_buffer(Type t, const std::string &buffer_name);
 
     /** Track the types of allocations to avoid unnecessary casts. */
     Scope<Type> allocations;

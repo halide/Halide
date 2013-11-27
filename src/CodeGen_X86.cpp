@@ -34,7 +34,9 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(),
     #endif
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) {
+void CodeGen_X86::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
 
     init_module();
 
@@ -92,7 +94,7 @@ void CodeGen_X86::compile(Stmt stmt, string name, const vector<Argument> &args) 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args);
+    CodeGen::compile(stmt, name, args, images_to_embed);
 
     // Optimize
     CodeGen::optimize_module();
@@ -580,7 +582,7 @@ void CodeGen_X86::test() {
     Stmt s = Block::make(init, loop);
 
     CodeGen_X86 cg(get_host_target());
-    cg.compile(s, "test1", args);
+    cg.compile(s, "test1", args, vector<Buffer>());
 
     //cg.compile_to_bitcode("test1.bc");
     //cg.compile_to_native("test1.o", false);
