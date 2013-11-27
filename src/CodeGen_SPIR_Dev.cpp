@@ -26,6 +26,12 @@ CodeGen_SPIR_Dev::CodeGen_SPIR_Dev(int bits) : CodeGen(), bits(bits) {
     #endif
 }
 
+static vector<Value *> init_kernel_metadata(LLVMContext &ctx, const char *name) {
+    vector<Value *> md;
+    md.push_back(MDString::get(ctx, name));
+    return md;
+}
+
 void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
 
     // Now deduce the types of the arguments to our function
@@ -60,6 +66,12 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
     
+    vector<Value *> kernel_arg_address_space = init_kernel_metadata(*context, "kernel_arg_address_space");
+    vector<Value *> kernel_arg_access_qual = init_kernel_metadata(*context, "kernel_arg_access_qual");
+    vector<Value *> kernel_arg_type = init_kernel_metadata(*context, "kernel_arg_type");
+    vector<Value *> kernel_arg_type_qual = init_kernel_metadata(*context, "kernel_arg_type_qual");
+    vector<Value *> kernel_arg_name = init_kernel_metadata(*context, "kernel_arg_name");
+    
     // Put the arguments in the symbol table
     {
         llvm::Function::arg_iterator arg = function->arg_begin();
@@ -71,12 +83,30 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
                 sym_push(iter->name + ".host", arg);
+                
+                kernel_arg_address_space.push_back(ConstantInt::get(i32, 1));
             } else {
                 sym_push(iter->name, arg);
+
+                kernel_arg_address_space.push_back(ConstantInt::get(i32, 0));
             }
             arg->setName(iter->name);
+
+            kernel_arg_name.push_back(MDString::get(*context, iter->name));
+            kernel_arg_access_qual.push_back(MDString::get(*context, "none"));
+            kernel_arg_type_qual.push_back(MDString::get(*context, ""));
+            // TODO: 'Type' isn't correct, but we don't have C to get the type name from...
+            // This really shouldn't matter anyways. Everything SPIR needs is in the function
+            // type, this metadata seems redundant.
+            kernel_arg_type.push_back(MDString::get(*context, "type"));
         }
         arg->setName("shared");
+
+        kernel_arg_address_space.push_back(ConstantInt::get(i32, 3)); // __local = addrspace(3)
+        kernel_arg_name.push_back(MDString::get(*context, "shared"));
+        kernel_arg_access_qual.push_back(MDString::get(*context, "none"));
+        kernel_arg_type.push_back(MDString::get(*context, "char*"));
+        kernel_arg_type_qual.push_back(MDString::get(*context, ""));
     }
 
     // We won't end the entry block yet, because we'll want to add
@@ -98,7 +128,16 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function.
-    MDNode *mdNode = MDNode::get(*context, vec<Value *>(function));
+    Value *kernel_metadata[] =
+    {
+        function, 
+        MDNode::get(*context, kernel_arg_address_space), 
+        MDNode::get(*context, kernel_arg_access_qual), 
+        MDNode::get(*context, kernel_arg_type), 
+        MDNode::get(*context, kernel_arg_type_qual), 
+        MDNode::get(*context, kernel_arg_name)
+    };
+    MDNode *mdNode = MDNode::get(*context, kernel_metadata);
     module->getOrInsertNamedMetadata("opencl.kernels")->addOperand(mdNode);
 
 
@@ -108,6 +147,8 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     // Finally, verify the module is ok
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
+
+    module->dump();
 
     // Optimize it - this really only optimizes the current function
     optimize_module();
