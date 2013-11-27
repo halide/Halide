@@ -354,14 +354,16 @@ void CodeGen::optimize_module() {
     b.populateFunctionPassManager(function_pass_manager);
     b.populateModulePassManager(module_pass_manager);
 
-    llvm::Function *fn = module->getFunction(function_name);
-    assert(fn && "Could not find function inside llvm module");
-
     // Run optimization passes
     module_pass_manager.run(*module);
-    function_pass_manager.doInitialization();
-    function_pass_manager.run(*fn);
-    function_pass_manager.doFinalization();
+    if (!function_name.empty()) {
+        llvm::Function *fn = module->getFunction(function_name);
+        assert(fn && "Could not find function inside llvm module");
+
+        function_pass_manager.doInitialization();
+        function_pass_manager.run(*fn);
+        function_pass_manager.doFinalization();
+    }
 
     if (debug::debug_level >= 2) {
         module->dump();
@@ -1813,7 +1815,7 @@ void CodeGen::visit(const For *op) {
         // and dump it into a closure
         Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t_type);
 
-	Value *saved_stack = save_stack();
+        Value *saved_stack = save_stack();
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
@@ -1869,7 +1871,7 @@ void CodeGen::visit(const For *op) {
 
         debug(3) << "Leaving parallel for loop over " << op->name << "\n";
 
-	restore_stack(saved_stack);
+        restore_stack(saved_stack);
 
         // Now restore the scope
         std::swap(symbol_table, saved_symbol_table);
