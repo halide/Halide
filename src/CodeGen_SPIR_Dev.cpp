@@ -26,7 +26,7 @@ CodeGen_SPIR_Dev::CodeGen_SPIR_Dev(int bits) : CodeGen(), bits(bits) {
     #endif
 }
 
-void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
+void CodeGen_SPIR_Dev::add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args) {
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size()+1);
@@ -59,12 +59,12 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
-    
+
     // Put the arguments in the symbol table
     {
         llvm::Function::arg_iterator arg = function->arg_begin();
-        for (std::vector<Argument>::const_iterator iter = args.begin(); 
-            iter != args.end(); 
+        for (std::vector<Argument>::const_iterator iter = args.begin();
+            iter != args.end();
             ++iter, ++arg) {
             if (iter->is_buffer) {
                 // HACK: codegen expects a load from foo to use base
@@ -120,7 +120,7 @@ void CodeGen_SPIR_Dev::init_module() {
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     module->setModuleIdentifier("<halide_spir>");
-    
+
     for(Module::iterator i = module->begin(); i != module->end(); ++i)
         i->setCallingConv(CallingConv::SPIR_FUNC);
 
@@ -134,17 +134,17 @@ string CodeGen_SPIR_Dev::simt_intrinsic(const string &name) {
         return "halide.spir.lid.y";
     } else if (ends_with(name, ".threadidz")) {
         return "halide.spir.lid.z";
-    } 
+    }
     //else if (ends_with(name, ".threadidw")) {
     //    return "halide.spir.lid.w";
-    //} 
+    //}
     else if (ends_with(name, ".blockidx")) {
         return "halide.spir.gid.x";
     } else if (ends_with(name, ".blockidy")) {
         return "halide.spir.gid.y";
     } else if (ends_with(name, ".blockidz")) {
         return "halide.spir.gid.z";
-    } 
+    }
     //else if (ends_with(name, ".blockidw")) {
     //    return "halide.spir.gid.w";
     //}
@@ -229,7 +229,7 @@ void CodeGen_SPIR_Dev::visit(const Allocate *alloc) {
 
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
-    
+
     // Optimize it - this really only optimizes the current function
     optimize_module();
 }
@@ -255,7 +255,7 @@ bool CodeGen_SPIR_Dev::use_soft_float_abi() const {
 }
 
 vector<char> CodeGen_SPIR_Dev::compile_to_src() {
-    
+
     SmallVector<char, 1024> buffer;
     raw_svector_ostream stream(buffer);
     WriteBitcodeToFile(module, stream);

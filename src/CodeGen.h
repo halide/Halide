@@ -21,6 +21,7 @@ class Instruction;
 class CallInst;
 class ExecutionEngine;
 class AllocaInst;
+class Constant;
 }
 
 #include <map>
@@ -54,7 +55,9 @@ public:
     /** Take a halide statement and compiles it to an llvm module held
      * internally. Call this before calling compile_to_bitcode or
      * compile_to_native. */
-    virtual void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    virtual void compile(Stmt stmt, std::string name,
+                         const std::vector<Argument> &args,
+                         const std::vector<Buffer> &images_to_embed);
 
     /** Emit a compiled halide statement as llvm bitcode. Call this
      * after calling compile. */
@@ -138,7 +141,7 @@ protected:
     /** Some useful llvm types */
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
-    llvm::StructType *buffer_t;
+    llvm::StructType *buffer_t_type;
     // @}
 
     /** The name of the function being generated. */
@@ -163,7 +166,10 @@ protected:
     void create_assertion(llvm::Value *condition, const std::string &message);
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
-    llvm::Value *create_string_constant(const std::string &str);
+    llvm::Constant *create_string_constant(const std::string &str);
+
+    /** Put a binary blob in the module as a global variable and return a pointer to it. */
+    llvm::Constant *create_constant_binary_blob(const std::vector<char> &data, const std::string &name);
 
     /** Widen an llvm scalar into an llvm vector with the given number of lanes. */
     llvm::Value *create_broadcast(llvm::Value *, int width);
@@ -310,7 +316,7 @@ private:
 
     /** String constants already emitted to the module. Tracked to
      * prevent emitting the same string many times. */
-    std::map<std::string, llvm::Value *> string_constants;
+    std::map<std::string, llvm::Constant *> string_constants;
 };
 
 }}
