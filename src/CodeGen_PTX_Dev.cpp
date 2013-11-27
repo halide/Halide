@@ -403,13 +403,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     string str = outs.str();
     vector<char> buffer(str.begin(), str.end());
+#else // WITH_PTX
+    vector<char> buffer;
+#endif
     buffer.push_back(0);
     return buffer;
-#else // WITH_PTX
-    vector<char> empty();
-    return empty();
-#endif
-
 }
 
 
