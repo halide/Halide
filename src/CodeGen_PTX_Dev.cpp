@@ -409,8 +409,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     buffer.push_back(0);
     return buffer;
 #else // WITH_PTX
-    vector<char> empty();
-    return empty();
+    return vector<char>();
 #endif
 
 }
