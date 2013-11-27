@@ -171,7 +171,7 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf) {
     return true;
 #else
     if (buf->dev == 0)
-      return true;
+        return true;
 
     CUcontext ctx;
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, buf->dev);
@@ -188,7 +188,7 @@ WEAK void halide_dev_free(buffer_t* buf) {
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
     if (buf->dev == 0)
-      return;
+        return;
 
     #ifdef DEBUG
     halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
@@ -280,32 +280,32 @@ WEAK void halide_release() {
     // Do not do any of this if there is not context set. E.g.
     // if halide_release is called and no CUDA calls have been made.
     if (cuda_ctx_ptr != NULL) {
-	// It's possible that this is being called from the destructor of
-	// a static variable, in which case the driver may already be
-	// shutting down. For this reason we allow the deinitialized
-	// error.
-	CHECK_CALL_DEINIT_OK( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
+        // It's possible that this is being called from the destructor of
+        // a static variable, in which case the driver may already be
+        // shutting down. For this reason we allow the deinitialized
+        // error.
+        CHECK_CALL_DEINIT_OK( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
 
-	// Destroy the events
-	if (__start) {
-	    cuEventDestroy(__start);
-	    cuEventDestroy(__end);
-	    __start = __end = 0;
-	}
+        // Destroy the events
+        if (__start) {
+            cuEventDestroy(__start);
+            cuEventDestroy(__end);
+            __start = __end = 0;
+        }
 
-	// Unload the module
-	if (__mod) {
-	    CHECK_CALL_DEINIT_OK( cuModuleUnload(__mod), "cuModuleUnload" );
-	    __mod = 0;
-	}
+        // Unload the module
+        if (__mod) {
+            CHECK_CALL_DEINIT_OK( cuModuleUnload(__mod), "cuModuleUnload" );
+            __mod = 0;
+        }
 
-	// Only destroy the context if we own it
-	if (weak_cuda_ctx) {
-	    CHECK_CALL_DEINIT_OK( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );
-	    weak_cuda_ctx = 0;
-	}
+        // Only destroy the context if we own it
+        if (weak_cuda_ctx) {
+            CHECK_CALL_DEINIT_OK( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );
+            weak_cuda_ctx = 0;
+        }
 
-	cuda_ctx_ptr = NULL;
+        cuda_ctx_ptr = NULL;
     }
 
     //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
@@ -347,9 +347,9 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
 
     #ifdef DEBUG
     halide_printf("dev_malloc allocating buffer of %zd bytes, extents: %zdx%zdx%zdx%zd strides: %zdx%zdx%zdx%zd (%d bytes per element)\n",
-		  size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
+                  size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
                   buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3],
-		  buf->elem_size);
+                  buf->elem_size);
     #endif
 
     CUdeviceptr p;
