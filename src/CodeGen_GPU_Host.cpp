@@ -518,7 +518,11 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name);
         for (size_t i = 0; i < kernel_name.size(); i++) {
-            if (kernel_name[i] == '.') kernel_name[i] = '_';
+            switch (kernel_name[i]) {
+            case '$': 
+            case '.': 
+                kernel_name[i] = '_';
+            }
         }
         cgdev->compile(loop, kernel_name, c.arguments());
 
@@ -786,11 +790,5 @@ void CodeGen_GPU_Host::visit(const Call *call) {
     }
 
     CodeGen::visit(call);
-}
-
-string CodeGen_GPU_Host::unique_name(const string &name) {
-    std::stringstream unique;
-    unique << name << unique_names[name]++;
-    return unique.str();
 }
 }}
