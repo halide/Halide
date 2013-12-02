@@ -1364,6 +1364,7 @@ public:
     vector<Argument> arg_types;
     vector<const void *> arg_values;
     vector<pair<int, Internal::Parameter> > image_param_args;
+    vector<pair<int, Buffer> > image_args;
 
     InferArguments(const string &o) : output(o) {}
 
@@ -1406,6 +1407,7 @@ private:
     void include_buffer(Buffer b) {
         if (!b.defined()) return;
         if (already_have(b.name())) return;
+        image_args.push_back(make_pair((int)arg_types.size(), b));
         arg_types.push_back(Argument(b.name(), true, b.type()));
         arg_values.push_back(b.raw_buffer());
     }
@@ -1432,21 +1434,41 @@ private:
     }
 };
 
-/** Check that all the necessary arguments are in an args vector */
-void validate_arguments(const string &output, const vector<Argument> &args, Stmt lowered) {
+/** Check that all the necessary arguments are in an args vector. Any
+ * images in the source that aren't in the args vector are placed in
+ * the images_to_embed list. */
+void validate_arguments(const string &output,
+                        const vector<Argument> &args,
+                        Stmt lowered,
+                        vector<Buffer> &images_to_embed) {
     InferArguments infer_args(output);
     lowered.accept(&infer_args);
     const vector<Argument> &required_args = infer_args.arg_types;
 
     for (size_t i = 0; i < required_args.size(); i++) {
         const Argument &arg = required_args[i];
+
+        Buffer buf;
+        for (size_t j = 0; !buf.defined() && j < infer_args.image_args.size(); j++) {
+            if (infer_args.image_args[j].first == (int)i) {
+                buf = infer_args.image_args[j].second;
+                assert(buf.defined());
+            }
+        }
+
         bool found = false;
         for (size_t j = 0; !found && j < args.size(); j++) {
             if (args[j].name == arg.name) {
                 found = true;
             }
         }
-        if (!found) {
+
+        if (buf.defined() && !found) {
+            // It's a raw Buffer used that isn't in the args
+            // list. Embed it in the output instead.
+            images_to_embed.push_back(buf);
+            Internal::debug(1) << "Embedding image " << buf.name() << "\n";
+        } else if (!found) {
             std::cerr << "Generated code refers to ";
             if (arg.is_buffer) std::cerr << "image ";
             std::cerr << "parameter " << arg.name
@@ -1475,14 +1497,15 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
         lowered = Halide::Internal::lower(func);
     }
 
-    validate_arguments(name(), args, lowered);
+    vector<Buffer> images_to_embed;
+    validate_arguments(name(), args, lowered, images_to_embed);
 
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
     }
 
     StmtCompiler cg(get_target_from_environment());
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_bitcode(filename);
 }
 
@@ -1493,14 +1516,15 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
         lowered = Halide::Internal::lower(func);
     }
 
-    validate_arguments(name(), args, lowered);
+    vector<Buffer> images_to_embed;
+    validate_arguments(name(), args, lowered, images_to_embed);
 
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
     }
 
     StmtCompiler cg(get_target_from_environment());
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, false);
 }
 
@@ -1519,7 +1543,8 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
         lowered = Halide::Internal::lower(func);
     }
 
-    validate_arguments(name(), args, lowered);
+    vector<Buffer> images_to_embed;
+    validate_arguments(name(), args, lowered, images_to_embed);
 
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
@@ -1527,7 +1552,7 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
 
     ofstream src(filename.c_str());
     CodeGen_C cg(src);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
 }
 
 void Func::compile_to_lowered_stmt(const string &filename) {
@@ -1573,12 +1598,15 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
 
+    vector<Buffer> images_to_embed;
+    validate_arguments(name(), args, lowered, images_to_embed);
+
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
     }
 
     StmtCompiler cg(get_target_from_environment());
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args);
+    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, true);
 }
 
@@ -1803,7 +1831,7 @@ void *Func::compile_jit() {
     // TODO: Validate that we can reasonably jit to this target
     t.features |= Target::JIT;
     StmtCompiler cg(t);
-    cg.compile(lowered, name(), infer_args.arg_types);
+    cg.compile(lowered, name(), infer_args.arg_types, vector<Buffer>());
 
     if (debug::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);

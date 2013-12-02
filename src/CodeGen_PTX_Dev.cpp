@@ -33,9 +33,9 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev() : CodeGen() {
     assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
 }
 
-void CodeGen_PTX_Dev::compile(Stmt stmt, std::string name, const std::vector<Argument> &args) {
+void CodeGen_PTX_Dev::add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args) {
 
-    debug(2) << "In CodeGen_PTX_Dev::compile\n";
+    debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 
     // Now deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
@@ -279,6 +279,9 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /*int argc = sizeof(argv)/sizeof(char*);*/
     /*cl::ParseCommandLineOptions(argc, argv, "Halide PTX internal compiler\n");*/
 
+    // Generic llvm optimizations on the module.
+    optimize_module();
+
     // Set up TargetTriple
     module->setTargetTriple(Triple::normalize(march()+"--"));
     Triple TheTriple(module->getTargetTriple());
@@ -403,11 +406,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     string str = outs.str();
     vector<char> buffer(str.begin(), str.end());
-#else // WITH_PTX
-    vector<char> buffer;
-#endif
     buffer.push_back(0);
     return buffer;
+#else // WITH_PTX
+    return vector<char>();
+#endif
 }
 
 

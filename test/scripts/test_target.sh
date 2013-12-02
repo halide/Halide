@@ -49,6 +49,7 @@ if [[ "$HL_TARGET" == *nacl ]]; then
 else
     make test_correctness -j8 &&
     make test_errors -j8 &&
+    make test_static -j8 &&
     make test_tutorials -j8 &&
     make test_performance &&
     make test_apps &&

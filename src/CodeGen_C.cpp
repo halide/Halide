@@ -234,8 +234,48 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "#endif\n";
 }
 
-void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_C::compile(Stmt s, string name,
+                        const vector<Argument> &args,
+                        const vector<Buffer> &images_to_embed) {
     stream << preamble;
+
+    // Embed the constant images
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+        Buffer buffer = images_to_embed[i];
+        string name = print_name(buffer.name());
+        buffer_t b = *(buffer.raw_buffer());
+
+        // Figure out the offset of the last pixel.
+        size_t num_elems = 1;
+        for (int d = 0; b.extent[d]; d++) {
+            num_elems += b.stride[d] * (b.extent[d] - 1);
+        }
+
+        // Emit the data
+        stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+        for (size_t i = 0; i < num_elems * b.elem_size; i++) {
+            if (i > 0) stream << ", ";
+            stream << (int)(b.host[i]);
+        }
+        stream << "};\n";
+
+        // Emit the buffer_t
+        assert(b.host && "Can't embed an image with a null host pointer\n");
+        assert(!b.dev_dirty && "Can't embed an image with a dirty device pointer\n");
+        stream << "static buffer_t " << name << "_buffer = {"
+               << "0, " // dev
+               << "&" << name << "_data[0], " // host
+               << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
+               << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
+               << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
+               << b.elem_size << ", "
+               << "0, " // host_dirty
+               << "0};\n"; //dev_dirty
+
+        // Make a global pointer to it
+        stream << "static buffer_t *_" << name << " = &" << name << "_buffer;\n";
+
+    }
 
     // Emit the function prototype
     stream << "extern \"C\" int " << name << "(";
@@ -258,62 +298,69 @@ void CodeGen_C::compile(Stmt s, string name, const vector<Argument> &args) {
     // Unpack the buffer_t's
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            string name = print_name(args[i].name);
-            string type = print_type(args[i].type);
-            stream << type
-                   << " *"
-                   << name
-                   << " = ("
-                   << type
-                   << " *)(_"
-                   << name
-                   << "->host);\n";
-            allocations.push(args[i].name, args[i].type);
-
-            stream << "const bool "
-                   << name
-                   << "_host_and_dev_are_null = (_"
-                   << name << "->host == NULL) && (_"
-                   << name << "->dev == 0);\n";
-            stream << "(void)" << name << "_host_and_dev_are_null;\n";
-
-            for (int j = 0; j < 4; j++) {
-                stream << "const int32_t "
-                       << name
-                       << "_min_" << j << " = _"
-                       << name
-                       << "->min[" << j << "];\n";
-                // emit a void cast to suppress "unused variable" warnings
-                stream << "(void)" << name << "_min_" << j << ";\n";
-            }
-            for (int j = 0; j < 4; j++) {
-                stream << "const int32_t "
-                       << name
-                       << "_extent_" << j << " = _"
-                       << name
-                       << "->extent[" << j << "];\n";
-                stream << "(void)" << name << "_extent_" << j << ";\n";
-            }
-            for (int j = 0; j < 4; j++) {
-                stream << "const int32_t "
-                       << name
-                       << "_stride_" << j << " = _"
-                       << name
-                       << "->stride[" << j << "];\n";
-                stream << "(void)" << name << "_stride_" << j << ";\n";
-            }
-            stream << "const int32_t "
-                   << name
-                   << "_elem_size = _"
-                   << name
-                   << "->elem_size;\n";
+            unpack_buffer(args[i].type, args[i].name);
         }
     }
-
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+        unpack_buffer(images_to_embed[i].type(), images_to_embed[i].name());
+    }
+    // Emit the body
     print(s);
 
     stream << "return 0;\n"
            << "}\n";
+}
+
+void CodeGen_C::unpack_buffer(Type t, const std::string &buffer_name) {
+    string name = print_name(buffer_name);
+    string type = print_type(t);
+    stream << type
+           << " *"
+           << name
+           << " = ("
+           << type
+           << " *)(_"
+           << name
+           << "->host);\n";
+    allocations.push(buffer_name, t);
+
+    stream << "const bool "
+           << name
+           << "_host_and_dev_are_null = (_"
+           << name << "->host == NULL) && (_"
+           << name << "->dev == 0);\n";
+    stream << "(void)" << name << "_host_and_dev_are_null;\n";
+
+    for (int j = 0; j < 4; j++) {
+        stream << "const int32_t "
+               << name
+               << "_min_" << j << " = _"
+               << name
+               << "->min[" << j << "];\n";
+        // emit a void cast to suppress "unused variable" warnings
+        stream << "(void)" << name << "_min_" << j << ";\n";
+    }
+    for (int j = 0; j < 4; j++) {
+        stream << "const int32_t "
+               << name
+               << "_extent_" << j << " = _"
+               << name
+               << "->extent[" << j << "];\n";
+        stream << "(void)" << name << "_extent_" << j << ";\n";
+    }
+    for (int j = 0; j < 4; j++) {
+        stream << "const int32_t "
+               << name
+               << "_stride_" << j << " = _"
+               << name
+               << "->stride[" << j << "];\n";
+        stream << "(void)" << name << "_stride_" << j << ";\n";
+    }
+    stream << "const int32_t "
+           << name
+           << "_elem_size = _"
+           << name
+           << "->elem_size;\n";
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -470,11 +517,11 @@ template <typename T>
 static bool isnan(T x) { return x != x; }
 
 template <typename T>
-static bool isinf(T x) 
-{ 
+static bool isinf(T x)
+{
     return std::numeric_limits<T>::has_infinity && (
         x == std::numeric_limits<T>::infinity() ||
-        x == -std::numeric_limits<T>::infinity()); 
+        x == -std::numeric_limits<T>::infinity());
 }
 
 void CodeGen_C::visit(const FloatImm *op) {
@@ -828,7 +875,7 @@ void CodeGen_C::test() {
 
     ostringstream source;
     CodeGen_C cg(source);
-    cg.compile(s, "test1", args);
+    cg.compile(s, "test1", args, vector<Buffer>());
 
     string correct_source = preamble +
         "extern \"C\" int test1(buffer_t *_buf, const float alpha, const int32_t beta) {\n"
