@@ -29,9 +29,12 @@ public:
     StmtCompiler(Target target);
 
     /** Compile a statement to an llvm module of the given name with
-     * the given toplevel arguments. The module is stored internally
-     * until one of the later functions is called: */
-    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
+     * the given toplevel arguments, and the given buffers embedded
+     * inside it. The module is stored internally until one of the
+     * later functions is called: */
+    void compile(Stmt stmt, std::string name,
+                 const std::vector<Argument> &args,
+                 const std::vector<Buffer> &images_to_embed);
 
     /** Write the module to an llvm bitcode file */
     void compile_to_bitcode(const std::string &filename);

@@ -315,7 +315,9 @@ CodeGen_GPU_Host::~CodeGen_GPU_Host() {
     delete cgdev;
 }
 
-void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &args) {
+void CodeGen_GPU_Host::compile(Stmt stmt, string name,
+                               const vector<Argument> &args,
+                               const vector<Buffer> &images_to_embed) {
 
     init_module();
 
@@ -354,20 +356,14 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name, const vector<Argument> &a
     // module->setTargetTriple( ... );
 
     // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args);
+    CodeGen::compile(stmt, name, args, images_to_embed);
 
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
-    llvm::Type *kernel_src_type = ArrayType::get(i8, kernel_src.size());
-    GlobalVariable *kernel_src_global = new GlobalVariable(*module, kernel_src_type,
-                                                           true, GlobalValue::PrivateLinkage, 0,
-                                                           "halide_kernel_src");
-    ArrayRef<unsigned char> src_array((unsigned char *)&kernel_src[0], kernel_src.size());
-    kernel_src_global->setInitializer(ConstantDataArray::get(*context, src_array));
+    Value *kernel_src_ptr = create_constant_binary_blob(kernel_src, "halide_kernel_src");
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
-    Value *kernel_src_ptr = builder->CreateConstInBoundsGEP2_32(kernel_src_global, 0, 0);
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     assert(init && "Could not find function halide_init_kernels in initial module");
@@ -524,7 +520,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
-        cgdev->compile(loop, kernel_name, c.arguments());
+        cgdev->add_kernel(loop, kernel_name, c.arguments());
 
         map<string, Closure::BufferRef>::iterator it;
         for (it = c.buffers.begin(); it != c.buffers.end(); ++it) {
@@ -657,7 +653,7 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
             // Save the stack pointer if we haven't already
             saved_stack = save_stack();
         }
-        buf = builder->CreateAlloca(buffer_t);
+        buf = builder->CreateAlloca(buffer_t_type);
         Value *zero32 = ConstantInt::get(i32, 0),
             *one32  = ConstantInt::get(i32, 1),
             *null64 = ConstantInt::get(i64, 0),

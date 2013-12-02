@@ -106,19 +106,19 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     }
 }
 
-void CodeGen_OpenCL_Dev::compile(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     debug(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
-    clc->compile(s, name, args);
+    clc->add_kernel(s, name, args);
 }
 
 namespace {
 const string preamble = "/*OpenCL C*/\n"; // This identifies the program as OpenCL C (as opposed to SPIR).
 }
 
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::compile(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     debug(0) << "hi! " << name << "\n";
 
     stream << preamble;

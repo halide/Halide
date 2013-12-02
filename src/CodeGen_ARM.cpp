@@ -340,7 +340,9 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
 }
 
 
-void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) {
+void CodeGen_ARM::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
 
     init_module();
 
@@ -392,7 +394,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name, const vector<Argument> &args) 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args);
+    CodeGen::compile(stmt, name, args, images_to_embed);
 
     // Optimize
     CodeGen::optimize_module();
