@@ -63,12 +63,7 @@ protected:
     /** Reaches inside the module at sets it to use a single shared
      * cuda context */
     void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod, std::vector<void (*)()> *cleanup_routines);
-
-    /** Creates a unique name for the kernels generated in this program */
-    std::string unique_name(const std::string &name);
-
-    std::map<std::string, int> unique_names;
-
+    
     static bool lib_cuda_linked;
 
     static CodeGen_GPU_Dev* make_dev(Target);
