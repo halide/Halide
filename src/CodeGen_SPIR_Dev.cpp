@@ -69,6 +69,7 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     vector<Value *> kernel_arg_address_space = init_kernel_metadata(*context, "kernel_arg_address_space");
     vector<Value *> kernel_arg_access_qual = init_kernel_metadata(*context, "kernel_arg_access_qual");
     vector<Value *> kernel_arg_type = init_kernel_metadata(*context, "kernel_arg_type");
+    vector<Value *> kernel_arg_base_type = init_kernel_metadata(*context, "kernel_arg_base_type");
     vector<Value *> kernel_arg_type_qual = init_kernel_metadata(*context, "kernel_arg_type_qual");
     vector<Value *> kernel_arg_name = init_kernel_metadata(*context, "kernel_arg_name");
     
@@ -99,6 +100,7 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
             // This really shouldn't matter anyways. Everything SPIR needs is in the function
             // type, this metadata seems redundant.
             kernel_arg_type.push_back(MDString::get(*context, "type"));
+            kernel_arg_base_type.push_back(MDString::get(*context, "type"));
         }
         arg->setName("shared");
 
@@ -106,6 +108,7 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
         kernel_arg_name.push_back(MDString::get(*context, "shared"));
         kernel_arg_access_qual.push_back(MDString::get(*context, "none"));
         kernel_arg_type.push_back(MDString::get(*context, "char*"));
+        kernel_arg_base_type.push_back(MDString::get(*context, "char*"));
         kernel_arg_type_qual.push_back(MDString::get(*context, ""));
     }
 
@@ -147,9 +150,7 @@ void CodeGen_SPIR_Dev::compile(Stmt stmt, std::string name, const std::vector<Ar
     // Finally, verify the module is ok
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
-
-    module->dump();
-
+    
     // Optimize it - this really only optimizes the current function
     optimize_module();
 }
