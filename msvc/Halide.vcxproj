@@ -181,7 +181,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;Halide_SHARED=1;Halide_EXPORTS=1;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -217,7 +217,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;Halide_SHARED=1;Halide_EXPORTS=1;_DEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -252,7 +252,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -294,7 +294,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Static|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -335,7 +335,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;Halide_SHARED=1;Halide_EXPORTS=1;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -372,7 +372,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;Halide_SHARED=1;Halide_EXPORTS=1;NDEBUG;_WINDOWS;_WINDOWS_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -408,7 +408,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -451,7 +451,7 @@ cd $(SolutionDir)</Command>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Static|x64'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CRT_SECURE_NO_WARNINGS;WITH_PTX=1;WITH_X86=1;WITH_ARM=1;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -503,6 +503,7 @@ cd $(SolutionDir)</Command>
     <ClCompile Include="..\src\CodeGen_OpenCL_Dev.cpp" />
     <ClCompile Include="..\src\CodeGen_Posix.cpp" />
     <ClCompile Include="..\src\CodeGen_PTX_Dev.cpp" />
+    <ClCompile Include="..\src\CodeGen_SPIR_Dev.cpp" />
     <ClCompile Include="..\src\CodeGen_X86.cpp" />
     <ClCompile Include="..\src\CSE.cpp" />
     <ClCompile Include="..\src\Debug.cpp" />
@@ -532,7 +533,9 @@ cd $(SolutionDir)</Command>
     <ClCompile Include="..\src\Reduction.cpp" />
     <ClCompile Include="..\src\RemoveTrivialForLoops.cpp" />
     <ClCompile Include="..\src\Simplify.cpp" />
+    <ClCompile Include="..\src\SkipStages.cpp" />
     <ClCompile Include="..\src\SlidingWindow.cpp" />
+    <ClCompile Include="..\src\SpecializeClampedRamps.cpp" />
     <ClCompile Include="..\src\StmtCompiler.cpp" />
     <ClCompile Include="..\src\StorageFlattening.cpp" />
     <ClCompile Include="..\src\StorageFolding.cpp" />
@@ -562,6 +565,7 @@ cd $(SolutionDir)</Command>
     <ClInclude Include="..\src\CodeGen_OpenCL_Dev.h" />
     <ClInclude Include="..\src\CodeGen_Posix.h" />
     <ClInclude Include="..\src\CodeGen_PTX_Dev.h" />
+    <ClInclude Include="..\src\CodeGen_SPIR_Dev.h" />
     <ClInclude Include="..\src\CodeGen_X86.h" />
     <ClInclude Include="..\src\CSE.h" />
     <ClInclude Include="..\src\Debug.h" />
@@ -600,7 +604,9 @@ cd $(SolutionDir)</Command>
     <ClInclude Include="..\src\Schedule.h" />
     <ClInclude Include="..\src\Scope.h" />
     <ClInclude Include="..\src\Simplify.h" />
+    <ClInclude Include="..\src\SkipStages.h" />
     <ClInclude Include="..\src\SlidingWindow.h" />
+    <ClInclude Include="..\src\SpecializeClampedRamps.h" />
     <ClInclude Include="..\src\StmtCompiler.h" />
     <ClInclude Include="..\src\StorageFlattening.h" />
     <ClInclude Include="..\src\StorageFolding.h" />
