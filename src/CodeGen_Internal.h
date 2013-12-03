@@ -40,7 +40,22 @@ protected:
     llvm::StructType *buffer_t;
 
 public:
+    /** Information about a buffer reference from a closure. */
+    struct BufferRef
+    {
+        /** The type of the buffer referenced. */
+        Type type;
 
+        /** The buffer is read from. */
+        bool read;
+
+        /** The buffer is written to. */
+        bool write;
+
+        BufferRef() : read(false), write(false) { }
+    };
+
+public:
     /** Traverse a statement and find all references to external
      * symbols. 
      * 
@@ -56,11 +71,8 @@ public:
     /** External variables referenced. */
     std::map<std::string, Type> vars;
     
-    /** External allocations read from. */
-    std::map<std::string, Type> reads;
-
-    /** External allocations written to. */
-    std::map<std::string, Type> writes;
+    /** External allocations referenced. */
+    std::map<std::string, BufferRef> buffers;
 
     /** The llvm types of the external symbols. */
     std::vector<llvm::Type *> llvm_types(llvm::LLVMContext *context);

@@ -47,7 +47,7 @@ string int_to_string(int x) {
     return ss.str();
 }
 
-string unique_name(const string &name) {
+string unique_name(const string &name, bool user) {
     static map<string, int> known_names;
 
     // An empty string really does not make sense, but use 'z' as prefix.
@@ -59,8 +59,10 @@ string unique_name(const string &name) {
     // us separate the name from the number using '$' as a delimiter,
     // which guarantees uniqueness of the generated name, without
     // having to track all names generated so far.
-    for (size_t i = 0; i < name.length(); i++) {
-        assert(name[i] != '$' && "names passed to unique_name may not contain the character '$'");
+    if (user) {
+        for (size_t i = 0; i < name.length(); i++) {
+            assert(name[i] != '$' && "names passed to unique_name may not contain the character '$'");
+        }
     }
 
     int &count = known_names[name];
