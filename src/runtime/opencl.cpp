@@ -232,7 +232,7 @@ WEAK void halide_init_kernels(const char* src, int size) {
 
             halide_printf("Error: Failed to build program executable! err = %d\n", err);
             if (clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len) == CL_SUCCESS)
-                halide_printf("%s\n", buffer);
+                halide_printf("Build Log:\n %s\n-----\n", buffer);
             else
                 halide_printf("clGetProgramBuildInfo failed to get build log!\n");
             halide_assert(err == CL_SUCCESS);
