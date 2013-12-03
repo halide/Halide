@@ -146,6 +146,9 @@ private:
 
             // Make the allocation node
             stmt = Allocate::make(buffer_name, realize->types[idx], size, stmt);
+            if (realize->lazy) {
+                stmt = Allocate::make(buffer_name + ".result_computed", Bool(), size, stmt);
+            }
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {

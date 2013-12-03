@@ -572,7 +572,8 @@ private:
             bounds.push_back(Range(min, extent));
         }
 
-        s = Realize::make(func.name(), func.output_types(), bounds, s);
+        s = Realize::make(func.name(), func.output_types(), bounds,
+                          func.schedule().lazy, s);
 
         // The allocated bounds are the bounds produced at this loop
         // level. If it's a reduction, we may need to increase it to

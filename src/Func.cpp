@@ -977,6 +977,16 @@ Func &Func::compute_at(Func f, Var var) {
     return *this;
 }
 
+Func &Func::compute_lazy(Func f, RVar var) {
+    return compute_lazy(f, Var(var.name()));
+}
+
+Func &Func::compute_lazy(Func f, Var var) {
+    // TODO(bblum): support finer grained control
+    func.schedule().lazy = true;
+    return *this;
+}
+
 Func &Func::compute_root() {
     func.schedule().compute_level = Schedule::LoopLevel::root();
     if (func.schedule().store_level.is_inline()) {

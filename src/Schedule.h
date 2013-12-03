@@ -69,6 +69,11 @@ struct Schedule {
     LoopLevel store_level, compute_level;
     // @}
 
+    // TODO(bblum)
+    bool lazy;
+
+    Schedule() : lazy(false) { }
+
     struct Split {
         std::string old_var, outer, inner;
         Expr factor;

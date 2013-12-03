@@ -970,6 +970,11 @@ public:
      */
     EXPORT Func &compute_root();
 
+    /** TODO(bblum): Document.
+     */
+    EXPORT Func &compute_lazy(Func f, Var var);
+    EXPORT Func &compute_lazy(Func f, RVar var);
+
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
      * separate the loop level at which storage occurs from the loop

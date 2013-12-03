@@ -839,8 +839,9 @@ struct Realize : public StmtNode<Realize> {
     std::vector<Type> types;
     Region bounds;
     Stmt body;
+    bool lazy; // TODO(bblum): turn this into a LoopLevel
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, bool lazy, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].min.defined() && "Realize of undefined");
             assert(bounds[i].extent.defined() && "Realize of undefined");
@@ -855,6 +856,7 @@ struct Realize : public StmtNode<Realize> {
         node->types = types;
         node->bounds = bounds;
         node->body = body;
+        node->lazy = lazy;
         return node;
     }
 };
