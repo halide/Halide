@@ -22,6 +22,9 @@ if not errorlevel 0 exit 1
 echo Running test bitwise_ops
 test_bitwise_ops.exe
 if not errorlevel 0 exit 1
+echo Running test bit_counting
+test_bit_counting.exe
+if not errorlevel 0 exit 1
 echo Running test bound
 test_bound.exe
 if not errorlevel 0 exit 1
@@ -36,6 +39,9 @@ test_bounds_inference_chunk.exe
 if not errorlevel 0 exit 1
 echo Running test bounds_inference_complex
 test_bounds_inference_complex.exe
+if not errorlevel 0 exit 1
+echo Running test bounds_of_abs
+test_bounds_of_abs.exe
 if not errorlevel 0 exit 1
 echo Running test bounds_of_cast
 test_bounds_of_cast.exe
@@ -124,6 +130,9 @@ if not errorlevel 0 exit 1
 echo Running test gpu_large_alloc
 test_gpu_large_alloc.exe
 if not errorlevel 0 exit 1
+echo Running test gpu_multi_kernel
+test_gpu_multi_kernel.exe
+if not errorlevel 0 exit 1
 echo Running test handle
 test_handle.exe
 if not errorlevel 0 exit 1
@@ -160,6 +169,9 @@ if not errorlevel 0 exit 1
 echo Running test lambda
 test_lambda.exe
 if not errorlevel 0 exit 1
+echo Running test lazy_convolution
+test_lazy_convolution.exe
+if not errorlevel 0 exit 1
 echo Running test lerp
 test_lerp.exe
 if not errorlevel 0 exit 1
@@ -172,6 +184,9 @@ if not errorlevel 0 exit 1
 echo Running test many_dimensions
 test_many_dimensions.exe
 if not errorlevel 0 exit 1
+echo Running test math
+test_math.exe
+if not errorlevel 0 exit 1
 echo Running test mod
 test_mod.exe
 if not errorlevel 0 exit 1
@@ -180,6 +195,9 @@ test_multiple_outputs.exe
 if not errorlevel 0 exit 1
 echo Running test multi_output_pipeline_with_bad_sizes
 test_multi_output_pipeline_with_bad_sizes.exe
+if not errorlevel 0 exit 1
+echo Running test multi_pass_reduction
+test_multi_pass_reduction.exe
 if not errorlevel 0 exit 1
 echo Running test newtons_method
 test_newtons_method.exe
@@ -214,6 +232,9 @@ if not errorlevel 0 exit 1
 echo Running test partial_application
 test_partial_application.exe
 if not errorlevel 0 exit 1
+echo Running test process_some_tiles
+test_process_some_tiles.exe
+if not errorlevel 0 exit 1
 echo Running test realize_over_shifted_domain
 test_realize_over_shifted_domain.exe
 if not errorlevel 0 exit 1
@@ -234,6 +255,9 @@ test_shifted_image.exe
 if not errorlevel 0 exit 1
 echo Running test side_effects
 test_side_effects.exe
+if not errorlevel 0 exit 1
+echo Running test skip_stages
+test_skip_stages.exe
 if not errorlevel 0 exit 1
 echo Running test sliding_backwards
 test_sliding_backwards.exe
