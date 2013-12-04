@@ -143,6 +143,9 @@ Target get_target_from_environment() {
     tokens.push_back(rest);
 
     bool os_specified = false, arch_specified = false, bits_specified = false;
+    // For historical reasons, ARM defaults to NEON-enabled unless
+    // "noneon" is specified as a feature.
+    bool noneon = false;
 
     for (size_t i = 0; i < tokens.size(); i++) {
         bool is_arch = false, is_os = false, is_bits = false;
@@ -198,13 +201,15 @@ Target get_target_from_environment() {
             t.features |= Target::OpenCL | Target::SPIR64;
         } else if (tok == "gpu_debug") {
             t.features |= Target::GPUDebug;
+        } else if (tok == "noneon") {
+            noneon = true;
         } else {
             std::cerr << "Did not understand HL_TARGET=" << target << "\n"
                       << "Expected format is arch-os-feature1-feature2-... "
                       << "Where arch is x86-32, x86-64, arm-32, arm-64, "
                       << "and os is linux, windows, osx, nacl, ios, or android. "
                       << "If arch or os are omitted, they default to the host. "
-                      << "Features include sse41, avx, avx2, cuda, opencl, and gpu_debug.\n"
+                      << "Features include sse41, avx, avx2, cuda, opencl, noneon, and gpu_debug.\n"
                       << "HL_TARGET can also include \"host\", which sets the "
                       << "host's architecture, os, and feature set, with the "
                       << "exception of the GPU runtimes, which default to off\n";
@@ -237,6 +242,16 @@ Target get_target_from_environment() {
         } else {
             std::cerr << "For this target we default to 32-bits\n";
             t.bits = 32;
+        }
+    }
+
+    if (t.arch == Target::ARM && t.bits == 32) {
+        if (!noneon) {
+            t.features |= Target::NEON;
+        }
+    } else {
+        if (noneon) {
+            std::cerr << "noneon should only be specified for arm-32\n";
         }
     }
 
@@ -301,6 +316,7 @@ DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
 
 DECLARE_LL_INITMOD(arm)
+DECLARE_LL_INITMOD(arm_noneon)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(ptx_dev)
 #if WITH_PTX
@@ -439,7 +455,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_x86_ll(c));
     }
     if (t.arch == Target::ARM) {
-        modules.push_back(get_initmod_arm_ll(c));
+        if (t.features & Target::NEON) {
+            modules.push_back(get_initmod_arm_ll(c));
+        } else {
+            modules.push_back(get_initmod_arm_noneon_ll(c));
+        }
     }
     if (t.features & Target::SSE41) {
         modules.push_back(get_initmod_x86_sse41_ll(c));
