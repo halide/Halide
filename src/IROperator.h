@@ -915,6 +915,35 @@ inline Expr count_trailing_zeros(Expr x) {
                                 vec(x), Internal::Call::Intrinsic);
 }
 
+/** Return an undef value of the given type. Halide skips stores that
+ * depend on undef values, so you can use this to mean "do not modify
+ * this memory location". This is an escape hatch that can be used for
+ * several things:
+ *
+ * You can define a reduction with no pure step, by setting the pure
+ * step to undef. Do this only if you're confident that the update
+ * steps are sufficient to correctly fill in the domain.
+ *
+ * For a tuple-valued reduction, you can write an update step that
+ * only updates some tuple elements.
+ *
+ * You can define single-stage pipeline that only has update steps,
+ * and depends on the values already in the output buffer.
+ *
+ * Use this feature with great caution, as you can use it to load from
+ * uninitialized memory.
+ */
+inline Expr undef(Type t) {
+    return Internal::Call::make(t, Internal::Call::undef,
+                                std::vector<Expr>(),
+                                Internal::Call::Intrinsic);
+}
+
+template<typename T>
+inline Expr undef() {
+    return undef(type_of<T>());
+}
+
 }
 
 
