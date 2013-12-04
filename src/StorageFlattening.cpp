@@ -148,8 +148,17 @@ private:
             stmt = Allocate::make(buffer_name, realize->types[idx], size, stmt);
 
             if (realize->lazy) {
-                // Allocate a bitmask to track what's been computed.
-                stmt = Allocate::make(buffer_name + ".result_computed", Bool(), size, stmt);
+                string bitmask_name = buffer_name + ".result_computed";
+                string loop_var_name = buffer_name + ".init_loop_var";
+
+                // Allocate and initialize a bitmask to track what's been computed.
+                // TODO(bblum): Can we be more efficient?
+                Expr loop_var = Variable::make(Int(32), loop_var_name);
+                Stmt body = Store::make(bitmask_name, const_false(), loop_var);
+                Stmt loop = For::make(loop_var_name, Expr(0), size, For::Serial, body);
+                stmt = Allocate::make(bitmask_name, Bool(), size,
+                                      Block::make(loop, stmt));
+
             }
 
             // Compute the strides
@@ -184,9 +193,17 @@ private:
             Expr idx = mutate(flatten_args(provide->name, provide->args));
             stmt = Store::make(provide->name, values[0], idx);
             if (provide->lazy) {
+                string bitmask_name = provide->name + ".result_computed";
+
                 // TODO(bblum): renumber idx according to different lazy granularities
-                Stmt store2 = Store::make(provide->name + ".result_computed", const_true(), idx);
-                stmt = Block::make(stmt, store2);
+                // TODO(bblum): Emit a release barrier here (and below) in case there
+                // is concurrency between the compute level and the store level
+                Stmt store2 = Store::make(bitmask_name, const_true(), idx);
+
+                // Wrap it with an if that skips the computation if it was already done.
+                // TODO(bblum): An acquire barrier will also need to go before stmt.
+                Expr condition = Not::make(Load::make(Bool(), bitmask_name, idx));
+                stmt = IfThenElse::make(condition, Block::make(stmt, store2));
             }
         } else {
 
@@ -201,9 +218,11 @@ private:
                 Expr var = Variable::make(values[i].type(), names[i]);
                 Stmt store = Store::make(name, var, idx);
                 if (provide->lazy) {
+                    string bitmask_name = name + ".result_computed";
                     // TODO(bblum): as above
-                    Stmt store2 = Store::make(name + ".result_computed", const_true(), idx);
-                    store = Block::make(store, store2);
+                    Stmt store2 = Store::make(bitmask_name, const_true(), idx);
+                    Expr condition = Not::make(Load::make(Bool(), bitmask_name, idx));
+                    store = IfThenElse::make(condition, Block::make(store, store2));
                 }
                 if (result.defined()) {
                     result = Block::make(result, store);

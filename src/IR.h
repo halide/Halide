@@ -560,7 +560,7 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
+    static Expr make(Type type, std::string name, Expr index, Buffer image = Buffer(), Parameter param = Parameter()) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == index.type().width && "Vector width of Load must match vector width of index");
 
