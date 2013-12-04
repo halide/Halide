@@ -11,14 +11,6 @@
 #include <limits>
 #include <stdlib.h>
 
-#if __cplusplus > 199711L
-#include <memory>
-using std::shared_ptr;
-#else
-#include <tr1/memory>
-using std::tr1::shared_ptr;
-#endif
-
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 #include <stdint.h>
@@ -39,15 +31,16 @@ extern "C" void halide_copy_to_host(buffer_t* buf);
 template<typename T>
 class Image {
     struct Contents {
-        Contents(buffer_t b, uint8_t* a) {buf = b; alloc = a;}
+        Contents(buffer_t b, uint8_t* a) : buf(b), ref_count(1), alloc(a) {}
         buffer_t buf;
+        int ref_count;
         uint8_t *alloc;
         ~Contents() {
             delete[] alloc;
         }
     };
 
-    shared_ptr<Contents> contents;
+    Contents *contents;
 
     void initialize(int w, int h, int c) {
         buffer_t buf;
@@ -71,15 +64,47 @@ class Image {
         buf.dev_dirty = false;
         buf.dev = 0;
         while ((size_t)buf.host & 0x1f) buf.host++;
-        contents.reset(new Contents(buf, ptr));
+        contents = new Contents(buf, ptr);
     }
 
 public:
-    Image() {
+    Image() : contents(NULL) {
     }
 
     Image(int w, int h = 1, int c = 1) {
         initialize(w, h, c);
+    }
+
+    Image(const Image &other) : contents(other.contents) {
+        if (contents) {
+            contents->ref_count++;
+        }
+    }
+
+    ~Image() {
+        if (contents) {
+            contents->ref_count--;
+            if (contents->ref_count == 0) {
+                delete contents;
+                contents = NULL;
+            }
+        }
+    }
+
+    Image &operator=(const Image &other) {
+        Contents *p = other.contents;
+        if (p) {
+            p->ref_count++;
+        }
+        if (contents) {
+            contents->ref_count--;
+            if (contents->ref_count == 0) {
+                delete contents;
+                contents = NULL;
+            }
+        }
+        contents = p;
+        return *this;
     }
 
     T *data() {return (T*)contents->buf.host;}
