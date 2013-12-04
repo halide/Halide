@@ -114,7 +114,7 @@ Image<T> load_png(std::string filename) {
 
     // convert the data to T
 
-    int c_stride = im.stride(2);
+    int c_stride = (im.channels() == 1) ? 0 : im.stride(2);
     T *ptr = (T*)im.data();
     if (bit_depth == 8) {
         for (int y = 0; y < im.height(); y++) {
@@ -202,7 +202,7 @@ void save_png(Image<T> im, std::string filename) {
 
     // im.copyToHost(); // in case the image is on the gpu
 
-    int c_stride = im.stride(2);
+    int c_stride = (im.channels() == 1) ? 0 : im.stride(2);
     T *srcPtr = (T*)im.data();
 
     for (int y = 0; y < im.height(); y++) {

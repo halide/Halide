@@ -96,6 +96,7 @@ const string Call::extract_buffer_extent = "extract_buffer_extent";
 const string Call::popcount = "popcount";
 const string Call::count_leading_zeros = "count_leading_zeros";
 const string Call::count_trailing_zeros = "count_trailing_zeros";
+const string Call::undef = "undef";
 const string Call::trace = "trace";
 
 }
