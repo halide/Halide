@@ -106,7 +106,7 @@ Stmt build_provide_loop_nest(Function f,
 
     // Make the (multi-dimensional multi-valued) store node.
     assert(!values.empty());
-    Stmt stmt = Provide::make(buffer, values, site);
+    Stmt stmt = Provide::make(buffer, values, site, s.lazy);
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;

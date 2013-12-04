@@ -146,7 +146,9 @@ private:
 
             // Make the allocation node
             stmt = Allocate::make(buffer_name, realize->types[idx], size, stmt);
+
             if (realize->lazy) {
+                // Allocate a bitmask to track what's been computed.
                 stmt = Allocate::make(buffer_name + ".result_computed", Bool(), size, stmt);
             }
 
@@ -181,6 +183,11 @@ private:
         if (values.size() == 1) {
             Expr idx = mutate(flatten_args(provide->name, provide->args));
             stmt = Store::make(provide->name, values[0], idx);
+            if (provide->lazy) {
+                // TODO(bblum): renumber idx according to different lazy granularities
+                Stmt store2 = Store::make(provide->name + ".result_computed", const_true(), idx);
+                stmt = Block::make(stmt, store2);
+            }
         } else {
 
             vector<string> names(provide->values.size());
@@ -193,6 +200,11 @@ private:
                 names[i] = name + ".value";
                 Expr var = Variable::make(values[i].type(), names[i]);
                 Stmt store = Store::make(name, var, idx);
+                if (provide->lazy) {
+                    // TODO(bblum): as above
+                    Stmt store2 = Store::make(name + ".result_computed", const_true(), idx);
+                    store = Block::make(store, store2);
+                }
                 if (result.defined()) {
                     result = Block::make(result, store);
                 } else {

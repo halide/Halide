@@ -764,8 +764,11 @@ struct Provide : public StmtNode<Provide> {
     std::string name;
     std::vector<Expr> values;
     std::vector<Expr> args;
+    // TODO(bblum): turn this into a LoopLevel;
+    // or otherwise some instructions on how to index into it
+    bool lazy;
 
-    static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
+    static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args, bool lazy) {
         assert(!values.empty() && "Provide of no values");
         for (size_t i = 0; i < values.size(); i++) {
             assert(values[i].defined() && "Provide of undefined value");
@@ -778,6 +781,7 @@ struct Provide : public StmtNode<Provide> {
         node->name = name;
         node->values = values;
         node->args = args;
+        node->lazy = lazy;
         return node;
     }
 };
