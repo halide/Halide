@@ -73,14 +73,30 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(SPIR_CXX_FLAGS)
 LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 
+ifneq ($(WITH_PTX), )
+ifneq (,$(findstring ptx,$(HL_TARGET)))
+TEST_PTX = 1
+endif
+ifneq (,$(findstring cuda,$(HL_TARGET)))
+TEST_PTX = 1
+endif
+endif
+
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
+ifneq ($(TEST_PTX), )
+STATIC_TEST_LIBS ?= -L/usr/lib/nvidia-current -lcuda
+endif
 HOST_OS=linux
 endif
 
 ifeq ($(UNAME), Darwin)
+# Someone with an osx box with cuda installed please fix the line below
+ifneq ($(TEST_PTX), )
+STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+endif
 HOST_OS=os_x
 endif
 
@@ -237,7 +253,7 @@ tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	@-echo
 
 $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread -ldl $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
