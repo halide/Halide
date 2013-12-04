@@ -107,7 +107,6 @@ set (RUNTIME_DEPENDS
 
 # Commands to build initial module objects.
 set (INITMOD_DIR "${CMAKE_CFG_INTDIR}/initmod")
-file (MAKE_DIRECTORY ${INITMOD_DIR})
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )

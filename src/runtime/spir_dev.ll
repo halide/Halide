@@ -101,3 +101,14 @@ define weak_odr spir_func float @abs_f32(float %x) nounwind uwtable readnone alw
     %y = tail call float @_Z4fabsf(float %x) nounwind readnone
     ret float %y
 }
+
+!opencl.enable.FP_CONTRACT = !{}
+!opencl.spir.version = !{!0}
+!opencl.ocl.version = !{!1}
+!opencl.used.extensions = !{!2}
+!opencl.used.optional.core.features = !{!2}
+!opencl.compiler.options = !{!2}
+
+!0 = metadata !{i32 1, i32 2}
+!1 = metadata !{i32 1, i32 0}
+!2 = metadata !{}
