@@ -167,6 +167,8 @@ done
 for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
+    elif [[ "$LLVM" == release-3.2 ]]; then
+        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
     else
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx"
     fi
