@@ -66,13 +66,8 @@ struct Schedule {
      * inline, the store_level is meaningless. See \ref Func::store_at
      * and \ref Func::compute_at */
     // @{
-    LoopLevel store_level, compute_level;
+    LoopLevel store_level, compute_level, lazy_level;
     // @}
-
-    // TODO(bblum)
-    bool lazy;
-
-    Schedule() : lazy(false) { }
 
     struct Split {
         std::string old_var, outer, inner;

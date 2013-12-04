@@ -106,7 +106,7 @@ Stmt build_provide_loop_nest(Function f,
 
     // Make the (multi-dimensional multi-valued) store node.
     assert(!values.empty());
-    Stmt stmt = Provide::make(buffer, values, site, s.lazy);
+    Stmt stmt = Provide::make(buffer, values, site, !s.lazy_level.is_inline());
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -215,12 +215,26 @@ Stmt build_provide_loop_nest(Function f,
         }
     }
 
+    bool found_lazy_level = false;
+
     // Build the loop nest
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
+
+        if (s.lazy_level.match(prefix + dim.var)) {
+            // TODO(bblum): Here insert a lazified ast node.
+            found_lazy_level = true;
+        }
+
         Expr min = Variable::make(Int(32), prefix + dim.var + ".min_produced");
         Expr extent = Variable::make(Int(32), prefix + dim.var + ".extent_produced");
         stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
+    }
+
+    if (!s.lazy_level.is_inline() && !found_lazy_level) {
+        std::cerr << "Error: Cannot dynamically schedule `" << f.name() << "' in `"
+                  << s.lazy_level.var << "', which is not one of its dimensions.\n";
+        assert(false);
     }
 
     // Define the bounds on the split dimensions using the bounds
@@ -455,6 +469,13 @@ pair<Stmt, Stmt> build_realization(Function func) {
             }
         }
 
+        if (!func.schedule().lazy_level.is_inline()) {
+            // TODO(bblum): Figure out something better to do here.
+            std::cerr << "Error: Cannot generate a dynamic schedule for `"
+                      << func.name() << "' because it has an update phase.\n";
+            assert(false);
+        }
+
         if (!bounds.empty()) {
             assert(bounds.size() == func.args().size());
             // Expand the region to be produced using the region read in the update step
@@ -572,8 +593,10 @@ private:
             bounds.push_back(Range(min, extent));
         }
 
+        // TODO(bblum): Send the whole lazy-level through, or some notion of dimension.
+
         s = Realize::make(func.name(), func.output_types(), bounds,
-                          func.schedule().lazy, s);
+                          !func.schedule().lazy_level.is_inline(), s);
 
         // The allocated bounds are the bounds produced at this loop
         // level. If it's a reduction, we may need to increase it to

@@ -977,13 +977,15 @@ Func &Func::compute_at(Func f, Var var) {
     return *this;
 }
 
-Func &Func::compute_lazy(Func f, RVar var) {
-    return compute_lazy(f, Var(var.name()));
+Func &Func::compute_lazy(RVar var) {
+    return compute_lazy(Var(var.name()));
 }
 
-Func &Func::compute_lazy(Func f, Var var) {
-    // TODO(bblum): support finer grained control
-    func.schedule().lazy = true;
+Func &Func::compute_lazy(Var var) {
+    // The loop level at which to lazify a function is always associated with
+    // the function itself, rather than with a different one.
+    Schedule::LoopLevel loop_level(func.name(), var.name());
+    func.schedule().lazy_level = loop_level;
     return *this;
 }
 
