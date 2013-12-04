@@ -950,6 +950,7 @@ struct Call : public ExprNode<Call> {
         popcount,
         count_leading_zeros,
         count_trailing_zeros,
+        undef,
         trace;
 
     // If it's a call to another halide function, this call node

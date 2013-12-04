@@ -489,8 +489,14 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
         // to "available externally" which should guarantee they do not exist
         // after the resulting module is finalized to code. That is they must
         // be inlined to be used.
+	//
+	// However libdevice has a few routines that are marked
+	// "noinline" which must either be changed to alow inlining or
+	// preserved in generated code. This preserves the intent of
+	// keeping these routines out-of-line and hence called by
+	// not marking them AvailableExternally.
 
-        if (!f->isDeclaration()) {
+        if (!f->isDeclaration() && !f->hasFnAttribute(llvm::Attribute::NoInline)) {
             f->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
         }
     }

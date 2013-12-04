@@ -53,43 +53,43 @@ if (TARGET_ARM64)
 endif()
 
 set(RUNTIME_CPP
-  android_io 
-  cuda 
-  fake_thread_pool 
-  gcd_thread_pool 
-  ios_io 
-  android_clock 
-  linux_clock 
-  nogpu 
-  opencl 
-  posix_allocator 
-  posix_clock 
-  osx_clock 
-  windows_clock 
-  posix_error_handler 
-  posix_io 
-  nacl_io 
-  osx_io 
-  posix_math 
-  posix_thread_pool 
-  android_host_cpu_count 
-  linux_host_cpu_count 
-  osx_host_cpu_count 
-  tracing 
-  write_debug_image 
-  cuda_debug 
-  opencl_debug 
+  android_io
+  cuda
+  fake_thread_pool
+  gcd_thread_pool
+  ios_io
+  android_clock
+  linux_clock
+  nogpu
+  opencl
+  posix_allocator
+  posix_clock
+  osx_clock
+  windows_clock
+  posix_error_handler
+  posix_io
+  nacl_io
+  osx_io
+  posix_math
+  posix_thread_pool
+  android_host_cpu_count
+  linux_host_cpu_count
+  osx_host_cpu_count
+  tracing
+  write_debug_image
+  cuda_debug
+  opencl_debug
   windows_io)
-set (RUNTIME_LL 
-  arm 
-  posix_math 
-  ptx_dev 
+set (RUNTIME_LL
+  arm
+  posix_math
+  ptx_dev
   spir_dev
   spir64_dev
-  x86_avx 
-  x86 
+  x86_avx
+  x86
   x86_sse41)
-  
+
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
 file(TO_NATIVE_PATH "${CMAKE_CFG_INTDIR}/" NATIVE_INT_DIR)
@@ -136,7 +136,7 @@ add_library(InitialModules STATIC
 
 add_dependencies(InitialModules
   bitcode2cpp)
-  
+
 set(HEADER_FILES
   Util.h
   Type.h
@@ -204,8 +204,9 @@ set(HEADER_FILES
   Lerp.h
   Target.h
   SkipStages.h
+  RemoveUndef.h
   SpecializeClampedRamps.h)
-  
+
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
 add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/include/Halide.h
@@ -216,71 +217,72 @@ add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/include/Halide.h
 add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-  CodeGen.cpp 
-  CodeGen_Internal.cpp 
-  CodeGen_X86.cpp 
-  CodeGen_GPU_Host.cpp 
-  CodeGen_PTX_Dev.cpp 
-  CodeGen_OpenCL_Dev.cpp 
-  CodeGen_SPIR_Dev.cpp 
-  CodeGen_GPU_Dev.cpp 
-  CodeGen_Posix.cpp 
-  CodeGen_ARM.cpp 
-  IR.cpp 
-  IRMutator.cpp 
-  IRPrinter.cpp 
-  IRVisitor.cpp 
-  CodeGen_C.cpp 
-  Substitute.cpp 
-  ModulusRemainder.cpp 
+  CodeGen.cpp
+  CodeGen_Internal.cpp
+  CodeGen_X86.cpp
+  CodeGen_GPU_Host.cpp
+  CodeGen_PTX_Dev.cpp
+  CodeGen_OpenCL_Dev.cpp
+  CodeGen_SPIR_Dev.cpp
+  CodeGen_GPU_Dev.cpp
+  CodeGen_Posix.cpp
+  CodeGen_ARM.cpp
+  IR.cpp
+  IRMutator.cpp
+  IRPrinter.cpp
+  IRVisitor.cpp
+  CodeGen_C.cpp
+  Substitute.cpp
+  ModulusRemainder.cpp
   Bounds.cpp
-  Derivative.cpp 
-  OneToOne.cpp 
-  Func.cpp 
-  Simplify.cpp 
-  IREquality.cpp 
-  Util.cpp 
-  Function.cpp 
-  IROperator.cpp 
-  Lower.cpp 
-  Debug.cpp 
-  Parameter.cpp 
-  Reduction.cpp 
-  RDom.cpp 
-  Profiling.cpp 
-  Tracing.cpp 
-  StorageFlattening.cpp 
-  VectorizeLoops.cpp 
-  UnrollLoops.cpp 
-  BoundsInference.cpp 
+  Derivative.cpp
+  OneToOne.cpp
+  Func.cpp
+  Simplify.cpp
+  IREquality.cpp
+  Util.cpp
+  Function.cpp
+  IROperator.cpp
+  Lower.cpp
+  Debug.cpp
+  Parameter.cpp
+  Reduction.cpp
+  RDom.cpp
+  Profiling.cpp
+  Tracing.cpp
+  StorageFlattening.cpp
+  VectorizeLoops.cpp
+  UnrollLoops.cpp
+  BoundsInference.cpp
   IRMatch.cpp
-  StmtCompiler.cpp 
-  integer_division_table.cpp 
-  SlidingWindow.cpp 
+  StmtCompiler.cpp
+  integer_division_table.cpp
+  SlidingWindow.cpp
   StorageFolding.cpp
-  InlineReductions.cpp 
-  RemoveTrivialForLoops.cpp 
-  Deinterleave.cpp 
+  InlineReductions.cpp
+  RemoveTrivialForLoops.cpp
+  Deinterleave.cpp
   DebugToFile.cpp
-  Type.cpp 
-  JITCompiledModule.cpp 
-  EarlyFree.cpp 
-  UniquifyVariableNames.cpp 
-  CSE.cpp 
-  Tuple.cpp 
-  Lerp.cpp 
+  Type.cpp
+  JITCompiledModule.cpp
+  EarlyFree.cpp
+  UniquifyVariableNames.cpp
+  CSE.cpp
+  Tuple.cpp
+  Lerp.cpp
   Target.cpp
   SkipStages.cpp
+  RemoveUndef.cpp
   SpecializeClampedRamps.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
-  
+
 target_link_libraries(Halide InitialModules ${LIBS})
 # if this is a DLL, don't link dependencies to this set of libs.
 if (HALIDE_SHARED_LIBRARY)
   set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
 endif()
 
-add_dependencies(Halide 
+add_dependencies(Halide
   InitialModules
   build_halide_h)
