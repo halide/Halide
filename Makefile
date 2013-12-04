@@ -77,13 +77,17 @@ TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
+ifneq ($(WITH_PTX), )
 STATIC_TEST_LIBS ?= -L/usr/lib/nvidia-current -lcuda
+endif
 HOST_OS=linux
 endif
 
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
+ifneq ($(WITH_PTX), )
 STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+endif
 HOST_OS=os_x
 endif
 
