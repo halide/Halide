@@ -232,7 +232,6 @@ public:
                                     int x_size, int y_size, int z_size, GPUAPI gpu_api = GPU_DEFAULT);
     // @}
 
-#if 0
     // These calls are for legacy compatibility only.
     EXPORT ScheduleHandle &cuda_threads(Var thread_x) {
         return gpu_threads(thread_x);
@@ -275,7 +274,6 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
-#endif
 };
 
 /** A halide function. This class represents one stage in a Halide
