@@ -652,13 +652,13 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var 
     return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
 }
 
-ScheduleHandle &ScheduleHandle::cuda_threads(Var tx) {
+  ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
     rename(tx, Var("threadidx"));
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_threads(Var tx, Var ty) {
+ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     rename(tx, Var("threadidx"));
@@ -666,7 +666,7 @@ ScheduleHandle &ScheduleHandle::cuda_threads(Var tx, Var ty) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_threads(Var tx, Var ty, Var tz) {
+ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, Var tz, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     parallel(tz);
@@ -676,13 +676,13 @@ ScheduleHandle &ScheduleHandle::cuda_threads(Var tx, Var ty, Var tz) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_blocks(Var tx) {
+ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
     rename(tx, Var("blockidx"));
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_blocks(Var tx, Var ty) {
+ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     rename(tx, Var("blockidx"));
@@ -690,7 +690,7 @@ ScheduleHandle &ScheduleHandle::cuda_blocks(Var tx, Var ty) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_blocks(Var tx, Var ty, Var tz) {
+ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, Var tz, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     parallel(tz);
@@ -700,21 +700,22 @@ ScheduleHandle &ScheduleHandle::cuda_blocks(Var tx, Var ty, Var tz) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda(Var bx, Var tx) {
-    return cuda_blocks(bx).cuda_threads(tx);
+ScheduleHandle &ScheduleHandle::gpu(Var bx, Var tx, GPUAPI /* gpu_api */) {
+    return gpu_blocks(bx).gpu_threads(tx);
 }
 
-ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by,
-                                     Var tx, Var ty) {
-    return cuda_blocks(bx, by).cuda_threads(tx, ty);
+ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by,
+                                    Var tx, Var ty, GPUAPI /* gpu_api */) {
+    return gpu_blocks(bx, by).gpu_threads(tx, ty);
 }
 
-ScheduleHandle &ScheduleHandle::cuda(Var bx, Var by, Var bz,
-                                     Var tx, Var ty, Var tz) {
-    return cuda_blocks(bx, by, bz).cuda_threads(tx, ty, tz);
+ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by, Var bz,
+                                    Var tx, Var ty, Var tz,
+				    GPUAPI /* gpu_api */) {
+    return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-ScheduleHandle &ScheduleHandle::cuda_tile(Var x, int x_size) {
+ScheduleHandle &ScheduleHandle::gpu_tile(Var x, int x_size, GPUAPI /* gpu_api */) {
     Var bx("blockidx"), tx("threadidx");
     split(x, bx, tx, x_size);
     parallel(bx);
@@ -723,8 +724,8 @@ ScheduleHandle &ScheduleHandle::cuda_tile(Var x, int x_size) {
 }
 
 
-ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y,
-                                          int x_size, int y_size) {
+ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
+                                          int x_size, int y_size, GPUAPI /* gpu_api */) {
     Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
@@ -734,8 +735,9 @@ ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y,
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, Var z,
-                                          int x_size, int y_size, int z_size) {
+ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
+                                         int x_size, int y_size, int z_size,
+					 GPUAPI /* gpu_api */) {
     Var bx("blockidx"), by("blockidy"), bz("blockidz"),
         tx("threadidx"), ty("threadidy"), tz("threadidz");
     split(x, bx, tx, x_size);
@@ -863,63 +865,63 @@ Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, 
     return *this;
 }
 
-Func &Func::cuda_threads(Var tx) {
-    ScheduleHandle(func.schedule()).cuda_threads(tx);
+Func &Func::gpu_threads(Var tx) {
+    ScheduleHandle(func.schedule()).gpu_threads(tx);
     return *this;
 }
 
-Func &Func::cuda_threads(Var tx, Var ty) {
-    ScheduleHandle(func.schedule()).cuda_threads(tx, ty);
+Func &Func::gpu_threads(Var tx, Var ty) {
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty);
     return *this;
 }
 
-Func &Func::cuda_threads(Var tx, Var ty, Var tz) {
-    ScheduleHandle(func.schedule()).cuda_threads(tx, ty, tz);
+Func &Func::gpu_threads(Var tx, Var ty, Var tz) {
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz);
     return *this;
 }
 
-Func &Func::cuda_blocks(Var bx) {
-    ScheduleHandle(func.schedule()).cuda_blocks(bx);
+Func &Func::gpu_blocks(Var bx) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx);
     return *this;
 }
 
-Func &Func::cuda_blocks(Var bx, Var by) {
-    ScheduleHandle(func.schedule()).cuda_blocks(bx, by);
+Func &Func::gpu_blocks(Var bx, Var by) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by);
     return *this;
 }
 
-Func &Func::cuda_blocks(Var bx, Var by, Var bz) {
-    ScheduleHandle(func.schedule()).cuda_blocks(bx, by, bz);
+Func &Func::gpu_blocks(Var bx, Var by, Var bz) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz);
     return *this;
 }
 
-Func &Func::cuda(Var bx, Var tx) {
-    ScheduleHandle(func.schedule()).cuda(bx, tx);
+Func &Func::gpu(Var bx, Var tx) {
+    ScheduleHandle(func.schedule()).gpu(bx, tx);
     return *this;
 }
 
-Func &Func::cuda(Var bx, Var by, Var tx, Var ty) {
-    ScheduleHandle(func.schedule()).cuda(bx, by, tx, ty);
+Func &Func::gpu(Var bx, Var by, Var tx, Var ty) {
+    ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty);
     return *this;
 }
 
-Func &Func::cuda(Var bx, Var by, Var bz, Var tx, Var ty, Var tz) {
-    ScheduleHandle(func.schedule()).cuda(bx, by, bz, tx, ty, tz);
+Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz) {
+    ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz);
     return *this;
 }
 
-Func &Func::cuda_tile(Var x, int x_size) {
-    ScheduleHandle(func.schedule()).cuda_tile(x, x_size);
+Func &Func::gpu_tile(Var x, int x_size) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, x_size);
     return *this;
 }
 
-Func &Func::cuda_tile(Var x, Var y, int x_size, int y_size) {
-    ScheduleHandle(func.schedule()).cuda_tile(x, y, x_size, y_size);
+Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size);
     return *this;
 }
 
-Func &Func::cuda_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size) {
-    ScheduleHandle(func.schedule()).cuda_tile(x, y, z, x_size, y_size, z_size);
+Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size);
     return *this;
 }
 
