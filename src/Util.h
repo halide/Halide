@@ -112,7 +112,7 @@ EXPORT std::string unique_name(char prefix);
 
 /** Generate a unique name starting with the given string.  Not
  * thread-safe. */
-EXPORT std::string unique_name(const std::string &name);
+EXPORT std::string unique_name(const std::string &name, bool user = true);
 
 /** Test if the first string starts with the second string */
 EXPORT bool starts_with(const std::string &str, const std::string &prefix);

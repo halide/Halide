@@ -145,7 +145,7 @@ $(BIN_DIR)/build_halide_h: src/build_halide_h.cpp
 
 msvc/initmod.cpp: $(INITIAL_MODULES)
 	echo "extern \"C\" {" > msvc/initmod.cpp
-	cat $(BUILD_DIR)/initmod.*.cpp >> msvc/initmod.cpp
+	cat $(BUILD_DIR)/initmod*.cpp >> msvc/initmod.cpp
 	echo "}" >> msvc/initmod.cpp
 
 -include $(OBJECTS:.o=.d)

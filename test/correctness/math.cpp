@@ -93,17 +93,20 @@ fun_1_all_types(exp)
 fun_1_all_types(log)
 fun_1_all_types(floor)
 fun_1_all_types(ceil)
-fun_1_all_types(round)
 fun_1_all_types(asin)
 fun_1_all_types(acos)
 fun_1_all_types(tan)
 fun_1_all_types(atan)
 fun_1_all_types(sinh)
-fun_1_all_types(asinh)
 fun_1_all_types(cosh)
-fun_1_all_types(acosh)
 fun_1_all_types(tanh)
+#ifndef _MSC_VER
+// These functions don't exist in msvc < 2012
+fun_1_all_types(asinh)
+fun_1_all_types(acosh)
 fun_1_all_types(atanh)
+fun_1_all_types(round)
+#endif
 
 fun_1(float, abs, fabsf)
 fun_1(double, abs, fabs)
@@ -176,15 +179,17 @@ int main(int argc, char **argv) {
     call_1(cosh, 256, 0, 1)
     call_1(tanh, 256, 5 * -3.1415, 5 * 3.1415)
 
+#ifndef _MSC_VER
     call_1(asinh, 256, -10.0, 10.0)
     call_1(acosh, 256, 1.0, 10)
     call_1(atanh, 256, -1.0, 1.0)
+    call_1(round, 256, -15, 15)
+#endif
 
     call_1(exp, 256, 0, 20)
     call_1(log, 256, 1, 1000000)
     call_1(floor, 256, -25, 25)
     call_1(ceil, 256, -25, 25)
-    call_1(round, 256, -15, 15)
     call_2(pow, 256, .1, 20, .1, 2)
 
     printf("Success!\n");

@@ -411,7 +411,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 #else // WITH_PTX
     return vector<char>();
 #endif
-
 }
 
 
