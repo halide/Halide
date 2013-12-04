@@ -12,7 +12,6 @@
 #include <stdlib.h>
 
 #if __cplusplus > 199711L
-#include <memory>
 using std::shared_ptr;
 #else
 #include <tr1/memory>
