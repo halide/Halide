@@ -74,8 +74,12 @@ CXX_FLAGS += $(SPIR_CXX_FLAGS)
 LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 
 ifneq ($(WITH_PTX), )
-TEST_PTX = $(findstring ptx,$(HL_TARGET))
-TEST_PTX += $(findstring cuda,$(HL_TARGET))
+ifneq (,$(findstring ptx,$(HL_TARGET)))
+TEST_PTX = 1
+endif
+ifneq (,$(findstring cuda,$(HL_TARGET)))
+TEST_PTX = 1
+endif
 endif
 
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
