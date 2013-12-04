@@ -73,11 +73,16 @@ CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(SPIR_CXX_FLAGS)
 LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 
+ifneq ($(WITH_PTX), )
+TEST_PTX = $(findstring ptx,$(HL_TARGET))
+TEST_PTX += $(findstring cuda,$(HL_TARGET))
+endif
+
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
-ifneq ($(WITH_PTX), )
+ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -L/usr/lib/nvidia-current -lcuda
 endif
 HOST_OS=linux
@@ -85,7 +90,7 @@ endif
 
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
-ifneq ($(WITH_PTX), )
+ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
 endif
 HOST_OS=os_x
