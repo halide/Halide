@@ -192,6 +192,25 @@ void IRMutator::visit(const For *op) {
     }
 }
 
+void IRMutator::visit(const DynamicStmt *op) {
+    vector<Expr> new_indices(op->indices.size());
+    bool changed = false;
+
+    for (size_t i = 0; i < op->indices.size(); i++) {
+        Expr old_index = op->indices[i];
+        Expr new_index = mutate(old_index);
+        if (!new_index.same_as(old_index)) changed = true;
+        new_indices[i] = new_index;
+    }
+
+    Stmt body = mutate(op->body);
+    if (!changed && body.same_as(op->body)) {
+        stmt = op;
+    } else {
+        stmt = DynamicStmt::make(op->name, new_indices, body);
+    }
+}
+
 void IRMutator::visit(const Store *op) {
     Expr value = mutate(op->value);
     Expr index = mutate(op->index);

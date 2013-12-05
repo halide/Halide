@@ -45,6 +45,7 @@ public:
     void visit(const AssertStmt *);
     void visit(const Pipeline *);
     void visit(const For *);
+    void visit(const DynamicStmt *);
     void visit(const Store *);
     void visit(const Provide *);
     void visit(const Allocate *);
@@ -371,6 +372,10 @@ void ComputeModulusRemainder::visit(const Pipeline *) {
 }
 
 void ComputeModulusRemainder::visit(const For *) {
+    assert(false && "modulus_remainder of statement");
+}
+
+void ComputeModulusRemainder::visit(const DynamicStmt *) {
     assert(false && "modulus_remainder of statement");
 }
 

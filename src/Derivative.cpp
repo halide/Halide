@@ -307,6 +307,10 @@ class Monotonic : public IRVisitor {
         assert(false && "Monotonic of statement");
     }
 
+    void visit(const DynamicStmt *op) {
+        assert(false && "Monotonic of statement");
+    }
+
     void visit(const Store *op) {
         assert(false && "Monotonic of statement");
     }

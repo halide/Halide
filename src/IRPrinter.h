@@ -99,6 +99,7 @@ protected:
     void visit(const AssertStmt *);
     void visit(const Pipeline *);
     void visit(const For *);
+    void visit(const DynamicStmt *);
     void visit(const Store *);
     void visit(const Provide *);
     void visit(const Allocate *);

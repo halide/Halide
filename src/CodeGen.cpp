@@ -2006,6 +2006,10 @@ void CodeGen::visit(const Block *op) {
     if (op->rest.defined()) codegen(op->rest);
 }
 
+void CodeGen::visit(const DynamicStmt *op) {
+    assert(false && "DynamicStmt encountered during codegen");
+}
+
 void CodeGen::visit(const Realize *op) {
     assert(false && "Realize encountered during codegen");
 }
