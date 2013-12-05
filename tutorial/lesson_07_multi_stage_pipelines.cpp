@@ -1,13 +1,13 @@
-// Halide tutorial lesson 67
+// Halide tutorial lesson 7
 
 // This lesson demonstrates how express multi-stage pipelines.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_07
+// g++ lesson_07*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07
 
 // On os x:
-// g++ lesson_07.cpp -I ../include -L ../bin -lHalide -o lesson_07
+// g++ lesson_07*.cpp -I ../include -L ../bin -lHalide -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
 #include <Halide.h>
@@ -17,8 +17,6 @@ using namespace Halide;
 
 // Support code for loading pngs.
 #include "../apps/support/image_io.h"
-
-using namespace Halide;
 
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.

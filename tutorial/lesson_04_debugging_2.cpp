@@ -3,11 +3,11 @@
 // This lesson demonstrates how to follow what Halide is doing at runtime.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_04.cpp -I ../include -L ../bin -rdynamic -lHalide -lpthread -ldl -o lesson_04
+// g++ lesson_04*.cpp -I ../include -L ../bin -rdynamic -lHalide -lpthread -ldl -o lesson_04
 // LD_LIBRARY_PATH=../bin ./lesson_04
 
 // On os x:
-// g++ lesson_04.cpp -I ../include -L ../bin -lHalide -o lesson_04
+// g++ lesson_04*.cpp -I ../include -L ../bin -lHalide -o lesson_04
 // DYLD_LIBRARY_PATH=../bin ./lesson_04
 
 #include <Halide.h>
