@@ -15,13 +15,10 @@ int main(int argc, char **argv) {
     g(x, y) = f(x+1, y) + f(x-1, y);
 
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
+    if (target.has_gpu()) {
         Var xi, yi;
-        g.cuda_tile(x, y, 8, 8);
-        f.compute_at(g, Var("blockidx")).cuda_threads(x, y);
-    } else {
-        g.tile(x, y, xo, yo, xi, yi, 8, 8);
-        f.compute_at(g, xo);
+        g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
+        f.compute_at(g, Var("blockidx")).gpu_threads(x, y, GPU_DEFAULT);
     }
 
     printf("Realizing function...\n");

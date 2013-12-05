@@ -71,18 +71,18 @@ int main(int argc, char **argv) {
     bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
+    if (target.has_gpu()) {
 
         // GPU schedule
-        grid.compute_root().reorder(z, c, x, y).cuda_tile(x, y, 8, 8);
+        grid.compute_root().reorder(z, c, x, y).gpu_tile(x, y, 8, 8, GPU_DEFAULT);
 
         // Compute the histogram into shared memory before spilling it to global memory
         histogram.store_at(grid, Var("blockidx")).compute_at(grid, Var("threadidx"));
 
-        blurx.compute_root().cuda_tile(x, y, z, 16, 16, 1);
-        blury.compute_root().cuda_tile(x, y, z, 16, 16, 1);
-        blurz.compute_root().cuda_tile(x, y, z, 8, 8, 4);
-        bilateral_grid.compute_root().cuda_tile(x, y, s_sigma, s_sigma);
+        blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1, GPU_DEFAULT);
+        blury.compute_root().gpu_tile(x, y, z, 16, 16, 1, GPU_DEFAULT);
+        blurz.compute_root().gpu_tile(x, y, z, 8, 8, 4, GPU_DEFAULT);
+        bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma, GPU_DEFAULT);
     } else {
 
         // CPU schedule

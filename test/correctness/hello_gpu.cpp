@@ -14,12 +14,9 @@ int main(int argc, char **argv) {
     f(x, y) = x*y;
 
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
-        f.cuda_tile(x, y, 8, 8);
+    if (target.has_gpu()) {
+        f.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
     } 
-    if (target.features & Target::OpenCL) {
-        f.cuda_tile(x, y, 8, 8);
-    }
 
     printf("Realizing function...\n");
 

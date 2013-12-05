@@ -14,15 +14,10 @@ int main(int argc, char **argv) {
     g.compute_root();
 
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
-        f.cuda_tile(x, y, 16, 16);
-        g.cuda_tile(x, 128);
-        h.cuda_tile(x, 128);
-    }
-    if (target.features & Target::OpenCL) {
-        f.cuda_tile(x, y, 16, 16);
-        g.cuda_tile(x, 128);
-        h.cuda_tile(x, 128);
+    if (target.has_gpu()) {
+        f.gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+        g.gpu_tile(x, 128, GPU_DEFAULT);
+        h.gpu_tile(x, 128, GPU_DEFAULT);
     }
 
 

@@ -45,8 +45,8 @@ bool relatively_equal(value_t a, value_t b) {
         Buffer in_buffer(type_of<type>(), in_buf);                            \
         input.set(in_buffer);                                                 \
         Target target = get_target_from_environment();                        \
-        if (target.features & Target::CUDA) {                                 \
-            test_##name.cuda_tile(x, 8);                                      \
+        if (target.has_gpu()) {                                               \
+            test_##name.gpu_tile(x, 8, GPU_DEFAULT);                          \
         }                                                                     \
         Image<type> result = test_##name.realize(in_buf->extent[0]);          \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
@@ -66,8 +66,8 @@ bool relatively_equal(value_t a, value_t b) {
         Buffer in_buffer(type_of<type>(), in_buf);                                  \
         input.set(in_buffer);                                                       \
         Target target = get_target_from_environment();                              \
-        if (target.features & Target::CUDA) {                                       \
-            test_##name.cuda_tile(x, 8);                                            \
+        if (target.has_gpu()) {                                                     \
+          test_##name.gpu_tile(x, 8, GPU_DEFAULT);                                  \
         }                                                                           \
         Image<type> result = test_##name.realize(in_buf->extent[1]);                \
         for (int i = 0; i < in_buf->extent[1]; i++) {                               \
