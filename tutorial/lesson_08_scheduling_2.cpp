@@ -489,7 +489,7 @@ int main(int argc, char **argv) {
                         if (x_base > 801 - 4) x_base = 801 - 4;
                         // If you're on x86, Halide generates SSE code for this part:
                         int x[] = {x_base, x_base + 1, x_base + 2, x_base + 3};
-                        float vec[4] = {sqrt(x[0] * py), sqrt(x[1] * py), sqrt(x[2] * py), sqrt(x[3] * py)};
+                        float vec[4] = {sqrtf(x[0] * py), sqrtf(x[1] * py), sqrtf(x[2] * py), sqrtf(x[3] * py)};
                         producer_storage[py & 1][x[0]] = vec[0];
                         producer_storage[py & 1][x[1]] = vec[1];
                         producer_storage[py & 1][x[2]] = vec[2];
