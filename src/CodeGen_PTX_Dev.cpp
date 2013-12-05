@@ -309,7 +309,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     /* if (FloatABIForCalls != FloatABI::Default) */
         /* Options.FloatABIType = FloatABIForCalls; */
     Options.NoZerosInBSS = false;
-    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
+    #if LLVM_VERSION < 33
     Options.JITExceptionHandling = false;
     #endif
     Options.JITEmitDebugInfo = false;
@@ -339,7 +339,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     PM.add(TLI);
 
     if (target.get()) {
-        #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
+        #if LLVM_VERSION < 33
         PM.add(new TargetTransformInfo(target->getScalarTargetTransformInfo(),
                                        target->getVectorTargetTransformInfo()));
         #else
