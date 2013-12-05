@@ -24,9 +24,8 @@ OPTIMIZE ?= -O3
 #  such a compiler handy. One still needs to have 32-bit llvm libraries, etc.)
 BUILD_BIT_SIZE ?=
 
-# llvm_config doesn't always point to the correct include
-# directory. We haven't figured out why yet.
-LLVM_CXX_FLAGS += -I$(shell $(LLVM_CONFIG) --src-root)/include
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
