@@ -3,11 +3,11 @@
 // This lesson demonstrates how to inspect what the Halide compiler is producing.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_03.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03
+// g++ lesson_03*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03
 // LD_LIBRARY_PATH=../bin ./lesson_03
 
 // On os x:
-// g++ lesson_03.cpp -I ../include -L ../bin -lHalide -o lesson_03
+// g++ lesson_03*.cpp -I ../include -L ../bin -lHalide -o lesson_03
 // DYLD_LIBRARY_PATH=../bin ./lesson_03
 
 #include <Halide.h>
@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     // name for debugging purposes.
     Func gradient("gradient");
     Var x("x"), y("y");
-    gradient(x, y) = x + y;    
+    gradient(x, y) = x + y;
 
     // Realize the function to produce an output image. We'll keep it
     // very small for this lesson.
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     // That line compiled and ran the pipeline. Try running this
     // lesson with the environment variable HL_DEBUG_CODEGEN set to
     // 1. It will print out the various stages of compilation, and a
-    // pseudocode representation of the final pipeline. 
+    // pseudocode representation of the final pipeline.
 
     // If you set HL_DEBUG_CODEGEN to a higher number, you can see
     // more and more details of how Halide compiles your pipeline.

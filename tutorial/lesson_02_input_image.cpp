@@ -3,12 +3,12 @@
 // This lesson demonstrates how to pass in input images.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_02.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -o lesson_02
-// LD_LIBRARY_PATH=../bin ./lesson_02 
+// g++ lesson_02*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -o lesson_02
+// LD_LIBRARY_PATH=../bin ./lesson_02
 
 // On os x:
-// g++ lesson_02.cpp -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02
-// DYLD_LIBRARY_PATH=../bin ./lesson_02 
+// g++ lesson_02*.cpp -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02
+// DYLD_LIBRARY_PATH=../bin ./lesson_02
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.
 #include <Halide.h>
@@ -38,10 +38,10 @@ int main(int argc, char **argv) {
     // Normally we'd probably write the whole function definition on
     // one line. Here we'll break it apart so we can explain what
     // we're doing at every step.
-    
+
     // For each pixel of the input image.
     Halide::Expr value = input(x, y, c);
-    
+
     // Cast it to a floating point value.
     value = Halide::cast<float>(value);
 
@@ -61,10 +61,10 @@ int main(int argc, char **argv) {
     brighter(x, y, c) = value;
 
     // The equivalent one-liner to all of the above is:
-    // 
+    //
     // brighter(x, y, c) = Halide::cast<uint8_t>(min(input(x, y, c) * 1.5f, 255));
-    // 
-    // In the shorter version: 
+    //
+    // In the shorter version:
     // - I skipped the cast to float, because multiplying by 1.5f does
     //   that automatically.
     // - I also used integer constants in clamp, because they get cast
@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
     // Remember. All we've done so far is build a representation of a
     // Halide program in memory. We haven't actually processed any
     // pixels yet. We haven't even compiled that Halide program yet.
-    
+
     // So now we'll realize the Func. The size of the output image
     // should match the size of the input image. If we just wanted to
     // brighten a portion of the input image we could request a
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 
     // Save the output for inspection. It should look like a bright parrot.
     save(output, "brighter.png");
-    
+
     printf("Success!\n");
     return 0;
 }
