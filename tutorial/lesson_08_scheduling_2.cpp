@@ -406,14 +406,95 @@ int main(int argc, char **argv) {
     // producer.store_root().compute_at(consumer, x) for this type of
     // code?
     //
-    // The answer is parallelism. In both of the previous two strategies we've
-    // assumed that values computed on previous iterations are lying
-    // around for us to reuse. This assumes that previous values of x
-    // or y happened earlier in time and have finished. This is not
-    // true if you parallelize or vectorize either loop. Darn. If you
-    // parallelize, Halide won't inject the optimizations that skip
-    // work already done, and won't fold the storage down into a
-    // circular buffer either, which makes our store_root pointless.
+    // The answer is parallelism. In both of the previous two
+    // strategies we've assumed that values computed on previous
+    // iterations are lying around for us to reuse. This assumes that
+    // previous values of x or y happened earlier in time and have
+    // finished. This is not true if you parallelize or vectorize
+    // either loop. Darn. If you parallelize, Halide won't inject the
+    // optimizations that skip work already done if there's a parallel
+    // loop in between the store_at level and the compute_at level,
+    // and won't fold the storage down into a circular buffer either,
+    // which makes our store_root pointless.
+
+    // We're running out of options. We can make new ones by
+    // splitting. We can store_at or compute_at at the natural
+    // variables of the consumer (x and y), or we can split x or y
+    // into new inner and outer sub-variables and then schedule with
+    // respect to those. We'll use this to express fusion in tiles:
+    {
+        Func producer("producer_store_root_compute_y"), consumer("consumer_store_root_compute_y");
+        producer(x, y) = sqrt(x * y);
+        consumer(x, y) = (producer(x, y) +
+                          producer(x, y+1) +
+                          producer(x+1, y) +
+                          producer(x+1, y+1));
+
+
+        // Tile the consumer using 2x2 tiles.
+        Var x_outer, y_outer, x_inner, y_inner;
+        consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2);
+
+        // Compute the producer per tile of the consumer
+        producer.compute_at(consumer, x_outer);
+
+        // Notice that I wrote my schedule starting from the end of
+        // the pipeline (the consumer). This is because the schedule
+        // for the producer refers to x_outer, which we introduced
+        // when we tiled the consumer. You can write it in the other
+        // order, but it tends to be harder to read.
+
+        // Turn on tracing.
+        producer.trace_stores();
+        consumer.trace_stores();
+
+        printf("\nEvaluating:\n"
+               "consumer.tile(x, y, x_outer, y_outer, x_inner, y_inner, 2, 2);\n"
+               "producer.compute_at(consumer, x_outer);\n");
+        consumer.realize(4, 4);
+
+        // Reading the log, you should see that producer and consumer
+        // now alternate on a per-tile basis. Here's the equivalent C:
+
+        float result[4][4];
+
+        // For every tile of the consumer:
+        for (int y_outer = 0; y_outer < 2; y_outer++) {
+            for (int x_outer = 0; x_outer < 2; x_outer++) {
+                // Compute the x and y coords of the start of this tile.
+                int x_base = x_outer*2;
+                int y_base = y_outer*2;
+
+                // Compute enough of producer to satisfy this tile. A
+                // 2x2 tile of the consumer requires a 3x3 tile of the
+                // producer.
+                float producer_storage[3][3];
+                for (int py = x_base; py < x_base + 3; py++) {
+                    for (int px = x_base; px < x_base + 3; px++) {
+                        producer_storage[py-y_base][px-x_base] = sqrt(px * py);
+                    }
+                }
+
+                // Compute this tile of the consumer
+                for (int y_inner = 0; y_inner < 2; y_inner++) {
+                    for (int x_inner = 0; x_inner < 2; x_inner++) {
+                        int x = x_base + x_inner;
+                        int y = y_base + y_inner;
+                        result[y][x] = (producer_storage[y - y_base][x - x_base] +
+                                        producer_storage[y - y_base + 1][x - x_base] +
+                                        producer_storage[y - y_base][x - x_base + 1] +
+                                        producer_storage[y - y_base + 1][x - x_base + 1]);
+                    }
+                }
+            }
+        }
+
+        // Tiling can make sense for problems like this one with
+        // stencils that reach outwards in x and y. Each tile can be
+        // computed independently in parallel, and the redundant work
+        // done by each tile isn't so bad once the tiles get large
+        // enough.
+    }
 
     // Let's try a mixed strategy that combines what we have done with
     // splitting, parallelizing, and vectorizing. This is one that
@@ -436,22 +517,15 @@ int main(int argc, char **argv) {
         // Vectorize across x by a factor of four.
         consumer.vectorize(x, 4);
 
-        // Now store the producer within each strip. This will be 17
-        // scanlines of the producer (16+1), but hopefully it will
-        // fold down into a circular buffer of two scanlines:
+        // Now store the producer per-strip. This will be 17 scanlines
+        // of the producer (16+1), but hopefully it will fold down
+        // into a circular buffer of two scanlines:
         producer.store_at(consumer, yo);
         // Within each strip, compute the producer per scanline of the
         // consumer, skipping work done on previous scanlines.
         producer.compute_at(consumer, yi);
         // Also vectorize the producer (because sqrt is vectorizable on x86 using SSE).
         producer.vectorize(x, 4);
-
-        // Notice that I wrote my scheduling starting from the end of
-        // the pipeline (the consumer). This is because compute_at and
-        // store_at refer to the consumer's yo and yi dimensions,
-        // which we introduced when we split the consumer's y
-        // dimension. You can write it in the other order, but it
-        // tends to be harder to read.
 
         // Let's leave tracing off this time, because we're going to
         // evaluate over a larger image.
@@ -489,7 +563,7 @@ int main(int argc, char **argv) {
                         if (x_base > 801 - 4) x_base = 801 - 4;
                         // If you're on x86, Halide generates SSE code for this part:
                         int x[] = {x_base, x_base + 1, x_base + 2, x_base + 3};
-                        float vec[4] = {sqrt(x[0] * py), sqrt(x[1] * py), sqrt(x[2] * py), sqrt(x[3] * py)};
+                        float vec[4] = {sqrtf(x[0] * py), sqrtf(x[1] * py), sqrtf(x[2] * py), sqrtf(x[3] * py)};
                         producer_storage[py & 1][x[0]] = vec[0];
                         producer_storage[py & 1][x[1]] = vec[1];
                         producer_storage[py & 1][x[2]] = vec[2];
@@ -537,7 +611,7 @@ int main(int argc, char **argv) {
             for (int x = 0; x < 800; x++) {
                 float error = halide_result(x, y) - c_result[y][x];
                 // It's floating-point math, so we'll allow some slop:
-                if (error < -0.0001f || error > 0.0001f) {
+                if (error < -0.001f || error > 0.001f) {
                     printf("halide_result(%d, %d) = %f instead of %f\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;

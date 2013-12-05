@@ -6,8 +6,6 @@
 #pragma warning(push, 0)
 #endif
 
-#include <llvm/Config/config.h>
-
 // MCJIT doesn't seem to work right on os x yet
 #ifdef __APPLE__
 #else
@@ -36,9 +34,9 @@
 #include <llvm/Linker.h>
 #include <llvm/ADT/StringMap.h>
 
-// Temporary affordance to compile with both llvm 3.2 and 3.3.
+// Temporary affordance to compile with both llvm 3.2 and 3.3+
 // Protected as at least one installation of llvm elides version macros.
-#if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
+#if LLVM_VERSION < 33
 
 // LLVM 3.2 includes
 #include <llvm/Value.h>
