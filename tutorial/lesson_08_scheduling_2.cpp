@@ -611,7 +611,7 @@ int main(int argc, char **argv) {
             for (int x = 0; x < 800; x++) {
                 float error = halide_result(x, y) - c_result[y][x];
                 // It's floating-point math, so we'll allow some slop:
-                if (error < -0.0001f || error > 0.0001f) {
+                if (error < -0.001f || error > 0.001f) {
                     printf("halide_result(%d, %d) = %f instead of %f\n",
                            x, y, halide_result(x, y), c_result[y][x]);
                     return -1;
