@@ -865,63 +865,63 @@ Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, 
     return *this;
 }
 
-Func &Func::gpu_threads(Var tx) {
-    ScheduleHandle(func.schedule()).gpu_threads(tx);
+Func &Func::gpu_threads(Var tx, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_threads(Var tx, Var ty) {
-    ScheduleHandle(func.schedule()).gpu_threads(tx, ty);
+Func &Func::gpu_threads(Var tx, Var ty, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_threads(Var tx, Var ty, Var tz) {
-    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz);
+Func &Func::gpu_threads(Var tx, Var ty, Var tz, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_blocks(Var bx) {
-    ScheduleHandle(func.schedule()).gpu_blocks(bx);
+  Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_blocks(Var bx, Var by) {
-    ScheduleHandle(func.schedule()).gpu_blocks(bx, by);
+Func &Func::gpu_blocks(Var bx, Var by, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_blocks(Var bx, Var by, Var bz) {
-    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz);
+Func &Func::gpu_blocks(Var bx, Var by, Var bz, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
     return *this;
 }
 
-Func &Func::gpu(Var bx, Var tx) {
-    ScheduleHandle(func.schedule()).gpu(bx, tx);
+Func &Func::gpu(Var bx, Var tx, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
     return *this;
 }
 
-Func &Func::gpu(Var bx, Var by, Var tx, Var ty) {
-    ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty);
+Func &Func::gpu(Var bx, Var by, Var tx, Var ty, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
     return *this;
 }
 
-Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz) {
-    ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz);
+Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_tile(Var x, int x_size) {
-    ScheduleHandle(func.schedule()).gpu_tile(x, x_size);
+  Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size) {
-    ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size);
+  Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size) {
-    ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size);
+Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
+  ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
     return *this;
 }
 

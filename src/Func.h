@@ -800,9 +800,9 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(Var thread_x);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z);
+    EXPORT Func &gpu_threads(Var thread_x, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_DEFAULT);
     // @}
 
     /** \deprecated Old name for #gpu_threads. */
@@ -823,9 +823,9 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(Var block_x);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z);
+    EXPORT Func &gpu_blocks(Var block_x, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_blocks(Var block_x, Var block_y, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpuapi = GPU_DEFAULT);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
@@ -847,11 +847,11 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(Var block_x, Var thread_x);
+    EXPORT Func &gpu(Var block_x, Var thread_x, GPUAPI gpuapi = GPU_DEFAULT);
     EXPORT Func &gpu(Var block_x, Var block_y,
-                                Var thread_x, Var thread_y);
+		     Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_DEFAULT);
     EXPORT Func &gpu(Var block_x, Var block_y, Var block_z,
-                     Var thread_x, Var thread_y, Var thread_z);
+                     Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_DEFAULT);
     // @}
 
     /** \deprecated Old name for #gpu. */
@@ -874,10 +874,10 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(Var x, int x_size);
-    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size);
+    EXPORT Func &gpu_tile(Var x, int x_size, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi = GPU_DEFAULT);
     EXPORT Func &gpu_tile(Var x, Var y, Var z,
-                          int x_size, int y_size, int z_size);
+                          int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_DEFAULT);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */

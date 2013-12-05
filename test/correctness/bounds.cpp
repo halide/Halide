@@ -16,15 +16,10 @@ int main(int argc, char **argv) {
     h(x, y) = clamp(x+y, 20, 100);
 
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
-        f.cuda_tile(x, y, 8, 8);
-        g.cuda_tile(x, y, 8, 8);
-        h.cuda_tile(x, y, 8, 8);
-    }
-    if (target.features & Target::OpenCL) {
-        f.cuda_tile(x, y, 32, 1);
-        g.cuda_tile(x, y, 32, 1);
-        h.cuda_tile(x, y, 32, 1);
+    if (target.has_gpu()) {
+        f.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
+        g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
+        h.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
     }
 
     printf("Realizing function...\n");
