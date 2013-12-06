@@ -242,7 +242,7 @@ void IRMutator::visit(const Provide *op) {
     if (!changed) {
         stmt = op;
     } else {
-        stmt = Provide::make(op->name, new_values, new_args, op->lazy);
+        stmt = Provide::make(op->name, new_values, new_args);
     }
 }
 

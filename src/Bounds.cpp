@@ -978,7 +978,7 @@ void bounds_test() {
                                         vec(Add::make(
                                                 Call::make(Int(32), "input", input_site_1, Call::Extern),
                                                 Call::make(Int(32), "input", input_site_2, Call::Extern))),
-                                        output_site, false));
+                                        output_site));
 
     map<string, Region> r;
     r = regions_called(loop);

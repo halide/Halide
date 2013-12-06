@@ -45,7 +45,7 @@ class FoldStorageOfFunction : public IRMutator {
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
-            stmt = Provide::make(op->name, op->values, args, op->lazy);
+            stmt = Provide::make(op->name, op->values, args);
         }
     }
 

@@ -218,7 +218,7 @@ class VectorizeLoops : public IRMutator {
                 for (size_t i = 0; i < new_values.size(); i++) {
                     new_values[i] = widen(new_values[i], max_width);
                 }
-                stmt = Provide::make(op->name, new_values, new_args, op->lazy);
+                stmt = Provide::make(op->name, new_values, new_args);
             }
         }
 

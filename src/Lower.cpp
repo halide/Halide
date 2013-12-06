@@ -106,7 +106,11 @@ Stmt build_provide_loop_nest(Function f,
 
     // Make the (multi-dimensional multi-valued) store node.
     assert(!values.empty());
-    Stmt stmt = Provide::make(buffer, values, site, !s.lazy_level.is_inline());
+    Stmt stmt = Provide::make(buffer, values, site);
+
+    // In addition to 'stmt', also accumulate a vector of indices for
+    // indexing into the dynamic scheduling bitmask, in case it is used.
+    vector<Expr> bitmask_index = site;
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -166,6 +170,7 @@ Stmt build_provide_loop_nest(Function f,
             known_size_dims[split.inner] = split.factor;
 
             Expr base = outer * split.factor;
+            Expr base_val;
 
             map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
             if ((iter != known_size_dims.end()) &&
@@ -174,6 +179,8 @@ Stmt build_provide_loop_nest(Function f,
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base.
                 known_size_dims[split.outer] = iter->second / split.factor;
+
+                base_val = base;
             } else if (!is_update) {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
@@ -185,15 +192,26 @@ Stmt build_provide_loop_nest(Function f,
 
                 Expr min_extent_produced = f.min_extent_produced(split.old_var);
 
-                base = Min::make(base, old_extent - min_extent_produced) + old_min;
+                base_val = Min::make(base, old_extent - min_extent_produced) + old_min;
 
                 string name = prefix + split.inner + ".base";
-                stmt = LetStmt::make(name, base, stmt);
+                stmt = LetStmt::make(name, base_val, stmt);
                 base = Variable::make(Int(32), name);
             }
 
             // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
             stmt = substitute(prefix + split.old_var, base + inner, stmt);
+
+            // If the function is dynamically scheduled, update the lazy bitmask
+            // index in the same way, though without using a let statement.
+            // 'base_val' stores the actual value rather than a let-bound variable.
+            if (!s.lazy_level.is_inline()) {
+                for (size_t i = 0; i < bitmask_index.size(); i++) {
+                    Expr e0 = bitmask_index[i];
+                    Expr e1 = substitute(prefix + split.old_var, base_val + inner, e0);
+                    bitmask_index[i] = e1;
+                }
+            }
         } else if (split.is_fuse()) {
             // Define the inner and outer in terms of the fused var
             Expr fused = Variable::make(Int(32), prefix + split.old_var);
@@ -209,10 +227,37 @@ Stmt build_provide_loop_nest(Function f,
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
 
+            // Update possible dynamic bitmask index, as in the pevious case.
+            if (!s.lazy_level.is_inline()) {
+                for (size_t i = 0; i < bitmask_index.size(); i++) {
+                    Expr e0 = bitmask_index[i];
+                    Expr e1 = substitute(prefix + split.inner, inner, e0);
+                    Expr e2 = substitute(prefix + split.outer, outer, e0);
+                    bitmask_index[i] = e2;
+                }
+            }
         } else {
             // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
+
+            // Update possible dynamic bitmask index, as in the pevious case.
+            if (!s.lazy_level.is_inline()) {
+                for (size_t i = 0; i < bitmask_index.size(); i++) {
+                    Expr e0 = bitmask_index[i];
+                    Expr e1 = substitute(prefix + split.old_var, outer, e0);
+                    bitmask_index[i] = e1;
+                }
+            }
         }
+    }
+
+    if (!s.lazy_level.is_inline()) {
+        std::cout << "Stmt currently is " << stmt << "\n";
+        std::cout << "Index currently is ";
+        for (size_t i = 0; i < bitmask_index.size(); i++) {
+            std::cout << "" << bitmask_index[i] << ", ";
+        }
+        std::cout << "\n";
     }
 
     bool found_lazy_level = false;
@@ -221,9 +266,47 @@ Stmt build_provide_loop_nest(Function f,
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
 
-        if (s.lazy_level.match(prefix + dim.var)) {
-            // TODO(bblum): Here insert a lazified ast node.
-            found_lazy_level = true;
+        if (!s.lazy_level.is_inline()) {
+            // Is this the loop level to dynamically schedule at? If so, surround
+            // the current statement with a dynamic stmt node before adding the loop.
+            if (s.lazy_level.match(prefix + dim.var)) {
+                found_lazy_level = true;
+                stmt = DynamicStmt::make(f.name(), bitmask_index, stmt);
+            } else if (!found_lazy_level) {
+                // This dimension is "more inner" than the lazy level, so its
+                // dimension variable should be fixed and can't reference the loop
+                // var. Note that the indices correspond to the function's dimensions,
+                // not necessarily to the scheduling dimensions (splits, tiles, etc).
+                for (size_t i = 0; i < bitmask_index.size(); i++) {
+                    Expr e0 = bitmask_index[i];
+                    Expr e1 = substitute(prefix + dim.var, Expr(0), e0);
+                    bitmask_index[i] = e1;
+                }
+
+                // TODO(bblum): Lift this restriction
+                std::cerr << "Error: Cannot dynamically schedule `" << f.name()
+                          << "'in `" << s.lazy_level.var << "' because that is not "
+                          << "the innermost dimension.\n";
+                assert(false);
+            }
+            
+            if (found_lazy_level) {
+                // This dimension is or is outside of the lazy level. Check legality.
+                if (dim.for_type == For::Vectorized) {
+                    std::cerr << "Error: Cannot dynamically schedule `" << f.name()
+                              << "' in `" << s.lazy_level.var << "' because that "
+                              << "dimension is inside `" << dim.var << "' which is "
+                              << "vectorized.\n";
+                    assert(false);
+                } else if (dim.for_type == For::Parallel) {
+                    // TODO(bblum): Record this so storageflat can emit a barrier.
+                    std::cerr << "Error: Cannot dynamically schedule `" << f.name()
+                              << "' in `" << s.lazy_level.var << "' because that "
+                              << "dimension is inside `" << dim.var << "' which is "
+                              << "parallelized.\n";
+                    assert(false);
+                }
+            }
         }
 
         Expr min = Variable::make(Int(32), prefix + dim.var + ".min_produced");
@@ -592,8 +675,6 @@ private:
             Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent_realized");
             bounds.push_back(Range(min, extent));
         }
-
-        // TODO(bblum): Send the whole lazy-level through, or some notion of dimension.
 
         s = Realize::make(func.name(), func.output_types(), bounds,
                           !func.schedule().lazy_level.is_inline(), s);

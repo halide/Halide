@@ -84,7 +84,7 @@ private:
                 traces[i] = Call::make(values[i].type(), Call::trace_expr, args, Call::Intrinsic);
             }
 
-            stmt = Provide::make(op->name, traces, op->args, op->lazy);
+            stmt = Provide::make(op->name, traces, op->args);
         }
     }
 

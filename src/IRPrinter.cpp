@@ -481,7 +481,7 @@ void IRPrinter::visit(const Free *op) {
 
 void IRPrinter::visit(const Realize *op) {
     do_indent();
-    stream << "realize " << op->name << "(";
+    stream << "realize " << (op->lazy ? "dynamically " : "") << op->name << "(";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print(op->bounds[i].min);
