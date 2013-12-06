@@ -40,7 +40,6 @@ extern const char * strstr(const char *, const char *);
 #ifndef DEBUG
 #define CHECK_ERR(e,str)
 #define CHECK_CALL(c,str) (c)
-#define DEBUG_PRINTF(str, ...)
 #else // DEBUG
 #define CHECK_ERR(err,str) if (err != CL_SUCCESS)           \
                               halide_printf("CL: %s returned non-success: %d\n", str, err); \
@@ -51,7 +50,6 @@ extern const char * strstr(const char *, const char *);
         halide_printf("CL: %s returned non-success: %d\n", str, err); \
     halide_assert(err == CL_SUCCESS);                                              \
 } halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
-#define DEBUG_PRINTF(str, ...) halide_printf(str, __VA_ARGS__)
 #endif //DEBUG
 }
 extern "C" {
@@ -76,7 +74,9 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
         halide_printf("Bad device pointer %p: clGetMemObjectInfo returned %d\n", (void *)buf->dev, result);
         return false;
     }
-    DEBUG_PRINTF("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
+    #ifdef DEBUG
+    halide_printf("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
+    #endif
     if (size) halide_assert(real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
@@ -88,7 +88,9 @@ WEAK void halide_dev_free(buffer_t* buf) {
     if (buf->dev == 0)
       return;
 
-    DEBUG_PRINTF("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
+    #ifdef DEBUG
+    halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
+    #endif
 
     halide_assert(halide_validate_dev_pointer(buf));
     CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
@@ -182,7 +184,9 @@ WEAK void halide_init_kernels(const char* src, int size) {
         *cl_q = clCreateCommandQueue(*cl_ctx, dev, 0, &err);
         CHECK_ERR( err, "clCreateCommandQueue" );
     } else {
-        DEBUG_PRINTF("Already had context %p\n", *cl_ctx);
+        #ifdef DEBUG
+        halide_printf("Already had context %p\n", *cl_ctx);
+        #endif
 
         // Maintain ref count of context.
         CHECK_CALL( clRetainContext(*cl_ctx), "clRetainContext" );
@@ -201,7 +205,9 @@ WEAK void halide_init_kernels(const char* src, int size) {
         if (strstr(src, "/*OpenCL C*/")) {
             // Program is OpenCL C.
 
-            DEBUG_PRINTF("Compiling OpenCL C kernel: %s\n\n", src);
+            #ifdef DEBUG
+            halide_printf("Compiling OpenCL C kernel: %s\n\n", src);
+            #endif
 
             const char * sources[] = { src };
             __mod = clCreateProgramWithSource(*cl_ctx, 1, &sources[0], NULL, &err );
@@ -209,7 +215,9 @@ WEAK void halide_init_kernels(const char* src, int size) {
         } else {
             // Program is SPIR binary.
 
-            DEBUG_PRINTF("Compiling SPIR kernel (%i bytes)\n", size);
+            #ifdef DEBUG
+            halide_printf("Compiling SPIR kernel (%i bytes)\n", size);
+            #endif
 
             const unsigned char * binaries[] = { (unsigned char *)src };
             __mod = clCreateProgramWithBinary(*cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
@@ -238,12 +246,16 @@ WEAK void halide_dev_sync() {
 
 WEAK void halide_release() {
     // TODO: this is for timing; bad for release-mode performance
-    DEBUG_PRINTF("dev_sync on exit\n" );
+    #ifdef DEBUG
+    halide_printf("dev_sync on exit\n" );
+    #endif
     halide_dev_sync();
 
     // Unload the module
     if (__mod) {
-        DEBUG_PRINTF("clReleaseProgram %p\n", __mod);
+        #ifdef DEBUG
+        halide_printf("clReleaseProgram %p\n", __mod);
+        #endif
 
         CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
         __mod = 0;
@@ -251,13 +263,17 @@ WEAK void halide_release() {
 
     // Unload context (ref counted).
     CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
-    DEBUG_PRINTF("clReleaseContext %p\n", *cl_ctx);
+    #ifdef DEBUG
+    halide_printf("clReleaseContext %p\n", *cl_ctx);
+    #endif
     CHECK_CALL( clReleaseContext(*cl_ctx), "clReleaseContext" );
 }
 
 static cl_kernel __get_kernel(const char* entry_name) {
     cl_kernel f;
-    DEBUG_PRINTF("get_kernel %s\n", entry_name);
+    #ifdef DEBUG
+    halide_printf("get_kernel %s\n", entry_name);
+    #endif
     // Get kernel function ptr
     int err;
     f = clCreateKernel(__mod, entry_name, &err);
@@ -267,11 +283,15 @@ static cl_kernel __get_kernel(const char* entry_name) {
 
 static cl_mem __dev_malloc(size_t bytes) {
     cl_mem p;
-    DEBUG_PRINTF("dev_malloc (%lld bytes)\n", (long long)bytes);
+    #ifdef DEBUG
+    halide_printf("dev_malloc (%lld bytes)\n", (long long)bytes);
+    #endif
 
     int err;
     p = clCreateBuffer(*cl_ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
-    DEBUG_PRINTF("    returned: %p (err: %d)\n", (void*)p, err);
+    #ifdef DEBUG
+    halide_printf("    returned: %p (err: %d)\n", (void*)p, err);
+    #endif
     halide_assert(p);
     return p;
 }
@@ -294,10 +314,12 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
     }
 
     size_t size = __buf_size(buf);
-    DEBUG_PRINTF("dev_malloc allocating buffer of %lld bytes, extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
+    #ifdef DEBUG
+    halide_printf("dev_malloc allocating buffer of %lld bytes, extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
 		  (long long)size, (long long)buf->extent[0], (long long)buf->extent[1], (long long)buf->extent[2], (long long)buf->extent[3],
                   (long long)buf->stride[0], (long long)buf->stride[1], (long long)buf->stride[2], (long long)buf->stride[3],
 		  buf->elem_size);
+    #endif
 
     buf->dev = (uint64_t)__dev_malloc(size);
     halide_assert(buf->dev);
@@ -307,7 +329,9 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         halide_assert(buf->host && buf->dev);
         size_t size = __buf_size(buf);
-        DEBUG_PRINTF("copy_to_dev (%lld bytes) %p -> %p\n", (long long)size, buf->host, (void*)buf->dev);
+        #ifdef DEBUG
+        halide_printf("copy_to_dev (%lld bytes) %p -> %p\n", (long long)size, buf->host, (void*)buf->dev);
+        #endif
         halide_assert(halide_validate_dev_pointer(buf));
         int err = clEnqueueWriteBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, "clEnqueueWriteBuffer" );
@@ -320,7 +344,9 @@ WEAK void halide_copy_to_host(buffer_t* buf) {
         clFinish(*cl_q); // block on completion before read back
         halide_assert(buf->host && buf->dev);
         size_t size = __buf_size(buf);
-        DEBUG_PRINTF("copy_to_host (%lld bytes) %p -> %p\n", (long long)size, (void*)buf->dev, buf->host );
+        #ifdef DEBUG
+        halide_printf("copy_to_host (%lld bytes) %p -> %p\n", (long long)size, (void*)buf->dev, buf->host );
+        #endif
 
         halide_assert(halide_validate_dev_pointer(buf, size));
         int err = clEnqueueReadBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
@@ -339,10 +365,12 @@ WEAK void halide_dev_run(
     void* args[])
 {
     cl_kernel f = __get_kernel(entry_name);
-    DEBUG_PRINTF(
+    #ifdef DEBUG
+    halide_printf(
         "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem\n",
         entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes
     );
+    #endif
     // Pack dims
     size_t global_dim[3] = {blocksX*threadsX,  blocksY*threadsY,  blocksZ*threadsZ};
     size_t local_dim[3] = {threadsX, threadsY, threadsZ};
@@ -350,7 +378,9 @@ WEAK void halide_dev_run(
     // Set args
     int i = 0;
     while (arg_sizes[i] != 0) {
-        DEBUG_PRINTF("clSetKernelArg %i %i [0x%x ...]\n", i, arg_sizes[i], *(int *)args[i]);
+        #ifdef DEBUG
+        halide_printf("clSetKernelArg %i %i [0x%x ...]\n", i, arg_sizes[i], *(int *)args[i]);
+        #endif
         CHECK_CALL( clSetKernelArg(f, i, arg_sizes[i], args[i]), "clSetKernelArg" );
         i++;
     }
