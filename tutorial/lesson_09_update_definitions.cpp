@@ -211,8 +211,7 @@ int main(int argc, char **argv) {
         // variables that are part of the reduction domain (e.g. r.x
         // in our histogram example) can't be modified, as this risks
         // changing the meaning of the update step (because the
-        // function may recursively refer to itself at earlier values
-        // of the reduction domain).
+        // function may recursively refer back to itself).
 
         // Consider the definition:
         Func f;
@@ -225,18 +224,18 @@ int main(int argc, char **argv) {
         // The pure variables in each stage can be scheduled
         // independently. To control the pure definition, we schedule
         // as we have done in the past. The following code vectorizes
-        // and parallelizes the pure definition.
+        // and parallelizes the pure definition only.
         f.vectorize(x, 4).parallel(y);
 
         // We use Func::update(int) to get a handle to an update step
-        // for the purposes of scheduling.
-
-        // Vectorize the first update step across x. We can't do
+        // for the purposes of scheduling. The following line
+        // vectorizes the first update step across x. We can't do
         // anything with y for this update step, because it doesn't
         // use y.
         f.update(0).vectorize(x, 4);
 
-        // Parallelize the second update step in chunks of size 4.
+        // No we parallelize the second update step in chunks of size
+        // 4.
         Var yo, yi;
         f.update(1).split(y, yo, yi, 4).parallel(yo);
 
@@ -338,8 +337,8 @@ int main(int argc, char **argv) {
             consumer(x) = 2 * producer(x);
             consumer(x) += 1;
 
-            // The value schedules for the producer are the default
-            // schedule - inlined, and also:
+            // The valid schedules for the producer in this case are
+            // the default schedule - inlined, and also:
             //
             // 1) producer.compute_at(x), which places the computation of
             // the producer inside the loop over x in the pure step of the
@@ -372,9 +371,8 @@ int main(int argc, char **argv) {
                 c_result[x] += 1;
             }
 
-            // Note that all of the pure step is evaluated before any
-            // of the update step, so there are two separate loops
-            // over x.
+            // All of the pure step is evaluated before any of the
+            // update step, so there are two separate loops over x.
 
             // Check the results match
             for (int x = 0; x < 10; x++) {
@@ -403,7 +401,7 @@ int main(int argc, char **argv) {
             //
             // producer.compute_at(consumer.update(0), x).
             //
-            // Schedules are done with respect to Vars of a Func, and
+            // Scheduling is done with respect to Vars of a Func, and
             // the Vars of a Func are shared across the pure and
             // update steps.
 
@@ -444,13 +442,10 @@ int main(int argc, char **argv) {
 
             // Again we compute the producer per x coordinate of the
             // consumer. This places producer code inside both the
-            // pure and the update the update steps of the producer,
-            // so there end up being two separate realizations of the
-            // producer, and redundant work occurs.
+            // pure and the update step of the producer. So there ends
+            // up being two separate realizations of the producer, and
+            // redundant work occurs.
             producer.compute_at(consumer, x);
-
-            // We may have been better off with
-            // producer.compute_root() in this case.
 
             Image<int> halide_result = consumer.realize(10);
 
@@ -492,7 +487,7 @@ int main(int argc, char **argv) {
 
             // In this case neither producer.compute_at(consumer, x)
             // nor producer.compute_at(consumer, y) will work, because
-            // either one misses out on one of the uses of the
+            // either one fails to cover one of the uses of the
             // producer. So we'd have to inline producer, or use
             // producer.compute_root().
 
@@ -639,10 +634,11 @@ int main(int argc, char **argv) {
 
         Image<uint8_t> halide_result = blurry.realize(input.width(), input.height());
 
-        // The default schedule will inline 'clamped' into 'local_sum'
-        // (because 'clamped' only has a pure definition), and then
-        // compute local_sum per x coordinate of blurry, because the
-        // default schedule for reductions is
+        // The default schedule will inline 'clamped' into the update
+        // step of 'local_sum', because clamped only has a pure
+        // definition, and so its default schedule is fully-inlined.
+        // We will then compute local_sum per x coordinate of blurry,
+        // because the default schedule for reductions is
         // compute-innermost. Here's the equivalent C:
 
         Image<uint8_t> c_result(input.width(), input.height());
@@ -702,7 +698,7 @@ int main(int argc, char **argv) {
                 }
             }
             // Update step.
-            for (int r = 0; r < 10; r++) {
+            for (int r = 0; r < 10; r++) { // Loop over the reduction domain is outermost.
                 for (int y = 0; y < 100; y++) {
                     for (int x = 0; x < 100; x++) {
                         c_result[y][x] += r * x * y;
@@ -722,10 +718,10 @@ int main(int argc, char **argv) {
             }
         }
 
-        // That makes 11 separate passes over the output buffer! For
-        // this type of reduction, we can do better by adding a dummy
-        // wrapper stage, and letting the reduction compute itself
-        // innermost with the wrapper:
+        // That code makes 11 separate passes over the output buffer!
+        // For this type of reduction, we can do better by adding a
+        // dummy wrapper stage, and letting the reduction compute
+        // itself innermost with the wrapper:
 
         Func wrapper;
         wrapper(x, y) = f(x, y);
@@ -768,9 +764,10 @@ int main(int argc, char **argv) {
 
     // Reduction helpers.
     {
-        // There are several reduction helper functions, which compute
-        // small reductions and schedule them innermost into their
-        // consumer. The most useful one is "sum".
+        // There are several reduction helper functions provided in
+        // Halide.h, which compute small reductions and schedule them
+        // innermost into their consumer. The most useful one is
+        // "sum".
         Func f1;
         RDom r(0, 100);
         f1(x) = sum(r + x) * 7;
