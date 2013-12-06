@@ -348,6 +348,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_shutdown_thread_pool",
                        "halide_shutdown_trace",
                        "halide_set_cuda_context",
+                       "halide_set_cl_context",
                        "halide_dev_sync",
                        "halide_release",
                        "halide_current_time_ns",
