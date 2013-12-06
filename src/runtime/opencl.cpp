@@ -40,40 +40,29 @@ extern const char * strstr(const char *, const char *);
 #ifndef DEBUG
 #define CHECK_ERR(e,str)
 #define CHECK_CALL(c,str) (c)
-#define TIME_START()
-#define TIME_CHECK(str)
+#define DEBUG_PRINTF(str, ...)
 #else // DEBUG
-#define CHECK_ERR(err,str) halide_printf("Do %s\n", str); \
-                         if (err != CL_SUCCESS)           \
-                            halide_printf("CL: %s returned non-success: %d\n", str, err); \
-                         halide_assert(err == CL_SUCCESS)
+#define CHECK_ERR(err,str) if (err != CL_SUCCESS)           \
+                              halide_printf("CL: %s returned non-success: %d\n", str, err); \
+                           halide_assert(err == CL_SUCCESS)
 #define CHECK_CALL(c,str) {                                                 \
-    halide_printf("Do %s\n", str);                                        \
     int err = (c);                                                          \
     if (err != CL_SUCCESS)                                                  \
         halide_printf("CL: %s returned non-success: %d\n", str, err); \
     halide_assert(err == CL_SUCCESS);                                              \
 } halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
-#if 0
-#define TIME_START() cuEventRecord(__start, 0)
-#define TIME_CHECK(str) {\
-    cuEventRecord(__end, 0);                                \
-    cuEventSynchronize(__end);                              \
-    float msec;                                             \
-    cuEventElapsedTime(&msec, __start, __end);              \
-    halide_printf("Do %s\n", str);                                     \
-    halide_printf("   (took %fms, t=%lld)\n", msec, (long long)halide_current_time_ns()); \
-} halide_current_time_ns() // just *some* expression fragment after which it's legal to put a ;
-#else
-#define TIME_START()
-#define TIME_CHECK(str)
-#endif
+#define DEBUG_PRINTF(str, ...) halide_printf(str, __VA_ARGS__)
 #endif //DEBUG
-
 }
 extern "C" {
-cl_context WEAK cl_ctx = 0;
-cl_command_queue WEAK cl_q = 0;
+// These are pointers to the real context/queue stored elsewhere.
+static cl_context* cl_ctx = 0;
+static cl_command_queue* cl_q = 0;
+
+WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q) {
+    cl_ctx = ctx;
+    cl_q = q;
+}
 
 static cl_program __mod;
 
@@ -87,9 +76,7 @@ WEAK bool halide_validate_dev_pointer(buffer_t* buf, size_t size=0) {
         halide_printf("Bad device pointer %p: clGetMemObjectInfo returned %d\n", (void *)buf->dev, result);
         return false;
     }
-    #ifdef DEBUG
-    halide_printf("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
-    #endif
+    DEBUG_PRINTF("validate %p: asked for %lld, actual allocated %lld\n", (void*)buf->dev, (long long)size, (long long)real_size);
     if (size) halide_assert(real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
@@ -101,9 +88,7 @@ WEAK void halide_dev_free(buffer_t* buf) {
     if (buf->dev == 0)
       return;
 
-    #ifdef DEBUG
-    halide_printf("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
-    #endif
+    DEBUG_PRINTF("In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
 
     halide_assert(halide_validate_dev_pointer(buf));
     CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
@@ -120,7 +105,7 @@ WEAK void halide_init_kernels(const char* src, int size) {
     int err;
     cl_device_id dev;
     // Initialize one shared context for all Halide compiled instances
-    if (!cl_ctx) {
+    if (!(*cl_ctx)) {
         const cl_uint maxPlatforms = 4;
         cl_platform_id platforms[maxPlatforms];
         cl_uint platformCount = 0;
@@ -188,26 +173,26 @@ WEAK void halide_init_kernels(const char* src, int size) {
 
         // Create context
         cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
-        cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
+        *cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
         CHECK_ERR( err, "clCreateContext" );
         // cuEventCreate(&__start, 0);
         // cuEventCreate(&__end, 0);
 
-        halide_assert(!cl_q);
-        cl_q = clCreateCommandQueue(cl_ctx, dev, 0, &err);
+        halide_assert(!(*cl_q));
+        *cl_q = clCreateCommandQueue(*cl_ctx, dev, 0, &err);
         CHECK_ERR( err, "clCreateCommandQueue" );
     } else {
+        DEBUG_PRINTF("Already had context %p\n", *cl_ctx);
+
         // Maintain ref count of context.
-        clRetainContext(cl_ctx);
-        clRetainCommandQueue(cl_q);
+        CHECK_CALL( clRetainContext(*cl_ctx), "clRetainContext" );
+        CHECK_CALL( clRetainCommandQueue(*cl_q), "clRetainCommandQueue" );
+
+        CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
     }
 
     // Initialize a module for just this Halide module
     if ((!__mod) && (size > 1)) {
-        #ifdef DEBUG
-        halide_printf("Compiling kernel (%i bytes)\n", size);
-        #endif
-
         // Create module
 
         cl_device_id devices[] = { dev };
@@ -215,13 +200,19 @@ WEAK void halide_init_kernels(const char* src, int size) {
 
         if (strstr(src, "/*OpenCL C*/")) {
             // Program is OpenCL C.
+
+            DEBUG_PRINTF("Compiling OpenCL C kernel: %s\n\n", src);
+
             const char * sources[] = { src };
-            __mod = clCreateProgramWithSource(cl_ctx, 1, &sources[0], NULL, &err );
+            __mod = clCreateProgramWithSource(*cl_ctx, 1, &sources[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithSource" );
         } else {
             // Program is SPIR binary.
+
+            DEBUG_PRINTF("Compiling SPIR kernel (%i bytes)\n", size);
+
             const unsigned char * binaries[] = { (unsigned char *)src };
-            __mod = clCreateProgramWithBinary(cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
+            __mod = clCreateProgramWithBinary(*cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithBinary" );
         }
 
@@ -242,61 +233,45 @@ WEAK void halide_init_kernels(const char* src, int size) {
 
 // Used to generate correct timings when tracing
 WEAK void halide_dev_sync() {
-    clFinish(cl_q);
+    clFinish(*cl_q);
 }
 
 WEAK void halide_release() {
     // TODO: this is for timing; bad for release-mode performance
-    #ifdef DEBUG
-    halide_printf("dev_sync on exit" );
-    #endif
+    DEBUG_PRINTF("dev_sync on exit\n" );
     halide_dev_sync();
 
     // Unload the module
     if (__mod) {
+        DEBUG_PRINTF("clReleaseProgram %p\n", __mod);
+
         CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
         __mod = 0;
     }
 
     // Unload context (ref counted).
-    CHECK_CALL( clReleaseCommandQueue(cl_q), "clReleaseCommandQueue" );
-    CHECK_CALL( clReleaseContext(cl_ctx), "clReleaseContext" );
+    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
+    DEBUG_PRINTF("clReleaseContext %p\n", *cl_ctx);
+    CHECK_CALL( clReleaseContext(*cl_ctx), "clReleaseContext" );
 }
 
 static cl_kernel __get_kernel(const char* entry_name) {
     cl_kernel f;
-    #ifndef DEBUG
-    // char msg[1];
-    #else
-    char msg[256];
-    snprintf(msg, 256, "get_kernel %s (t=%lld)",
-             entry_name, (long long)halide_current_time_ns() );
-    #endif
+    DEBUG_PRINTF("get_kernel %s\n", entry_name);
     // Get kernel function ptr
-    TIME_START();
     int err;
     f = clCreateKernel(__mod, entry_name, &err);
     CHECK_ERR(err, "clCreateKernel");
-    TIME_CHECK(msg);
     return f;
 }
 
 static cl_mem __dev_malloc(size_t bytes) {
     cl_mem p;
-    #ifndef DEBUG
-    // char msg[1];
-    #else
-    char msg[256];
-    snprintf(msg, 256, "dev_malloc (%lld bytes) (t=%lld)",
-             (long long)bytes, (long long)halide_current_time_ns() );
-    #endif
-    TIME_START();
+    DEBUG_PRINTF("dev_malloc (%lld bytes)\n", (long long)bytes);
+
     int err;
-    p = clCreateBuffer(cl_ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
-    TIME_CHECK(msg);
-    #ifdef DEBUG
-    halide_printf("    returned: %p (err: %d)\n", (void*)p, err);
-    #endif
+    p = clCreateBuffer(*cl_ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
+    DEBUG_PRINTF("    returned: %p (err: %d)\n", (void*)p, err);
     halide_assert(p);
     return p;
 }
@@ -319,12 +294,10 @@ WEAK void halide_dev_malloc(buffer_t* buf) {
     }
 
     size_t size = __buf_size(buf);
-    #ifdef DEBUG
-    halide_printf("dev_malloc allocating buffer of %zd bytes, extents: %zdx%zdx%zdx%zd strides: %zdx%zdx%zdx%zd (%d bytes per element)\n",
-		  size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
-                  buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3],
+    DEBUG_PRINTF("dev_malloc allocating buffer of %lld bytes, extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
+		  (long long)size, (long long)buf->extent[0], (long long)buf->extent[1], (long long)buf->extent[2], (long long)buf->extent[3],
+                  (long long)buf->stride[0], (long long)buf->stride[1], (long long)buf->stride[2], (long long)buf->stride[3],
 		  buf->elem_size);
-    #endif
 
     buf->dev = (uint64_t)__dev_malloc(size);
     halide_assert(buf->dev);
@@ -334,39 +307,24 @@ WEAK void halide_copy_to_dev(buffer_t* buf) {
     if (buf->host_dirty) {
         halide_assert(buf->host && buf->dev);
         size_t size = __buf_size(buf);
-        #ifdef DEBUG
-        char msg[256];
-        snprintf(msg, 256, "copy_to_dev (%lld bytes) %p -> %p (t=%lld)",
-                 (long long)size, buf->host, (void*)buf->dev, (long long)halide_current_time_ns() );
-        #endif
+        DEBUG_PRINTF("copy_to_dev (%lld bytes) %p -> %p\n", (long long)size, buf->host, (void*)buf->dev);
         halide_assert(halide_validate_dev_pointer(buf));
-        TIME_START();
-        int err = clEnqueueWriteBuffer( cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
-        CHECK_ERR( err, msg );
-        TIME_CHECK(msg);
+        int err = clEnqueueWriteBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
+        CHECK_ERR( err, "clEnqueueWriteBuffer" );
     }
     buf->host_dirty = false;
 }
 
 WEAK void halide_copy_to_host(buffer_t* buf) {
     if (buf->dev_dirty) {
-        clFinish(cl_q); // block on completion before read back
+        clFinish(*cl_q); // block on completion before read back
         halide_assert(buf->host && buf->dev);
         size_t size = __buf_size(buf);
-        #ifndef DEBUG
-        char msg[1] = { 0 };
-        #else
-        char msg[256];
-        snprintf(msg, 256, "copy_to_host (%lld bytes) %p -> %p", (long long)size, (void*)buf->dev, buf->host );
-        #endif
+        DEBUG_PRINTF("copy_to_host (%lld bytes) %p -> %p\n", (long long)size, (void*)buf->dev, buf->host );
+
         halide_assert(halide_validate_dev_pointer(buf, size));
-        TIME_START();
-        #ifdef DEBUG
-        halide_printf("%s\n", msg);
-        #endif
-        int err = clEnqueueReadBuffer( cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
-        CHECK_ERR( err, msg );
-        TIME_CHECK(msg);
+        int err = clEnqueueReadBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
+        CHECK_ERR( err, "clEnqueueReadBuffer" );
     }
     buf->dev_dirty = false;
 }
@@ -381,17 +339,10 @@ WEAK void halide_dev_run(
     void* args[])
 {
     cl_kernel f = __get_kernel(entry_name);
-    #ifndef DEBUG
-    char msg[1];
-    #else
-    char msg[256];
-    snprintf(
-        msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)",
-        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
-        (long long)halide_current_time_ns()
+    DEBUG_PRINTF(
+        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem\n",
+        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes
     );
-    #endif
     // Pack dims
     size_t global_dim[3] = {blocksX*threadsX,  blocksY*threadsY,  blocksZ*threadsZ};
     size_t local_dim[3] = {threadsX, threadsY, threadsZ};
@@ -399,6 +350,7 @@ WEAK void halide_dev_run(
     // Set args
     int i = 0;
     while (arg_sizes[i] != 0) {
+        DEBUG_PRINTF("clSetKernelArg %i %i [0x%x ...]\n", i, arg_sizes[i], *(int *)args[i]);
         CHECK_CALL( clSetKernelArg(f, i, arg_sizes[i], args[i]), "clSetKernelArg" );
         i++;
     }
@@ -407,10 +359,9 @@ WEAK void halide_dev_run(
     CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
 
     // Launch kernel
-    TIME_START();
     int err =
     clEnqueueNDRangeKernel(
-        cl_q,
+        *cl_q,
         f,
         3,
         NULL,
@@ -419,7 +370,6 @@ WEAK void halide_dev_run(
         0, NULL, NULL
     );
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
-    TIME_CHECK(msg);
 }
 
 #ifdef TEST_STUB
