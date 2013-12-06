@@ -55,6 +55,9 @@ struct SharedCudaContext {
     }
 } cuda_ctx;
 
+// A single global OpenCL context and command queue to share among modules.
+void * cl_ctx = 0;
+void * cl_q = 0;
 
 using std::vector;
 using std::string;
@@ -453,10 +456,19 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
             reinterpret_bits<void (*)()>(f);
         cleanup_routines->push_back(cleanup_routine);
     } else if (target.features & Target::OpenCL) {
-        // When the module dies, we need to call halide_release
-        llvm::Function *fn = module->getFunction("halide_release");
-        assert(fn && "Could not find halide_release in module");
+        // Share the same cl_ctx, cl_q across all OpenCL modules.
+        llvm::Function *fn = module->getFunction("halide_set_cl_context");
+        assert(fn && "Could not find halide_set_cl_context in module");
         void *f = ee->getPointerToFunction(fn);
+        assert(f && "Could not find compiled form of halide_set_cl_context in module");
+        void (*set_cl_context)(void **, void **) =
+            reinterpret_bits<void (*)(void **, void **)>(f);
+        set_cl_context(&cl_ctx, &cl_q);
+
+        // When the module dies, we need to call halide_release
+        fn = module->getFunction("halide_release");
+        assert(fn && "Could not find halide_release in module");
+        f = ee->getPointerToFunction(fn);
         assert(f && "Could not find compiled form of halide_release in module");
         void (*cleanup_routine)() =
             reinterpret_bits<void (*)()>(f);
