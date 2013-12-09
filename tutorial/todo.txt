@@ -1,9 +1,7 @@
-- single-stage stencil - show need for clamp on input to avoid bounds assertions
-- multi-stage stencil (talk about bounds inference down pipelines)
-- parameters
 - reductions (histogram, cdf)
+- static compilation
+- parameters
 - debug_to_file
-- scheduling compute_at/store_at
 - the bounds query interface
 - tuples
 - overriding the runtime
