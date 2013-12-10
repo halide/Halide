@@ -32,7 +32,10 @@ public:
 protected:
 
     /** Which arm target are we compiling for */
-    Target target;
+    const Target target;
+
+    // == (target.features & Target::NEON), but terser
+    const bool neon;
 
     /** Generate a call to a neon intrinsic */
     // @{
@@ -76,6 +79,9 @@ protected:
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+
+private:
+    void build_neon_patterns();
 };
 
 }}

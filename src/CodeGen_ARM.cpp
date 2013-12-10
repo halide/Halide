@@ -122,7 +122,8 @@ Expr _u32q(Expr e) {
 }
 
 CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
-                                     target(t) {
+                                     target(t),
+                                     neon((target.features & Target::NEON) != 0) {
     #if !(WITH_ARM)
     assert(false && "arm not enabled for this build of Halide.");
     #endif
@@ -136,6 +137,15 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     #if !(WITH_NATIVE_CLIENT)
     assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
     #endif
+
+    if (neon) {
+        build_neon_patterns();
+    }
+}
+
+void CodeGen_ARM::build_neon_patterns() {
+
+    assert(neon && "CodeGen_ARM::build_neon_patterns should not be called unless neon == true");
 
     // These patterns went away in llvm commit r189481, which is
     // unfortunate, because they don't always get generated
@@ -336,7 +346,6 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     negations.push_back(Pattern("vqneg.v8i16", -max(wild_i16x8, -32767)));
     negations.push_back(Pattern("vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))));
     negations.push_back(Pattern("vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))));
-
 }
 
 
@@ -413,6 +422,9 @@ Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Exp
 Value *CodeGen_ARM::call_intrin(llvm::Type *result_type,
                                 const string &name,
                                 vector<Value *> arg_values) {
+
+    assert(neon && "CodeGen_ARM::call_intrin should not be called unless neon == true");
+
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
@@ -454,6 +466,8 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Expr> args
 
 
 Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> arg_values) {
+    assert(neon && "CodeGen_ARM::call_intrin should not be called unless neon == true");
+
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
@@ -592,14 +606,14 @@ void CodeGen_ARM::visit(const Div *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;
-    if (op->type == Float(32, 4) && is_one(op->a)) {
+    if (op->type == Float(32, 4) && is_one(op->a) && neon) {
         // Reciprocal and reciprocal square root
         if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {
             value = call_intrin(Float(32, 4), "vrsqrte.v4f32", matches);
         } else {
             value = call_intrin(Float(32, 4), "vrecpe.v4f32", vec(op->b));
         }
-    } else if (op->type == Float(32, 2) && is_one(op->a)) {
+    } else if (op->type == Float(32, 2) && is_one(op->a) && neon) {
         // Reciprocal and reciprocal square root
         if (expr_match(Call::make(Float(32, 2), "sqrt_f32", vec(wild_f32x2), Call::Extern), op->b, matches)) {
             value = call_intrin(Float(32, 2), "vrsqrte.v2f32", matches);
@@ -648,13 +662,13 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *mult_wide = builder->CreateIntCast(mult, wider, false);
         Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
         // Do the shift (add 8 or 16 to narrow back down)
-        if (op->type == Int(32, 2) && shift == 0) {
+        if (op->type == Int(32, 2) && shift == 0 && neon) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
             val = call_intrin(narrower, "vshiftn.v2i32", vec<Value *>(wide_val, shift_amount));
-        } else if (op->type == Int(16, 4) && shift == 0) {
+        } else if (op->type == Int(16, 4) && shift == 0 && neon) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
             val = call_intrin(narrower, "vshiftn.v4i16", vec<Value *>(wide_val, shift_amount));
-        } else if (op->type == Int(8, 8) && shift == 0) {
+        } else if (op->type == Int(8, 8) && shift == 0 && neon) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
             val = call_intrin(narrower, "vshiftn.v8i8", vec<Value *>(wide_val, shift_amount));
         } else {
@@ -700,13 +714,13 @@ void CodeGen_ARM::visit(const Div *op) {
         val = builder->CreateMul(val, mult);
 
         // Narrow
-        if (op->type == UInt(32, 2) && shift == 0) {
+        if (op->type == UInt(32, 2) && shift == 0 && neon) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
             val = call_intrin(narrower, "vshiftn.v2i32", vec<Value *>(val, shift_amount));
-        } else if (op->type == UInt(16, 4) && shift == 0) {
+        } else if (op->type == UInt(16, 4) && shift == 0 && neon) {
             Constant *shift_amount = ConstantInt::get(wider, -16);
             val = call_intrin(narrower, "vshiftn.v4i16", vec<Value *>(val, shift_amount));
-        } else if (op->type == UInt(8, 8) && shift == 0) {
+        } else if (op->type == UInt(8, 8) && shift == 0 && neon) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
             val = call_intrin(narrower, "vshiftn.v8i8", vec<Value *>(val, shift_amount));
         } else {
@@ -722,11 +736,11 @@ void CodeGen_ARM::visit(const Div *op) {
 
         // Average with original numerator
         if (method == 2) {
-            if (op->type == Int(32, 2)) {
+            if (op->type == Int(32, 2) && neon) {
                 val = call_intrin(narrower, "vhaddu.v2i32", vec(val, num));
-            } else if (op->type == Int(16, 4)) {
+            } else if (op->type == Int(16, 4) && neon) {
                 val = call_intrin(narrower, "vhaddu.v4i16", vec(val, num));
-            } else if (op->type == Int(8, 8)) {
+            } else if (op->type == Int(8, 8) && neon) {
                 val = call_intrin(narrower, "vhaddu.v8i8", vec(val, num));
             } else {
                 // num > val, so the following works without widening:
@@ -790,6 +804,11 @@ void CodeGen_ARM::visit(const Sub *op) {
 
 void CodeGen_ARM::visit(const Min *op) {
 
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
+
     if (op->type == Float(32)) {
         // Use a 2-wide vector instead
         Value *undef = UndefValue::get(f32x2);
@@ -832,6 +851,10 @@ void CodeGen_ARM::visit(const Min *op) {
 }
 
 void CodeGen_ARM::visit(const Max *op) {
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
 
     if (op->type == Float(32)) {
         // Use a 2-wide vector instead
@@ -875,6 +898,11 @@ void CodeGen_ARM::visit(const Max *op) {
 }
 
 void CodeGen_ARM::visit(const LT *op) {
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
+
     const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
 
     // Check if they're hidden behind a broadcast
@@ -912,6 +940,11 @@ void CodeGen_ARM::visit(const LT *op) {
 }
 
 void CodeGen_ARM::visit(const LE *op) {
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
+
     const Call *a = op->a.as<Call>(), *b = op->b.as<Call>();
 
     // Check if they're hidden behind a broadcast
@@ -984,6 +1017,10 @@ Expr try_narrow(Expr a) {
 }
 
 void CodeGen_ARM::visit(const Select *op) {
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
 
     // Absolute difference patterns:
     // select(a < b, b - a, a - b)
@@ -1028,6 +1065,10 @@ void CodeGen_ARM::visit(const Select *op) {
 }
 
 void CodeGen_ARM::visit(const Store *op) {
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
 
     // A dense store of an interleaving can be done using a vst2 intrinsic
     const Ramp *ramp = op->index.as<Ramp>();
@@ -1131,6 +1172,10 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
+    if (!neon) {
+        CodeGen::visit(op);
+        return;
+    }
     const Ramp *ramp = op->index.as<Ramp>();
 
     // We only deal with ramps here
@@ -1250,14 +1295,18 @@ void CodeGen_ARM::visit(const Call *op) {
 
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
-        return "cortex-a9";
+        return neon ? "cortex-a9" : "armv7-a";
     } else {
         return "generic";
     }
 }
 
 string CodeGen_ARM::mattrs() const {
-    return "+neon";
+    // If Neon isn't supported, assume that we have VFPv3-D16 at least.
+    // (This is intended to support Tegra2, which is by far the most common
+    // ARMv7 chip that doesn't have NEON.) Unfortunately, that means we
+    // have only 16 FP registers (rather than the 32 in "normal" VFPv3).
+    return neon ? "+neon" : "+vfp3-d16";
 }
 
 bool CodeGen_ARM::use_soft_float_abi() const {
