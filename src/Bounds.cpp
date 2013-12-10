@@ -347,12 +347,24 @@ private:
         }
 
         if (min_b.same_as(max_b)) {
-            // Constant denominator
-            Expr a = min_a / min_b;
-            Expr b = max_a / max_b;
-            Expr cmp = min_b > make_zero(min_b.type());
-            min = select(cmp, a, b);
-            max = select(cmp, b, a);
+            if (is_zero(min_b)) {
+                // Divide by zero. Drat.
+                min = Expr();
+                max = Expr();
+            } else if (is_positive_const(min_b) || op->type.is_uint()) {
+                min = min_a / min_b;
+                max = max_a / min_b;
+            } else if (is_negative_const(min_b)) {
+                min = max_a / min_b;
+                max = min_a / min_b;
+            } else {
+                // Sign of b is unknown
+                Expr a = min_a / min_b;
+                Expr b = max_a / max_b;
+                Expr cmp = min_b > make_zero(min_b.type());
+                min = select(cmp, a, b);
+                max = select(cmp, b, a);
+            }
         } else {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
             bool min_is_positive = is_positive_const(min_b) ||
