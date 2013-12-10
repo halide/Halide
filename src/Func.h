@@ -253,25 +253,30 @@ class Func {
 
     /** The current error handler used for realizing this
      * function. May be NULL. Only relevant when jitting. */
-    void (*error_handler)(const char *);
+    void (*error_handler)(void *user_context, const char *);
 
     /** The current custom allocator used for realizing this
      * function. May be NULL. Only relevant when jitting. */
     // @{
-    void *(*custom_malloc)(size_t);
-    void (*custom_free)(void *);
+    void *(*custom_malloc)(void *user_context, size_t);
+    void (*custom_free)(void *user_context, void *ptr);
     // @}
 
     /** The current custom parallel task launcher and handler for
      * realizing this function. May be NULL. */
     // @{
-    int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *);
-    int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *);
+    int (*custom_do_par_for)(void *user_context,
+                             int (*)(void *, int, uint8_t *),
+                             int, int, uint8_t *);
+    int (*custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
+                          int, uint8_t *);
     // @}
 
     /** The current custom tracing function. May be NULL. */
     // @{
-    void (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
+    void (*custom_trace)(void *user_context, const char *, int32_t, int32_t,
+                         int32_t, int32_t, int32_t, const void *, int32_t,
+                         const int32_t *);
     // @}
 
     /** Pointers to current values of the automatically inferred
@@ -423,32 +428,35 @@ public:
      * statically, you can also just define your own function with
      * signature
      \code
-     extern "C" void halide_error(const char *);
+     extern "C" void halide_error(void *user_context, const char *);
      \endcode
      * This will clobber Halide's version.
      */
-    EXPORT void set_error_handler(void (*handler)(const char *));
+    EXPORT void set_error_handler(void (*handler)(void *, const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
      * return 32-byte aligned chunks of memory. If compiling
      * statically, routines with appropriate signatures can be
      * provided directly
      \code
-     extern "C" void *halide_malloc(size_t)
-     extern "C" void halide_free(void *)
+     extern "C" void *halide_malloc(void *, size_t)
+     extern "C" void halide_free(void *, void *)
      \endcode
      * These will clobber Halide's versions. See \file HalideRuntime.h
      * for declarations.
      */
-    EXPORT void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
+    EXPORT void set_custom_allocator(void *(*malloc)(void *, size_t),
+                                     void (*free)(void *, void *));
 
     /** Set a custom task handler to be called by the parallel for
      * loop. It is useful to set this if you want to do some
      * additional bookkeeping at the granularity of parallel
      * tasks. The default implementation does this:
      \code
-     extern "C" int halide_do_task(int (*f)(int, uint8_t *), int idx, uint8_t *state) {
-         return f(idx, state);
+     extern "C" int halide_do_task(void *user_context,
+                                   int (*f)(void *, int, uint8_t *),
+                                   int idx, uint8_t *state) {
+         return f(user_context, idx, state);
      }
      \endcode
      * If you are statically compiling, you can also just define your
@@ -458,16 +466,20 @@ public:
      * If you're trying to use a custom parallel runtime, you probably
      * don't want to call this. See instead \ref Func::set_custom_do_par_for .
     */
-    EXPORT void set_custom_do_task(int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *));
+    EXPORT void set_custom_do_task(
+        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
+                              int, uint8_t *));
 
     /** Set a custom parallel for loop launcher. Useful if your app
      * already manages a thread pool. The default implementation is
      * equivalent to this:
      \code
-     extern "C" int halide_do_par_for(int (*f)(int uint8_t *), int min, int extent, uint8_t *state) {
+     extern "C" int halide_do_par_for(void *user_context,
+                                      int (*f)(void *, int, uint8_t *),
+                                      int min, int extent, uint8_t *state) {
          int exit_status = 0;
          parallel for (int idx = min; idx < min+extent; idx++) {
-             int job_status = halide_do_task(f, idx, state);
+             int job_status = halide_do_task(user_context, f, idx, state);
              if (job_status) exit_status = job_status;
          }
          return exit_status;
@@ -482,7 +494,9 @@ public:
      * own version of the above function, and it will clobber Halide's
      * version.
      */
-    EXPORT void set_custom_do_par_for(int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *));
+    EXPORT void set_custom_do_par_for(
+        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
+                                 int, uint8_t *));
 
     /** Set custom routines to call when tracing is enabled. Call this
      * on the output Func of your pipeline. This then sets custom

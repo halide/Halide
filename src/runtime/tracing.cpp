@@ -9,7 +9,7 @@ extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
 extern int snprintf(char *str, size_t size, const char *format, ...);
 extern int fclose(void *f);
 
-typedef void (*trace_fn)(const char *, halide_trace_event_t,
+  typedef void (*trace_fn)(void *, const char *, halide_trace_event_t,
                          int32_t, int32_t, int32_t, int32_t,
                          const void *, int32_t, const int32_t *);
 WEAK trace_fn halide_custom_trace = NULL;
@@ -20,11 +20,12 @@ WEAK void halide_set_custom_trace(trace_fn t) {
 
 WEAK void *halide_trace_file = NULL;
 
-WEAK void halide_trace(const char *func, halide_trace_event_t event,
+WEAK void halide_trace(void *user_context, const char *func, halide_trace_event_t event,
                        int32_t type_code, int32_t bits, int32_t width, int32_t value_idx, void *value,
                        int32_t num_int_args, const int32_t *int_args) {
     if (halide_custom_trace) {
-        (*halide_custom_trace)(func, event, type_code, bits, width, value_idx, value, num_int_args, int_args);
+        (*halide_custom_trace)(user_context, func, event, type_code, bits,
+                               width, value_idx, value, num_int_args, int_args);
     } else {
         static bool initialized = false;
 
@@ -185,7 +186,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
                 }
             }
 
-            halide_printf("%s\n", buf);
+            halide_printf(user_context, "%s\n", buf);
         }
     }
 }

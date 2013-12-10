@@ -527,8 +527,8 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         string kernel_name = unique_name("kernel_" + loop->name, false);
         for (size_t i = 0; i < kernel_name.size(); i++) {
             switch (kernel_name[i]) {
-            case '$': 
-            case '.': 
+            case '$':
+            case '.':
                 kernel_name[i] = '_';
                 break;
             default:
@@ -543,9 +543,13 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             // allocations done via static analysis, external ones
             // need to be dynamically checked
             Value *buf = sym_get(it->first + ".buffer");
+            Value *args[2] = {
+                get_user_context(),
+                buf,
+            };
             debug(4) << "halide_dev_malloc " << it->first << "\n";
-            builder->CreateCall(dev_malloc_fn, buf);
-            
+            builder->CreateCall(dev_malloc_fn, args);
+
             // Anything dirty on the cpu that gets read on the gpu
             // needs to be copied over
             if (it->second.read) {
@@ -616,6 +620,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid_w?
         Value *launch_args[] = {
+            get_user_context(),
             entry_name_str,
             codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
             codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
@@ -704,7 +709,8 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
         builder->CreateStore(ConstantInt::get(i32, bytes),
                              buffer_elem_size_ptr(buf));
 
-        builder->CreateCall(dev_malloc_fn, buf);
+        Value *args[2] = { get_user_context(), buf };
+        builder->CreateCall(dev_malloc_fn, args);
 
         sym_push(alloc->name + ".buffer", buf);
     }
@@ -728,7 +734,9 @@ void CodeGen_GPU_Host::visit(const Free *f) {
     }
 
     if (sym_exists(f->name + ".buffer")) {
-        builder->CreateCall(dev_free_fn, sym_get(f->name + ".buffer"));
+        Value *args[2] = { get_user_context(),
+                           sym_get(f->name + ".buffer") };
+        builder->CreateCall(dev_free_fn, args);
         sym_pop(f->name + ".buffer");
     }
 }

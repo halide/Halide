@@ -475,7 +475,7 @@ void CodeGen::sym_pop(const string &name) {
     symbol_table.pop(name);
 }
 
-llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) {
+llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) const {
     // look in the symbol table
     if (!symbol_table.contains(name)) {
         if (must_succeed) {
@@ -494,7 +494,7 @@ llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) {
     return symbol_table.get(name);
 }
 
-bool CodeGen::sym_exists(const string &name) {
+bool CodeGen::sym_exists(const string &name) const {
     return symbol_table.contains(name);
 }
 
@@ -1234,6 +1234,39 @@ Expr unbroadcast(Expr e) {
     }
 }
 
+// Returns true if the given function name is one of the Halide runtime
+// functions that takes a user_context pointer as its first parameter.
+static bool function_takes_user_context(const string &name) {
+    static const char *user_context_runtime_funcs[] = {
+        "halide_copy_to_host",
+        "halide_copy_to_dev",
+        "halide_current_time_ns",
+        "halide_debug_to_file",
+        "halide_dev_free",
+        "halide_dev_malloc",
+        "halide_dev_run",
+        "halide_dev_sync",
+        "halide_do_par_for",
+        "halide_do_task",
+        "halide_error",
+        "halide_free",
+        "halide_init_kernels",
+        "halide_malloc",
+        "halide_printf",
+        "halide_profiling_timer",
+        "halide_release",
+        "halide_start_clock",
+        "halide_trace"
+    };
+    const int num_funcs = sizeof(user_context_runtime_funcs) /
+        sizeof(user_context_runtime_funcs[0]);
+    for (int i = 0; i < num_funcs; ++i) {
+        if (name == user_context_runtime_funcs[i])
+            return true;
+    }
+    return false;
+}
+
 void CodeGen::visit(const Call *op) {
     assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) &&
            "Can only codegen extern calls and intrinsics");
@@ -1278,10 +1311,11 @@ void CodeGen::visit(const Call *op) {
             assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
 
             // Make the filename a global string constant
+            Value *user_context = get_user_context();
             Value *char_ptr = codegen(Expr(filename));
             Value *data_ptr = symbol_table.get(func->name + ".host");
             data_ptr = builder->CreatePointerCast(data_ptr, i8->getPointerTo());
-            vector<Value *> args = vec(char_ptr, data_ptr);
+            vector<Value *> args = vec(user_context, char_ptr, data_ptr);
             for (size_t i = 3; i < 9; i++) {
                 debug(4) << op->args[i];
                 args.push_back(codegen(op->args[i]));
@@ -1462,16 +1496,17 @@ void CodeGen::visit(const Call *op) {
             }
 
             // Call the runtime function
-            vector<Value *> args(9);
-            args[0] = name;
-            args[1] = event_type;
-            args[2] = ConstantInt::get(i32, type.code);
-            args[3] = ConstantInt::get(i32, type.bits);
-            args[4] = ConstantInt::get(i32, type.width);
-            args[5] = value_index;
-            args[6] = value_stored_array;
-            args[7] = ConstantInt::get(i32, int_args * type.width);
-            args[8] = coords;
+            vector<Value *> args(10);
+            args[0] = get_user_context();
+            args[1] = name;
+            args[2] = event_type;
+            args[3] = ConstantInt::get(i32, type.code);
+            args[4] = ConstantInt::get(i32, type.bits);
+            args[5] = ConstantInt::get(i32, type.width);
+            args[6] = value_index;
+            args[7] = value_stored_array;
+            args[8] = ConstantInt::get(i32, int_args * type.width);
+            args[9] = coords;
 
             llvm::Function *trace_fn = module->getFunction("halide_trace");
             assert(trace_fn);
@@ -1491,7 +1526,6 @@ void CodeGen::visit(const Call *op) {
             value = call;
         } else if (op->name == Call::lerp) {
             assert(op->args.size() == 3);
-
             value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
         } else if (op->name == Call::popcount) {
             assert(op->args.size() == 1);
@@ -1575,21 +1609,24 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
-        bool has_side_effects = false;
         // TODO: Need a general solution here
         if (op->name == "halide_current_time_ns") {
-            has_side_effects = true;
-        }
-
-        if (op->type.is_scalar()) {
+            assert(op->args.size() == 0);
             debug(4) << "Creating scalar call to " << op->name << "\n";
-            CallInst *call = builder->CreateCall(fn, args);
-            if (!has_side_effects) {
-                call->setDoesNotAccessMemory();
-                call->setDoesNotThrow();
+            CallInst *call = builder->CreateCall(fn, get_user_context());
+            value = call;
+        } else if (op->type.is_scalar()) {
+            debug(4) << "Creating scalar call to " << op->name << "\n";
+            if (function_takes_user_context(op->name)) {
+                debug(4) << "Adding user_context to " << op->name << " args\n";
+                args.insert(args.begin(), get_user_context());
             }
+            CallInst *call = builder->CreateCall(fn, args);
+            call->setDoesNotAccessMemory();
+            call->setDoesNotThrow();
             value = call;
         } else {
+            assert(function_takes_user_context(op->name) == false);
             // Check if a vector version of the function already
             // exists. We use the naming convention that a N-wide
             // version of a function foo is called fooxN.
@@ -1599,10 +1636,8 @@ void CodeGen::visit(const Call *op) {
             if (vec_fn) {
                 debug(4) << "Creating vector call to " << ss.str() << "\n";
                 CallInst *call = builder->CreateCall(vec_fn, args);
-                if (!has_side_effects) {
-                    call->setDoesNotAccessMemory();
-                    call->setDoesNotThrow();
-                }
+                call->setDoesNotAccessMemory();
+                call->setDoesNotThrow();
                 value = call;
             } else {
                 // Scalarize. Extract each simd lane in turn and do
@@ -1615,10 +1650,8 @@ void CodeGen::visit(const Call *op) {
                         arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                     }
                     CallInst *call = builder->CreateCall(fn, arg_lane);
-                    if (!has_side_effects) {
-                        call->setDoesNotAccessMemory();
-                        call->setDoesNotThrow();
-                    }
+                    call->setDoesNotAccessMemory();
+                    call->setDoesNotThrow();
                     value = builder->CreateInsertElement(value, call, idx);
                 }
             }
@@ -1710,12 +1743,13 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
 
     // Make the error message string a global constant
     Value *char_ptr = create_string_constant(message);
+    Value *user_context = get_user_context();
 
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
     assert(error_handler && "Could not find halide_error in initial module");
     debug(4) << "Creating call to error handlers\n";
-    builder->CreateCall(error_handler, vec(char_ptr));
+    builder->CreateCall(error_handler, vec(user_context, char_ptr));
 
     // Do any architecture-specific cleanup necessary
     debug(4) << "Creating cleanup code\n";
@@ -1825,15 +1859,19 @@ void CodeGen::visit(const For *op) {
         closure.pack_struct(ptr, symbol_table, builder);
 
         // Make a new function that does one iteration of the body of the loop
-        FunctionType *func_t = FunctionType::get(i32, vec(i32, (llvm::Type *)(i8->getPointerTo())), false);
+        llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
+        FunctionType *func_t = FunctionType::get(i32, vec(voidPointerType, i32, voidPointerType), false);
         llvm::Function *containing_function = function;
         function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par for " + op->name, module);
-        function->setDoesNotAlias(2);
+        function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function
         BasicBlock *call_site = builder->GetInsertBlock();
         BasicBlock *block = BasicBlock::Create(*context, "entry", function);
         builder->SetInsertPoint(block);
+
+        // Get the user context value before swapping out the symbol table.
+        Value *user_context = get_user_context();
 
         // Make a new scope to use
         Scope<Value *> saved_symbol_table;
@@ -1841,11 +1879,18 @@ void CodeGen::visit(const For *op) {
 
         // Get the function arguments
 
-        // The loop variable is first argument of the function
+        // The user context is first argument of the function; it's
+        // important that we override the name to be "__user_context",
+        // since the LLVM function has a random auto-generated name for
+        // this argument.
         llvm::Function::arg_iterator iter = function->arg_begin();
+        sym_push("__user_context", iter);
+
+        // Next is the loop variable.
+        ++iter;
         sym_push(op->name, iter);
 
-        // The closure pointer is the second argument.
+        // The closure pointer is the third and last argument.
         ++iter;
         iter->setName("closure");
         Value *closure_handle = builder->CreatePointerCast(iter, closure_t->getPointerTo());
@@ -1862,10 +1907,10 @@ void CodeGen::visit(const For *op) {
         builder->SetInsertPoint(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
         assert(do_par_for && "Could not find halide_do_par_for in initial module");
-        do_par_for->setDoesNotAlias(4);
-        //do_par_for->setDoesNotCapture(4);
+        do_par_for->setDoesNotAlias(5);
+        //do_par_for->setDoesNotCapture(5);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
-        vector<Value *> args = vec<Value *>(function, min, extent, ptr);
+        vector<Value *> args = vec<Value *>(user_context, function, min, extent, ptr);
         debug(4) << "Creating call to do_par_for\n";
         Value *result = builder->CreateCall(do_par_for, args);
 
@@ -2005,6 +2050,14 @@ void CodeGen::restore_stack(llvm::Value *saved_stack) {
         llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore);
     debug(4) << "Restoring stack\n";
     builder->CreateCall(stackrestore, saved_stack);
+}
+
+llvm::Value *CodeGen::get_user_context() const {
+    llvm::Value *ctx = sym_get("__user_context", false);
+    if (!ctx) {
+        ctx = ConstantPointerNull::get(i8->getPointerTo()); // void*
+    }
+    return ctx;
 }
 
 template<>
