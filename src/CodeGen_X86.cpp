@@ -81,10 +81,10 @@ void CodeGen_X86::compile(Stmt stmt, string name,
             }
         }
     } else if (target.os == Target::Android) {
-        std::cerr << "WARNING: x86 android is untested\n";
         if (target.bits == 32) {
             module->setTargetTriple("i386-unknown-linux-android");
         } else {
+            std::cerr << "WARNING: x86-64 android is untested\n";
             module->setTargetTriple("x86_64-unknown-linux-android");
         }
     } else if (target.os == Target::IOS) {
