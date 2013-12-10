@@ -4,11 +4,11 @@
 // does not start at (0, 0).
 
 // On linux, you can compile and run it like so:
-// g++ lesson_06.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06
-// LD_LIBRARY_PATH=../bin ./lesson_06 
+// g++ lesson_06*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06
+// LD_LIBRARY_PATH=../bin ./lesson_06
 
 // On os x:
-// g++ lesson_06.cpp -I ../include -L ../bin -lHalide -o lesson_06
+// g++ lesson_06*.cpp -I ../include -L ../bin -lHalide -o lesson_06
 // DYLD_LIBRARY_PATH=../bin ./lesson_06
 
 #include <Halide.h>
@@ -50,17 +50,17 @@ int main(int argc, char **argv) {
     printf("Evaluating gradient from (0, 0) to (7, 7)\n");
     Image<int> result(8, 8);
     gradient.realize(result);
-    
+
     // Let's check it did what we expect:
     for (int y = 0; y < 8; y++) {
         for (int x = 0; x < 8; x++) {
             if (result(x, y) != x + y) {
                 printf("Something went wrong!\n");
                 return -1;
-            }          
+            }
         }
     }
-    
+
     // Now let's evaluate gradient over a 5 x 7 rectangle that starts
     // somewhere else -- at position (100, 50). So x and y will run
     // from (100, 50) to (104, 56) inclusive.
@@ -68,12 +68,12 @@ int main(int argc, char **argv) {
     // We start by creating an image that represents that rectangle:
     Image<int> shifted(5, 7); // In the constructor we tell it the size.
     shifted.set_min(100, 50); // Then we tell it the top-left corner.
-    
+
     printf("Evaluating gradient from (100, 50) to (104, 56)\n");
 
     // Note that this won't need to compile any new code, because when
     // we realized it the first time, we generated code capable of
-    // evaluating gradient over an arbitrary rectangle. 
+    // evaluating gradient over an arbitrary rectangle.
     gradient.realize(shifted);
 
     // From C++, we also access the image object using coordinates

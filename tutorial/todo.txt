@@ -1,12 +1,11 @@
-- single-stage stencil - show need for clamp on input to avoid bounds assertions
-- multi-stage stencil (talk about bounds inference down pipelines)
-- parameters
 - reductions (histogram, cdf)
+- static compilation
+- parameters
 - debug_to_file
-- scheduling compute_at/store_at
 - the bounds query interface
 - tuples
 - overriding the runtime
 - lambdas
   useful tricks, e.g., `Image<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);`
 - extern functions and extern stages
+- common scheduling patterns

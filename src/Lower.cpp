@@ -28,6 +28,7 @@
 #include "SkipStages.h"
 #include "CSE.h"
 #include "SpecializeClampedRamps.h"
+#include "RemoveUndef.h"
 
 namespace Halide {
 namespace Internal {
@@ -1606,7 +1607,11 @@ Stmt lower(Function f) {
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, env);
-    debug(2) << "Storage flattening: " << '\n' << s << "\n\n";
+    debug(2) << "Storage flattening: \n" << s << "\n\n";
+
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Removed code that depends on undef values: \n" << s << "\n\n;";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
