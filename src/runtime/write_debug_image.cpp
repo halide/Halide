@@ -105,7 +105,7 @@ bool has_tiff_extension(const char *filename) {
 
 }
 
-WEAK extern "C" int32_t halide_debug_to_file(const char *filename, uint8_t *data,
+WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename, uint8_t *data,
                                              int32_t s0, int32_t s1, int32_t s2, int32_t s3,
                                              int32_t type_code, int32_t bytes_per_element) {
     void *f = fopen(filename, "wb");
@@ -207,4 +207,4 @@ WEAK extern "C" int32_t halide_debug_to_file(const char *filename, uint8_t *data
         fclose(f);
         return -1;
     }
-};
+}

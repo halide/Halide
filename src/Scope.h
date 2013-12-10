@@ -199,7 +199,7 @@ public:
 };
 
 template<typename T>
-std::ostream &operator<<(std::ostream &stream, Scope<T>& s) {
+std::ostream &operator<<(std::ostream &stream, const Scope<T>& s) {
     stream << "{\n";
     typename Scope<T>::const_iterator iter;
     for (iter = s.cbegin(); iter != s.cend(); ++iter) {
