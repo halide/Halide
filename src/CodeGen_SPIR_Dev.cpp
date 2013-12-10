@@ -66,7 +66,7 @@ void CodeGen_SPIR_Dev::add_kernel(Stmt stmt, std::string name, const std::vector
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
     
-    vector<Value *> kernel_arg_address_space = init_kernel_metadata(*context, "kernel_arg_address_space");
+    vector<Value *> kernel_arg_address_space = init_kernel_metadata(*context, "kernel_arg_addr_space");
     vector<Value *> kernel_arg_access_qual = init_kernel_metadata(*context, "kernel_arg_access_qual");
     vector<Value *> kernel_arg_type = init_kernel_metadata(*context, "kernel_arg_type");
     vector<Value *> kernel_arg_base_type = init_kernel_metadata(*context, "kernel_arg_base_type");
