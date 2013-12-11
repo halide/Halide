@@ -50,10 +50,10 @@ extern int halide_printf(void *user_context, const char *, ...);
  * implementation of halide_error in AOT code.  See
  * Func::set_error_handler.
  */
- extern void halide_error(void *user_context, const char *msg);
+extern void halide_error(void *user_context, const char *msg);
 
 /** A macro that calls halide_error if the supplied condition is false. */
-#define halide_assert(cond) if (!(cond)) halide_error(user_context, #cond);
+#define halide_assert(user_context, cond) if (!(cond)) halide_error(user_context, #cond);
 
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to

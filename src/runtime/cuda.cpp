@@ -18,7 +18,7 @@ extern int snprintf(char *, size_t, const char *, ...);
     CUresult status = (c);                              \
     if (status != CUDA_SUCCESS)                                         \
         halide_printf(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
-    halide_assert(status == CUDA_SUCCESS);                              \
+    halide_assert(user_context, status == CUDA_SUCCESS);                \
 } while(0)
 #define TIME_CALL(c,str) do {\
     cuEventRecord(__start, 0);                              \
@@ -194,7 +194,7 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
 
     #ifdef DEBUG
     halide_printf(user_context, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
-    halide_assert(halide_validate_dev_pointer(user_context, buf));
+    halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
     #endif
 
     CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
@@ -216,7 +216,7 @@ WEAK void halide_init_kernels(void *user_context, const char* ptx_src, int size)
         // Make sure we have a device
         int deviceCount = 0;
         CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
-        halide_assert(deviceCount > 0);
+        halide_assert(user_context, deviceCount > 0);
 
         char *device_str = getenv("HL_GPU_DEVICE");
 
@@ -236,7 +236,7 @@ WEAK void halide_init_kernels(void *user_context, const char* ptx_src, int size)
             }
         }
 
-        halide_assert(status == CUDA_SUCCESS && "Failed to get device\n");
+        halide_assert(user_context, status == CUDA_SUCCESS && "Failed to get device\n");
 
         #ifdef DEBUG
         halide_printf(user_context, "Got device %d, about to create context (t=%lld)\n",
@@ -273,8 +273,8 @@ WEAK void halide_init_kernels(void *user_context, const char* ptx_src, int size)
     halide_printf(user_context, "Do %s\n", str); \
     CUresult status = (c); \
     if (status != CUDA_SUCCESS && status != CUDA_ERROR_DEINITIALIZED) \
-      halide_printf(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
-    halide_assert(status == CUDA_SUCCESS || status == CUDA_ERROR_DEINITIALIZED); \
+        halide_printf(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
+    halide_assert(user_context, status == CUDA_SUCCESS || status == CUDA_ERROR_DEINITIALIZED); \
 } while(0)
 #else
 #define CHECK_CALL_DEINIT_OK(c,str) c
@@ -336,8 +336,8 @@ static size_t __buf_size(void *user_context, buffer_t* buf) {
         size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
         if (total_dim_size > size)
             size = total_dim_size;
-     }
-    halide_assert(size);
+    }
+    halide_assert(user_context, size);
     return size;
 }
 
@@ -361,22 +361,22 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
     TIME_CALL( cuMemAlloc(&p, size), "dev_malloc");
 
     buf->dev = (uint64_t)p;
-    halide_assert(buf->dev);
+    halide_assert(user_context, buf->dev);
 
     #ifdef DEBUG
-    halide_assert(halide_validate_dev_pointer(user_context, buf));
+    halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
     #endif
 }
 
 WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
     if (buf->host_dirty) {
-        halide_assert(buf->host && buf->dev);
+      halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         #ifdef DEBUG
         char msg[256];
         snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%lld)",
                  size, buf->host, (void*)buf->dev, (long long)halide_current_time_ns(user_context) );
-        halide_assert(halide_validate_dev_pointer(user_context, buf));
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
         #endif
         TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
     }
@@ -385,13 +385,13 @@ WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
 
 WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
     if (buf->dev_dirty) {
-        halide_assert(buf->dev);
-        halide_assert(buf->host);
+        halide_assert(user_context, buf->dev);
+        halide_assert(user_context, buf->host);
         size_t size = __buf_size(user_context, buf);
         #ifdef DEBUG
         char msg[256];
         snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
-        halide_assert(halide_validate_dev_pointer(user_context, buf));
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
         #endif
         TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
     }

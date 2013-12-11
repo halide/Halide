@@ -45,14 +45,14 @@ extern const char * strstr(const char *, const char *);
     do { \
         if (err != CL_SUCCESS)                                                \
             halide_printf(user_context, "CL: %s returned non-success: %d\n", str, err); \
-        halide_assert(err == CL_SUCCESS);                               \
+        halide_assert(user_context, err == CL_SUCCESS);                               \
     } while (0) /* eat semicolon */
 #define CHECK_CALL(c,str)                                               \
   do {                                                                  \
     int err = (c);                                                      \
     if (err != CL_SUCCESS)                                              \
         halide_printf(user_context, "CL: %s returned non-success: %d\n", str, err); \
-    halide_assert(err == CL_SUCCESS);                                   \
+    halide_assert(user_context, err == CL_SUCCESS);                                   \
   } while (0) /* eat semicolon */
 #endif //DEBUG
 }
@@ -70,7 +70,7 @@ static cl_program __mod;
 
 WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
     if (buf->dev == 0)
-      return true;
+        return true;
 
     size_t real_size;
     cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
@@ -83,7 +83,7 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
     halide_printf(user_context, "validate %p: asked for %lld, actual allocated %lld\n",
                   (void*)buf->dev, (long long)size, (long long)real_size);
     #endif
-    if (size) halide_assert(real_size >= size && "Validating pointer with insufficient size");
+    if (size) halide_assert(user_context, real_size >= size && "Validating pointer with insufficient size");
     return true;
 }
 
@@ -98,7 +98,7 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
     halide_printf(user_context, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     #endif
 
-    halide_assert(halide_validate_dev_pointer(user_context, buf));
+    halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
     CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
     buf->dev = 0;
 }
@@ -186,12 +186,12 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         // cuEventCreate(&__start, 0);
         // cuEventCreate(&__end, 0);
 
-        halide_assert(!(*cl_q));
+        halide_assert(user_context, !(*cl_q));
         *cl_q = clCreateCommandQueue(*cl_ctx, dev, 0, &err);
         CHECK_ERR( err, "clCreateCommandQueue" );
     } else {
         #ifdef DEBUG
-      halide_printf(user_context, "Already had context %p\n", *cl_ctx);
+        halide_printf(user_context, "Already had context %p\n", *cl_ctx);
         #endif
 
         // Maintain ref count of context.
@@ -240,7 +240,7 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
                 halide_printf(user_context, "Build Log:\n %s\n-----\n", buffer);
             else
                 halide_printf(user_context, "clGetProgramBuildInfo failed to get build log!\n");
-            halide_assert(err == CL_SUCCESS);
+            halide_assert(user_context, err == CL_SUCCESS);
         }
     }
 }
@@ -310,7 +310,7 @@ static cl_mem __dev_malloc(void *user_context, size_t bytes) {
     #ifdef DEBUG
     halide_printf(user_context, "    returned: %p (err: %d)\n", (void*)p, err);
     #endif
-    halide_assert(p);
+    halide_assert(user_context, p);
     return p;
 }
 
@@ -321,13 +321,13 @@ static size_t __buf_size(void *user_context, buffer_t* buf) {
         if (total_dim_size > size)
             size = total_dim_size;
      }
-    halide_assert(size);
+    halide_assert(user_context, size);
     return size;
 }
 
 WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
     if (buf->dev) {
-        halide_assert(halide_validate_dev_pointer(user_context, buf));
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
         return;
     }
 
@@ -343,17 +343,17 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
     #endif
 
     buf->dev = (uint64_t)__dev_malloc(user_context, size);
-    halide_assert(buf->dev);
+    halide_assert(user_context, buf->dev);
 }
 
 WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
     if (buf->host_dirty) {
-        halide_assert(buf->host && buf->dev);
+        halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         #ifdef DEBUG
         halide_printf(user_context, "copy_to_dev (%lld bytes) %p -> %p\n", (long long)size, buf->host, (void*)buf->dev);
         #endif
-        halide_assert(halide_validate_dev_pointer(user_context, buf));
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
         int err = clEnqueueWriteBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, "clEnqueueWriteBuffer" );
     }
@@ -363,14 +363,14 @@ WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
 WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
     if (buf->dev_dirty) {
         clFinish(*cl_q); // block on completion before read back
-        halide_assert(buf->host && buf->dev);
+        halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         #ifdef DEBUG
         halide_printf(user_context, "copy_to_host (%lld bytes) %p -> %p\n", (long long)size,
                       (void*)buf->dev, buf->host );
         #endif
 
-        halide_assert(halide_validate_dev_pointer(user_context, buf, size));
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
         int err = clEnqueueReadBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, "clEnqueueReadBuffer" );
     }

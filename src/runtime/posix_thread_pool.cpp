@@ -197,7 +197,7 @@ extern int halide_host_cpu_count();
 WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                            int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {
-      return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
+        return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
     }
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
@@ -210,7 +210,7 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
             halide_threads = atoi(threadStr);
         } else {
             halide_threads = halide_host_cpu_count();
-            // halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
+            // halide_printf(user_context, "HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
         if (halide_threads > MAX_THREADS) {
             halide_threads = MAX_THREADS;

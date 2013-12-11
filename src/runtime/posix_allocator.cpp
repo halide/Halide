@@ -13,13 +13,13 @@ extern void free(void *);
 WEAK void *(*halide_custom_malloc)(void *, size_t) = NULL;
 WEAK void (*halide_custom_free)(void *, void *) = NULL;
 
-  WEAK void halide_set_custom_allocator(void *(*cust_malloc)(void *, size_t),
-                                        void (*cust_free)(void *, void *)) {
+WEAK void halide_set_custom_allocator(void *(*cust_malloc)(void *, size_t),
+                                      void (*cust_free)(void *, void *)) {
     halide_custom_malloc = cust_malloc;
     halide_custom_free = cust_free;
 }
 
-  WEAK void *halide_malloc(void *user_context, size_t x) {
+WEAK void *halide_malloc(void *user_context, size_t x) {
     if (halide_custom_malloc) {
         return halide_custom_malloc(user_context, x);
     } else {

@@ -253,6 +253,8 @@ public:
         void (*copy_to_host)(void *, buffer_t *) =
             contents.ptr->source_module.copy_to_host;
         if (copy_to_host) {
+            /* The user context is always NULL when jitting, so it's safe to
+             * pass NULL here. */
             copy_to_host(NULL, raw_buffer());
         }
     }
