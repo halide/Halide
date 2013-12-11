@@ -114,13 +114,27 @@ define weak_odr spir_func float @abs_f32(float %x) nounwind uwtable readnone alw
     ret float %y
 }
 
+define spir_kernel void @_at_least_one_kernel(i32 %x) {
+entry:
+    ret void
+}
+
 !opencl.enable.FP_CONTRACT = !{}
 !opencl.spir.version = !{!0}
 !opencl.ocl.version = !{!1}
 !opencl.used.extensions = !{!2}
 !opencl.used.optional.core.features = !{!2}
 !opencl.compiler.options = !{!2}
+!opencl.kernels = !{!3}
 
 !0 = metadata !{i32 1, i32 2}
 !1 = metadata !{i32 1, i32 0}
 !2 = metadata !{}
+
+!3 = metadata !{void (i32)* @_at_least_one_kernel, metadata !4, metadata !5, metadata !6, metadata !7, metadata !8}
+
+!4 = metadata !{metadata !"kernel_arg_addr_space", i32 0}
+!5 = metadata !{metadata !"kernel_arg_access_qual", metadata !"none"}
+!6 = metadata !{metadata !"kernel_arg_type", metadata !"int"}
+!7 = metadata !{metadata !"kernel_arg_type_qual", metadata !""}
+!8 = metadata !{metadata !"kernel_arg_name", metadata !"x"}

@@ -217,6 +217,10 @@ void CodeGen_OpenCL_Dev::init_module() {
 
     src_stream << std::endl;
 
+    // Add at least one kernel to avoid errors on some implementations for functions
+    // without any GPU schedules.
+    src_stream << "__kernel void _at_least_one_kernel(int x) { }" << std::endl;
+
     cur_kernel_name = "";
 }
 
