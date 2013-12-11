@@ -1236,7 +1236,9 @@ Expr unbroadcast(Expr e) {
 
 // Returns true if the given function name is one of the Halide runtime
 // functions that takes a user_context pointer as its first parameter.
-static bool function_takes_user_context(const string &name) {
+namespace {
+
+bool function_takes_user_context(const string &name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_copy_to_host",
         "halide_copy_to_dev",
@@ -1261,10 +1263,13 @@ static bool function_takes_user_context(const string &name) {
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
     for (int i = 0; i < num_funcs; ++i) {
-        if (name == user_context_runtime_funcs[i])
+        if (name == user_context_runtime_funcs[i]) {
             return true;
+        }
     }
     return false;
+}
+
 }
 
 void CodeGen::visit(const Call *op) {

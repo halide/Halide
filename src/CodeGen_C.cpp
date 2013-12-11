@@ -611,7 +611,7 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << "halide_rewrite_buffer(";
             for (size_t i = 0; i < 14; i++) {
-                rhs << ", ";
+                if (i > 0) rhs << ", ";
                 if (i < args.size()) {
                     rhs << args[i];
                 } else {

@@ -107,7 +107,7 @@ public:
  * calls a function from the Halide runtime (e.g. halide_printf()), it
  * passes the value of this pointer as the first argument to the
  * runtime function.  */
-inline Param<void *> get_user_context() {
+inline Param<void *> user_context_param() {
   return Param<void *>("__user_context");
 }
 

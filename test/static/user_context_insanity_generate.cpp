@@ -19,6 +19,6 @@ int main(int argc, char **argv) {
 
     f.parallel(y);
     f.trace_stores();
-    f.compile_to_file("user_context_insanity", input, get_user_context());
+    f.compile_to_file("user_context_insanity", input, user_context_param());
     return 0;
 }
