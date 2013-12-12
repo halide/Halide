@@ -536,7 +536,7 @@ void CodeGen_C::visit(const FloatImm *op) {
     } else {
         ostringstream oss;
         oss.setf(std::ios::fixed | std::ios::scientific, std::ios::floatfield);
-        oss.precision(7 + 1); // 7 = ceil(log10(2^23)), 23 = significant bits in a float.
+        oss.precision(6 + 1); // 6 = ceil(log16(2^23)), 23 = significant bits in a float.
         oss << op->value << 'f';
         id = oss.str();
     }
