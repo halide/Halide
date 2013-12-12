@@ -175,7 +175,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "float cos_f32(float x) { return cos(x); }" << std::endl;
     src_stream << "float exp_f32(float x) { return exp(x); }" << std::endl;
     src_stream << "float log_f32(float x) { return log(x); }" << std::endl;
-    src_stream << "float abs_f32(float x) { return x < 0.0f ? -x : x; }" << std::endl; // No abs in OCL C.
+    src_stream << "float abs_f32(float x) { return fabs(x); }" << std::endl;
     src_stream << "float floor_f32(float x) { return floor(x); }" << std::endl;
     src_stream << "float ceil_f32(float x) { return ceil(x); }" << std::endl;
     src_stream << "float round_f32(float x) { return round(x); }" << std::endl;
@@ -198,7 +198,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "double cos_f64(double x) { return cos(x); }" << std::endl;
     src_stream << "double exp_f64(double x) { return exp(x); }" << std::endl;
     src_stream << "double log_f64(double x) { return log(x); }" << std::endl;
-    src_stream << "double abs_f64(double x) { return x < 0.0 ? -x : x; }" << std::endl; // No abs in OCL C.
+    src_stream << "double abs_f64(double x) { return fabs(x); }" << std::endl;
     src_stream << "double floor_f64(double x) { return floor(x); }" << std::endl;
     src_stream << "double ceil_f64(double x) { return ceil(x); }" << std::endl;
     src_stream << "double round_f64(double x) { return round(x); }" << std::endl;
