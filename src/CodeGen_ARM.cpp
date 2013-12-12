@@ -142,7 +142,7 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     // automatically. It also means that vshiftn catches these
     // patterns instead of letting them fall through to the natural
     // bitcode that triggers llvm's recognition.
-    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 4
+    #if LLVM_VERSION < 34
     casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
     casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
     casts.push_back(Pattern("vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256)));
@@ -621,15 +621,15 @@ void CodeGen_ARM::visit(const Div *op) {
 
         int64_t multiplier, shift;
         if (op->type.bits == 32) {
-            multiplier = IntegerDivision::table_s32[const_divisor-2][1];
-            shift      = IntegerDivision::table_s32[const_divisor-2][2];
+            multiplier = IntegerDivision::table_s32[const_divisor][2];
+            shift      = IntegerDivision::table_s32[const_divisor][3];
         } else if (op->type.bits == 16) {
-            multiplier = IntegerDivision::table_s16[const_divisor-2][1];
-            shift      = IntegerDivision::table_s16[const_divisor-2][2];
+            multiplier = IntegerDivision::table_s16[const_divisor][2];
+            shift      = IntegerDivision::table_s16[const_divisor][3];
         } else {
             // 8 bit
-            multiplier = IntegerDivision::table_s8[const_divisor-2][1];
-            shift      = IntegerDivision::table_s8[const_divisor-2][2];
+            multiplier = IntegerDivision::table_s8[const_divisor][2];
+            shift      = IntegerDivision::table_s8[const_divisor][3];
         }
 
         Value *val = codegen(op->a);
@@ -671,17 +671,17 @@ void CodeGen_ARM::visit(const Div *op) {
 
         int64_t method, multiplier, shift;
         if (op->type.bits == 32) {
-            method     = IntegerDivision::table_u32[const_divisor-2][0];
-            multiplier = IntegerDivision::table_u32[const_divisor-2][1];
-            shift      = IntegerDivision::table_u32[const_divisor-2][2];
+            method     = IntegerDivision::table_u32[const_divisor][1];
+            multiplier = IntegerDivision::table_u32[const_divisor][2];
+            shift      = IntegerDivision::table_u32[const_divisor][3];
         } else if (op->type.bits == 16) {
-            method     = IntegerDivision::table_u16[const_divisor-2][0];
-            multiplier = IntegerDivision::table_u16[const_divisor-2][1];
-            shift      = IntegerDivision::table_u16[const_divisor-2][2];
+            method     = IntegerDivision::table_u16[const_divisor][1];
+            multiplier = IntegerDivision::table_u16[const_divisor][2];
+            shift      = IntegerDivision::table_u16[const_divisor][3];
         } else {
-            method     = IntegerDivision::table_u8[const_divisor-2][0];
-            multiplier = IntegerDivision::table_u8[const_divisor-2][1];
-            shift      = IntegerDivision::table_u8[const_divisor-2][2];
+            method     = IntegerDivision::table_u8[const_divisor][1];
+            multiplier = IntegerDivision::table_u8[const_divisor][2];
+            shift      = IntegerDivision::table_u8[const_divisor][3];
         }
 
         assert(method != 0 &&

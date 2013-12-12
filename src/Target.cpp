@@ -25,19 +25,16 @@ static void cpuid(int info[4], int infoType, int extra) {
 
 #ifdef _LP64
 static void cpuid(int info[4], int infoType, int extra) {
-    // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
         "cpuid                 \n\t"
-        "xchg{l}\t{%%}ebx, %1  \n\t"
-        : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
-        : "0" (infoType), "2" (extra)
-        : "%rbx");
+        : "=a" (info[0]), "=b" (info[1]), "=c" (info[2]), "=d" (info[3])
+        : "0" (infoType), "2" (extra));
 }
 #else
 static void cpuid(int info[4], int infoType, int extra) {
     // We save %ebx in case it's the PIC register
     __asm__ __volatile__ (
-        "xchg{l}\t{%%}ebx, %1  \n\t"
+        "mov{l}\t{%%}ebx, %1  \n\t"
         "cpuid                 \n\t"
         "xchg{l}\t{%%}ebx, %1  \n\t"
         : "=a" (info[0]), "=r" (info[1]), "=c" (info[2]), "=d" (info[3])
@@ -348,6 +345,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_shutdown_thread_pool",
                        "halide_shutdown_trace",
                        "halide_set_cuda_context",
+                       "halide_set_cl_context",
                        "halide_dev_sync",
                        "halide_release",
                        "halide_current_time_ns",

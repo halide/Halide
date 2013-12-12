@@ -154,8 +154,11 @@ int main(int argc, char **argv) {
     f.bound(x, 0, N);
     f.compile_jit();
     Image<int> bitonic_sorted(N);
-    double t1 = currentTime();
     f.realize(bitonic_sorted);
+    double t1 = currentTime();
+    for (int i = 0; i < 10; i++) {
+        f.realize(bitonic_sorted);
+    }
     double t2 = currentTime();
 
     printf("Merge sort...\n");
@@ -163,8 +166,11 @@ int main(int argc, char **argv) {
     f.bound(x, 0, N);
     f.compile_jit();
     Image<int> merge_sorted(N);
-    double t3 = currentTime();
     f.realize(merge_sorted);
+    double t3 = currentTime();
+    for (int i = 0; i < 10; i++) {
+        f.realize(merge_sorted);
+    }
     double t4 = currentTime();
 
     Image<int> correct(N);
@@ -180,7 +186,7 @@ int main(int argc, char **argv) {
            "bitonic sort: %f \n"
            "merge sort: %f \n"
            "std::sort %f\n",
-           t2-t1, t4-t3, t6-t5);
+           (t2-t1)/10, (t4-t3)/10, t6-t5);
 
     if (N <= 100) {
         for (int i = 0; i < N; i++) {
