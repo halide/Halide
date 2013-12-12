@@ -53,9 +53,13 @@ extern const char * strstr(const char *, const char *);
 #endif //DEBUG
 }
 extern "C" {
+// A cuda context defined in this module with weak linkage
+cl_context WEAK weak_cl_ctx = 0;
+cl_command_queue WEAK weak_cl_q = 0;
+
 // These are pointers to the real context/queue stored elsewhere.
-static cl_context* cl_ctx = 0;
-static cl_command_queue* cl_q = 0;
+static cl_context* cl_ctx = &weak_cl_ctx;
+static cl_command_queue* cl_q = &weak_cl_q;
 
 WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q) {
     cl_ctx = ctx;
