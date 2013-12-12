@@ -362,6 +362,9 @@ public:
 
         expr = s->size;
         op->size.accept(this);
+
+        stmt = s->body;
+        op->body.accept(this);
     }
 
     void visit(const Realize *op) {
@@ -390,6 +393,9 @@ public:
                 expr = s->bounds[i].extent;
                 op->bounds[i].extent.accept(this);
             }
+
+            stmt = s->body;
+            op->body.accept(this);
         }
     }
 
@@ -426,15 +432,23 @@ public:
 
         const IfThenElse *s = stmt.as<IfThenElse>();
 
-        expr = s->condition;
-        op->condition.accept(this);
+        if (!s->else_case.defined() && op->else_case.defined()) {
+            result = -1;
+        } else if (s->else_case.defined() && op->else_case.defined()) {
+            result = 1;
+        } else {
 
-        stmt = s->then_case;
-        op->then_case.accept(this);
+            expr = s->condition;
+            op->condition.accept(this);
 
-        stmt = s->else_case;
-        op->else_case.accept(this);
+            stmt = s->then_case;
+            op->then_case.accept(this);
 
+            if (result == 0 && s->else_case.defined()) {
+                stmt = s->else_case;
+                op->else_case.accept(this);
+            }
+        }
     }
 
     void visit(const Evaluate *op) {
