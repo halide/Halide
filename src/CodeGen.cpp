@@ -439,7 +439,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));
 
-    #if defined(LLVM_VERSION_MINOR) && LLVM_VERSION_MINOR < 3
+    #if LLVM_VERSION < 33
     pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                              target_machine->getVectorTargetTransformInfo()));
     #else
