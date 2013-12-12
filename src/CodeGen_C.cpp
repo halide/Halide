@@ -10,6 +10,9 @@
 #include "Debug.h"
 #include "Lerp.h"
 
+// For converting floats to hex literals.
+#include "LLVM_Headers.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -534,11 +537,14 @@ void CodeGen_C::visit(const FloatImm *op) {
             id = "neg_inf_f32()";
         }
     } else {
-        ostringstream oss;
-        oss.setf(std::ios::fixed | std::ios::scientific, std::ios::floatfield);
-        oss.precision(6 + 1); // 6 = ceil(log16(2^23)), 23 = significant bits in a float.
-        oss << op->value << 'f';
-        id = oss.str();
+        // Write the constant as a hex string to avoid any bits lost in conversion.
+        // TODO: Find a portable way to write this string (without depending on LLVM). 
+        // std::hexfloat requires C++11.
+        char buffer[30];
+        llvm::APFloat value(op->value);
+        value.convertToHexString(buffer, 0, false, llvm::APFloat::rmNearestTiesToEven);
+        strcat(buffer, "f");
+        id = buffer;
     }
 }
 
@@ -914,7 +920,7 @@ void CodeGen_C::test() {
         " {\n"
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
-        "  bool V2 = alpha > 4.000000f;\n"
+        "  bool V2 = alpha > 0x1p2f;\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
         " } // alloc tmp_stack\n"
