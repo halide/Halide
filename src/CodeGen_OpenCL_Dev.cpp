@@ -164,6 +164,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 #ifdef ENABLE_CL_KHR_FP64
     src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable" << std::endl;
 #endif
+    src_stream << "#pragma OPENCL FP_CONTRACT ON" << std::endl;
 
     // Write out the Halide math functions.
     src_stream << "float nan_f32() { return NAN; }" << std::endl;
