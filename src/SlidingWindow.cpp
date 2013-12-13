@@ -241,12 +241,22 @@ class SlidingWindow : public IRMutator {
         // Find the args for this function
         map<string, Function>::const_iterator iter = env.find(op->name);
 
+        assert(iter != env.end() && "Compiler bug: Sliding window found a realization for a function not in the environment\n");
+
+        // For now we skip reductions, because the update step of a
+        // reduction may read from the same buffer at points outside
+        // of the region required, which in turn means the
+        // initialization takes place over a larger domain than the
+        // region required, which means that the initialization may
+        // clobber old values that we're relying on to still be
+        // correct.
+        //
+        // In the future we may allow a more nuanced test here.
+
         Stmt new_body = op->body;
-        if (iter != env.end()) {
+        if (!(iter->second.has_reduction_definition())) {
             debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
             new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
-        } else {
-            assert(false && "Compiler bug: Sliding window found a realization for a function not in the environment\n");
         }
         new_body = mutate(new_body);
 
