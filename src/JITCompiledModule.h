@@ -37,32 +37,36 @@ struct JITCompiledModule {
      * objects. These pointers may be NULL if not compiling for a
      * gpu-like target. */
     // @{
-    void (*copy_to_host)(struct buffer_t*);
-    void (*copy_to_dev)(struct buffer_t*);
-    void (*free_dev_buffer)(struct buffer_t*);
+    void (*copy_to_host)(void *user_context, struct buffer_t*);
+    void (*copy_to_dev)(void *user_context, struct buffer_t*);
+    void (*free_dev_buffer)(void *user_context, struct buffer_t*);
     // @}
 
     /** The type of a halide runtime error handler function */
-    typedef void (*ErrorHandler)(const char *);
+    typedef void (*ErrorHandler)(void *user_context, const char *);
 
     /** Set the runtime error handler for this module */
     void (*set_error_handler)(ErrorHandler);
 
     /** Set a custom malloc and free for this module to use. See
      * \ref Func::set_custom_allocator */
-    void (*set_custom_allocator)(void *(*malloc)(size_t), void (*free)(void *));
+    void (*set_custom_allocator)(void *(*malloc)(void *user_context, size_t),
+                                 void (*free)(void *user_context, void *ptr));
 
     /** Set a custom parallel for loop launcher. See
      * \ref Func::set_custom_do_par_for */
-    typedef int (*HalideTask)(int, uint8_t *);
-    void (*set_custom_do_par_for)(int (*custom_do_par_for)(HalideTask, int, int, uint8_t *));
+    typedef int (*HalideTask)(void *user_context, int, uint8_t *);
+    void (*set_custom_do_par_for)(int (*custom_do_par_for)(void *user_context, HalideTask,
+                                                           int, int, uint8_t *));
 
     /** Set a custom do parallel task. See
      * \ref Func::set_custom_do_task */
-    void (*set_custom_do_task)(int (*custom_do_task)(HalideTask, int, uint8_t *));
+  void (*set_custom_do_task)(int (*custom_do_task)(void *user_context, HalideTask,
+                                                   int, uint8_t *));
 
     /** Set a custom trace function. See \ref Func::set_custom_trace. */
-    typedef void (*TraceFn)(const char *, int, int, int, int, int, const void *, int, const int *);
+    typedef void (*TraceFn)(void *user_context, const char *, int, int, int,
+                            int, int, const void *, int, const int *);
     void (*set_custom_trace)(TraceFn);
 
     /** Shutdown the thread pool maintained by this JIT module. This

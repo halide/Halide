@@ -12,7 +12,7 @@ extern size_t write(int fd, const void *buf, size_t count);
 extern int vsnprintf(char *buf, size_t buf_size, const char *format, __builtin_va_list ap);
 const int STDERR_FILENO = 2;
 
-WEAK int halide_printf(const char * fmt, ...) {
+WEAK int halide_printf(void *user_context, const char * fmt, ...) {
     const size_t BUF_SIZE = 1024;
     char buf[BUF_SIZE];
     __builtin_va_list args;

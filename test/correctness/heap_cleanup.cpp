@@ -8,7 +8,7 @@ using namespace Halide;
 int malloc_count = 0;
 int free_count = 0;
 
-void *my_malloc(size_t x) {
+void *my_malloc(void *user_context, size_t x) {
     malloc_count++;
     void *orig = malloc(x+32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -16,13 +16,13 @@ void *my_malloc(size_t x) {
     return ptr;
 }
 
-void my_free(void *ptr) {
+void my_free(void *user_context, void *ptr) {
     free_count++;
     free(((void**)ptr)[-1]);
 }
 
 bool error_occurred = false;
-void my_error_handler(const char *) {
+void my_error_handler(void *user_context, const char *) {
     error_occurred = true;
 }
 

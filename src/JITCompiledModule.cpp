@@ -20,7 +20,9 @@ class JITModuleHolder {
 public:
     mutable RefCount ref_count;
 
-    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*stop_threads)(), void (*stop_trace)()) :
+    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m,
+                    void (*stop_threads)(),
+                    void (*stop_trace)()) :
         execution_engine(ee),
         module(m),
         context(&m->getContext()),

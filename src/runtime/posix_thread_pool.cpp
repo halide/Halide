@@ -40,7 +40,7 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 extern char *getenv(const char *);
 extern int atoi(const char *);
 
-extern int halide_printf(const char *, ...);
+extern int halide_printf(void *user_context, const char *, ...);
 
 #ifndef NULL
 #define NULL 0
@@ -48,7 +48,8 @@ extern int halide_printf(const char *, ...);
 
 struct work {
     work *next_job;
-    int (*f)(int, uint8_t *);
+    int (*f)(void *, int, uint8_t *);
+    void *user_context;
     int next, max;
     uint8_t *closure;
     int active_workers;
@@ -106,23 +107,26 @@ WEAK void halide_shutdown_thread_pool() {
     halide_thread_pool_initialized = false;
 }
 
-typedef int (*halide_task)(int, uint8_t *);
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
-WEAK int (*halide_custom_do_task)(halide_task, int, uint8_t *);
-WEAK void halide_set_custom_do_task(int (*f)(halide_task, int, uint8_t *)) {
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
+
+WEAK void halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)) {
     halide_custom_do_task = f;
 }
 
-WEAK int (*halide_custom_do_par_for)(halide_task, int, int, uint8_t *);
-WEAK void halide_set_custom_do_par_for(int (*f)(halide_task, int, int, uint8_t *)) {
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
+
+WEAK void halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)) {
     halide_custom_do_par_for = f;
 }
 
-WEAK int halide_do_task(halide_task f, int idx, uint8_t *closure) {
+WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+                        uint8_t *closure) {
     if (halide_custom_do_task) {
-        return (*halide_custom_do_task)(f, idx, closure);
+        return (*halide_custom_do_task)(user_context, f, idx, closure);
     } else {
-        return f(idx, closure);
+        return f(user_context, idx, closure);
     }
 }
 
@@ -165,7 +169,8 @@ WEAK void *halide_worker_thread(void *void_arg) {
 
             // Release the lock and do the task.
             pthread_mutex_unlock(&halide_work_queue.mutex);
-            int result = halide_do_task(myjob.f, myjob.next, myjob.closure);
+            int result = halide_do_task(myjob.user_context, myjob.f, myjob.next,
+                                        myjob.closure);
             pthread_mutex_lock(&halide_work_queue.mutex);
 
             // If this task failed, set the exit status on the job.
@@ -189,9 +194,10 @@ WEAK void *halide_worker_thread(void *void_arg) {
 
 extern int halide_host_cpu_count();
 
-WEAK int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t *closure) {
+WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
+                           int min, int size, uint8_t *closure) {
     if (halide_custom_do_par_for) {
-        return (*halide_custom_do_par_for)(f, min, size, closure);
+        return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
     }
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
@@ -204,7 +210,7 @@ WEAK int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t 
             halide_threads = atoi(threadStr);
         } else {
             halide_threads = halide_host_cpu_count();
-            // halide_printf("HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
+            // halide_printf(user_context, "HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
         }
         if (halide_threads > MAX_THREADS) {
             halide_threads = MAX_THREADS;
@@ -222,6 +228,7 @@ WEAK int halide_do_par_for(int (*f)(int, uint8_t *), int min, int size, uint8_t 
     // Make the job.
     work job;
     job.f = f;               // The job should call this function. It takes an index and a closure.
+    job.user_context = user_context;
     job.next = min;          // Start at this index.
     job.max  = min + size;   // Keep going until one less than this index.
     job.closure = closure;   // Use this closure.
