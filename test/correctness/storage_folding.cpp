@@ -7,7 +7,7 @@ using namespace Halide;
 
 size_t custom_malloc_size = 0;
 
-void *my_malloc(size_t x) {
+void *my_malloc(void *user_context, size_t x) {
     custom_malloc_size = x;
     void *orig = malloc(x+32);
     void *ptr = (void *)((((size_t)orig + 32) >> 5) << 5);
@@ -15,7 +15,7 @@ void *my_malloc(size_t x) {
     return ptr;
 }
 
-void my_free(void *ptr) {
+void my_free(void *user_context, void *ptr) {
     free(((void**)ptr)[-1]);
 }
 
