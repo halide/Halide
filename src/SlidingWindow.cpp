@@ -67,7 +67,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             string dim = "";
             Expr min_produced, extent_produced;
 
-            debug(0) << "Considering sliding " << func.name()
+            debug(3) << "Considering sliding " << func.name()
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
@@ -81,7 +81,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 Expr m_r = scope.get(min_req_name);
                 Expr e_r = scope.get(extent_req_name);
 
-                debug(0) << func.args()[i] << ":" << m << ", " << e  << "\n";
+                debug(3) << func.args()[i] << ":" << m << ", " << e  << "\n";
                 if (expr_depends_on_var(m_r, loop_var) ||
                     expr_depends_on_var(e_r, loop_var)) {
                     if (!dim.empty()) {
@@ -94,7 +94,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         min_produced = substitute(min_req_name, m_r, m);
                         extent_produced = substitute(extent_req_name, e_r, e);
                     }
-                }                
+                }
             }
 
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
@@ -119,15 +119,15 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             if (min_produced.defined()) {
                 // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
-                debug(0) << "Sliding " << func.name() 
-                         << " over dimension " << dim 
+                debug(3) << "Sliding " << func.name()
+                         << " over dimension " << dim
                          << " along loop variable " << loop_var << "\n";
 
                 Expr new_min, new_extent;
 
                 Expr min_extent = func.min_extent_produced(dim);
                 Expr min_extent_factor = func.min_extent_updated(dim);
-                
+
                     // We've sworn to produce from min_produced to
                     // extent_produced, but we can perhaps skip values
                     // already computed
@@ -147,9 +147,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                     new_extent /= min_extent_factor;
                     new_extent *= min_extent_factor;
                     new_extent = simplify(new_extent);
-                     
+
                     new_min = max_plus_one - new_extent;
-                   
+
                     new_extent = select(loop_var_expr == loop_min, extent_produced, new_extent);
                     new_min = select(loop_var_expr == loop_min, min_produced, new_min);
 
@@ -170,12 +170,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 new_min = simplify(new_min);
                 new_extent = simplify(new_extent);
 
-                debug(0) << "Sliding " << func.name() << ", " << dim << "\n";
-                debug(0) << "old extent: " << extent_produced << "\n";
-                debug(0) << "new extent: " << new_extent << "\n";
-
-                debug(3) << "Pushing min up from " << min_produced << " to " << new_min << "\n";
-                debug(3) << "Shrinking extent from " << extent_produced << " to " << new_extent << "\n";
+                debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
+                         << "Pushing min up from " << min_produced << " to " << new_min << "\n"
+                         << "Shrinking extent from " << extent_produced << " to " << new_extent << "\n";
                 string min_name = func.name() + "." + dim + ".min_produced";
                 string extent_name = func.name() + "." + dim + ".extent_produced";
 
@@ -183,10 +180,10 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 stmt = LetStmt::make(min_name, new_min, stmt);
                 stmt = LetStmt::make(extent_name, new_extent, stmt);
 
-                debug(0) << "new extent: " << new_extent << "\n";
+                debug(3) << "new extent: " << new_extent << "\n";
 
             } else {
-                debug(0) << "Could not perform sliding window optimization of " 
+                debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << "\n";
                 stmt = op;
             }
