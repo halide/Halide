@@ -51,7 +51,7 @@ endif
 
 # -O2 is faster than -O3 for this app (O3 unrolls too much)
 test: test.cpp halide_blur.o
-	$(GXX) $(OPENMP_FLAGS) -msse2 -Wall -O2 -g -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
+	$(GXX) $(OPENMP_FLAGS) -msse2 -Wall -O2 -I ../support/ test.cpp halide_blur.o -o test -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 clean:
 	rm -f test halide_blur.o halide_blur
