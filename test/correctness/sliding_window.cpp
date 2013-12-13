@@ -88,7 +88,6 @@ int main(int argc, char **argv) {
     f4.store_root().compute_at(g4, x);
 
     Image<int> im4 = g4.realize(10, 10);
-    printf("%d\n", count);
     if (count != 1500) {
         printf("f was called %d times instead of %d times\n", count, 1500);
         return -1;
