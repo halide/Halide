@@ -93,7 +93,7 @@ int main(int argc, char **argv) {
 
     int sched;
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
+    if (target.features & (Target::CUDA | Target::OpenCL)) {
         sched = 4;
     } else {
         sched = 2;
