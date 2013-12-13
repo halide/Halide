@@ -10,9 +10,6 @@
 #include "Debug.h"
 #include "Lerp.h"
 
-// For converting floats to hex literals.
-#include "LLVM_Headers.h"
-
 namespace Halide {
 namespace Internal {
 
@@ -137,6 +134,14 @@ const string preamble =
     "inline float nan_f32() {return NAN;}\n"
     "inline float neg_inf_f32() {return -INFINITY;}\n"
     "inline float inf_f32() {return INFINITY;}\n"
+    "inline float float_from_bits(uint32_t bits) {\n"
+    " union {\n"
+    "  uint32_t as_uint;\n"
+    "  float as_float;\n"
+    " } u;\n"
+    " u.as_uint = bits;\n"
+    " return u.as_float;\n"
+    "}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
@@ -537,14 +542,16 @@ void CodeGen_C::visit(const FloatImm *op) {
             id = "neg_inf_f32()";
         }
     } else {
-        // Write the constant as a hex string to avoid any bits lost in conversion.
-        // TODO: Find a portable way to write this string (without depending on LLVM). 
-        // std::hexfloat requires C++11.
-        char buffer[30];
-        llvm::APFloat value(op->value);
-        value.convertToHexString(buffer, 0, false, llvm::APFloat::rmNearestTiesToEven);
-        strcat(buffer, "f");
-        id = buffer;
+        // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+        union {
+            uint32_t as_uint;
+            float as_float;
+        } u;
+        u.as_float = op->value;
+
+        ostringstream oss;
+        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
+        id = oss.str();
     }
 }
 
@@ -920,7 +927,7 @@ void CodeGen_C::test() {
         " {\n"
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
-        "  bool V2 = alpha > 0x1p2f;\n"
+        "  bool V2 = alpha > float_from_bits(1082130432 /* 4 */);\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
         " } // alloc tmp_stack\n"
