@@ -23,12 +23,21 @@ endif
 ifneq (,$(findstring cuda,$(HL_TARGET)))
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
+ifneq (, $(findstring opencl,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir64,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
 
 all: interpolate
 
 interpolate: ../../ interpolate.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../$(LIB_HALIDE) -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS)
+	$(CXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../$(LIB_HALIDE) -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 out.png: interpolate
 	./interpolate ../images/rgba.png out.png

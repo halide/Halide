@@ -25,6 +25,15 @@ endif
 ifeq ($(HL_TARGET),ptx-debug)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
+ifneq (, $(findstring opencl,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir64,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
 
 all: filter
 
@@ -39,7 +48,7 @@ filter.o: filter.cpp $(HL_MODULES)
 	$(CXX) $(PNGFLAGS) -I../support -O3 -c filter.cpp
 
 filter: filter.o
-	$(CXX) filter.o $(HL_MODULES) $(PNGFLAGS) $(CUDA_LDFLAGS) -o filter -lpthread
+	$(CXX) filter.o $(HL_MODULES) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) -o filter -lpthread
 
 clean:
 	rm -f wavelet filter filter.o $(HL_MODULES) $(HL_MODULES:%.o) $(HL_MODULES:%.o=%.h)

@@ -133,10 +133,11 @@ protected:
     /** Fetch an entry from the symbol table. If the symbol is not
      * found, it either errors out (if the second arg is true), or
      * returns NULL. */
-    llvm::Value* sym_get(const std::string &name, bool must_succeed = true);
+    llvm::Value* sym_get(const std::string &name,
+                         bool must_succeed = true) const;
 
     /** Test if an item exists in the symbol table. */
-    bool sym_exists(const std::string &name);
+    bool sym_exists(const std::string &name) const;
 
     /** Some useful llvm types */
     // @{
@@ -304,6 +305,7 @@ protected:
      * guarantee their alignment) */
     std::set<std::string> might_be_misaligned;
 
+    llvm::Value *get_user_context() const;
 
 private:
 
