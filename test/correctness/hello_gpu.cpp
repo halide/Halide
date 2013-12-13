@@ -11,25 +11,26 @@ int main(int argc, char **argv) {
 
     printf("Defining function...\n");
 
-    f(x, y) = x*y;
+    f(x, y) = x*y + 2.4f;
 
     Target target = get_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 8, 8);
-    } 
+    }
     if (target.features & Target::OpenCL) {
         f.cuda_tile(x, y, 8, 8);
     }
 
     printf("Realizing function...\n");
 
-    Image<int> imf = f.realize(32, 32);
+    Image<float> imf = f.realize(32, 32);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            if (imf(i, j) != i*j) {
-                printf("imf[%d, %d] = %d\n", i, j, imf(i, j));
+            float correct = i*j + 2.4f;
+            if (fabs(imf(i, j) - correct) > 0.001f) {
+                printf("imf[%d, %d] = %f instead of %f\n", i, j, imf(i, j), correct);
                 return -1;
             }
         }
