@@ -24,6 +24,15 @@ endif
 ifneq (,$(findstring cuda,$(HL_TARGET)))
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
+ifneq (, $(findstring opencl,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir64,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
 
 all: filter
 
@@ -37,7 +46,7 @@ bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8
 
 filter: bilateral_grid.o filter.cpp
-	$(CXX) -I../support -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LDFLAGS)
+	$(CXX) -I../support -O3 -ffast-math -Wall -Werror filter.cpp bilateral_grid.o -lpthread -ldl -o filter  $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 out.png: filter
 	./filter ../images/gray.png out.png 0.1
