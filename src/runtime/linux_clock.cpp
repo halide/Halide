@@ -52,7 +52,7 @@ WEAK timespec halide_reference_clock;
 
 extern int syscall(int num, ...);
 
-WEAK int halide_start_clock() {
+WEAK int halide_start_clock(void *user_context) {
     // Guard against multiple calls
     if (!halide_reference_clock_inited) {
         syscall(SYS_CLOCK_GETTIME, CLOCK_REALTIME, &halide_reference_clock);
@@ -61,7 +61,7 @@ WEAK int halide_start_clock() {
     return 0;
 }
 
-WEAK int64_t halide_current_time_ns() {
+WEAK int64_t halide_current_time_ns(void *user_context) {
     timespec now;
     // To avoid requiring people to link -lrt, we just make the syscall directly.
 
