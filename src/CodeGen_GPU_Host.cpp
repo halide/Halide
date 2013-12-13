@@ -367,10 +367,11 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
+    Value *user_context = get_user_context();
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     assert(init && "Could not find function halide_init_kernels in initial module");
-    builder->CreateCall2(init, kernel_src_ptr, kernel_size);
+    builder->CreateCall3(init, user_context, kernel_src_ptr, kernel_size);
 
     // Optimize the module
     CodeGen::optimize_module();
@@ -542,19 +543,16 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             // While internal buffers have all had their device
             // allocations done via static analysis, external ones
             // need to be dynamically checked
+            Value *user_context = get_user_context();
             Value *buf = sym_get(it->first + ".buffer");
-            Value *args[2] = {
-                get_user_context(),
-                buf,
-            };
             debug(4) << "halide_dev_malloc " << it->first << "\n";
-            builder->CreateCall(dev_malloc_fn, args);
+            builder->CreateCall2(dev_malloc_fn, user_context, buf);
 
             // Anything dirty on the cpu that gets read on the gpu
             // needs to be copied over
             if (it->second.read) {
                 debug(4) << "halide_copy_to_dev " << it->first << "\n";
-                builder->CreateCall(copy_to_dev_fn, buf);
+                builder->CreateCall2(copy_to_dev_fn, user_context, buf);
             }
         }
 
@@ -765,13 +763,14 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
                              buffer_host_dirty_ptr(buf));
     }
 
+    Value *user_context = get_user_context();
     if (n->update.defined()) {
         WhereIsBufferUsed update_usage(n->name);
         n->update.accept(&update_usage);
 
         // Copy back host update reads
         if (update_usage.read_on_host) {
-            builder->CreateCall(copy_to_host_fn, buf);
+            builder->CreateCall2(copy_to_host_fn, user_context, buf);
         }
 
         codegen(n->update);
@@ -786,7 +785,7 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
 
     // Copy back host reads
     if (consume_usage.read_on_host) {
-        builder->CreateCall(copy_to_host_fn, buf);
+        builder->CreateCall2(copy_to_host_fn, user_context, buf);
     }
 
     codegen(n->consume);
@@ -804,7 +803,8 @@ void CodeGen_GPU_Host::visit(const Call *call) {
         Value *buf = sym_get(func->name + ".buffer", false);
         if (buf) {
             // This buffer may have been last-touched on device
-            builder->CreateCall(copy_to_host_fn, buf);
+            Value *user_context = get_user_context();
+            builder->CreateCall2(copy_to_host_fn, user_context, buf);
         }
     }
 
