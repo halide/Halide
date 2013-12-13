@@ -81,6 +81,20 @@ TEST_PTX = 1
 endif
 endif
 
+ifneq ($(WITH_OPENCL), )
+ifneq (,$(findstring opencl,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+endif
+ifneq ($(WITH_SPIR), )
+ifneq (,$(findstring spir,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+ifneq (,$(findstring spir64,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+endif
+
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
@@ -97,6 +111,10 @@ ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
 endif
 HOST_OS=os_x
+endif
+
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -lOpenCL
 endif
 
 # Compiling the tutorials requires libpng
