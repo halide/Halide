@@ -101,7 +101,7 @@ WEAK void halide_dev_free(buffer_t* buf) {
     buf->dev = 0;
 }
 
-const char * get_opencl_platform() {
+static const char * get_opencl_platform() {
     char *platform = getenv("HL_OCL_PLATFORM");
     if (platform) return platform;
     else return "";
