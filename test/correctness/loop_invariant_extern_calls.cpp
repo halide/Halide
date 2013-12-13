@@ -20,9 +20,9 @@ extern "C" DLLEXPORT int my_func(int counter, int x) {
 HalideExtern_2(int, my_func, int, int);
 
 // A parallel for loop runner that isn't actually parallel
-int not_really_parallel_for(int (*f)(int, uint8_t *), int min, int extent, uint8_t *closure) {
+int not_really_parallel_for(void *ctx, int (*f)(void *, int, uint8_t *), int min, int extent, uint8_t *closure) {
     for (int i = min; i < min + extent; i++) {
-        f(i, closure);
+        f(ctx, i, closure);
     }
     return 0;
 }

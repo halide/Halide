@@ -9,7 +9,7 @@ extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
 extern int snprintf(char *str, size_t size, const char *format, ...);
 extern int fclose(void *f);
 
-typedef void (*trace_fn)(const char *, halide_trace_event_t,
+typedef void (*trace_fn)(void *, const char *, halide_trace_event_t,
                          int32_t, int32_t, int32_t, int32_t,
                          const void *, int32_t, const int32_t *);
 WEAK trace_fn halide_custom_trace = NULL;
@@ -20,11 +20,12 @@ WEAK void halide_set_custom_trace(trace_fn t) {
 
 WEAK void *halide_trace_file = NULL;
 
-WEAK void halide_trace(const char *func, halide_trace_event_t event,
+WEAK void halide_trace(void *user_context, const char *func, halide_trace_event_t event,
                        int32_t type_code, int32_t bits, int32_t width, int32_t value_idx, void *value,
                        int32_t num_int_args, const int32_t *int_args) {
     if (halide_custom_trace) {
-        (*halide_custom_trace)(func, event, type_code, bits, width, value_idx, value, num_int_args, int_args);
+        (*halide_custom_trace)(user_context, func, event, type_code, bits,
+                               width, value_idx, value, num_int_args, int_args);
     } else {
         static bool initialized = false;
 
@@ -33,7 +34,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
             initialized = true;
             if (trace_file_name) {
                 halide_trace_file = fopen(trace_file_name, "wb");
-                halide_assert(halide_trace_file && "Failed to open trace file\n");
+                halide_assert(user_context, halide_trace_file && "Failed to open trace file\n");
             }
         }
 
@@ -55,7 +56,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
             size_t int_arg_bytes = clamped_num_int_args * sizeof(int32_t);
             size_t total_bytes = header_bytes + value_bytes + int_arg_bytes;
             uint8_t buffer[4096];
-            halide_assert(total_bytes <= 4096 && "Tracing packet too large");
+            halide_assert(user_context, total_bytes <= 4096 && "Tracing packet too large");
 
             buffer[0] = event;
             buffer[1] = type_code;
@@ -87,7 +88,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
 
 
             size_t written = fwrite(&buffer[0], 1, total_bytes, halide_trace_file);
-            halide_assert(written == total_bytes && "Can't write to trace file");
+            halide_assert(user_context, written == total_bytes && "Can't write to trace file");
 
         } else {
             char buf[256];
@@ -97,7 +98,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
             // Round up bits to 8, 16, 32, or 64
             int print_bits = 8;
             while (print_bits < bits) print_bits <<= 1;
-            halide_assert(print_bits <= 64 && "Tracing bad type");
+            halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
             // Otherwise, use halide_printf and a plain-text format
             const char *event_types[] = {"Load",
@@ -170,7 +171,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
                             buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", (uint32_t)((uint64_t *)(value))[i]);
                         }
                     } else if (type_code == 2) {
-                        halide_assert(print_bits >= 32 && "Tracing a bad type");
+                        halide_assert(user_context, print_bits >= 32 && "Tracing a bad type");
                         if (print_bits == 32) {
                             buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(value))[i]);
                         } else {
@@ -185,7 +186,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
                 }
             }
 
-            halide_printf("%s\n", buf);
+            halide_printf(user_context, "%s\n", buf);
         }
     }
 }

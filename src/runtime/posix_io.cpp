@@ -7,7 +7,7 @@ extern "C" {
 extern int vfprintf(void *stream, const char *format, __builtin_va_list ap);
 extern void *stderr;
 
-WEAK int halide_printf(const char * fmt, ...) {
+WEAK int halide_printf(void *user_context, const char * fmt, ...) {
     __builtin_va_list args;
     __builtin_va_start(args,fmt);
     int ret = vfprintf(stderr, fmt, args);
