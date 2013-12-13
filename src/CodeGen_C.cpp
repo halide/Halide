@@ -542,7 +542,7 @@ void CodeGen_C::visit(const FloatImm *op) {
             id = "neg_inf_f32()";
         }
     } else {
-        // Write the constant as a hex string to avoid any bits lost in conversion.
+        // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
         union {
             uint32_t as_uint;
             float as_float;
@@ -927,7 +927,7 @@ void CodeGen_C::test() {
         " {\n"
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
-        "  bool V2 = alpha > 0x1p2f;\n"
+        "  bool V2 = alpha > float_from_bits(1082130432 /* 4 */);\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
         " } // alloc tmp_stack\n"
