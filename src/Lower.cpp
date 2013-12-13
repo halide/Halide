@@ -1571,16 +1571,16 @@ Stmt lower(Function f) {
     s = add_image_checks(s, f);
     debug(2) << "Image checks injected:\n" << s << '\n';
 
-    debug(1) << "Performing sliding window optimization...\n";
-    s = sliding_window(s, env);
-    debug(2) << "Sliding window:\n" << s << '\n';
-
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing bounds inference...\n";
     s = bounds_inference(s, order, env);
     debug(2) << "Bounds inference:\n" << s << '\n';
+
+    debug(1) << "Performing sliding window optimization...\n";
+    s = sliding_window(s, env);
+    debug(2) << "Sliding window:\n" << s << '\n';
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
