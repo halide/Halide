@@ -72,14 +72,10 @@ int main(int argc, char **argv) {
     }
     interpolated[levels-1](x, y, c) = downsampled[levels-1](x, y, c);
     for (unsigned int l = levels-2; l < levels; --l) {
-        upsampledx[l](x, y, c) = select((x % 2) == 0,
-                                        interpolated[l+1](x/2, y, c),
-                                        0.5f * (interpolated[l+1](x/2, y, c) +
-                                                interpolated[l+1](x/2+1, y, c)));
-        upsampled[l](x, y, c) = select((y % 2) == 0,
-                                       upsampledx[l](x, y/2, c),
-                                       0.5f * (upsampledx[l](x, y/2, c) +
-                                               upsampledx[l](x, y/2+1, c)));
+        upsampledx[l](x, y, c) = (interpolated[l+1](x/2, y, c) +
+                                  interpolated[l+1]((x+1)/2, y, c)) / 2.0f;
+        upsampled[l](x, y, c) =  (upsampledx[l](x, y/2, c) +
+                                  upsampledx[l](x, (y+1)/2, c)) / 2.0f;
         interpolated[l](x, y, c) = downsampled[l](x, y, c) + (1.0f - downsampled[l](x, y, 3)) * upsampled[l](x, y, c);
     }
 
