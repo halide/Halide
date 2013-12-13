@@ -86,6 +86,7 @@ set (RUNTIME_LL
   ptx_dev
   spir_dev
   spir64_dev
+  spir_common_dev
   x86_avx
   x86
   x86_sse41)

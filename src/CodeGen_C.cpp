@@ -45,13 +45,13 @@ const string preamble =
     "#include <string.h>\n"
     "#include <stdint.h>\n"
     "\n"
-    "extern \"C\" void *halide_malloc(size_t);\n"
-    "extern \"C\" void halide_free(void *);\n"
-    "extern \"C\" int halide_debug_to_file(const char *filename, void *data, int, int, int, int, int, int);\n"
-    "extern \"C\" int halide_start_clock();\n"
-    "extern \"C\" int64_t halide_current_time_ns();\n"
-    "extern \"C\" uint64_t halide_profiling_timer();\n"
-    "extern \"C\" int halide_printf(const char *fmt, ...);\n"
+    "extern \"C\" void *halide_malloc(void *ctx, size_t);\n"
+    "extern \"C\" void halide_free(void *ctx, void *ptr);\n"
+    "extern \"C\" int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
+    "extern \"C\" int halide_start_clock(void *ctx);\n"
+    "extern \"C\" int64_t halide_current_time_ns(void *ctx);\n"
+    "extern \"C\" uint64_t halide_profiling_timer(void *ctx);\n"
+    "extern \"C\" int halide_printf(void *ctx, const char *fmt, ...);\n"
     "\n"
 
     // TODO: this next chunk is copy-pasted from posix_math.cpp. A
@@ -134,6 +134,14 @@ const string preamble =
     "inline float nan_f32() {return NAN;}\n"
     "inline float neg_inf_f32() {return -INFINITY;}\n"
     "inline float inf_f32() {return INFINITY;}\n"
+    "inline float float_from_bits(uint32_t bits) {\n"
+    " union {\n"
+    "  uint32_t as_uint;\n"
+    "  float as_float;\n"
+    " } u;\n"
+    " u.as_uint = bits;\n"
+    " return u.as_float;\n"
+    "}\n"
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
@@ -275,6 +283,12 @@ void CodeGen_C::compile(Stmt s, string name,
         // Make a global pointer to it
         stream << "static buffer_t *_" << name << " = &" << name << "_buffer;\n";
 
+    }
+
+    have_user_context = false;
+    for (size_t i = 0; i < args.size(); i++) {
+        // TODO: check that its type is void *?
+        have_user_context |= (args[i].name == "__user_context");
     }
 
     // Emit the function prototype
@@ -534,9 +548,15 @@ void CodeGen_C::visit(const FloatImm *op) {
             id = "neg_inf_f32()";
         }
     } else {
+        // Write the constant as reinterpreted uint to avoid any bits lost in conversion.
+        union {
+            uint32_t as_uint;
+            float as_float;
+        } u;
+        u.as_float = op->value;
+
         ostringstream oss;
-        oss.setf(std::ios::fixed, std::ios::floatfield);
-        oss << op->value << 'f';
+        oss << "float_from_bits(" << u.as_uint << " /* " << u.as_float << " */)";
         id = oss.str();
     }
 }
@@ -564,7 +584,9 @@ void CodeGen_C::visit(const Call *op) {
                 args[i] = print_expr(op->args[i+3]);
             }
 
-            rhs << "halide_debug_to_file(\"" + filename + "\", " + func;
+            rhs << "halide_debug_to_file(";
+            rhs << (have_user_context ? "__user_context" : "NULL");
+            rhs << ", \"" + filename + "\", " + func;
             for (size_t i = 0; i < args.size(); i++) {
                 rhs << ", " << args[i];
             }
@@ -613,7 +635,9 @@ void CodeGen_C::visit(const Call *op) {
             rhs << ")";
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);
-            rhs << "halide_profiling_timer()";
+            rhs << "halide_profiling_timer(";
+            rhs << (have_user_context ? "__user_context" : "NULL");
+            rhs << ")";
         } else if (op->name == Call::lerp) {
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
             rhs << print_expr(e);
@@ -722,7 +746,9 @@ void CodeGen_C::visit(const AssertStmt *op) {
 
     stream << "if (!" << id_cond << ") {\n";
     do_indent();
-    stream << " halide_printf(" << Expr(op->message + "\n") << ");\n";
+    stream << " halide_printf(";
+    stream << (have_user_context ? "__user_context," : "NULL,");
+    stream << Expr(op->message + "\n") << ");\n";
     do_indent();
     stream << " return -1;\n";
     do_indent();
@@ -803,7 +829,9 @@ void CodeGen_C::visit(const Allocate *op) {
                << print_name(op->name)
                << " = ("
                << print_type(op->type)
-               << " *)halide_malloc(sizeof("
+               << " *)halide_malloc("
+               << (have_user_context ? "__user_context" : "NULL")
+               << ", sizeof("
                << print_type(op->type)
                << ")*" << size_id << ");\n";
         heap_allocations.push(op->name, 0);
@@ -821,6 +849,7 @@ void CodeGen_C::visit(const Free *op) {
     if (heap_allocations.contains(op->name)) {
         do_indent();
         stream << "halide_free("
+               << (have_user_context ? "__user_context," : "NULL,")
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
@@ -858,10 +887,12 @@ void CodeGen_C::test() {
     Argument buffer_arg("buf", true, Int(32));
     Argument float_arg("alpha", false, Float(32));
     Argument int_arg("beta", false, Int(32));
-    vector<Argument> args(3);
+    Argument user_context_arg("__user_context", false, Handle());
+    vector<Argument> args(4);
     args[0] = buffer_arg;
     args[1] = float_arg;
     args[2] = int_arg;
+    args[3] = user_context_arg;
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
@@ -878,7 +909,7 @@ void CodeGen_C::test() {
     cg.compile(s, "test1", args, vector<Buffer>());
 
     string correct_source = preamble +
-        "extern \"C\" int test1(buffer_t *_buf, const float alpha, const int32_t beta) {\n"
+        "extern \"C\" int test1(buffer_t *_buf, const float alpha, const int32_t beta, const void * __user_context) {\n"
         "int32_t *buf = (int32_t *)(_buf->host);\n"
         "const bool buf_host_and_dev_are_null = (_buf->host == NULL) && (_buf->dev == 0);\n"
         "(void)buf_host_and_dev_are_null;\n"
@@ -909,15 +940,15 @@ void CodeGen_C::test() {
         "const int32_t buf_elem_size = _buf->elem_size;\n"
         "{\n"
         " int32_t V0 = 43 * beta;\n"
-        " int32_t *tmp_heap = (int32_t *)halide_malloc(sizeof(int32_t)*V0);\n"
+        " int32_t *tmp_heap = (int32_t *)halide_malloc(__user_context, sizeof(int32_t)*V0);\n"
         " {\n"
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
-        "  bool V2 = alpha > 4.000000f;\n"
+        "  bool V2 = alpha > float_from_bits(1082130432 /* 4 */);\n"
         "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
         " } // alloc tmp_stack\n"
-        " halide_free(tmp_heap);\n"
+        " halide_free(__user_context,tmp_heap);\n"
         "} // alloc tmp_heap\n"
         "return 0;\n"
         "}\n";

@@ -4,5 +4,5 @@
 #include "mini_stdint.h"
 #include "../buffer_t.h"
 
-extern "C" WEAK void halide_copy_to_host(buffer_t *) {}
+extern "C" WEAK void halide_copy_to_host(void *user_context, buffer_t *) {}
 
