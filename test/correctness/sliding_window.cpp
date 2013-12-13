@@ -16,12 +16,12 @@ extern "C" DLLEXPORT int call_counter(int x, int y) {
 }
 HalideExtern_2(int, call_counter, int, int);
 
-extern "C" void *my_malloc(size_t x) {
+extern "C" void *my_malloc(void *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
     exit(-1);
 }
 
-extern "C" void my_free(void *) {
+extern "C" void my_free(void *, void *) {
 }
 
 int main(int argc, char **argv) {

@@ -102,6 +102,14 @@ public:
     }
 };
 
+/** Returns a Param corresponding to a pointer to a user context
+ * structure; when the Halide function that takes such a parameter
+ * calls a function from the Halide runtime (e.g. halide_printf()), it
+ * passes the value of this pointer as the first argument to the
+ * runtime function.  */
+inline Param<void *> user_context_param() {
+  return Param<void *>("__user_context");
+}
 
 /** A handle on the output buffer of a pipeline. Used to make static
  * promises about the output size and stride. */
