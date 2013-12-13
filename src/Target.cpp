@@ -307,6 +307,7 @@ DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
 DECLARE_LL_INITMOD(spir_dev)
 DECLARE_LL_INITMOD(spir64_dev)
+DECLARE_LL_INITMOD(spir_common_dev)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -505,10 +506,15 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
 
 llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c, int bits) {
     assert(bits == 32 || bits == 64);
+
+    vector<llvm::Module *> modules;
     if (bits == 32)
-        return get_initmod_spir_dev_ll(c);
+        modules.push_back(get_initmod_spir_dev_ll(c));
     else
-        return get_initmod_spir64_dev_ll(c);
+        modules.push_back(get_initmod_spir64_dev_ll(c));
+    modules.push_back(get_initmod_spir_common_dev_ll(c));
+    link_modules(modules);
+    return modules[0];
 }
 
 }
