@@ -710,7 +710,7 @@ void CodeGen_C::visit(const Let *op) {
 
 void CodeGen_C::visit(const Select *op) {
     ostringstream rhs;
-    rhs << print_type(op->type)
+    rhs << "(" << print_type(op->type) << ")"
         << "(" << print_expr(op->condition)
         << " ? " << print_expr(op->true_value)
         << " : " << print_expr(op->false_value)
