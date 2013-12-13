@@ -1612,14 +1612,15 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     cg.compile_to_native(filename, true);
 }
 
-void Func::set_error_handler(void (*handler)(const char *)) {
+void Func::set_error_handler(void (*handler)(void *, const char *)) {
     error_handler = handler;
     if (compiled_module.set_error_handler) {
         compiled_module.set_error_handler(handler);
     }
 }
 
-void Func::set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(void *)) {
+void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
+                                void (*cust_free)(void *, void *)) {
     custom_malloc = cust_malloc;
     custom_free = cust_free;
     if (compiled_module.set_custom_allocator) {
@@ -1627,14 +1628,14 @@ void Func::set_custom_allocator(void *(*cust_malloc)(size_t), void (*cust_free)(
     }
 }
 
-void Func::set_custom_do_par_for(int (*cust_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *)) {
+void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
     custom_do_par_for = cust_do_par_for;
     if (compiled_module.set_custom_do_par_for) {
         compiled_module.set_custom_do_par_for(cust_do_par_for);
     }
 }
 
-void Func::set_custom_do_task(int (*cust_do_task)(int (*)(int, uint8_t *), int, uint8_t *)) {
+void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
     custom_do_task = cust_do_task;
     if (compiled_module.set_custom_do_task) {
         compiled_module.set_custom_do_task(cust_do_task);

@@ -17,7 +17,7 @@ int extern_error(buffer_t *out) {
 
 bool error_occurred = false;
 extern "C" DLLEXPORT
-void my_halide_error(const char *msg) {
+void my_halide_error(void *user_context, const char *msg) {
     printf("Expected: %s\n", msg);
     error_occurred = true;
 }
