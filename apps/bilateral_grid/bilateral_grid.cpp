@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
     bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
     Target target = get_target_from_environment();
-    if (target.features & Target::CUDA) {
+    if (target.features & (Target::CUDA | Target::OpenCL)) {
 
         // GPU schedule
         grid.compute_root().reorder(z, c, x, y).cuda_tile(x, y, 8, 8);
