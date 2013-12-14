@@ -230,7 +230,6 @@ vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
-    std::cout << str << "\n";
     return buffer;
 }
 
