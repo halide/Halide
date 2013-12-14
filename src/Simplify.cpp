@@ -1206,7 +1206,7 @@ private:
             // Subtract a term from both sides
             expr = mutate(make_zero(add_b->b.type()) < add_b->b);
         } else if (add_b && equal(add_b->b, a)) {
-            expr = mutate(make_zero(add_b->a.type()) < add_b->a);            
+            expr = mutate(make_zero(add_b->a.type()) < add_b->a);
         } else if (add_b && const_int(a, &ia) && const_int(add_b->b, &ib)) {
             // ia < x + ib
             expr = mutate((ia - ib) < add_b->a);
@@ -1265,6 +1265,9 @@ private:
         } else if (lt_a && lt_b && equal(lt_a->b, lt_b->b)) {
             // (foo <= x && bar <= x) -> max(foo, bar) <= x
             expr = mutate(max(lt_a->a, lt_b->a) <= lt_a->b);
+        } else if (equal(a, b)) {
+            // x < x
+            expr = make_zero(a.type());
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {

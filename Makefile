@@ -269,7 +269,7 @@ tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	cd tmp/static; DYLD_LIBRARY_PATH=../../$(BIN_DIR) LD_LIBRARY_PATH=../../$(BIN_DIR) ../../$<
 	@-echo
 
-$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o
+$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread -ldl $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
