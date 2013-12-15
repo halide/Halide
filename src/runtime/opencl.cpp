@@ -273,10 +273,6 @@ WEAK void halide_release(void *user_context) {
         __mod = 0;
     }
 
-    // TODO: This is not a good solution to deal with this problem (finding out if the
-    // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
-    // context scheme might be necessary.
-
     // Unload context (ref counted).
     CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
     #ifdef DEBUG
@@ -290,7 +286,6 @@ WEAK void halide_release(void *user_context) {
     halide_printf(user_context, "clGetContextInfo ctx %p refs %d\n", *cl_ctx, refs);
     #endif
 
-    // See TODO above...
     if (refs == 0) {
         #ifdef DEBUG
         halide_printf(user_context, "setting ctx and queue to NULL\n");
