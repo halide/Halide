@@ -6,11 +6,11 @@
 #     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-CXX ?= g++
-LLVM_CONFIG ?= llvm-config
+CXX = g++-4.8
+LLVM_CONFIG ?= $(HOME)/code/llvm33/Release+Asserts/bin/llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
-CLANG ?= clang
+CLANG ?= $(HOME)/code/llvm33/Release+Asserts/bin/clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
@@ -108,13 +108,16 @@ endif
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+STATIC_TEST_LIBS ?= -framework CUDA
+endif
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -framework OpenCL
 endif
 HOST_OS=os_x
-endif
-
+else
 ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -lOpenCL
+endif
 endif
 
 # Compiling the tutorials requires libpng
@@ -237,7 +240,7 @@ test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
 test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
-test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
+test_tutorials: $(TUTORIALS:tutorial/lesson_01_basics.cpp=tutorial_lesson_01_basics)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 
 run_tests: test_correctness test_errors test_tutorials test_static

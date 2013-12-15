@@ -27,6 +27,8 @@ typedef uint64_t cl_ulong;
 
 #include "CL/cl.h"
 
+#define DEBUG
+
 extern "C" {
 
 extern int64_t halide_current_time_ns(void *user_context);
@@ -163,14 +165,14 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         const cl_uint maxDevices = 4;
         cl_device_id devices[maxDevices];
         cl_uint deviceCount = 0;
-        err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, maxDevices, devices, &deviceCount );
+        err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_GPU, maxDevices, devices, &deviceCount );
         CHECK_ERR( err, "clGetDeviceIDs" );
         if (deviceCount == 0) {
             halide_printf(user_context, "Failed to get device\n");
             return;
         }
 
-        dev = devices[deviceCount-1];
+        dev = devices[0];
 
         #ifdef DEBUG
         const cl_uint maxDeviceName = 256;
