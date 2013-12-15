@@ -1,4 +1,4 @@
-CXX ?= g++
+CXX ?= g++-4.8
 
 ifdef BUILD_PREFIX
 LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
@@ -16,6 +16,7 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
+UNAME = $(shell uname)
 
 
 ifneq (,$(findstring ptx,$(HL_TARGET)))
