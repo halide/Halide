@@ -17,7 +17,7 @@ LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(shell $(LLVM_CONFIG) --cppflags)
-OPTIMIZE ?= -O3
+OPTIMIZE ?= -g
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
 #  but that is difficult in some testing situations because it requires having
@@ -240,7 +240,7 @@ test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
 test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
-test_tutorials: $(TUTORIALS:tutorial/lesson_01_basics.cpp=tutorial_lesson_01_basics)
+test_tutorials: $(TUTORIALS:tutorial/lesson_05_scheduling_1.cpp=tutorial_lesson_05_scheduling_1)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 
 run_tests: test_correctness test_errors test_tutorials test_static

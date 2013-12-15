@@ -72,6 +72,7 @@ int main(int argc, char **argv) {
     // so we got a 32-bit signed integer image out when we call
     // 'realize'. Halide types and type-casting rules are equivalent
     // to C.
+    //gradient.compile_to_c("gradient.cpp", std::vector<Halide::Argument>(), "gradient");
 
     // Let's check everything worked, and we got the output we were
     // expecting:
