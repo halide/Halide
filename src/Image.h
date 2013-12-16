@@ -190,6 +190,12 @@ public:
         return buffer.extent(dim);
     }
 
+    /** Set the size of the image. */
+    void set_extent(int e0, int e1 = 0, int e2 = 0, int e3 = 0) {
+        assert(defined());
+        buffer.set_extent(e0, e1, e2, e3);
+    }
+
     /** Get the min coordinate of a dimension. The top left of the
      * image represents this point in a function that was realized
      * into this image. */
