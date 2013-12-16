@@ -72,7 +72,6 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.has_gpu()) {
-
         // GPU schedule
         grid.compute_root().reorder(z, c, x, y).gpu_tile(x, y, 8, 8, GPU_DEFAULT);
 

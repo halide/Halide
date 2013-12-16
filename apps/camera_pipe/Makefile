@@ -1,15 +1,9 @@
-PNGFLAGS=$(shell libpng-config --ldflags) $(shell libpng-config --cflags)
+include ../support/Makefile.inc
+
 ifeq ($(HL_TARGET),ptx)
   SCHEDULE=100
-  CUDA_LFLAGS=-L/usr/local/cuda/lib -lcuda
 else
   SCHEDULE=0
-endif
-
-ifdef BUILD_PREFIX
-LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
-else
-LIB_HALIDE = bin/libHalide.a
 endif
 
 all: process
