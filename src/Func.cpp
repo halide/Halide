@@ -8,6 +8,7 @@
 #include "Lower.h"
 #include "StmtCompiler.h"
 #include "CodeGen_C.h"
+#include "CodeGen_OpenCL_Dev.h"
 #include "Image.h"
 #include "Param.h"
 #include "Debug.h"

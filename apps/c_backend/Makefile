@@ -13,6 +13,30 @@ ifeq ($(HL_TARGET),ptx-debug)
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
 
+UNAME = $(shell uname)
+
+ifeq ($(UNAME), Darwin)
+ifneq (, $(findstring opencl,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-framework OpenCL
+endif
+ifneq (, $(findstring spir,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-framework OpenCL
+endif
+ifneq (, $(findstring spir64,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-framework OpenCL
+endif
+else
+ifneq (, $(findstring opencl,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+ifneq (, $(findstring spir64,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-lOpenCL
+endif
+endif
+
 pipeline: pipeline.cpp
 	$(CXX) -Wall pipeline.cpp -I ../../include ../../$(LIB_HALIDE) -o pipeline -lpthread -ldl
 
@@ -29,7 +53,7 @@ pipeline_native.o: pipeline
 	./pipeline
 
 run: run.cpp pipeline_native.h pipeline_c.c
-	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run $(CUDA_LDFLAGS)
+	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 test: run
 	./run

@@ -27,6 +27,8 @@ typedef uint64_t cl_ulong;
 
 #include "CL/cl.h"
 
+#define DEBUG
+
 extern "C" {
 
 extern int64_t halide_current_time_ns(void *user_context);
@@ -163,14 +165,14 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         const cl_uint maxDevices = 4;
         cl_device_id devices[maxDevices];
         cl_uint deviceCount = 0;
-        err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, maxDevices, devices, &deviceCount );
+        err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_GPU, maxDevices, devices, &deviceCount );
         CHECK_ERR( err, "clGetDeviceIDs" );
         if (deviceCount == 0) {
             halide_printf(user_context, "Failed to get device\n");
             return;
         }
 
-        dev = devices[deviceCount-1];
+        dev = devices[0];
 
         #ifdef DEBUG
         const cl_uint maxDeviceName = 256;
@@ -199,7 +201,7 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         #endif
 
         // Maintain ref count of context.
-        CHECK_CALL( clRetainContext(*cl_ctx), "clRetainContext" );
+        //CHECK_CALL( clRetainContext(*cl_ctx), "clRetainContext" );
         CHECK_CALL( clRetainCommandQueue(*cl_q), "clRetainCommandQueue" );
 
         CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
@@ -236,15 +238,25 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
 
         err = clBuildProgram( __mod, 1, &dev, NULL, NULL, NULL );
         if (err != CL_SUCCESS) {
-            size_t len;
-            char buffer[2048];
+            size_t len=0;
+            char *buffer=NULL;
 
             halide_printf(user_context, "Error: Failed to build program executable! err = %d\n", err);
-            if (clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len) == CL_SUCCESS)
+            clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len);
+            halide_printf(user_context, "Build log size %d\n", len);
+            if(len)
+                buffer=new char[len];
+            if(buffer) {
+                clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, NULL);
                 halide_printf(user_context, "Build Log:\n %s\n-----\n", buffer);
-            else
-                halide_printf(user_context, "clGetProgramBuildInfo failed to get build log!\n");
-            halide_assert(user_context, err == CL_SUCCESS);
+                delete[] buffer;
+            }
+            // if (len && buffer && clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, NULL) == CL_SUCCESS)
+            //     halide_printf(user_context, "Build Log:\n %s\n-----\n", buffer);
+            // else
+            //     halide_printf(user_context, "clGetProgramBuildInfo failed to get build log!\n");
+            // if(buffer) delete[] buffer;
+            // halide_assert(user_context, err == CL_SUCCESS);
         }
     }
 }
@@ -259,7 +271,16 @@ WEAK void halide_release(void *user_context) {
     #ifdef DEBUG
     halide_printf(user_context, "dev_sync on exit\n" );
     #endif
+    if(!(*cl_ctx))
+        return;
+
     halide_dev_sync(user_context);
+
+    cl_uint refs = 0;
+    clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
+    #ifdef DEBUG
+    halide_printf(user_context, "clGetContextInfo before relese: ctx %p refs %d\n", *cl_ctx, refs);
+    #endif
 
     // Unload the module
     if (__mod) {
@@ -268,24 +289,38 @@ WEAK void halide_release(void *user_context) {
         #endif
 
         CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
+        clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
+        #ifdef DEBUG
+        halide_printf(user_context, "clGetContextInfo before relese: ctx %p refs %d\n", *cl_ctx, refs);
+        #endif
         __mod = 0;
     }
 
-    // TODO: This is not a good solution to deal with this problem (finding out if the
-    // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
-    // context scheme might be necessary.
-    cl_uint refs = 0;
-    clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
-
     // Unload context (ref counted).
-    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
+    #ifdef DEBUG
+    halide_printf(user_context, "clReleaseCommandQueue %p\n", *cl_q);
+    #endif
+    if(refs>1) CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
+    clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
+    #ifdef DEBUG
+    halide_printf(user_context, "clGetContextInfo before relese: ctx %p refs %d\n", *cl_ctx, refs);
+    #endif
     #ifdef DEBUG
     halide_printf(user_context, "clReleaseContext %p\n", *cl_ctx);
     #endif
-    CHECK_CALL( clReleaseContext(*cl_ctx), "clReleaseContext" );
+    if(refs>1) CHECK_CALL( clReleaseContext(*cl_ctx), "clReleaseContext" );
 
-    // See TODO above...
-    if (--refs == 0) {
+    clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
+    #ifdef DEBUG
+    halide_printf(user_context, "clGetContextInfo ctx %p refs %d\n", *cl_ctx, refs);
+    #endif
+
+    if (refs <= 1) 
+    {
+        #ifdef DEBUG
+        halide_printf(user_context, "setting ctx and queue to NULL\n");
+        #endif
+
         *cl_ctx = NULL;
         *cl_q = NULL;
     }

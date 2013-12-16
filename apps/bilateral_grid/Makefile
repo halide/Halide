@@ -1,4 +1,4 @@
-CXX ?= g++
+CXX ?= g++-4.8
 
 ifdef BUILD_PREFIX
 LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
@@ -16,6 +16,7 @@ endif
 endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
+UNAME = $(shell uname)
 
 
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -24,6 +25,17 @@ endif
 ifneq (,$(findstring cuda,$(HL_TARGET)))
   CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 endif
+ifeq ($(UNAME), Darwin)
+ifneq (, $(findstring opencl,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-framework OpenCL
+endif
+ifneq (, $(findstring spir,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-framework OpenCL
+endif
+ifneq (, $(findstring spir64,$(HL_TARGET)))
+  OPENCL_LDFLAGS=-framework OpenCL
+endif
+else
 ifneq (, $(findstring opencl,$(HL_TARGET)))
   OPENCL_LDFLAGS=-lOpenCL
 endif
@@ -32,6 +44,7 @@ ifneq (, $(findstring spir,$(HL_TARGET)))
 endif
 ifneq (, $(findstring spir64,$(HL_TARGET)))
   OPENCL_LDFLAGS=-lOpenCL
+endif
 endif
 
 all: filter

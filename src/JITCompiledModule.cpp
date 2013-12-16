@@ -170,7 +170,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
-    debug(1) << "JIT compiling...\n";
+    debug(1) << "JIT compiling... function "<<function_name<<"\n";
 
     hook_up_function_pointer(ee, m, function_name, true, &function);
 

@@ -6,11 +6,11 @@
 #     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 
-CXX ?= g++
-LLVM_CONFIG ?= llvm-config
+CXX = g++-4.8
+LLVM_CONFIG ?= $(HOME)/code/llvm33/Release+Asserts/bin/llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
-CLANG ?= clang
+CLANG ?= $(HOME)/code/llvm33/Release+Asserts/bin/clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
@@ -108,13 +108,16 @@ endif
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+STATIC_TEST_LIBS ?= -framework CUDA
+endif
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -framework OpenCL
 endif
 HOST_OS=os_x
-endif
-
+else
 ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -lOpenCL
+endif
 endif
 
 # Compiling the tutorials requires libpng
@@ -228,6 +231,8 @@ clean:
 .SECONDARY:
 
 CORRECTNESS_TESTS = $(shell ls test/correctness/*.cpp)
+#Note: cuda_tile() doesn't work with OpenCL
+#CORRECTNESS_TESTS_CUDA_TILE = $(shell  grep -rnwl -v test/correctness/*.cpp -e 'cuda_tile' )
 STATIC_TESTS = $(shell ls test/static/*_generate.cpp)
 PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
@@ -313,12 +318,12 @@ tutorial_%: $(BIN_DIR)/tutorial_%
 
 .PHONY: test_apps
 test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
-	make -C apps/bilateral_grid clean
-	make -C apps/bilateral_grid out.png
-	make -C apps/local_laplacian clean
-	make -C apps/local_laplacian out.png
-	make -C apps/interpolate clean
-	make -C apps/interpolate out.png
+	# make -C apps/bilateral_grid clean
+	# make -C apps/bilateral_grid out.png
+	# make -C apps/local_laplacian clean
+	# make -C apps/local_laplacian out.png
+	# make -C apps/interpolate clean
+	# make -C apps/interpolate out.png
 	make -C apps/blur clean
 	make -C apps/blur test
 	./apps/blur/test
@@ -326,6 +331,8 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/wavelet test
 	make -C apps/c_backend clean
 	make -C apps/c_backend test
+	make -C apps/camera_pipe clean
+	make -C apps/camera_pipe out.png
 
 ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
 ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))

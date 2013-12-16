@@ -164,60 +164,6 @@ void CodeGen_OpenCL_Dev::init_module() {
 #ifdef ENABLE_CL_KHR_FP64
     src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
 #endif
-    src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
-
-    // Write out the Halide math functions.
-    src_stream << "float nan_f32() { return NAN; }\n"
-               << "float neg_inf_f32() { return -INFINITY; }\n"
-               << "float inf_f32() { return INFINITY; }\n"
-               << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
-               << "float sqrt_f32(float x) { return sqrt(x); }\n"
-               << "float sin_f32(float x) { return sin(x); }\n"
-               << "float cos_f32(float x) { return cos(x); }\n"
-               << "float exp_f32(float x) { return exp(x); }\n"
-               << "float log_f32(float x) { return log(x); }\n"
-               << "float abs_f32(float x) { return fabs(x); }\n"
-               << "float floor_f32(float x) { return floor(x); }\n"
-               << "float ceil_f32(float x) { return ceil(x); }\n"
-               << "float round_f32(float x) { return round(x); }\n"
-               << "float pow_f32(float x, float y) { return pow(x, y); }\n"
-               << "float asin_f32(float x) { return asin(x); }\n"
-               << "float acos_f32(float x) { return acos(x); }\n"
-               << "float tan_f32(float x) { return tan(x); }\n"
-               << "float atan_f32(float x) { return atan(x); }\n"
-               << "float atan2_f32(float y, float x) { return atan2(y, x); }\n"
-               << "float sinh_f32(float x) { return sinh(x); }\n"
-               << "float asinh_f32(float x) { return asinh(x); }\n"
-               << "float cosh_f32(float x) { return cosh(x); }\n"
-               << "float acosh_f32(float x) { return acosh(x); }\n"
-               << "float tanh_f32(float x) { return tanh(x); }\n"
-               << "float atanh_f32(float x) { return atanh(x); }\n";
-
-#ifdef ENABLE_CL_KHR_FP64
-    src_stream << "double sqrt_f64(double x) { return sqrt(x); }\n"
-               << "double sin_f64(double x) { return sin(x); }\n"
-               << "double cos_f64(double x) { return cos(x); }\n"
-               << "double exp_f64(double x) { return exp(x); }\n"
-               << "double log_f64(double x) { return log(x); }\n"
-               << "double abs_f64(double x) { return fabs(x); }\n"
-               << "double floor_f64(double x) { return floor(x); }\n"
-               << "double ceil_f64(double x) { return ceil(x); }\n"
-               << "double round_f64(double x) { return round(x); }\n"
-               << "double pow_f64(double x, double y) { return pow(x, y); }\n"
-               << "double asin_f64(double x) { return asin(x); }\n"
-               << "double acos_f64(double x) { return acos(x); }\n"
-               << "double tan_f64(double x) { return tan(x); }\n"
-               << "double atan_f64(double x) { return atan(x); }\n"
-               << "double atan2_f64(double y, double x) { return atan2(y, x); }\n"
-               << "double sinh_f64(double x) { return sinh(x); }\n"
-               << "double asinh_f64(double x) { return asinh(x); }\n"
-               << "double cosh_f64(double x) { return cosh(x); }\n"
-               << "double acosh_f64(double x) { return acosh(x); }\n"
-               << "double tanh_f64(double x) { return tanh(x); }\n"
-               << "double atanh_f64(double x) { return atanh(x); }\n";
-#endif
-
-    src_stream << '\n';
 
     // Add at least one kernel to avoid errors on some implementations for functions
     // without any GPU schedules.
