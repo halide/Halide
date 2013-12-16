@@ -271,14 +271,15 @@ WEAK void halide_release(void *user_context) {
         __mod = 0;
     }
 
+    // Unload context (ref counted).
+    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
+
     // TODO: This is not a good solution to deal with this problem (finding out if the
     // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
     // context scheme might be necessary.
     cl_uint refs = 0;
     clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
 
-    // Unload context (ref counted).
-    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
     #ifdef DEBUG
     halide_printf(user_context, "clReleaseContext %p\n", *cl_ctx);
     #endif
@@ -365,6 +366,9 @@ WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
+    #ifdef DEBUG
+    halide_printf(user_context, "copy_to_host of buf %p\n", buf);
+    #endif
     if (buf->dev_dirty) {
         clFinish(*cl_q); // block on completion before read back
         halide_assert(user_context, buf->host && buf->dev);

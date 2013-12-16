@@ -61,119 +61,178 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             IRMutator::visit(op);
         } else {
 
+            stmt = op;
+
             // We're interested in the case where exactly one of the
             // dimensions of the buffer has a min/extent that depends
             // on the loop_var.
             string dim = "";
-            Expr min, extent;
-
-            Region r = region_called(op, func.name());
+            int dim_idx = -1;
+            Expr min_produced, extent_produced;
 
             debug(3) << "Considering sliding " << func.name()
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
-            for (size_t i = 0; i < r.size(); i++) {
-                debug(3) << i << ") " << r[i].min << ", " << r[i].extent << "\n";
-                if (expr_depends_on_var(r[i].min, loop_var) ||
-                    expr_depends_on_var(r[i].extent, loop_var)) {
+
+            for (int i = 0; i < func.dimensions(); i++) {
+                // Look up the region produced over this dimension
+                Expr m = scope.get(func.name() + "." + func.args()[i] + ".min_produced");
+                Expr e = scope.get(func.name() + "." + func.args()[i] + ".extent_produced");
+
+                string min_req_name = func.name() + "." + func.args()[i] + ".min_required";
+                string extent_req_name = func.name() + "." + func.args()[i] + ".extent_required";
+                Expr m_r = scope.get(min_req_name);
+                Expr e_r = scope.get(extent_req_name);
+
+                debug(3) << func.args()[i] << ":" << m << ", " << e  << "\n";
+                if (expr_depends_on_var(m_r, loop_var) ||
+                    expr_depends_on_var(e_r, loop_var)) {
                     if (!dim.empty()) {
                         dim = "";
-                        min = Expr();
-                        extent = Expr();
+                        dim_idx = -1;
+                        min_produced = Expr();
+                        extent_produced = Expr();
                         break;
                     } else {
                         dim = func.args()[i];
-                        min = r[i].min;
-                        extent = r[i].extent;
+                        dim_idx = i;
+                        min_produced = substitute(min_req_name, m_r, m);
+                        extent_produced = substitute(extent_req_name, e_r, e);
                     }
                 }
             }
 
-            Expr loop_var_expr = Variable::make(Int(32), loop_var);
+            if (!min_produced.defined()) {
+                debug(3) << "Could not perform sliding window optimization of "
+                         << func.name() << " over " << loop_var << " because either zero "
+                         << "or many dimensions of the function dependended on the loop var\n";
+                return;
+            }
+
             bool increasing = true;
 
-            if (min.defined()) {
-                MonotonicResult m = is_monotonic(min, loop_var);
+            MonotonicResult m = is_monotonic(min_produced, loop_var);
 
-                if (m == MonotonicIncreasing || m == Constant) {
-
-                } else if (m == MonotonicDecreasing) {
-                    increasing = false;
-                } else {
-                    debug(3) << "Not sliding " << func.name()
-                             << " over dimension " << dim
-                             << " along loop variable " << loop_var
-                             << " because I couldn't prove it moved monotonically along that dimension\n"
-                             << "Min is " << min << "\n";
-                    min = Expr();
-                }
+            if (m == MonotonicIncreasing || m == Constant) {
+                increasing = true;
+            } else if (m == MonotonicDecreasing) {
+                increasing = false;
+            } else {
+                debug(3) << "Not sliding " << func.name()
+                         << " over dimension " << dim
+                         << " along loop variable " << loop_var
+                         << " because I couldn't prove it moved monotonically along that dimension\n"
+                         << "Min is " << min << "\n";
+                return;
             }
 
-            if (min.defined()) {
-                // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
-                debug(3) << "Sliding " << func.name() << " over dimension " << dim << " along loop variable " << loop_var << "\n";
-                Expr steady_state = loop_var_expr > loop_min;
 
-                Expr new_min, new_extent;
+            if (op->update.defined()) {
+                // A reduction may not reach outwards in the dimension
+                // that we're trying to slide over. E.g. we can't slide
+                // the following over x:
+                //
+                // f(x, y) = 2
+                // f(x, 0) = f(x-1, 1) + f(x+1, 1);
 
-                if (increasing) {
-                    Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, min + extent);
+                // The update step of such a reads from the same buffer at
+                // points outside of the region required, which in turn
+                // means the initialization takes place over a larger
+                // domain than the region required, which means that the
+                // initialization may clobber old values that we're
+                // relying on to still be correct when we slide.
+                Region r = region_called(op->update, func.name());
+                if (r.size()) {
+                    assert(dim_idx < (int)r.size());
+                    Expr min_initialized = r[dim_idx].min;
+                    Expr extent_initialized = r[dim_idx].extent;
 
-                    // Bump up the min to skip stuff we've already computed.
-                    new_min = simplify(Max::make(min, prev_max_plus_one));
+                    assert(min_initialized.defined() && extent_initialized.defined() &&
+                           "Function update reads itself in an unbounded manner\n");
 
-                    // The new extent is the old extent shrunk by how
-                    // much we trimmed off the min. The extent does
-                    // not get larger because new_min > min.
-                    //new_extent = simplify(extent + (min - new_min));
-                    new_extent = simplify(extent + Min::make(min - prev_max_plus_one, 0));
-                } else {
-                    // Truncate the extent to be less than the previous min
-                    new_min = simplify(min);
-                    Expr prev_min = substitute(loop_var, loop_var_expr - 1, min);
-                    new_extent = simplify(Min::make(extent + min, prev_min) - new_min);
-                }
+                    string min_name = func.name() + "." + dim + ".min_produced";
+                    string extent_name = func.name() + "." + dim + ".extent_produced";
+                    Expr min_produced_var = Variable::make(Int(32), min_name);
+                    Expr extent_produced_var = Variable::make(Int(32), extent_name);
 
-                debug(3) << "Pushing min up from " << min << " to " << new_min << "\n";
-                debug(3) << "Shrinking extent from " << extent << " to " << new_extent << "\n";
-                string min_name = func.name() + "." + dim + ".min_produced";
-                string extent_name = func.name() + "." + dim + ".extent_produced";
+                    Expr test;
+                    if (increasing) {
+                        test = (min_initialized >= min_produced_var);
+                    } else {
+                        Expr max_initialized = min_initialized + extent_initialized;
+                        Expr max_produced = min_produced_var + extent_produced_var;
+                        test = (max_initialized <= max_produced);
+                    }
+                    Expr simplified_test = simplify(test);
 
-                // Check if we've gone off the end. Only relevant for increasing.
-                if (increasing) {
-                    // TODO: It would be better to truncate back to
-                    // the max min, but this produces expressions too
-                    // difficult for storage folding to handle.
-                    Expr min_extent = func.min_extent_produced(dim);
-                    if (!is_one(min_extent)) {
-                        //Expr max_min = Variable::make(Int(32), func.name() + "." + dim + ".max_min");
-                        Expr extent_produced = Variable::make(Int(32), func.name() + "." + dim + ".extent_realized");
-                        Expr min_produced = Variable::make(Int(32), func.name() + "." + dim + ".min_realized");
-                        Expr max_min = min_produced + extent_produced - min_extent;
-                        Expr before_end = new_min < max_min;
-                        steady_state = steady_state && before_end;
+                    if (!is_one(simplified_test)) {
+                        debug(3) << "Not sliding " << func.name() << " along " << dim
+                                 << " because we failed to prove that the reduction step doesn't trigger an"
+                                 << " initialization over a larger domain along that axis. The expression we"
+                                 << " attempted to prove was: " << test << "\n"
+                                 << "Which simplified to " << simplified_test << "\n";
+                        return;
                     }
                 }
 
-                stmt = op;
-                if (increasing) {
-                    new_min = Select::make(steady_state, new_min, min);
-                    stmt = LetStmt::make(min_name, new_min, stmt);
-                }
-                new_extent = Select::make(steady_state, new_extent, extent);
-                //new_extent = extent;
-                stmt = LetStmt::make(extent_name, new_extent, stmt);
-
-                if (increasing) {
-
-                }
-
-            } else {
-                debug(3) << "Could not perform sliding window optimization of " << func.name() << " over " << loop_var << "\n";
-                stmt = op;
             }
 
+            // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
+            debug(3) << "Sliding " << func.name()
+                     << " over dimension " << dim
+                     << " along loop variable " << loop_var << "\n";
 
+            Expr new_min, new_extent;
+
+            Expr min_extent = func.min_extent_produced(dim);
+            Expr min_extent_factor = func.min_extent_updated(dim);
+
+            // We've sworn to produce from min_produced to
+            // extent_produced, but we can perhaps skip values
+            // already computed
+
+            Expr loop_var_expr = Variable::make(Int(32), loop_var);
+            Expr max_plus_one = min_produced + extent_produced;
+            // Compute the new extent.
+            if (increasing) {
+                Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_plus_one);
+                new_extent = max_plus_one - prev_max_plus_one;
+            } else {
+                Expr prev_min = substitute(loop_var, loop_var_expr - 1, min_produced);
+                new_extent = prev_min - min_produced;
+            }
+
+            // We still need to produce an amount that is a
+            // multiple of the min_extent_factor and is at
+            // least the min_extent.
+            new_extent = Max::make(new_extent, min_extent);
+            new_extent += min_extent_factor - 1;
+            new_extent /= min_extent_factor;
+            new_extent *= min_extent_factor;
+
+            // Compute the new min.
+            if (increasing) {
+                new_min = max_plus_one - new_extent;
+                new_min = select(loop_var_expr == loop_min, min_produced, new_min);
+            } else {
+                new_min = min_produced;
+            }
+
+            // Use the old min and extent for the first iteration.
+            new_extent = select(loop_var_expr == loop_min, extent_produced, new_extent);
+
+            // Simplify.
+            new_extent = simplify(new_extent);
+            new_min = simplify(new_min);
+
+            debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
+                     << "Pushing min up from " << min_produced << " to " << new_min << "\n"
+                     << "Shrinking extent from " << extent_produced << " to " << new_extent << "\n";
+            string min_name = func.name() + "." + dim + ".min_produced";
+            string extent_name = func.name() + "." + dim + ".extent_produced";
+
+            stmt = LetStmt::make(min_name, new_min, stmt);
+            stmt = LetStmt::make(extent_name, new_extent, stmt);
         }
     }
 
@@ -226,13 +285,13 @@ class SlidingWindow : public IRMutator {
         // Find the args for this function
         map<string, Function>::const_iterator iter = env.find(op->name);
 
+        assert(iter != env.end() && "Compiler bug: Sliding window found a realization for a function not in the environment\n");
+
         Stmt new_body = op->body;
-        if (iter != env.end()) {
-            debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
-            new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
-        } else {
-            assert(false && "Compiler bug: Sliding window found a realization for a function not in the environment\n");
-        }
+
+        debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
+        new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
+
         new_body = mutate(new_body);
 
         if (new_body.same_as(op->body)) {

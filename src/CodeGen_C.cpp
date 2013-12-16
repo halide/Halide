@@ -720,7 +720,7 @@ void CodeGen_C::visit(const Let *op) {
 
 void CodeGen_C::visit(const Select *op) {
     ostringstream rhs;
-    rhs << print_type(op->type)
+    rhs << "(" << print_type(op->type) << ")"
         << "(" << print_expr(op->condition)
         << " ? " << print_expr(op->true_value)
         << " : " << print_expr(op->false_value)
@@ -945,7 +945,7 @@ void CodeGen_C::test() {
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
         "  bool V2 = alpha > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t V3 = int32_t(V2 ? 3 : 2);\n"
+        "  int32_t V3 = (int32_t)(V2 ? 3 : 2);\n"
         "  buf[V1] = V3;\n"
         " } // alloc tmp_stack\n"
         " halide_free(__user_context,tmp_heap);\n"

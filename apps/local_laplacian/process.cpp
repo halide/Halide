@@ -5,7 +5,7 @@
 #include <sys/time.h>
 
 int main(int argc, char **argv) {
-    if (argc < 4) {
+    if (argc < 6) {
         printf("Usage: ./process input.png levels alpha beta output.png\n"
                "e.g.: ./process input.png 8 1 1 output.png\n");
         return 0;

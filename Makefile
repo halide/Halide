@@ -81,6 +81,20 @@ TEST_PTX = 1
 endif
 endif
 
+ifneq ($(WITH_OPENCL), )
+ifneq (,$(findstring opencl,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+endif
+ifneq ($(WITH_SPIR), )
+ifneq (,$(findstring spir,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+ifneq (,$(findstring spir64,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+endif
+
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
@@ -97,6 +111,10 @@ ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
 endif
 HOST_OS=os_x
+endif
+
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -lOpenCL
 endif
 
 # Compiling the tutorials requires libpng
@@ -145,7 +163,7 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) -ldl -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) $(BIN_DIR)/build_halide_h
 	mkdir -p include
@@ -251,7 +269,7 @@ tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	cd tmp/static; DYLD_LIBRARY_PATH=../../$(BIN_DIR) LD_LIBRARY_PATH=../../$(BIN_DIR) ../../$<
 	@-echo
 
-$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o
+$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread -ldl $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
