@@ -181,6 +181,14 @@ public:
         return param.defined();
     }
 
+    /** Get an expression representing the minimum coordinates of this image
+     * parameter in the given dimension. */
+    Expr min(int x) const {
+        std::ostringstream s;
+        s << name() << ".min." << x;
+        return Internal::Variable::make(Int(32), s.str(), param);
+    }
+
     /** Get an expression representing the extent of this image
      * parameter in the given dimension */
     Expr extent(int x) const {
@@ -249,6 +257,20 @@ public:
     int dimensions() const {
         return dims;
     };
+
+    /** Get an expression giving the minimum coordinate in dimension 0, which
+     * by convention is the smallest x coordinate of the image */
+    Expr xmin() const {
+        assert(dims >= 0);
+        return min(0);
+    }
+
+    /** Get an expression giving the minimum coordinate in dimension 0, which
+     * by convention is the smallest y coordinate of the image */
+   Expr ymin() const {
+        assert(dims >= 1);
+        return min(1);
+    }
 
     /** Get an expression giving the extent in dimension 0, which by
      * convention is the width of the image */

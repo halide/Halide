@@ -180,6 +180,15 @@ public:
         return contents.ptr->buf.extent[dim];
     }
 
+    /** Set the extent of this buffer. */
+    void set_extent(int e0, int e1 = 0, int e2 = 0, int e3 = 0) {
+        assert(defined());
+        contents.ptr->buf.extent[0] = e0;
+        contents.ptr->buf.extent[1] = e1;
+        contents.ptr->buf.extent[2] = e2;
+        contents.ptr->buf.extent[3] = e3;
+    }
+
     /** Get the number of bytes between adjacent elements of this buffer along the given dimension. */
     int stride(int dim) const {
         assert(defined());
