@@ -154,17 +154,18 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
                       platformName, (long long)halide_current_time_ns(user_context));
         #endif
 
-        // Find the device types requested, or CL_DEVICE_TYPE_ALL if none specified.
-        const char * dev_type = getenv("HL_OCL_DEVICE");
         cl_device_type device_type = 0;
+        // Find the device types requested.
+        const char * dev_type = getenv("HL_OCL_DEVICE");
         if (dev_type != NULL) {
             if (strstr("cpu", dev_type))
                 device_type |= CL_DEVICE_TYPE_CPU;
             if (strstr("gpu", dev_type))
                 device_type |= CL_DEVICE_TYPE_GPU;
-        } else {
+        } 
+        // If no devices are specified yet, just use all.
+        if (device_type == 0)
             device_type = CL_DEVICE_TYPE_ALL;
-        }
         
         // Make sure we have a device
         const cl_uint maxDevices = 4;
