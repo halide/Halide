@@ -107,12 +107,6 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
     buf->dev = 0;
 }
 
-static const char * get_opencl_platform() {
-    char *platform = getenv("HL_OCL_PLATFORM");
-    if (platform) return platform;
-    else return "";
-}
-
 WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
     int err;
     cl_device_id dev;
@@ -127,7 +121,8 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
 
         cl_platform_id platform = NULL;
 
-        const char * name = get_opencl_platform();
+        // Find the requested platform, or the first if none specified.
+        const char * name = getenv("HL_OCL_PLATFORM");
         if (name != NULL) {
             for (cl_uint i = 0; i < platformCount; ++i) {
                 const cl_uint maxPlatformName = 256;
@@ -159,11 +154,23 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
                       platformName, (long long)halide_current_time_ns(user_context));
         #endif
 
+        // Find the device types requested, or CL_DEVICE_TYPE_ALL if none specified.
+        const char * dev_type = getenv("HL_OCL_DEVICE");
+        cl_device_type device_type = 0;
+        if (dev_type != NULL) {
+            if (strstr("cpu", dev_type))
+                device_type |= CL_DEVICE_TYPE_CPU;
+            if (strstr("gpu", dev_type))
+                device_type |= CL_DEVICE_TYPE_GPU;
+        } else {
+            device_type = CL_DEVICE_TYPE_ALL;
+        }
+        
         // Make sure we have a device
         const cl_uint maxDevices = 4;
         cl_device_id devices[maxDevices];
         cl_uint deviceCount = 0;
-        err = clGetDeviceIDs( platform, CL_DEVICE_TYPE_ALL, maxDevices, devices, &deviceCount );
+        err = clGetDeviceIDs( platform, device_type, maxDevices, devices, &deviceCount );
         CHECK_ERR( err, "clGetDeviceIDs" );
         if (deviceCount == 0) {
             halide_printf(user_context, "Failed to get device\n");
@@ -271,15 +278,14 @@ WEAK void halide_release(void *user_context) {
         __mod = 0;
     }
 
-    // Unload context (ref counted).
-    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
-
     // TODO: This is not a good solution to deal with this problem (finding out if the
     // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
     // context scheme might be necessary.
     cl_uint refs = 0;
     clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
 
+    // Unload context (ref counted).
+    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
     #ifdef DEBUG
     halide_printf(user_context, "clReleaseContext %p\n", *cl_ctx);
     #endif
@@ -366,9 +372,6 @@ WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
-    #ifdef DEBUG
-    halide_printf(user_context, "copy_to_host of buf %p\n", buf);
-    #endif
     if (buf->dev_dirty) {
         clFinish(*cl_q); // block on completion before read back
         halide_assert(user_context, buf->host && buf->dev);
