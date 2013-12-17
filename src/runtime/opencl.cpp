@@ -2,7 +2,7 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && defined(__32BIT__)
 #define CL_API_ENTRY
 #define CL_API_CALL     __stdcall
 #define CL_CALLBACK     __stdcall
