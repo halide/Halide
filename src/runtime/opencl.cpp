@@ -355,6 +355,10 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
     #endif
 
     buf->dev = (uint64_t)__dev_malloc(user_context, size);
+    #ifdef DEBUG
+    halide_printf(user_context, "dev_malloc allocated buffer %p of with buf->dev of %p\n",
+                  buf, (void *)buf->dev);
+    #endif
     halide_assert(user_context, buf->dev);
 }
 
@@ -378,7 +382,7 @@ WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         #ifdef DEBUG
-        halide_printf(user_context, "copy_to_host (%lld bytes) %p -> %p\n", (long long)size,
+        halide_printf(user_context, "copy_to_host buf %p (%lld bytes) %p -> %p\n", buf, (long long)size,
                       (void*)buf->dev, buf->host );
         #endif
 
