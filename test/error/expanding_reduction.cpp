@@ -13,6 +13,8 @@ int main(int argc, char **argv) {
     // update step will use y from 0 to 100. Faulty bounds inference
     // might get this wrong.
 
+    // This behavior is now disallowed, so this test has been moved
+    // into the error category.
     ImageParam input(Int(32), 2);
     f(x, y) = input(x, y);
     f(r, y) = f(r, y-1) + f(r, y+1);
