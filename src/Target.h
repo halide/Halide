@@ -2,6 +2,7 @@
 #define HALIDE_TARGET_H
 
 #include <stdint.h>
+#include <string>
 #include "Util.h"
 
 namespace llvm {
@@ -28,6 +29,10 @@ EXPORT Target get_host_target();
 /** Return the target that Halide will use. If HL_TARGET is set it
  * uses that. Otherwise calls \ref get_host_target */
 EXPORT Target get_target_from_environment();
+
+/** Given a string of the form used in HL_TARGET (e.g. "x86-64-avx"),
+ * return the Target it specifies. */
+EXPORT Target parse_target_string(const std::string &target);
 
 namespace Internal {
 
