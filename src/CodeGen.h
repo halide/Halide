@@ -93,6 +93,8 @@ public:
      * module cleanup routines. */
     virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<void (*)()> *) {}
 
+    static void initialize_llvm();
+
 protected:
 
     /** State needed by llvm for code generation, including the

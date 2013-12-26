@@ -16,6 +16,7 @@
 #include "JITCompiledModule.h"
 #include "Image.h"
 #include "Util.h"
+#include "Target.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -339,7 +340,11 @@ public:
      \endcode
      *
      */
-    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
+    // @{
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_host_target());
+    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                               const Target &target = get_host_target());
+    // @}
 
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -347,8 +352,8 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst);
-    EXPORT void realize(Buffer dst);
+    EXPORT void realize(Realization dst, const Target &target = get_host_target());
+    EXPORT void realize(Buffer dst, const Target &target = get_host_target());
     // @}
 
     /** For a given size of output, or a given output buffer,
@@ -366,14 +371,16 @@ public:
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
      * as this halide function */
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+                                   const Target &target = get_target_from_environment());
 
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_file instead. */
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+                                  const Target &target = get_target_from_environment());
 
     /** Emit a header file with the given filename for this
      * function. The header will define a function with the type
@@ -389,7 +396,8 @@ public:
      * useful for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+                                    const Target &target = get_target_from_environment());
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -406,13 +414,20 @@ public:
      * argument.
      */
     //@{
-    EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args);
-    EXPORT void compile_to_file(const std::string &filename_prefix);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e);
+    EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
+                                const Target &target = get_target_from_environment());
     // @}
 
     /** Eagerly jit compile the function to machine code. This
@@ -420,8 +435,10 @@ public:
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
      * then you can call this ahead of time. Returns the raw function
-     * pointer to the compiled pipeline. */
-    EXPORT void *compile_jit();
+     * pointer to the compiled pipeline. Default is to use the Target
+     * returned from Halide::get_host_target()
+     */
+    EXPORT void *compile_jit(const Target &target = get_host_target());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling

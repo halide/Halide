@@ -88,7 +88,10 @@ CodeGen::CodeGen() :
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
     buffer_t_type(NULL), need_stack_restore(false) {
+    initialize_llvm();
+}
 
+void CodeGen::initialize_llvm() {
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration
     if (!llvm_initialized) {

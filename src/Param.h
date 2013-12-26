@@ -319,6 +319,11 @@ public:
         return Argument(name(), true, type());
     }
 
+    /** Using a param as the argument to an external stage treats it
+     * as an Expr */
+    operator ExternFuncArgument() const {
+        return param;
+    }
 };
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
