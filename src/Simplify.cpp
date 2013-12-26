@@ -674,6 +674,14 @@ private:
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
         if (const_int(b, &ib) && a.type() == Int(32)) {
+            // If the LHS is bounded, we can possibly bail out early
+            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
+            if (ia.max.defined() && ia.min.defined() &&
+                is_one(mutate((ia.max < b) && (ia.min >= 0)))) {
+                expr = a;
+                return;
+            }
+
             mod_rem = modulus_remainder(a, alignment_info);
         }
 
@@ -775,8 +783,8 @@ private:
         } else if (op->type == Int(32) && is_simple_const(b)) {
             // Try to remove pointless mins that splitting introduces
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            ia.max = mutate(ia.max);
-            if (ia.max.defined() && is_const(ia.max) && is_one(mutate(ia.max <= b))) {
+            if (ia.max.defined() &&
+                is_one(mutate(ia.max <= b))) {
                 expr = a;
                 return;
             }
