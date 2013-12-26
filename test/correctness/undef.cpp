@@ -49,14 +49,15 @@ int main(int argc, char **argv) {
     }
 
     // Now use undef in a tuple. The following code ping-pongs between the two tuple components using a stencil:
+    RDom rx(0, 100);
     Func f3;
     f3(x) = Tuple(undef<float>(), sin(x));
-    Expr left = max(x-1, 0);
-    Expr right = min(x+1, 99);
+    Expr left = max(rx-1, 0);
+    Expr right = min(rx+1, 99);
 
     for (int i = 0; i < 10; i++) {
-        f3(x) = Tuple(f3(x)[0] + f3(x)[1] + f3(left)[1] + f3(right)[1], undef<float>());
-        f3(x) = Tuple(undef<float>(), f3(x)[1] + f3(x)[0] + f3(left)[0] + f3(right)[0]);
+        f3(rx) = Tuple(f3(rx)[0] + f3(rx)[1] + f3(left)[1] + f3(right)[1], undef<float>());
+        f3(rx) = Tuple(undef<float>(), f3(rx)[1] + f3(rx)[0] + f3(left)[0] + f3(right)[0]);
     }
     f3.realize(100);
 

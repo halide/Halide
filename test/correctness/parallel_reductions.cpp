@@ -35,10 +35,7 @@ int main(int argc, char **argv) {
 
 
     {
-
-        RDom r1(1, 15);
         Var i, j;
-        Func f1, f2;
 
         // Now we'll try a parallelized and vectorized prefix sum
         Image<int> input(256), correct(256);
@@ -48,32 +45,31 @@ int main(int argc, char **argv) {
             if (i > 0) correct(i) += correct(i-1);
         }
 
-        // We lay the input out row-major in a 2D array
-        f1(i, j) = input(i + j*16);
+        int chunk_size = 16;
 
-        // Sum along the rows
-        f1(r1, j) += f1(r1-1, j);
+        RDom r1(0, chunk_size);
 
-        // Sum down the last column
-        f1(15, r1) += f(15, r1-1);
+        // Lay out the input in 2D, and do a sum scan of each row
+        Func sum_rows;
+        sum_rows(i, j) = 0;
+        sum_rows(r1, j) = sum_rows(r1 - 1, j) + input(r1 + j * chunk_size);
 
-        // Fix the first column
-        f1(0, r1) += f(15, r1-1);
+        // Sum down the last column to compute the sum of the previous n rows.
+        Func sum_cols;
+        sum_cols(j) = 0;
+        sum_cols(r1) += sum_cols(r1 - 1) + sum_rows(chunk_size - 1, r1);
 
-        // Correct the rest of each row
-        RDom r2(1, 14);
-        f1(r2, j) += f(r2-1, j);
-
-        // Then each output is a combination of two terms.
+        // Then each output is a column sum plus a row sum.
         Func out;
-        Expr x = i%16, y = i/16;
-        out(i) = f1(x, y);
+        Expr x = i % chunk_size, y = i / chunk_size;
+        out(i) = sum_rows(x, y) + sum_cols(y-1);
 
-        f1.compute_root().vectorize(i, 4).parallel(i);
-        f1.update(0).vectorize(i, 4).parallel(i);
-        f1.update(3).parallel(j);
-
-        out.vectorize(i, 4).parallel(i);
+        Var ii, io;
+        out.split(i, io, ii, chunk_size).vectorize(ii, 4).parallel(io);
+        sum_rows.compute_root().vectorize(i, 4).parallel(j);
+        sum_rows.update().parallel(j);
+        sum_cols.compute_root().vectorize(j, 4);
+        out.output_buffer().set_bounds(0, 0, 256);
 
         Image<int> result = out.realize(256);
 
