@@ -338,6 +338,10 @@ Expr Function::min_extent_produced(const string &d) const {
     return compute_min_extent(d, schedule());
 }
 
+Expr Function::min_extent_updated(const string &d, int pass) const {
+    return compute_min_extent(d, reductions()[pass].schedule);
+}
+
 Expr Function::min_extent_updated(const string &d) const {
     if (!has_reduction_definition()) {
         return 1;

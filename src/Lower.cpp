@@ -377,12 +377,12 @@ Stmt build_produce(Function f) {
     }
 }
 
-// Build the loop nest that updates a function (assuming it's a reduction).
-Stmt build_update(Function f) {
+// Build the loop nests that update a function (assuming it's a reduction).
+vector<Stmt> build_update(Function f) {
 
     string prefix = f.name() + ".";
 
-    Stmt updates;
+    vector<Stmt> updates;
 
     for (size_t i = 0; i < f.reductions().size(); i++) {
         ReductionDefinition r = f.reductions()[i];
@@ -410,11 +410,7 @@ Stmt build_update(Function f) {
             }
         }
 
-        if (updates.defined()) {
-            updates = Block::make(updates, loop);
-        } else {
-            updates = loop;
-        }
+        updates.push_back(loop);
     }
 
     return updates;
@@ -422,72 +418,94 @@ Stmt build_update(Function f) {
 
 pair<Stmt, Stmt> build_realization(Function func) {
     Stmt produce = build_produce(func);
-    Stmt update = build_update(func);
+    vector<Stmt> updates = build_update(func);
 
-    if (update.defined()) {
-        // Expand the bounds produced in the produce step using the
-        // bounds read in the update step.
+    vector<Stmt> stages;
+    stages.push_back(produce);
+    stages.insert(stages.end(), updates.begin(), updates.end());
 
-        // This is necessary because later bounds inference does not
-        // consider the bounds read during an update step, and the
-        // bounds produced in the produce step must cover all pixels
-        // touched in the update step, or the update step is going to
-        // read uninitialized data.
+    // Build it from the last stage backwards.
+    Stmt merged_updates;
 
-        // TODO: don't actually compute all the pixels in the produce
-        // step if they're just going to get clobbered, or if they
-        // never get read in the update step.
-        Region bounds = region_called(update, func.name());
-        for (size_t i = 0; i < bounds.size(); i++) {
-            if (!bounds[i].min.defined() || !bounds[i].extent.defined()) {
-                std::cerr << "Error: The region of " << func.name()
-                          << " accessed in its reduction definition "
-                          << "is unbounded in dimension " << i << ".\n"
-                          << "Consider introducing clamp operators.\n";
-                assert(false);
+    for (size_t s = stages.size(); s > 0; s--) {
+        Stmt next = stages[s-1];
+
+        // First compute the bounds used in merged_updates, which
+        // represents subsequent update passes.
+
+        Region bounds;
+        if (merged_updates.defined()) {
+            bounds = region_called(merged_updates, func.name());
+            for (size_t i = 0; i < bounds.size(); i++) {
+                if (!bounds[i].min.defined() || !bounds[i].extent.defined()) {
+                    std::cerr << "Error: The region of " << func.name()
+                              << " accessed in its reduction definition "
+                              << "is unbounded in dimension " << i << ".\n"
+                              << "Consider introducing clamp operators.\n";
+                    assert(false);
+                }
             }
         }
 
+        // Then expand the bounds computed of the 'next' stage, which
+        // comes before merged_updates, using the bounds computed.
         if (!bounds.empty()) {
             assert(bounds.size() == func.args().size());
-            // Expand the region to be produced using the region read in the update step
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
                 Expr update_min = Variable::make(Int(32), var + ".update_min_required");
                 Expr update_extent = Variable::make(Int(32), var + ".update_extent_required");
                 Expr min_produced = Variable::make(Int(32), var + ".min_produced");
                 Expr extent_produced = Variable::make(Int(32), var + ".extent_produced");
-                Expr init_min = Min::make(update_min, min_produced);
-                Expr init_max_plus_one = Max::make(update_min + update_extent, min_produced + extent_produced);
-                Expr init_extent = init_max_plus_one - init_min;
+                Expr this_min = Min::make(update_min, min_produced);
+                Expr this_max_plus_one = Max::make(update_min + update_extent, min_produced + extent_produced);
+                Expr this_extent = this_max_plus_one - this_min;
 
-                // Redefine max_min just after we redefine min and
-                // extent produced, otherwise we may truncate our
-                // initialization and not initialize some values that
-                // are only read by the update step.
-                Expr new_max_min = min_produced + extent_produced - func.min_extent_produced(func.args()[i]);
-                produce = LetStmt::make(var + ".max_min", new_max_min, produce);
+                if (s == 1) {
+                    // Pure step.
+
+                    // Redefine max_min just after we redefine min and
+                    // extent produced, otherwise we may truncate
+                    // early and not touch some values that are only
+                    // read by later stages.
+                    Expr new_max_min = min_produced + extent_produced - func.min_extent_produced(func.args()[i]);
+                    next = LetStmt::make(var + ".max_min", new_max_min, next);
+                } else {
+                    // An update step.
+                    // We need to round up this_extent to be a multiple of the min factor for this stage.
+
+                    Expr factor = func.min_extent_updated(func.args()[i], s-2);
+                    if (!is_one(factor)) {
+                        this_extent = ((this_extent + factor - 1)/factor)*factor;
+                    }
+                }
 
                 // Inside that, redefine the min produced.
-                produce = LetStmt::make(var + ".min_produced", init_min, produce);
+                next = LetStmt::make(var + ".min_produced", this_min, next);
 
                 // The new extent produced refers to the old min
                 // produced, so it must be defined inside the new
                 // definition of min produced.
-                produce = LetStmt::make(var + ".extent_produced", init_extent, produce);
+                next = LetStmt::make(var + ".extent_produced", this_extent, next);
 
 
             }
 
-            // Define the region read during the update step
+            // Define the region read during the subsequent steps
             for (size_t i = 0; i < bounds.size(); i++) {
                 string var = func.name() + "." + func.args()[i];
-                produce = LetStmt::make(var + ".update_min_required", bounds[i].min, produce);
-                produce = LetStmt::make(var + ".update_extent_required", bounds[i].extent, produce);
+                next = LetStmt::make(var + ".update_min_required", bounds[i].min, next);
+                next = LetStmt::make(var + ".update_extent_required", bounds[i].extent, next);
             }
         }
+
+        if (s > 1) {
+            merged_updates = Block::make(next, merged_updates);
+        } else {
+            produce = next;
+        }
     }
-    return make_pair(produce, update);
+    return make_pair(produce, merged_updates);
 }
 
 // A schedule may include explicit bounds on some dimension. This
@@ -577,9 +595,14 @@ private:
         // the segfault.
 
         // TODO: Don't build the update twice, once here and once when we actually inject it.
-        Region reduction_region;
+        Region region_updated;
         if (func.has_reduction_definition()) {
-            reduction_region = region_touched(build_update(func), func.name());
+            pair<Stmt, Stmt> realization = build_realization(func);
+            Stmt s = realization.first;
+            if (realization.second.defined()) {
+                s = Block::make(s, realization.second);
+            }
+            region_updated = region_touched(s, func.name());
         }
 
         for (int i = 0; i < func.dimensions(); i++) {
@@ -591,7 +614,7 @@ private:
             Expr min_produced = Variable::make(Int(32), func.name() + "." + arg + ".min_produced");
 
             if (func.has_reduction_definition()) {
-                Range r = reduction_region[i];
+                Range r = region_updated[i];
                 Expr old_max_plus_one = min_produced + extent_produced;
                 Expr new_max_plus_one = Max::make(r.min + r.extent, old_max_plus_one);
                 Expr new_min = Min::make(r.min, min_produced);
