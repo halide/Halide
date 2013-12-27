@@ -96,27 +96,48 @@ Target get_host_target() {
 #endif
 }
 
-Target get_target_from_environment() {
-    string target;
+namespace {
+string get_env(const char *name) {
 #ifdef _WIN32
     char buf[128];
     size_t read = 0;
-    getenv_s(&read, buf, "HL_TARGET");
+    getenv_s(&read, buf, name);
     if (read) {
-        target = buf;
+        return string(buf);
     } else {
-        return t;
+        return "";
     }
 #else
-    char *buf = getenv("HL_TARGET");
+    char *buf = getenv(name);
     if (buf) {
-        target = buf;
+        return string(buf);
     } else {
-        return get_host_target();
+        return "";
     }
 #endif
+}
+}
 
-    return parse_target_string(target);
+Target get_target_from_environment() {
+    string target = get_env("HL_TARGET");
+    if (target.empty()) {
+        return get_host_target();
+    } else {
+        return parse_target_string(target);
+    }
+}
+
+Target get_jit_target_from_environment() {
+    Target host = get_host_target();
+    string target = get_env("HL_JIT_TARGET");
+    if (target.empty()) {
+        return host;
+    } else {
+        Target t = parse_target_string(target);
+        assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits &&
+               "HL_JIT_TARGET must match the host OS, architecture, and bit width");
+        return t;
+    }
 }
 
 Target parse_target_string(const std::string &target) {
