@@ -27,6 +27,30 @@ extern "C" DLLEXPORT int make_data(buffer_t *out) {
     return 0;
 }
 
+// Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
+extern "C" DLLEXPORT int make_data_multi(buffer_t *out1, buffer_t *out2) {
+    assert(out1->host && out1->elem_size == 4 && out1->stride[0] == 1);
+    assert(out2->host && out2->elem_size == 4 && out2->stride[0] == 1);
+    assert(out1->min[0] == out2->min[0] &&
+	   out1->min[1] == out2->min[1] &&
+	   out1->extent[0] == out2->extent[0] &&
+	   out1->extent[1] == out2->extent[1]);
+    printf("Generating data over [%d %d] x [%d %d]\n",
+           out1->min[0], out1->min[0] + out1->extent[0],
+           out1->min[1], out1->min[1] + out1->extent[1]);
+    for (int y = 0; y < out1->extent[1]; y++) {
+        float *dst1 = (float *)out1->host + y * out1->stride[1];
+        float *dst2 = (float *)out2->host + y * out2->stride[1];
+        for (int x = 0; x < out1->extent[0]; x++) {
+            int x_coord = x + out1->min[0];
+            int y_coord = y + out1->min[1];
+            dst1[x] = sinf(x_coord + y_coord);
+            dst2[x] = cosf(x_coord + y_coord);
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     Func source;
     source.define_extern("make_data",
@@ -49,6 +73,31 @@ int main(int argc, char **argv) {
     float error = evaluate<float>(sum(abs(output(r.x, r.y))));
     if (error != 0) {
         printf("Something went wrong\n");
+        return -1;
+    }
+
+    Func multi;
+    std::vector<Type> types;
+    types.push_back(Float(32));
+    types.push_back(Float(32));
+    multi.define_extern("make_data_multi",
+                        std::vector<ExternFuncArgument>(),
+			types, 2);
+    Func sink_multi;
+    sink_multi(x, y) = multi(x, y)[0] - sin(x + y) +
+                       multi(x, y)[1] - cos(x + y);
+
+    sink_multi.tile(x, y, xi, yi, 32, 32);
+
+    // Compute the source per tile of sink
+    multi.compute_at(sink_multi, x);
+
+    Image<float> output_multi = sink_multi.realize(100, 100);
+
+    // Should be all zeroes.
+    float error_multi = evaluate<float>(sum(abs(output_multi(r.x, r.y))));
+    if (error_multi != 0) {
+        printf("Something went wrong in multi case\n");
         return -1;
     }
 
