@@ -98,6 +98,7 @@ const string Call::count_leading_zeros = "count_leading_zeros";
 const string Call::count_trailing_zeros = "count_trailing_zeros";
 const string Call::undef = "undef";
 const string Call::trace = "trace";
+const string Call::trace_expr = "trace_expr";
 
 }
 }

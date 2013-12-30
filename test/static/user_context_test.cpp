@@ -17,12 +17,14 @@ extern "C" void halide_error(void *context, const char *msg) {
     assert(context == context_pointer);
 }
 
-extern "C" void halide_trace(void *context, const char *func, halide_trace_event_t event,
-                             int32_t type_code, int32_t bits, int32_t vector_width,
-                             int32_t value_idx, void *value,
-                             int32_t dimensions, const int32_t *coordinates) {
+extern "C" int32_t halide_trace(void *context, const char *func,
+                                halide_trace_event_t event, int32_t parent_id,
+                                int32_t type_code, int32_t bits, int32_t vector_width,
+                                int32_t value_idx, void *value,
+                                int32_t dimensions, const int32_t *coordinates) {
     called_trace = true;
     assert(context == context_pointer);
+    return 0;
 }
 
 extern "C" void *halide_malloc(void *context, size_t sz) {
