@@ -18,7 +18,8 @@ using std::string;
 
 stack<string> stack_trace;
 
-int my_trace(const char *function, int event_type, int parent_id,
+int my_trace(void *user_context, const char *function,
+             int event_type, int parent_id,
              int type_code, int bits, int width,
              int value_index, const void *value,
              int num_int_args, const int *int_args) {

@@ -12,7 +12,7 @@ extern "C" void NSLogv(objc_id fmt, __builtin_va_list args);
 // To allocate a constant string, use: __builtin___CFStringMakeConstantString
 
 extern "C" {
-WEAK int halide_printf(const char * fmt, ...) {
+WEAK int halide_printf(void *user_context, const char * fmt, ...) {
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
 

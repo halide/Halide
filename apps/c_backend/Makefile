@@ -1,17 +1,4 @@
-CXX ?= g++
-
-ifdef BUILD_PREFIX
-LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
-else
-LIB_HALIDE = bin/libHalide.a
-endif
-
-ifeq ($(HL_TARGET),ptx)
-  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
-endif
-ifeq ($(HL_TARGET),ptx-debug)
-  CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
-endif
+include ../support/Makefile.inc
 
 pipeline: pipeline.cpp
 	$(CXX) -Wall pipeline.cpp -I ../../include ../../$(LIB_HALIDE) -o pipeline -lpthread -ldl

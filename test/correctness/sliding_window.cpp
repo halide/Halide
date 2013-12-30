@@ -16,12 +16,12 @@ extern "C" DLLEXPORT int call_counter(int x, int y) {
 }
 HalideExtern_2(int, call_counter, int, int);
 
-extern "C" void *my_malloc(size_t x) {
+extern "C" void *my_malloc(void *, size_t x) {
     printf("Malloc wasn't supposed to be called!\n");
     exit(-1);
 }
 
-extern "C" void my_free(void *) {
+extern "C" void my_free(void *, void *) {
 }
 
 int main(int argc, char **argv) {
@@ -88,7 +88,6 @@ int main(int argc, char **argv) {
     f4.store_root().compute_at(g4, x);
 
     Image<int> im4 = g4.realize(10, 10);
-    printf("%d\n", count);
     if (count != 1500) {
         printf("f was called %d times instead of %d times\n", count, 1500);
         return -1;

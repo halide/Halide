@@ -2,6 +2,7 @@
 #define HALIDE_TARGET_H
 
 #include <stdint.h>
+#include <string>
 #include "Util.h"
 
 namespace llvm {
@@ -28,6 +29,17 @@ EXPORT Target get_host_target();
 /** Return the target that Halide will use. If HL_TARGET is set it
  * uses that. Otherwise calls \ref get_host_target */
 EXPORT Target get_target_from_environment();
+
+/** Return the target that Halide will use for jit-compilation. If
+ * HL_JIT_TARGET is set it uses that. Otherwise calls \ref
+ * get_host_target. Throws an error if the architecture, bit width,
+ * and OS of the target do not match the host target, so this is only
+ * useful for controlling the feature set. */
+EXPORT Target get_jit_target_from_environment();
+
+/** Given a string of the form used in HL_TARGET (e.g. "x86-64-avx"),
+ * return the Target it specifies. */
+EXPORT Target parse_target_string(const std::string &target);
 
 namespace Internal {
 

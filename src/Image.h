@@ -242,6 +242,38 @@ public:
         return extent(2);
     }
 
+    /** Get the minimum coordinate in dimension 0, which by convention
+     * is the coordinate of the left edge of the image. Returns zero
+     * for zero-dimensional images. */
+    int left() const {
+        if (dimensions() < 1) return 0;
+        return min(0);
+    }
+
+    /** Get the maximum coordinate in dimension 0, which by convention
+     * is the coordinate of the right edge of the image. Returns zero
+     * for zero-dimensional images. */
+    int right() const {
+        if (dimensions() < 1) return 0;
+        return min(0) + extent(0) - 1;
+    }
+
+    /** Get the minimum coordinate in dimension 1, which by convention
+     * is the top of the image. Returns zero for zero- or
+     * one-dimensional images. */
+    int top() const {
+        if (dimensions() < 2) return 0;
+        return min(1);
+    }
+
+    /** Get the maximum coordinate in dimension 1, which by convention
+     * is the bottom of the image. Returns zero for zero- or
+     * one-dimensional images. */
+    int bottom() const {
+        if (dimensions() < 2) return 0;
+        return min(1) + extent(1) - 1;
+    }
+
     /** Get a pointer to the element at the min location. */
     T *data() const {
         assert(defined());

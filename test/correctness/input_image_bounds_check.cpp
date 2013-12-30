@@ -8,12 +8,12 @@ using namespace Halide;
 // Custom error handler. If we don't define this, it'll just print out
 // an error message and quit
 bool error_occurred = false;
-void halide_error(const char *msg) {
+void halide_error(void *, const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
 }
 
-extern "C" void set_error_handler(void (*)(const char *));
+extern "C" void set_error_handler(void (*)(void *, const char *));
 
 int main(int argc, char **argv) {
     Image<float> input(19);

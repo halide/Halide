@@ -16,6 +16,7 @@
 #include "JITCompiledModule.h"
 #include "Image.h"
 #include "Util.h"
+#include "Target.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -253,25 +254,31 @@ class Func {
 
     /** The current error handler used for realizing this
      * function. May be NULL. Only relevant when jitting. */
-    void (*error_handler)(const char *);
+    void (*error_handler)(void *user_context, const char *);
 
     /** The current custom allocator used for realizing this
      * function. May be NULL. Only relevant when jitting. */
     // @{
-    void *(*custom_malloc)(size_t);
-    void (*custom_free)(void *);
+    void *(*custom_malloc)(void *user_context, size_t);
+    void (*custom_free)(void *user_context, void *ptr);
     // @}
 
     /** The current custom parallel task launcher and handler for
      * realizing this function. May be NULL. */
     // @{
-    int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *);
-    int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *);
+    int (*custom_do_par_for)(void *user_context,
+                             int (*)(void *, int, uint8_t *),
+                             int, int, uint8_t *);
+    int (*custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
+                          int, uint8_t *);
     // @}
 
     /** The current custom tracing function. May be NULL. */
     // @{
-    int32_t (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
+    int32_t (*custom_trace)(void *, const char *, int32_t,
+                            int32_t, int32_t, int32_t,
+                            int32_t, int32_t, const void *,
+                            int32_t, const int32_t *);
     // @}
 
     /** Pointers to current values of the automatically inferred
@@ -334,7 +341,11 @@ public:
      \endcode
      *
      */
-    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
+    // @{
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                               const Target &target = get_jit_target_from_environment());
+    // @}
 
     /** Evaluate this function into an existing allocated buffer or
      * buffers. If the buffer is also one of the arguments to the
@@ -342,8 +353,8 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst);
-    EXPORT void realize(Buffer dst);
+    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
+    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
     // @}
 
     /** For a given size of output, or a given output buffer,
@@ -361,14 +372,16 @@ public:
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
      * as this halide function */
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+                                   const Target &target = get_target_from_environment());
 
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_file instead. */
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+                                  const Target &target = get_target_from_environment());
 
     /** Emit a header file with the given filename for this
      * function. The header will define a function with the type
@@ -384,7 +397,8 @@ public:
      * useful for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+                                    const Target &target = get_target_from_environment());
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -401,13 +415,20 @@ public:
      * argument.
      */
     //@{
-    EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args);
-    EXPORT void compile_to_file(const std::string &filename_prefix);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d);
-    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e);
+    EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
+                                const Target &target = get_target_from_environment());
+    EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
+                                const Target &target = get_target_from_environment());
     // @}
 
     /** Eagerly jit compile the function to machine code. This
@@ -415,40 +436,45 @@ public:
      * running your halide pipeline inside time-sensitive code and
      * wish to avoid including the time taken to compile a pipeline,
      * then you can call this ahead of time. Returns the raw function
-     * pointer to the compiled pipeline. */
-    EXPORT void *compile_jit();
+     * pointer to the compiled pipeline. Default is to use the Target
+     * returned from Halide::get_jit_target_from_environment()
+     */
+     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
      * statically, you can also just define your own function with
      * signature
      \code
-     extern "C" void halide_error(const char *);
+     extern "C" void halide_error(void *user_context, const char *);
      \endcode
      * This will clobber Halide's version.
      */
-    EXPORT void set_error_handler(void (*handler)(const char *));
+    EXPORT void set_error_handler(void (*handler)(void *, const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
      * return 32-byte aligned chunks of memory. If compiling
      * statically, routines with appropriate signatures can be
      * provided directly
      \code
-     extern "C" void *halide_malloc(size_t)
-     extern "C" void halide_free(void *)
+     extern "C" void *halide_malloc(void *, size_t)
+     extern "C" void halide_free(void *, void *)
      \endcode
      * These will clobber Halide's versions. See \file HalideRuntime.h
      * for declarations.
      */
-    EXPORT void set_custom_allocator(void *(*malloc)(size_t), void (*free)(void *));
+    EXPORT void set_custom_allocator(void *(*malloc)(void *, size_t),
+                                     void (*free)(void *, void *));
 
     /** Set a custom task handler to be called by the parallel for
      * loop. It is useful to set this if you want to do some
      * additional bookkeeping at the granularity of parallel
      * tasks. The default implementation does this:
      \code
-     extern "C" int halide_do_task(int (*f)(int, uint8_t *), int idx, uint8_t *state) {
-         return f(idx, state);
+     extern "C" int halide_do_task(void *user_context,
+                                   int (*f)(void *, int, uint8_t *),
+                                   int idx, uint8_t *state) {
+         return f(user_context, idx, state);
      }
      \endcode
      * If you are statically compiling, you can also just define your
@@ -458,16 +484,20 @@ public:
      * If you're trying to use a custom parallel runtime, you probably
      * don't want to call this. See instead \ref Func::set_custom_do_par_for .
     */
-    EXPORT void set_custom_do_task(int (*custom_do_task)(int (*)(int, uint8_t *), int, uint8_t *));
+    EXPORT void set_custom_do_task(
+        int (*custom_do_task)(void *, int (*)(void *, int, uint8_t *),
+                              int, uint8_t *));
 
     /** Set a custom parallel for loop launcher. Useful if your app
      * already manages a thread pool. The default implementation is
      * equivalent to this:
      \code
-     extern "C" int halide_do_par_for(int (*f)(int uint8_t *), int min, int extent, uint8_t *state) {
+     extern "C" int halide_do_par_for(void *user_context,
+                                      int (*f)(void *, int, uint8_t *),
+                                      int min, int extent, uint8_t *state) {
          int exit_status = 0;
          parallel for (int idx = min; idx < min+extent; idx++) {
-             int job_status = halide_do_task(f, idx, state);
+             int job_status = halide_do_task(user_context, f, idx, state);
              if (job_status) exit_status = job_status;
          }
          return exit_status;
@@ -482,7 +512,9 @@ public:
      * own version of the above function, and it will clobber Halide's
      * version.
      */
-    EXPORT void set_custom_do_par_for(int (*custom_do_par_for)(int (*)(int, uint8_t *), int, int, uint8_t *));
+    EXPORT void set_custom_do_par_for(
+        int (*custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
+                                 int, uint8_t *));
 
     /** Set custom routines to call when tracing is enabled. Call this
      * on the output Func of your pipeline. This then sets custom

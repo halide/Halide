@@ -350,27 +350,35 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
 
     // Fix the target triple.
     if (target.bits == 64) {
-        #if !(WITH_ARM64)
+
+    }
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+    llvm::Triple triple;
+    if (target.bits == 32) {
+        triple.setArch(llvm::Triple::arm);
+    } else {
+        assert(target.bits == 64);
+        #if (WITH_ARM64)
+        triple.setArch(llvm::Triple::aarch64);
+        #else
         assert(false && "AArch64 llvm target not enabled in this build of Halide");
         #endif
         std::cerr << "WARNING: 64-bit arm builds are completely untested\n";
     }
 
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
     if (target.os == Target::Android) {
         assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm android");
-        module->setTargetTriple("arm-linux-eabi");
+        triple.setOS(llvm::Triple::Linux);
+        triple.setEnvironment(llvm::Triple::EABI);
     } else if (target.os == Target::IOS) {
-        // armv7 is 32-bit
-        if (target.bits == 32) {
-            module->setTargetTriple("armv7-apple-ios");
-        } else {
-            module->setTargetTriple("aarch64-apple-ios");
-        }
+        triple.setOS(llvm::Triple::IOS);
+        triple.setVendor(llvm::Triple::Apple);
     } else if (target.os == Target::NaCl) {
         assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm nacl");
-        module->setTargetTriple("arm-unknown-nacl-eabi");
         #if WITH_NATIVE_CLIENT
+        triple.setOS(llvm::Triple::NaCl);
+        triple.setEnvironment(llvm::Triple::EABI);
         // The ARM Nacl backend relies on global switches being set to do
         // the sandboxing, so set them here.
         llvm::FlagSfiData = true;
@@ -381,16 +389,16 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
         llvm::FlagSfiDisableCP = true;
         llvm::FlagSfiZeroMask = false;
         ReserveR9 = true;
+        #else
+        assert(false && "This version of Halide was compiled without nacl support");
         #endif
     } else if (target.os == Target::Linux) {
-        if (target.bits == 32) {
-            module->setTargetTriple("arm-linux-gnueabihf");
-        } else {
-            module->setTargetTriple("aarch64-linux-gnueabihf");
-        }
+        triple.setOS(llvm::Triple::Linux);
+        triple.setEnvironment(llvm::Triple::GNUEABIHF);
     } else {
         assert(false && "No arm support for this OS");
     }
+    module->setTargetTriple(triple.str());
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
