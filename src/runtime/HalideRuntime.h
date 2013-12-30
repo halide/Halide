@@ -108,14 +108,37 @@ enum halide_trace_event_t {halide_trace_load = 0,
  * yet-to-be-documented binary format (see src/runtime/tracing.cpp to
  * reverse engineer the format). If the trace is going to be large,
  * you may want to make the file a named pipe, and then read from that
- * pipe into gzip. */
-extern void halide_trace(void *user_context, const char *func, halide_trace_event_t event,
-                         int32_t type_code, int32_t bits, int32_t vector_width,
-                         int32_t value_idx, void *value,
-                         int32_t dimensions, const int32_t *coordinates);
+ * pipe into gzip.
+ *
+ * halide_trace returns a unique ID which will be passed to future
+ * events that "belong" to the earlier event as the parent id. The
+ * ownership hierarchy looks like:
+ *
+ * begin_realization
+ *    produce
+ *      store
+ *      update
+ *      load/store
+ *      consume
+ *      load
+ *      end_consume
+ *    end_realization
+ *
+ * Threading means that ownership cannot be inferred from the ordering
+ * of events. There can be many active realizations of a given
+ * function, or many active productions for a single
+ * realization. Within a single production, the ordering of events is
+ * meaningful.
+ */
+extern int32_t halide_trace(void *user_context, const char *func,
+                            halide_trace_event_t event, int32_t parent_id,
+                            int32_t type_code, int32_t bits, int32_t vector_width,
+                            int32_t value_idx, void *value,
+                            int32_t dimensions, const int32_t *coordinates);
 
-/** If tracing is writing to a file. This call closes that file (flushing the trace). */
-extern void halide_shutdown_trace();
+/** If tracing is writing to a file. This call closes that file
+ * (flushing the trace). Returns zero on success. */
+extern int halide_shutdown_trace();
 
 #ifdef __cplusplus
 } // End extern "C"

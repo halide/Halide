@@ -9,12 +9,14 @@ const int num_launcher_tasks = 1000;
 
 static bool got_context[num_launcher_tasks];
 
-extern "C" void halide_trace(void *context, const char *func, halide_trace_event_t event,
-                             int32_t type_code, int32_t bits, int32_t vector_width,
-                             int32_t value_idx, void *value,
-                             int32_t dimensions, const int32_t *coordinates) {
-  bool *bool_ptr = (bool *)context;
-  *bool_ptr = true;
+extern "C" int32_t halide_trace(void *context, const char *func,
+                                halide_trace_event_t event, int32_t parent_id,
+                                int32_t type_code, int32_t bits, int32_t vector_width,
+                                int32_t value_idx, void *value,
+                                int32_t dimensions, const int32_t *coordinates) {
+    bool *bool_ptr = (bool *)context;
+    *bool_ptr = true;
+    return 0;
 }
 
 int launcher_task(void *user_context, int index, uint8_t *closure) {

@@ -275,9 +275,10 @@ class Func {
 
     /** The current custom tracing function. May be NULL. */
     // @{
-    void (*custom_trace)(void *user_context, const char *, int32_t, int32_t,
-                         int32_t, int32_t, int32_t, const void *, int32_t,
-                         const int32_t *);
+    int32_t (*custom_trace)(void *, const char *, int32_t,
+                            int32_t, int32_t, int32_t,
+                            int32_t, int32_t, const void *,
+                            int32_t, const int32_t *);
     // @}
 
     /** Pointers to current values of the automatically inferred
@@ -341,9 +342,9 @@ public:
      *
      */
     // @{
-    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_host_target());
+    EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
     EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-                               const Target &target = get_host_target());
+                               const Target &target = get_jit_target_from_environment());
     // @}
 
     /** Evaluate this function into an existing allocated buffer or
@@ -352,8 +353,8 @@ public:
      * necessarily safe to run in-place. If you pass multiple buffers,
      * they must have matching sizes. */
     // @{
-    EXPORT void realize(Realization dst, const Target &target = get_host_target());
-    EXPORT void realize(Buffer dst, const Target &target = get_host_target());
+    EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
+    EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
     // @}
 
     /** For a given size of output, or a given output buffer,
@@ -436,9 +437,9 @@ public:
      * wish to avoid including the time taken to compile a pipeline,
      * then you can call this ahead of time. Returns the raw function
      * pointer to the compiled pipeline. Default is to use the Target
-     * returned from Halide::get_host_target()
+     * returned from Halide::get_jit_target_from_environment()
      */
-    EXPORT void *compile_jit(const Target &target = get_host_target());
+     EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling

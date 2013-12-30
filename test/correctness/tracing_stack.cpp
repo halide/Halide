@@ -18,10 +18,11 @@ using std::string;
 
 stack<string> stack_trace;
 
-void my_trace(void *user_context, const char *function, int event_type,
-              int type_code, int bits, int width,
-              int value_index, const void *value,
-              int num_int_args, const int *int_args) {
+int my_trace(void *user_context, const char *function,
+             int event_type, int parent_id,
+             int type_code, int bits, int width,
+             int value_index, const void *value,
+             int num_int_args, const int *int_args) {
 
     const string event_types[] = {"Load ",
                                   "Store ",
@@ -40,6 +41,8 @@ void my_trace(void *user_context, const char *function, int event_type,
         // These events signal the start of some new region
         stack_trace.push(event_types[event_type] + function);
     }
+
+    return 0;
 }
 
 void signal_handler(int signum) {
