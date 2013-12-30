@@ -9,9 +9,9 @@ extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
 extern int snprintf(char *str, size_t size, const char *format, ...);
 extern int fclose(void *f);
 
-typedef void (*trace_fn)(const char *, halide_trace_event_t,
-                         int32_t, int32_t, int32_t, int32_t,
-                         const void *, int32_t, const int32_t *);
+typedef int32_t (*trace_fn)(const char *, halide_trace_event_t, int32_t,
+                            int32_t, int32_t, int32_t, int32_t,
+                            const void *, int32_t, const int32_t *);
 WEAK trace_fn halide_custom_trace = NULL;
 
 WEAK void halide_set_custom_trace(trace_fn t) {
@@ -19,24 +19,28 @@ WEAK void halide_set_custom_trace(trace_fn t) {
 }
 
 WEAK void *halide_trace_file = NULL;
+WEAK bool halide_trace_initialized = false;
 
-WEAK void halide_trace(const char *func, halide_trace_event_t event,
-                       int32_t type_code, int32_t bits, int32_t width, int32_t value_idx, void *value,
-                       int32_t num_int_args, const int32_t *int_args) {
+WEAK int32_t halide_trace(const char *func, halide_trace_event_t event, int32_t parent_id,
+                          int32_t type_code, int32_t bits, int32_t width, int32_t value_idx, void *value,
+                          int32_t num_int_args, const int32_t *int_args) {
+    static int32_t ids = 1;
+
     if (halide_custom_trace) {
-        (*halide_custom_trace)(func, event, type_code, bits, width, value_idx, value, num_int_args, int_args);
+        return (*halide_custom_trace)(func, event, parent_id, type_code,
+                                      bits, width, value_idx, value, num_int_args, int_args);
     } else {
-        static bool initialized = false;
 
-        if (!initialized) {
+        int32_t my_id = __sync_fetch_and_add(&ids, 1);
+
+        if (!halide_trace_initialized) {
             const char *trace_file_name = getenv("HL_TRACE_FILE");
-            initialized = true;
+            halide_trace_initialized = true;
             if (trace_file_name) {
-                halide_trace_file = fopen(trace_file_name, "wb");
+                halide_trace_file = fopen(trace_file_name, "ab");
                 halide_assert(halide_trace_file && "Failed to open trace file\n");
             }
         }
-
 
         // If we're dumping to a file, use a binary format
         if (halide_trace_file) {
@@ -47,7 +51,7 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
             // Upgrade the bit count to a power of two, because that's
             // how it will be stored on the stack.
             int bytes = 1;
-            while (bytes < (bits*8)) bytes <<= 1;
+            while (bytes*8 < bits) bytes <<= 1;
 
             // Compute the size of each portion of the tracing packet
             size_t header_bytes = 32;
@@ -57,17 +61,19 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
             uint8_t buffer[4096];
             halide_assert(total_bytes <= 4096 && "Tracing packet too large");
 
-            buffer[0] = event;
-            buffer[1] = type_code;
-            buffer[2] = bits;
-            buffer[3] = clamped_width;
-            buffer[4] = value_idx;
-            buffer[5] = clamped_num_int_args;
+            ((int32_t *)buffer)[0] = my_id;
+            ((int32_t *)buffer)[1] = parent_id;
+            buffer[8] = event;
+            buffer[9] = type_code;
+            buffer[10] = bits;
+            buffer[11] = clamped_width;
+            buffer[12] = value_idx;
+            buffer[13] = clamped_num_int_args;
 
-            // Use up to 25 bytes for the function name
-            int i = 6;
+            // Use up to 17 bytes for the function name
+            int i = 14;
             for (; i < header_bytes-1; i++) {
-                buffer[i] = func[i-6];
+                buffer[i] = func[i-14];
                 if (buffer[i] == 0) break;
             }
             // Fill the rest with zeros
@@ -187,13 +193,20 @@ WEAK void halide_trace(const char *func, halide_trace_event_t event,
 
             halide_printf("%s\n", buf);
         }
+
+        return my_id;
+
     }
 }
 
-WEAK void halide_shutdown_trace() {
+WEAK int halide_shutdown_trace() {
     if (halide_trace_file) {
-        fclose(halide_trace_file);
+        int ret = fclose(halide_trace_file);
         halide_trace_file = NULL;
+        halide_trace_initialized = false;
+        return ret;
+    } else {
+        return 0;
     }
 }
 

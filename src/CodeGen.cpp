@@ -1424,9 +1424,9 @@ void CodeGen::visit(const Call *op) {
 
             // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
-        } else if (op->name == Call::trace) {
+        } else if (op->name == Call::trace || op->name == Call::trace_expr) {
 
-            int int_args = (int)(op->args.size()) - 4;
+            int int_args = (int)(op->args.size()) - 5;
             assert(int_args >= 0);
 
             // Make a global string for the func name. Should be the same for all lanes.
@@ -1435,26 +1435,29 @@ void CodeGen::visit(const Call *op) {
             // Codegen the event type. Should be the same for all lanes.
             Value *event_type = codegen(unbroadcast(op->args[1]));
 
+            // Codegen the buffer id
+            Value *realization_id = codegen(unbroadcast(op->args[2]));
+
             // Codegen the value index. Should be the same for all lanes.
-            Value *value_index = codegen(unbroadcast(op->args[2]));
+            Value *value_index = codegen(unbroadcast(op->args[3]));
 
             Value *saved_stack = save_stack();
 
             // Allocate and populate a stack entry for the value arg
-            Type type = op->args[3].type();
+            Type type = op->args[4].type();
             Value *value_stored_array = builder->CreateAlloca(llvm_type_of(type), ConstantInt::get(i32, 1));
-            Value *value_stored = codegen(op->args[3]);
+            Value *value_stored = codegen(op->args[4]);
             builder->CreateStore(value_stored, value_stored_array);
             value_stored_array = builder->CreatePointerCast(value_stored_array, i8->getPointerTo());
 
             // Allocate and populate a stack array for the integer args
             Value *coords;
             if (int_args > 0) {
-                coords = builder->CreateAlloca(llvm_type_of(op->args[4].type()),
+                coords = builder->CreateAlloca(llvm_type_of(op->args[5].type()),
                                                       ConstantInt::get(i32, int_args));
                 for (int i = 0; i < int_args; i++) {
                     Value *coord_ptr = builder->CreateConstInBoundsGEP1_32(coords, i);
-                    builder->CreateStore(codegen(op->args[4+i]), coord_ptr);
+                    builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
                 }
                 coords = builder->CreatePointerCast(coords, i32->getPointerTo());
             } else {
@@ -1462,26 +1465,28 @@ void CodeGen::visit(const Call *op) {
             }
 
             // Call the runtime function
-            vector<Value *> args(9);
+            vector<Value *> args(10);
             args[0] = name;
             args[1] = event_type;
-            args[2] = ConstantInt::get(i32, type.code);
-            args[3] = ConstantInt::get(i32, type.bits);
-            args[4] = ConstantInt::get(i32, type.width);
-            args[5] = value_index;
-            args[6] = value_stored_array;
-            args[7] = ConstantInt::get(i32, int_args * type.width);
-            args[8] = coords;
+            args[2] = realization_id;
+            args[3] = ConstantInt::get(i32, type.code);
+            args[4] = ConstantInt::get(i32, type.bits);
+            args[5] = ConstantInt::get(i32, type.width);
+            args[6] = value_index;
+            args[7] = value_stored_array;
+            args[8] = ConstantInt::get(i32, int_args * type.width);
+            args[9] = coords;
 
             llvm::Function *trace_fn = module->getFunction("halide_trace");
             assert(trace_fn);
 
-            builder->CreateCall(trace_fn, args);
+            value = builder->CreateCall(trace_fn, args);
+
+            if (op->name == Call::trace_expr) {
+                value = value_stored;
+            }
 
             restore_stack(saved_stack);
-
-            // Evaluates to the value arg
-            value = value_stored;
 
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);

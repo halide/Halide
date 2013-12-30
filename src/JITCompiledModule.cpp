@@ -20,12 +20,11 @@ class JITModuleHolder {
 public:
     mutable RefCount ref_count;
 
-    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*stop_threads)(), void (*stop_trace)()) :
+    JITModuleHolder(llvm::ExecutionEngine *ee, llvm::Module *m, void (*stop_threads)()) :
         execution_engine(ee),
         module(m),
         context(&m->getContext()),
-        shutdown_thread_pool(stop_threads),
-        shutdown_trace(stop_trace) {
+        shutdown_thread_pool(stop_threads) {
     }
 
     ~JITModuleHolder() {
@@ -36,7 +35,6 @@ public:
         }
 
         shutdown_thread_pool();
-        shutdown_trace();
         delete execution_engine;
         delete context;
         // No need to delete the module - deleting the execution engine should take care of that.
@@ -46,7 +44,6 @@ public:
     Module *module;
     LLVMContext *context;
     void (*shutdown_thread_pool)();
-    void (*shutdown_trace)();
 
     /** Do any target-specific module cleanup. */
     std::vector<void (*)()> cleanup_routines;
@@ -114,9 +111,9 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     string error_string;
-    
+
     // Make an ELF on windows, MCJIT doesn't support the default (COFF).
-    // TODO: This #ifdef might be better 
+    // TODO: This #ifdef might be better
 #ifdef _WIN32
     m->setTargetTriple(m->getTargetTriple() + "-elf");
 #endif
@@ -185,13 +182,12 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(ee, m, "halide_set_custom_do_task", true, &set_custom_do_task);
     hook_up_function_pointer(ee, m, "halide_set_custom_trace", true, &set_custom_trace);
     hook_up_function_pointer(ee, m, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
-    hook_up_function_pointer(ee, m, "halide_shutdown_trace", true, &shutdown_trace);
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
-    module = new JITModuleHolder(ee, m, shutdown_thread_pool, shutdown_trace);
+    module = new JITModuleHolder(ee, m, shutdown_thread_pool);
 
     // Do any target-specific post-compilation module meddling
     cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);

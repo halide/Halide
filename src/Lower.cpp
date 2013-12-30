@@ -968,10 +968,8 @@ Stmt create_initial_loop_nest(Function f) {
     // Generate initial loop nest
     pair<Stmt, Stmt> r = build_realization(f);
     Stmt s = r.first;
-    if (r.second.defined()) {
-        // This must be in a pipeline so that bounds inference understands the update step
-        s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
-    }
+    // This must be in a pipeline so that bounds inference understands the update step
+    s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
     return inject_explicit_bounds(s, f);
 }
 

@@ -271,7 +271,7 @@ class Func {
 
     /** The current custom tracing function. May be NULL. */
     // @{
-    void (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
+    int32_t (*custom_trace)(const char *, int32_t, int32_t, int32_t, int32_t, int32_t, int32_t, const void *, int32_t, const int32_t *);
     // @}
 
     /** Pointers to current values of the automatically inferred
