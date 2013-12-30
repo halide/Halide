@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-void my_trace(const char *function, int event_type,
+int my_trace(const char *function, int event_type, int parent_id,
               int type_code, int bits, int width,
               int value_index, const void *value,
               int num_int_args, const int *int_args) {
@@ -15,6 +15,7 @@ void my_trace(const char *function, int event_type,
             exit(-1);
         }
     }
+    return 0;
 }
 
 int main(int argc, char **argv) {
