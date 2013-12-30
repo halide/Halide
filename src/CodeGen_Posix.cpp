@@ -174,10 +174,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         malloc_fn->setDoesNotAlias(0);
         assert(malloc_fn && "Could not find halide_malloc in module");
 
-        llvm_size = builder->CreateIntCast(llvm_size, malloc_fn->arg_begin()->getType(), false);
+        llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
+        ++arg_iter;  // skip the user context *
+        llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
         debug(4) << "Creating call to halide_malloc\n";
-        CallInst *call = builder->CreateCall(malloc_fn, llvm_size);
+        Value *args[2] = { get_user_context(), llvm_size };
+
+        CallInst *call = builder->CreateCall(malloc_fn, args);
         allocation.ptr = call;
 
         // Assert that the allocation worked.
@@ -209,7 +213,8 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
         llvm::Function *free_fn = module->getFunction("halide_free");
         assert(free_fn && "Could not find halide_free in module");
         debug(4) << "Creating call to halide_free\n";
-        builder->CreateCall(free_fn, alloc.ptr);
+        Value *args[2] = { get_user_context(), alloc.ptr };
+        builder->CreateCall(free_fn, args);
     }
 
     allocations.pop(name);

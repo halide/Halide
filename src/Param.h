@@ -102,6 +102,14 @@ public:
     }
 };
 
+/** Returns a Param corresponding to a pointer to a user context
+ * structure; when the Halide function that takes such a parameter
+ * calls a function from the Halide runtime (e.g. halide_printf()), it
+ * passes the value of this pointer as the first argument to the
+ * runtime function.  */
+inline Param<void *> user_context_param() {
+  return Param<void *>("__user_context");
+}
 
 /** A handle on the output buffer of a pipeline. Used to make static
  * promises about the output size and stride. */
@@ -173,6 +181,14 @@ public:
         return param.defined();
     }
 
+    /** Get an expression representing the minimum coordinates of this image
+     * parameter in the given dimension. */
+    Expr min(int x) const {
+        std::ostringstream s;
+        s << name() << ".min." << x;
+        return Internal::Variable::make(Int(32), s.str(), param);
+    }
+
     /** Get an expression representing the extent of this image
      * parameter in the given dimension */
     Expr extent(int x) const {
@@ -240,7 +256,35 @@ public:
     /** Get the dimensionality of this image parameter */
     int dimensions() const {
         return dims;
-    };
+    }
+
+    /** Get an expression giving the minimum coordinate in dimension 0, which
+     * by convention is the coordinate of the left edge of the image */
+    Expr left() const {
+        assert(dims >= 0);
+        return min(0);
+    }
+
+    /** Get an expression giving the maximum coordinate in dimension 0, which
+     * by convention is the coordinate of the right edge of the image */
+    Expr right() const {
+        assert(dims >= 0);
+        return Internal::Add::make(min(0), Internal::Sub::make(extent(0), 1));
+    }
+
+    /** Get an expression giving the minimum coordinate in dimension 1, which
+     * by convention is the top of the image */
+    Expr top() const {
+        assert(dims >= 1);
+        return min(1);
+    }
+
+    /** Get an expression giving the maximum coordinate in dimension 1, which
+     * by convention is the bottom of the image */
+    Expr bottom() const {
+        assert(dims >= 1);
+        return Internal::Add::make(min(1), Internal::Sub::make(extent(1), 1));
+    }
 
     /** Get an expression giving the extent in dimension 0, which by
      * convention is the width of the image */
@@ -275,6 +319,11 @@ public:
         return Argument(name(), true, type());
     }
 
+    /** Using a param as the argument to an external stage treats it
+     * as an Expr */
+    operator ExternFuncArgument() const {
+        return param;
+    }
 };
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */

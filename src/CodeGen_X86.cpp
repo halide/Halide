@@ -42,54 +42,49 @@ void CodeGen_X86::compile(Stmt stmt, string name,
 
     module = get_initial_module_for_target(target, context);
 
-    // Fix the target triple
-    #if WITH_NATIVE_CLIENT
-    if (target.os == Target::NaCl) {
-        llvm::Triple triple(module->getTargetTriple());
-        triple.setOS(llvm::Triple::NaCl);
-        module->setTargetTriple(triple.str());
+    llvm::Triple triple;
+
+    if (target.bits == 32) {
+        triple.setArch(llvm::Triple::x86);
+    } else {
+        assert(target.bits == 64);
+        triple.setArch(llvm::Triple::x86_64);
     }
-    #else
-    assert(target.os != Target::NaCl && "This version of Halide was compiled without nacl support");
-    #endif
+
+    // Fix the target triple
 
     if (target.os == Target::Linux) {
-        if (target.bits == 32) {
-            module->setTargetTriple("i386-unknown-linux-gnu");
-        } else {
-            module->setTargetTriple("x86_64-unknown-linux-gnu");
-        }
+        triple.setOS(llvm::Triple::Linux);
+        triple.setEnvironment(llvm::Triple::GNU);
     } else if (target.os == Target::OSX) {
-        if (target.bits == 32) {
-            module->setTargetTriple("i386-apple-macosx");
-        } else {
-            module->setTargetTriple("x86_64-apple-macosx");
-        }
+        triple.setVendor(llvm::Triple::Apple);
+        triple.setOS(llvm::Triple::MacOSX);
     } else if (target.os == Target::Windows) {
+        triple.setVendor(llvm::Triple::PC);
+        triple.setOS(llvm::Triple::Win32);
         if (target.features & Target::JIT) {
-            if (target.bits == 32) {
-                module->setTargetTriple("i386-pc-win32-elf");
-            } else {
-                module->setTargetTriple("x86_64-pc-win32-elf");
-            }
-        } else {
-            // Use COFF files instead of elf.
-            if (target.bits == 32) {
-                module->setTargetTriple("i386-pc-win32-unknown");
-            } else {
-                module->setTargetTriple("x86_64-pc-win32-unknown");
-            }
+            // Use ELF for jitting
+            triple.setEnvironment(llvm::Triple::ELF);
         }
     } else if (target.os == Target::Android) {
-        if (target.bits == 32) {
-            module->setTargetTriple("i386-unknown-linux-android");
-        } else {
+        triple.setOS(llvm::Triple::Linux);
+        triple.setEnvironment(llvm::Triple::Android);
+
+        if (target.bits == 64) {
             std::cerr << "WARNING: x86-64 android is untested\n";
-            module->setTargetTriple("x86_64-unknown-linux-android");
         }
+    } else if (target.os == Target::NaCl) {
+        #if WITH_NATIVE_CLIENT
+        triple.setOS(llvm::Triple::NaCl);
+        triple.setEnvironment(llvm::Triple::GNU);
+        #else
+        assert(false && "This version of Halide was compiled without nacl support");
+        #endif
     } else if (target.os == Target::IOS) {
         assert(false && "Not sure what llvm target triple to use when compiling to IOS on x86 (does this even exist?)");
     }
+
+    module->setTargetTriple(triple.str());
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 

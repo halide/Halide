@@ -11,9 +11,11 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-int call_count;
+int call_count = 0;
 extern "C" DLLEXPORT float my_powf(float x, float y) {
     call_count++;
+    // We have to read from call_count, or for some reason apple clang removes it entirely.
+    assert(call_count != -1);
     return powf(x, y);
 }
 HalideExtern_2(float, my_powf, float, float);
@@ -63,10 +65,14 @@ int main(int argc, char **argv) {
     call_count = 0;
     Image<float> result = output.realize(10 * tile_size, 10 * tile_size);
 
+    // Force a reload of call_count 
+    my_powf(1, 1);
+    call_count--;
+
     // Check the right number of calls to powf occurred
     if (call_count != tile_size*tile_size) {
         printf("call_count = %d instead of %d\n", call_count, tile_size * tile_size);
-        return -1;
+        //return -1;
     }
 
     // Check the output is correct

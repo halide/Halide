@@ -12,7 +12,7 @@ size_t total_allocated = 0;
 // and bug behaviors, etc. Cheap enough to be good in testing.
 std::map<void *, size_t> allocation_sizes;
 
-extern "C" void *test_malloc(size_t x) {
+extern "C" void *test_malloc(void *user_context, size_t x) {
     if (total_allocated + x > mem_limit)
         return NULL;
 
@@ -25,14 +25,14 @@ extern "C" void *test_malloc(size_t x) {
     return result;
 }
 
-extern "C" void test_free(void *ptr) {
+extern "C" void test_free(void *user_context, void *ptr) {
     total_allocated -= allocation_sizes[ptr];
     allocation_sizes.erase(ptr);
     free(ptr);
 }
 
 bool error_occurred  = false;
-extern "C" void handler(const char *msg) {
+extern "C" void handler(void *user_context, const char *msg) {
     printf("%s\n", msg);
     error_occurred = true;
 }

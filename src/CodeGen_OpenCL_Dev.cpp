@@ -159,63 +159,69 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream.clear();
 
     // This identifies the program as OpenCL C (as opposed to SPIR).
-    src_stream << "/*OpenCL C*/" << std::endl; 
+    src_stream << "/*OpenCL C*/\n";
 
 #ifdef ENABLE_CL_KHR_FP64
-    src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable" << std::endl;
+    src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
 #endif
+    src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
-    src_stream << "float nan_f32() { return NAN; }" << std::endl;
-    src_stream << "float neg_inf_f32() { return -INFINITY; }" << std::endl;
-    src_stream << "float inf_f32() { return INFINITY; }" << std::endl;
-    src_stream << "float sqrt_f32(float x) { return sqrt(x); }" << std::endl;
-    src_stream << "float sin_f32(float x) { return sin(x); }" << std::endl;
-    src_stream << "float cos_f32(float x) { return cos(x); }" << std::endl;
-    src_stream << "float exp_f32(float x) { return exp(x); }" << std::endl;
-    src_stream << "float log_f32(float x) { return log(x); }" << std::endl;
-    src_stream << "float abs_f32(float x) { return x < 0.0f ? -x : x; }" << std::endl; // No abs in OCL C.
-    src_stream << "float floor_f32(float x) { return floor(x); }" << std::endl;
-    src_stream << "float ceil_f32(float x) { return ceil(x); }" << std::endl;
-    src_stream << "float round_f32(float x) { return round(x); }" << std::endl;
-    src_stream << "float pow_f32(float x, float y) { return pow(x, y); }" << std::endl;
-    src_stream << "float asin_f32(float x) { return asin(x); }" << std::endl;
-    src_stream << "float acos_f32(float x) { return acos(x); }" << std::endl;
-    src_stream << "float tan_f32(float x) { return tan(x); }" << std::endl;
-    src_stream << "float atan_f32(float x) { return atan(x); }" << std::endl;
-    src_stream << "float atan2_f32(float y, float x) { return atan2(y, x); }" << std::endl;
-    src_stream << "float sinh_f32(float x) { return sinh(x); }" << std::endl;
-    src_stream << "float asinh_f32(float x) { return asinh(x); }" << std::endl;
-    src_stream << "float cosh_f32(float x) { return cosh(x); }" << std::endl;
-    src_stream << "float acosh_f32(float x) { return acosh(x); }" << std::endl;
-    src_stream << "float tanh_f32(float x) { return tanh(x); }" << std::endl;
-    src_stream << "float atanh_f32(float x) { return atanh(x); }" << std::endl;
+    src_stream << "float nan_f32() { return NAN; }\n"
+               << "float neg_inf_f32() { return -INFINITY; }\n"
+               << "float inf_f32() { return INFINITY; }\n"
+               << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "float sqrt_f32(float x) { return sqrt(x); }\n"
+               << "float sin_f32(float x) { return sin(x); }\n"
+               << "float cos_f32(float x) { return cos(x); }\n"
+               << "float exp_f32(float x) { return exp(x); }\n"
+               << "float log_f32(float x) { return log(x); }\n"
+               << "float abs_f32(float x) { return fabs(x); }\n"
+               << "float floor_f32(float x) { return floor(x); }\n"
+               << "float ceil_f32(float x) { return ceil(x); }\n"
+               << "float round_f32(float x) { return round(x); }\n"
+               << "float pow_f32(float x, float y) { return pow(x, y); }\n"
+               << "float asin_f32(float x) { return asin(x); }\n"
+               << "float acos_f32(float x) { return acos(x); }\n"
+               << "float tan_f32(float x) { return tan(x); }\n"
+               << "float atan_f32(float x) { return atan(x); }\n"
+               << "float atan2_f32(float y, float x) { return atan2(y, x); }\n"
+               << "float sinh_f32(float x) { return sinh(x); }\n"
+               << "float asinh_f32(float x) { return asinh(x); }\n"
+               << "float cosh_f32(float x) { return cosh(x); }\n"
+               << "float acosh_f32(float x) { return acosh(x); }\n"
+               << "float tanh_f32(float x) { return tanh(x); }\n"
+               << "float atanh_f32(float x) { return atanh(x); }\n";
 
 #ifdef ENABLE_CL_KHR_FP64
-    src_stream << "double sqrt_f64(double x) { return sqrt(x); }" << std::endl;
-    src_stream << "double sin_f64(double x) { return sin(x); }" << std::endl;
-    src_stream << "double cos_f64(double x) { return cos(x); }" << std::endl;
-    src_stream << "double exp_f64(double x) { return exp(x); }" << std::endl;
-    src_stream << "double log_f64(double x) { return log(x); }" << std::endl;
-    src_stream << "double abs_f64(double x) { return x < 0.0 ? -x : x; }" << std::endl; // No abs in OCL C.
-    src_stream << "double floor_f64(double x) { return floor(x); }" << std::endl;
-    src_stream << "double ceil_f64(double x) { return ceil(x); }" << std::endl;
-    src_stream << "double round_f64(double x) { return round(x); }" << std::endl;
-    src_stream << "double pow_f64(double x, double y) { return pow(x, y); }" << std::endl;
-    src_stream << "double asin_f64(double x) { return asin(x); }" << std::endl;
-    src_stream << "double acos_f64(double x) { return acos(x); }" << std::endl;
-    src_stream << "double tan_f64(double x) { return tan(x); }" << std::endl;
-    src_stream << "double atan_f64(double x) { return atan(x); }" << std::endl;
-    src_stream << "double atan2_f64(double y, double x) { return atan2(y, x); }" << std::endl;
-    src_stream << "double sinh_f64(double x) { return sinh(x); }" << std::endl;
-    src_stream << "double asinh_f64(double x) { return asinh(x); }" << std::endl;
-    src_stream << "double cosh_f64(double x) { return cosh(x); }" << std::endl;
-    src_stream << "double acosh_f64(double x) { return acosh(x); }" << std::endl;
-    src_stream << "double tanh_f64(double x) { return tanh(x); }" << std::endl;
-    src_stream << "double atanh_f64(double x) { return atanh(x); }" << std::endl;
+    src_stream << "double sqrt_f64(double x) { return sqrt(x); }\n"
+               << "double sin_f64(double x) { return sin(x); }\n"
+               << "double cos_f64(double x) { return cos(x); }\n"
+               << "double exp_f64(double x) { return exp(x); }\n"
+               << "double log_f64(double x) { return log(x); }\n"
+               << "double abs_f64(double x) { return fabs(x); }\n"
+               << "double floor_f64(double x) { return floor(x); }\n"
+               << "double ceil_f64(double x) { return ceil(x); }\n"
+               << "double round_f64(double x) { return round(x); }\n"
+               << "double pow_f64(double x, double y) { return pow(x, y); }\n"
+               << "double asin_f64(double x) { return asin(x); }\n"
+               << "double acos_f64(double x) { return acos(x); }\n"
+               << "double tan_f64(double x) { return tan(x); }\n"
+               << "double atan_f64(double x) { return atan(x); }\n"
+               << "double atan2_f64(double y, double x) { return atan2(y, x); }\n"
+               << "double sinh_f64(double x) { return sinh(x); }\n"
+               << "double asinh_f64(double x) { return asinh(x); }\n"
+               << "double cosh_f64(double x) { return cosh(x); }\n"
+               << "double acosh_f64(double x) { return acosh(x); }\n"
+               << "double tanh_f64(double x) { return tanh(x); }\n"
+               << "double atanh_f64(double x) { return atanh(x); }\n";
 #endif
 
-    src_stream << std::endl;
+    src_stream << '\n';
+
+    // Add at least one kernel to avoid errors on some implementations for functions
+    // without any GPU schedules.
+    src_stream << "__kernel void _at_least_one_kernel(int x) { }\n";
 
     cur_kernel_name = "";
 }

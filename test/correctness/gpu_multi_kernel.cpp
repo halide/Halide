@@ -7,7 +7,7 @@ int main(int argc, char *argv[]) {
     Var x;
 
     Func kernel1;
-    kernel1(x) = floor(x / 3.0f);
+    kernel1(x) = floor((x + 0.5f) / 3.0f);
 
     Func kernel2;
     kernel2(x) = sqrt(4 * x * x) + kernel1(x);
@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     Image<int32_t> result = kernel3.realize(256);
 
     for (int i = 0; i < 256; i ++)
-      assert(result(i) == static_cast<int32_t>(floor(i / 3.0f) + sqrt(4 * i * i) + i));
+      assert(result(i) == static_cast<int32_t>(floor(((float)i + 0.5f) / 3.0f) + sqrt(4 * i * i) + i));
 
     std::cout << "Success!" << std::endl;
 }

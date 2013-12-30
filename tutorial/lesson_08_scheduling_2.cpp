@@ -469,7 +469,7 @@ int main(int argc, char **argv) {
                 // 2x2 tile of the consumer requires a 3x3 tile of the
                 // producer.
                 float producer_storage[3][3];
-                for (int py = x_base; py < x_base + 3; py++) {
+                for (int py = y_base; py < y_base + 3; py++) {
                     for (int px = x_base; px < x_base + 3; px++) {
                         producer_storage[py-y_base][px-x_base] = sqrt(px * py);
                     }

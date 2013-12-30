@@ -70,7 +70,10 @@ CXX_FLAGS += $(ARM64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(SPIR_CXX_FLAGS)
-LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
+LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
+
+# Remove some non-llvm libs that llvm-config has helpfully included
+LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_LIBS))
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -78,6 +81,20 @@ TEST_PTX = 1
 endif
 ifneq (,$(findstring cuda,$(HL_TARGET)))
 TEST_PTX = 1
+endif
+endif
+
+ifneq ($(WITH_OPENCL), )
+ifneq (,$(findstring opencl,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+endif
+ifneq ($(WITH_SPIR), )
+ifneq (,$(findstring spir,$(HL_TARGET)))
+TEST_OPENCL = 1
+endif
+ifneq (,$(findstring spir64,$(HL_TARGET)))
+TEST_OPENCL = 1
 endif
 endif
 
@@ -97,6 +114,10 @@ ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
 endif
 HOST_OS=os_x
+endif
+
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -lOpenCL
 endif
 
 # Compiling the tutorials requires libpng
@@ -130,7 +151,7 @@ OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
 RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io nacl_io osx_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug windows_io
-RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev spir_dev spir64_dev x86_avx x86 x86_sse41
+RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev spir_dev spir64_dev spir_common_dev x86_avx x86 x86_sse41
 
 INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_64.o) $(RUNTIME_LL_COMPONENTS:%=$(BUILD_DIR)/initmod.%_ll.o) $(PTX_DEVICE_INITIAL_MODULES:libdevice.%.bc=$(BUILD_DIR)/initmod_ptx.%_ll.o)
 
@@ -145,7 +166,7 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) -ldl -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) $(BIN_DIR)/build_halide_h
 	mkdir -p include
@@ -251,7 +272,7 @@ tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	cd tmp/static; DYLD_LIBRARY_PATH=../../$(BIN_DIR) LD_LIBRARY_PATH=../../$(BIN_DIR) ../../$<
 	@-echo
 
-$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o
+$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread -ldl $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h

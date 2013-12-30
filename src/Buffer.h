@@ -98,12 +98,23 @@ struct BufferContents {
 class Buffer {
 private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
+    int32_t size_or_zero(const std::vector<int32_t> &sizes, size_t index) {
+        return (index < sizes.size()) ? sizes[index] : 0;
+    }
 public:
     Buffer() : contents(NULL) {}
 
     Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
            uint8_t* data = NULL, const std::string &name = "") :
         contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data, name)) {
+    }
+
+    Buffer(Type t, const std::vector<int32_t> &sizes,
+	   uint8_t* data = NULL, const std::string &name = "") :
+        contents(new Internal::BufferContents(t,
+             size_or_zero(sizes, 0), size_or_zero(sizes, 1), size_or_zero(sizes, 2), size_or_zero(sizes, 3),
+	     data, name)) {
+	assert(sizes.size() <= 4 && "Buffer dimensions greater than 4 are not supported.");
     }
 
     Buffer(Type t, const buffer_t *buf, const std::string &name = "") :
@@ -250,10 +261,12 @@ public:
      * realization, then copy it back to the cpu-side memory. This is
      * usually achieved by casting the Buffer to an Image. */
     void copy_to_host() {
-        void (*copy_to_host)(buffer_t *) =
+        void (*copy_to_host)(void *, buffer_t *) =
             contents.ptr->source_module.copy_to_host;
         if (copy_to_host) {
-            copy_to_host(raw_buffer());
+            /* The user context is always NULL when jitting, so it's safe to
+             * pass NULL here. */
+            copy_to_host(NULL, raw_buffer());
         }
     }
 
@@ -268,10 +281,10 @@ public:
      * you. Casting the Buffer to an Image sets the dirty bit for
      * you. */
     void copy_to_dev() {
-        void (*copy_to_dev)(buffer_t *) =
+        void (*copy_to_dev)(void *, buffer_t *) =
             contents.ptr->source_module.copy_to_dev;
         if (copy_to_dev) {
-            copy_to_dev(raw_buffer());
+            copy_to_dev(NULL, raw_buffer());
         }
     }
 
@@ -280,10 +293,10 @@ public:
      * allocation, if there is one. Done automatically when the last
      * reference to this buffer dies. */
     void free_dev_buffer() {
-        void (*free_dev_buffer)(buffer_t *) =
+        void (*free_dev_buffer)(void *, buffer_t *) =
             contents.ptr->source_module.free_dev_buffer;
         if (free_dev_buffer) {
-            free_dev_buffer(raw_buffer());
+            free_dev_buffer(NULL, raw_buffer());
         }
     }
 
@@ -299,7 +312,7 @@ template<>
 inline void destroy<BufferContents>(const BufferContents *p) {
     // Free any device-side allocation
     if (p->source_module.free_dev_buffer) {
-        p->source_module.free_dev_buffer(const_cast<buffer_t *>(&p->buf));
+        p->source_module.free_dev_buffer(NULL, const_cast<buffer_t *>(&p->buf));
     }
     free(p->allocation);
 

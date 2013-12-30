@@ -12,11 +12,11 @@
 
 #define DEBUG 1
 
-extern "C" void halide_set_error_handler(int (*handler)(const char *));
+extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
 extern "C" int halide_host_cpu_count();
 extern "C" int64_t halide_current_time_ns();
 
-int handler(const char *msg) {
+int handler(void */* user_context */, const char *msg) {
     LOGE(msg);
 }
 
