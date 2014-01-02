@@ -321,20 +321,27 @@ Stmt build_produce(Function f) {
 
         // Make the buffer_ts representing the output. They
         // all use the same size, but have differing types.
+        //
+        // Bounds are inferred for the first element of the Tuple
+        // hence they must be looked up using the name chosen for the
+        // first name generated on the Tuple.
+        string bounds_name;
         for (int j = 0; j < f.outputs(); j++) {
             string name = f.name();
             if (f.outputs() > 1) {
                 name += "." + int_to_string(j);
             }
+            if (j == 0)
+                bounds_name = name;
             vector<Expr> buffer_args(2);
             Expr host = Call::make(Handle(), name, vector<Expr>(), Call::Intrinsic);
             buffer_args[0] = host;
             buffer_args[1] = f.output_types()[j].bytes();
             for (int k = 0; k < f.dimensions(); k++) {
                 string d = int_to_string(k);
-                buffer_args.push_back(Variable::make(Int(32), f.name() + ".min." + d));
-                buffer_args.push_back(Variable::make(Int(32), f.name() + ".extent." + d));
-                buffer_args.push_back(Variable::make(Int(32), f.name() + ".stride." + d));
+                buffer_args.push_back(Variable::make(Int(32), bounds_name + ".min." + d));
+                buffer_args.push_back(Variable::make(Int(32), bounds_name + ".extent." + d));
+                buffer_args.push_back(Variable::make(Int(32), bounds_name + ".stride." + d));
             }
 
             Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
@@ -968,10 +975,8 @@ Stmt create_initial_loop_nest(Function f) {
     // Generate initial loop nest
     pair<Stmt, Stmt> r = build_realization(f);
     Stmt s = r.first;
-    if (r.second.defined()) {
-        // This must be in a pipeline so that bounds inference understands the update step
-        s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
-    }
+    // This must be in a pipeline so that bounds inference understands the update step
+    s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
     return inject_explicit_bounds(s, f);
 }
 

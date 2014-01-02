@@ -3,10 +3,11 @@
 
 using namespace Halide;
 
-void my_trace(void *user_context, const char *function, int event_type,
-              int type_code, int bits, int width,
-              int value_index, const void *value,
-              int num_int_args, const int *int_args) {
+int my_trace(void *user_context, const char *function,
+             int event_type, int parent_id,
+             int type_code, int bits, int width,
+             int value_index, const void *value,
+             int num_int_args, const int *int_args) {
     // The schedule implies that f and g will be stored from 0 to 7
     if (event_type == 2) {
         if (int_args[1] < 7) {
@@ -15,6 +16,7 @@ void my_trace(void *user_context, const char *function, int event_type,
             exit(-1);
         }
     }
+    return 0;
 }
 
 int main(int argc, char **argv) {
