@@ -96,32 +96,56 @@ Target get_host_target() {
 #endif
 }
 
-Target get_target_from_environment() {
+namespace {
+string get_env(const char *name) {
+#ifdef _WIN32
+    char buf[128];
+    size_t read = 0;
+    getenv_s(&read, buf, name);
+    if (read) {
+        return string(buf);
+    } else {
+        return "";
+    }
+#else
+    char *buf = getenv(name);
+    if (buf) {
+        return string(buf);
+    } else {
+        return "";
+    }
+#endif
+}
+}
 
+Target get_target_from_environment() {
+    string target = get_env("HL_TARGET");
+    if (target.empty()) {
+        return get_host_target();
+    } else {
+        return parse_target_string(target);
+    }
+}
+
+Target get_jit_target_from_environment() {
+    Target host = get_host_target();
+    string target = get_env("HL_JIT_TARGET");
+    if (target.empty()) {
+        return host;
+    } else {
+        Target t = parse_target_string(target);
+        assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits &&
+               "HL_JIT_TARGET must match the host OS, architecture, and bit width");
+        return t;
+    }
+}
+
+Target parse_target_string(const std::string &target) {
     //Internal::debug(0) << "Getting host target \n";
 
     Target t = get_host_target();
 
     //Internal::debug(0) << "Got host target \n";
-
-    string target;
-#ifdef _WIN32
-    char buf[128];
-    size_t read = 0;
-    getenv_s(&read, buf, "HL_TARGET");
-    if (read) {
-        target = buf;
-    } else {
-        return t;
-    }
-#else
-    char *buf = getenv("HL_TARGET");
-    if (buf) {
-        target = buf;
-    } else {
-        return t;
-    }
-#endif
 
     if (target.empty()) return t;
 
@@ -488,12 +512,12 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
         // to "available externally" which should guarantee they do not exist
         // after the resulting module is finalized to code. That is they must
         // be inlined to be used.
-	//
-	// However libdevice has a few routines that are marked
-	// "noinline" which must either be changed to alow inlining or
-	// preserved in generated code. This preserves the intent of
-	// keeping these routines out-of-line and hence called by
-	// not marking them AvailableExternally.
+        //
+        // However libdevice has a few routines that are marked
+        // "noinline" which must either be changed to alow inlining or
+        // preserved in generated code. This preserves the intent of
+        // keeping these routines out-of-line and hence called by
+        // not marking them AvailableExternally.
 
         if (!f->isDeclaration() && !f->hasFnAttribute(llvm::Attribute::NoInline)) {
             f->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
