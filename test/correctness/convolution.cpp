@@ -77,7 +77,6 @@ int main(int argc, char **argv) {
         // Summation is done as a sequential loop within each gpu thread
         blur2.cuda_tile(x, y, 16, 16);
     } else if (target.features & Target::OpenCL) {
-        printf("using opencl!");
         // Initialization (basically memset) done in a cuda kernel
         blur1.cuda_tile(x, y, 16, 16);
 
