@@ -343,7 +343,13 @@ public:
      */
     // @{
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
-    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size, int y_size, int z_size, 
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size, int y_size, 
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size = 0,
                                const Target &target = get_jit_target_from_environment());
     // @}
 

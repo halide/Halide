@@ -1342,6 +1342,18 @@ Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const 
     return r;
 }
 
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
+    return realize(x_size, y_size, z_size, 0, target);
+}
+
+Realization Func::realize(int x_size, int y_size, const Target &target) {
+    return realize(x_size, y_size, 0, 0, target);
+}
+
+Realization Func::realize(int x_size, const Target &target) {
+    return realize(x_size, 0, 0, 0, target);
+}
+
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     assert(defined() && "Can't infer input bounds on an undefined function");
     vector<Buffer> outputs(func.outputs());
