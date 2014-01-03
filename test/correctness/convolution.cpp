@@ -77,6 +77,7 @@ int main(int argc, char **argv) {
         // Summation is done as a sequential loop within each gpu thread
         blur2.cuda_tile(x, y, 16, 16);
     } else if (target.features & Target::OpenCL) {
+        printf("using opencl!");
         // Initialization (basically memset) done in a cuda kernel
         blur1.cuda_tile(x, y, 16, 16);
 
@@ -94,8 +95,8 @@ int main(int argc, char **argv) {
         blur2.vectorize(x, 4).parallel(y);
     }
 
-    Image<uint16_t> out1 = blur1.realize(W, H);
-    Image<uint16_t> out2 = blur2.realize(W, H);
+    Image<uint16_t> out1 = blur1.realize(W, H, target);
+    Image<uint16_t> out2 = blur2.realize(W, H, target);
 
     for (int y = 1; y < H-1; y++) {
         for (int x = 1; x < W-1; x++) {
