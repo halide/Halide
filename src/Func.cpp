@@ -1322,14 +1322,25 @@ FuncRefExpr::operator Tuple() const {
 }
 */
 
-Realization Func::realize(int x_size, int y_size, int z_size, int w_size) {
+Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
+    assert(defined() && "Can't realize undefined function");
+    vector<Buffer> outputs(func.outputs());
+    for (size_t i = 0; i < outputs.size(); i++) {
+        outputs[i] = Buffer(func.output_types()[i], sizes);
+    }
+    Realization r(outputs);
+    realize(r, target);
+    return r;
+}
+
+Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
     assert(defined() && "Can't realize undefined function");
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
     }
     Realization r(outputs);
-    realize(r);
+    realize(r, target);
     return r;
 }
 
@@ -1492,7 +1503,8 @@ void validate_arguments(const string &output,
 }
 
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name) {
+  void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+                                const Target &target) {
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
@@ -1506,12 +1518,13 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg(get_target_from_environment());
+    StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_bitcode(filename);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name) {
+  void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
+                               const Target &target) {
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
@@ -1525,7 +1538,7 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg(get_target_from_environment());
+    StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, false);
 }
@@ -1566,36 +1579,43 @@ void Func::compile_to_lowered_stmt(const string &filename) {
     stmt_output << lowered;
 }
 
-void Func::compile_to_file(const string &filename_prefix, vector<Argument> args) {
+void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
+                           const Target &target) {
     compile_to_header(filename_prefix + ".h", args, filename_prefix);
-    compile_to_object(filename_prefix + ".o", args, filename_prefix);
+    compile_to_object(filename_prefix + ".o", args, filename_prefix, target);
 }
 
-void Func::compile_to_file(const string &filename_prefix) {
-    compile_to_file(filename_prefix, vector<Argument>());
+void Func::compile_to_file(const string &filename_prefix, const Target &target) {
+  compile_to_file(filename_prefix, vector<Argument>(), target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, Argument a) {
-    compile_to_file(filename_prefix, Internal::vec(a));
+void Func::compile_to_file(const string &filename_prefix, Argument a,
+                           const Target &target) {
+  compile_to_file(filename_prefix, Internal::vec(a), target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b) {
-    compile_to_file(filename_prefix, Internal::vec(a, b));
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b,
+                           const Target &target) {
+  compile_to_file(filename_prefix, Internal::vec(a, b), target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c));
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c,
+                           const Target &target) {
+  compile_to_file(filename_prefix, Internal::vec(a, b, c), target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d));
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d,
+                           const Target &target) {
+  compile_to_file(filename_prefix, Internal::vec(a, b, c, d), target);
 }
 
-void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e) {
-    compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e));
+void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
+                           const Target &target) {
+  compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name) {
+void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
+                               const Target &target) {
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
@@ -1607,7 +1627,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg(get_target_from_environment());
+    StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, true);
 }
@@ -1649,12 +1669,12 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
-void Func::realize(Buffer b) {
-    realize(Realization(vec<Buffer>(b)));
+  void Func::realize(Buffer b, const Target &target) {
+    realize(Realization(vec<Buffer>(b)), target);
 }
 
-void Func::realize(Realization dst) {
-    if (!compiled_module.wrapped_function) compile_jit();
+  void Func::realize(Realization dst, const Target &target) {
+    if (!compiled_module.wrapped_function) compile_jit(target);
 
     assert(compiled_module.wrapped_function);
 
@@ -1801,7 +1821,7 @@ void Func::infer_input_bounds(Realization dst) {
     }
 }
 
-void *Func::compile_jit() {
+void *Func::compile_jit(const Target &target) {
     assert(defined() && "Can't realize undefined function");
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func);
@@ -1830,8 +1850,7 @@ void *Func::compile_jit() {
                          << infer_args.arg_types[i].is_buffer << "\n";
     }
 
-    Target t = get_target_from_environment();
-    // TODO: Validate that we can reasonably jit to this target
+    Target t = target;
     t.features |= Target::JIT;
     StmtCompiler cg(t);
     cg.compile(lowered, name(), infer_args.arg_types, vector<Buffer>());

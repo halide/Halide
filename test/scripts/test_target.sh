@@ -1,6 +1,7 @@
 LLVM=$1
 
 export HL_TARGET=$2
+export HL_JIT_TARGET=$2
 
 if [[ "$HL_TARGET" == x86-3* ]]; then
     BITS=32
