@@ -33,6 +33,34 @@ int dump_to_file(buffer_t *input, const char *filename,
     return 0;
 }
 
+bool check_result() {
+    // Check the right thing happened
+    const char *correct =
+        "0\n"
+        "1\n"
+        "4\n"
+        "9\n"
+        "16\n"
+        "25\n"
+        "36\n"
+        "49\n"
+        "64\n"
+        "81\n";
+
+    FILE *f = fopen("halide_test_extern_consumer.txt", "r");
+    char result[1024];
+    size_t bytes_read = fread(&result[0], 1, 1023, f);
+    result[bytes_read] = 0;
+    fclose(f);
+
+    if (strncmp(result, correct, 1023)) {
+        printf("Incorrect output: %s\n", result);
+        return false;
+    }
+
+    return true;
+}
+
 int main(int argc, char **argv) {
     // Define a pipeline that dumps some squares to a file using an
     // external consumer stage.
@@ -61,30 +89,26 @@ int main(int argc, char **argv) {
     extent.set(10);
     sink.realize();
 
-
-    // Check the right thing happened
-    const char *correct =
-        "0\n"
-        "1\n"
-        "4\n"
-        "9\n"
-        "16\n"
-        "25\n"
-        "36\n"
-        "49\n"
-        "64\n"
-        "81\n";
-
-    FILE *f = fopen("halide_test_extern_consumer.txt", "r");
-    char result[1024];
-    size_t bytes_read = fread(&result[0], 1, 1023, f);
-    result[bytes_read] = 0;
-    fclose(f);
-
-    if (strncmp(result, correct, 1023)) {
-        printf("Incorrect output: %s\n", result);
+    if (!check_result())
         return -1;
-    }
+
+    // Test ImageParam ExternFuncArgument via passed in image.
+    Image<int32_t> buf = source.realize(10);
+    ImageParam passed_in(Int(32), 1);
+    passed_in.set(buf);
+
+    Func sink2;
+    std::vector<ExternFuncArgument> args2;
+    args2.push_back(passed_in);
+    args2.push_back(filename);
+    args2.push_back(min);
+    args2.push_back(extent);
+    sink2.define_extern("dump_to_file", args2, Int(32), 0);
+
+    sink2.realize();
+
+    if (!check_result())
+        return -1;
 
     printf("Success!\n");
     return 0;

@@ -98,12 +98,23 @@ struct BufferContents {
 class Buffer {
 private:
     Internal::IntrusivePtr<Internal::BufferContents> contents;
+    int32_t size_or_zero(const std::vector<int32_t> &sizes, size_t index) {
+        return (index < sizes.size()) ? sizes[index] : 0;
+    }
 public:
     Buffer() : contents(NULL) {}
 
     Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
            uint8_t* data = NULL, const std::string &name = "") :
         contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data, name)) {
+    }
+
+    Buffer(Type t, const std::vector<int32_t> &sizes,
+	   uint8_t* data = NULL, const std::string &name = "") :
+        contents(new Internal::BufferContents(t,
+             size_or_zero(sizes, 0), size_or_zero(sizes, 1), size_or_zero(sizes, 2), size_or_zero(sizes, 3),
+	     data, name)) {
+	assert(sizes.size() <= 4 && "Buffer dimensions greater than 4 are not supported.");
     }
 
     Buffer(Type t, const buffer_t *buf, const std::string &name = "") :

@@ -951,7 +951,7 @@ struct Call : public ExprNode<Call> {
         count_leading_zeros,
         count_trailing_zeros,
         undef,
-        trace;
+        trace, trace_expr;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.
