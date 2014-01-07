@@ -16,17 +16,255 @@ using std::ostringstream;
 using std::vector;
 using std::map;
 using std::pair;
+using std::set;
 
-// Inject let stmts defining the bounds of a function required at each loop level
 class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
-    Scope<int> in_consume, in_realize;
+    Scope<int> in_pipeline;
+    set<string> inner_productions;
+
+    struct Stage {
+        Function func;
+        int stage; // 0 is the pure definition, 1 is the first update
+        vector<int> consumers;
+        Box bounds;
+
+        // Computed expressions on the left and right-hand sides
+        vector<Expr> exprs() {
+            if (stage == 0) {
+                return func.values();
+            } else {
+                const ReductionDefinition &r = func.reductions()[stage-1];
+                vector<Expr> result = r.values;
+                result.insert(result.end(), r.args.begin(), r.args.end());
+                return result;
+            }
+        }
+
+        // Wrap a statement in let stmts defining the box
+        Stmt define_bounds(Stmt s) {
+            assert(bounds.size() == func.args().size());
+            for (size_t d = 0; d < bounds.size(); d++) {
+                string arg = func.name() + ".s" + int_to_string(stage) + "." + func.args()[d];
+                s = LetStmt::make(arg + ".min", bounds[d].min, s);
+                s = LetStmt::make(arg + ".max", bounds[d].max, s);
+            }
+
+            return s;
+        }
+
+        // A scope giving the bounds for variables used by this stage
+        Scope<Interval> scope() {
+            Scope<Interval> result;
+            for (size_t d = 0; d < func.args().size(); d++) {
+                string arg = func.name() + ".s" + int_to_string(stage) + "." + func.args()[d];
+                result.push(func.args()[d],
+                            Interval(Variable::make(Int(32), arg + ".min"),
+                                     Variable::make(Int(32), arg + ".max")));
+            }
+            if (stage > 0) {
+                const ReductionDefinition &r = func.reductions()[stage-1];
+                if (r.domain.defined()) {
+                    const vector<ReductionVariable> &dom = r.domain.domain();
+                    for (size_t i = 0; i < dom.size(); i++) {
+                        const ReductionVariable &rvar = dom[i];
+                        // TODO: Consider using symbolic bounds for
+                        // the reduction domain instead of literal
+                        // ones. This would require someone to add let
+                        // statements that define those symbolic
+                        // bounds elsewhere.
+
+                        // TODO: What if the reduction domain bounds
+                        // reference the func's pure variables (not
+                        // currently allowed, but nice-to-have). If
+                        // so, we'd better take the min and max of the
+                        // expressions below w.r.t the scope so far.
+                        result.push(rvar.var, Interval(rvar.min, (rvar.min + rvar.extent) - 1));
+                    }
+                }
+            }
+            return result;
+        }
+
+    };
+    vector<Stage> stages;
 
     BoundsInference(const vector<Function> &f) : funcs(f) {
+        // Compute the intrinsic relationships between the stages of
+        // the functions.
+
+        // First lay out all the stages in their realization order.
+        // The functions are already in topologically sorted order, so
+        // this is straight-forward.
+        for (size_t i = 0; i < f.size(); i++) {
+            Stage s;
+            s.func = f[i];
+            s.stage = 0;
+            stages.push_back(s);
+
+            for (size_t j = 0; j < f[i].reductions().size(); j++) {
+                s.stage = (int)(j+1);
+                stages.push_back(s);
+            }
+
+        }
+
+        // Then compute relationships between them.
+        for (size_t i = 0; i < stages.size(); i++) {
+
+            Stage &consumer = stages[i];
+
+            // Set up symbols representing the bounds over which this
+            // stage will be computed.
+            Scope<Interval> scope = consumer.scope();
+
+            // Compute all the boxes of the producers this consumer
+            // uses.
+            const vector<Expr> &exprs = consumer.exprs();
+            map<string, Box> boxes;
+            for (size_t j = 0; j < exprs.size(); j++) {
+                map<string, Box> new_boxes = boxes_required(exprs[j], scope);
+                for (map<string, Box>::iterator iter = new_boxes.begin();
+                     iter != new_boxes.end(); ++iter) {
+                    merge_boxes(boxes[iter->first], iter->second);
+                }
+            }
+
+            // Expand the bounds required of all the producers found.
+            for (size_t j = 0; j < i; j++) {
+                Stage &producer = stages[j];
+                const Box &b = boxes[producer.func.name()];
+                if (!b.empty()) {
+                    merge_boxes(producer.bounds, b);
+                    producer.consumers.push_back((int)i);
+                }
+            }
+        }
+
+        // The region required of the last function is expanded to include output size
+        Function output = stages[stages.size()-1].func;
+        Box output_box;
+        for (int d = 0; d < output.dimensions(); d++) {
+            Expr min = Variable::make(Int(32), output.name() + ".min." + int_to_string(d));
+            Expr extent = Variable::make(Int(32), output.name() + ".extent." + int_to_string(d));
+            output_box.push_back(Interval(min, (min + extent) - 1));
+        }
+        for (size_t i = 0; i < stages.size(); i++) {
+            Stage &s = stages[i];
+            if (!s.func.same_as(output)) continue;
+            merge_boxes(s.bounds, output_box);
+        }
+
+        // Simplify all the bounds expressions
+        for (size_t i = 0; i < stages.size(); i++) {
+            for (size_t j = 0; j < stages[i].bounds.size(); j++) {
+                stages[i].bounds[j].min = simplify(stages[i].bounds[j].min);
+                stages[i].bounds[j].max = simplify(stages[i].bounds[j].max);
+            }
+        }
+
+        // Dump out the region required of each stage for debugging.
+        /*
+        for (size_t i = 0; i < stages.size(); i++) {
+            debug(0) << "Region required of " << stages[i].func.name()
+                     << " stage " << stages[i].stage << ":\n";
+            for (size_t j = 0; j < stages[i].bounds.size(); j++) {
+                debug(0) << "  [" << simplify(stages[i].bounds[j].min) << ", " << simplify(stages[i].bounds[j].max) << "]\n";
+            }
+            debug(0) << " consumed by: ";
+            for (size_t j = 0; j < stages[i].consumers.size(); j++) {
+                debug(0) << stages[stages[i].consumers[j]].func.name() << " ";
+            }
+            debug(0) << "\n";
+        }
+        */
     }
 
     using IRMutator::visit;
+
+    void visit(const For *op) {
+        set<string> old_inner_productions;
+        inner_productions.swap(old_inner_productions);
+
+        Stmt body = op->body;
+
+        // Figure out which stage of which function we're producing
+        int producing = -1;
+        Function f;
+        string stage_name;
+        for (size_t i = 0; i < stages.size(); i++) {
+            string next_stage_name = stages[i].func.name() + ".s" + int_to_string(stages[i].stage) + ".";
+            if (starts_with(op->name, next_stage_name)) {
+                producing = i;
+                f = stages[i].func;
+                stage_name = next_stage_name;
+            }
+        }
+
+        // Figure out how much of it we're producing
+        Box box;
+        if (producing >= 0) {
+            box = box_provided(body, f.name());
+            assert((int)box.size() == f.dimensions());
+        }
+
+        // Recurse.
+        body = mutate(body);
+
+        // We only care about the bounds of things that have a
+        // production inside this loop somewhere, and their
+        // consumers that we're not already in a pipeline of.
+        vector<bool> bounds_needed(stages.size(), false);
+
+        for (size_t i = 0; i < stages.size(); i++) {
+            if (inner_productions.count(stages[i].func.name())) {
+                bounds_needed[i] = true;
+            }
+
+            if (in_pipeline.contains(stages[i].func.name())) {
+                bounds_needed[i] = false;
+            }
+
+            if (bounds_needed[i]) {
+                for (size_t j = 0; j < stages[i].consumers.size(); j++) {
+                    bounds_needed[stages[i].consumers[j]] = true;
+                }
+                body = stages[i].define_bounds(body);
+            }
+        }
+
+        // Finally, define the production bounds for the thing
+        // we're producing.
+        if (producing >= 0 && !inner_productions.empty()) {
+            for (size_t i = 0; i < box.size(); i++) {
+                assert(box[i].min.defined() && box[i].max.defined());
+                string var = stage_name + f.args()[i];
+
+                if (box[i].max.same_as(box[i].min)) {
+                    body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                } else {
+                    body = LetStmt::make(var + ".max", box[i].max, body);
+                }
+
+                body = LetStmt::make(var + ".min", box[i].min, body);
+            }
+        }
+
+        inner_productions.insert(old_inner_productions.begin(),
+                                 old_inner_productions.end());
+
+        stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+    }
+
+    void visit(const Pipeline *p) {
+        in_pipeline.push(p->name, 0);
+        IRMutator::visit(p);
+        in_pipeline.pop(p->name);
+        inner_productions.insert(p->name);
+    }
+
+    /*
 
     virtual void visit(const For *for_loop) {
 
@@ -42,16 +280,25 @@ public:
 
         debug(3) << "\nIn loop over " << for_loop->name << " regions called are:\n\n";
         for (size_t i = 0; i < funcs.size(); i++) {
-            map<string, Region>::const_iterator iter = regions.find(funcs[i].name());
-            if (iter == regions.end()) continue;
-            const Region &r = iter->second;
+            Function f = funcs[i];
+            int stages = (int)f.reductions().size() + 1;
+            for (int j = 0; j < stages; j++) {
+                string stage = f.name();
+                if (j < stages-1) {
+                    stage += ".s" + int_to_string(j);
+                }
 
-            debug(3) << funcs[i].name() << ":\n";
-            for (size_t j = 0; j < r.size(); j++) {
-                debug(3) << "  min " << j << ": " << r[j].min << "\n"
-                         << "  extent " << j << ": " << r[j].extent << "\n";
+                map<string, Region>::const_iterator iter = regions.find(stage);
+                if (iter == regions.end()) continue;
+                const Region &r = iter->second;
+
+                debug(3) << funcs[i].name() << ":\n";
+                for (size_t j = 0; j < r.size(); j++) {
+                    debug(3) << "  min " << j << ": " << r[j].min << "\n"
+                             << "  extent " << j << ": " << r[j].extent << "\n";
+                }
+                debug(3) << "\n";
             }
-            debug(3) << "\n";
         }
 
         // In the outermost loop, the output func counts as used
@@ -288,14 +535,28 @@ public:
                 }
             }
 
-            for (size_t j = 0; j < region.size(); j++) {
-                if (!region[j].min.defined() || !region[j].extent.defined()) {
-                    std::cerr << "Use of " << f.name()
-                              << " is unbounded in dimension " << j
-                              << " in the following fragment of generated code: \n"
-                              << for_loop->body;
-                    assert(false);
+            int stages = f.reductions().size() + 1;
+            for (int stage = 0; stage < stages; stage++) {
+
+                string name = f.name();
+                if (stage < stages - 1) {
+                    name += ".s" + int_to_string(stage);
                 }
+                map<string, Region>::iterator iter = regions.find(name);
+                if (iter == regions.end()) continue;
+                Region region;
+                if (func_used) region = iter->second;
+                const Function &f = funcs[i];
+
+                region =
+                for (size_t j = 0; j < region.size(); j++) {
+                    if (!region[j].min.defined() || !region[j].extent.defined()) {
+                        std::cerr << "Use of " << f.name()
+                                  << " is unbounded in dimension " << j
+                                  << " in the following fragment of generated code: \n"
+                                  << for_loop->body;
+                        assert(false);
+                    }
 
                 const string &arg_name = f.args()[j];
                 string prefix = f.name() + "." + arg_name;
@@ -406,25 +667,24 @@ public:
         in_realize.pop(realize->name);
     }
 
+    */
+
 };
 
+
+
 Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
-    // Add a outermost::make loop to make sure we get outermost bounds definitions too
-    s = For::make("<outermost>", 0, 1, For::Serial, s);
+
 
     vector<Function> funcs(order.size());
     for (size_t i = 0; i < order.size(); i++) {
         funcs[i] = env.find(order[i])->second;
     }
 
+    // Add an outermost bounds inference marker
+    s = For::make("<outermost>", 0, 1, For::Serial, s);
     s = BoundsInference(funcs).mutate(s);
-
-    // We can remove the loop over root now
-    const For *root_loop = s.as<For>();
-    assert(root_loop);
-    s = root_loop->body;
-
-    return s;
+    return s.as<For>()->body;
 }
 
 

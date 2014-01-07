@@ -15,6 +15,8 @@ namespace Internal {
 using std::string;
 using std::map;
 
+namespace {
+
 // Does an expression depend on a particular variable?
 class ExprDependsOnVar : public IRVisitor {
     using IRVisitor::visit;
@@ -46,6 +48,32 @@ bool expr_depends_on_var(Expr e, string v) {
     return depends.result;
 }
 
+
+class ExpandExpr : public IRMutator {
+    using IRMutator::visit;
+    const Scope<Expr> &scope;
+
+    void visit(const Variable *var) {
+        if (scope.contains(var->name)) {
+            expr = mutate(scope.get(var->name));
+        } else {
+            expr = var;
+        }
+    }
+
+public:
+    ExpandExpr(const Scope<Expr> &s) : scope(s) {}
+
+};
+
+// Perform all the subtitutions in a scope
+Expr expand_expr(Expr e, Scope<Expr> scope) {
+    ExpandExpr ee(scope);
+    return ee.mutate(e);
+}
+
+}
+
 // Perform sliding window optimization for a function over a
 // particular serial for loop
 class SlidingWindowOnFunctionAndLoop : public IRMutator {
@@ -67,66 +95,70 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // dimensions of the buffer has a min/extent that depends
             // on the loop_var.
             string dim = "";
-            int dim_idx = -1;
-            Expr min_produced, extent_produced;
+            Expr min_required, max_required;
 
             debug(3) << "Considering sliding " << func.name()
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
+            string prefix = func.name() + ".s" + int_to_string(func.reductions().size()) + ".";
             for (int i = 0; i < func.dimensions(); i++) {
-                // Look up the region produced over this dimension
-                Expr m = scope.get(func.name() + "." + func.args()[i] + ".min_produced");
-                Expr e = scope.get(func.name() + "." + func.args()[i] + ".extent_produced");
+                // Look up the region required of all of this function's last stage
+                string var = prefix + func.args()[i];
+                Expr min_req = scope.get(var + ".min");
+                Expr max_req = scope.get(var + ".max");
+                min_req = expand_expr(min_req, scope);
+                max_req = expand_expr(max_req, scope);
 
-                string min_req_name = func.name() + "." + func.args()[i] + ".min_required";
-                string extent_req_name = func.name() + "." + func.args()[i] + ".extent_required";
-                Expr m_r = scope.get(min_req_name);
-                Expr e_r = scope.get(extent_req_name);
-
-                debug(3) << func.args()[i] << ":" << m << ", " << e  << "\n";
-                if (expr_depends_on_var(m_r, loop_var) ||
-                    expr_depends_on_var(e_r, loop_var)) {
+                debug(3) << func.args()[i] << ":" << min_req << ", " << max_req  << "\n";
+                if (expr_depends_on_var(min_req, loop_var) ||
+                    expr_depends_on_var(max_req, loop_var)) {
                     if (!dim.empty()) {
                         dim = "";
-                        dim_idx = -1;
-                        min_produced = Expr();
-                        extent_produced = Expr();
+                        min_required = Expr();
+                        max_required = Expr();
                         break;
                     } else {
                         dim = func.args()[i];
-                        dim_idx = i;
-                        min_produced = substitute(min_req_name, m_r, m);
-                        extent_produced = substitute(extent_req_name, e_r, e);
+                        min_required = min_req;
+                        max_required = max_req;
                     }
                 }
             }
 
-            if (!min_produced.defined()) {
+            if (!min_required.defined()) {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because either zero "
                          << "or many dimensions of the function dependended on the loop var\n";
                 return;
             }
 
-            bool increasing = true;
+            bool can_slide_up = false;
+            bool can_slide_down = false;
 
-            MonotonicResult m = is_monotonic(min_produced, loop_var);
+            MonotonicResult monotonic_min = is_monotonic(min_required, loop_var);
+            MonotonicResult monotonic_max = is_monotonic(max_required, loop_var);
 
-            if (m == MonotonicIncreasing || m == Constant) {
-                increasing = true;
-            } else if (m == MonotonicDecreasing) {
-                increasing = false;
-            } else {
+            if (monotonic_min == MonotonicIncreasing || monotonic_min == Constant) {
+                can_slide_up = true;
+            }
+
+            if (monotonic_max == MonotonicDecreasing || monotonic_max == Constant) {
+                can_slide_down = true;
+            }
+
+
+            if (!can_slide_up && !can_slide_down) {
                 debug(3) << "Not sliding " << func.name()
                          << " over dimension " << dim
                          << " along loop variable " << loop_var
                          << " because I couldn't prove it moved monotonically along that dimension\n"
-                         << "Min is " << min << "\n";
+                         << "Min is " << min_required << "\n"
+                         << "Max is " << max_required << "\n";
                 return;
             }
 
-
+            /* TODO
             if (op->update.defined()) {
                 // A reduction may not reach outwards in the dimension
                 // that we're trying to slide over. E.g. we can't slide
@@ -174,65 +206,38 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         return;
                     }
                 }
-
             }
+            */
 
             // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
             debug(3) << "Sliding " << func.name()
                      << " over dimension " << dim
                      << " along loop variable " << loop_var << "\n";
 
-            Expr new_min, new_extent;
-
-            Expr min_extent = func.min_extent_produced(dim);
-            Expr min_extent_factor = func.min_extent_updated(dim);
-
-            // We've sworn to produce from min_produced to
-            // extent_produced, but we can perhaps skip values
-            // already computed
+            Expr new_min, new_max;
 
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
-            Expr max_plus_one = min_produced + extent_produced;
-            // Compute the new extent.
-            if (increasing) {
-                Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_plus_one);
-                new_extent = max_plus_one - prev_max_plus_one;
+
+            Expr prev_max_plus_one = substitute(loop_var, loop_var_expr - 1, max_required) + 1;
+            Expr prev_min_minus_one = substitute(loop_var, loop_var_expr - 1, min_required) - 1;
+
+            if (can_slide_up) {
+                new_min = select(loop_var_expr == loop_min, min_required, prev_max_plus_one);
+                new_max = max_required;
             } else {
-                Expr prev_min = substitute(loop_var, loop_var_expr - 1, min_produced);
-                new_extent = prev_min - min_produced;
+                new_min = min_required;
+                new_max = select(loop_var_expr == loop_min, max_required, prev_min_minus_one);
             }
-
-            // We still need to produce an amount that is a
-            // multiple of the min_extent_factor and is at
-            // least the min_extent.
-            new_extent = Max::make(new_extent, min_extent);
-            new_extent += min_extent_factor - 1;
-            new_extent /= min_extent_factor;
-            new_extent *= min_extent_factor;
-
-            // Compute the new min.
-            if (increasing) {
-                new_min = max_plus_one - new_extent;
-                new_min = select(loop_var_expr == loop_min, min_produced, new_min);
-            } else {
-                new_min = min_produced;
-            }
-
-            // Use the old min and extent for the first iteration.
-            new_extent = select(loop_var_expr == loop_min, extent_produced, new_extent);
-
-            // Simplify.
-            new_extent = simplify(new_extent);
-            new_min = simplify(new_min);
 
             debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
-                     << "Pushing min up from " << min_produced << " to " << new_min << "\n"
-                     << "Shrinking extent from " << extent_produced << " to " << new_extent << "\n";
-            string min_name = func.name() + "." + dim + ".min_produced";
-            string extent_name = func.name() + "." + dim + ".extent_produced";
+                     << "Pushing min up from " << min_required << " to " << new_min << "\n"
+                     << "Shrinking max from " << max_required << " to " << new_max << "\n";
+            string min_name = prefix + dim + ".min";
+            string max_name = prefix + dim + ".max";
 
             stmt = LetStmt::make(min_name, new_min, stmt);
-            stmt = LetStmt::make(extent_name, new_extent, stmt);
+            stmt = LetStmt::make(max_name, new_max, stmt);
+            // TODO: Recompute bounds for update stages
         }
     }
 
@@ -259,6 +264,8 @@ class SlidingWindowOnFunction : public IRMutator {
 
     void visit(const For *op) {
         Stmt new_body = mutate(op->body);
+
+        debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
 
         if (op->for_type == For::Serial || op->for_type == For::Unrolled) {
             new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);

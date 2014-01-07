@@ -247,19 +247,6 @@ public:
         return contents.ptr->trace_realizations;
     }
     // @}
-
-    /** What's the smallest amount of this Function that can be
-     * produced? This is a function of the splits being done. Ignores
-     * writes due to scattering done by reductions. */
-    Expr min_extent_produced(const std::string &dim) const;
-
-    /** Reductions also have a minimum granularity with which they can
-     * be computed in the pure vars (because they can't hit the same
-     * pure variable twice). This function retrieves that. */
-    Expr min_extent_updated(const std::string &dim) const;
-
-    /** Retrive the min granularity for a particular update pass. */
-    Expr min_extent_updated(const std::string &dim, int pass) const;
 };
 
 }}
