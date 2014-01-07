@@ -33,9 +33,9 @@ struct Interval {
  */
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope);
 
-/** Compute rectangular domains large enough to cover all the 'Call's
- * to each function that occurs within a given statement. This is
- * useful for figuring out what regions of things to evaluate. */
+
+#if 0
+
 std::map<std::string, Region> regions_called(Stmt s);
 
 /** Compute rectangular domains large enough to cover all the
@@ -62,6 +62,62 @@ Region region_called(Stmt s, const std::string &func);
 
 /** Compute the smallest bounding box that contains two regions */
 Region region_union(const Region &, const Region &);
+
+#endif
+
+typedef std::vector<Interval> Box;
+
+// Expand box a to encompass box b
+void merge_boxes(Box &a, const Box &b);
+
+/** Compute rectangular domains large enough to cover all the 'Call's
+ * to each function that occurs within a given statement or
+ * expression. This is useful for figuring out what regions of things
+ * to evaluate. */
+// @{
+std::map<std::string, Box> boxes_required(Expr e, const Scope<Interval> &scope);
+std::map<std::string, Box> boxes_required(Stmt s, const Scope<Interval> &scope);
+std::map<std::string, Box> boxes_required(Expr e);
+std::map<std::string, Box> boxes_required(Stmt s);
+// @}
+
+/** Compute rectangular domains large enough to cover all the
+ * 'Provides's to each function that occurs within a given statement
+ * or expression. */
+// @{
+std::map<std::string, Box> boxes_provided(Expr e, const Scope<Interval> &scope);
+std::map<std::string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope);
+std::map<std::string, Box> boxes_provided(Expr e);
+std::map<std::string, Box> boxes_provided(Stmt s);
+// @}
+
+/** Compute rectangular domains large enough to cover all the 'Call's
+ * and 'Provides's to each function that occurs within a given
+ * statement or expression. */
+// @{
+std::map<std::string, Box> boxes_touched(Expr e, const Scope<Interval> &scope);
+std::map<std::string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope);
+std::map<std::string, Box> boxes_touched(Expr e);
+std::map<std::string, Box> boxes_touched(Stmt s);
+// @}
+
+/** Variants of the above that are only concerned with a single function */
+// @{
+Box box_required(Expr e, std::string fn, const Scope<Interval> &scope);
+Box box_required(Stmt s, std::string fn, const Scope<Interval> &scope);
+Box box_required(Expr e, std::string fn);
+Box box_required(Stmt s, std::string fn);
+
+Box box_provided(Expr e, std::string fn, const Scope<Interval> &scope);
+Box box_provided(Stmt s, std::string fn, const Scope<Interval> &scope);
+Box box_provided(Expr e, std::string fn);
+Box box_provided(Stmt s, std::string fn);
+
+Box box_touched(Expr e, std::string fn, const Scope<Interval> &scope);
+Box box_touched(Stmt s, std::string fn, const Scope<Interval> &scope);
+Box box_touched(Expr e, std::string fn);
+Box box_touched(Stmt s, std::string fn);
+// @}
 
 void bounds_test();
 

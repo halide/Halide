@@ -33,7 +33,7 @@ int main(int argc, char **argv) {
         g.infer_input_bounds(100, 100);
 
         Image<int> in(input.get());
-        assert(in.height() == 102 && in.width() == 104);
+        assert(in.width() == 104 && in.height() == 102);
     }
 
     // Same thing but with splits to complicate matters.
@@ -45,25 +45,14 @@ int main(int argc, char **argv) {
 
         ImageParam input(Int(32), 2);
 
-        // This stage gets evaluated over [-2, 104]x[-1, 103]
         f(x, y) = input(x, y);
         f.unroll(x, 2).unroll(y, 2);
-        // The region required is [-2, 104]x[-1, 103]. This would be
-        // extents of 107 and 105. We don't need to round them up to
-        // cope with the unrolls because for pure stages we can just
-        // recompute.
 
-        // This stage is evaluated over [0, 0]x[-1, 103]
         f(0, y) = f(y-1, y) + f(y+1, y);
         f.update(0).unroll(y, 3);
-        // The range required in y is [-1, 102], but that would be an extent of
-        // 104. We need to round it up to 105 due to the unroll.
 
-        // This stage is evaluated over [0, 101]x[0, 0]
         f(x, 0) = f(x, x-1) + f(x, x+1);
         f.update(1).unroll(x, 3);
-        // The range required in x is [0, 99], but that would be an extent of
-        // 100. We need to round it up to 102 due to the unroll.
 
         f.compute_root();
 
@@ -74,8 +63,10 @@ int main(int argc, char **argv) {
         g.infer_input_bounds(100, 100);
 
         Image<int> in(input.get());
+        // The unrolling shouldn't affect anything, because the only
+        // thing that reads from the input is the pure step.
         printf("%d %d\n", in.width(), in.height());
-        assert(in.width() == 107 && in.height() == 106); // Shouldn't this be 105?
+        assert(in.width() == 104 && in.height() == 102);
     }
 
     printf("Success!\n");

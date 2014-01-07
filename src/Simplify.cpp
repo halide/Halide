@@ -178,7 +178,7 @@ private:
     }
 
     void visit(const Add *op) {
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
 
         Expr a = mutate(op->a), b = mutate(op->b);
@@ -203,6 +203,8 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
+        const Div *div_a = a.as<Div>();
+
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
         const Mod *mod_a = a.as<Mod>();
         const Mod *mod_b = b.as<Mod>();
@@ -222,6 +224,8 @@ private:
         sub_a_b = max_a ? max_a->b.as<Sub>() : sub_a_b;
         add_a_a = max_a ? max_a->a.as<Add>() : add_a_a;
         add_a_b = max_a ? max_a->b.as<Add>() : add_a_b;
+
+        add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
@@ -299,6 +303,12 @@ private:
         } else if (max_a && add_a_a && const_int(add_a_a->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
             // max(a + (-2), b) + 2 -> max(a, b + 2)
             expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
+        } else if (div_a && add_a_a &&
+                   const_int(add_a_a->b, &ia) &&
+                   const_int(div_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
+            expr = mutate((add_a_a->a + (ia + ib*ic)) / ib);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b + mul_b->b));
@@ -308,7 +318,6 @@ private:
             expr = mutate(mul_a->b * (mul_a->a + mul_b->a));
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->b)) {
             expr = mutate(mul_a->a * (mul_a->b + mul_b->a));
-
         } else if (mod_a && mul_b && equal(mod_a->b, mul_b->b)) {
             // (x%3) + y*3 -> y*3 + x%3
             expr = mutate(b + a);
@@ -542,6 +551,7 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Div *div_a = a.as<Div>();
+        const Div *div_a_a = NULL;
         const Mul *mul_a_a = NULL;
         const Mul *mul_a_b = NULL;
         const Broadcast *broadcast_a = a.as<Broadcast>();
@@ -549,6 +559,7 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
 
         if (add_a) {
+            div_a_a = add_a->a.as<Div>();
             mul_a_a = add_a->a.as<Mul>();
             mul_a_b = add_a->b.as<Mul>();
         } else if (sub_a) {
@@ -620,6 +631,12 @@ private:
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
+        } else if (div_a_a && add_a &&
+                   const_int(div_a_a->b, &ia) &&
+                   const_int(add_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
+            expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
                    ia && ib && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
@@ -1809,6 +1826,9 @@ void simplify_test() {
     check((y + x*4)/2, y/2 + x*2);
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
+    check((x + 3)/2 + 7, (x + 17)/2);
+    check((x/2 + 3)/5, (x + 6)/10);
+
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
           Expr(Broadcast::make(y/x, 4)));
