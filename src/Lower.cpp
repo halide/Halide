@@ -1207,10 +1207,6 @@ Stmt add_image_checks(Stmt s, Function f) {
         Type type = iter->second.type;
         int dimensions = iter->second.dimensions;
 
-        Box touched = boxes[name];
-
-        assert((int)(touched.size()) == dimensions);
-
         // Detect if this is one of the outputs of a multi-output pipeline.
         bool is_output_buffer = false;
         bool is_secondary_output_buffer = false;
@@ -1227,6 +1223,9 @@ Stmt add_image_checks(Stmt s, Function f) {
         // If we're one of multiple output buffers, we should use the
         // region inferred for the output Func.
         string buffer_name = is_output_buffer ? f.name() : name;
+
+        Box touched = boxes[buffer_name];
+        assert((int)(touched.size()) == dimensions);
 
         // An expression returning whether or not we're in inference mode
         Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", param);
@@ -1510,7 +1509,7 @@ Stmt lower(Function f) {
     debug(2) << "Computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
-    s = allocation_bounds_inference(s);
+    s = allocation_bounds_inference(s, env);
     debug(2) << "Allocation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
