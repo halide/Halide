@@ -141,7 +141,7 @@ Func merge_sort(Func input, int total_size) {
 
 int main(int argc, char **argv) {
 
-    const int N = 1 << 15;
+    const int N = 1 << 10;
 
     Image<int> data(N);
     for (int i = 0; i < N; i++) {
@@ -153,6 +153,7 @@ int main(int argc, char **argv) {
     Func f = bitonic_sort(input, N);
     f.bound(x, 0, N);
     f.compile_jit();
+    printf("Running...\n");
     Image<int> bitonic_sorted(N);
     f.realize(bitonic_sorted);
     double t1 = currentTime();
@@ -165,6 +166,7 @@ int main(int argc, char **argv) {
     f = merge_sort(input, N);
     f.bound(x, 0, N);
     f.compile_jit();
+    printf("Running...\n");
     Image<int> merge_sorted(N);
     f.realize(merge_sorted);
     double t3 = currentTime();
