@@ -290,6 +290,18 @@ public:
         for (int d = 0; d < output.dimensions(); d++) {
             Expr min = Variable::make(Int(32), buffer_name + ".min." + int_to_string(d));
             Expr extent = Variable::make(Int(32), buffer_name + ".extent." + int_to_string(d));
+
+            // Respect any output min and extent constraints
+            Expr min_constraint = output.output_buffers()[0].min_constraint(d);
+            Expr extent_constraint = output.output_buffers()[0].extent_constraint(d);
+
+            if (min_constraint.defined()) {
+                min = min_constraint;
+            }
+            if (extent_constraint.defined()) {
+                extent = extent_constraint;
+            }
+
             output_box.push_back(Interval(min, (min + extent) - 1));
         }
         for (size_t i = 0; i < stages.size(); i++) {
