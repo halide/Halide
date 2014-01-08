@@ -43,12 +43,119 @@ public:
         }
 
         // Wrap a statement in let stmts defining the box
-        Stmt define_bounds(Stmt s) {
+        Stmt define_bounds(Stmt s, const Scope<int> &in_pipeline) {
+            if (func.has_extern_definition()) {
+                // After we define our bounds we need to run the
+                // bounds query to define bounds for my
+                // consumers.
+                s = do_bounds_query(s, in_pipeline);
+            }
+
             assert(bounds.size() == func.args().size());
             for (size_t d = 0; d < bounds.size(); d++) {
                 string arg = func.name() + ".s" + int_to_string(stage) + "." + func.args()[d];
                 s = LetStmt::make(arg + ".min", bounds[d].min, s);
                 s = LetStmt::make(arg + ".max", bounds[d].max, s);
+            }
+
+            return s;
+        }
+
+        Stmt do_bounds_query(Stmt s, const Scope<int> &in_pipeline) {
+            const string &extern_name = func.extern_function_name();
+            const vector<ExternFuncArgument> &args = func.extern_arguments();
+
+            // If we're already inside a pipeline for all of the
+            // inputs, this is pointless, because we know their
+            // bounds.
+            bool need_query = false;
+            for (size_t i = 0; i < args.size(); i++) {
+                if (args[i].is_func()) {
+                    Function input(args[i].func);
+                    if (!in_pipeline.contains(input.name())) {
+                        need_query = true;
+                    }
+                }
+            }
+            if (!need_query) {
+                return s;
+            }
+
+            vector<Expr> bounds_inference_args;
+
+            vector<pair<string, Expr> > lets;
+
+            // Iterate through all of the input args to the extern
+            // function building a suitable argument list for the
+            // extern function call.  We need a query buffer_t per
+            // producer and a query buffer_t for the output
+
+            for (size_t j = 0; j < args.size(); j++) {
+                if (args[j].is_expr()) {
+                    bounds_inference_args.push_back(args[j].expr);
+                } else if (args[j].is_func()) {
+                    Function input(args[j].func);
+                    for (int k = 0; k < input.outputs(); k++) {
+                        string name = input.name() + ".o" + int_to_string(k) + ".bounds_query." + func.name();
+                        Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                              vec<Expr>(0, input.output_types()[k].bytes()),
+                                              Call::Intrinsic);
+                        lets.push_back(make_pair(name, buf));
+                        bounds_inference_args.push_back(Variable::make(Handle(), name));
+                    }
+                } else if (args[j].is_buffer()) {
+                    Buffer b = args[j].buffer;
+                    Parameter p(b.type(), true, b.name());
+                    p.set_buffer(b);
+                    Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
+                    bounds_inference_args.push_back(buf);
+                } else if (args[j].is_image_param()) {
+                    Parameter p = args[j].image_param;
+                    Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                    bounds_inference_args.push_back(buf);
+                } else {
+                    assert(false && "Bad ExternFuncArgument type");
+                }
+            }
+
+            // Make the buffer_ts representing the output. They all
+            // use the same size, but have differing types.
+            for (int j = 0; j < func.outputs(); j++) {
+                vector<Expr> output_buffer_t_args(2);
+                output_buffer_t_args[0] = 0;
+                output_buffer_t_args[1] = func.output_types()[j].bytes();
+                for (size_t k = 0; k < func.args().size(); k++) {
+                    const string &arg = func.args()[k];
+                    string prefix = func.name() + ".s" + int_to_string(stage) + "." + arg;
+                    Expr min = Variable::make(Int(32), prefix + ".min");
+                    Expr max = Variable::make(Int(32), prefix + ".max");
+                    output_buffer_t_args.push_back(min);
+                    output_buffer_t_args.push_back(max + 1 - min);
+                    output_buffer_t_args.push_back(0); // stride
+                }
+
+                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                                                  output_buffer_t_args, Call::Intrinsic);
+
+                string buf_name = func.name() + ".o" + int_to_string(j) + ".bounds_query";
+                bounds_inference_args.push_back(Variable::make(Handle(), buf_name));
+
+                lets.push_back(make_pair(buf_name, output_buffer_t));
+            }
+
+            // Make the extern call
+            Expr e = Call::make(Int(32), extern_name,
+                                bounds_inference_args, Call::Extern);
+            // Check if it succeeded
+            Stmt check = AssertStmt::make(EQ::make(e, 0), "Bounds inference call to external func " +
+                                          extern_name + " returned non-zero value");
+
+            // Now inner code is free to extract the fields from the buffer_t
+            s = Block::make(check, s);
+
+            // Wrap in let stmts defining the args
+            for (size_t i = 0; i < lets.size(); i++) {
+                s = LetStmt::make(lets[i].first, lets[i].second, s);
             }
 
             return s;
@@ -110,6 +217,8 @@ public:
 
         }
 
+        // TODO: Consider doing inlining, because it can save you some on bounds computations.
+
         // Then compute relationships between them.
         for (size_t i = 0; i < stages.size(); i++) {
 
@@ -121,19 +230,47 @@ public:
 
             // Compute all the boxes of the producers this consumer
             // uses.
-            const vector<Expr> &exprs = consumer.exprs();
             map<string, Box> boxes;
-            for (size_t j = 0; j < exprs.size(); j++) {
-                map<string, Box> new_boxes = boxes_required(exprs[j], scope);
-                for (map<string, Box>::iterator iter = new_boxes.begin();
-                     iter != new_boxes.end(); ++iter) {
-                    merge_boxes(boxes[iter->first], iter->second);
+            if (consumer.func.has_extern_definition()) {
+
+                const vector<ExternFuncArgument> &args = consumer.func.extern_arguments();
+                // Stage::define_bounds is going to compute a query
+                // buffer_t per producer for bounds inference to
+                // use. We just need to extract those values.
+                for (size_t j = 0; j < args.size(); j++) {
+                    if (args[j].is_func()) {
+                        Function f(args[j].func);
+                        string stage_name = f.name() + ".s" + int_to_string(f.reductions().size());
+                        Box b(f.dimensions());
+                        for (int d = 0; d < f.dimensions(); d++) {
+                            string buf_name = f.name() + ".o0.bounds_query." + consumer.func.name();
+                            Expr buf = Variable::make(Handle(), buf_name);
+                            Expr min = Call::make(Int(32), Call::extract_buffer_min,
+                                                  vec<Expr>(buf, d), Call::Intrinsic);
+                            Expr extent = Call::make(Int(32), Call::extract_buffer_extent,
+                                                     vec<Expr>(buf, d), Call::Intrinsic);
+                            Expr max = min + extent - 1;
+                            b[d] = Interval(min, max);
+                        }
+                        merge_boxes(boxes[f.name()], b);
+                    }
+                }
+
+            } else {
+                const vector<Expr> &exprs = consumer.exprs();
+                for (size_t j = 0; j < exprs.size(); j++) {
+                    map<string, Box> new_boxes = boxes_required(exprs[j], scope);
+                    for (map<string, Box>::iterator iter = new_boxes.begin();
+                         iter != new_boxes.end(); ++iter) {
+                        merge_boxes(boxes[iter->first], iter->second);
+                    }
                 }
             }
 
             // Expand the bounds required of all the producers found.
             for (size_t j = 0; j < i; j++) {
                 Stage &producer = stages[j];
+                // A consumer depends on *all* stages of a producer, not just the last one.
                 const Box &b = boxes[producer.func.name()];
                 if (!b.empty()) {
                     merge_boxes(producer.bounds, b);
@@ -145,9 +282,14 @@ public:
         // The region required of the last function is expanded to include output size
         Function output = stages[stages.size()-1].func;
         Box output_box;
+        string buffer_name = output.name();
+        if (output.outputs() > 1) {
+            // Use the output size of the first output buffer
+            buffer_name += ".0";
+        }
         for (int d = 0; d < output.dimensions(); d++) {
-            Expr min = Variable::make(Int(32), output.name() + ".min." + int_to_string(d));
-            Expr extent = Variable::make(Int(32), output.name() + ".extent." + int_to_string(d));
+            Expr min = Variable::make(Int(32), buffer_name + ".min." + int_to_string(d));
+            Expr extent = Variable::make(Int(32), buffer_name + ".extent." + int_to_string(d));
             output_box.push_back(Interval(min, (min + extent) - 1));
         }
         for (size_t i = 0; i < stages.size(); i++) {
@@ -230,7 +372,7 @@ public:
                 for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                     bounds_needed[stages[i].consumers[j]] = true;
                 }
-                body = stages[i].define_bounds(body);
+                body = stages[i].define_bounds(body, in_pipeline);
             }
         }
 
