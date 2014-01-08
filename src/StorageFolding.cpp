@@ -119,7 +119,8 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
 
                     dim_folded = (int)i - 1;
                     fold_factor = factor;
-                    result = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
+                    stmt = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
+                    return;
                 } else {
                     debug(3) << "Not folding because extent not bounded by a constant\n"
                              << "extent = " << extent << "\n"
