@@ -24,15 +24,11 @@ int main(int argc, char **argv) {
     f1.store_at(out, x).compute_at(g, y);
     f2.store_at(out, x).compute_at(g, x);
 
-    out.output_buffer().set_bounds(0, 0, 10).set_bounds(1, 0, 10);
-
-    f1.trace_stores();
-    f1.trace_realizations();
-
     out.realize(10, 10);
 
+    // We just want this to not segfault.
 
-
+    printf("Success!\n");
 
     return 0;
 }
