@@ -1015,7 +1015,8 @@ Expr promote_64(Expr e) {
 
 Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Expr index) {
     // Promote index to 64-bit on targets that use 64-bit pointers.
-    if (module->getPointerSize() == llvm::Module::Pointer64) {
+    llvm::DataLayout d(module);
+    if (d.getPointerSize() == 8) {
         index = promote_64(index);
     }
 
@@ -1037,7 +1038,8 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
     }
 
     // Promote index to 64-bit on targets that use 64-bit pointers.
-    if (module->getPointerSize() == llvm::Module::Pointer64) {
+    llvm::DataLayout d(module);
+    if (d.getPointerSize() == 8) {
         index = builder->CreateIntCast(index, i64, true);
     }
 
