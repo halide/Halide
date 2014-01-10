@@ -6,6 +6,7 @@
 #include "IRPrinter.h"
 #include "IROperator.h"
 #include "Simplify.h"
+#include "Substitute.h"
 #include <sstream>
 
 namespace Halide {

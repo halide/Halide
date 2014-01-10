@@ -1079,6 +1079,10 @@ void CodeGen::visit(const Load *op) {
             // analysis
             ModulusRemainder mod_rem = modulus_remainder(ramp->base);
             alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+            if (alignment < 0) {
+                // Can happen if ramp->base is a negative constant
+                alignment = -alignment;
+            }
         }
 
         if (ramp && stride && stride->value == 1) {
