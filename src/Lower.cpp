@@ -181,12 +181,12 @@ Stmt build_provide_loop_nest(Function f,
                 base = Min::make(base, old_max + (1 - split.factor));
 
                 string name = prefix + split.inner + ".base";
-                stmt = LetStmt::make(name, base, stmt);
-                base = Variable::make(Int(32), name);
+                //stmt = LetStmt::make(name, base, stmt);
+                //base = Variable::make(Int(32), name);
             }
 
-            // stmt = LetStmt::make(prefix + split.old_var, base + inner + old_min, stmt);
-            stmt = substitute(prefix + split.old_var, base + inner, stmt);
+            stmt = LetStmt::make(prefix + split.old_var, base + inner, stmt);
+            //stmt = substitute(prefix + split.old_var, base + inner, stmt);
         } else if (split.is_fuse()) {
             // Define the inner and outer in terms of the fused var
             Expr fused = Variable::make(Int(32), prefix + split.old_var);

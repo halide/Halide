@@ -19,6 +19,28 @@ using std::map;
 using std::pair;
 using std::set;
 
+namespace {
+class DependsOnBoundsInference : public IRVisitor {
+    void visit(const Variable *var) {
+        if (ends_with(var->name, ".max") ||
+            ends_with(var->name, ".min")) {
+            result = true;
+        }
+    }
+
+public:
+    bool result;
+    DependsOnBoundsInference() : result(false) {}
+};
+
+bool depends_on_bounds_inference(Expr e) {
+    DependsOnBoundsInference d;
+    e.accept(&d);
+    return d.result;
+}
+
+}
+
 class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
@@ -344,6 +366,19 @@ public:
 
         Stmt body = op->body;
 
+        // Walk inside of any let statements that don't depend on
+        // bounds inference results so that we don't needlessly
+        // complicate our bounds expressions.
+        vector<pair<string, Expr> > lets;
+        while (const LetStmt *let = body.as<LetStmt>()) {
+            if (depends_on_bounds_inference(let->value)) {
+                break;
+            }
+
+            body = let->body;
+            lets.push_back(make_pair(let->name, let->value));
+        }
+
         // Figure out which stage of which function we're producing
         int producing = -1;
         Function f;
@@ -408,6 +443,11 @@ public:
 
         inner_productions.insert(old_inner_productions.begin(),
                                  old_inner_productions.end());
+
+        // Rewrap the let statements
+        for (size_t i = lets.size(); i > 0; i--) {
+            body = LetStmt::make(lets[i-1].first, lets[i-1].second, body);
+        }
 
         stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
     }
