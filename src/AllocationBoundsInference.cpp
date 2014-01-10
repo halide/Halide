@@ -17,32 +17,6 @@ using std::pair;
 using std::make_pair;
 using std::set;
 
-/*
-class ProducingScalar : public IRVisitor {
-    bool in_for_loop;
-    string func;
-
-    using IRVisitor::visit;
-
-    void visit(const For *op) {
-        bool old = in_for_loop;
-        in_for_loop = true;
-        op->body.accept(this);
-        in_for_loop = old;
-    }
-
-    void visit(const Provide *op) {
-        if (op->name == func && in_for_loop) {
-            result = false;
-        }
-    }
-
-public:
-    ProducingScalar(string f) : in_for_loop(false), func(f), result(true);
-    bool result;
-};
-*/
-
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
 // they're not internal allocations.
@@ -61,30 +35,7 @@ class AllocationInference : public IRMutator {
         assert(iter != env.end());
         Function f = iter->second;
 
-        // Box b = box_touched(op->body, op->name);
-
-        Box bp = box_provided(op->body, op->name);
-        Box br = box_required(op->body, op->name);
-
-        Box b(bp.size());
-        for (size_t i = 0; i < bp.size(); i++) {
-            debug(0) << op->name << " " << i << " " << bp[i].min << ", " << bp[i].max << "\n";
-
-            if (br.size() == 0) {
-                b[i] = bp[i];
-            } else if (equal(bp[i].min, bp[i].max)) {
-                // Producing a single element. It must be within the region required.
-                b[i] = br[i];
-            } else if (i < br.size() && equal(br[i].min, br[i].max)) {
-                // Consuming a single element. It must be within the region produced.
-                b[i] = bp[i];
-            } else {
-                b[i] = Interval(min(bp[i].min, br[i].min),
-                                max(bp[i].max, br[i].max));
-            }
-        }
-
-        //b = br;
+        Box b = box_touched(op->body, op->name);
 
         if (touched_by_extern.count(op->name)) {
             // The region touched is at least the region required at this
