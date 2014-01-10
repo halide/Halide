@@ -30,7 +30,6 @@
 #include "SpecializeClampedRamps.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
-#include "LiftLoopInvariants.h"
 
 namespace Halide {
 namespace Internal {
