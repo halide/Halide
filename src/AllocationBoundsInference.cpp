@@ -15,6 +15,33 @@ using std::string;
 using std::vector;
 using std::pair;
 using std::make_pair;
+using std::set;
+
+/*
+class ProducingScalar : public IRVisitor {
+    bool in_for_loop;
+    string func;
+
+    using IRVisitor::visit;
+
+    void visit(const For *op) {
+        bool old = in_for_loop;
+        in_for_loop = true;
+        op->body.accept(this);
+        in_for_loop = old;
+    }
+
+    void visit(const Provide *op) {
+        if (op->name == func && in_for_loop) {
+            result = false;
+        }
+    }
+
+public:
+    ProducingScalar(string f) : in_for_loop(false), func(f), result(true);
+    bool result;
+};
+*/
 
 // Figure out the region touched of each buffer, and deposit them as
 // let statements outside of each realize node, or at the top level if
@@ -24,6 +51,7 @@ class AllocationInference : public IRMutator {
     using IRMutator::visit;
 
     const map<string, Function> &env;
+    set<string> touched_by_extern;
 
     void visit(const Realize *op) {
         IRMutator::visit(op);
@@ -33,28 +61,44 @@ class AllocationInference : public IRMutator {
         assert(iter != env.end());
         Function f = iter->second;
 
-        Box b = box_provided(op->body, op->name);
+        // Box b = box_touched(op->body, op->name);
 
-        // The region touched is at least the region required at this
-        // loop level of the first stage (this is important for inputs
-        // and outputs to extern stages).
-        Box required(op->bounds.size());
-        for (size_t i = 0; i < required.size(); i++) {
-            string prefix = f.name() + ".s0." + f.args()[i];
-            required[i] = Interval(Variable::make(Int(32), prefix + ".min"),
-                                   Variable::make(Int(32), prefix + ".max"));
-        }
+        Box bp = box_provided(op->body, op->name);
+        Box br = box_required(op->body, op->name);
 
-        for (size_t i = 0; i < b.size(); i++) {
-            if (!b[i].min.defined() || !b[i].max.defined()) {
-                std::cerr << "The realization of function " << op->name
-                          << " is written to in an unbounded way in dimension " << i << "\n"
-                          << "Could not deduce how much space to allocate for it.\n";
-                assert(false);
+        Box b(bp.size());
+        for (size_t i = 0; i < bp.size(); i++) {
+            debug(0) << op->name << " " << i << " " << bp[i].min << ", " << bp[i].max << "\n";
+
+            if (br.size() == 0) {
+                b[i] = bp[i];
+            } else if (equal(bp[i].min, bp[i].max)) {
+                // Producing a single element. It must be within the region required.
+                b[i] = br[i];
+            } else if (i < br.size() && equal(br[i].min, br[i].max)) {
+                // Consuming a single element. It must be within the region produced.
+                b[i] = bp[i];
+            } else {
+                b[i] = Interval(min(bp[i].min, br[i].min),
+                                max(bp[i].max, br[i].max));
             }
         }
 
-        merge_boxes(b, required);
+        //b = br;
+
+        if (touched_by_extern.count(op->name)) {
+            // The region touched is at least the region required at this
+            // loop level of the first stage (this is important for inputs
+            // and outputs to extern stages).
+            Box required(op->bounds.size());
+            for (size_t i = 0; i < required.size(); i++) {
+                string prefix = f.name() + ".s0." + f.args()[i];
+                required[i] = Interval(Variable::make(Int(32), prefix + ".min"),
+                                       Variable::make(Int(32), prefix + ".max"));
+            }
+
+            merge_boxes(b, required);
+        }
 
         assert(b.size() == op->bounds.size());
         for (size_t i = 0; i < b.size(); i++) {
@@ -62,15 +106,32 @@ class AllocationInference : public IRMutator {
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
             string extent_name = prefix + ".extent_realized";
-            Expr min = b[i].min, extent = (b[i].max - b[i].min) + 1;
+            Expr min = simplify(b[i].min);
+            Expr max = simplify(b[i].max);
+            Expr extent = simplify((max - min) + 1);
             stmt = LetStmt::make(extent_name, extent, stmt);
             stmt = LetStmt::make(min_name, min, stmt);
-            stmt = LetStmt::make(max_name, b[i].max, stmt);
+            stmt = LetStmt::make(max_name, max, stmt);
         }
     }
 
 public:
-    AllocationInference(const map<string, Function> &e) : env(e) {}
+    AllocationInference(const map<string, Function> &e) : env(e) {
+        // Figure out which buffers are touched by extern stages
+        for (map<string, Function>::const_iterator iter = e.begin();
+             iter != e.end(); ++iter) {
+            Function f = iter->second;
+            if (f.has_extern_definition()) {
+                touched_by_extern.insert(f.name());
+                for (size_t i = 0; i < f.extern_arguments().size(); i++) {
+                    ExternFuncArgument arg = f.extern_arguments()[i];
+                    if (!arg.is_func()) continue;
+                    Function input(arg.func);
+                    touched_by_extern.insert(input.name());
+                }
+            }
+        }
+    }
 };
 
 Stmt allocation_bounds_inference(Stmt s, const map<string, Function> &env) {

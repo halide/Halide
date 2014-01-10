@@ -30,6 +30,7 @@
 #include "SpecializeClampedRamps.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
+#include "LiftLoopInvariants.h"
 
 namespace Halide {
 namespace Internal {
@@ -1483,6 +1484,10 @@ Stmt lower(Function f) {
     s = schedule_functions(s, order, env, graph);
     debug(2) << "All realizations injected:\n" << s << '\n';
 
+    //debug(2) << "Lift loop invariants...\n";
+    //s = lift_loop_invariants(s);
+    //debug(2) << "Loop invariants lifted:\n" << s << '\n';
+
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, f);
     debug(2) << "Tracing injected:\n" << s << '\n';
@@ -1508,13 +1513,13 @@ Stmt lower(Function f) {
     s = bounds_inference(s, order, env);
     debug(2) << "Computation bounds inference:\n" << s << '\n';
 
-    debug(1) << "Performing allocation bounds inference...\n";
-    s = allocation_bounds_inference(s, env);
-    debug(2) << "Allocation bounds inference:\n" << s << '\n';
-
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
     debug(2) << "Sliding window:\n" << s << '\n';
+
+    debug(1) << "Performing allocation bounds inference...\n";
+    s = allocation_bounds_inference(s, env);
+    debug(2) << "Allocation bounds inference:\n" << s << '\n';
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
