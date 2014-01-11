@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
     f(x) = u;
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, 256);
     } 

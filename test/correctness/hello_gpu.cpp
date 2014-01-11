@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     f(x, y) = x*y + 2.4f;
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 8, 8);
     }

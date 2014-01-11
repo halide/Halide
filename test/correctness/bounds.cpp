@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     g(x, y) = min(x, y);
     h(x, y) = clamp(x+y, 20, 100);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 8, 8);
         g.cuda_tile(x, y, 8, 8);

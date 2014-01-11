@@ -15,7 +15,7 @@ int main(int argc, char *argv[]) {
     Func kernel3;
     kernel3(x) = cast<int32_t>(x + kernel2(x));
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA ||
 	target.features & Target::OpenCL) {
         kernel1.cuda_tile(x, 32).compute_root();
