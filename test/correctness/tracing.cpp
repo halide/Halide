@@ -99,6 +99,8 @@ int my_trace(void *user_context, const char *function,
         e.value[i] = ((const float *)value)[i];
     }
     trace[n_trace++] = e;
+
+    return 0;
 }
 
 int main(int argc, char **argv) {
