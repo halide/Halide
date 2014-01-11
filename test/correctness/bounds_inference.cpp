@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     }
 
 
-    Image<int> out = f.realize(32, 32);
+    Image<int> out = f.realize(32, 32, target);
 
     for (int y = 0; y < 32; y++) {
         for (int x = 0; x < 32; x++) {

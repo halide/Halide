@@ -21,10 +21,10 @@ int main(int argc, char **argv) {
     }
 
     u.set(17.0f);
-    Image<float> out_17 = f.realize(1024);
+    Image<float> out_17 = f.realize(1024, target);
 
     u.set(123.0f);
-    Image<float> out_123 = f.realize(1024);
+    Image<float> out_123 = f.realize(1024, target);
 
     for (int i = 0; i < 1024; i++) {
         if (out_17(i) != 17.0f || out_123(i) != 123.0f) {
