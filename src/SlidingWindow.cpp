@@ -69,7 +69,9 @@ public:
 // Perform all the subtitutions in a scope
 Expr expand_expr(Expr e, Scope<Expr> scope) {
     ExpandExpr ee(scope);
-    return ee.mutate(e);
+    Expr result = ee.mutate(e);
+    debug(3) << "Expanded " << e << " into " << result << "\n";
+    return result;
 }
 
 }
@@ -81,6 +83,9 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     string loop_var;
     Expr loop_min;
     Scope<Expr> scope;
+    
+    string min_name, max_name;
+    Expr new_min, new_max;
 
     using IRMutator::visit;
 
@@ -95,6 +100,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             // dimensions of the buffer has a min/extent that depends
             // on the loop_var.
             string dim = "";
+            int dim_idx = 0;
             Expr min_required, max_required;
 
             debug(3) << "Considering sliding " << func.name()
@@ -103,7 +109,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             string prefix = func.name() + ".s" + int_to_string(func.reductions().size()) + ".";
             for (int i = 0; i < func.dimensions(); i++) {
-                // Look up the region required of all of this function's last stage
+                // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
                 Expr min_req = scope.get(var + ".min");
                 Expr max_req = scope.get(var + ".max");
@@ -120,6 +126,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                         break;
                     } else {
                         dim = func.args()[i];
+                        dim_idx = i;
                         min_required = min_req;
                         max_required = max_req;
                     }
@@ -130,6 +137,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 debug(3) << "Could not perform sliding window optimization of "
                          << func.name() << " over " << loop_var << " because either zero "
                          << "or many dimensions of the function dependended on the loop var\n";
+                min_name = max_name = "";
                 return;
             }
 
@@ -155,66 +163,16 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                          << " because I couldn't prove it moved monotonically along that dimension\n"
                          << "Min is " << min_required << "\n"
                          << "Max is " << max_required << "\n";
+                min_name = max_name = "";
                 return;
             }
 
-            /* TODO
-            if (op->update.defined()) {
-                // A reduction may not reach outwards in the dimension
-                // that we're trying to slide over. E.g. we can't slide
-                // the following over x:
-                //
-                // f(x, y) = 2
-                // f(x, 0) = f(x-1, 1) + f(x+1, 1);
-
-                // The update step of such a reads from the same buffer at
-                // points outside of the region required, which in turn
-                // means the initialization takes place over a larger
-                // domain than the region required, which means that the
-                // initialization may clobber old values that we're
-                // relying on to still be correct when we slide.
-                Region r = region_called(op->update, func.name());
-                if (r.size()) {
-                    assert(dim_idx < (int)r.size());
-                    Expr min_initialized = r[dim_idx].min;
-                    Expr extent_initialized = r[dim_idx].extent;
-
-                    assert(min_initialized.defined() && extent_initialized.defined() &&
-                           "Function update reads itself in an unbounded manner\n");
-
-                    string min_name = func.name() + "." + dim + ".min_produced";
-                    string extent_name = func.name() + "." + dim + ".extent_produced";
-                    Expr min_produced_var = Variable::make(Int(32), min_name);
-                    Expr extent_produced_var = Variable::make(Int(32), extent_name);
-
-                    Expr test;
-                    if (increasing) {
-                        test = (min_initialized >= min_produced_var);
-                    } else {
-                        Expr max_initialized = min_initialized + extent_initialized;
-                        Expr max_produced = min_produced_var + extent_produced_var;
-                        test = (max_initialized <= max_produced);
-                    }
-                    Expr simplified_test = simplify(test);
-
-                    if (!is_one(simplified_test)) {
-                        debug(3) << "Not sliding " << func.name() << " along " << dim
-                                 << " because we failed to prove that the reduction step doesn't trigger an"
-                                 << " initialization over a larger domain along that axis. The expression we"
-                                 << " attempted to prove was: " << test << "\n"
-                                 << "Which simplified to " << simplified_test << "\n";
-                        return;
-                    }
-                }
-            }
-            */
+            assert(!op->update.defined());
 
             // Ok, we've isolated a function, a dimension to slide along, and loop variable to slide over
             debug(3) << "Sliding " << func.name()
                      << " over dimension " << dim
                      << " along loop variable " << loop_var << "\n";
-
-            Expr new_min, new_max;
 
             Expr loop_var_expr = Variable::make(Int(32), loop_var);
 
@@ -232,22 +190,28 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             debug(3) << "Sliding " << func.name() << ", " << dim << "\n"
                      << "Pushing min up from " << min_required << " to " << new_min << "\n"
                      << "Shrinking max from " << max_required << " to " << new_max << "\n";
-            string min_name = prefix + dim + ".min";
-            string max_name = prefix + dim + ".max";
 
-            stmt = LetStmt::make(min_name, new_min, stmt);
-            stmt = LetStmt::make(max_name, new_max, stmt);
-            // TODO: Recompute bounds for update stages
+            min_name = prefix + dim + ".min";
+            max_name = prefix + dim + ".max";
         }
     }
 
     void visit(const LetStmt *op) {
         scope.push(op->name, op->value);
         Stmt new_body = mutate(op->body);
-        if (new_body.same_as(op->body)) {
+
+        Expr value = op->value;
+        if (op->name == min_name) {
+            value = new_min;
+        }
+        if (op->name == max_name) {
+            value = new_max;
+        }
+
+        if (new_body.same_as(op->body) && value.same_as(op->value)) {
             stmt = op;
         } else {
-            stmt = LetStmt::make(op->name, op->value, new_body);
+            stmt = LetStmt::make(op->name, value, new_body);
         }
         scope.pop(op->name);
     }
@@ -296,8 +260,11 @@ class SlidingWindow : public IRMutator {
 
         Stmt new_body = op->body;
 
-        debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
-        new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
+        // We can't reliably do sliding window on reductions right now.
+        if (!iter->second.has_reduction_definition()) {
+            debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";       
+            new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
+        }
 
         new_body = mutate(new_body);
 
