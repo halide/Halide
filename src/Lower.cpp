@@ -977,13 +977,60 @@ string schedule_to_source(Function f,
     return ss.str();
 }
 
-void validate_schedule(Function f, Stmt s) {
+void validate_schedule(Function f, Stmt s, bool is_output) {
+
+    // Check the rvars haven't been illegally reordered
+    for (size_t i = 0; i < f.reductions().size(); i++) {
+        const ReductionDefinition &r = f.reductions()[i];
+
+        if (!r.domain.defined()) {
+            // No reduction domain
+            continue;
+        }
+
+        const vector<ReductionVariable> &rvars = r.domain.domain();
+        const vector<Schedule::Dim> &dims = r.schedule.dims;
+
+        // Look for the rvars in order
+        size_t next = 0;
+        for (size_t j = 0; j < dims.size() && next < rvars.size(); j++) {
+            if (rvars[next].var == dims[j].var) {
+                next++;
+            }
+        }
+
+        if (next != rvars.size()) {
+            std::cerr << "In function " << f.name() << " stage " << i 
+                      << ", the reduction variables have been illegally reordered.\n"
+                      << "Correct order:";
+            for (size_t j = 0; j < rvars.size(); j++) {
+                std::cerr << " " << rvars[j].var;
+            }
+            std::cerr << "\nOrder specified by schedule:";
+            for (size_t j = 0; j < dims.size(); j++) {
+                std::cerr << " " << dims[j].var;
+            }
+            std::cerr << "\n";
+            assert(false);               
+        }
+    }
 
     Schedule::LoopLevel store_at = f.schedule().store_level;
     Schedule::LoopLevel compute_at = f.schedule().compute_level;
     // Inlining is always allowed
     if (store_at.is_inline() && compute_at.is_inline()) {
         return;
+    }
+
+    if (is_output) {
+        if ((store_at.is_inline() || store_at.is_root()) &&
+            (compute_at.is_inline() || compute_at.is_root())) {
+            return;
+        } else {
+            std::cerr << "Function " << f.name() << " is the output, so must"
+                      << " be scheduled compute_root (which is the default).\n";
+            assert(false);
+        }
     }
 
     // Otherwise inspect the uses to see what's ok.
@@ -1040,10 +1087,10 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
             }
         }
 
+        validate_schedule(f, s, i == order.size());
+
         // We don't actually want to schedule the output function here.
         if (i == order.size()) continue;
-
-        validate_schedule(f, s);
 
         if (f.has_pure_definition() &&
             !f.has_reduction_definition() &&
