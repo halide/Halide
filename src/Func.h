@@ -28,6 +28,23 @@ namespace Halide {
  */
 class FuncRefExpr;
 
+/** A class that can represent Vars or RVars. Used for reorder calls
+ * which can accept a mix of either. */
+struct VarOrRVar {
+    VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
+    VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
+    VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
+
+    const std::string &name() const {
+        if (is_rvar) return rvar.name();
+        else return var.name();
+    }
+
+    const Var var;
+    const RVar rvar;
+    const bool is_rvar;   
+};
+
 class FuncRefVar {
     Internal::Function func;
     int implicit_placeholder_pos;
@@ -191,16 +208,28 @@ public:
     EXPORT ScheduleHandle &bound(Var var, Expr min, Expr extent);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
-    EXPORT ScheduleHandle &reorder(const std::vector<Var> &vars);
-    EXPORT ScheduleHandle &reorder(Var x, Var y);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
+    EXPORT ScheduleHandle &reorder(const std::vector<VarOrRVar> &vars);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w, VarOrRVar t);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                                   VarOrRVar t3);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                                   VarOrRVar t3, VarOrRVar t4);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, 
+                                   VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
     EXPORT ScheduleHandle &cuda_threads(Var thread_x);
@@ -746,46 +775,58 @@ public:
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(const std::vector<Var> &vars);
+    EXPORT Func &reorder(const std::vector<VarOrRVar> &vars);
 
     /** Reorder two dimensions so that x is traversed inside y. Does
      * not affect the nesting order of other dimensions. E.g, if you
      * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
      * traversed in the order (w, y, z, x), from innermost
      * outwards. */
-    EXPORT Func &reorder(Var x, Var y);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y);
 
     /** Reorder three dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
 
     /** Reorder four dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w);
 
     /** Reorder five dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w, VarOrRVar t);
 
     /** Reorder six dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
 
     /** Reorder seven dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                         VarOrRVar t3);
 
     /** Reorder eight dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                         VarOrRVar t3, VarOrRVar t4);
 
     /** Reorder nine dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
 
     /** Reorder ten dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, 
+                         VarOrRVar t6);
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);
@@ -820,9 +861,9 @@ public:
     // @{
     EXPORT Func &cuda(Var block_x, Var thread_x);
     EXPORT Func &cuda(Var block_x, Var block_y,
-                                Var thread_x, Var thread_y);
+                      Var thread_x, Var thread_y);
     EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
-                                Var thread_x, Var thread_y, Var thread_z);
+                      Var thread_x, Var thread_y, Var thread_z);
     // @}
 
     /** Short-hand for tiling a domain and mapping the tile indices
@@ -833,7 +874,7 @@ public:
     EXPORT Func &cuda_tile(Var x, int x_size);
     EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size);
     EXPORT Func &cuda_tile(Var x, Var y, Var z,
-                                     int x_size, int y_size, int z_size);
+                           int x_size, int y_size, int z_size);
     // @}
 
     /** Specify how the storage for the function is laid out. These
