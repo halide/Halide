@@ -343,7 +343,13 @@ public:
      */
     // @{
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
-    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size, int y_size, int z_size, 
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size, int y_size, 
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size = 0,
                                const Target &target = get_jit_target_from_environment());
     // @}
 
@@ -372,16 +378,24 @@ public:
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
      * as this halide function */
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    //@{
+    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                    const Target &target = get_target_from_environment());
+    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>,
+                                   const Target &target = get_target_from_environment());
+    // @}
 
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_file instead. */
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    //@{
+    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
+    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>,
+                                  const Target &target = get_target_from_environment());
+    // @}
 
     /** Emit a header file with the given filename for this
      * function. The header will define a function with the type
@@ -397,8 +411,12 @@ public:
      * useful for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    //@{
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                     const Target &target = get_target_from_environment());
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>,
+                                    const Target &target = get_target_from_environment());
+    // @}
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization

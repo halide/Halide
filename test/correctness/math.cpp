@@ -44,11 +44,11 @@ bool relatively_equal(value_t a, value_t b) {
         test_##name(x) = name(input(x));                                      \
         Buffer in_buffer(type_of<type>(), in_buf);                            \
         input.set(in_buffer);                                                 \
-        Target target = get_target_from_environment();                        \
+        Target target = get_jit_target_from_environment();                        \
         if (target.features & Target::CUDA) {                                 \
             test_##name.cuda_tile(x, 8);                                      \
         }                                                                     \
-        Image<type> result = test_##name.realize(in_buf->extent[0]);          \
+        Image<type> result = test_##name.realize(in_buf->extent[0], target);  \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
           type c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]);  \
           assert(relatively_equal(c_result, result(i)) &&                     \
@@ -65,11 +65,11 @@ bool relatively_equal(value_t a, value_t b) {
         test_##name(x) = name(input(0, x), input(1, x));                            \
         Buffer in_buffer(type_of<type>(), in_buf);                                  \
         input.set(in_buffer);                                                       \
-        Target target = get_target_from_environment();                              \
+        Target target = get_jit_target_from_environment();                              \
         if (target.features & Target::CUDA) {                                       \
             test_##name.cuda_tile(x, 8);                                            \
         }                                                                           \
-        Image<type> result = test_##name.realize(in_buf->extent[1]);                \
+        Image<type> result = test_##name.realize(in_buf->extent[1], target);        \
         for (int i = 0; i < in_buf->extent[1]; i++) {                               \
           type c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2],     \
                                  reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]);\
