@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     f(x, y) = x*y + 2.4f;
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 8, 8);
     }
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<float> imf = f.realize(32, 32);
+    Image<float> imf = f.realize(32, 32, target);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

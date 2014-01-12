@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     f(x, y) = max(x, y);
     g(x, y) = clamp(f(x, y), 20, 100);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         f.compute_root().cuda_tile(x, y, 16, 16);
         g.compute_root().cuda_tile(x, y, 16, 16);
@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<int> img = g.realize(W, H);
+    Image<int> img = g.realize(W, H, target);
 
     for (int i = 0; i < W; i++) {
         for (int j = 0; j < H; j++) {

@@ -1342,6 +1342,18 @@ Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const 
     return r;
 }
 
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
+    return realize(x_size, y_size, z_size, 0, target);
+}
+
+Realization Func::realize(int x_size, int y_size, const Target &target) {
+    return realize(x_size, y_size, 0, 0, target);
+}
+
+Realization Func::realize(int x_size, const Target &target) {
+    return realize(x_size, 0, 0, 0, target);
+}
+
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
     assert(defined() && "Can't infer input bounds on an undefined function");
     vector<Buffer> outputs(func.outputs());
@@ -1520,6 +1532,10 @@ void validate_arguments(const string &output,
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_bitcode(filename);
 }
+  
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_bitcode(filename, args, "", target);
+}
 
   void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
@@ -1539,6 +1555,10 @@ void validate_arguments(const string &output,
     StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, false);
+}
+
+void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_object(filename, args, "", target);
 }
 
 void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {
@@ -1628,6 +1648,10 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, true);
+}
+
+void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_assembly(filename, args, "", target);
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {

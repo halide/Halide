@@ -25,6 +25,8 @@ struct job {
 
 vector<job> jobs;
 
+Target target;
+
 void check(const char *op, int vector_width, Expr e) {
     if (filter) {
 	if (strncmp(op, filter, strlen(filter)) != 0) return;
@@ -62,7 +64,7 @@ void check(const char *op, int vector_width, Expr e) {
 
     char *module = new char[1024];
     snprintf(module, 1024, "test_%s_%s", op, f.name().c_str());
-    f.compile_to_assembly(module, arg_types);
+    f.compile_to_assembly(module, arg_types, target);
 
     job j = {op, module, f, NULL};
     jobs.push_back(j);
@@ -1387,7 +1389,7 @@ int main(int argc, char **argv) {
     if (argc > 1) filter = argv[1];
     else filter = NULL;
 
-    Target target = get_target_from_environment();
+    target = get_target_from_environment();
 
     use_avx2 = target.features & Target::AVX2;
     use_avx = use_avx2 | (target.features & Target::AVX);

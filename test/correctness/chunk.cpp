@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     f(x, y) = cast<float>(x);
     g(x, y) = f(x+1, y) + f(x-1, y);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         Var xi, yi;
         g.cuda_tile(x, y, 8, 8);
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<float> im = g.realize(32, 32);
+    Image<float> im = g.realize(32, 32, target);
 
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {

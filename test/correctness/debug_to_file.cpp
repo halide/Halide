@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
         g(x, y) = cast<float>(f(x, y) + f(x+1, y));
         h(x, y) = f(x, y) + g(x, y);
 
-        Target target = get_target_from_environment();
+        Target target = get_jit_target_from_environment();
         if (target.features & Target::CUDA) {
             f.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("f.tmp");
             g.compute_root().cuda_tile(x, y, 1, 1).debug_to_file("g.tmp");
@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
             h.compute_root().debug_to_file("h.tmp");
         }
 
-        Image<float> im = h.realize(10, 10);
+        Image<float> im = h.realize(10, 10, target);
     }
 
     FILE *f = fopen("f.tmp", "rb");
