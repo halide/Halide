@@ -58,7 +58,7 @@ int main(int argc, char **argv) {
     // For each value of y, f should be evaluated over (0 .. 100) in
     // x, and (y .. y-1) in y. Sliding window optimization means that
     // we can skip the y-1 case in all but the first iteration.
-    if (count != 100 * 11 && false) { // Sliding reductions are not currently functional
+    if (count != 100 * 11) {
         printf("f was called %d times instead of %d times\n", count, 100*11);
         return -1;
     }

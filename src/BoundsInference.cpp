@@ -21,6 +21,8 @@ using std::set;
 
 namespace {
 class DependsOnBoundsInference : public IRVisitor {
+    using IRVisitor::visit;
+
     void visit(const Variable *var) {
         if (ends_with(var->name, ".max") ||
             ends_with(var->name, ".min")) {
