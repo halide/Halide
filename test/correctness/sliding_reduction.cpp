@@ -16,7 +16,7 @@ void check(Image<int> im) {
         for (int x = 0; x < im.width(); x++) {
             int correct = 99*3;
             if (im(x, y) != correct) {
-                printf("Value at %d %d was %d instead of %d\n", 
+                printf("Value at %d %d was %d instead of %d\n",
                        x, y, im(x, y), correct);
                 exit(-1);
             }
@@ -36,17 +36,18 @@ int main(int argc, char **argv) {
         f(x, y) = x;
         f(0, y) += f(1, y) + f(0, y);
         f(x, y) = call_count(f(x, y));
-        
+
         Func g("g");
         g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
-        
+
         f.store_root().compute_at(g, y);
 
         counter = 0;
         check(g.realize(2, 10));
-        
-        if (counter != 60) { // Would be 24 if we could slide it
-            printf("Failed sliding a reduction: %d\n", counter);
+
+        int correct = 24;
+        if (counter != correct) {
+            printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
             return -1;
         }
     }
@@ -57,42 +58,51 @@ int main(int argc, char **argv) {
         f(x, y) = x;
         f(x, x) += f(x, 0) + f(x, 1);
         f(x, y) = call_count(f(x, y));
-        
+
         Func g("g");
         g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
-        
+
         f.store_root().compute_at(g, y);
 
         counter = 0;
         check(g.realize(2, 10));
-        
-        if (counter != 60) {
-            printf("Failed sliding a reduction: %d\n", counter);
+
+        int correct = 60;
+        if (counter != correct) {
+            printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
             return -1;
         }
     }
 
     {
-        // Would be able to slide this, but the unroll in the first
+        // Would be able to slide this so that we only have to compute
+        // one new row of f per row of g, but the unroll in the first
         // stage forces evaluations of size two in y, which would
-        // clobber earlier values.
+        // clobber earlier values of the final stage of f, so we have
+        // to compute the final stage of f two rows at a time as well.
+
+        // The result is that we evaluate the first three rows of f
+        // for the first scanline of g, and then another two rows for
+        // every row of g thereafter. This adds up to 2*(3 + 9*2) = 42
+        // evaluations of f.
         Func f("f");
         f(x, y) = x;
         f(0, y) += f(1, y) + f(2, y);
         f(x, y) = call_count(f(x, y));
-        
+
         f.unroll(y, 2);
 
         Func g("g");
         g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
-        
+
         f.store_root().compute_at(g, y);
 
         counter = 0;
         check(g.realize(2, 10));
-        
-        if (counter != 60) {
-            printf("Failed sliding a reduction: %d\n", counter);
+
+        int correct = 42;
+        if (counter != correct) {
+            printf("Failed sliding a reduction: %d evaluations instead of %d\n", counter, correct);
             return -1;
         }
     }
