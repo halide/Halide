@@ -22,16 +22,24 @@ int main(int argc, char **argv) {
     Image<float> output(input.width(), input.height(), 1);
 
     bilateral_grid(atof(argv[3]), input, output);
-    
+
 #if 1
-    // Timing code 
+    // Timing code
     timeval t1, t2;
-    gettimeofday(&t1, NULL);
-    for (int i = 0; i < 20; i++) 
-        bilateral_grid(atof(argv[3]), input, output);
-    gettimeofday(&t2, NULL);
-    double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
-    printf("Time: %fms\n", t/20);
+    double min_t = 1e10f;
+    for (int j = 0; j < 10; j++) {
+        gettimeofday(&t1, NULL);
+        for (int i = 0; i < 10; i++) {
+            bilateral_grid(atof(argv[3]), input, output);
+        }
+        gettimeofday(&t2, NULL);
+        double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;
+        if (t < min_t) {
+            min_t = t;
+        }
+    }
+
+    printf("Time: %fms\n", min_t/10);
 #endif
 
     save(output, argv[2]);
