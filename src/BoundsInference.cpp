@@ -298,6 +298,21 @@ public:
                 // A consumer depends on *all* stages of a producer, not just the last one.
                 const Box &b = boxes[producer.func.name()];
                 if (!b.empty()) {
+                    // Check for unboundedness
+                    for (size_t k = 0; k < b.size(); k++) {
+                        if (!b[k].min.defined() || !b[k].max.defined()) {
+                            if (consumer.stage == 0) {
+                                std::cerr << "The pure definition ";
+                            } else {
+                                std::cerr << "Update definition number " << (consumer.stage-1);
+                            }
+                            std::cerr << " of Function " << consumer.func.name()
+                                      << " calls function " << producer.func.name()
+                                      << " in an unbounded way in dimension " << k << "\n";
+                            assert(false);
+                        }
+                    }
+
                     merge_boxes(producer.bounds, b);
                     producer.consumers.push_back((int)i);
                 }
