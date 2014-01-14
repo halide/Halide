@@ -87,7 +87,7 @@ CodeGen::CodeGen() :
     value(NULL),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
-    buffer_t_type(NULL), need_stack_restore(false) {
+    buffer_t_type(NULL) {
     initialize_llvm();
 }
 
@@ -1390,8 +1390,7 @@ void CodeGen::visit(const Call *op) {
             // Make some memory for this buffer_t
             const Call *c = op->args[0].as<Call>();
 
-            Value *buffer = builder->CreateAlloca(buffer_t_type, ConstantInt::get(i32, 1));
-            need_stack_restore = true;
+            Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
 
             // Populate the fields
             Value *host_ptr;
@@ -1485,11 +1484,9 @@ void CodeGen::visit(const Call *op) {
             // Codegen the value index. Should be the same for all lanes.
             Value *value_index = codegen(unbroadcast(op->args[3]));
 
-            Value *saved_stack = save_stack();
-
             // Allocate and populate a stack entry for the value arg
             Type type = op->args[4].type();
-            Value *value_stored_array = builder->CreateAlloca(llvm_type_of(type), ConstantInt::get(i32, 1));
+            Value *value_stored_array = create_alloca_at_entry(llvm_type_of(type), 1);
             Value *value_stored = codegen(op->args[4]);
             builder->CreateStore(value_stored, value_stored_array);
             value_stored_array = builder->CreatePointerCast(value_stored_array, i8->getPointerTo());
@@ -1497,8 +1494,7 @@ void CodeGen::visit(const Call *op) {
             // Allocate and populate a stack array for the integer args
             Value *coords;
             if (int_args > 0) {
-                coords = builder->CreateAlloca(llvm_type_of(op->args[5].type()),
-                                                      ConstantInt::get(i32, int_args));
+                coords = create_alloca_at_entry(llvm_type_of(op->args[5].type()), int_args);
                 for (int i = 0; i < int_args; i++) {
                     Value *coord_ptr = builder->CreateConstInBoundsGEP1_32(coords, i);
                     builder->CreateStore(codegen(op->args[5+i]), coord_ptr);
@@ -1530,8 +1526,6 @@ void CodeGen::visit(const Call *op) {
             if (op->name == Call::trace_expr) {
                 value = value_stored;
             }
-
-            restore_stack(saved_stack);
 
         } else if (op->name == Call::profiling_timer) {
             assert(op->args.size() == 0);
@@ -1624,6 +1618,14 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
+        // If any of the args are handles, assume it might access memory
+        bool pure = true;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (op->args[i].type().is_handle()) {
+                pure = false;
+            }
+        }
+
         // TODO: Need a general solution here
         if (op->name == "halide_current_time_ns") {
             assert(op->args.size() == 0);
@@ -1637,7 +1639,9 @@ void CodeGen::visit(const Call *op) {
                 args.insert(args.begin(), get_user_context());
             }
             CallInst *call = builder->CreateCall(fn, args);
-            call->setDoesNotAccessMemory();
+            if (pure) {
+                call->setDoesNotAccessMemory();
+            }
             call->setDoesNotThrow();
             value = call;
         } else {
@@ -1651,7 +1655,9 @@ void CodeGen::visit(const Call *op) {
             if (vec_fn) {
                 debug(4) << "Creating vector call to " << ss.str() << "\n";
                 CallInst *call = builder->CreateCall(vec_fn, args);
-                call->setDoesNotAccessMemory();
+                if (pure) {
+                    call->setDoesNotAccessMemory();
+                }
                 call->setDoesNotThrow();
                 value = call;
             } else {
@@ -1665,7 +1671,9 @@ void CodeGen::visit(const Call *op) {
                         arg_lane[j] = builder->CreateExtractElement(args[j], idx);
                     }
                     CallInst *call = builder->CreateCall(fn, arg_lane);
-                    call->setDoesNotAccessMemory();
+                    if (pure) {
+                        call->setDoesNotAccessMemory();
+                    }
                     call->setDoesNotThrow();
                     value = builder->CreateInsertElement(value, call, idx);
                 }
@@ -1822,25 +1830,8 @@ void CodeGen::visit(const For *op) {
         // Within the loop, the variable is equal to the phi value
         sym_push(op->name, phi);
 
-        // Set up state to detect if we need to do a stack restore on exit from this block.
-        bool old_need_stack_restore = need_stack_restore;
-        need_stack_restore = false;
-        Value *saved_stack = save_stack();
-
         // Emit the loop body
         codegen(op->body);
-
-        // Do any necessary stack restore/save
-        if (need_stack_restore) {
-            restore_stack(saved_stack);
-        } else {
-            // Remove the save
-            Instruction *save_inst = dyn_cast<Instruction>(saved_stack);
-            assert(save_inst);
-            save_inst->eraseFromParent();
-        }
-
-        need_stack_restore = old_need_stack_restore;
 
         // Update the counter
         Value *next_var = builder->CreateNSWAdd(phi, ConstantInt::get(i32, 1));
@@ -1864,11 +1855,9 @@ void CodeGen::visit(const For *op) {
         // and dump it into a closure
         Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t_type);
 
-        Value *saved_stack = save_stack();
-
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
-        Value *ptr = builder->CreateAlloca(closure_t, ConstantInt::get(i32, 1));
+        Value *ptr = create_alloca_at_entry(closure_t, 1);
 
         // Fill in the closure
         closure.pack_struct(ptr, symbol_table, builder);
@@ -1930,8 +1919,6 @@ void CodeGen::visit(const For *op) {
         Value *result = builder->CreateCall(do_par_for, args);
 
         debug(3) << "Leaving parallel for loop over " << op->name << "\n";
-
-        restore_stack(saved_stack);
 
         // Now restore the scope
         std::swap(symbol_table, saved_symbol_table);
@@ -2053,18 +2040,13 @@ void CodeGen::visit(const Evaluate *op) {
     value = NULL;
 }
 
-Value *CodeGen::save_stack() {
-    llvm::Function *stacksave =
-        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stacksave);
-    debug(4) << "Saving stack\n";
-    return builder->CreateCall(stacksave);
-}
-
-void CodeGen::restore_stack(llvm::Value *saved_stack) {
-    llvm::Function *stackrestore =
-        llvm::Intrinsic::getDeclaration(module, llvm::Intrinsic::stackrestore);
-    debug(4) << "Restoring stack\n";
-    builder->CreateCall(stackrestore, saved_stack);
+Value *CodeGen::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
+    llvm::BasicBlock *here = builder->GetInsertBlock();
+    builder->SetInsertPoint(here->getParent()->getEntryBlock().getFirstNonPHI());
+    Value *size = ConstantInt::get(i32, n);
+    Value *ptr = builder->CreateAlloca(t, size, name);
+    builder->SetInsertPoint(here);
+    return ptr;
 }
 
 llvm::Value *CodeGen::get_user_context() const {
