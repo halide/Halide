@@ -30,6 +30,8 @@
 #include "SpecializeClampedRamps.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
+#include "Inline.h"
+#include "Qualify.h"
 
 namespace Halide {
 namespace Internal {
@@ -64,33 +66,6 @@ void lower_test() {
     assert(result.defined() && "Lowering returned trivial function");
 
     std::cout << "Lowering test passed" << std::endl;
-}
-
-// Prefix all names in an expression with some string.
-class QualifyExpr : public IRMutator {
-    const string &prefix;
-
-    using IRMutator::visit;
-
-    void visit(const Variable *v) {
-        if (v->param.defined()) {
-            expr = v;
-        } else {
-            expr = Variable::make(v->type, prefix + v->name, v->reduction_domain);
-        }
-    }
-    void visit(const Let *op) {
-        Expr value = mutate(op->value);
-        Expr body = mutate(op->body);
-        expr = Let::make(prefix + op->name, value, body);
-    }
-public:
-    QualifyExpr(const string &p) : prefix(p) {}
-};
-
-Expr qualify_expr(const string &prefix, Expr value) {
-    QualifyExpr q(prefix);
-    return q.mutate(value);
 }
 
 // Build a loop nest about a provide node using a schedule
@@ -383,7 +358,7 @@ Stmt build_produce(Function f) {
 
         vector<Expr> values(f.values().size());
         for (size_t i = 0; i < values.size(); i++) {
-            values[i] = qualify_expr(prefix, f.values()[i]);
+            values[i] = qualify(prefix, f.values()[i]);
         }
 
         for (size_t i = 0; i < f.args().size(); i++) {
@@ -408,13 +383,13 @@ vector<Stmt> build_update(Function f) {
         vector<Expr> values(r.values.size());
         for (size_t i = 0; i < values.size(); i++) {
             Expr v = r.values[i];
-            v = qualify_expr(prefix, v);
+            v = qualify(prefix, v);
             values[i] = v;
         }
 
         for (size_t i = 0; i < r.args.size(); i++) {
             Expr s = r.args[i];
-            s = qualify_expr(prefix, s);
+            s = qualify(prefix, s);
             site[i] = s;
             debug(2) << "Reduction site " << i << " = " << s << "\n";
         }
@@ -601,116 +576,6 @@ private:
             found_store_level = found_compute_level = true;
         } else {
             stmt = op;
-        }
-    }
-};
-
-class InlineFunction : public IRMutator {
-    Function func;
-    bool found;
-public:
-    InlineFunction(Function f) : func(f), found(false) {
-        // Sanity check that this is a reasonable function to inline.
-        assert(!f.has_reduction_definition());
-
-        const Schedule &s = f.schedule();
-
-        if (!s.store_level.is_inline()) {
-            std::cerr << "Function " << f.name() << " is scheduled to be computed inline, "
-                      << "but is not scheduled to be stored inline. A storage schedule "
-                      << "is meaningless for functions computed inline.\n";
-            assert(false);
-        }
-
-        for (size_t i = 0; i < s.dims.size(); i++) {
-            Schedule::Dim d = s.dims[i];
-            if (d.for_type == For::Parallel) {
-                std::cerr << "Cannot parallelize dimension "
-                          << d.var << " of function "
-                          << f.name() << " because the function is scheduled inline.\n";
-                assert(false);
-            } else if (d.for_type == For::Unrolled) {
-                std::cerr << "Cannot unroll dimension "
-                          << d.var << " of function "
-                          << f.name() << " because the function is scheduled inline.\n";
-                assert(false);
-            } else if (d.for_type == For::Vectorized) {
-                std::cerr << "Cannot vectorize dimension "
-                          << d.var << " of function "
-                          << f.name() << " because the function is scheduled inline.\n";
-                assert(false);
-            }
-        }
-
-        for (size_t i = 0; i < s.splits.size(); i++) {
-            if (s.splits[i].is_rename()) {
-                std::cerr << "Warning: It is meaningless to rename variable "
-                          << s.splits[i].old_var << " of function "
-                          << f.name() << " to " << s.splits[i].outer
-                          << " because " << f.name() << " is scheduled inline.\n";
-            } else if (s.splits[i].is_fuse()) {
-                std::cerr << "Warning: It is meaningless to fuse variables "
-                          << s.splits[i].inner << " and " << s.splits[i].outer
-                          << " because " << f.name() << " is scheduled inline.\n";
-            } else {
-                std::cerr << "Warning: It is meaningless to split variable "
-                          << s.splits[i].old_var << " of function "
-                          << f.name() << " into "
-                          << s.splits[i].outer << " * "
-                          << s.splits[i].factor << " + "
-                          << s.splits[i].inner << " because "
-                          << f.name() << " is scheduled inline.\n";
-            }
-        }
-
-        for (size_t i = 0; i < s.bounds.size(); i++) {
-            std::cerr << "Warning: It is meaningless to bound dimension "
-                      << s.bounds[i].var << " of function "
-                      << f.name() << " to be within ["
-                      << s.bounds[i].min << ", "
-                      << s.bounds[i].extent << "] because the function is scheduled inline.\n";
-        }
-
-    }
-private:
-    using IRMutator::visit;
-
-    void visit(const Call *op) {
-        // std::cout << "Found call to " << op->name << endl;
-        if (op->name == func.name()) {
-            // Mutate the args
-            vector<Expr> args(op->args.size());
-            for (size_t i = 0; i < args.size(); i++) {
-                args[i] = mutate(op->args[i]);
-            }
-            // Grab the body
-            Expr body = qualify_expr(func.name() + ".", func.values()[op->value_index]);
-
-
-            // Bind the args using Let nodes
-            assert(args.size() == func.args().size());
-
-            for (size_t i = 0; i < args.size(); i++) {
-                body = Let::make(func.name() + "." + func.args()[i],
-                                 args[i],
-                                 body);
-            }
-
-            expr = body;
-
-            found = true;
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Provide *op) {
-        found = false;
-        IRMutator::visit(op);
-
-        if (found) {
-            // Clean up so that we don't get code explosion due to recursive inlining
-            stmt = common_subexpression_elimination(stmt);
         }
     }
 };
@@ -1093,7 +958,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
             !f.has_reduction_definition() &&
             f.schedule().compute_level.is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
-            s = InlineFunction(f).mutate(s);
+            s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
             InjectRealization injector(f);
