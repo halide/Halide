@@ -42,7 +42,7 @@ struct VarOrRVar {
 
     const Var var;
     const RVar rvar;
-    const bool is_rvar;   
+    const bool is_rvar;
 };
 
 class FuncRefVar {
@@ -205,30 +205,29 @@ public:
     EXPORT ScheduleHandle &unroll(Var var);
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
     EXPORT ScheduleHandle &unroll(Var var, int factor);
-    EXPORT ScheduleHandle &bound(Var var, Expr min, Expr extent);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
     EXPORT ScheduleHandle &reorder(const std::vector<VarOrRVar> &vars);
     EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y);
     EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
-                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, 
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
@@ -374,9 +373,9 @@ public:
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
     EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
                                const Target &target = get_jit_target_from_environment());
-    EXPORT Realization realize(int x_size, int y_size, int z_size, 
+    EXPORT Realization realize(int x_size, int y_size, int z_size,
                                const Target &target = get_jit_target_from_environment());
-    EXPORT Realization realize(int x_size, int y_size, 
+    EXPORT Realization realize(int x_size, int y_size,
                                const Target &target = get_jit_target_from_environment());
     EXPORT Realization realize(int x_size = 0,
                                const Target &target = get_jit_target_from_environment());
@@ -790,42 +789,42 @@ public:
 
     /** Reorder four dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                          VarOrRVar w);
 
     /** Reorder five dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                          VarOrRVar w, VarOrRVar t);
 
     /** Reorder six dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                          VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
 
     /** Reorder seven dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                          VarOrRVar t3);
 
     /** Reorder eight dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                          VarOrRVar t3, VarOrRVar t4);
 
     /** Reorder nine dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                          VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
 
     /** Reorder ten dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, 
-                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2, 
-                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, 
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                          VarOrRVar t6);
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */

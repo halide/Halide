@@ -562,12 +562,6 @@ ScheduleHandle &ScheduleHandle::unroll(Var var, int factor) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::bound(Var var, Expr min, Expr extent) {
-    Schedule::Bound b = {var.name(), min, extent};
-    schedule.bounds.push_back(b);
-    return *this;
-}
-
 ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
     split(x, xo, xi, xfactor);
     split(y, yo, yi, yfactor);
@@ -801,7 +795,8 @@ Func &Func::unroll(Var var, int factor) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
-    ScheduleHandle(func.schedule()).bound(var, min, extent);
+    Schedule::Bound b = {var.name(), min, extent};
+    func.schedule().bounds.push_back(b);
     return *this;
 }
 
@@ -835,39 +830,39 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, 
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t);
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, 
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2);
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, 
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3);
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, 
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4);
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, 
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, 
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
                     VarOrRVar t5) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
     return *this;
 }
 
-Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, 
-                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, 
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
                     VarOrRVar t5, VarOrRVar t6) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
     return *this;
@@ -1542,7 +1537,7 @@ void validate_arguments(const string &output,
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_bitcode(filename);
 }
-  
+
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
     compile_to_bitcode(filename, args, "", target);
 }
