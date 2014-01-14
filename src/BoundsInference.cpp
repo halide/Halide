@@ -7,6 +7,7 @@
 #include "IROperator.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "Inline.h"
 #include <sstream>
 
 namespace Halide {
@@ -54,16 +55,16 @@ public:
         int stage; // 0 is the pure definition, 1 is the first update
         vector<int> consumers;
         Box bounds;
+        vector<Expr> exprs;
 
         // Computed expressions on the left and right-hand sides
-        vector<Expr> exprs() {
+        void compute_exprs() {
             if (stage == 0) {
-                return func.values();
+                exprs = func.values();
             } else {
                 const ReductionDefinition &r = func.reductions()[stage-1];
-                vector<Expr> result = r.values;
-                result.insert(result.end(), r.args.begin(), r.args.end());
-                return result;
+                exprs = r.values;
+                exprs.insert(exprs.end(), r.args.begin(), r.args.end());
             }
         }
 
@@ -226,23 +227,52 @@ public:
         // Compute the intrinsic relationships between the stages of
         // the functions.
 
+        // Figure out which functions will be inlined away
+        vector<bool> inlined(f.size());
+        for (size_t i = 0; i < inlined.size(); i++) {
+            if (i < f.size() - 1 &&
+                f[i].schedule().compute_level.is_inline() &&
+                f[i].has_pure_definition() &&
+                !f[i].has_reduction_definition()) {
+                inlined[i] = true;
+            } else {
+                inlined[i] = false;
+            }
+        }
+
         // First lay out all the stages in their realization order.
         // The functions are already in topologically sorted order, so
         // this is straight-forward.
         for (size_t i = 0; i < f.size(); i++) {
+
+            if (inlined[i]) continue;
+
             Stage s;
             s.func = f[i];
             s.stage = 0;
+            s.compute_exprs();
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].reductions().size(); j++) {
                 s.stage = (int)(j+1);
+                s.compute_exprs();
                 stages.push_back(s);
             }
 
         }
 
-        // TODO: Consider doing inlining, because it can save you some on bounds computations.
+        // Do any inlining (TODO: This is currently slow)
+        for (size_t i = f.size()-1; i > 0; i--) {
+            Function func = f[i-1];
+            if (inlined[i-1]) {
+                for (size_t j = 0; j < stages.size(); j++) {
+                    Stage &s = stages[j];
+                    for (size_t k = 0; k < s.exprs.size(); k++) {
+                        s.exprs[k] = inline_function(s.exprs[k], func);
+                    }
+                }
+            }
+        }
 
         // Then compute relationships between them.
         for (size_t i = 0; i < stages.size(); i++) {
@@ -282,7 +312,7 @@ public:
                 }
 
             } else {
-                const vector<Expr> &exprs = consumer.exprs();
+                const vector<Expr> &exprs = consumer.exprs;
                 for (size_t j = 0; j < exprs.size(); j++) {
                     map<string, Box> new_boxes = boxes_required(exprs[j], scope);
                     for (map<string, Box>::iterator iter = new_boxes.begin();
