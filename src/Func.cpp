@@ -795,6 +795,20 @@ Func &Func::unroll(Var var, int factor) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
+    bool found = false;
+    for (size_t i = 0; i < func.args().size(); i++) {
+        if (var.name() == func.args()[i]) {
+            found = true;
+        }
+    }
+    if (!found) {
+        std::cerr << "Can't bound variable " << var.name()
+                  << " of function " << name()
+                  << " because " << var.name()
+                  << " is not one of the pure variables of " << name() << "\n";
+        assert(false);
+    }
+
     Schedule::Bound b = {var.name(), min, extent};
     func.schedule().bounds.push_back(b);
     return *this;
