@@ -456,11 +456,8 @@ pair<Stmt, Stmt> build_realization(Function func) {
 // inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     // Inject any explicit bounds
+    const Schedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.reductions().size(); stage++) {
-        const Schedule &s = ((stage == 0) ?
-                             func.schedule() :
-                             func.reductions()[stage-1].schedule);
-
         for (size_t i = 0; i < s.bounds.size(); i++) {
             Schedule::Bound b = s.bounds[i];
             Expr max_val = (b.extent + b.min) - 1;
@@ -1000,7 +997,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
 
         if (next != rvars.size()) {
-            std::cerr << "In function " << f.name() << " stage " << i 
+            std::cerr << "In function " << f.name() << " stage " << i
                       << ", the reduction variables have been illegally reordered.\n"
                       << "Correct order:";
             for (size_t j = 0; j < rvars.size(); j++) {
@@ -1011,7 +1008,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
                 std::cerr << " " << dims[j].var;
             }
             std::cerr << "\n";
-            assert(false);               
+            assert(false);
         }
     }
 
