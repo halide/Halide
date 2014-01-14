@@ -18,7 +18,12 @@
 #include <llvm/ExecutionEngine/JIT.h>
 #endif
 
+#if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
+#else
+#include <llvm/IR/Verifier.h>
+#endif
+
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
