@@ -402,9 +402,11 @@ vector<Stmt> build_update(Function f, string extra_prefix) {
             const vector<ReductionVariable> &dom = r.domain.domain();
             for (size_t i = 0; i < dom.size(); i++) {
                 string p = prefix + dom[i].var;
-                loop = LetStmt::make(p + ".loop_min", dom[i].min, loop);
-                loop = LetStmt::make(p + ".loop_max", dom[i].min + dom[i].extent - 1, loop);
-                loop = LetStmt::make(p + ".loop_extent", dom[i].extent, loop);
+                Expr rmin = Variable::make(Int(32), p + ".min");
+                Expr rmax = Variable::make(Int(32), p + ".max");
+                loop = LetStmt::make(p + ".loop_min", rmin, loop);
+                loop = LetStmt::make(p + ".loop_max", rmax, loop);
+                loop = LetStmt::make(p + ".loop_extent", rmax - rmin + 1, loop);
             }
         }
 
