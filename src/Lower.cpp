@@ -1514,6 +1514,7 @@ Stmt lower(Function f) {
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
+    s = remove_trivial_for_loops(s);
     debug(2) << "Simplified: \n" << s << "\n\n";
 
     debug(1) << "Unrolling...\n";
@@ -1529,7 +1530,6 @@ Stmt lower(Function f) {
     debug(2) << "Vectorized: \n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
-    s = remove_trivial_for_loops(s);
     s = simplify(s);
     debug(2) << "Simplified: \n" << s << "\n\n";
 
