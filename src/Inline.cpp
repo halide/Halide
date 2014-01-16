@@ -94,9 +94,6 @@ class Inliner : public IRMutator {
             // Grab the body
             Expr body = qualify(func.name() + ".", func.values()[op->value_index]);
 
-            // Recursively inline inside of the body
-            // body = mutate(body);
-
             // Bind the args using Let nodes
             assert(args.size() == func.args().size());
 
@@ -107,6 +104,7 @@ class Inliner : public IRMutator {
             expr = body;
 
             found = true;
+
         } else {
             IRMutator::visit(op);
         }
@@ -119,7 +117,6 @@ class Inliner : public IRMutator {
         IRMutator::visit(op);
 
         if (found) {
-            // Clean up so that we don't get code explosion due to recursive inlining
             stmt = common_subexpression_elimination(stmt);
         }
 

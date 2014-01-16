@@ -81,10 +81,11 @@ string unique_name(const string &name, bool user) {
 string base_name(const string &name) {
     size_t off = name.rfind('.');
     if (off == string::npos) {
-        return "";
+        return name;
     }
     return name.substr(off+1);
 }
+
 
 }
 }

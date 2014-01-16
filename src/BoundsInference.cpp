@@ -42,6 +42,29 @@ bool depends_on_bounds_inference(Expr e) {
     return d.result;
 }
 
+
+struct FuncIsCalledByExpr : public IRVisitor {
+    using IRVisitor::visit;
+
+    Function f;
+    bool result;
+    void visit(const Call *call) {
+        if (call->func.same_as(f)) {
+            result = true;
+        } else {
+            IRVisitor::visit(call);
+        }
+    }
+};
+
+bool func_is_called_by_expr(Function f, Expr e) {
+    FuncIsCalledByExpr c;
+    c.f = f;
+    c.result = false;
+    e.accept(&c);
+    return c.result;
+}
+
 }
 
 class BoundsInference : public IRMutator {
@@ -53,6 +76,7 @@ public:
     struct Stage {
         Function func;
         int stage; // 0 is the pure definition, 1 is the first update
+        string name;
         vector<int> consumers;
         Box bounds;
         vector<Expr> exprs;
@@ -79,7 +103,7 @@ public:
 
             assert(bounds.size() == func.args().size());
             for (size_t d = 0; d < bounds.size(); d++) {
-                string arg = func.name() + ".s" + int_to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
                 s = LetStmt::make(arg + ".min", bounds[d].min, s);
                 s = LetStmt::make(arg + ".max", bounds[d].max, s);
             }
@@ -191,7 +215,7 @@ public:
         Scope<Interval> scope() {
             Scope<Interval> result;
             for (size_t d = 0; d < func.args().size(); d++) {
-                string arg = func.name() + ".s" + int_to_string(stage) + "." + func.args()[d];
+                string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
                 result.push(func.args()[d],
                             Interval(Variable::make(Int(32), arg + ".min"),
                                      Variable::make(Int(32), arg + ".max")));
@@ -224,6 +248,9 @@ public:
     vector<Stage> stages;
 
     BoundsInference(const vector<Function> &f) : funcs(f) {
+        assert(!f.empty());
+        Function output_function = f[f.size()-1];
+
         // Compute the intrinsic relationships between the stages of
         // the functions.
 
@@ -232,8 +259,7 @@ public:
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
                 f[i].schedule().compute_level.is_inline() &&
-                f[i].has_pure_definition() &&
-                !f[i].has_reduction_definition()) {
+                f[i].is_pure()) {
                 inlined[i] = true;
             } else {
                 inlined[i] = false;
@@ -250,18 +276,20 @@ public:
             Stage s;
             s.func = f[i];
             s.stage = 0;
+            s.name = s.func.name();
             s.compute_exprs();
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].reductions().size(); j++) {
                 s.stage = (int)(j+1);
+                s.name = s.func.name();
                 s.compute_exprs();
                 stages.push_back(s);
             }
 
         }
 
-        // Do any inlining (TODO: This is currently slow)
+        // Do any pure inlining (TODO: This is currently slow)
         for (size_t i = f.size()-1; i > 0; i--) {
             Function func = f[i-1];
             if (inlined[i-1]) {
@@ -273,6 +301,63 @@ public:
                 }
             }
         }
+
+        // Remove the inlined stages
+        vector<Stage> new_stages;
+        for (size_t i = 0; i < stages.size(); i++) {
+            if (stages[i].func.same_as(output_function) ||
+                !stages[i].func.schedule().compute_level.is_inline() ||
+                !stages[i].func.is_pure()) {
+                new_stages.push_back(stages[i]);
+            }
+        }
+        new_stages.swap(stages);
+
+        // TODO: Handle inline reductions/externs by stamping down a
+        // unique copy of their stages per consumer
+        int s = (int)stages.size() - 1;
+        while (s >= 0) {
+            if (!stages[s].func.is_pure() &&
+                stages[s].func.schedule().compute_level.is_inline() &&
+                !stages[s].func.same_as(output_function)) {
+                // We've found an inlined reduction. Make a unique
+                // copy of it per consumer, and name each
+                // appropriately.
+                vector<string> consumers;
+                for (size_t i = s+1; i < stages.size(); i++) {
+                    if (stages[i].func.same_as(stages[s].func)) {
+                        // Skip over other copies of me.
+                        continue;
+                    }
+                    // Is this stage a consumer of me?
+                    bool consumes_me = false;
+                    for (size_t j = 0; j < stages[i].exprs.size(); j++) {
+                        Expr e = stages[i].exprs[j];
+                        if (func_is_called_by_expr(stages[s].func, e)) {
+                            consumes_me = true;
+                        }
+                    }
+                    if (consumes_me) {
+                        consumers.push_back(stages[i].name);
+                    }
+                }
+
+                // Insert some copies of me after me
+                stages.insert(stages.begin() + s, consumers.size()-1, stages[s]);
+                for (size_t i = 0; i < consumers.size(); i++) {
+                    stages[s + i].name = consumers[i] + "." + stages[s + i].name;
+                }
+            }
+            s--;
+        }
+
+        // Dump the stages post-inlining for debugging
+        /*
+        debug(0) << "Bounds inference stages after inlining: \n";
+        for (size_t i = 0; i < stages.size(); i++) {
+            debug(0) << " " << i << ") " << stages[i].name << "\n";
+        }
+        */
 
         // Then compute relationships between them.
         for (size_t i = 0; i < stages.size(); i++) {
@@ -298,7 +383,7 @@ public:
                         string stage_name = f.name() + ".s" + int_to_string(f.reductions().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
-                            string buf_name = f.name() + ".o0.bounds_query." + consumer.func.name();
+                            string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
                             Expr buf = Variable::make(Handle(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
                                                   vec<Expr>(buf, d), Call::Intrinsic);
@@ -327,6 +412,16 @@ public:
                 Stage &producer = stages[j];
                 // A consumer depends on *all* stages of a producer, not just the last one.
                 const Box &b = boxes[producer.func.name()];
+
+                // Skip over this producer if it's an inlined
+                // reduction and it's not *our* copy of that inlined
+                // reduction.
+                if (producer.func.schedule().compute_level.is_inline() &&
+                    !producer.func.is_pure() &&
+                    !starts_with(producer.name, consumer.name)) {
+                    continue;
+                }
+
                 if (!b.empty()) {
                     // Check for unboundedness
                     for (size_t k = 0; k < b.size(); k++) {
@@ -336,8 +431,8 @@ public:
                             } else {
                                 std::cerr << "Update definition number " << (consumer.stage-1);
                             }
-                            std::cerr << " of Function " << consumer.func.name()
-                                      << " calls function " << producer.func.name()
+                            std::cerr << " of Function " << consumer.name
+                                      << " calls function " << producer.name
                                       << " in an unbounded way in dimension " << k << "\n";
                             assert(false);
                         }
@@ -391,14 +486,14 @@ public:
         // Dump out the region required of each stage for debugging.
         /*
         for (size_t i = 0; i < stages.size(); i++) {
-            debug(0) << "Region required of " << stages[i].func.name()
+            debug(0) << "Region required of " << stages[i].name
                      << " stage " << stages[i].stage << ":\n";
             for (size_t j = 0; j < stages[i].bounds.size(); j++) {
                 debug(0) << "  [" << simplify(stages[i].bounds[j].min) << ", " << simplify(stages[i].bounds[j].max) << "]\n";
             }
             debug(0) << " consumed by: ";
             for (size_t j = 0; j < stages[i].consumers.size(); j++) {
-                debug(0) << stages[stages[i].consumers[j]].func.name() << " ";
+                debug(0) << stages[stages[i].consumers[j]].name << " ";
             }
             debug(0) << "\n";
         }
@@ -431,7 +526,7 @@ public:
         Function f;
         string stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            string next_stage_name = stages[i].func.name() + ".s" + int_to_string(stages[i].stage) + ".";
+            string next_stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage) + ".";
             if (starts_with(op->name, next_stage_name)) {
                 producing = i;
                 f = stages[i].func;
@@ -442,7 +537,7 @@ public:
         // Figure out how much of it we're producing
         Box box;
         if (producing >= 0) {
-            box = box_provided(body, f.name());
+            box = box_provided(body, stages[producing].name);
             assert((int)box.size() == f.dimensions());
         }
 
@@ -455,11 +550,11 @@ public:
         vector<bool> bounds_needed(stages.size(), false);
 
         for (size_t i = 0; i < stages.size(); i++) {
-            if (inner_productions.count(stages[i].func.name())) {
+            if (inner_productions.count(stages[i].name)) {
                 bounds_needed[i] = true;
             }
 
-            if (in_pipeline.contains(stages[i].func.name())) {
+            if (in_pipeline.contains(stages[i].name)) {
                 bounds_needed[i] = false;
             }
 
@@ -510,8 +605,8 @@ public:
 
 
 
-Stmt bounds_inference(Stmt s, const vector<string> &order, const map<string, Function> &env) {
-
+Stmt bounds_inference(Stmt s, const vector<string> &order,
+                      const map<string, Function> &env) {
 
     vector<Function> funcs(order.size());
     for (size_t i = 0; i < order.size(); i++) {

@@ -308,7 +308,12 @@ class SlidingWindow : public IRMutator {
         // Find the args for this function
         map<string, Function>::const_iterator iter = env.find(op->name);
 
-        assert(iter != env.end() && "Compiler bug: Sliding window found a realization for a function not in the environment\n");
+        // If it's not in the environment it's some anonymous
+        // realization that we should skip (e.g. an inlined reduction)
+        if (iter == env.end()) {
+            IRMutator::visit(op);
+            return;
+        }
 
         Stmt new_body = op->body;
 

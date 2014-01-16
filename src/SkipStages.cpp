@@ -155,13 +155,13 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &b) : buffer(b) {}
+    StageSkipper(const string &f) : func(f) {}
 private:
-    string buffer;
+    string func;
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        if (op->name == buffer) {
+        if (base_name(op->name) == func) {
             PredicateFinder f(op->name);
             op->body.accept(&f);
             Expr predicate = simplify(f.predicate);
