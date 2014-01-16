@@ -108,6 +108,18 @@ public:
                 s = LetStmt::make(arg + ".max", bounds[d].max, s);
             }
 
+            if (stage > 0) {
+                const ReductionDefinition &r = func.reductions()[stage-1];
+                if (r.domain.defined()) {
+                    const vector<ReductionVariable> &dom = r.domain.domain();
+                    for (size_t i = 0; i < dom.size(); i++) {
+                        string arg = name + ".s" + int_to_string(stage) + "." + dom[i].var;
+                        s = LetStmt::make(arg + ".min", dom[i].min, s);
+                        s = LetStmt::make(arg + ".max", dom[i].extent + dom[i].min - 1, s);
+                    }
+                }
+            }
+
             return s;
         }
 
@@ -237,7 +249,11 @@ public:
                         // currently allowed, but nice-to-have). If
                         // so, we'd better take the min and max of the
                         // expressions below w.r.t the scope so far.
-                        result.push(rvar.var, Interval(rvar.min, (rvar.min + rvar.extent) - 1));
+
+                        string arg = name + ".s" + int_to_string(stage) + "." + rvar.var;
+                        result.push(rvar.var, Interval(Variable::make(Int(32), arg + ".min"),
+                                                       Variable::make(Int(32), arg + ".max")));
+                        //result.push(rvar.var, Interval(rvar.min, (rvar.min + rvar.extent) - 1));
                     }
                 }
             }
@@ -588,6 +604,23 @@ public:
                 }
 
                 body = LetStmt::make(var + ".min", box[i].min, body);
+            }
+        }
+
+        // And the current bounds on its reduction variables.
+        if (producing >= 0 && stages[producing].stage > 0) {
+            const Stage &s = stages[producing];
+            const ReductionDefinition &r = s.func.reductions()[s.stage-1];
+            if (r.domain.defined()) {
+                const vector<ReductionVariable> &d = r.domain.domain();
+                for (size_t i = 0; i < d.size(); i++) {
+                    if (op->name == s.name + ".s" + int_to_string(s.stage) + "." + d[i].var) {
+                        // We just entered the loop over this var
+                        Expr loop_var = Variable::make(Int(32), op->name);
+                        body = LetStmt::make(op->name + ".min", loop_var, body);
+                        body = LetStmt::make(op->name + ".max", loop_var, body);
+                    }
+                }
             }
         }
 
