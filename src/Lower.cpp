@@ -283,7 +283,7 @@ Stmt build_provide_loop_nest(Function f,
                     bitmask_index[i] = e1;
                 }
 
-                // TODO(bblum): Lift this restriction
+                // TODO: Lift this restriction.
                 std::cerr << "Error: Cannot dynamically schedule `" << f.name()
                           << "'in `" << s.lazy_level.var << "' because that is not "
                           << "the innermost dimension.\n";
@@ -299,7 +299,7 @@ Stmt build_provide_loop_nest(Function f,
                               << "vectorized.\n";
                     assert(false);
                 } else if (dim.for_type == For::Parallel) {
-                    // TODO(bblum): Record this so storageflat can emit a barrier.
+                    // TODO: Record this so storageflat can emit a barrier.
                     std::cerr << "Error: Cannot dynamically schedule `" << f.name()
                               << "' in `" << s.lazy_level.var << "' because that "
                               << "dimension is inside `" << dim.var << "' which is "
@@ -553,7 +553,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
         }
 
         if (!func.schedule().lazy_level.is_inline()) {
-            // TODO(bblum): Figure out something better to do here.
+            // This may be possible to deal with in the future.
             std::cerr << "Error: Cannot generate a dynamic schedule for `"
                       << func.name() << "' because it has an update phase.\n";
             assert(false);
