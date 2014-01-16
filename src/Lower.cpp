@@ -623,8 +623,9 @@ private:
             function_is_called_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
-            stmt = build_realize(build_pipeline(op, producing + "."), producing + ".");
-            stmt = prefix_calls_to_function(stmt, func, producing + ".");
+            string extra_prefix = producing + "#";
+            stmt = build_realize(build_pipeline(op, extra_prefix), extra_prefix);
+            stmt = prefix_calls_to_function(stmt, func, extra_prefix);
             found_store_level = found_compute_level = true;
         } else {
             stmt = op;

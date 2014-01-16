@@ -342,10 +342,12 @@ public:
                     }
                 }
 
-                // Insert some copies of me after me
+                // Insert some copies of me after me. They should have
+                // predictable names so that lowering knows what
+                // bounds inference variables will be in scope.
                 stages.insert(stages.begin() + s, consumers.size()-1, stages[s]);
                 for (size_t i = 0; i < consumers.size(); i++) {
-                    stages[s + i].name = consumers[i] + "." + stages[s + i].name;
+                    stages[s + i].name = consumers[i] + "#" + stages[s + i].name;
                 }
             }
             s--;
@@ -418,7 +420,7 @@ public:
                 // reduction.
                 if (producer.func.schedule().compute_level.is_inline() &&
                     !producer.func.is_pure() &&
-                    !starts_with(producer.name, consumer.name + ".")) {
+                    !starts_with(producer.name, consumer.name + '#')) {
                     continue;
                 }
 

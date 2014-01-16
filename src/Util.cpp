@@ -78,8 +78,8 @@ string unique_name(const string &name, bool user) {
     }
 }
 
-string base_name(const string &name) {
-    size_t off = name.rfind('.');
+string base_name(const string &name, char delim) {
+    size_t off = name.rfind(delim);
     if (off == string::npos) {
         return name;
     }
