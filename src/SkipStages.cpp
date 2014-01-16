@@ -161,7 +161,7 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        if (base_name(op->name) == func) {
+        if (base_name(op->name, '#') == func) {
             PredicateFinder f(op->name);
             op->body.accept(&f);
             Expr predicate = simplify(f.predicate);
