@@ -54,7 +54,7 @@ struct CheckVars : public IRGraphVisitor {
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-        if (op->name == name) {
+        if (op->name == name && op->call_type == Call::Halide) {
             for (size_t i = 0; i < op->args.size(); i++) {
                 const Variable *var = op->args[i].as<Variable>();
                 if (!pure_args[i].empty()) {
