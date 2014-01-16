@@ -219,6 +219,12 @@ void CodeGen_Posix::destroy_allocation(Allocation alloc) {
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
 
+    if (sym_exists(alloc->name + ".host")) {
+        std::cerr << "Can't have two different buffers with the same name: "
+                  << alloc->name << "\n";
+        assert(false);
+    }
+
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->size);
     sym_push(alloc->name + ".host", allocation.ptr);
 
