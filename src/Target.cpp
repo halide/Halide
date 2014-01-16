@@ -264,6 +264,16 @@ Target parse_target_string(const std::string &target) {
     return t;
 }
 
+namespace {
+llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMContext *context) {
+    #if LLVM_VERSION < 35
+    return llvm::ParseBitcodeFile(bitcode_buffer, *context);
+    #else
+    return llvm::parseBitcodeFile(bitcode_buffer, *context).get();
+    #endif
+}
+}
+
 #define DECLARE_INITMOD(mod)                                            \
     extern "C" unsigned char halide_internal_initmod_##mod[];           \
     extern "C" int halide_internal_initmod_##mod##_length;              \
@@ -271,7 +281,7 @@ Target parse_target_string(const std::string &target) {
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length); \
         llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
-        llvm::Module *module = llvm::ParseBitcodeFile(bitcode_buffer, *context); \
+        llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
         delete bitcode_buffer;                                          \
         return module;                                                  \
     }
