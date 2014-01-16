@@ -241,6 +241,12 @@ public:
                     }
                 }
             }
+
+            for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
+                const Schedule::Bound &b = func.schedule().bounds[i];
+                result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
+            }
+
             return result;
         }
 
