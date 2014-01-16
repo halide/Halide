@@ -418,7 +418,7 @@ public:
                 // reduction.
                 if (producer.func.schedule().compute_level.is_inline() &&
                     !producer.func.is_pure() &&
-                    !starts_with(producer.name, consumer.name)) {
+                    !starts_with(producer.name, consumer.name + ".")) {
                     continue;
                 }
 
