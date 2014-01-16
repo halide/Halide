@@ -150,6 +150,13 @@ public:
         return !contents.ptr->values.empty();
     }
 
+    /** Does this function *only* have a pure definition */
+    bool is_pure() const {
+        return (has_pure_definition() &&
+                !has_reduction_definition() &&
+                !has_extern_definition());
+    }
+
     /** Get a handle to the schedule for the purpose of modifying
      * it */
     Schedule &schedule() {
@@ -247,6 +254,7 @@ public:
         return contents.ptr->trace_realizations;
     }
     // @}
+
 };
 
 }}

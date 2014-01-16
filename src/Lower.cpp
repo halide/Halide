@@ -70,6 +70,7 @@ void lower_test() {
 
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(Function f,
+                             string func_prefix,
                              string prefix,
                              const vector<Expr> &site,
                              const vector<Expr> &values,
@@ -81,7 +82,7 @@ Stmt build_provide_loop_nest(Function f,
 
     // Make the (multi-dimensional multi-valued) store node.
     assert(!values.empty());
-    Stmt stmt = Provide::make(f.name(), values, site);
+    Stmt stmt = Provide::make(func_prefix + f.name(), values, site);
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -227,7 +228,7 @@ Stmt build_provide_loop_nest(Function f,
     for (size_t i = 0; i < f.args().size(); i++) {
         string var = prefix + f.args()[i];
         Expr max = Variable::make(Int(32), var + ".max");
-        Expr min = Variable::make(Int(32), var + ".min");
+        Expr min = Variable::make(Int(32), var + ".min"); // Inject instance name here? (compute instance names during lowering)
         stmt = LetStmt::make(var + ".loop_extent",
                              (max + 1) - min,
                              stmt);
@@ -244,7 +245,7 @@ Stmt build_provide_loop_nest(Function f,
 // which it should be realized. It will compute at least those
 // bounds (depending on splits, it may compute more). This loop
 // won't do any allocation.
-Stmt build_produce(Function f) {
+Stmt build_produce(Function f, string extra_prefix) {
 
     if (f.has_extern_definition()) {
         // Call the external function
@@ -312,7 +313,7 @@ Stmt build_produce(Function f) {
         // first name generated on the Tuple.
         string bounds_name;
         for (int j = 0; j < f.outputs(); j++) {
-            string name = f.name();
+            string name = extra_prefix + f.name();
             if (f.outputs() > 1) {
                 name += "." + int_to_string(j);
             }
@@ -351,7 +352,7 @@ Stmt build_produce(Function f) {
         return check;
     } else {
 
-        string prefix = f.name() + ".s0.";
+        string prefix = extra_prefix + f.name() + ".s0.";
 
         // Compute the site to store to as the function args
         vector<Expr> site;
@@ -365,19 +366,19 @@ Stmt build_produce(Function f) {
             site.push_back(Variable::make(Int(32), prefix + f.args()[i]));
         }
 
-        return build_provide_loop_nest(f, prefix, site, values, f.schedule(), false);
+        return build_provide_loop_nest(f, extra_prefix, prefix, site, values, f.schedule(), false);
     }
 }
 
 // Build the loop nests that update a function (assuming it's a reduction).
-vector<Stmt> build_update(Function f) {
+vector<Stmt> build_update(Function f, string extra_prefix) {
 
     vector<Stmt> updates;
 
     for (size_t i = 0; i < f.reductions().size(); i++) {
         ReductionDefinition r = f.reductions()[i];
 
-        string prefix = f.name() + ".s" + int_to_string(i+1) + ".";
+        string prefix = extra_prefix + f.name() + ".s" + int_to_string(i+1) + ".";
 
         vector<Expr> site(r.args.size());
         vector<Expr> values(r.values.size());
@@ -394,7 +395,7 @@ vector<Stmt> build_update(Function f) {
             debug(2) << "Reduction site " << i << " = " << s << "\n";
         }
 
-        Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
+        Stmt loop = build_provide_loop_nest(f, extra_prefix, prefix, site, values, r.schedule, true);
 
         // Now define the bounds on the reduction domain
         if (r.domain.defined()) {
@@ -413,9 +414,9 @@ vector<Stmt> build_update(Function f) {
     return updates;
 }
 
-pair<Stmt, Stmt> build_realization(Function func) {
-    Stmt produce = build_produce(func);
-    vector<Stmt> updates = build_update(func);
+pair<Stmt, Stmt> build_production(Function func, string extra_prefix) {
+    Stmt produce = build_produce(func, extra_prefix);
+    vector<Stmt> updates = build_update(func, extra_prefix);
 
     // Build it from the last stage backwards.
     Stmt merged_updates;
@@ -429,7 +430,7 @@ pair<Stmt, Stmt> build_realization(Function func) {
 // injects let statements that set those bounds, and assertions that
 // check that those bounds are sufficiently large to cover the
 // inferred bounds required.
-Stmt inject_explicit_bounds(Stmt body, Function func) {
+Stmt inject_explicit_bounds(Stmt body, Function func, string extra_prefix) {
     // Inject any explicit bounds
     const Schedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.reductions().size(); stage++) {
@@ -437,7 +438,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Schedule::Bound b = s.bounds[i];
             Expr max_val = (b.extent + b.min) - 1;
             Expr min_val = b.min;
-            string prefix = func.name() + ".s" + int_to_string(stage) + "." + b.var;
+            string prefix = extra_prefix + func.name() + ".s" + int_to_string(stage) + "." + b.var;
             string min_name = prefix + ".min";
             string max_name = prefix + ".max";
             Expr min_var = Variable::make(Int(32), min_name);
@@ -478,39 +479,89 @@ bool function_is_called_in_stmt(Function f, Stmt s) {
     return is_called.result;
 }
 
+class PrefixCalls : public IRMutator {
+    using IRMutator::visit;
+
+    Function func;
+    string prefix;
+
+    void visit(const Call *op) {
+        IRMutator::visit(op);
+        op = expr.as<Call>();
+        assert(op);
+
+        if (op->call_type == Call::Halide && op->func.same_as(func)) {
+            expr = Call::make(op->type, prefix + op->name, op->args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+        }
+    }
+
+public:
+    PrefixCalls(Function f, string p) : func(f), prefix(p) {}
+};
+
+Stmt prefix_calls_to_function(Stmt s, Function f, string p) {
+    return PrefixCalls(f, p).mutate(s);
+}
+
 // Inject the allocation and realization of a function into an
 // existing loop nest using its schedule
 class InjectRealization : public IRMutator {
 public:
     const Function &func;
     bool found_store_level, found_compute_level;
-    InjectRealization(const Function &f) : func(f), found_store_level(false), found_compute_level(false) {}
 
+    InjectRealization(const Function &f) :
+        func(f), found_store_level(false), found_compute_level(false) {}
 private:
-    Stmt build_pipeline(Stmt s) {
-        pair<Stmt, Stmt> realization = build_realization(func);
-        return Pipeline::make(func.name(), realization.first, realization.second, s);
+
+    string producing;
+
+    Stmt build_pipeline(Stmt s, string extra_prefix) {
+        pair<Stmt, Stmt> realization = build_production(func, extra_prefix);
+        return Pipeline::make(extra_prefix + func.name(), realization.first, realization.second, s);
     }
 
-    Stmt build_realize(Stmt s) {
+    Stmt build_realize(Stmt s, string extra_prefix) {
         Region bounds;
+        string name = extra_prefix + func.name();
         for (int i = 0; i < func.dimensions(); i++) {
             string arg = func.args()[i];
-            Expr min = Variable::make(Int(32), func.name() + "." + arg + ".min_realized");
-            Expr extent = Variable::make(Int(32), func.name() + "." + arg + ".extent_realized");
+            Expr min = Variable::make(Int(32), name + "." + arg + ".min_realized");
+            Expr extent = Variable::make(Int(32), name + "." + arg + ".extent_realized");
             bounds.push_back(Range(min, extent));
         }
 
-        s = Realize::make(func.name(), func.output_types(), bounds, s);
+        s = Realize::make(name, func.output_types(), bounds, s);
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        return inject_explicit_bounds(s, func);
+        return inject_explicit_bounds(s, func, extra_prefix);
     }
 
     using IRMutator::visit;
 
-    virtual void visit(const For *for_loop) {
+    void visit(const Pipeline *op) {
+        string old = producing;
+        producing = op->name;
+        Stmt produce = mutate(op->produce);
+        Stmt update;
+        if (op->update.defined()) {
+            update = mutate(op->update);
+        }
+        producing = old;
+        Stmt consume = mutate(op->consume);
+
+        if (produce.same_as(op->produce) &&
+            update.same_as(op->update) &&
+            consume.same_as(op->consume)) {
+            stmt = op;
+        } else {
+            stmt = Pipeline::make(op->name, produce, update, consume);
+        }
+    }
+
+    void visit(const For *for_loop) {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
         const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
         const Schedule::LoopLevel &store_level = func.schedule().store_level;
@@ -525,7 +576,7 @@ private:
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
-            stmt = build_realize(build_pipeline(for_loop));
+            stmt = build_realize(build_pipeline(for_loop, ""), "");
             found_store_level = found_compute_level = true;
             return;
         }
@@ -535,7 +586,7 @@ private:
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
             if (function_is_called_in_stmt(func, body)) {
-                body = build_pipeline(body);
+                body = build_pipeline(body, "");
             }
             found_compute_level = true;
         }
@@ -546,7 +597,7 @@ private:
                    "The compute loop level was not found within the store loop level!");
 
             if (function_is_called_in_stmt(func, body)) {
-                body = build_realize(body);
+                body = build_realize(body, "");
             }
 
             found_store_level = true;
@@ -567,12 +618,13 @@ private:
     // If we're an inline reduction or extern, we may need to inject a realization here
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
-            (func.has_extern_definition() ||
-             func.has_reduction_definition()) &&
+            !func.is_pure() &&
             func.schedule().compute_level.is_inline() &&
             function_is_called_in_stmt(func, op)) {
-            debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(op) << "\n";
-            stmt = build_realize(build_pipeline(op));
+
+            // Prefix all calls to func in op
+            stmt = build_realize(build_pipeline(op, producing + "."), producing + ".");
+            stmt = prefix_calls_to_function(stmt, func, producing + ".");
             found_store_level = found_compute_level = true;
         } else {
             stmt = op;
@@ -599,9 +651,12 @@ public:
 
     void visit(const Call *call) {
         IRVisitor::visit(call);
+
         if (call->call_type == Call::Halide) {
-            include_function(call->func);
+            Function f = call->func;
+            include_function(f);
         }
+
     }
 };
 
@@ -760,11 +815,11 @@ vector<string> realization_order(string output, const map<string, Function> &env
 
 Stmt create_initial_loop_nest(Function f) {
     // Generate initial loop nest
-    pair<Stmt, Stmt> r = build_realization(f);
+    pair<Stmt, Stmt> r = build_production(f, "");
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
     s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
-    return inject_explicit_bounds(s, f);
+    return inject_explicit_bounds(s, f, "");
 }
 
 class ComputeLegalSchedules : public IRVisitor {
@@ -840,6 +895,21 @@ string schedule_to_source(Function f,
 }
 
 void validate_schedule(Function f, Stmt s, bool is_output) {
+
+    // If f is extern, check that none of its inputs are scheduled inline.
+    if (f.has_extern_definition()) {
+        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
+            ExternFuncArgument arg = f.extern_arguments()[i];
+            if (arg.is_func()) {
+                Function g(arg.func);
+                if (g.schedule().compute_level.is_inline()) {
+                    std::cerr << "Function " << g.name() << " cannot be scheduled to be computed inline, "
+                              << "because it is used in the externally-computed function " << f.name() << "\n";
+                    assert(false);
+                }
+            }
+        }
+    }
 
     // Check the rvars haven't been illegally reordered
     for (size_t i = 0; i < f.reductions().size(); i++) {
@@ -933,21 +1003,6 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
-
-        // If f is extern, check that none of its inputs are scheduled inline.
-        if (f.has_extern_definition()) {
-            for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-                ExternFuncArgument arg = f.extern_arguments()[i];
-                if (arg.is_func()) {
-                    Function g(arg.func);
-                    if (g.schedule().compute_level.is_inline()) {
-                        std::cerr << "Function " << g.name() << " cannot be scheduled to be computed inline, "
-                                  << "because it is used in the externally-computed function " << f.name() << "\n";
-                        assert(false);
-                    }
-                }
-            }
-        }
 
         validate_schedule(f, s, i == order.size());
 
@@ -1379,6 +1434,7 @@ Stmt add_image_checks(Stmt s, Function f) {
 }
 
 Stmt lower(Function f) {
+
     // Compute an environment
     map<string, Function> env;
     populate_environment(f, env);
@@ -1391,10 +1447,6 @@ Stmt lower(Function f) {
     debug(2) << "Initial statement: " << '\n' << s << '\n';
     s = schedule_functions(s, order, env, graph);
     debug(2) << "All realizations injected:\n" << s << '\n';
-
-    //debug(2) << "Lift loop invariants...\n";
-    //s = lift_loop_invariants(s);
-    //debug(2) << "Loop invariants lifted:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, f);

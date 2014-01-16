@@ -31,19 +31,19 @@ class AllocationInference : public IRMutator {
         IRMutator::visit(op);
         op = stmt.as<Realize>();
 
-        map<string, Function>::const_iterator iter = env.find(op->name);
+        map<string, Function>::const_iterator iter = env.find(base_name(op->name));
         assert(iter != env.end());
         Function f = iter->second;
 
         Box b = box_touched(op->body, op->name);
 
-        if (touched_by_extern.count(op->name)) {
+        if (touched_by_extern.count(f.name())) {
             // The region touched is at least the region required at this
             // loop level of the first stage (this is important for inputs
             // and outputs to extern stages).
             Box required(op->bounds.size());
             for (size_t i = 0; i < required.size(); i++) {
-                string prefix = f.name() + ".s0." + f.args()[i];
+                string prefix = op->name + ".s0." + f.args()[i];
                 required[i] = Interval(Variable::make(Int(32), prefix + ".min"),
                                        Variable::make(Int(32), prefix + ".max"));
             }
@@ -53,7 +53,7 @@ class AllocationInference : public IRMutator {
 
         assert(b.size() == op->bounds.size());
         for (size_t i = 0; i < b.size(); i++) {
-            string prefix = f.name() + "." + f.args()[i];
+            string prefix = op->name + "." + f.args()[i];
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
             string extent_name = prefix + ".extent_realized";

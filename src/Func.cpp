@@ -488,7 +488,6 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     vector<Schedule::Dim> &dims = schedule.dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old_var.name())) {
-            debug(0) << dims[i].var << " matches " << old_var.name() << "\n";
             found = true;
             old_name = dims[i].var;
             dims[i].var += "." + new_var.name();
