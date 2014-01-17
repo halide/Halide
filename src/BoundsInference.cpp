@@ -70,15 +70,15 @@ bool func_is_called_by_expr(Function f, Expr e) {
 class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
-    Scope<int> in_pipeline;
-    set<string> inner_productions;
+    set<string> in_pipeline, inner_productions;
+    Scope<int> in_stages;
 
     struct Stage {
         Function func;
         int stage; // 0 is the pure definition, 1 is the first update
         string name;
         vector<int> consumers;
-        Box bounds;
+        map<pair<string, int>, Box> bounds;
         vector<Expr> exprs;
 
         // Computed expressions on the left and right-hand sides
@@ -93,7 +93,10 @@ public:
         }
 
         // Wrap a statement in let stmts defining the box
-        Stmt define_bounds(Stmt s, const Scope<int> &in_pipeline) {
+        Stmt define_bounds(Stmt s,
+                           const Scope<int> &in_stages,
+                           const set<string> &in_pipeline,
+                           const set<string> inner_productions) {
             if (func.has_extern_definition()) {
                 // After we define our bounds we need to run the
                 // bounds query to define bounds for my
@@ -101,11 +104,24 @@ public:
                 s = do_bounds_query(s, in_pipeline);
             }
 
-            assert(bounds.size() == func.args().size());
-            for (size_t d = 0; d < bounds.size(); d++) {
+            // Merge all the relevant boxes.
+            Box b;
+            for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
+                 iter != bounds.end(); ++iter) {
+                // Ignore stage number for now
+                string func_name = iter->first.first;
+                string stage_name = func_name + ".s" + int_to_string(iter->first.second);
+                if (in_stages.contains(stage_name) ||
+                    inner_productions.count(func_name)) {
+                    merge_boxes(b, iter->second);
+                }
+            }
+
+            assert(b.size() == func.args().size());
+            for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
-                s = LetStmt::make(arg + ".min", bounds[d].min, s);
-                s = LetStmt::make(arg + ".max", bounds[d].max, s);
+                s = LetStmt::make(arg + ".min", b[d].min, s);
+                s = LetStmt::make(arg + ".max", b[d].max, s);
             }
 
             if (stage > 0) {
@@ -123,7 +139,7 @@ public:
             return s;
         }
 
-        Stmt do_bounds_query(Stmt s, const Scope<int> &in_pipeline) {
+        Stmt do_bounds_query(Stmt s, const set<string> &in_pipeline) {
             const string &extern_name = func.extern_function_name();
             const vector<ExternFuncArgument> &args = func.extern_arguments();
 
@@ -134,7 +150,7 @@ public:
             for (size_t i = 0; i < args.size(); i++) {
                 if (args[i].is_func()) {
                     Function input(args[i].func);
-                    if (!in_pipeline.contains(input.name())) {
+                    if (in_pipeline.count(input.name()) == 0) {
                         need_query = true;
                     }
                 }
@@ -238,22 +254,9 @@ public:
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
                         const ReductionVariable &rvar = dom[i];
-                        // TODO: Consider using symbolic bounds for
-                        // the reduction domain instead of literal
-                        // ones. This would require someone to add let
-                        // statements that define those symbolic
-                        // bounds elsewhere.
-
-                        // TODO: What if the reduction domain bounds
-                        // reference the func's pure variables (not
-                        // currently allowed, but nice-to-have). If
-                        // so, we'd better take the min and max of the
-                        // expressions below w.r.t the scope so far.
-
                         string arg = name + ".s" + int_to_string(stage) + "." + rvar.var;
                         result.push(rvar.var, Interval(Variable::make(Int(32), arg + ".min"),
                                                        Variable::make(Int(32), arg + ".max")));
-                        //result.push(rvar.var, Interval(rvar.min, (rvar.min + rvar.extent) - 1));
                     }
                 }
             }
@@ -462,7 +465,8 @@ public:
                         }
                     }
 
-                    merge_boxes(producer.bounds, b);
+                    producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
+                    //merge_boxes(producer.bounds, b);
                     producer.consumers.push_back((int)i);
                 }
             }
@@ -496,15 +500,7 @@ public:
         for (size_t i = 0; i < stages.size(); i++) {
             Stage &s = stages[i];
             if (!s.func.same_as(output)) continue;
-            merge_boxes(s.bounds, output_box);
-        }
-
-        // Simplify all the bounds expressions
-        for (size_t i = 0; i < stages.size(); i++) {
-            for (size_t j = 0; j < stages[i].bounds.size(); j++) {
-                stages[i].bounds[j].min = simplify(stages[i].bounds[j].min);
-                stages[i].bounds[j].max = simplify(stages[i].bounds[j].max);
-            }
+            s.bounds[make_pair(s.name, s.stage)] = output_box;
         }
 
         // Dump out the region required of each stage for debugging.
@@ -550,13 +546,15 @@ public:
         Function f;
         string stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            string next_stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage) + ".";
-            if (starts_with(op->name, next_stage_name)) {
+            string next_stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
+            if (starts_with(op->name, next_stage_name + ".")) {
                 producing = i;
                 f = stages[i].func;
                 stage_name = next_stage_name;
             }
         }
+
+        in_stages.push(stage_name, 0);
 
         // Figure out how much of it we're producing
         Box box;
@@ -578,7 +576,7 @@ public:
                 bounds_needed[i] = true;
             }
 
-            if (in_pipeline.contains(stages[i].name)) {
+            if (in_pipeline.count(stages[i].name)) {
                 bounds_needed[i] = false;
             }
 
@@ -586,7 +584,7 @@ public:
                 for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                     bounds_needed[stages[i].consumers[j]] = true;
                 }
-                body = stages[i].define_bounds(body, in_pipeline);
+                body = stages[i].define_bounds(body, in_stages, in_pipeline, inner_productions);
             }
         }
 
@@ -595,7 +593,7 @@ public:
         if (producing >= 0 && !inner_productions.empty()) {
             for (size_t i = 0; i < box.size(); i++) {
                 assert(box[i].min.defined() && box[i].max.defined());
-                string var = stage_name + f.args()[i];
+                string var = stage_name + "." + f.args()[i];
 
                 if (box[i].max.same_as(box[i].min)) {
                     body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
@@ -632,13 +630,15 @@ public:
             body = LetStmt::make(lets[i-1].first, lets[i-1].second, body);
         }
 
+        in_stages.pop(stage_name);
+
         stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
     }
 
     void visit(const Pipeline *p) {
-        in_pipeline.push(p->name, 0);
+        in_pipeline.insert(p->name);
         IRMutator::visit(p);
-        in_pipeline.pop(p->name);
+        in_pipeline.erase(p->name);
         inner_productions.insert(p->name);
     }
 
