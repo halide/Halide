@@ -105,6 +105,21 @@ private:
         size = mutate(size);
 
         stmt = body;
+
+        // Is this function dynamically scheduled?
+        // If so, allocate a memoization bitmask.
+        if (realize->lazy) {
+            string bitmask_name = realize->name + ".result_computed";
+            string loop_var_name = realize->name + ".init_loop_var";
+
+            // Allocate and initialize a bitmask to track what's been computed.
+            // TODO(bblum): Make the init loop more efficient?
+            Expr loop_var = Variable::make(Int(32), loop_var_name);
+            Stmt body = Store::make(bitmask_name, const_false(), loop_var);
+            Stmt loop = For::make(loop_var_name, Expr(0), size, For::Serial, body);
+            stmt = Allocate::make(bitmask_name, Bool(), size, Block::make(loop, stmt));
+        }
+
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
             string buffer_name = realize->name;
             if (realize->types.size() > 1) {
@@ -166,6 +181,25 @@ private:
                 stmt = LetStmt::make(extent_name[i-1], realize->bounds[i-1].extent, stmt);
             }
         }
+    }
+
+    void visit(const DynamicStmt *dynamic) {
+        string bitmask_name = dynamic->name + ".result_computed";
+        string index_name = dynamic->name + ".result_computed_index";
+
+        Stmt body = mutate(dynamic->body);
+        Expr index_val = flatten_args(dynamic->name, dynamic->indices);
+        Expr index_var = Variable::make(Int(32), index_name);
+
+        // TODO: Emit a release barrier here (and below) in case there
+        // is concurrency between the compute level and the store level
+        Stmt store = Store::make(bitmask_name, const_true(), index_var);
+
+        // Wrap it with an if that skips the computation if it was already done.
+        // TODO: An acquire barrier will also need to go before stmt.
+        Expr load = Load::make(Bool(), bitmask_name, index_var);
+        stmt = IfThenElse::make(Not::make(load), Block::make(body, store));
+        stmt = LetStmt::make(index_name, index_val, stmt);
     }
 
     void visit(const Provide *provide) {

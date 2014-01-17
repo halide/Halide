@@ -280,6 +280,7 @@ protected:
     // @{
     virtual void visit(const Provide *);
     virtual void visit(const Realize *);
+    virtual void visit(const DynamicStmt *);
     // @}
 
     /** If we have to bail out of a pipeline midway, this should

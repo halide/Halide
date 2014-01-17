@@ -174,7 +174,7 @@ private:
                 // loaded. They can be incorrect, but they must be
                 // loadable. Perhaps we can mmap some readable junk memory
                 // (e.g. lots of pages of /dev/zero).
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+                stmt = Realize::make(op->name, op->types, op->bounds, op->lazy, body);
             } else {
                 IRMutator::visit(op);
             }

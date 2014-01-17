@@ -66,6 +66,7 @@ template<> EXPORT IRNodeType StmtNode<LetStmt>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<AssertStmt>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Pipeline>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<For>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<DynamicStmt>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Store>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Provide>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Allocate>::_type_info = {};

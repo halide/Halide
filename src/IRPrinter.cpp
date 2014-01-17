@@ -416,6 +416,23 @@ void IRPrinter::visit(const For *op) {
     stream << "}\n";
 }
 
+void IRPrinter::visit(const DynamicStmt *op) {
+    do_indent();
+    stream << "dynamically " << op->name << "(";
+    for (size_t i = 0; i < op->indices.size(); i++) {
+        print(op->indices[i]);
+        if (i < op->indices.size() - 1) stream << ", ";
+    }
+    stream << ") {\n";
+
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+
+    do_indent();
+    stream << "}\n";
+}
+
 void IRPrinter::visit(const Store *op) {
     do_indent();
     stream << op->name << "[";
@@ -464,7 +481,7 @@ void IRPrinter::visit(const Free *op) {
 
 void IRPrinter::visit(const Realize *op) {
     do_indent();
-    stream << "realize " << op->name << "(";
+    stream << "realize " << (op->lazy ? "dynamically " : "") << op->name << "(";
     for (size_t i = 0; i < op->bounds.size(); i++) {
         stream << "[";
         print(op->bounds[i].min);

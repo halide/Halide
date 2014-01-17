@@ -970,6 +970,22 @@ public:
      */
     EXPORT Func &compute_root();
 
+    /** Generate additional code to cache the results of a function's
+     * computation at each iteration of the dimension given by 'var'.
+     * This is useful for functions with "dynamic data dependencies"
+     * that cause work to be duplicated, e.g. across tile boundaries.
+     * Work can only be saved when at least one dimension of the
+     * containing function is in between this function's compute_at()
+     * level and its store_at() level.
+     *
+     * Because the shapes of tiles can change across iterations of
+     * outer dimensions, it is currently not supported to lazily
+     * compute at coarser than pixel-granularity - that is, the only
+     * legal value for `var' is the function's innermost dimension.
+     */
+    EXPORT Func &compute_lazy(Var var);
+    EXPORT Func &compute_lazy(RVar var);
+
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
      * separate the loop level at which storage occurs from the loop

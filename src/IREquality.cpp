@@ -312,6 +312,28 @@ public:
         }
     }
 
+    void visit(const DynamicStmt *op) {
+        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
+
+        const DynamicStmt *s = stmt.as<DynamicStmt>();
+
+        if (compare_names(s->name, op->name)) return;
+
+        if (s->indices.size() < op->indices.size()) {
+            result = -1;
+        } else if (s->indices.size() > op->indices.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; (result == 0) && (i < s->indices.size()); i++) {
+                expr = s->indices[i];
+                op->indices[i].accept(this);
+            }
+
+            stmt = s->body;
+            op->body.accept(this);
+        }
+    }
+
     void visit(const Store *op) {
         if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
 

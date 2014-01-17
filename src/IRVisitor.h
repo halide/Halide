@@ -46,6 +46,7 @@ struct LetStmt;
 struct AssertStmt;
 struct Pipeline;
 struct For;
+struct DynamicStmt;
 struct Store;
 struct Provide;
 struct Allocate;
@@ -93,6 +94,7 @@ public:
     virtual void visit(const AssertStmt *);
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
+    virtual void visit(const DynamicStmt *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
     virtual void visit(const Allocate *);
@@ -156,6 +158,7 @@ public:
     virtual void visit(const AssertStmt *);
     virtual void visit(const Pipeline *);
     virtual void visit(const For *);
+    virtual void visit(const DynamicStmt *);
     virtual void visit(const Store *);
     virtual void visit(const Provide *);
     virtual void visit(const Allocate *);

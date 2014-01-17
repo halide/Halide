@@ -560,7 +560,7 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
+    static Expr make(Type type, std::string name, Expr index, Buffer image = Buffer(), Parameter param = Parameter()) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == index.type().width && "Vector width of Load must match vector width of index");
 
@@ -737,6 +737,30 @@ struct For : public StmtNode<For> {
     }
 };
 
+/* A dynamically-scheduled statement. 'name' is the name of the function
+ * being computed dynamically, and is used to determine the associated
+ * bitmask which tracks whether or not this statement has already been
+ * computed. 'indices' are the indices into that for this statement.
+ * Generated in Lower and converted into if/thens in StorageFlattening. */
+struct DynamicStmt : public StmtNode<DynamicStmt > {
+    std::string name;
+    std::vector<Expr> indices;
+    Stmt body;
+
+    static Stmt make(std::string name, std::vector<Expr> indices, Stmt body) {
+        for (size_t i = 0; i < indices.size(); i++) {
+            assert(indices[i].defined() && "DynamicStmt of undefined index");
+        }
+        assert(body.defined() && "DynamicStmt of undefined body");
+
+        DynamicStmt *node = new DynamicStmt;
+        node->name = name;
+        node->indices = indices;
+        node->body = body;
+        return node;
+    }
+};
+
 /** Store a 'value' to the buffer called 'name' at a given
  * 'index'. The buffer is interpreted as an array of the same type as
  * 'value'. */
@@ -833,14 +857,16 @@ typedef std::vector<Range> Region;
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
- * (min, extent) pairs for each dimension. */
+ * (min, extent) pairs for each dimension. If 'lazy' is true, will
+ * also allocate a bitmask to memoize the function's results. */
 struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
     Region bounds;
     Stmt body;
+    bool lazy;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, bool lazy, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             assert(bounds[i].min.defined() && "Realize of undefined");
             assert(bounds[i].extent.defined() && "Realize of undefined");
@@ -855,6 +881,7 @@ struct Realize : public StmtNode<Realize> {
         node->types = types;
         node->bounds = bounds;
         node->body = body;
+        node->lazy = lazy;
         return node;
     }
 };
