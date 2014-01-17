@@ -120,7 +120,11 @@ public:
             assert(b.size() == func.args().size());
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
-                s = LetStmt::make(arg + ".min", b[d].min, s);
+                if (b[d].min.same_as(b[d].max)) {
+                    s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
+                } else {
+                    s = LetStmt::make(arg + ".min", b[d].min, s);
+                }
                 s = LetStmt::make(arg + ".max", b[d].max, s);
             }
 
