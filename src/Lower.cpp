@@ -32,6 +32,7 @@
 #include "AllocationBoundsInference.h"
 #include "Inline.h"
 #include "Qualify.h"
+#include "UnifyDuplicateLets.h"
 
 namespace Halide {
 namespace Internal {
@@ -1517,6 +1518,7 @@ Stmt lower(Function f) {
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
+    s = unify_duplicate_lets(s);
     s = remove_trivial_for_loops(s);
     debug(2) << "Simplified: \n" << s << "\n\n";
 
