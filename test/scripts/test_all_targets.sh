@@ -75,10 +75,11 @@ if [[ `uname` == Darwin ]]; then
     export CC="clang"
     export LLVMS="trunk pnacl release-3.3"
 else
-    export CXX="clang++"
-    export GXX="clang++"
-    export CC="clang"
-    export LLVMS="release-3.2 release-3.3 trunk pnacl"
+    export CXX="g++"
+    export GXX="g++"
+    export CC="gcc"
+    export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
+    export LLVMS="trunk release-3.2 release-3.3 pnacl"
 fi
 
 
