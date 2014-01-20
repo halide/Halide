@@ -68,6 +68,26 @@ void lower_test() {
     std::cout << "Lowering test passed" << std::endl;
 }
 
+class ExprUsesVar : public IRVisitor {
+    using IRVisitor::visit;
+
+    string var;
+
+    void visit(const Variable *v) {
+        if (v->name == var) {
+            result = true;
+        }
+    }
+public:
+    ExprUsesVar(const string &v) : var(v), result(false) {}
+    bool result;
+};
+bool expr_uses_var(Expr e, const string &v) {
+    ExprUsesVar uses(v);
+    e.accept(&uses);
+    return uses.result;
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(Function f,
                              string func_prefix,
@@ -156,13 +176,15 @@ Stmt build_provide_loop_nest(Function f,
 
                 base = Min::make(base, old_max + (1 - split.factor));
 
-                string name = prefix + split.inner + ".base";
-                //stmt = LetStmt::make(name, base, stmt);
-                //base = Variable::make(Int(32), name);
             }
 
-            stmt = LetStmt::make(prefix + split.old_var, base + inner, stmt);
-            //stmt = substitute(prefix + split.old_var, base + inner, stmt);
+            string base_name = prefix + split.inner + ".base";
+            Expr base_var = Variable::make(Int(32), base_name);
+            //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+            stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+            stmt = LetStmt::make(base_name, base, stmt);
+
+
         } else if (split.is_fuse()) {
             // Define the inner and outer in terms of the fused var
             Expr fused = Variable::make(Int(32), prefix + split.old_var);
@@ -189,7 +211,24 @@ Stmt build_provide_loop_nest(Function f,
         const Schedule::Dim &dim = s.dims[i];
         Expr min = Variable::make(Int(32), prefix + dim.var + ".loop_min");
         Expr extent = Variable::make(Int(32), prefix + dim.var + ".loop_extent");
+
+        string var = prefix + dim.var;
+
+        // Put the for loop as far inwards as possible
+        vector<pair<string, Expr> > lets;
+        while (const LetStmt *l = stmt.as<LetStmt>()) {
+            if (expr_uses_var(l->value, var)) {
+                break;
+            }
+            lets.push_back(make_pair(l->name, l->value));
+            stmt = l->body;
+        }
+
         stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
+
+        for (size_t i = lets.size(); i > 0; i--) {
+            stmt = LetStmt::make(lets[i - 1].first, lets[i - 1].second, stmt);
+        }
     }
 
     // Define the bounds on the split dimensions using the bounds
@@ -570,6 +609,13 @@ private:
 
         Stmt body = for_loop->body;
 
+        // Dig through any let statements
+        vector<pair<string, Expr> > lets;
+        while (const LetStmt *l = body.as<LetStmt>()) {
+            lets.push_back(make_pair(l->name, l->value));
+            body = l->body;
+        }
+
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
             func.schedule().compute_level.is_inline() &&
@@ -583,7 +629,7 @@ private:
             return;
         }
 
-        body = mutate(for_loop->body);
+        body = mutate(body);
 
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
@@ -605,6 +651,10 @@ private:
             found_store_level = true;
         }
 
+        // Reinstate the let statements
+        for (size_t i = lets.size(); i > 0; i--) {
+            body = LetStmt::make(lets[i - 1].first, lets[i - 1].second, body);
+        }
 
         if (body.same_as(for_loop->body)) {
             stmt = for_loop;
