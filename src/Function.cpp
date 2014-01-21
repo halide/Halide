@@ -262,18 +262,19 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
                 "Bug: removed too many circular references when defining reduction", name());
     }
 
-    // First add any reduction domain
-    if (r.domain.defined()) {
-        for (size_t i = 0; i < r.domain.domain().size(); i++) {
-            Schedule::Dim d = {r.domain.domain()[i].var, For::Serial};
-            r.schedule.dims.push_back(d);
-        }
-    }
-
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
             Schedule::Dim d = {pure_args[i], For::Serial};
+            r.schedule.dims.push_back(d);
+        }
+    }
+
+    // HACK: reduction domain is temporarily outside of pure domain. This code should be moved back up.
+    // First add any reduction domain
+    if (r.domain.defined()) {
+        for (size_t i = 0; i < r.domain.domain().size(); i++) {
+            Schedule::Dim d = {r.domain.domain()[i].var, For::Serial};
             r.schedule.dims.push_back(d);
         }
     }

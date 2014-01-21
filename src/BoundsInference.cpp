@@ -104,6 +104,26 @@ public:
                 s = do_bounds_query(s, in_pipeline);
             }
 
+            if (in_pipeline.count(name) == 0) {
+                // Inject any explicit bounds
+                string prefix = name + ".s" + int_to_string(stage) + ".";
+                for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
+                    const Schedule::Bound &b = func.schedule().bounds[i];
+                    string min_var = prefix + b.var + ".min";
+                    string max_var = prefix + b.var + ".max";
+                    Expr min_bound = b.min;
+                    Expr max_bound = (b.min + b.extent) - 1;
+                    s = LetStmt::make(min_var, min_bound, s);
+                    s = LetStmt::make(max_var, max_bound, s);
+
+                    // Save the unbounded values to use in bounds-checking assertions
+                    Expr min_required = Variable::make(Int(32), min_var);
+                    Expr max_required = Variable::make(Int(32), max_var);
+                    s = LetStmt::make(min_var + "_unbounded", min_required, s);
+                    s = LetStmt::make(max_var + "_unbounded", max_required, s);
+                }
+            }
+
             // Merge all the relevant boxes.
             Box b;
             for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
@@ -265,10 +285,12 @@ public:
                 }
             }
 
+            /*
             for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
                 const Schedule::Bound &b = func.schedule().bounds[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }
+            */
 
             return result;
         }
