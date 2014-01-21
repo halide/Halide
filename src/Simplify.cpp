@@ -1085,7 +1085,7 @@ private:
             }
         } else if (is_zero(delta)) {
             expr = const_true(op->type.width);
-        } else if (is_simple_const(delta)) {
+        } else if (is_simple_const(delta) && ((!ramp_a && !ramp_b) || (ramp_a && ramp_b))) {
             expr = const_false(op->type.width);
         } else if (is_simple_const(a) && !is_simple_const(b)) {
             // Move constants to the right
@@ -1985,6 +1985,9 @@ void simplify_test() {
 
     check(max(clamp(x, y, z), clamp(x, v, w)),
           clamp(x, max(y, v), max(z, w)));
+
+    check(Ramp::make(0, 1, 4) == Broadcast::make(2, 4),
+          Ramp::make(0, 1, 4) == Broadcast::make(2, 4));
 
     check(!f, t);
     check(!t, f);
