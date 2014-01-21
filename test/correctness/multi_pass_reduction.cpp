@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         for (int i = 1; i < 11; i++) {
             ref[i] += ref[i-1];
         }
-        for (int i = 10; i >= 0; i--) {
+        for (int i = 9; i >= 0; i--) {
             ref[i] += ref[i+1];
         }
 
