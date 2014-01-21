@@ -1453,6 +1453,15 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
+            const Variable *var_b = NULL;
+            if (add) {
+                var_b = add->b.as<Variable>();
+            } else if (sub) {
+                var_b = sub->b.as<Variable>();
+            } else if (mul) {
+                var_b = mul->b.as<Variable>();
+            }
+
             if (is_const(new_value)) {
                 replacement = substitute(new_name, new_value, replacement);
                 new_value = Expr();
@@ -1461,16 +1470,16 @@ private:
                 replacement = substitute(new_name, var, replacement);
                 new_value = Expr();
                 break;
-            } else if (add && is_const(add->b)) {
+            } else if (add && (is_const(add->b) || var_b)) {
                 replacement = substitute(new_name, Add::make(new_var, add->b), replacement);
                 new_value = add->a;
-            } else if (mul && is_const(mul->b)) {
+            } else if (mul && (is_const(mul->b) || var_b)) {
                 replacement = substitute(new_name, Mul::make(new_var, mul->b), replacement);
                 new_value = mul->a;
             } else if (div && is_const(div->b)) {
                 replacement = substitute(new_name, Div::make(new_var, div->b), replacement);
                 new_value = div->a;
-            } else if (sub && is_const(sub->b)) {
+            } else if (sub && (is_const(sub->b) || var_b)) {
                 replacement = substitute(new_name, Sub::make(new_var, sub->b), replacement);
                 new_value = sub->a;
             } else if (mod && is_const(mod->b)) {

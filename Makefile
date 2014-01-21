@@ -236,6 +236,9 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
+LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../$(BIN_DIR)
+LD_PATH_SETUP2 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../$(BIN_DIR)
+
 test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
 test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
@@ -269,7 +272,7 @@ $(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so
 
 tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	@-mkdir -p tmp/static
-	cd tmp/static; DYLD_LIBRARY_PATH=../../$(BIN_DIR) LD_LIBRARY_PATH=../../$(BIN_DIR) ../../$<
+	cd tmp/static; $(LD_PATH_SETUP2) ../../$<
 	@-echo
 
 $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
@@ -280,38 +283,38 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
+	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
 static_%: $(BIN_DIR)/static_%_test
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
+	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
 valgrind_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) valgrind --error-exitcode=-1 ../$<
+	cd tmp ; $(LD_PATH_SETUP) valgrind --error-exitcode=-1 ../$<
 	@-echo
 
 # This test is *supposed* to do an out-of-bounds read, so skip it when testing under valgrind
 valgrind_tracing_stack: $(BIN_DIR)/test_tracing_stack
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$(BIN_DIR)/test_tracing_stack
+	cd tmp ; $(LD_PATH_SETUP) ../$(BIN_DIR)/test_tracing_stack
 	@-echo
 
 performance_%: $(BIN_DIR)/performance_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
+	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$< 2>&1 | egrep --q "Assertion.*failed"
+	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "Assertion.*failed"
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%
 	@-mkdir -p tmp
-	cd tmp ; DYLD_LIBRARY_PATH=../$(BIN_DIR) LD_LIBRARY_PATH=../$(BIN_DIR) ../$<
+	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
 .PHONY: test_apps
