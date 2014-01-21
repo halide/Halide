@@ -89,6 +89,17 @@ bool expr_uses_var(Expr e, const string &v) {
     return uses.result;
 }
 
+
+namespace {
+// A structure representing a containing LetStmt or For loop. Used in
+// build_provide_loop_nest below.
+struct Container {
+    int dim_idx; // index in the dims list. -1 for let statements.
+    string name;
+    Expr value;
+};
+}
+
 // Build a loop nest about a provide node using a schedule
 Stmt build_provide_loop_nest(Function f,
                              string func_prefix,
@@ -152,6 +163,7 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Define the function args in terms of the loop variables using the splits
+    map<string, pair<string, Expr> > base_values;
     for (size_t i = 0; i < splits.size(); i++) {
         const Schedule::Split &split = splits[i];
         Expr outer = Variable::make(Int(32), prefix + split.outer);
@@ -183,8 +195,9 @@ Stmt build_provide_loop_nest(Function f,
             Expr base_var = Variable::make(Int(32), base_name);
             //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-            stmt = LetStmt::make(base_name, base, stmt);
 
+            // Don't put the let here, put it just inside the loop over outer
+            stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
             // Define the inner and outer in terms of the fused var
@@ -207,30 +220,61 @@ Stmt build_provide_loop_nest(Function f,
         }
     }
 
+    // All containing lets and fors. Outermost first.
+    vector<Container> nest;
+
+    // Put the desired loop nest into the containers vector.
+    for (int i = (int)s.dims.size() - 1; i >= 0; i--) {
+        const Schedule::Dim &dim = s.dims[i];
+        Container c = {i, prefix + dim.var, Expr()};
+        nest.push_back(c);
+    }
+
+    // Strip off the lets into the containers vector.
+    while (const LetStmt *let = stmt.as<LetStmt>()) {
+        Container c = {-1, let->name, let->value};
+        nest.push_back(c);
+        stmt = let->body;
+    }
+
+    // Resort the containers vector so that lets are as far outwards
+    // as possible. Use reverse insertion sort. Start at the first letstmt.
+    for (int i = (int)s.dims.size(); i < (int)nest.size(); i++) {
+        // Only push up LetStmts.
+        assert(nest[i].value.defined());
+
+        for (int j = i-1; j >= 0; j--) {
+            // Try to push it up by one.
+            assert(nest[j+1].value.defined());
+            if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
+                std::swap(nest[j+1], nest[j]);
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Rewrap the statement in the containing lets and fors.
+    for (int i = (int)nest.size() - 1; i >= 0; i--) {
+        if (nest[i].value.defined()) {
+            stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
+        } else {
+            const Schedule::Dim &dim = s.dims[nest[i].dim_idx];
+            Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
+            Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+        }
+    }
+
+    /*
     // Build the loop nest
     for (size_t i = 0; i < s.dims.size(); i++) {
         const Schedule::Dim &dim = s.dims[i];
         Expr min = Variable::make(Int(32), prefix + dim.var + ".loop_min");
         Expr extent = Variable::make(Int(32), prefix + dim.var + ".loop_extent");
-
-        string var = prefix + dim.var;
-
-        // Put the for loop as far inwards as possible
-        vector<pair<string, Expr> > lets;
-        while (const LetStmt *l = stmt.as<LetStmt>()) {
-            if (expr_uses_var(l->value, var)) {
-                break;
-            }
-            lets.push_back(make_pair(l->name, l->value));
-            stmt = l->body;
-        }
-
         stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
-
-        for (size_t i = lets.size(); i > 0; i--) {
-            stmt = LetStmt::make(lets[i - 1].first, lets[i - 1].second, stmt);
-        }
     }
+    */
 
     // Define the bounds on the split dimensions using the bounds
     // on the function args
