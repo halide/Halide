@@ -44,26 +44,36 @@ protected:
         }
     }
 
+    // Can't unify lets where the RHS might be not be pure
+    bool contains_calls;
+    void visit(const Call *op) {
+        contains_calls = true;
+        expr = op;
+    }
+
     void visit(const LetStmt *op) {
+        contains_calls = false;
         Expr value = mutate(op->value);
         Stmt body = op->body;
 
         bool should_pop = false;
 
-        map<Expr, string, ExprDeepCompare>::iterator iter = scope.find(value);
-        if (iter == scope.end()) {
-            scope[value] = op->name;
-            should_pop = true;
-        } else {
-            value = Variable::make(value.type(), iter->second);
-            rewrites[op->name] = iter->second;
+        if (!contains_calls) {
+            map<Expr, string, ExprDeepCompare>::iterator iter = scope.find(value);
+            if (iter == scope.end()) {
+                scope[value] = op->name;
+                should_pop = true;
+            } else {
+                value = Variable::make(value.type(), iter->second);
+                rewrites[op->name] = iter->second;
+            }
         }
 
         body = mutate(op->body);
 
         if (should_pop) {
             scope.erase(value);
-        } else {
+        } else if (!contains_calls) {
             rewrites.erase(op->name);
         }
 
