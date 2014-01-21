@@ -481,15 +481,16 @@ Stmt inject_explicit_bounds(Stmt body, Function func, string extra_prefix) {
             Expr max_val = (b.extent + b.min) - 1;
             Expr min_val = b.min;
             string prefix = extra_prefix + func.name() + ".s" + int_to_string(stage) + "." + b.var;
-            string min_name = prefix + ".min";
-            string max_name = prefix + ".max";
+            string min_name = prefix + ".min_unbounded";
+            string max_name = prefix + ".max_unbounded";
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
             Expr check = (min_val <= min_var) && (max_val >= max_var);
             string error_msg = "Bounds given for " + b.var + " in " + func.name() + " don't cover required region";
 
-            body = LetStmt::make(prefix + ".min", min_val, body);
-            body = LetStmt::make(prefix + ".max", max_val, body);
+            // bounds inference has already respected these values for us
+            //body = LetStmt::make(prefix + ".min", min_val, body);
+            //body = LetStmt::make(prefix + ".max", max_val, body);
 
             body = Block::make(AssertStmt::make(check, error_msg), body);
         }
