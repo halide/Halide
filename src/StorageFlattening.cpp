@@ -86,7 +86,7 @@ private:
 
         vector<int> storage_permutation;
         {
-            map<string, Function>::const_iterator iter = env.find(base_name(realize->name, '#'));
+            map<string, Function>::const_iterator iter = env.find(realize->name);
             assert(iter != env.end() && "Realize node refers to function not in environment");
             const vector<string> &storage_dims = iter->second.schedule().storage_dims;
             const vector<string> &args = iter->second.args();
@@ -238,7 +238,7 @@ private:
                 name = name + '.' + int_to_string(call->value_index);
 
             }
-            
+
             // Promote the type to be a multiple of 8 bits
             Type t = call->type;
             t.bits = t.bytes() * 8;

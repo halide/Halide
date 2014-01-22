@@ -31,7 +31,7 @@ class AllocationInference : public IRMutator {
         IRMutator::visit(op);
         op = stmt.as<Realize>();
 
-        map<string, Function>::const_iterator iter = env.find(base_name(op->name, '#'));
+        map<string, Function>::const_iterator iter = env.find(op->name);
         assert (iter != env.end());
         Function f = iter->second;
 

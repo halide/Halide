@@ -161,7 +161,7 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        if (base_name(op->name, '#') == func) {
+        if (op->name == func) {
             PredicateFinder f(op->name);
             op->body.accept(&f);
             Expr predicate = simplify(f.predicate);
@@ -170,7 +170,7 @@ private:
                 ProductionGuarder g(op->name, predicate);
                 Stmt body = g.mutate(op->body);
                 // In the future we may be able to shrink the size
-                // opated, but right now those values may be
+                // opdated, but right now those values may be
                 // loaded. They can be incorrect, but they must be
                 // loadable. Perhaps we can mmap some readable junk memory
                 // (e.g. lots of pages of /dev/zero).
