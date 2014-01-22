@@ -641,6 +641,12 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::lerp) {
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
             rhs << print_expr(e);
+        } else if (op->name == Call::null_handle) {
+            rhs << "NULL";
+        } else if (op->name == Call::address_of) {
+            assert(op->args.size() == 1 && op->args[0].as<Load>());
+            string arg = print_expr(op->args[0]);
+            rhs << "&(" << arg << ")";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << std::endl;

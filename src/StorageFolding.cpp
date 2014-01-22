@@ -81,53 +81,55 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
             return;
         }
 
-        Region region = region_touched(op->body, func);
+        Box box = box_touched(op->body, func);
 
         Stmt result = op;
 
         // Try each dimension in turn from outermost in
-        for (size_t i = region.size(); i > 0; i--) {
-            Expr min = region[i-1].min;
-            Expr extent = region[i-1].extent;
+        for (size_t i = box.size(); i > 0; i--) {
+            Expr min = box[i-1].min;
+            Expr max = box[i-1].max;
 
             debug(3) << "Considering folding " << func << " over for loop over " << op->name << '\n'
                      << "Min: " << min << '\n'
-                     << "Extent: " << extent << '\n';
-            // The min has to be monotonic with the loop variable, and
-            // should depend on the loop variable.
-            MonotonicResult m = is_monotonic(min, op->name);
+                     << "Max: " << max << '\n';
 
-            if (m != MonotonicIncreasing &&
-                m != MonotonicDecreasing) {
-                debug(3) << "Not folding because min is not monotonic in loop var\n";
-                continue;
-            }
+            // The min or max has to be monotonic with the loop
+            // variable, and should depend on the loop variable.
+            if (is_monotonic(min, op->name) == MonotonicIncreasing ||
+                is_monotonic(max, op->name) == MonotonicDecreasing) {
 
-            //Expr min_deriv = simplify(finite_difference(min, op->name));
+                // The max of the extent over all values of the loop variable must be a constant
+                Expr extent = simplify(max - min);
+                Scope<Interval> scope;
+                scope.push(op->name, Interval(Variable::make(Int(32), op->name + ".loop_min"),
+                                              Variable::make(Int(32), op->name + ".loop_max")));
+                Expr max_extent = bounds_of_expr_in_scope(extent, scope).max;
+                scope.pop(op->name);
 
-            // The max of the extent over all values of the loop variable must be a constant
-            Scope<Interval> scope;
-            scope.push(op->name, Interval(op->min, op->min + op->extent - 1));
-            Expr max_extent = bounds_of_expr_in_scope(extent, scope).max;
-            scope.pop(op->name);
+                max_extent = simplify(max_extent);
 
-            max_extent = simplify(max_extent);
+                const IntImm *max_extent_int = max_extent.as<IntImm>();
+                if (max_extent_int) {
+                    int extent = max_extent_int->value;
+                    debug(3) << "Proceeding...\n";
 
-            const IntImm *max_extent_int = max_extent.as<IntImm>();
-            if (max_extent_int) {
-                int extent = max_extent_int->value;
-                debug(3) << "Proceeding...\n";
+                    int factor = 1;
+                    while (factor <= extent) factor *= 2;
 
-                int factor = 1;
-                while (factor < extent) factor *= 2;
-
-                dim_folded = (int)i-1;
-                fold_factor = factor;
-                result = FoldStorageOfFunction(func, (int)i-1, factor).mutate(result);
+                    dim_folded = (int)i - 1;
+                    fold_factor = factor;
+                    stmt = FoldStorageOfFunction(func, (int)i - 1, factor).mutate(result);
+                    return;
+                } else {
+                    debug(3) << "Not folding because extent not bounded by a constant\n"
+                             << "extent = " << extent << "\n"
+                             << "max extent = " << max_extent << "\n";
+                }
             } else {
-                debug(3) << "Not folding because extent not bounded by a constant\n"
-                         << "extent = " << extent << "\n"
-                         << "max extent = " << max_extent << "\n";
+                    debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                             << "min = " << min << "\n"
+                             << "max = " << max << "\n";
             }
         }
 

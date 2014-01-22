@@ -178,7 +178,7 @@ private:
     }
 
     void visit(const Add *op) {
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
 
         Expr a = mutate(op->a), b = mutate(op->b);
@@ -203,6 +203,8 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
+        const Div *div_a = a.as<Div>();
+
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
         const Mod *mod_a = a.as<Mod>();
         const Mod *mod_b = b.as<Mod>();
@@ -222,6 +224,8 @@ private:
         sub_a_b = max_a ? max_a->b.as<Sub>() : sub_a_b;
         add_a_a = max_a ? max_a->a.as<Add>() : add_a_a;
         add_a_b = max_a ? max_a->b.as<Add>() : add_a_b;
+
+        add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
@@ -299,6 +303,12 @@ private:
         } else if (max_a && add_a_a && const_int(add_a_a->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
             // max(a + (-2), b) + 2 -> max(a, b + 2)
             expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
+        } else if (div_a && add_a_a &&
+                   const_int(add_a_a->b, &ia) &&
+                   const_int(div_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
+            expr = mutate((add_a_a->a + (ia + ib*ic)) / ib);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b + mul_b->b));
@@ -308,7 +318,6 @@ private:
             expr = mutate(mul_a->b * (mul_a->a + mul_b->a));
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->b)) {
             expr = mutate(mul_a->a * (mul_a->b + mul_b->a));
-
         } else if (mod_a && mul_b && equal(mod_a->b, mul_b->b)) {
             // (x%3) + y*3 -> y*3 + x%3
             expr = mutate(b + a);
@@ -542,6 +551,7 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Div *div_a = a.as<Div>();
+        const Div *div_a_a = NULL;
         const Mul *mul_a_a = NULL;
         const Mul *mul_a_b = NULL;
         const Broadcast *broadcast_a = a.as<Broadcast>();
@@ -549,6 +559,7 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
 
         if (add_a) {
+            div_a_a = add_a->a.as<Div>();
             mul_a_a = add_a->a.as<Mul>();
             mul_a_b = add_a->b.as<Mul>();
         } else if (sub_a) {
@@ -620,6 +631,12 @@ private:
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
+        } else if (div_a_a && add_a &&
+                   const_int(div_a_a->b, &ia) &&
+                   const_int(add_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
+            expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
                    ia && ib && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
@@ -674,6 +691,14 @@ private:
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
         if (const_int(b, &ib) && a.type() == Int(32)) {
+            // If the LHS is bounded, we can possibly bail out early
+            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
+            if (ia.max.defined() && ia.min.defined() &&
+                is_one(mutate((ia.max < b) && (ia.min >= 0)))) {
+                expr = a;
+                return;
+            }
+
             mod_rem = modulus_remainder(a, alignment_info);
         }
 
@@ -775,8 +800,8 @@ private:
         } else if (op->type == Int(32) && is_simple_const(b)) {
             // Try to remove pointless mins that splitting introduces
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            ia.max = mutate(ia.max);
-            if (ia.max.defined() && is_const(ia.max) && is_one(mutate(ia.max <= b))) {
+            if (ia.max.defined() &&
+                is_one(mutate(ia.max <= b))) {
                 expr = a;
                 return;
             }
@@ -1085,7 +1110,7 @@ private:
             }
         } else if (is_zero(delta)) {
             expr = const_true(op->type.width);
-        } else if (is_simple_const(delta)) {
+        } else if (is_simple_const(delta) && ((!ramp_a && !ramp_b) || (ramp_a && ramp_b))) {
             expr = const_false(op->type.width);
         } else if (is_simple_const(a) && !is_simple_const(b)) {
             // Move constants to the right
@@ -1428,6 +1453,15 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
+            const Variable *var_b = NULL;
+            if (add) {
+                var_b = add->b.as<Variable>();
+            } else if (sub) {
+                var_b = sub->b.as<Variable>();
+            } else if (mul) {
+                var_b = mul->b.as<Variable>();
+            }
+
             if (is_const(new_value)) {
                 replacement = substitute(new_name, new_value, replacement);
                 new_value = Expr();
@@ -1436,16 +1470,16 @@ private:
                 replacement = substitute(new_name, var, replacement);
                 new_value = Expr();
                 break;
-            } else if (add && is_const(add->b)) {
+            } else if (add && (is_const(add->b) || var_b)) {
                 replacement = substitute(new_name, Add::make(new_var, add->b), replacement);
                 new_value = add->a;
-            } else if (mul && is_const(mul->b)) {
+            } else if (mul && (is_const(mul->b) || var_b)) {
                 replacement = substitute(new_name, Mul::make(new_var, mul->b), replacement);
                 new_value = mul->a;
             } else if (div && is_const(div->b)) {
                 replacement = substitute(new_name, Div::make(new_var, div->b), replacement);
                 new_value = div->a;
-            } else if (sub && is_const(sub->b)) {
+            } else if (sub && (is_const(sub->b) || var_b)) {
                 replacement = substitute(new_name, Sub::make(new_var, sub->b), replacement);
                 new_value = sub->a;
             } else if (mod && is_const(mod->b)) {
@@ -1801,6 +1835,9 @@ void simplify_test() {
     check((y + x*4)/2, y/2 + x*2);
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
+    check((x + 3)/2 + 7, (x + 17)/2);
+    check((x/2 + 3)/5, (x + 6)/10);
+
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
           Expr(Broadcast::make(y/x, 4)));
@@ -1985,6 +2022,9 @@ void simplify_test() {
 
     check(max(clamp(x, y, z), clamp(x, v, w)),
           clamp(x, max(y, v), max(z, w)));
+
+    check(Ramp::make(0, 1, 4) == Broadcast::make(2, 4),
+          Ramp::make(0, 1, 4) == Broadcast::make(2, 4));
 
     check(!f, t);
     check(!t, f);
