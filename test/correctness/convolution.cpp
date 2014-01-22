@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
     Func blur2("blur2");
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         // Initialization (basically memset) done in a cuda kernel
         blur1.cuda_tile(x, y, 16, 16);

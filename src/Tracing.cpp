@@ -148,9 +148,12 @@ private:
             args.push_back(0); // value index
             args.push_back(0); // value
 
+            // Use the size of the pure step
+
             for (int i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".min_produced");
-                Expr extent = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".extent_produced");
+                Expr min = Variable::make(Int(32), f.name() + ".s0." + f.args()[i] + ".min");
+                Expr max = Variable::make(Int(32), f.name() + ".s0." + f.args()[i] + ".max");
+                Expr extent = (max + 1) - min;
                 args.push_back(min);
                 args.push_back(extent);
             }

@@ -144,8 +144,12 @@ private:
                                      stmt);
             }
 
+            // Promote the type to be a multiple of 8 bits
+            Type t = realize->types[idx];
+            t.bits = t.bytes() * 8;
+
             // Make the allocation node
-            stmt = Allocate::make(buffer_name, realize->types[idx], size, stmt);
+            stmt = Allocate::make(buffer_name, t, size, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -173,6 +177,13 @@ private:
         vector<Expr> values(provide->values.size());
         for (size_t i = 0; i < values.size(); i++) {
             values[i] = mutate(provide->values[i]);
+
+            // Promote the type to be a multiple of 8 bits
+            Type t = values[i].type();
+            t.bits = t.bytes() * 8;
+            if (t.bits != values[i].type().bits) {
+                values[i] = Cast::make(t, values[i]);
+            }
         }
 
         if (values.size() == 1) {
@@ -228,8 +239,16 @@ private:
 
             }
 
+            // Promote the type to be a multiple of 8 bits
+            Type t = call->type;
+            t.bits = t.bytes() * 8;
+
             Expr idx = mutate(flatten_args(name, call->args));
-            expr = Load::make(call->type, name, idx, call->image, call->param);
+            expr = Load::make(t, name, idx, call->image, call->param);
+
+            if (call->type.bits != t.bits) {
+                expr = Cast::make(call->type, expr);
+            }
         }
     }
 

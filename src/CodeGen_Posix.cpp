@@ -134,7 +134,9 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     Allocation allocation;
 
     if (const IntImm *int_size = size.as<IntImm>()) {
-        allocation.stack_size = int_size->value * type.bytes();
+        int stack_elems = int_size->value;
+
+        allocation.stack_size = stack_elems * type.bytes();
 
         // Round up to nearest multiple of 32.
         allocation.stack_size = ((allocation.stack_size + 31)/32)*32;
@@ -150,23 +152,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     llvm::Type *llvm_type = llvm_type_of(type);
 
     if (allocation.stack_size) {
-        // Do a new 32-byte aligned alloca at the function entry block
-        allocation.saved_stack = NULL; //save_stack();
 
         // We used to do the alloca locally and save and restore the
         // stack pointer, but this makes llvm generate streams of
         // spill/reloads.
-
-        llvm::BasicBlock *here = builder->GetInsertBlock();
-        builder->SetInsertPoint(here->getParent()->getEntryBlock().getFirstNonPHI());
-        Value *size = ConstantInt::get(i32, allocation.stack_size/32);
-        Value *ptr = builder->CreateAlloca(i32x8, size, name);
+        Value *ptr = create_alloca_at_entry(i32x8, allocation.stack_size/32, name);
         allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
 
-        builder->SetInsertPoint(here);
-
     } else {
-        allocation.saved_stack = NULL;
         Value *llvm_size = codegen(size * type.bytes());
 
         // call malloc
@@ -221,15 +214,16 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
 }
 
 void CodeGen_Posix::destroy_allocation(Allocation alloc) {
-
-    if (alloc.saved_stack) {
-        restore_stack(alloc.saved_stack);
-    }
-
     // Heap allocations have already been freed.
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
+
+    if (sym_exists(alloc->name + ".host")) {
+        std::cerr << "Can't have two different buffers with the same name: "
+                  << alloc->name << "\n";
+        assert(false);
+    }
 
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->size);
     sym_push(alloc->name + ".host", allocation.ptr);

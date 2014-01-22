@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     h.compute_root();
     g.compute_root();
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.features & Target::CUDA) {
         f.cuda_tile(x, y, 16, 16);
         g.cuda_tile(x, 128);

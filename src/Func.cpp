@@ -488,7 +488,6 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     vector<Schedule::Dim> &dims = schedule.dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old_var.name())) {
-            debug(0) << dims[i].var << " matches " << old_var.name() << "\n";
             found = true;
             old_name = dims[i].var;
             dims[i].var += "." + new_var.name();
@@ -562,12 +561,6 @@ ScheduleHandle &ScheduleHandle::unroll(Var var, int factor) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::bound(Var var, Expr min, Expr extent) {
-    Schedule::Bound b = {var.name(), min, extent};
-    schedule.bounds.push_back(b);
-    return *this;
-}
-
 ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
     split(x, xo, xi, xfactor);
     split(y, yo, yi, yfactor);
@@ -582,7 +575,7 @@ ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor,
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::reorder(const std::vector<Var>& vars) {
+ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
     if (vars.size() <= 1) {
         return *this;
     }
@@ -592,10 +585,10 @@ ScheduleHandle &ScheduleHandle::reorder(const std::vector<Var>& vars) {
     for(size_t i = 1; i < vars.size(); ++i) {
         reorder(vars[0], vars[i]);
     }
-    return reorder(std::vector<Var>(vars.begin() + 1, vars.end()));
+    return reorder(std::vector<VarOrRVar>(vars.begin() + 1, vars.end()));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
     vector<Schedule::Dim> &dims = schedule.dims;
     bool found_y = false;
     size_t y_loc = 0;
@@ -604,7 +597,9 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
             found_y = true;
             y_loc = i;
         } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) std::swap(dims[i], dims[y_loc]);
+            if (found_y) {
+                std::swap(dims[i], dims[y_loc]);
+            }
             return *this;
         }
     }
@@ -612,44 +607,44 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z) {
-    Var vars[]  = {x, y, z};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
+    VarOrRVar vars[]  = {x, y, z};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w) {
-    Var vars[]  = {x, y, z, w};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
+    VarOrRVar vars[]  = {x, y, z, w};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t) {
-    Var vars[]  = {x, y, z, w, t};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
+    VarOrRVar vars[]  = {x, y, z, w, t};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2) {
-    Var vars[]  = {x, y, z, w, t1, t2};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
+    VarOrRVar vars[]  = {x, y, z, w, t1, t2};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3) {
-    Var vars[]  = {x, y, z, w, t1, t2, t3};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
+    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4) {
-    Var vars[]  = {x, y, z, w, t1, t2, t3, t4};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
+    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5) {
-    Var vars[]  = {x, y, z, w, t1, t2, t3, t4, t5};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
+    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4, t5};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6) {
-    Var vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
+    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
 }
 
 ScheduleHandle &ScheduleHandle::cuda_threads(Var tx) {
@@ -799,7 +794,22 @@ Func &Func::unroll(Var var, int factor) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
-    ScheduleHandle(func.schedule()).bound(var, min, extent);
+    bool found = false;
+    for (size_t i = 0; i < func.args().size(); i++) {
+        if (var.name() == func.args()[i]) {
+            found = true;
+        }
+    }
+    if (!found) {
+        std::cerr << "Can't bound variable " << var.name()
+                  << " of function " << name()
+                  << " because " << var.name()
+                  << " is not one of the pure variables of " << name() << "\n";
+        assert(false);
+    }
+
+    Schedule::Bound b = {var.name(), min, extent};
+    func.schedule().bounds.push_back(b);
     return *this;
 }
 
@@ -813,52 +823,60 @@ Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
     return *this;
 }
 
-Func &Func::reorder(const std::vector<Var> &vars) {
+Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     ScheduleHandle(func.schedule()).reorder(vars);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
     ScheduleHandle(func.schedule()).reorder(x, y);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
     ScheduleHandle(func.schedule()).reorder(x, y, z);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
+                    VarOrRVar t5) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
+                    VarOrRVar t5, VarOrRVar t6) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
     return *this;
 }
@@ -1532,7 +1550,7 @@ void validate_arguments(const string &output,
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_bitcode(filename);
 }
-  
+
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
     compile_to_bitcode(filename, args, "", target);
 }
