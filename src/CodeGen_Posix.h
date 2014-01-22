@@ -66,10 +66,6 @@ protected:
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
         int stack_size;
-
-        /** The stack pointer before the allocation was created. NULL
-         * for heap allocations. */
-        llvm::Value *saved_stack;
     };
 
     /** The allocations currently in scope. The stack gets pushed when

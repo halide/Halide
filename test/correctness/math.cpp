@@ -44,7 +44,7 @@ bool relatively_equal(value_t a, value_t b) {
         test_##name(x) = name(input(x));                                      \
         Buffer in_buffer(type_of<type>(), in_buf);                            \
         input.set(in_buffer);                                                 \
-        Target target = get_target_from_environment();                        \
+        Target target = get_jit_target_from_environment();                        \
         if (target.features & Target::CUDA) {                                 \
             test_##name.cuda_tile(x, 8);                                      \
         }                                                                     \
@@ -65,7 +65,7 @@ bool relatively_equal(value_t a, value_t b) {
         test_##name(x) = name(input(0, x), input(1, x));                            \
         Buffer in_buffer(type_of<type>(), in_buf);                                  \
         input.set(in_buffer);                                                       \
-        Target target = get_target_from_environment();                              \
+        Target target = get_jit_target_from_environment();                              \
         if (target.features & Target::CUDA) {                                       \
             test_##name.cuda_tile(x, 8);                                            \
         }                                                                           \

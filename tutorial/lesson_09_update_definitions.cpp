@@ -53,22 +53,29 @@ int main(int argc, char **argv) {
         // function's current value at the same site:
         f(x, y) = f(x, y) + 17;
 
-        // We can also recursively refer back to the current value at
-        // a different site:
-        f(x, y) = f(0, 0) * f(x/2, min(y, 10));
+        // If we confine our update to a single row, we can
+        // recursively refer to values in the same column:
+        f(x, 3) = f(x, 0) * f(x, 10);
 
-        // Each Var used in an update definition must appear unadorned
-        // on the left-hand-side in the same position as in the
-        // pure definition. So the following definitions are legal updates:
-        f(x, 17) = x + 8;
-        f(0, y) = y * 8;
+        // Similarly, if we confine our update to a single column, we
+        // can recursively refer to other values in the same row.
+        f(0, y) = f(0, y) / f(3, y);
+
+        // The general rule is: Each Var used in an update definition
+        // must appear unadorned in the same position as in the pure
+        // definition in all references to the function on the left-
+        // and right-hand sides. So the following definitions are
+        // legal updates:
+        f(x, 17) = x + 8; // x is used, so all uses of f must have x as the first argument.
+        f(0, y) = y * 8;  // y is used, so all uses of f must have y as the second argument.
         f(x, x + 1) = x + 8;
         f(y/2, y) = f(0, y) * 17;
 
         // But these ones would cause an error:
-        // f(y, y + 1) = y + 8
-        // f(y, x) = y - x;
-        // f(3, 4) = x + y;
+        // f(x, 0) = f(x + 1, 0) <- First argument to f on the right-hand-side must be 'x', not 'x + 1'.
+        // f(y, y + 1) = y + 8   <- Second argument to f on the left-hand-side must be 'y', not 'y + 1'.
+        // f(y, x) = y - x;      <- Arguments to f on the left-hand-side are in the wrong places.
+        // f(3, 4) = x + y;      <- Free variables appear on the right-hand-side but not the left-hand-side.
 
         // We'll realize this one just to make sure it compiles. The
         // second-to-last definition forces us to realize over a
@@ -138,11 +145,11 @@ int main(int argc, char **argv) {
                 c_result[y][x] = x + y;
             }
         }
-        for (int r = 0; r < 50; r++) {
-            // The loop over the reduction domain occurs outside of
-            // the loop over any pure variables used in the update
-            // step:
-            for (int x = 0; x < 100; x++) {
+        for (int x = 0; x < 100; x++) {
+            for (int r = 0; r < 50; r++) {
+                // The loop over the reduction domain occurs inside of
+                // the loop over any pure variables used in the update
+                // step:
                 c_result[r][x] = c_result[r][x] * c_result[r][x];
             }
         }
@@ -218,8 +225,8 @@ int main(int argc, char **argv) {
         f(x, y) = x*y;
         // Set the second row to equal the first row.
         f(x, 1) = f(x, 0);
-        // Set the first column to equal the first row.
-        f(1, y) = f(y, 0);
+        // Set the second column to equal the first column plus 2.
+        f(1, y) = f(0, y) + 2;
 
         // The pure variables in each stage can be scheduled
         // independently. To control the pure definition, we schedule
@@ -268,7 +275,7 @@ int main(int argc, char **argv) {
         for (int yo = 0; yo < 4; yo++) { // Should be a parallel for loop
             for (int yi = 0; yi < 4; yi++) {
                 int y = yo*4 + yi;
-                c_result[y][1] = c_result[0][y];
+                c_result[y][1] = c_result[y][0] + 2;
             }
         }
 
@@ -575,21 +582,16 @@ int main(int argc, char **argv) {
                 c_result[x] = x + 10;
             }
             // Update step for the consumer.
-            for (int r = 0; r < 5; r++) { // The loop over the reduction domain is always the outer loop.
-                // We've schedule the storage and computation of the
-                // producer here. Bounds inference tells us that we
-                // might need values of the producer from 0 to 13
-                // inclusive, because x can be at most 9, and r can be
-                // at most 4.
-                int producer_storage[14];
-                // Pure step of the producer.
-                for (int x = 0; x < 14; x++) {
-                    producer_storage[x] = x * 17;
-                }
+            for (int x = 0; x < 10; x++) {
+                for (int r = 0; r < 5; r++) { // The loop over the reduction domain is always the inner loop.
+                    // We've schedule the storage and computation of
+                    // the producer here. We just need a single value.
+                    int producer_storage[1];
+                    // Pure step of the producer.
+                    producer_storage[0] = (x + r) * 17;
 
-                // Now use it in the update step of the consumer.
-                for (int x = 0; x < 10; x++) {
-                    c_result[x] += r + producer_storage[x + r];
+                    // Now use it in the update step of the consumer.
+                    c_result[x] += r + producer_storage[0];
                 }
             }
 
@@ -668,95 +670,6 @@ int main(int argc, char **argv) {
                     printf("halide_result(%d, %d) = %d instead of %d\n",
                            x, y, halide_result(x, y), c_result(x, y));
                     return -1;
-                }
-            }
-        }
-    }
-
-    // The pointwise reduction wrapper trick.
-    {
-        // A common type of reduction is a convolution-like one, in
-        // which the left hand side is always just the pure variables,
-        // and the reduction happens independently pixel-by-pixel:
-        Func f;
-        RDom r(0, 10);
-        f(x, y) = 0;
-        f(x, y) += r * x * y;
-
-        Image<int> halide_result = f.realize(100, 100);
-
-        // When scheduled compute_root, or when it's the final stage
-        // of your pipeline, this results in mediocre code. The
-        // equivalent C is:
-
-        int c_result[100][100];
-        {
-            // Pure step.
-            for (int y = 0; y < 100; y++) {
-                for (int x = 0; x < 100; x++) {
-                    c_result[y][x] = 0;
-                }
-            }
-            // Update step.
-            for (int r = 0; r < 10; r++) { // Loop over the reduction domain is outermost.
-                for (int y = 0; y < 100; y++) {
-                    for (int x = 0; x < 100; x++) {
-                        c_result[y][x] += r * x * y;
-                    }
-                }
-            }
-
-            // Check the results match:
-            for (int y = 0; y < 100; y++) {
-                for (int x = 0; x < 100; x++) {
-                    if (halide_result(x, y) != c_result[y][x]) {
-                        printf("halide_result(%d, %d) = %d instead of %d\n",
-                               x, y, halide_result(x, y), c_result[y][x]);
-                        return -1;
-                    }
-                }
-            }
-        }
-
-        // That code makes 11 separate passes over the output buffer!
-        // For this type of reduction, we can do better by adding a
-        // dummy wrapper stage, and letting the reduction compute
-        // itself innermost with the wrapper:
-
-        Func wrapper;
-        wrapper(x, y) = f(x, y);
-
-        halide_result = wrapper.realize(100, 100);
-
-        // Now the equivalent C is:
-
-        {
-            // Pure step of the wrapper function.
-            for (int y = 0; y < 100; y++) {
-                for (int x = 0; x < 100; x++) {
-                    // Pure step of f.
-                    int f_storage[1];
-                    f_storage[0] = 0;
-                    // Update step of f.
-                    for (int r = 0; r < 10; r++) {
-                        f_storage[0] += r * x * y;
-                    }
-                    c_result[y][x] = f_storage[0];
-                }
-            }
-
-            // This is closer to what we wanted. Now we can also
-            // parallelize and vectorize the wrapper function to compute
-            // the reduction more quickly.
-
-            // Check the results match:
-            for (int y = 0; y < 100; y++) {
-                for (int x = 0; x < 100; x++) {
-                    if (halide_result(x, y) != c_result[y][x]) {
-                        printf("halide_result(%d, %d) = %d instead of %d\n",
-                               x, y, halide_result(x, y), c_result[y][x]);
-                        return -1;
-                    }
                 }
             }
         }

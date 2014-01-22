@@ -141,15 +141,15 @@ public:
         assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
         contents.ptr->stride_constraint[dim] = e;
     }
-    Expr min_constraint(int dim) {
+    Expr min_constraint(int dim) const {
         assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
         return contents.ptr->min_constraint[dim];
     }
-    Expr extent_constraint(int dim) {
+    Expr extent_constraint(int dim) const {
         assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
         return contents.ptr->extent_constraint[dim];
     }
-    Expr stride_constraint(int dim) {
+    Expr stride_constraint(int dim) const {
         assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
         return contents.ptr->stride_constraint[dim];
     }
