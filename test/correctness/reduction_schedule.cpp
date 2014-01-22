@@ -47,7 +47,7 @@ int main(int argc, char **argv) {
             ref_energy(x, y) = noise(x, y) + incr;
 
             float delta = ref_energy(x,y) - im_energy(x,y);
-            if (fabs(delta) > 1e-10) {
+            if (fabs(delta) > 1e-5) {
                 printf("energy(%d,%d) was %f instead of %f\n", x, y, im_energy(x,y), ref_energy(x,y));
                 return -1;
             }
