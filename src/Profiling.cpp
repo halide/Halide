@@ -1,6 +1,7 @@
 #include "Profiling.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Debug.h"
 #include <algorithm>
 #include <map>
 #include <string>
@@ -215,12 +216,13 @@ private:
     }
 
     void visit(const For *op) {
-        IRMutator::visit(op);
-        if (level >= 1) {
-            if (op->for_type == For::Parallel) {
-                assert(false && "Halide Profiler does not yet support parallel schedules. "
-                    "try removing parallel() schedules and re-running.");
-            }
+        if (op->for_type == For::Parallel && level >= 1) {
+            std::cerr << "Warning: The Halide profiler does not yet support "
+                      << "parallel schedules. Not profiling inside the loop over "
+                      << op->name << "\n";
+            stmt = op;
+        } else {
+            IRMutator::visit(op);
         }
         // We only instrument loops at profiling level 2 or higher
         if (level >= 2) {
