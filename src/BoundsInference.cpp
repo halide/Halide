@@ -97,33 +97,6 @@ public:
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
-            if (func.has_extern_definition()) {
-                // After we define our bounds we need to run the
-                // bounds query to define bounds for my
-                // consumers.
-                s = do_bounds_query(s, in_pipeline);
-            }
-
-            if (in_pipeline.count(name) == 0) {
-                // Inject any explicit bounds
-                string prefix = name + ".s" + int_to_string(stage) + ".";
-                for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
-                    const Schedule::Bound &b = func.schedule().bounds[i];
-                    string min_var = prefix + b.var + ".min";
-                    string max_var = prefix + b.var + ".max";
-                    Expr min_bound = b.min;
-                    Expr max_bound = (b.min + b.extent) - 1;
-                    s = LetStmt::make(min_var, min_bound, s);
-                    s = LetStmt::make(max_var, max_bound, s);
-
-                    // Save the unbounded values to use in bounds-checking assertions
-                    Expr min_required = Variable::make(Int(32), min_var);
-                    Expr max_required = Variable::make(Int(32), max_var);
-                    s = LetStmt::make(min_var + "_unbounded", min_required, s);
-                    s = LetStmt::make(max_var + "_unbounded", max_required, s);
-                }
-            }
-
             // Merge all the relevant boxes.
             Box b;
             for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
@@ -137,7 +110,35 @@ public:
                 }
             }
 
-            assert(b.size() == func.args().size());
+            assert(b.empty() || b.size() == func.args().size());
+
+            if (func.has_extern_definition()) {
+                // After we define our bounds we need to run the
+                // bounds query to define bounds for my
+                // consumers.
+                s = do_bounds_query(s, in_pipeline);
+            }
+
+            if (in_pipeline.count(name) == 0) {
+                // Inject any explicit bounds
+                string prefix = name + ".s" + int_to_string(stage) + ".";
+                for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
+                    const Schedule::Bound &bound = func.schedule().bounds[i];
+                    string min_var = prefix + bound.var + ".min";
+                    string max_var = prefix + bound.var + ".max";
+                    Expr min_bound = bound.min;
+                    Expr max_bound = (bound.min + bound.extent) - 1;
+                    s = LetStmt::make(min_var, min_bound, s);
+                    s = LetStmt::make(max_var, max_bound, s);
+
+                    // Save the unbounded values to use in bounds-checking assertions
+                    Expr min_required = Variable::make(Int(32), min_var);
+                    Expr max_required = Variable::make(Int(32), max_var);
+                    s = LetStmt::make(min_var + "_unbounded", min_required, s);
+                    s = LetStmt::make(max_var + "_unbounded", max_required, s);
+                }
+            }
+
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
                 if (b[d].min.same_as(b[d].max)) {
@@ -364,46 +365,6 @@ public:
         }
         new_stages.swap(stages);
 
-        // TODO: Handle inline reductions/externs by stamping down a
-        // unique copy of their stages per consumer
-        int s = (int)stages.size() - 1;
-        while (s >= 0) {
-            if (!stages[s].func.is_pure() &&
-                stages[s].func.schedule().compute_level.is_inline() &&
-                !stages[s].func.same_as(output_function)) {
-                // We've found an inlined reduction. Make a unique
-                // copy of it per consumer, and name each
-                // appropriately.
-                vector<string> consumers;
-                for (size_t i = s+1; i < stages.size(); i++) {
-                    if (stages[i].func.same_as(stages[s].func)) {
-                        // Skip over other copies of me.
-                        continue;
-                    }
-                    // Is this stage a consumer of me?
-                    bool consumes_me = false;
-                    for (size_t j = 0; j < stages[i].exprs.size(); j++) {
-                        Expr e = stages[i].exprs[j];
-                        if (func_is_called_by_expr(stages[s].func, e)) {
-                            consumes_me = true;
-                        }
-                    }
-                    if (consumes_me) {
-                        consumers.push_back(stages[i].name);
-                    }
-                }
-
-                // Insert some copies of me after me. They should have
-                // predictable names so that lowering knows what
-                // bounds inference variables will be in scope.
-                stages.insert(stages.begin() + s, consumers.size()-1, stages[s]);
-                for (size_t i = 0; i < consumers.size(); i++) {
-                    stages[s + i].name = consumers[i] + "#" + stages[s + i].name;
-                }
-            }
-            s--;
-        }
-
         // Dump the stages post-inlining for debugging
         /*
         debug(0) << "Bounds inference stages after inlining: \n";
@@ -466,15 +427,6 @@ public:
                 // A consumer depends on *all* stages of a producer, not just the last one.
                 const Box &b = boxes[producer.func.name()];
 
-                // Skip over this producer if it's an inlined
-                // reduction and it's not *our* copy of that inlined
-                // reduction.
-                if (producer.func.schedule().compute_level.is_inline() &&
-                    !producer.func.is_pure() &&
-                    !starts_with(producer.name, consumer.name + '#')) {
-                    continue;
-                }
-
                 if (!b.empty()) {
                     // Check for unboundedness
                     for (size_t k = 0; k < b.size(); k++) {
@@ -492,7 +444,6 @@ public:
                     }
 
                     producer.bounds[make_pair(consumer.name, consumer.stage)] = b;
-                    //merge_boxes(producer.bounds, b);
                     producer.consumers.push_back((int)i);
                 }
             }
