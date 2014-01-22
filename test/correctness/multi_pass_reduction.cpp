@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
         for (int i = 1; i < 11; i++) {
             ref[i] += ref[i-1];
         }
-        for (int i = 10; i >= 0; i--) {
+        for (int i = 9; i >= 0; i--) {
             ref[i] += ref[i+1];
         }
 
@@ -161,22 +161,21 @@ int main(int argc, char **argv) {
         Var xo, xi;
         ImageParam input(Float(32), 2);
         f(x, y) = input(x, y);
-        f(x, r) += f(x, r-1);
-        f(x, r) += f(x, r-1);
-        f(x, r) += f(x, r-1);
-        f(x, r) += f(x, r-1);
-        f.update(0).split(x, x, xi, 8);
-        f.update(1).split(x, x, xi, 12);
-        f.update(2).split(x, x, xi, 18);
+        f(x, r) += f(x, r-1) + input(x, r);
+        f(x, r) += f(x, r-1) + input(x, r);
+        f(x, r) += f(x, r-1) + input(x, r);
+        f(x, r) += f(x, r-1) + input(x, r);
+        f.update(0).split(x, x, xi, 11);
+        f.update(1).split(x, x, xi, 13);
+        f.update(2).split(x, x, xi, 17);
 
-        // The minimum realization factor is now 72 (the least common
-        // multiple of the split factors). So if we ask for an output
-        // of size 100x10, we'll need an input of size 144 x 100. 144
-        // being the smallest multiple of 72 larger than 100.
+        // So if we ask for an output of size 100x10, we'll need an
+        // input of size 110 x 100. 110 is enough to cover rounding up
+        // 100 to be a multiple of 11, 13, and 17.
         f.infer_input_bounds(100, 10);
 
         Image<float> in = input.get();
-        if (in.width() != 144 || in.height() != 100) {
+        if (in.width() != 110 || in.height() != 100) {
             printf("Unexpected image size: %d x %d instead of 144 x 100\n",
                    in.width(), in.height());
             return -1;

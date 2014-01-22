@@ -52,6 +52,21 @@ struct CheckVars : public IRGraphVisitor {
         defined_internally.pop(let->name);
     }
 
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
+        if (op->name == name && op->call_type == Call::Halide) {
+            for (size_t i = 0; i < op->args.size(); i++) {
+                const Variable *var = op->args[i].as<Variable>();
+                if (!pure_args[i].empty()) {
+                    assertf(var && var->name == pure_args[i],
+                            "All of a functions recursive references to itself"
+                            " must contain the same pure variables in the same"
+                            " places as on the left-hand-side.", name);
+                }
+            }
+        }
+    }
+
     void visit(const Variable *var) {
         // Is it a parameter?
         if (var->param.defined()) return;
@@ -166,7 +181,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) {
     assertf(!name().empty(), "A function needs a name", name());
     assertf(has_pure_definition(), "Can't add a reduction definition without a regular definition first", name());
-    //assertf(!has_reduction_definition(), "Function already has a reduction definition", name());
+
     for (size_t i = 0; i < values.size(); i++) {
         assertf(values[i].defined(), "Undefined expression in right-hand-side of reduction", name());
     }
@@ -195,32 +210,33 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     }
 
     // The pure args are those naked vars in the args that are not in
-    // a reduction domain and are not parameters
-    vector<string> pure_args;
+    // a reduction domain and are not parameters and line up with the
+    // pure args in the pure definition.
+    vector<string> pure_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
+        pure_args[i] = ""; // Will never match a var name
         assertf(args[i].defined(), "Undefined expression in left-hand-side of reduction", name());
         if (const Variable *var = args[i].as<Variable>()) {
-            if (!var->param.defined() && !var->reduction_domain.defined()) {
-                assertf(var->name == contents.ptr->args[i],
-                       "Pure argument to update step must have the same name as pure argument to initialization step in the same dimension", name());
-                pure_args.push_back(var->name);
+            if (!var->param.defined() &&
+                !var->reduction_domain.defined() &&
+                var->name == contents.ptr->args[i]) {
+                pure_args[i] = var->name;
             }
         }
-
     }
 
     // Make sure all the vars in the args and the value are either
-    // pure args, in the reduction domain, or a parameter
+    // pure args, in the reduction domain, or a parameter. Also checks
+    // that recursive references to the function contain all the pure
+    // vars in the LHS in the correct places.
     CheckVars check(name());
     check.pure_args = pure_args;
-    for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&check);
-    }
     for (size_t i = 0; i < args.size(); i++) {
         args[i].accept(&check);
     }
-
-    //assertf(check.reduction_domain.defined(), "No reduction domain referenced in reduction definition", name());
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&check);
+    }
 
     ReductionDefinition r;
     r.args = args;
@@ -246,16 +262,18 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
                 "Bug: removed too many circular references when defining reduction", name());
     }
 
-    // First add the pure args in order
-    for (size_t i = 0; i < pure_args.size(); i++) {
-        Schedule::Dim d = {pure_args[i], For::Serial};
-        r.schedule.dims.push_back(d);
-    }
-
-    // Then add the reduction domain outside of that
+    // First add any reduction domain
     if (r.domain.defined()) {
         for (size_t i = 0; i < r.domain.domain().size(); i++) {
             Schedule::Dim d = {r.domain.domain()[i].var, For::Serial};
+            r.schedule.dims.push_back(d);
+        }
+    }
+
+    // Then add the pure args outside of that
+    for (size_t i = 0; i < pure_args.size(); i++) {
+        if (!pure_args[i].empty()) {
+            Schedule::Dim d = {pure_args[i], For::Serial};
             r.schedule.dims.push_back(d);
         }
     }
@@ -298,58 +316,6 @@ void Function::define_extern(const std::string &function_name,
     }
 
 }
-
-namespace {
-Expr compute_min_extent(string dim, const Schedule &sched) {
-    Expr size = 1;
-    const vector<Schedule::Split> &splits = sched.splits;
-    for (size_t i = 0; i < splits.size(); i++) {
-        if (splits[i].old_var == dim && !splits[i].is_fuse()) {
-            if (splits[i].is_split()) {
-                Expr factor = splits[i].factor;
-                size = Mul::make(size, factor);
-            }
-            dim = splits[i].outer;
-        }
-    }
-    return size;
-}
-}
-
-Expr Function::min_extent_produced(const string &d) const {
-    return compute_min_extent(d, schedule());
-}
-
-Expr Function::min_extent_updated(const string &d) const {
-    if (!has_reduction_definition()) {
-        return 1;
-    } else {
-        // We want something close to the LCM of the min extents of
-        // the reduction schedules. To compute this reasonably, we
-        // pull out the const integer factors and take the exact LCM,
-        // then multiply it by the non-integer factors.
-        int integer_part = 1;
-        std::set<Expr, ExprDeepCompare> exprs;
-        for (size_t i = 0; i < reductions().size(); i++) {
-            Expr e = compute_min_extent(d, reductions()[i].schedule);
-            e = simplify(e);
-            if (const IntImm *int_imm = e.as<IntImm>()) {
-                integer_part = lcm(int_imm->value, integer_part);
-            } else {
-                exprs.insert(e);
-            }
-        }
-
-        Expr result = integer_part;
-        for (std::set<Expr, ExprDeepCompare>::iterator iter = exprs.begin();
-             iter != exprs.end(); ++iter) {
-            result *= (*iter);
-        }
-
-        return result;
-    }
-}
-
 
 }
 }
