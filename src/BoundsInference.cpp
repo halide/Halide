@@ -193,6 +193,8 @@ public:
             // extern function call.  We need a query buffer_t per
             // producer and a query buffer_t for the output
 
+            Expr null_handle = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+
             for (size_t j = 0; j < args.size(); j++) {
                 if (args[j].is_expr()) {
                     bounds_inference_args.push_back(args[j].expr);
@@ -201,7 +203,7 @@ public:
                     for (int k = 0; k < input.outputs(); k++) {
                         string name = input.name() + ".o" + int_to_string(k) + ".bounds_query." + func.name();
                         Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                              vec<Expr>(0, input.output_types()[k].bytes()),
+                                              vec<Expr>(null_handle, input.output_types()[k].bytes()),
                                               Call::Intrinsic);
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
@@ -225,7 +227,7 @@ public:
             // use the same size, but have differing types.
             for (int j = 0; j < func.outputs(); j++) {
                 vector<Expr> output_buffer_t_args(2);
-                output_buffer_t_args[0] = 0;
+                output_buffer_t_args[0] = null_handle;
                 output_buffer_t_args[1] = func.output_types()[j].bytes();
                 for (size_t k = 0; k < func.args().size(); k++) {
                     const string &arg = func.args()[k];

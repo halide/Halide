@@ -763,6 +763,19 @@ private:
     void visit(const Call *op) {
         if (!consider_calls) return;
 
+        // Calls inside of an address_of aren't touched, because no
+        // actual memory access takes place.
+        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+            // Visit the args of the inner call
+            assert(op->args.size() == 1);
+            const Call *c = op->args[0].as<Call>();
+            assert(c);
+            for (size_t i = 0; i < c->args.size(); i++) {
+                c->args[i].accept(this);
+            }
+            return;
+        }
+
         IRVisitor::visit(op);
 
         if (op->call_type == Call::Intrinsic ||

@@ -672,10 +672,9 @@ void CodeGen::visit(const Cast *op) {
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
     if (!src.is_float() && !dst.is_float()) {
-        // This has the same semantics as the longer code in
-        // cg_llvm.ml.  Widening integer casts either zero extend
-        // or sign extend, depending on the source type. Narrowing
-        // integer casts always truncate.
+        // Widening integer casts either zero extend or sign extend,
+        // depending on the source type. Narrowing integer casts
+        // always truncate.
         value = builder->CreateIntCast(value, llvm_dst, src.is_int());
     } else if (src.is_float() && dst.is_int()) {
         value = builder->CreateFPToSI(value, llvm_dst);
@@ -1392,23 +1391,23 @@ void CodeGen::visit(const Call *op) {
             }
         } else if (op->name == Call::create_buffer_t) {
             // Make some memory for this buffer_t
-            const Call *c = op->args[0].as<Call>();
-
             Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
 
             // Populate the fields
-            Value *host_ptr;
-            if (!c) {
-                const IntImm *imm = op->args[0].as<IntImm>();
-                assert(imm && imm->value == 0 && "First argument to create_buffer_t must either be a buffer name or the constant zero");
-                // Buffers with null host pointers are used for bounds
-                // inference queries to external stages.
-                host_ptr = ConstantPointerNull::get(i8->getPointerTo());
-            } else {
-                host_ptr = sym_get(c->name + ".host");
+            assert(op->args[0].type().is_handle() && "The first argument to create_buffer_t must be a Handle");
+            Value *host_ptr = codegen(op->args[0]);
+            host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
+            builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
+
+            // Type check integer arguments
+            for (size_t i = 1; i < op->args.size(); i++) {
+                assert(op->args[i].type() == Int(32) &&
+                       "All arguments to create_buffer_t beyond the first must have type Int32");
             }
 
-            int elem_size = op->args[1].as<IntImm>()->value;
+            Value *elem_size = codegen(op->args[1]);
+            builder->CreateStore(elem_size, buffer_elem_size_ptr(buffer));
+
             int dims = op->args.size()/3;
             for (int i = 0; i < 4; i++) {
                 Value *min, *extent, *stride;
@@ -1430,10 +1429,7 @@ void CodeGen::visit(const Call *op) {
             builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
             builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
-            Value *host_ptr_field = buffer_host_ptr(buffer);
-            host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
-            builder->CreateStore(host_ptr, host_ptr_field);
-            builder->CreateStore(ConstantInt::get(i32, elem_size), buffer_elem_size_ptr(buffer));
+
             value = buffer;
         } else if (op->name == Call::extract_buffer_min) {
             assert(op->args.size() == 2);
@@ -1471,6 +1467,19 @@ void CodeGen::visit(const Call *op) {
 
             // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
+        } else if (op->name == Call::null_handle) {
+            assert(op->args.size() == 0 && "null_handle takes no arguments");
+            assert(op->type == Handle() && "null_handle must return a Handle type");
+            value = ConstantPointerNull::get(i8->getPointerTo());
+        } else if (op->name == Call::address_of) {
+            assert(op->args.size() == 1 && "address_of takes one argument");
+            assert(op->type == Handle() && "address_of must return a Handle type");
+            const Load *load = op->args[0].as<Load>();
+            assert(load && "The sole argument to address_of must be a Load node");
+            assert(load->index.type().is_scalar() && "Can't take the address of a vector load");
+
+            value = codegen_buffer_pointer(load->name, load->type, load->index);
+
         } else if (op->name == Call::trace || op->name == Call::trace_expr) {
 
             int int_args = (int)(op->args.size()) - 5;
