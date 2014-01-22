@@ -70,10 +70,10 @@ if [[ ! -f testing/deps/libz32.a ]]; then
 fi
 
 if [[ `uname` == Darwin ]]; then
-    export CXX="clang++ -std=c++11 -stdlib=libc++"
-    export GXX="clang++ -std=c++11 -stdlib=libc++"
+    export CXX="clang++ -std=c++98 -stdlib=libc++"
+    export GXX="clang++ -std=c++98 -stdlib=libc++"
     export CC="clang"
-    export LLVMS="trunk pnacl release-3.3"
+    export LLVMS="pnacl trunk release-3.3" 
 else
     export CXX="g++"
     export GXX="g++"
