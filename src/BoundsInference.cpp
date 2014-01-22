@@ -94,6 +94,7 @@ public:
 
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
+                           string producing_stage,
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
@@ -101,10 +102,9 @@ public:
             Box b;
             for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
                  iter != bounds.end(); ++iter) {
-                // Ignore stage number for now
                 string func_name = iter->first.first;
                 string stage_name = func_name + ".s" + int_to_string(iter->first.second);
-                if (in_stages.contains(stage_name) ||
+                if (stage_name == producing_stage ||
                     inner_productions.count(func_name)) {
                     merge_boxes(b, iter->second);
                 }
@@ -563,7 +563,7 @@ public:
                 for (size_t j = 0; j < stages[i].consumers.size(); j++) {
                     bounds_needed[stages[i].consumers[j]] = true;
                 }
-                body = stages[i].define_bounds(body, in_stages, in_pipeline, inner_productions);
+                body = stages[i].define_bounds(body, stage_name, in_stages, in_pipeline, inner_productions);
             }
         }
 
