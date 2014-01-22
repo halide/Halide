@@ -354,10 +354,17 @@ Stmt build_produce(Function f) {
                     if (input.outputs() > 1) {
                         name += "." + int_to_string(k);
                     }
-                    Expr host = Call::make(Handle(), name, vector<Expr>(), Call::Intrinsic);
+
+                    vector<Expr> top_left;
+                    for (int i = 0; i < input.dimensions(); i++) {
+                        string d = int_to_string(i);
+                        top_left.push_back(Variable::make(Int(32), input.name() + ".min." + d));
+                    }
+                    Expr host_ptr = Call::make(input, top_left, k);
+                    host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
 
                     vector<Expr> buffer_args(2);
-                    buffer_args[0] = host;
+                    buffer_args[0] = host_ptr;
                     buffer_args[1] = input.output_types()[k].bytes();
                     for (int i = 0; i < input.dimensions(); i++) {
                         string d = int_to_string(i);
@@ -390,35 +397,42 @@ Stmt build_produce(Function f) {
 
         // Make the buffer_ts representing the output. They
         // all use the same size, but have differing types.
-        //
-        // Bounds are inferred for the first element of the Tuple
-        // hence they must be looked up using the name chosen for the
-        // first name generated on the Tuple.
-        string bounds_name;
+        string stride_name = f.name();
+        if (f.outputs() > 1) {
+            stride_name += ".0";
+        }
+        string stage_name = f.name() + ".s0.";
+
         for (int j = 0; j < f.outputs(); j++) {
-            string name = f.name();
-            if (f.outputs() > 1) {
-                name += "." + int_to_string(j);
-            }
-            if (j == 0)
-                bounds_name = name;
+
             vector<Expr> buffer_args(2);
-            Expr host = Call::make(Handle(), name, vector<Expr>(), Call::Intrinsic);
-            buffer_args[0] = host;
+
+            vector<Expr> top_left;
+            for (int k = 0; k < f.dimensions(); k++) {
+                string var = stage_name + f.args()[k];
+                top_left.push_back(Variable::make(Int(32), var + ".min"));
+            }
+            Expr host_ptr = Call::make(f, top_left, j);
+            host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
+
+            buffer_args[0] = host_ptr;
             buffer_args[1] = f.output_types()[j].bytes();
             for (int k = 0; k < f.dimensions(); k++) {
-                string d = int_to_string(k);
-                buffer_args.push_back(Variable::make(Int(32), bounds_name + ".min." + d));
-                buffer_args.push_back(Variable::make(Int(32), bounds_name + ".extent." + d));
-                buffer_args.push_back(Variable::make(Int(32), bounds_name + ".stride." + d));
+                string var = stage_name + f.args()[k];
+                Expr min = Variable::make(Int(32), var + ".min");
+                Expr max = Variable::make(Int(32), var + ".max");
+                Expr stride = Variable::make(Int(32), stride_name + ".stride." + int_to_string(k));
+                buffer_args.push_back(min);
+                buffer_args.push_back(max - min + 1);
+                buffer_args.push_back(stride);
             }
 
             Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
                                               buffer_args, Call::Intrinsic);
 
-            name += ".tmp_buffer";
-            extern_call_args.push_back(Variable::make(Handle(), name));
-            lets.push_back(make_pair(name, output_buffer_t));
+            string buf_name = f.name() + "." + int_to_string(j) + ".tmp_buffer";
+            extern_call_args.push_back(Variable::make(Handle(), buf_name));
+            lets.push_back(make_pair(buf_name, output_buffer_t));
         }
 
         // Make the extern call
