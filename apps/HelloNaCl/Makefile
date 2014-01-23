@@ -63,7 +63,7 @@ halide_game_of_life_32.o: halide_game_of_life
 	mv halide_game_of_life.o halide_game_of_life_32.o
 
 halide_game_of_life: halide_game_of_life.cpp
-	g++ halide_game_of_life.cpp -o halide_game_of_life -I ../../include -L ../../bin -lHalide -lpthread -ldl
+	$(CXX) halide_game_of_life.cpp -o halide_game_of_life -I ../../include -L ../../bin -lHalide -lpthread -ldl
 
 clean:
 	rm -f halide_game_of_life *.o *.nexe *.s .lib64_linked lib64 .lib32_linked lib32
