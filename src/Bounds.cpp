@@ -23,8 +23,10 @@ using std::string;
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
-    Scope<Interval> scope;
+    const Scope<Interval> &scope;
+    Scope<Interval> inner_scope;
 
+    Bounds(const Scope<Interval> &s) : scope(s) {}
 private:
     void bounds_of_type(Type t) {
         if (t.is_uint() && t.bits <= 16) {
@@ -142,6 +144,10 @@ private:
     void visit(const Variable *op) {
         if (scope.contains(op->name)) {
             Interval bounds = scope.get(op->name);
+            min = bounds.min;
+            max = bounds.max;
+        } else if (inner_scope.contains(op->name)) {
+            Interval bounds = inner_scope.get(op->name);
             min = bounds.min;
             max = bounds.max;
         } else {
@@ -635,9 +641,9 @@ private:
 
     void visit(const Let *op) {
         op->value.accept(this);
-        scope.push(op->name, Interval(min, max));
+        inner_scope.push(op->name, Interval(min, max));
         op->body.accept(this);
-        scope.pop(op->name);
+        inner_scope.pop(op->name);
     }
 
     void visit(const LetStmt *) {
@@ -679,8 +685,7 @@ private:
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
-    Bounds b;
-    b.scope = scope;
+    Bounds b(scope);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
     return Interval(b.min, b.max);
@@ -885,22 +890,22 @@ Box box_required(Stmt s, string fn, const Scope<Interval> &scope) {
 }
 
 map<string, Box> boxes_required(Expr e) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return boxes_touched(e, Stmt(), true, false, "", scope);
 }
 
 Box box_required(Expr e, string fn) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return box_touched(e, Stmt(), true, false, fn, scope);
 }
 
 map<string, Box> boxes_required(Stmt s) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return boxes_touched(Expr(), s, true, false, "", scope);
 }
 
 Box box_required(Stmt s, string fn) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return box_touched(Expr(), s, true, false, fn, scope);
 }
 
@@ -922,22 +927,22 @@ Box box_provided(Stmt s, string fn, const Scope<Interval> &scope) {
 }
 
 map<string, Box> boxes_provided(Expr e) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return boxes_touched(e, Stmt(), false, true, "", scope);
 }
 
 Box box_provided(Expr e, string fn) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return box_touched(e, Stmt(), false, true, fn, scope);
 }
 
 map<string, Box> boxes_provided(Stmt s) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return boxes_touched(Expr(), s, false, true, "", scope);
 }
 
 Box box_provided(Stmt s, string fn) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return box_touched(Expr(), s, false, true, fn, scope);
 }
 
@@ -959,22 +964,22 @@ Box box_touched(Stmt s, string fn, const Scope<Interval> &scope) {
 }
 
 map<string, Box> boxes_touched(Expr e) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return boxes_touched(e, Stmt(), true, true, "", scope);
 }
 
 Box box_touched(Expr e, string fn) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return box_touched(e, Stmt(), true, true, fn, scope);
 }
 
 map<string, Box> boxes_touched(Stmt s) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return boxes_touched(Expr(), s, true, true, "", scope);
 }
 
 Box box_touched(Stmt s, string fn) {
-    Scope<Interval> scope;
+    const Scope<Interval> scope;
     return box_touched(Expr(), s, true, true, fn, scope);
 }
 
