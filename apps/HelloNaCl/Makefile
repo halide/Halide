@@ -1,5 +1,5 @@
 
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_26
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_30
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include
@@ -14,10 +14,13 @@ ifeq ($(UNAME), Darwin)
 TC ?= $(NACL_SDK_ROOT)/toolchain/mac_x86_glibc
 endif
 
+LIBDIR_32 = $(NACL_SDK_ROOT)/lib/glibc_x86_32/Release
+LIBDIR_64 = $(NACL_SDK_ROOT)/lib/glibc_x86_64/Release
+
 CXX_64 := $(TC)/bin/x86_64-nacl-g++ -m64 -O3
 CXX_32 := $(TC)/bin/i686-nacl-g++ -m32 -O3
-LDFLAGS_64 := -L $(TC)/x86_64-nacl/lib64 -lppapi_cpp -lppapi -lpthread
-LDFLAGS_32 := -L $(TC)/x86_64-nacl/lib32 -lppapi_cpp -lppapi -lpthread
+LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi -lpthread
+LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi -lpthread
 
 OBJECTS_32 = hello_nacl_32.o halide_game_of_life_32.o c_game_of_life_32.o
 OBJECTS_64 = hello_nacl_64.o halide_game_of_life_64.o c_game_of_life_64.o
@@ -63,7 +66,7 @@ halide_game_of_life_32.o: halide_game_of_life
 	mv halide_game_of_life.o halide_game_of_life_32.o
 
 halide_game_of_life: halide_game_of_life.cpp
-	g++ halide_game_of_life.cpp -o halide_game_of_life -I ../../include -L ../../bin -lHalide -lpthread -ldl
+	$(CXX) halide_game_of_life.cpp -o halide_game_of_life -I ../../include -L ../../bin -lHalide -lpthread -ldl
 
 clean:
 	rm -f halide_game_of_life *.o *.nexe *.s .lib64_linked lib64 .lib32_linked lib32
