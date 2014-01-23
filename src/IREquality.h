@@ -7,7 +7,7 @@
 
 #include "IR.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** Compare IR nodes for equality of value. Traverses entire IR
@@ -28,7 +28,7 @@ EXPORT int deep_compare(Stmt a, Stmt b);
 /** A compare struct suitable for use in std::map and std::set that
  * uses the ordering defined by deep_compare. */
 struct ExprDeepCompare {
-    bool operator()(const Expr &a, const Expr &b) {
+    bool operator()(const Expr &a, const Expr &b) const {
         return deep_compare(a, b) < 0;
     }
 };
@@ -36,7 +36,7 @@ struct ExprDeepCompare {
 /** A compare struct suitable for use in std::map and std::set that
  * uses the ordering defined by deep_compare. */
 struct StmtDeepCompare {
-    bool operator()(const Stmt &a, const Stmt &b) {
+    bool operator()(const Stmt &a, const Stmt &b) const {
         return deep_compare(a, b) < 0;
     }
 };
