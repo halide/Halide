@@ -236,6 +236,8 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
+STATIC_TEST_CXX ?= $(CXX)
+
 LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../$(BIN_DIR)
 LD_PATH_SETUP2 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../$(BIN_DIR)
 
@@ -276,7 +278,7 @@ tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	@-echo
 
 $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread -ldl $(STATIC_TEST_LIBS) -o $@
+	$(STATIC_TEST_CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide -lpthread -ldl $(LIBPNG_LIBS) -o $@
@@ -288,7 +290,7 @@ test_%: $(BIN_DIR)/test_%
 
 static_%: $(BIN_DIR)/static_%_test
 	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) ../$<
+	cd tmp ; $(LD_PATH_SETUP) $(STATIC_TEST_RUNNER) ../$<
 	@-echo
 
 valgrind_%: $(BIN_DIR)/test_%
