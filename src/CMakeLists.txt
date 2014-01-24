@@ -62,6 +62,7 @@ set(RUNTIME_CPP
   linux_clock
   nogpu
   opencl
+  opengl
   posix_allocator
   posix_clock
   osx_clock
