@@ -44,6 +44,10 @@ if (TARGET_OPENCL)
   add_definitions("-DWITH_OPENCL=1")
 endif()
 
+if (TARGET_OPENGL)
+  add_definitions("-DWITH_OPENGL=1")
+endif()
+
 if (TARGET_SPIR)
   add_definitions("-DWITH_SPIR=1")
 endif()

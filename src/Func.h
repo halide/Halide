@@ -201,6 +201,7 @@ public:
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
     EXPORT ScheduleHandle &parallel(Var var);
+    EXPORT ScheduleHandle &kernel_loop(Var x);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
@@ -248,6 +249,7 @@ public:
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
     EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
                                      int x_size, int y_size, int z_size);
+    EXPORT ScheduleHandle &glsl(Var x, Var y, Var c);
     // @}
 
 };
@@ -875,6 +877,9 @@ public:
     EXPORT Func &cuda_tile(Var x, Var y, Var z,
                            int x_size, int y_size, int z_size);
     // @}
+
+    /** Scheduling for GLSL. */
+    EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For

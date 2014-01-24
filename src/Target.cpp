@@ -219,6 +219,9 @@ Target parse_target_string(const std::string &target) {
             t.features |= Target::OpenCL | Target::SPIR64;
         } else if (tok == "gpu_debug") {
             t.features |= Target::GPUDebug;
+        } else if (tok == "opengl") {
+            t.features |= Target::OpenGL;
+
         } else {
             std::cerr << "Did not understand HL_TARGET=" << target << "\n"
                       << "Expected format is arch-os-feature1-feature2-... "
@@ -316,6 +319,8 @@ DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opencl_debug)
+DECLARE_CPP_INITMOD(opengl)
+DECLARE_CPP_INITMOD(opengl_debug)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_io)
 DECLARE_CPP_INITMOD(posix_allocator)
@@ -494,6 +499,12 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
             modules.push_back(get_initmod_opencl_debug(c, bits_64));
         } else {
             modules.push_back(get_initmod_opencl(c, bits_64));
+        }
+    } else if (t.features & Target::OpenGL) {
+        if (t.features & Target::GPUDebug) {
+            modules.push_back(get_initmod_opengl_debug(c, bits_64));
+        } else {
+            modules.push_back(get_initmod_opengl(c, bits_64));
         }
     } else {
         modules.push_back(get_initmod_nogpu(c, bits_64));

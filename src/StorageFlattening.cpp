@@ -14,9 +14,12 @@ using std::map;
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e) : env(e) {}
+    FlattenDimensions(const map<string, Function> &e) : env(e) {
+        inside_kernel_loop = false;
+    }
     Scope<int> scope;
     Scope<int> need_buffer_t;
+    bool inside_kernel_loop;
 private:
     const map<string, Function> &env;
 
@@ -187,8 +190,12 @@ private:
         }
 
         if (values.size() == 1) {
-            Expr idx = mutate(flatten_args(provide->name, provide->args));
-            stmt = Store::make(provide->name, values[0], idx);
+            if (inside_kernel_loop) {
+                stmt = Store::make(provide->name, values[0], provide->args);
+            } else {
+                Expr idx = mutate(flatten_args(provide->name, provide->args));
+                stmt = Store::make(provide->name, values[0], idx);
+            }
         } else {
 
             vector<string> names(provide->values.size());
@@ -197,10 +204,18 @@ private:
             // Store the values by name
             for (size_t i = 0; i < provide->values.size(); i++) {
                 string name = provide->name + "." + int_to_string(i);
-                Expr idx = mutate(flatten_args(name, provide->args));
                 names[i] = name + ".value";
                 Expr var = Variable::make(values[i].type(), names[i]);
-                Stmt store = Store::make(name, var, idx);
+
+                Stmt store;
+
+                if (inside_kernel_loop) {
+                    store = Store::make(name, var, provide->args);
+                } else {
+                    Expr idx = mutate(flatten_args(name, provide->args));
+                    store = Store::make(name, var, idx);
+                }
+
                 if (result.defined()) {
                     result = Block::make(result, store);
                 } else {
@@ -236,15 +251,19 @@ private:
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
                 name = name + '.' + int_to_string(call->value_index);
-
             }
 
             // Promote the type to be a multiple of 8 bits
             Type t = call->type;
             t.bits = t.bytes() * 8;
 
-            Expr idx = mutate(flatten_args(name, call->args));
-            expr = Load::make(t, name, idx, call->image, call->param);
+
+            if (inside_kernel_loop) {
+                expr = Load::make(t, name, call->args, call->image, call->param);
+            } else {
+                Expr idx = mutate(flatten_args(name, call->args));
+                expr = Load::make(t, name, idx, call->image, call->param);
+            }
 
             if (call->type.bits != t.bits) {
                 expr = Cast::make(call->type, expr);
@@ -264,6 +283,16 @@ private:
         if (constrained_version_exists) {
             scope.pop(let->name);
         }
+    }
+
+    void visit(const For *loop) {
+        bool old_kernel_loop = inside_kernel_loop;
+        if (loop->for_type == For::Kernel)
+            inside_kernel_loop = true;
+
+        IRMutator::visit(loop);
+
+        inside_kernel_loop = old_kernel_loop;
     }
 };
 
