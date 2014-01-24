@@ -41,7 +41,7 @@ public:
     static void test();
 
 protected:
-    /** An for the most recently generated ssa variable */
+    /** An ID for the most recently generated ssa variable */
     std::string id;
 
     /** A cache of generated values in scope */
