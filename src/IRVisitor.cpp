@@ -109,7 +109,9 @@ void IRVisitor::visit(const Select *op) {
 }
 
 void IRVisitor::visit(const Load *op) {
-    op->index.accept(this);
+    for (size_t i = 0; i < op->index.size(); i++) {
+        op->index[i].accept(this);
+    }
 }
 
 void IRVisitor::visit(const Ramp *op) {
@@ -155,7 +157,9 @@ void IRVisitor::visit(const For *op) {
 
 void IRVisitor::visit(const Store *op) {
     op->value.accept(this);
-    op->index.accept(this);
+    for (size_t i = 0; i < op->index.size(); i++) {
+        op->index[i].accept(this);
+    }
 }
 
 void IRVisitor::visit(const Provide *op) {
@@ -324,7 +328,9 @@ void IRGraphVisitor::visit(const Select *op) {
 }
 
 void IRGraphVisitor::visit(const Load *op) {
-    include(op->index);
+    for (size_t i = 0; i < op->index.size(); i++) {
+        include(op->index[i]);
+    }
 }
 
 void IRGraphVisitor::visit(const Ramp *op) {
@@ -370,7 +376,9 @@ void IRGraphVisitor::visit(const For *op) {
 
 void IRGraphVisitor::visit(const Store *op) {
     include(op->value);
-    include(op->index);
+    for (size_t i = 0; i < op->index.size(); i++) {
+        include(op->index[i]);
+    }
 }
 
 void IRGraphVisitor::visit(const Provide *op) {
@@ -417,5 +425,3 @@ void IRGraphVisitor::visit(const Evaluate *op) {
 
 }
 }
-
-

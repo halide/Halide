@@ -551,7 +551,11 @@ struct Select : public ExprNode<Select> {
  * no inherent type. */
 struct Load : public ExprNode<Load> {
     std::string name;
-    Expr index;
+
+    // For most targets, buffers are indexed using a one-dimensional offset
+    // and 'index' is a scalar expression. The OpenGL backend currently uses a
+    // 3-dimensional index instead.
+    std::vector<Expr> index;
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
@@ -563,6 +567,23 @@ struct Load : public ExprNode<Load> {
     static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
         assert(index.defined() && "Load of undefined");
         assert(type.width == index.type().width && "Vector width of Load must match vector width of index");
+
+        Load *node = new Load;
+        node->type = type;
+        node->name = name;
+        node->index.push_back(index);
+        node->image = image;
+        node->param = param;
+        return node;
+    }
+
+    static Expr make(Type type, std::string name, const std::vector<Expr> &index, Buffer image, Parameter param) {
+        int max_width = 0;
+        for (size_t i = 0; i < index.size(); i++) {
+            assert(index[i].defined() && "Load of undefined");
+            max_width = std::max(max_width, index[i].type().width);
+        }
+        assert(type.width == max_width && "Vector width of Load must match vector width of index");
 
         Load *node = new Load;
         node->type = type;
@@ -742,11 +763,25 @@ struct For : public StmtNode<For> {
  * 'value'. */
 struct Store : public StmtNode<Store> {
     std::string name;
-    Expr value, index;
+    Expr value;
+    std::vector<Expr> index;
 
     static Stmt make(std::string name, Expr value, Expr index) {
         assert(value.defined() && "Store of undefined");
         assert(index.defined() && "Store of undefined");
+
+        Store *node = new Store;
+        node->name = name;
+        node->value = value;
+        node->index.push_back(index);
+        return node;
+    }
+
+    static Stmt make(std::string name, Expr value, const std::vector<Expr> &index) {
+        assert(value.defined() && "Store of undefined");
+        for (size_t i = 0; i < index.size(); i++) {
+            assert(index[i].defined() && "Store of undefined");
+        }
 
         Store *node = new Store;
         node->name = name;

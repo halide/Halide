@@ -255,10 +255,14 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const Load *op) {
-        op->index.accept(this);
-        if (result != Constant) {
-            result = Unknown;
+        for (size_t i = 0; i < op->index.size(); i++) {
+            op->index[i].accept(this);
+            if (result != Constant) {
+                result = Unknown;
+                return;
+            }
         }
+        result = Constant;
     }
 
     void visit(const Ramp *op) {

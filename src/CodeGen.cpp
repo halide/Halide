@@ -1054,13 +1054,13 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
 }
 
 void CodeGen::visit(const Load *op) {
-
+    assert(op->index.size() == 1 && "Unexpected multi-index load");
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
     // There are several cases. Different architectures may wish to override some.
     if (op->type.is_scalar()) {
         // Scalar loads
-        Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index[0]);
         LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bytes());
         add_tbaa_metadata(load, op->name);
         value = load;
@@ -1069,7 +1069,7 @@ void CodeGen::visit(const Load *op) {
         if (possibly_misaligned) {
             alignment = op->type.element_of().bytes();
         }
-        const Ramp *ramp = op->index.as<Ramp>();
+        const Ramp *ramp = op->index[0].as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
         bool internal = !op->image.defined() && !op->param.defined();
@@ -1166,7 +1166,7 @@ void CodeGen::visit(const Load *op) {
             // Compute the index as scalars, and then do a gather
             Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
-                Expr idx = extract_lane(op->index, i);
+                Expr idx = extract_lane(op->index[0], i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name);
@@ -1175,7 +1175,7 @@ void CodeGen::visit(const Load *op) {
             value = vec;
         } else {
             // General gathers
-            Value *index = codegen(op->index);
+            Value *index = codegen(op->index[0]);
             Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
@@ -1476,9 +1476,10 @@ void CodeGen::visit(const Call *op) {
             assert(op->type == Handle() && "address_of must return a Handle type");
             const Load *load = op->args[0].as<Load>();
             assert(load && "The sole argument to address_of must be a Load node");
-            assert(load->index.type().is_scalar() && "Can't take the address of a vector load");
+            assert(load->index.size() == 1 && "Can't take the address of a multi-index load");
+            assert(load->index[0].type().is_scalar() && "Can't take the address of a vector load");
 
-            value = codegen_buffer_pointer(load->name, load->type, load->index);
+            value = codegen_buffer_pointer(load->name, load->type, load->index[0]);
 
         } else if (op->name == Call::trace || op->name == Call::trace_expr) {
 
@@ -1947,17 +1948,18 @@ void CodeGen::visit(const For *op) {
 }
 
 void CodeGen::visit(const Store *op) {
+    assert(op->index.size() == 1 && "Unexpected multi-index store");
     Value *val = codegen(op->value);
     Halide::Type value_type = op->value.type();
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
     // Scalar
     if (value_type.is_scalar()) {
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index[0]);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bytes());
         add_tbaa_metadata(store, op->name);
     } else {
         int alignment = op->value.type().bytes();
-        const Ramp *ramp = op->index.as<Ramp>();
+        const Ramp *ramp = op->index[0].as<Ramp>();
         if (ramp && is_one(ramp->stride)) {
 
             // Boost the alignment if possible
@@ -1999,7 +2001,7 @@ void CodeGen::visit(const Store *op) {
             }
         } else {
             // Scatter
-            Value *index = codegen(op->index);
+            Value *index = codegen(op->index[0]);
             for (int i = 0; i < value_type.width; i++) {
                 Value *lane = ConstantInt::get(i32, i);
                 Value *idx = builder->CreateExtractElement(index, lane);
