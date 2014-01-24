@@ -537,6 +537,12 @@ ScheduleHandle &ScheduleHandle::parallel(Var var) {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::kernel_loop(Var var) {
+    set_dim_type(var, For::Kernel);
+    return *this;
+}
+
+
 ScheduleHandle &ScheduleHandle::vectorize(Var var) {
     set_dim_type(var, For::Vectorized);
     return *this;
@@ -753,6 +759,14 @@ ScheduleHandle &ScheduleHandle::cuda_tile(Var x, Var y, Var z,
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::glsl(Var x, Var y, Var c) {
+    kernel_loop(x);
+    rename(x, Var("blockidx"));
+    kernel_loop(y);
+    rename(y, Var("blockidy"));
+    return *this;
+}
+
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
     return *this;
@@ -940,6 +954,12 @@ Func &Func::cuda_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size) {
     ScheduleHandle(func.schedule()).cuda_tile(x, y, z, x_size, y_size, z_size);
     return *this;
 }
+
+Func &Func::glsl(Var x, Var y, Var c) {
+    ScheduleHandle(func.schedule()).glsl(x, y, c);
+    return *this;
+}
+
 
 Func &Func::reorder_storage(Var x, Var y) {
     vector<string> &dims = func.schedule().storage_dims;

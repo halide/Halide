@@ -1,6 +1,7 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_OpenGL_Dev.h"
 #include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
 #include <iostream>
@@ -311,6 +312,9 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();
+    } else if (t.features & Target::OpenGL) {
+        debug(1) << "Constructing OpenGL device codegen\n";
+        return new CodeGen_OpenGL_Dev();
     } else {
         assert(false && "Requested unknown GPU target");
         return NULL;
@@ -335,22 +339,27 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     module = get_initial_module_for_target(target, context);
 
     // grab runtime helper functions
-    dev_malloc_fn = module->getFunction("halide_dev_malloc");
+    if (target.features & Target::OpenGL) {
+        dev_malloc_fn = module->getFunction("halide_opengl_dev_malloc");
+        dev_free_fn = module->getFunction("halide_opengl_dev_free");
+        copy_to_host_fn = module->getFunction("halide_opengl_copy_to_host");
+        copy_to_dev_fn = module->getFunction("halide_opengl_copy_to_dev");
+        dev_run_fn = module->getFunction("halide_opengl_dev_run");
+        dev_sync_fn = module->getFunction("halide_opengl_dev_sync");
+    } else {
+        dev_malloc_fn = module->getFunction("halide_dev_malloc");
+        dev_free_fn = module->getFunction("halide_dev_free");
+        copy_to_host_fn = module->getFunction("halide_copy_to_host");
+        copy_to_dev_fn = module->getFunction("halide_copy_to_dev");
+        dev_run_fn = module->getFunction("halide_dev_run");
+        dev_sync_fn = module->getFunction("halide_dev_sync");
+    }
+
     assert(dev_malloc_fn && "Could not find halide_dev_malloc in module");
-
-    dev_free_fn = module->getFunction("halide_dev_free");
     assert(dev_free_fn && "Could not find halide_dev_free in module");
-
-    copy_to_host_fn = module->getFunction("halide_copy_to_host");
     assert(copy_to_host_fn && "Could not find halide_copy_to_host in module");
-
-    copy_to_dev_fn = module->getFunction("halide_copy_to_dev");
     assert(copy_to_dev_fn && "Could not find halide_copy_to_dev in module");
-
-    dev_run_fn = module->getFunction("halide_dev_run");
     assert(dev_run_fn && "Could not find halide_dev_run in module");
-
-    dev_sync_fn = module->getFunction("halide_dev_sync");
     assert(dev_sync_fn && "Could not find halide_dev_sync in module");
 
     // Fix the target triple
@@ -372,7 +381,12 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
     Value *user_context = get_user_context();
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
-    Value *init = module->getFunction("halide_init_kernels");
+    Value *init;
+    if (target.features & Target::OpenGL) {
+        init = module->getFunction("halide_opengl_init_kernels");
+    } else {
+        init = module->getFunction("halide_init_kernels");
+    }
     assert(init && "Could not find function halide_init_kernels in initial module");
     builder->CreateCall3(init, user_context, kernel_src_ptr, kernel_size);
 
@@ -436,6 +450,8 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
             }
             assert(error.empty() && "Could not find libopencl.so, OpenCL.framework, or opencl.dll");
         }
+    } else if (target.features & Target::OpenGL) {
+        assert(false && "OpenGL backend currently doesn't support JIT compilation");
     }
 }
 
@@ -473,6 +489,16 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
         fn = module->getFunction("halide_release");
         assert(fn && "Could not find halide_release in module");
         f = ee->getPointerToFunction(fn);
+        assert(f && "Could not find compiled form of halide_release in module");
+        void (*cleanup_routine)() =
+            reinterpret_bits<void (*)()>(f);
+        cleanup_routines->push_back(cleanup_routine);
+    } else if (target.features & Target::OpenGL) {
+        llvm::Function *fn;
+
+        fn = module->getFunction("halide_opengl_release");
+        assert(fn && "Could not find halide_opengl_release in module");
+        void* f = ee->getPointerToFunction(fn);
         assert(f && "Could not find compiled form of halide_release in module");
         void (*cleanup_routine)() =
             reinterpret_bits<void (*)()>(f);
