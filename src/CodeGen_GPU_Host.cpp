@@ -268,7 +268,10 @@ vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
         if (iter->second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        res.push_back(Argument(iter->first, true, iter->second.type));
+        Argument arg(iter->first, true, iter->second.type);
+        arg.read = iter->second.read;
+        arg.write = iter->second.write;
+        res.push_back(arg);
     }
     return res;
 }
