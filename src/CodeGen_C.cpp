@@ -683,21 +683,23 @@ void CodeGen_C::visit(const Load *op) {
     } else {
         rhs << print_name(op->name);
     }
+    assert(op->index.size() == 1 && "Multi-index loads only allowed inside kernel loops");
     rhs << "["
-        << print_expr(op->index)
+        << print_expr(op->index[0])
         << "]";
 
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_C::visit(const Store *op) {
+    assert(op->index.size() == 1 && "Unexpected multi-index store");
 
     Type t = op->value.type();
 
     bool type_cast_needed = !(allocations.contains(op->name) &&
                               allocations.get(op->name) == t);
 
-    string id_index = print_expr(op->index);
+    string id_index = print_expr(op->index[0]);
     string id_value = print_expr(op->value);
     do_indent();
 

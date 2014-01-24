@@ -145,9 +145,12 @@ public:
 
     void visit(const Load *op) {
         const Load *e = expr.as<Load>();
-        if (result && e && e->type == op->type && e->name == op->name) {
-            expr = e->index;
-            op->index.accept(this);
+        if (result && e && e->type == op->type && e->name == op->name &&
+            e->index.size() == op->index.size()) {
+            for (size_t i = 0; result && (i < e->index.size()); i++) {
+                expr = e->index[i];
+                op->index[i].accept(this);
+            }
         } else {
             result = false;
         }

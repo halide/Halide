@@ -171,8 +171,16 @@ public:
 
         if (compare_names(op->name, e->name)) return;
 
-        expr = e->index;
-        op->index.accept(this);
+        if (e->index.size() < op->index.size()) {
+            result = -1;
+        } else if (e->index.size() > op->index.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; (result == 0) && (i < e->index.size()); i++) {
+                expr = e->index[i];
+                op->index[i].accept(this);
+            }
+        }
     }
 
     void visit(const Ramp *op) {
@@ -322,8 +330,16 @@ public:
         expr = s->value;
         op->value.accept(this);
 
-        expr = s->index;
-        op->index.accept(this);
+        if (s->index.size() < op->index.size()) {
+            result = -1;
+        } else if (s->index.size() > op->index.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; (result == 0) && (i < s->index.size()); i++) {
+                expr = s->index[i];
+                op->index[i].accept(this);
+            }
+        }
     }
 
     void visit(const Provide *op) {

@@ -1379,15 +1379,30 @@ private:
     }
 
     void visit(const Load *op) {
-        // Load of a broadcast should be broadcast of the load
-        Expr index = mutate(op->index);
-        if (const Broadcast *b = index.as<Broadcast>()) {
-            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
-            expr = Broadcast::make(load, b->width);
-        } else if (index.same_as(op->index)) {
-            expr = op;
+        if (op->index.size() == 1) {
+            Expr index = mutate(op->index[0]);
+            // Load of a broadcast should be broadcast of the load
+            if (const Broadcast *b = index.as<Broadcast>()) {
+                Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
+                expr = Broadcast::make(load, b->width);
+            } else if (index.same_as(op->index[0])) {
+                expr = op;
+            } else {
+                expr = Load::make(op->type, op->name, index, op->image, op->param);
+            }
         } else {
-            expr = Load::make(op->type, op->name, index, op->image, op->param);
+            std::vector<Expr> index(op->index.size());
+            bool changed = false;
+            for (size_t i = 0; i < op->index.size(); i++) {
+                Expr newidx = mutate(op->index[i]);
+                if (!newidx.same_as(op->index[i])) changed = true;
+                index[i] = newidx;
+            }
+            if (!changed) {
+                expr = op;
+            } else {
+                expr = Load::make(op->type, op->name, index, op->image, op->param);
+            }
         }
     }
 

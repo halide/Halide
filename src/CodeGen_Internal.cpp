@@ -33,7 +33,9 @@ void Closure::visit(const For *op) {
 }
 
 void Closure::visit(const Load *op) {
-    op->index.accept(this);
+    for (size_t i = 0; i < op->index.size(); i++) {
+        op->index[i].accept(this);
+    }
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
@@ -45,7 +47,9 @@ void Closure::visit(const Load *op) {
 }
 
 void Closure::visit(const Store *op) {
-    op->index.accept(this);
+    for (size_t i = 0; i < op->index.size(); i++) {
+        op->index[i].accept(this);
+    }
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding " << op->name << " to closure\n";

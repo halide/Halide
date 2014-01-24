@@ -98,26 +98,50 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const Load *op) {
-            Expr index = mutate(op->index);
+            if (op->index.size() == 1) {
+                Expr index = mutate(op->index[0]);
 
-            // Internal allocations always get vectorized.
-            if (internal_allocations.contains(op->name)) {
-                int width = replacement.type().width;
-                if (index.type().is_scalar()) {
-                    index = Ramp::make(Mul::make(index, width), 1, width);
-                } else {
-                    index = Mul::make(index, Broadcast::make(width, width));
-                    index = Add::make(index, Ramp::make(0, 1, width));
+                // Internal allocations always get vectorized.
+                if (internal_allocations.contains(op->name)) {
+                    int width = replacement.type().width;
+                    if (index.type().is_scalar()) {
+                        index = Ramp::make(Mul::make(index, width), 1, width);
+                    } else {
+                        index = Mul::make(index, Broadcast::make(width, width));
+                        index = Add::make(index, Ramp::make(0, 1, width));
+                    }
                 }
-            }
 
-
-
-            if (index.same_as(op->index)) {
-                expr = op;
+                if (index.same_as(op->index[0])) {
+                    expr = op;
+                } else {
+                    int w = index.type().width;
+                    expr = Load::make(op->type.vector_of(w), op->name, index, op->image, op->param);
+                }
             } else {
-                int w = index.type().width;
-                expr = Load::make(op->type.vector_of(w), op->name, index, op->image, op->param);
+                vector<Expr> index(op->index.size());
+                bool changed = false;
+                int max_width = 0;
+                for (size_t i = 0; i < op->index.size(); i++) {
+                    Expr oldidx = op->index[i];
+                    Expr newidx = mutate(oldidx);
+
+                    if (!newidx.same_as(oldidx)) changed = true;
+                    index[i] = newidx;
+                    max_width = std::max(newidx.type().width, max_width);
+                }
+
+                if (!changed) {
+                    expr = op;
+                } else {
+                    // TODO(dheck): Do this here or later during codegen?
+                    // // Widen the indices to have the same width as the max width found
+                    // for (size_t i = 0; i < new_index.size(); i++) {
+                    //     new_index[i] = widen(new_index[i], max_width);
+                    // }
+                    expr = Load::make(op->type.vector_of(max_width), op->name, index,
+                                      op->image, op->param);
+                }
             }
         }
 
@@ -224,24 +248,42 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Store *op) {
             Expr value = mutate(op->value);
-            Expr index = mutate(op->index);
-
-            // Internal allocations always get vectorized.
-            if (internal_allocations.contains(op->name)) {
-                int width = replacement.type().width;
-                if (index.type().is_scalar()) {
-                    index = Ramp::make(Mul::make(index, width), 1, width);
-                } else {
-                    index = Mul::make(index, Broadcast::make(width, width));
-                    index = Add::make(index, Ramp::make(0, 1, width));
+            if (op->index.size() == 1) {
+                Expr index = mutate(op->index[0]);
+                // Internal allocations always get vectorized.
+                if (internal_allocations.contains(op->name)) {
+                    int width = replacement.type().width;
+                    if (index.type().is_scalar()) {
+                        index = Ramp::make(Mul::make(index, width), 1, width);
+                    } else {
+                        index = Mul::make(index, Broadcast::make(width, width));
+                        index = Add::make(index, Ramp::make(0, 1, width));
+                    }
                 }
-            }
 
-            if (value.same_as(op->value) && index.same_as(op->index)) {
-                stmt = op;
+                if (value.same_as(op->value) && index.same_as(op->index[0])) {
+                    stmt = op;
+                } else {
+                    int width = std::max(value.type().width, index.type().width);
+                    stmt = Store::make(op->name, widen(value, width), widen(index, width));
+                }
             } else {
-                int width = std::max(value.type().width, index.type().width);
-                stmt = Store::make(op->name, widen(value, width), widen(index, width));
+                vector<Expr> index(op->index.size());
+                bool changed = false;
+                int max_width = 0;
+                for (size_t i = 0; i < op->index.size(); i++) {
+                    Expr oldidx = op->index[i];
+                    Expr newidx = mutate(oldidx);
+                    if (!newidx.same_as(oldidx)) changed = true;
+                    index[i] = newidx;
+                    max_width = std::max(newidx.type().width, max_width);
+                }
+                if (value.same_as(op->value) && !changed) {
+                    stmt = op;
+                } else {
+                    int width = std::max(value.type().width, max_width);
+                    stmt = Store::make(op->name, widen(value, width), index);
+                }
             }
         }
 
@@ -377,8 +419,6 @@ class VectorizeLoops : public IRMutator {
     }
 
 };
-
-
 
 Stmt vectorize_loops(Stmt s) {
     return VectorizeLoops().mutate(s);
