@@ -89,24 +89,26 @@ extern "C" void halide_error(void */* user_context */, char *msg) {
 /// back to the browser.  Note that this interface is asynchronous.
 class HelloHalideInstance : public Instance {
 public:
-    Graphics2D::Graphics2D graphics;
+    Graphics2D graphics;
     ImageData im1, im2;
     CompletionCallback callback;
 
     /// The constructor creates the plugin-side instance.
     /// @param[in] instance the handle to the browser-side plugin instance.
-    explicit HelloHalideInstance(PP_Instance instance) : 
+    explicit HelloHalideInstance(PP_Instance instance) :
         Instance(instance),
         graphics(this, Size(WIDTH, HEIGHT), false),
         im1(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(WIDTH, HEIGHT), false),
         im2(this, PP_IMAGEDATAFORMAT_BGRA_PREMUL, Size(WIDTH, HEIGHT), false),
         callback(completion_callback, this) {
+
+        printf("HelloHalideInstance constructor\n");
         BindGraphics(graphics);
         RequestInputEvents(PP_INPUTEVENT_CLASS_MOUSE);
         inst = this;
     }
     virtual ~HelloHalideInstance() {}
-    
+
     virtual bool HandleInputEvent(const pp::InputEvent &event) {
         if (event.GetType() == PP_INPUTEVENT_TYPE_MOUSEMOVE) {
             pp::MouseInputEvent ev(event);
@@ -119,7 +121,7 @@ public:
                     int x = p.x() + dx;
                     if (x < MARGIN) x = MARGIN;
                     if (x > WIDTH - MARGIN - 1) x = WIDTH - MARGIN - 1;
-                    if (dx*dx + dy*dy < 4*4) {                        
+                    if (dx*dx + dy*dy < 4*4) {
                         uint32_t col;
                         switch (rand() & 3) {
                         case 0:
@@ -169,7 +171,7 @@ public:
         static int c_time_weight = 0;
         static bool use_halide = true;
 
-        if (var_message.is_string()) {            
+        if (var_message.is_string()) {
             std::string msg = var_message.AsString();
             int threads = atoi(msg.c_str()+2);
             if (threads < 1) threads = 1;
@@ -203,12 +205,12 @@ public:
         // Initialize the input with noise
         static bool first_run = true;
         if (first_run) {
-            first_run = false; 
+            first_run = false;
 
             // Start with 8 threads
             setenv("HL_NUMTHREADS", "8", 1);
 
-            //  Initialize the buffers                        
+            //  Initialize the buffers
             memset(im2.data(), 0, im2.stride() * im2.size().height());
 
             for (int y = 0; y < HEIGHT; y++) {
@@ -216,16 +218,16 @@ public:
                 for (int x = 0; x < WIDTH; x++) {
                     ptr[x*4] = ((rand() & 31) == 0) ? 255 : 0;
                     ptr[x*4+1] = ((rand() & 31) == 0) ? 255 : 0;
-                    ptr[x*4+2] = ((rand() & 31) == 0) ? 255 : 0;                
-                    ptr[x*4+3] = (x >= MARGIN && 
-                                  (x < (WIDTH - MARGIN)) && 
-                                   y >= MARGIN && 
+                    ptr[x*4+2] = ((rand() & 31) == 0) ? 255 : 0;
+                    ptr[x*4+3] = (x >= MARGIN &&
+                                  (x < (WIDTH - MARGIN)) &&
+                                   y >= MARGIN &&
                                    y < (HEIGHT - MARGIN)) ? 255 : 0;
                 }
-            }            
-                
+            }
+
         }
-        
+
         timeval t1, t2;
         gettimeofday(&t1, NULL);
         if (use_halide) {
@@ -233,7 +235,7 @@ public:
         } else {
             c_game_of_life(&input, &output);
         }
-        gettimeofday(&t2, NULL);        
+        gettimeofday(&t2, NULL);
 
         if (pipeline_barfed) return;
 
@@ -278,7 +280,7 @@ public:
 
         graphics.PaintImageData(im2, Point(0, 0));
 
-        graphics.Flush(callback);         
+        graphics.Flush(callback);
 
         std::swap(im1, im2);
     }
@@ -291,7 +293,7 @@ class HelloHalideModule : public Module {
 public:
     HelloHalideModule() : Module() {}
     virtual ~HelloHalideModule() {}
-    
+
     /// Create and return a HelloHalideInstance object.
     /// @param[in] instance The browser-side instance.
     /// @return the plugin-side instance.

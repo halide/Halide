@@ -425,7 +425,10 @@ namespace Internal {
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
     assert(t.bits == 32 || t.bits == 64);
-    bool bits_64 = (t.bits == 64);
+    // NaCl always uses the 32-bit runtime modules, because pointers
+    // and size_t are 32-bit in 64-bit NaCl, and that's the only way
+    // in which the 32- and 64-bit runtimes differ.
+    bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
 
     vector<llvm::Module *> modules;
 

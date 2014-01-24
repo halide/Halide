@@ -7,9 +7,9 @@ Var x, y;
 
 Expr game_of_life(Func last_gen) {
     // Count the number of live neighbors.
-    Expr count = (last_gen(x-1, y-1) + last_gen(x, y-1) + 
-                  last_gen(x+1, y-1) + last_gen(x-1, y) + 
-                  last_gen(x+1, y) + last_gen(x-1, y+1) + 
+    Expr count = (last_gen(x-1, y-1) + last_gen(x, y-1) +
+                  last_gen(x+1, y-1) + last_gen(x-1, y) +
+                  last_gen(x+1, y) + last_gen(x-1, y+1) +
                   last_gen(x, y+1) + last_gen(x+1, y+1));
 
     // Was this pixel alive in the previous generation?
@@ -17,7 +17,7 @@ Expr game_of_life(Func last_gen) {
 
     // We're alive in the next generation if we have two neighbors and
     // were alive before, or if we have three neighbors.
-    Expr alive_now = (count == 2 && alive_before) || count == 3;   
+    Expr alive_now = (count == 2 && alive_before) || count == 3;
 
     Expr result = select(alive_now, 255, 0);
 
@@ -44,9 +44,9 @@ int main(int argc, char **argv) {
 
     // Pack the new values into the color channels of the output, and
     // add an alpha of 255.
-    Expr result = ((255 << 24) + 
-                   (new_blue * (1 << 16)) + 
-                   (new_green * (1 << 8)) + 
+    Expr result = ((255 << 24) +
+                   (new_blue * (1 << 16)) +
+                   (new_green * (1 << 8)) +
                    new_red);
 
     Func output;
