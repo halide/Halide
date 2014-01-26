@@ -22,7 +22,7 @@ LIBDIR_ARM = $(NACL_SDK_ROOT)/lib/newlib_arm/Release
 
 CXX_64 := $(TC)/bin/x86_64-nacl-g++ -m64 -O3 -Wall -s -Wl,--gc-sections
 CXX_32 := $(TC)/bin/i686-nacl-g++ -m32 -O3 -Wall -s -Wl,--gc-sections
-CXX_ARM := $(ARM_TC)/bin/arm-nacl-g++ -O3 -Wall -s -Wl,--gc-sections
+CXX_ARM := $(ARM_TC)/bin/arm-nacl-g++ -O3 -Wall -s -Wl,--gc-sections -fstack-protector
 LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi
 LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi
 LDFLAGS_ARM := -L $(LIBDIR_ARM) -lppapi_cpp -lppapi

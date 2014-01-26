@@ -5,6 +5,11 @@ Var x("x"), y("y"), c("c");
 
 HalideExtern_3(int, my_rand, int, int, int);
 
+Expr rand_float(Expr x, Expr y, Expr c, Expr min, Expr max) {
+    Expr r = cast<float>(my_rand(x, y, c)) / RAND_MAX;
+    return lerp(min, max, r);
+}
+
 int main(int argc, char **argv) {
 
     // First define the function that gives the initial state.
@@ -12,7 +17,7 @@ int main(int argc, char **argv) {
         Func initial;
 
         // The initial state is a quantity of two chemicals present at each pixel
-        initial(x, y, c) = cast<float>(my_rand(x, y, c)) / RAND_MAX;
+        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f);
         initial.compile_to_file("reaction_diffusion_init");
     }
 
@@ -40,19 +45,8 @@ int main(int argc, char **argv) {
         Expr new_b = blur_y(x, y, 1);
 
         // Reaction
-        //Expr new_a = d_a + A * a - a*a*a - B - C * b;
-        //Expr new_b = d_b + a - b;
-        //new_a = 0.1f * new_a + 0.9f * a;
-        //new_b = 0.05f * new_b + 0.95f * b;
-
-        Expr dx = (x - 512)/1024.0f, dy = (y - 512)/1024.0f;
-        Expr r = dx * dx + dy * dy;
-        //Expr f = 0.01f + x * 0.09f / 1024.0f;
-        //Expr k = 0.06f + y * 0.2f / 1024.0f;
-
-        Expr k = 0.16f;
         Expr f = 0.08f;
-
+        Expr k = 0.16f;
         new_a += 0.4f * (a - a*a*a - b + k);
         new_b += 0.4f * f * (a - b);
 
@@ -62,8 +56,17 @@ int main(int argc, char **argv) {
         Func new_state;
         new_state(x, y, c) = select(c == 0, new_a, new_b);
 
+        // Finally add some noise at the edges to keep things moving
+        Expr r = rand_float(x, 0, c, -0.05f, 0.05f);
+        new_state(x, 0, c) += r;
+        new_state(x, 1023, c) += r;
+        r = rand_float(0, y, c, -0.05f, 0.05f);
+        new_state(0, y, c) += r;
+        new_state(1023, y, c) += r;
+
         new_state.vectorize(x, 4);
         new_state.bound(c, 0, 2).unroll(c);
+
 
         Var yi;
         new_state.split(y, y, yi, 16).parallel(y);
