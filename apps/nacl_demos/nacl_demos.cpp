@@ -49,6 +49,10 @@
 #include "reaction_diffusion_update.h"
 #include "reaction_diffusion_render.h"
 
+#include "reaction_diffusion_2_init.h"
+#include "reaction_diffusion_2_update.h"
+#include "reaction_diffusion_2_render.h"
+
 #define WIDTH 1024
 #define HEIGHT 1024
 #define MARGIN 8
@@ -249,6 +253,14 @@ public:
                 print_buffer(&state_1);
                 reaction_diffusion_init(&state_1);
                 break;
+            case 3:
+                reaction_diffusion_2_render(&state_1, &render_target);
+                state_2 = state_1;
+                alloc_buffer(&state_1);
+                alloc_buffer(&state_2);
+                print_buffer(&state_1);
+                reaction_diffusion_2_init(&state_1);
+                break;
             default:
                 PostMessage("Bad demo index");
                 return;
@@ -273,6 +285,10 @@ public:
         case 2:
             reaction_diffusion_update(&state_1, mouse_x, mouse_y, &state_2);
             reaction_diffusion_render(&state_2, &render_target);
+            break;
+        case 3:
+            reaction_diffusion_2_update(&state_1, mouse_x, mouse_y, &state_2);
+            reaction_diffusion_2_render(&state_2, &render_target);
             break;
         }
         gettimeofday(&t2, NULL);
