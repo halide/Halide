@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
         Expr c_real = cos(state() / 30.0f);
         Expr c_imag = sin(state() / 30.0f);
-        Expr r_adjust = (cos(state() / 43.0f) + 1.5f) * 0.6f;
+        Expr r_adjust = (cos(state() / 43.0f) + 1.5f) * 0.5f;
         c_real *= r_adjust;
         c_imag *= r_adjust;
 
@@ -66,19 +66,39 @@ int main(int argc, char **argv) {
         Expr r = cast<int32_t>(escape_f * r_scale);
         Expr g = cast<int32_t>(escape_f * g_scale);
         Expr b = cast<int32_t>(escape_f * b_scale);
-        color_map(x) = (255 << 24) + (r << 16) + (g << 8) + b;
+        color_map(x) = (255 << 24) | (r << 16) | (g << 8) | b;
 
         Func render;
         render(x, y) = color_map(escape);
 
         Var yi;
+
+        // The julia set has rotational symmetry, so we just render
+        // the top half and then flip it for the bottom half.
+        Func flipped;
+        flipped(x, y) = render(1023-x, 1023-y);
+
+        Func final;
+        Expr y_up = min(y, 511);
+        Expr y_down = max(y, 512);
+        final(x, y) = select(y < 512, 
+                             render(x, y_up), 
+                             render(1023 - x, 1024 - y_down));
+
+        Var yo;
+        final.bound(x, 0, 1024).bound(y, 0, 1024);
+        final.split(y, y, yi, 4).parallel(y);        
+        final.vectorize(x, 4);
+
+        render.compute_root();
+        render.bound(x, 0, 1024).bound(y, 0, 513);
+        render.split(y, y, yi, 4).parallel(y);
         render.vectorize(x, 4);
-        render.split(y, y, yi, 16).parallel(y);
 
-        julia.update().vectorize(x, 4);
         julia.compute_at(render, x);
+        julia.update().vectorize(x, 4);
 
-        render.compile_to_file("julia_render", state);
+        final.compile_to_file("julia_render", state);
     }
 
     return 0;
