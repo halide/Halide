@@ -27,7 +27,7 @@ LDFLAGS_64 := -L $(LIBDIR_64) -lppapi_cpp -lppapi
 LDFLAGS_32 := -L $(LIBDIR_32) -lppapi_cpp -lppapi
 LDFLAGS_ARM := -L $(LIBDIR_ARM) -lppapi_cpp -lppapi
 
-DEMOS = game_of_life julia reaction_diffusion
+DEMOS = game_of_life julia reaction_diffusion reaction_diffusion_2
 DEMO_OBJECTS = $(DEMOS:%=%_init) $(DEMOS:%=%_update) $(DEMOS:%=%_render)
 
 OBJECTS_32 = nacl_demos_32.o $(DEMO_OBJECTS:%=%_32.o)
