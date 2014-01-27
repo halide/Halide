@@ -65,8 +65,8 @@ static const char *test_kernel_src =
     "void main() {\n"
     "    gl_FragColor = parameter * texture2D(input, vec2(xpos, 0));\n"
     "}\n"
-    "/// KERNEL fill_read\n"
-    "/// OUT float output\n"
+    "/// KERNEL fill_red\n"
+    "/// OUT buffer output\n"
     "void main() {\n"
     "    gl_FragColor = vec4(1.0f, 0, 0, 0);\n"
     "}\n"
@@ -85,40 +85,127 @@ void test_compiled_filter() {
 
 }
 
+enum ImageLayout {
+    Interleaved, Planar
+};
+void create_empty_image(buffer_t *buf, int w, int h, int c, int elem_size,
+                        ImageLayout layout = Interleaved) {
+    memset(buf, 0, sizeof(buffer_t));
+    buf->extent[0] = w;
+    buf->extent[1] = h;
+    buf->extent[2] = c;
+    buf->elem_size = elem_size;
+
+    if (layout == Interleaved) {
+        buf->stride[0] = buf->extent[2];
+        buf->stride[1] = buf->extent[0] * buf->stride[0];
+        buf->stride[2] = 1;
+    } else {
+        buf->stride[0] = 1;
+        buf->stride[1] = buf->extent[0] * buf->stride[0];
+        buf->stride[2] = buf->extent[1] * buf->stride[1];
+    }
+    size_t size = w * h * c * elem_size;
+    buf->host = (uint8_t*)malloc(size);
+    memset(buf->host, 0, size);
+    buf->host_dirty = true;
+}
+
+void delete_image(buffer_t *buf) {
+    halide_opengl_dev_free(NULL, buf);
+    free(buf->host);
+}
+
+void test_copy() {
+    bool success = true;
+    const int W = 12, H = 32, C = 3;
+    const uint8_t VAL = 0x1c;
+
+    buffer_t buf;
+    create_empty_image(&buf, W, H, C, sizeof(uint8_t), Planar);
+
+    size_t size = W * H * C * sizeof(uint8_t);
+
+    memset(buf.host, VAL, size);
+
+    halide_opengl_dev_malloc(NULL, &buf);
+    halide_opengl_copy_to_dev(NULL, &buf);
+
+    memset(buf.host, 0, size);
+
+    buf.dev_dirty = true;
+
+    halide_opengl_copy_to_host(NULL, &buf);
+
+    for (int i = 0; i < size; i++) {
+        if (buf.host[i] != VAL) {
+            fprintf(stderr, "buf[%d] = %x\n", i, buf.host[i]);
+            success = false;
+        }
+    }
+    delete_image(&buf);
+    fprintf(stderr, "test_copy %s\n", success ? "SUCCEEDED" : "FAILED");
+}
+
+void test_set_red() {
+    fprintf(stderr, "Testing set-to-red kernel...");
+    bool success = true;
+    const int W = 12, H = 32, C = 3;
+
+    buffer_t buf;
+    create_empty_image(&buf, W, H, C, sizeof(uint8_t), Interleaved);
+    halide_opengl_dev_malloc(NULL, &buf);
+
+
+    // Run GPU kernel
+    void* args[] = { &buf.dev, 0 };
+    size_t arg_sizes[] = { 64, 0 };
+    halide_opengl_dev_run(
+        NULL,
+        "fill_red",
+        1, 1, 1,                        // blocks
+        W, H, 0,                        // threads
+        0,                              // shared_mem_bytes
+        arg_sizes, args);
+
+    // Copy back to host memory and check result
+    buf.dev_dirty = true;
+    halide_opengl_copy_to_host(NULL, &buf);
+
+    uint8_t *ptr = buf.host;
+    for (int y=0; y<H; y++) {
+        for (int x=0; x<W; x++) {
+            if (!(ptr[0] == 0xff &&
+                  ptr[1] == 0 &&
+                  ptr[2] == 0)) {
+                fprintf(stderr, "buf[%d,%d] = (%x,%x,%x)\n",
+                        x, y, ptr[0], ptr[1], ptr[2]);
+                success = false;
+            }
+            ptr += 3;
+        }
+    }
+    delete_image(&buf);
+    fprintf(stderr, "test_set_red %s\n", success ? "SUCCEEDED" : "FAILED");
+}
+
+
 void test_mockup() {
+    // Create GLSL kernels
+    halide_opengl_init_kernels(NULL, test_kernel_src, sizeof(test_kernel_src)-1);
+
+    test_copy();
+    test_set_red();
 
     // Create input buffer
-    buffer_t inbuf;
-    memset(&inbuf, 0, sizeof(inbuf));
-    inbuf.extent[0] = 12;
-    inbuf.extent[1] = 32;
-    inbuf.extent[2] = 4;
-    inbuf.elem_size = sizeof(uint8_t);
-    inbuf.stride[0] = inbuf.extent[2];
-    inbuf.stride[1] = inbuf.extent[0] * inbuf.stride[0];
-    inbuf.stride[2] = 1;
-    inbuf.host = (uint8_t*)
-        malloc(inbuf.extent[0] * inbuf.extent[1] * inbuf.extent[2] *
-               inbuf.elem_size);
-    inbuf.host_dirty = true;
+    buffer_t inbuf, outbuf;
+    create_empty_image(&inbuf, 12, 32, 4, sizeof(uint8_t));
+    create_empty_image(&outbuf, 12, 34, 4, sizeof(uint8_t));
 
     halide_opengl_dev_malloc(NULL, &inbuf);
     halide_opengl_copy_to_dev(NULL, &inbuf);
 
-    // Create output buffer
-    buffer_t outbuf;
-    memset(&outbuf, 0, sizeof(outbuf));
-    outbuf.extent[0] = inbuf.extent[0];
-    outbuf.extent[1] = inbuf.extent[1];
-    outbuf.extent[2] = inbuf.extent[2];
-    outbuf.elem_size = sizeof(uint8_t);
-    outbuf.host = (uint8_t*)
-        malloc(outbuf.extent[0] * outbuf.extent[1] * outbuf.extent[2] *
-               outbuf.elem_size);
     halide_opengl_dev_malloc(NULL, &outbuf);
-
-    // Create GLSL kernels
-    halide_opengl_init_kernels(NULL, test_kernel_src, sizeof(test_kernel_src)-1);
 
     // Run one of the kernels
     int arg_xpos = 11;
