@@ -30,8 +30,8 @@ void RgbToYcc() {
     // Schedule for GLSL
     out.bound(c, 0, 4);
     out.reorder(c, x, y);
-    out.unroll(c);
-//    out.vectorize(c);
+//    out.unroll(c);
+    out.vectorize(c);
     out.glsl(x, y, c);
     out.compute_root();
 
