@@ -272,6 +272,7 @@ void CodeGen::compile(Stmt stmt, string name,
         Constant *zero = ConstantInt::get(i32, 0);
         Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
         unpack_buffer(buffer.name(), global_ptr);
+
     }
 
     debug(1) << "Generating llvm bitcode...\n";
@@ -1101,11 +1102,24 @@ void CodeGen::visit(const Load *op) {
             Expr new_base;
             const Add *add = ramp->base.as<Add>();
             const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+            bool shifted = false;
             if (offset) {
                 if (offset->value == 1) {
                     new_base = add->a;
-                } else {
+                    shifted = true;
+                } else if (offset->value & 1) {
                     new_base = add->a + (offset->value - 1);
+                    shifted = true;
+                } else {
+                    new_base = ramp->base;
+                }
+
+                // Redo alignment analysis
+                if (internal && shifted) {
+                    alignment = op->type.bytes();
+                    ModulusRemainder mod_rem = modulus_remainder(new_base);
+                    alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+                    if (alignment < 0) alignment = -alignment;
                 }
             } else {
                 new_base = ramp->base;
@@ -1121,7 +1135,7 @@ void CodeGen::visit(const Load *op) {
             add_tbaa_metadata(b, op->name);
             vector<Constant *> indices(ramp->width);
             for (int i = 0; i < ramp->width; i++) {
-                indices[i] = ConstantInt::get(i32, i*2 + (offset ? 1 : 0));
+                indices[i] = ConstantInt::get(i32, i*2 + (shifted ? 1 : 0));
             }
             value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
@@ -1133,6 +1147,7 @@ void CodeGen::visit(const Load *op) {
                 alignment = op->type.bytes();
                 ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
                 alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+                if (alignment < 0) alignment = -alignment;
             }
 
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
