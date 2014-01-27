@@ -1,8 +1,10 @@
 GXX ?= g++
 CXXFLAGS += -g -O0 -I../../include
+OPENGL_LIBS = -lX11 -lGL
+
 
 opengl_test: opengl_test.o ycc.o blur.o
-	g++ $(CXXFLAGS) $^ -o $@ -lglut -lGLEW
+	g++ $(CXXFLAGS) $^ -o $@  $(OPENGL_LIBS)
 
 .PHONY: clean
 clean:
