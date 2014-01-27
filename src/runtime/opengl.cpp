@@ -16,7 +16,7 @@ extern "C" WEAK GLFUNCPTR halide_opengl_get_proc_address(const char* name) {
 }
 
 // List of all OpenGL functions used by the runtime. The list is used to
-// declare and initialize the corresponding tables below.
+// declare and initialize the dispatch table in OpenGLState below.
 #define USED_GL_FUNCTIONS                                               \
     GLFUNC(PFNGLDELETETEXTURESPROC, DeleteTextures);                    \
     GLFUNC(PFNGLGENTEXTURESPROC, GenTextures);                          \
@@ -63,9 +63,8 @@ extern "C" WEAK GLFUNCPTR halide_opengl_get_proc_address(const char* name) {
     GLFUNC(PFNGLVERTEXATTRIBPOINTERPROC, VertexAttribPointer);          \
     GLFUNC(PFNGLDRAWELEMENTSPROC, DrawElements);                        \
     GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);  \
-    GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray)
-
-
+    GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
+    GLFUNC(PFNGLGETTEXLEVELPARAMETERIVPROC, GetTexLevelParameteriv)
 
 // ---------- Types ----------
 
@@ -221,15 +220,6 @@ WEAK GLuint halide_opengl_make_shader(void* uctx, GLenum type,
 }
 
 static void check_buffer_properties(void* uctx, buffer_t* buf, int* w, int* h) {
-    halide_assert(uctx, buf->extent[2] <= 4 &&
-                  "Only up to 4 color channels are supported");
-    halide_assert(uctx, buf->extent[3] <= 1 &&
-                  "3D textures are not supported");
-    // Minimum size of texture: 1x1
-    *w = buf->extent[0];
-    *h = buf->extent[1];
-    if (*w < 1) *w = 1;
-    if (*h < 1) *h = 1;
 }
 
 // Check whether string starts with a given prefix.
@@ -430,11 +420,15 @@ WEAK void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
     GLuint tex = get_texture_id(buf);
     bool halide_allocated = false;
     GLint format = 0;
+    GLint width, height;
     if (tex != 0) {
-        // TODO: check texture format
+        ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
+        ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
+        CHECK_GLERROR();
+        halide_assert(uctx, width >= buf->extent[0] && "Texture width too small");
+        halide_assert(uctx, height >= buf->extent[1] && "Texture height too small");
     } else {
-        int w, h;
-        check_buffer_properties(uctx, buf, &w, &h);
+        halide_assert(uctx, buf->extent[3] <= 1 && "3D textures are not supported");
 
         // Generate texture ID
         ST.GenTextures(1, &tex);
@@ -465,13 +459,17 @@ WEAK void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
         } else if (buf->elem_size == 2) {
             type = GL_UNSIGNED_SHORT;
         } else {
-            halide_printf(uctx, "%d\n", buf->elem_size);
             halide_assert(uctx, false && "Only uint8 and uint16 textures are supported");
         }
 
+        width = buf->extent[0];
+        height = buf->extent[1];
+        if (width < 1) width = 1;
+        if (height < 1) height = 1;
+
         ST.TexImage2D(GL_TEXTURE_2D, 0,
                       format,
-                      w, h, 0,
+                      width, height, 0,
                       format, type, NULL);
         CHECK_GLERROR();
 

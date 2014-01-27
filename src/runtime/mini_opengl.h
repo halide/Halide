@@ -22,6 +22,8 @@ typedef void GLvoid;
 #define GL_CULL_FACE 0x0B44
 #define GL_DEPTH_TEST 0x0B71
 #define GL_TEXTURE_2D 0x0DE1
+#define GL_TEXTURE_WIDTH 0x1000
+#define GL_TEXTURE_HEIGHT 0x1001
 #define GL_BYTE 0x1400
 #define GL_UNSIGNED_BYTE 0x1401
 #define GL_SHORT 0x1402
@@ -58,6 +60,8 @@ typedef void (*PFNGLMATRIXMODEPROC)(GLenum mode);
 typedef void (*PFNGLORTHOPROC)(GLdouble left, GLdouble right,
                                GLdouble bottom, GLdouble top,
                                GLdouble near_val, GLdouble far_val);
+typedef void (*PFNGLGETTEXLEVELPARAMETERIVPROC)(GLenum target, GLint level,
+                                                GLenum pname, GLint *params);
 typedef void (*PFNGLTEXIMAGE2DPROC)(GLenum target, GLint level,
                                     GLint internalFormat,
                                     GLsizei width, GLsizei height,
