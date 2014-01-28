@@ -831,15 +831,15 @@ private:
         value_bounds.min = simplify(value_bounds.min);
         value_bounds.max = simplify(value_bounds.max);
 
-        string max_name = unique_name('t');
-        string min_name = unique_name('t');
-
         if (is_small_enough_to_substitute(value_bounds.min) &&
             is_small_enough_to_substitute(value_bounds.max)) {
             scope.push(op->name, value_bounds);
             op->body.accept(this);
             scope.pop(op->name);
         } else {
+            string max_name = unique_name('t');
+            string min_name = unique_name('t');
+
             scope.push(op->name, Interval(Variable::make(op->value.type(), min_name),
                                           Variable::make(op->value.type(), max_name)));
             op->body.accept(this);
