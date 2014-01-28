@@ -575,24 +575,24 @@ ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor,
     return *this;
 }
 
-template <typename It>
-static ScheduleHandle &reorder(ScheduleHandle& ths, It begin, It end)
-{
-    size_t size = std::distance(begin, end);
+namespace {
+// An helper function for reordering vars in a schedule.
+ScheduleHandle &reorder_vars(ScheduleHandle& sched, const VarOrRVar *vars, size_t size) {
     if (size <= 1) {
-        return ths;
+        return sched;
     }
     if (size == 2) {
-        return ths.reorder(*begin, *(begin + 1));
+        return sched.reorder(vars[0], vars[1]);
     }
-    for(It i = begin + 1; i != end; ++i) {
-        ths.reorder(*begin, *i);
+    for (size_t i = 1; i < size; i++) {
+        sched.reorder(vars[0], vars[i]);
     }
-    return reorder(ths, begin + 1, end);
+    return reorder_vars(sched, vars + 1, size - 1);
+}
 }
 
 ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
-    return Halide::reorder(*this, vars.begin(), vars.end());
+    return reorder_vars(*this, &vars[0], vars.size());
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
@@ -615,43 +615,43 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
-    VarOrRVar vars[]  = {x, y, z};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z};
+    return reorder_vars(*this, vars, 3);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
-    VarOrRVar vars[]  = {x, y, z, w};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z, w};
+    return reorder_vars(*this, vars, 4);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
-    VarOrRVar vars[]  = {x, y, z, w, t};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z, w, t};
+    return reorder_vars(*this, vars, 5);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2};
+    return reorder_vars(*this, vars, 6);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
+    return reorder_vars(*this, vars, 7);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
+    return reorder_vars(*this, vars, 8);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4, t5};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
+    return reorder_vars(*this, vars, 9);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
+    return reorder_vars(*this, vars, 10);
 }
 
 ScheduleHandle &ScheduleHandle::cuda_threads(Var tx) {
