@@ -32,9 +32,7 @@ class AllocationInference : public IRMutator {
         assert (iter != env.end());
         Function f = iter->second;
 
-        debug(1) << "Computing box touched for " << op->name << "\n";
         Box b = box_touched(op->body, op->name);
-        debug(1) << "Done computing box touched for " << op->name << "\n";
 
         if (touched_by_extern.count(f.name())) {
             // The region touched is at least the region required at this
@@ -50,32 +48,22 @@ class AllocationInference : public IRMutator {
             merge_boxes(b, required);
         }
 
-        debug(1) << "Recursively mutating body for" << op->name << "\n";
         Stmt new_body = mutate(op->body);
         stmt = Realize::make(op->name, op->types, op->bounds, new_body);
-        debug(1) << "Done recursively mutating body\n";
 
-        debug(1) << "Adding let statements for " << op->name << "\n";
         assert(b.size() == op->bounds.size());
         for (size_t i = 0; i < b.size(); i++) {
             string prefix = op->name + "." + f.args()[i];
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
             string extent_name = prefix + ".extent_realized";
-            debug(1) << "min\n";
-            if (op->name == "f9") {
-                debug(1) << b[i].min << "\n";
-            }
             Expr min = simplify(b[i].min);
-            debug(1) << "max\n";
             Expr max = simplify(b[i].max);
-            debug(1) << "extent\n";
             Expr extent = simplify((max - min) + 1);
             stmt = LetStmt::make(extent_name, extent, stmt);
             stmt = LetStmt::make(min_name, min, stmt);
             stmt = LetStmt::make(max_name, max, stmt);
         }
-        debug(1) << "Done Adding let statements\n";
     }
 
 public:
