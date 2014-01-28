@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
         c_imag *= r_adjust;
 
         Func julia;
-        julia(x, y, c) = Tuple((x - 512)/256.0f, (y - 512)/256.0f);
+        julia(x, y, c) = Tuple((x - 511.5f)/256.0f, (y - 511.5f)/256.0f);
 
         const int iters = 20;
 
@@ -75,23 +75,20 @@ int main(int argc, char **argv) {
 
         // The julia set has rotational symmetry, so we just render
         // the top half and then flip it for the bottom half.
-        Func flipped;
-        flipped(x, y) = render(1023-x, 1023-y);
-
         Func final;
         Expr y_up = min(y, 511);
         Expr y_down = max(y, 512);
-        final(x, y) = select(y < 512, 
-                             render(x, y_up), 
-                             render(1023 - x, 1024 - y_down));
+        final(x, y) = select(y < 512,
+                             render(x, y_up),
+                             render(1023 - x, 1023 - y_down));
 
         Var yo;
         final.bound(x, 0, 1024).bound(y, 0, 1024);
-        final.split(y, y, yi, 4).parallel(y);        
+        final.split(y, y, yi, 4).parallel(y);
         final.vectorize(x, 4);
 
         render.compute_root();
-        render.bound(x, 0, 1024).bound(y, 0, 513);
+        render.bound(x, 0, 1024).bound(y, 0, 512);
         render.split(y, y, yi, 4).parallel(y);
         render.vectorize(x, 4);
 
