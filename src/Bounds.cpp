@@ -815,6 +815,9 @@ private:
     // reasonably-sized expressions. We determine the size by
     // counting the number of var nodes.
     bool is_small_enough_to_substitute(Expr e) {
+        if (!e.defined()) {
+            return true;
+        }
         CountVars c;
         e.accept(&c);
         return c.count < 10;
