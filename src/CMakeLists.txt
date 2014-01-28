@@ -206,7 +206,12 @@ set(HEADER_FILES
   Target.h
   SkipStages.h
   RemoveUndef.h
-  SpecializeClampedRamps.h)
+  SpecializeClampedRamps.h
+  FastIntegerDivide.h
+  AllocationBoundsInference.h 
+  Inline.h
+  Qualify.h 
+  UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -275,6 +280,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   SkipStages.cpp
   RemoveUndef.cpp
   SpecializeClampedRamps.cpp
+  FastIntegerDivide.cpp
+  AllocationBoundsInference.cpp 
+  Inline.cpp 
+  Qualify.cpp 
+  UnifyDuplicateLets.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
 

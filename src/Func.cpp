@@ -575,17 +575,24 @@ ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor,
     return *this;
 }
 
+template <typename It>
+static ScheduleHandle &reorder(ScheduleHandle& ths, It begin, It end)
+{
+    size_t size = std::distance(begin, end);
+    if (size <= 1) {
+        return ths;
+    }
+    if (size == 2) {
+        return ths.reorder(*begin, *(begin + 1));
+    }
+    for(It i = begin + 1; i != end; ++i) {
+        ths.reorder(*begin, *i);
+    }
+    return reorder(ths, begin + 1, end);
+}
+
 ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
-    if (vars.size() <= 1) {
-        return *this;
-    }
-    if (vars.size() == 2) {
-        return reorder(vars[0], vars[1]);
-    }
-    for(size_t i = 1; i < vars.size(); ++i) {
-        reorder(vars[0], vars[i]);
-    }
-    return reorder(std::vector<VarOrRVar>(vars.begin() + 1, vars.end()));
+    return Halide::reorder(*this, vars.begin(), vars.end());
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
@@ -609,42 +616,42 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
     VarOrRVar vars[]  = {x, y, z};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     VarOrRVar vars[]  = {x, y, z, w};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
     VarOrRVar vars[]  = {x, y, z, w, t};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
     VarOrRVar vars[]  = {x, y, z, w, t1, t2};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
     VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4, t5};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return Halide::reorder(*this, vars, vars + (sizeof(vars) / sizeof(VarOrRVar)));
 }
 
 ScheduleHandle &ScheduleHandle::cuda_threads(Var tx) {
