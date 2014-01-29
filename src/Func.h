@@ -203,6 +203,7 @@ public:
     EXPORT ScheduleHandle &parallel(Var var);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
+    EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
     EXPORT ScheduleHandle &unroll(Var var, int factor);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
@@ -725,6 +726,14 @@ public:
 
     /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
+
+    /** Split a dimension by the given task_size, and the parallelize the
+     * outer dimension. This creates parallel tasks that have size
+     * task_size. After this call, var refers to the outer dimension of
+     * the split. The inner dimension has a new anonymous name. If you
+     * wish to mutate it, or schedule with respect to it, do the split
+     * manually. */
+    EXPORT Func &parallel(Var var, Expr task_size);
 
     /** Mark a dimension to be computed all-at-once as a single
      * vector. The dimension should have constant extent -

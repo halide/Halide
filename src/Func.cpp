@@ -547,6 +547,13 @@ ScheduleHandle &ScheduleHandle::unroll(Var var) {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::parallel(Var var, Expr factor) {
+    Var tmp;
+    split(var, var, tmp, factor);
+    parallel(var);
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::vectorize(Var var, int factor) {
     Var tmp;
     split(var, var, tmp, factor);
@@ -787,6 +794,11 @@ Func &Func::vectorize(Var var) {
 
 Func &Func::unroll(Var var) {
     ScheduleHandle(func.schedule()).unroll(var);
+    return *this;
+}
+
+Func &Func::parallel(Var var, Expr factor) {
+    ScheduleHandle(func.schedule()).parallel(var, factor);
     return *this;
 }
 
