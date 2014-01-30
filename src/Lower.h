@@ -15,8 +15,8 @@ namespace Internal {
 
 /** Given a halide function with a schedule, create a statement that
  * evaluates it. Automatically pulls in all the functions f depends
- * on */
-Stmt lower(Function f);
+ * on. Some stages of lowering may be target-specific. */
+Stmt lower(Function f, Target t);
 
 void lower_test();
 

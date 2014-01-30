@@ -1555,7 +1555,7 @@ void validate_arguments(const string &output,
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, target);
     }
 
     vector<Buffer> images_to_embed;
@@ -1579,7 +1579,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, target);
     }
 
     vector<Buffer> images_to_embed;
@@ -1610,7 +1610,7 @@ void Func::compile_to_header(const string &filename, vector<Argument> args, cons
 
 void Func::compile_to_c(const string &filename, vector<Argument> args, const string &fn_name) {
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, get_host_target());
     }
 
     vector<Buffer> images_to_embed;
@@ -1627,7 +1627,7 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
 
 void Func::compile_to_lowered_stmt(const string &filename) {
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, get_host_target());
     }
 
     ofstream stmt_output(filename.c_str());
@@ -1673,7 +1673,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
                                const Target &target) {
     assert(defined() && "Can't compile undefined function");
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
 
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
@@ -1883,7 +1883,7 @@ void Func::infer_input_bounds(Realization dst) {
 void *Func::compile_jit(const Target &target) {
     assert(defined() && "Can't realize undefined function");
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
 
     // Infer arguments
     InferArguments infer_args(name());

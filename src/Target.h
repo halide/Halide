@@ -16,7 +16,9 @@ struct Target {
     enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl} os;
     enum Arch {ArchUnknown = 0, X86, ARM} arch;
     int bits; // Must be 0 for unknown, or 32 or 64
-    enum Features {JIT = 1, SSE41 = 2, AVX = 4, AVX2 = 8, CUDA = 16, OpenCL = 32, GPUDebug = 64, SPIR = 128, SPIR64 = 256};
+    enum Features {JIT = 1, SSE41 = 2, AVX = 4, AVX2 = 8, CUDA = 16,
+                   OpenCL = 32, GPUDebug = 64, SPIR = 128, SPIR64 = 256,
+                   NoAsserts = 512, NoBoundsQuery = 1024};
     uint64_t features;
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}
