@@ -329,6 +329,7 @@ public:
 
         expr = s->value;
         op->value.accept(this);
+        if (result) return;
 
         if (s->index.size() < op->index.size()) {
             result = -1;

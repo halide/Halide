@@ -90,21 +90,20 @@ void IRMutator::visit(const Select *op)  {
 }
 
 void IRMutator::visit(const Load *op) {
-    vector<Expr > new_index(op->index.size());
+    vector<Expr > index(op->index.size());
     bool changed = false;
 
-    // Mutate the args
     for (size_t i = 0; i < op->index.size(); i++) {
         Expr oldidx = op->index[i];
         Expr newidx = mutate(oldidx);
         if (!newidx.same_as(oldidx)) changed = true;
-        new_index[i] = newidx;
+        index[i] = newidx;
     }
 
     if (!changed) {
         expr = op;
     } else {
-        expr = Load::make(op->type, op->name, new_index, op->image, op->param);
+        expr = Load::make(op->type, op->name, index, op->image, op->param);
     }
 }
 
@@ -203,21 +202,21 @@ void IRMutator::visit(const For *op) {
 }
 
 void IRMutator::visit(const Store *op) {
-    vector<Expr > new_index(op->index.size());
+    vector<Expr > index(op->index.size());
     bool changed = false;
 
     for (size_t i = 0; i < op->index.size(); i++) {
         Expr oldidx = op->index[i];
         Expr newidx = mutate(oldidx);
         if (!newidx.same_as(oldidx)) changed = true;
-        new_index[i] = newidx;
+        index[i] = newidx;
     }
 
     Expr value = mutate(op->value);
     if (value.same_as(op->value) && !changed) {
         stmt = op;
     } else {
-        stmt = Store::make(op->name, value, new_index);
+        stmt = Store::make(op->name, value, index);
     }
 }
 
