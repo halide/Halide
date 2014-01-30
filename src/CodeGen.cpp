@@ -272,6 +272,7 @@ void CodeGen::compile(Stmt stmt, string name,
         Constant *zero = ConstantInt::get(i32, 0);
         Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
         unpack_buffer(buffer.name(), global_ptr);
+
     }
 
     debug(1) << "Generating llvm bitcode...\n";
@@ -1065,10 +1066,7 @@ void CodeGen::visit(const Load *op) {
         add_tbaa_metadata(load, op->name);
         value = load;
     } else {
-        int alignment = op->type.bytes();
-        if (possibly_misaligned) {
-            alignment = op->type.element_of().bytes();
-        }
+        int alignment = op->type.bytes(); // The size of a single element
         const Ramp *ramp = op->index[0].as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
@@ -1094,36 +1092,49 @@ void CodeGen::visit(const Load *op) {
             value = load;
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
+            Expr base_a = ramp->base, base_b = ramp->base + ramp->width;
 
-            // If the base ends in an odd constant, then subtract one
-            // and do a different shuffle. This helps expressions like
-            // (f(2*x) + f(2*x+1) share loads.
-            Expr new_base;
-            const Add *add = ramp->base.as<Add>();
-            const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
-            if (offset) {
-                if (offset->value == 1) {
-                    new_base = add->a;
-                } else {
-                    new_base = add->a + (offset->value - 1);
-                }
+            // False indicates we should take the even-numbered lanes
+            // from the load, true indicates we should take the
+            // odd-numbered-lanes.
+            bool shifted_a = false, shifted_b = false;
+
+            // Don't read beyond the end of an external buffer.
+            if (!internal) {
+                base_b -= 1;
+                shifted_b = true;
             } else {
-                new_base = ramp->base;
+                // If the base ends in an odd constant, then subtract one
+                // and do a different shuffle. This helps expressions like
+                // (f(2*x) + f(2*x+1) share loads
+                const Add *add = ramp->base.as<Add>();
+                const IntImm *offset = add ? add->b.as<IntImm>() : NULL;
+                if (offset && offset->value & 1) {
+                    base_a -= 1;
+                    shifted_a = true;
+                    base_b -= 1;
+                    shifted_b = true;
+                }
             }
 
-            Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), new_base);
-            ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
-            LoadInst *a = builder->CreateAlignedLoad(ptr, alignment);
-            add_tbaa_metadata(a, op->name);
-            ptr = builder->CreateConstInBoundsGEP1_32(ptr, 1);
-            int bytes = (op->type.bits * op->type.width)/8;
-            LoadInst *b = builder->CreateAlignedLoad(ptr, gcd(alignment, bytes));
-            add_tbaa_metadata(b, op->name);
+            // Do each load.
+            Expr ramp_a = Ramp::make(base_a, 1, ramp->width);
+            Expr ramp_b = Ramp::make(base_b, 1, ramp->width);
+            Expr load_a = Load::make(op->type, op->name, ramp_a, op->image, op->param);
+            Expr load_b = Load::make(op->type, op->name, ramp_b, op->image, op->param);
+            Value *vec_a = codegen(load_a);
+            Value *vec_b = codegen(load_b);
+
+            // Shuffle together the results.
             vector<Constant *> indices(ramp->width);
-            for (int i = 0; i < ramp->width; i++) {
-                indices[i] = ConstantInt::get(i32, i*2 + (offset ? 1 : 0));
+            for (int i = 0; i < (ramp->width + 1)/2; i++) {
+                indices[i] = ConstantInt::get(i32, i*2 + (shifted_a ? 1 : 0));
             }
-            value = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            for (int i = (ramp->width + 1)/2; i < ramp->width; i++) {
+                indices[i] = ConstantInt::get(i32, i*2 + (shifted_b ? 1 : 0));
+            }
+
+            value = builder->CreateShuffleVector(vec_a, vec_b, ConstantVector::get(indices));
         } else if (ramp && stride && stride->value == -1) {
             // Load the vector and then flip it in-place
             Expr base = ramp->base - ramp->width + 1;
@@ -1133,6 +1144,7 @@ void CodeGen::visit(const Load *op) {
                 alignment = op->type.bytes();
                 ModulusRemainder mod_rem = modulus_remainder(ramp->base - ramp->width + 1);
                 alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 32);
+                if (alignment < 0) alignment = -alignment;
             }
 
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);

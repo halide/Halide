@@ -95,9 +95,15 @@ private:
         varies = false;
         condition.accept(this);
 
-        if (varies) {
-            predicate = (old_predicate || predicate ||
-                         true_predicate || false_predicate);
+        if (is_one(predicate) || is_one(old_predicate)) {
+            predicate = const_true();
+        } else if (varies) {
+            if (is_one(true_predicate) || is_one(false_predicate)) {
+                predicate = const_true();
+            } else {
+                predicate = (old_predicate || predicate ||
+                             true_predicate || false_predicate);
+            }
         } else {
             predicate = (old_predicate || predicate ||
                          (condition && true_predicate) ||

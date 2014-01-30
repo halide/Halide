@@ -28,9 +28,6 @@ class AllocationInference : public IRMutator {
     set<string> touched_by_extern;
 
     void visit(const Realize *op) {
-        IRMutator::visit(op);
-        op = stmt.as<Realize>();
-
         map<string, Function>::const_iterator iter = env.find(op->name);
         assert (iter != env.end());
         Function f = iter->second;
@@ -50,6 +47,9 @@ class AllocationInference : public IRMutator {
 
             merge_boxes(b, required);
         }
+
+        Stmt new_body = mutate(op->body);
+        stmt = Realize::make(op->name, op->types, op->bounds, new_body);
 
         assert(b.size() == op->bounds.size());
         for (size_t i = 0; i < b.size(); i++) {

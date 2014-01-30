@@ -23,7 +23,7 @@ WEAK void *halide_malloc(void *user_context, size_t x) {
     if (halide_custom_malloc) {
         return halide_custom_malloc(user_context, x);
     } else {
-        void *orig = malloc(x+32);
+        void *orig = malloc(x+40);
         if (orig == NULL) {
             // Will result in a failed assertion and a call to halide_error
             return NULL;
