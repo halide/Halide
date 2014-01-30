@@ -476,7 +476,7 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
         buf->dev = tex;
         halide_allocated = true;
 #ifdef DEBUG
-        halide_printf(uctx, "Allocated texture of size %dx%d\n", w, h);
+        halide_printf(uctx, "Allocated texture of size %dx%d\n", width, height);
 #endif
 
         ST.BindTexture(GL_TEXTURE_2D, 0);
