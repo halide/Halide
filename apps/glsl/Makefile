@@ -12,10 +12,10 @@ clean:
 	rm -f test halide_blur.o halide_blur ycc.o blur.o
 
 blur.o: halide_blur
-	HL_TARGET=host-opengl ./halide_blur
+	HL_TARGET=host-opengl-gpu_debug ./halide_blur
 
 ycc.o: halide_ycc
-	HL_TARGET=host-opengl ./halide_ycc
+	HL_TARGET=host-opengl-gpu_debug ./halide_ycc
 
 halide_blur: ../../bin/libHalide.a halide_blur.o
 	$(MAKE) -C ../../ bin/libHalide.a

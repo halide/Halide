@@ -24,6 +24,7 @@ void Blur() {
     std::vector<Argument> args;
     args.push_back(input8);
     out.compile_to_object("blur.o", args);
+    out.compile_to_header("blur.h", args);
 }
 
 

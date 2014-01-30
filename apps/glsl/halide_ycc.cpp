@@ -4,7 +4,7 @@ using namespace Halide;
 
 void RgbToYcc() {
     ImageParam input8(UInt(8), 3);
-    Func out("ycc_filter");
+    Func out("out");
     Var x("x"), y("y"), c("c");
 
     // The algorithm
@@ -28,19 +28,20 @@ void RgbToYcc() {
                                              0.0f))));
 
     // Schedule for GLSL
-    out.bound(c, 0, 4);
     out.reorder(c, x, y);
-//    out.unroll(c);
-    out.vectorize(c);
+    out.bound(c, 0, 4);
+    out.unroll(c);
+        //    out.vectorize(c);
     out.glsl(x, y, c);
     out.compute_root();
 
-    Func cpuout("cpuout");
+    Func cpuout("ycc_filter");
     cpuout(x,y,c) = out(x,y,c);
 
     std::vector<Argument> args;
     args.push_back(input8);
     cpuout.compile_to_object("ycc.o", args);
+    cpuout.compile_to_header("ycc.h", args);
 //    cpuout.compile_to_c("ycc.c", args);
 }
 
