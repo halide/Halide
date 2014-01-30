@@ -18,7 +18,7 @@ namespace Internal {
  * (e.g. replacing a variable with a value (Substitute.h), or
  * constant-folding).
  *
- * Your mutate should override the visit methods you can about. Return
+ * Your mutate should override the visit methods you care about. Return
  * the new expression by assigning to expr or stmt. The default ones
  * recursively mutate their children. To mutate sub-expressions and
  * sub-statements you should the mutate method, which will dispatch to
