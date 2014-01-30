@@ -49,6 +49,11 @@ class Inliner : public IRMutator {
                           << d.var << " of function "
                           << f.name() << " because the function is scheduled inline.\n";
                 assert(false);
+            } else if (d.for_type == For::Kernel) {
+                std::cerr << "Cannot compute dimension "
+                          << d.var << " of function "
+                          << f.name() << " as a kernel loop because the function is scheduled inline.\n";
+                assert(false);
             }
         }
 
