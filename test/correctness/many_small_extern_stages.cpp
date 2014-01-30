@@ -1,9 +1,13 @@
 #include <Halide.h>
 #include <stdio.h>
 
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
 
-
-extern "C" int copy(buffer_t *in, buffer_t *out) {
+extern "C" DLLEXPORT int copy(buffer_t *in, buffer_t *out) {
     /*
     printf("out: %d %d %d %d   %d %d %d %d   %d %d %d %d\n",
            out->min[0], out->min[1], out->min[2], out->min[3],
