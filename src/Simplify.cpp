@@ -1557,7 +1557,11 @@ private:
         if (body.same_as(op->body) &&
             value.same_as(op->value) &&
             !new_value.defined()) {
-            return op;
+
+            if (info.old_uses == 0 && remove_dead_lets)
+                return body;
+            else
+                return op;
         }
 
         Body result = body;
@@ -2072,6 +2076,7 @@ void simplify_test() {
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
+    check(Let::make("x", 0, 0), 0);
 
     std::cout << "Simplify test passed" << std::endl;
 }
