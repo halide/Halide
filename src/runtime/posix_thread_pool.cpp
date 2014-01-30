@@ -103,6 +103,9 @@ WEAK void halide_shutdown_thread_pool() {
     //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
     // Tidy up
     pthread_mutex_destroy(&halide_work_queue.mutex);
+    // Reset it to zero in case we call another do_par_for
+    pthread_mutex_t uninitialized_mutex = {0};
+    halide_work_queue.mutex = uninitialized_mutex;
     pthread_cond_destroy(&halide_work_queue.state_change);
     halide_thread_pool_initialized = false;
 }
@@ -199,9 +202,15 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     if (halide_custom_do_par_for) {
         return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
     }
+
+    // Grab the lock. If it hasn't been initialized yet, then the
+    // field will be zero-initialized because it's a static
+    // global. pthreads helpfully interprets zero-valued mutex objects
+    // as uninitialized and initializes them for you (see PTHREAD_MUTEX_INITIALIZER).
+    pthread_mutex_lock(&halide_work_queue.mutex);
+
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
-        pthread_mutex_init(&halide_work_queue.mutex, NULL);
         pthread_cond_init(&halide_work_queue.state_change, NULL);
         halide_work_queue.jobs = NULL;
 
@@ -236,7 +245,6 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     job.active_workers = 0;  // Nobody is working on this yet
 
     // Push the job onto the stack.
-    pthread_mutex_lock(&halide_work_queue.mutex);
     job.next_job = halide_work_queue.jobs;
     halide_work_queue.jobs = &job;
     pthread_mutex_unlock(&halide_work_queue.mutex);

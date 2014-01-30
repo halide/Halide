@@ -800,14 +800,64 @@ private:
         merge_boxes(boxes[op->name], b);
     }
 
+    class CountVars : public IRVisitor {
+        using IRVisitor::visit;
+
+        void visit(const Variable *var) {
+            count++;
+        }
+    public:
+        int count;
+        CountVars() : count(0) {}
+    };
+
+    // We get better simplification if we directly substitute mins
+    // and maxes in, but this can also cause combinatorial code
+    // explosion. Here we manage this by only substituting in
+    // reasonably-sized expressions. We determine the size by
+    // counting the number of var nodes.
+    bool is_small_enough_to_substitute(Expr e) {
+        if (!e.defined()) {
+            return true;
+        }
+        CountVars c;
+        e.accept(&c);
+        return c.count < 10;
+    }
+
     void visit(const LetStmt *op) {
         if (consider_calls) {
             op->value.accept(this);
         }
         Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
-        scope.push(op->name, value_bounds);
-        op->body.accept(this);
-        scope.pop(op->name);
+        value_bounds.min = simplify(value_bounds.min);
+        value_bounds.max = simplify(value_bounds.max);
+
+        if (is_small_enough_to_substitute(value_bounds.min) &&
+            is_small_enough_to_substitute(value_bounds.max)) {
+            scope.push(op->name, value_bounds);
+            op->body.accept(this);
+            scope.pop(op->name);
+        } else {
+            string max_name = unique_name('t');
+            string min_name = unique_name('t');
+
+            scope.push(op->name, Interval(Variable::make(op->value.type(), min_name),
+                                          Variable::make(op->value.type(), max_name)));
+            op->body.accept(this);
+            scope.pop(op->name);
+
+            for (map<string, Box>::iterator iter = boxes.begin();
+                 iter != boxes.end(); ++iter) {
+                Box &box = iter->second;
+                for (size_t i = 0; i < box.size(); i++) {
+                    box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                    box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                    box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                    box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                }
+            }
+        }
     }
 
     void visit(const For *op) {

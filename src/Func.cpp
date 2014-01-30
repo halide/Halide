@@ -553,6 +553,13 @@ ScheduleHandle &ScheduleHandle::unroll(Var var) {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::parallel(Var var, Expr factor) {
+    Var tmp;
+    split(var, var, tmp, factor);
+    parallel(var);
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::vectorize(Var var, int factor) {
     Var tmp;
     split(var, var, tmp, factor);
@@ -581,17 +588,24 @@ ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor,
     return *this;
 }
 
+namespace {
+// An helper function for reordering vars in a schedule.
+ScheduleHandle &reorder_vars(ScheduleHandle& sched, const VarOrRVar *vars, size_t size) {
+    if (size <= 1) {
+        return sched;
+    }
+    if (size == 2) {
+        return sched.reorder(vars[0], vars[1]);
+    }
+    for (size_t i = 1; i < size; i++) {
+        sched.reorder(vars[0], vars[i]);
+    }
+    return reorder_vars(sched, vars + 1, size - 1);
+}
+}
+
 ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
-    if (vars.size() <= 1) {
-        return *this;
-    }
-    if (vars.size() == 2) {
-        return reorder(vars[0], vars[1]);
-    }
-    for(size_t i = 1; i < vars.size(); ++i) {
-        reorder(vars[0], vars[i]);
-    }
-    return reorder(std::vector<VarOrRVar>(vars.begin() + 1, vars.end()));
+    return reorder_vars(*this, &vars[0], vars.size());
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
@@ -614,43 +628,43 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
-    VarOrRVar vars[]  = {x, y, z};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z};
+    return reorder_vars(*this, vars, 3);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
-    VarOrRVar vars[]  = {x, y, z, w};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z, w};
+    return reorder_vars(*this, vars, 4);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
-    VarOrRVar vars[]  = {x, y, z, w, t};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z, w, t};
+    return reorder_vars(*this, vars, 5);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2};
+    return reorder_vars(*this, vars, 6);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
+    return reorder_vars(*this, vars, 7);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
+    return reorder_vars(*this, vars, 8);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
-    VarOrRVar vars[]  = {x, y, z, w, t1, t2, t3, t4, t5};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
+    return reorder_vars(*this, vars, 9);
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    return reorder(std::vector<VarOrRVar>(vars, vars + (sizeof(vars) / sizeof(VarOrRVar))));
+    return reorder_vars(*this, vars, 10);
 }
 
 ScheduleHandle &ScheduleHandle::cuda_threads(Var tx) {
@@ -794,6 +808,11 @@ Func &Func::vectorize(Var var) {
 
 Func &Func::unroll(Var var) {
     ScheduleHandle(func.schedule()).unroll(var);
+    return *this;
+}
+
+Func &Func::parallel(Var var, Expr factor) {
+    ScheduleHandle(func.schedule()).parallel(var, factor);
     return *this;
 }
 

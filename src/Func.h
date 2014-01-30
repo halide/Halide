@@ -204,6 +204,7 @@ public:
     EXPORT ScheduleHandle &kernel_loop(Var x);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
+    EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
     EXPORT ScheduleHandle &unroll(Var var, int factor);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
@@ -501,10 +502,11 @@ public:
     EXPORT void set_error_handler(void (*handler)(void *, const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory. If compiling
-     * statically, routines with appropriate signatures can be
-     * provided directly
-     \code
+     * return 32-byte aligned chunks of memory, and it should be safe
+     * for Halide to read slightly out of bounds (up to 8 bytes before
+     * the start or beyond the end). If compiling statically, routines
+     * with appropriate signatures can be provided directly
+    \code
      extern "C" void *halide_malloc(void *, size_t)
      extern "C" void halide_free(void *, void *)
      \endcode
@@ -727,6 +729,14 @@ public:
 
     /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
+
+    /** Split a dimension by the given task_size, and the parallelize the
+     * outer dimension. This creates parallel tasks that have size
+     * task_size. After this call, var refers to the outer dimension of
+     * the split. The inner dimension has a new anonymous name. If you
+     * wish to mutate it, or schedule with respect to it, do the split
+     * manually. */
+    EXPORT Func &parallel(Var var, Expr task_size);
 
     /** Mark a dimension to be computed all-at-once as a single
      * vector. The dimension should have constant extent -

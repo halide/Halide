@@ -286,13 +286,16 @@ class Monotonic : public IRVisitor {
 
     void visit(const Let *op) {
         op->value.accept(this);
-        if (result != Constant) {
-            // No point pushing it if it's constant anyway w.r.t the
-            // var, because unknown variables are treated as constant.
+
+        if (result == Constant) {
+            // No point pushing it if it's constant w.r.t the var,
+            // because unknown variables are treated as constant.
+            op->body.accept(this);
+        } else {
             scope.push(op->name, result);
+            op->body.accept(this);
+            scope.pop(op->name);
         }
-        op->body.accept(this);
-        scope.pop(op->name);
     }
 
     void visit(const LetStmt *op) {
