@@ -77,7 +77,7 @@ endif()
 set (PROJECT_LIBS )
 if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
-  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
+  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996 /wd4305 /wd4146")
 endif()
 
 function(halide_project name folder)
