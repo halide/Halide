@@ -1559,12 +1559,6 @@ private:
         info = var_info.get(op->name);
         var_info.pop(op->name);
 
-        if (body.same_as(op->body) &&
-            value.same_as(op->value) &&
-            !new_value.defined()) {
-            return op;
-        }
-
         Body result = body;
 
         if (new_value.defined() && info.new_uses > 0) {
@@ -1575,6 +1569,16 @@ private:
         if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
             result = T::make(op->name, value, result);
+        }
+
+        // Don't needlessly make a new Let/LetStmt node.  (Here's a
+        // piece of template syntax I've never needed before).
+        const T *new_op = result.template as<T>();
+        if (new_op &&
+            new_op->name == op->name &&
+            new_op->body.same_as(op->body) &&
+            new_op->value.same_as(op->value)) {
+            return op;
         }
 
         return result;
@@ -2083,6 +2087,7 @@ void simplify_test() {
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
+    check(Let::make("x", 0, 0), 0);
 
     std::cout << "Simplify test passed" << std::endl;
 }

@@ -74,7 +74,9 @@ extern void halide_shutdown_thread_pool();
 
 /** Define halide_malloc and halide_free to replace the default memory
  * allocator.  See Func::set_custom_allocator. (Specifically note that
- * halide_malloc must return a 32-byte aligned pointer.)
+ * halide_malloc must return a 32-byte aligned pointer, and it must be
+ * safe to read at least 8 bytes before the start and beyond the
+ * end.)
  */
 //@{
 extern void *halide_malloc(void *user_context, size_t x);
