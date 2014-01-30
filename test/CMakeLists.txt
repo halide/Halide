@@ -9,7 +9,7 @@ function(tests folder)
   endif()
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name ${file})
-    halide_project(${name} ${folder} ${folder}/${file})
+    halide_project(${folder}_${name} ${folder} ${folder}/${file})
   endforeach()
 endfunction(tests)
 
