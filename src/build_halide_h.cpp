@@ -40,9 +40,17 @@ void dump_header(std::string header) {
 }
 
 int main(int argc, char **headers) {
+
+    // If we're building on windows and Halide_SHARED is defined, we'd better
+    // also define it for clients so that dllimport gets used.
+    #if defined(_WIN32) && defined(Halide_SHARED)
+    printf("#define Halide_SHARED\n");
+    #endif
+
     for (int i = 1; i < argc; i++) {
         dump_header(headers[i]);
     }
+
 
     return 0;
 }

@@ -191,6 +191,7 @@ string CodeGen_SPIR_Dev::simt_intrinsic(const string &name) {
     //    return "halide.spir.gid.w";
     //}
     assert(false && "simt_intrinsic called on bad variable name");
+    return "";
 }
 
 void CodeGen_SPIR_Dev::visit(const For *loop) {

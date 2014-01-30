@@ -3,13 +3,14 @@ add_executable(bitcode2cpp bitcode2cpp.cpp)
 
 
 if (MSVC)
-  option(HALIDE_SHARED_LIBRARY "Build Halide as a shared library" OFF)
+  # Suppress some warnings
   add_definitions("-D_CRT_SECURE_NO_WARNINGS")
   add_definitions("-D_SCL_SECURE_NO_WARNINGS")
+  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
 endif()
 
 if (HALIDE_SHARED_LIBRARY)
-  add_definitions("-D_Halide_SHARED")
+  add_definitions("-DHalide_SHARED")
   set(HALIDE_LIBRARY_TYPE SHARED)
 else()
   set(HALIDE_LIBRARY_TYPE STATIC)
@@ -52,6 +53,8 @@ if (TARGET_ARM64)
   add_definitions("-DWITH_ARM64=1")
 endif()
 
+add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
+
 set(RUNTIME_CPP
   android_io
   cuda
@@ -90,6 +93,10 @@ set (RUNTIME_LL
   x86_avx
   x86
   x86_sse41)
+set (RUNTIME_BC
+  compute_20
+  compute_30
+  compute_35)
 
 set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
@@ -100,11 +107,13 @@ file(GLOB RUNTIME_CL_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${RUNTIME_D
 file(GLOB RUNTIME_CPP_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/*.cpp")
 file(GLOB RUNTIME_H_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/*.h")
 file(GLOB RUNTIME_LL_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/*.ll")
+file(GLOB RUNTIME_BC_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/nvidia_libdevice_bitcode/*.bc")
 set (RUNTIME_DEPENDS
   ${RUNTIME_CL_DEPENDS}
   ${RUNTIME_CPP_DEPENDS}
   ${RUNTIME_H_DEPENDS}
-  ${RUNTIME_LL_DEPENDS})
+  ${RUNTIME_LL_DEPENDS}
+  ${RUNTIME_BC_DEPENDS})
 
 # Commands to build initial module objects.
 set (INITMOD_DIR "${CMAKE_CFG_INTDIR}/initmod")
@@ -127,6 +136,14 @@ foreach (i ${RUNTIME_LL} )
   add_custom_command(OUTPUT ${INITMOD}
                      COMMAND "${LLVM_AS}" "${NATIVE_RUNTIME_DIR}${i}.ll" -o ${NATIVE_INT_DIR}initmod.${i}.bc
                      COMMAND bitcode2cpp ${i}_ll < "${NATIVE_INT_DIR}initmod.${i}.bc" > ${INITMOD}
+                     DEPENDS ${RUNTIME_DEPENDS} "${NATIVE_INT_DIR}clang_ok" "${NATIVE_INT_DIR}llvm_ok"
+                     COMMENT "Building initial module ${i}...")
+  list(APPEND INITIAL_MODULES ${INITMOD})
+endforeach()
+foreach (i ${RUNTIME_BC} )
+  set(INITMOD "${INITMOD_DIR}/ptx_${i}.cpp")
+  add_custom_command(OUTPUT ${INITMOD}
+                     COMMAND bitcode2cpp ptx_${i}_ll < "${NATIVE_RUNTIME_DIR}/nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > ${INITMOD}
                      DEPENDS ${RUNTIME_DEPENDS} "${NATIVE_INT_DIR}clang_ok" "${NATIVE_INT_DIR}llvm_ok"
                      COMMENT "Building initial module ${i}...")
   list(APPEND INITIAL_MODULES ${INITMOD})
