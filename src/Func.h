@@ -500,10 +500,11 @@ public:
     EXPORT void set_error_handler(void (*handler)(void *, const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory. If compiling
-     * statically, routines with appropriate signatures can be
-     * provided directly
-     \code
+     * return 32-byte aligned chunks of memory, and it should be safe
+     * for Halide to read slightly out of bounds (up to 8 bytes before
+     * the start or beyond the end). If compiling statically, routines
+     * with appropriate signatures can be provided directly
+    \code
      extern "C" void *halide_malloc(void *, size_t)
      extern "C" void halide_free(void *, void *)
      \endcode
