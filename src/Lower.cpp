@@ -1305,6 +1305,13 @@ Stmt add_image_checks(Stmt s, Function f) {
             string actual_extent_name = name + ".extent." + dim;
             Expr actual_min = Variable::make(Int(32), actual_min_name);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name);
+            if (!touched[j].min.defined() || !touched[j].max.defined()) {
+                std::cerr << "Error: buffer " << name
+                          << " may be accessed in an unbounded way in dimension "
+                          << j << "\n";
+                assert(false);
+            }
+
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
             string error_msg_extent = error_name + " is accessed beyond the extent in dimension " + dim;
