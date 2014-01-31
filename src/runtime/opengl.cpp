@@ -404,6 +404,7 @@ EXPORT void halide_opengl_release(void* uctx) {
     ST.initialized = false;
 }
 
+// Determine OpenGL texture format and channel type for a given buffer_t.
 static void get_texture_format(void* uctx,
                                buffer_t* buf,
                                GLint *format,

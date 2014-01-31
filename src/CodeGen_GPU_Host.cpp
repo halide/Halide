@@ -693,43 +693,47 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     Value *buf = NULL;
     if (usage.used_on_device) {
         debug(2) << alloc->name << " is used on the device\n";
-
-        buf = create_alloca_at_entry(buffer_t_type, 1);
         Value *zero32 = ConstantInt::get(i32, 0),
             *one32  = ConstantInt::get(i32, 1),
             *null64 = ConstantInt::get(i64, 0),
             *zero8  = ConstantInt::get( i8, 0);
 
+        if (target.features & Target::OpenGL) {
+            Expr buffer_var = Variable::make(Handle(), alloc->name + ".buffer");
+            buf = codegen(buffer_var);
+        } else {
+            buf = create_alloca_at_entry(buffer_t_type, 1);
+
+            builder->CreateStore(null64,   buffer_dev_ptr(buf));
+            builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
+            builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+
+            // For now, we just track the allocation as a single 1D buffer of the
+            // required size. If we break this into multiple dimensions, this will
+            // fail to account for expansion for alignment.
+            builder->CreateStore(codegen(alloc->size),
+                                 buffer_extent_ptr(buf, 0));
+            builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
+            builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
+            builder->CreateStore(zero32,  buffer_extent_ptr(buf, 3));
+
+            builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
+            builder->CreateStore(zero32,  buffer_stride_ptr(buf, 1));
+            builder->CreateStore(zero32,  buffer_stride_ptr(buf, 2));
+            builder->CreateStore(zero32,  buffer_stride_ptr(buf, 3));
+
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
+
+            int bytes = alloc->type.width * alloc->type.bytes();
+            builder->CreateStore(ConstantInt::get(i32, bytes),
+                                 buffer_elem_size_ptr(buf));
+        }
+
         Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
         builder->CreateStore(host_ptr, buffer_host_ptr(buf));
-        builder->CreateStore(null64,   buffer_dev_ptr(buf));
-
-        builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
-        builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
-
-        // For now, we just track the allocation as a single 1D buffer of the
-        // required size. If we break this into multiple dimensions, this will
-        // fail to account for expansion for alignment.
-        builder->CreateStore(codegen(alloc->size),
-                             buffer_extent_ptr(buf, 0));
-        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
-        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
-        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 3));
-
-        builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
-        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 1));
-        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 2));
-        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 3));
-
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
-
-        int bytes = alloc->type.width * alloc->type.bytes();
-        builder->CreateStore(ConstantInt::get(i32, bytes),
-                             buffer_elem_size_ptr(buf));
-
         Value *args[2] = { get_user_context(), buf };
         builder->CreateCall(dev_malloc_fn, args);
 
@@ -825,6 +829,35 @@ void CodeGen_GPU_Host::visit(const Call *call) {
             Value *user_context = get_user_context();
             builder->CreateCall2(copy_to_host_fn, user_context, buf);
         }
+        // don't return
+    } else if (call->call_type == Call::Intrinsic &&
+               call->name == Call::create_buffer_t) {
+        Value *null64 = ConstantInt::get(i64, 0),
+            *zero8  = ConstantInt::get( i8, 0);
+
+        Value *buf = create_alloca_at_entry(buffer_t_type, 1);
+
+        builder->CreateStore(null64,   buffer_dev_ptr(buf));
+        builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
+        builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+
+        int dims = call->args.size()/3;
+        for (int i = 0; i < 4; i++) {
+            Value *min, *extent, *stride;
+            if (i < dims) {
+                min    = codegen(call->args[i*3+2]);
+                extent = codegen(call->args[i*3+3]);
+                stride = codegen(call->args[i*3+4]);
+            } else {
+                min = extent = stride = ConstantInt::get(i32, 0);
+            }
+            builder->CreateStore(min, buffer_min_ptr(buf, i));
+            builder->CreateStore(extent, buffer_extent_ptr(buf, i));
+            builder->CreateStore(stride, buffer_stride_ptr(buf, i));
+        }
+
+        value = buf;
+        return;
     }
 
     CodeGen::visit(call);
