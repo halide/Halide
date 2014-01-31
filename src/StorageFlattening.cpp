@@ -18,7 +18,6 @@ public:
         inside_kernel_loop = false;
     }
     Scope<int> scope;
-    Scope<int> need_buffer_t;
     bool inside_kernel_loop;
 private:
     const map<string, Function> &env;
@@ -72,13 +71,27 @@ private:
     void visit(const Realize *realize) {
         Stmt body = mutate(realize->body);
 
-        // Check if we need to create a buffer_t for this realization
+        // Since Allocate only handles one-dimensional arrays, we need another
+        // means to populate buffer_t for intermediate realizations with
+        // correct min/extent/stride values. These values are required when
+        // dealing with kernel loops wich require information about the
+        // dimensionality of a buffer.  We generate a create_buffer_t
+        // intrinsic to populate the buffer in this case.
         vector<bool> make_buffer_t(realize->types.size());
-        while (need_buffer_t.contains(realize->name)) {
-            int idx = need_buffer_t.get(realize->name);
-            assert(idx < (int)make_buffer_t.size());
-            make_buffer_t[idx] = true;
-            need_buffer_t.pop(realize->name);
+        map<string, Function>::const_iterator it = env.find(realize->name);
+        if (it != env.end()) {
+            Schedule &sched = it->second.schedule();
+            bool is_kernel_loop = false;
+            for (size_t i = 0; i < sched.dims.size(); i++) {
+                if (sched.dims[i].for_type == For::Kernel) {
+                    is_kernel_loop = true;
+                    break;
+                }
+            }
+            if (is_kernel_loop) {
+                for (size_t i = 0; i < realize->types.size(); i++)
+                    make_buffer_t[i] = true;
+            }
         }
 
         // Compute the size
@@ -129,11 +142,17 @@ private:
                 extent_var[i] = Variable::make(Int(32), extent_name[i]);
                 stride_var[i] = Variable::make(Int(32), stride_name[i]);
             }
+            // Promote the type to be a multiple of 8 bits
+            Type t = realize->types[idx];
+            t.bits = t.bytes() * 8;
 
+            // Make the allocation node
+            stmt = Allocate::make(buffer_name, t, size, stmt);
+
+            // Create a buffer_t object if necessary
             if (make_buffer_t[idx]) {
-                // We need to make a buffer_t for this buffer
                 vector<Expr> args(dims*3 + 2);
-                args[0] = Variable::make(Handle(), buffer_name);
+                args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
                 args[1] = realize->types[idx].bytes();
                 for (int i = 0; i < dims; i++) {
                     args[3*i+2] = min_var[i];
@@ -146,13 +165,6 @@ private:
                                      buf,
                                      stmt);
             }
-
-            // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx];
-            t.bits = t.bytes() * 8;
-
-            // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, size, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
