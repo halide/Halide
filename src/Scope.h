@@ -75,7 +75,7 @@ private:
 public:
     Scope() {}
 
-    /** Retrive the value referred to by a name */
+    /** Retrieve the value referred to by a name */
     T get(const std::string &name) const {
         typename std::map<std::string, SmallStack<T> >::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
