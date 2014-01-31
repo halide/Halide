@@ -14,6 +14,7 @@ set(LLVM_LIB "llvm3.2/lib/Debug/"
   CACHE PATH "Path to LLVM lib directory")
 set(LLVM_INCLUDE "llvm3.2/include/"
   CACHE PATH "Path to LLVM include directory")
+set(LLVM_VERSION "32" CACHE STRING "First two digits of LLVM version (omitting '.')")
 
 #message(STATUS "Gathering LLVM information")
 #execute_process(
@@ -77,6 +78,7 @@ endif()
 set (PROJECT_LIBS )
 if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
+  add_definitions("/wd4244 /wd4267 /wd4800 /wd4996 /wd4305 /wd4146")
 endif()
 
 function(halide_project name folder)
@@ -86,6 +88,10 @@ function(halide_project name folder)
 endfunction(halide_project)
 
 add_subdirectory(src)
-add_subdirectory(apps)
 add_subdirectory(test)
-add_subdirectory(tutorial)
+
+# The apps and tutorials don't really compile on windows yet
+if (!WIN32) 
+  add_subdirectory(apps)
+  add_subdirectory(tutorial)
+endif()

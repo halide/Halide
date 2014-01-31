@@ -732,10 +732,18 @@ void merge_boxes(Box &a, const Box &b) {
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
-            a[i].min = min(a[i].min, b[i].min);
+            if (a[i].min.defined() && b[i].min.defined()) {
+                a[i].min = min(a[i].min, b[i].min);
+            } else {
+                a[i].min = Expr();
+            }
         }
         if (!a[i].max.same_as(b[i].max)) {
-            a[i].max = max(a[i].max, b[i].max);
+            if (a[i].min.defined() && b[i].min.defined()) {
+                a[i].max = max(a[i].max, b[i].max);
+            } else {
+                a[i].max = Expr();
+            }
         }
     }
 }
