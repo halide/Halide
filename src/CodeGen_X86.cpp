@@ -21,8 +21,8 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(),
-                                     target(t) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
+
     #if !(WITH_X86)
     assert(false && "x86 not enabled for this build of Halide.");
     #endif

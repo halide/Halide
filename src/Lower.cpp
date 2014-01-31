@@ -901,13 +901,17 @@ vector<string> realization_order(string output, const map<string, Function> &env
 
 }
 
-Stmt create_initial_loop_nest(Function f) {
+Stmt create_initial_loop_nest(Function f, Target t) {
     // Generate initial loop nest
     pair<Stmt, Stmt> r = build_production(f);
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
     s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step"));
-    return inject_explicit_bounds(s, f);
+    if (t.features & Target::NoAsserts) {
+        return s;
+    } else {
+        return inject_explicit_bounds(s, f);
+    }
 }
 
 class ComputeLegalSchedules : public IRVisitor {
@@ -1523,21 +1527,19 @@ Stmt add_image_checks(Stmt s, Function f, Target t) {
         }
     }
 
-    if (!(no_asserts && no_bounds_query)) {
-        // Inject the code that defines the proposed sizes.
-        for (size_t i = lets_proposed.size(); i > 0; i--) {
-            s = LetStmt::make(lets_proposed[i-1].first, lets_proposed[i-1].second, s);
-        }
+    // Inject the code that defines the proposed sizes.
+    for (size_t i = lets_proposed.size(); i > 0; i--) {
+        s = LetStmt::make(lets_proposed[i-1].first, lets_proposed[i-1].second, s);
+    }
 
-        // Inject the code that defines the constrained sizes.
-        for (size_t i = lets_constrained.size(); i > 0; i--) {
-            s = LetStmt::make(lets_constrained[i-1].first, lets_constrained[i-1].second, s);
-        }
+    // Inject the code that defines the constrained sizes.
+    for (size_t i = lets_constrained.size(); i > 0; i--) {
+        s = LetStmt::make(lets_constrained[i-1].first, lets_constrained[i-1].second, s);
+    }
 
-        // Inject the code that defines the required sizes produced by bounds inference.
-        for (size_t i = lets_required.size(); i > 0; i--) {
-            s = LetStmt::make(lets_required[i-1].first, lets_required[i-1].second, s);
-        }
+    // Inject the code that defines the required sizes produced by bounds inference.
+    for (size_t i = lets_required.size(); i > 0; i--) {
+        s = LetStmt::make(lets_required[i-1].first, lets_required[i-1].second, s);
     }
 
     return s;
@@ -1552,7 +1554,7 @@ Stmt lower(Function f, Target t) {
     // Compute a realization order
     map<string, set<string> > graph;
     vector<string> order = realization_order(f.name(), env, graph);
-    Stmt s = create_initial_loop_nest(f);
+    Stmt s = create_initial_loop_nest(f, t);
 
     debug(2) << "Initial statement: " << '\n' << s << '\n';
     s = schedule_functions(s, order, env, graph, t);

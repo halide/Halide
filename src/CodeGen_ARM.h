@@ -31,9 +31,6 @@ public:
 
 protected:
 
-    /** Which arm target are we compiling for */
-    Target target;
-
     /** Generate a call to a neon intrinsic */
     // @{
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);

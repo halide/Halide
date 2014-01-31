@@ -35,6 +35,7 @@ class Constant;
 #include "Scope.h"
 #include "JITCompiledModule.h"
 #include "ModulusRemainder.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -49,7 +50,7 @@ class CodeGen : public IRVisitor {
 public:
     mutable RefCount ref_count;
 
-    CodeGen();
+    CodeGen(Target t);
     virtual ~CodeGen();
 
     /** Take a halide statement and compiles it to an llvm module held
@@ -114,6 +115,9 @@ protected:
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
     //@}
+
+    /** The target we're generating code for */
+    Halide::Target target;
 
     /** Initialize the CodeGen internal state to compile a fresh
      * module. This allows reuse of one CodeGen object to compiled

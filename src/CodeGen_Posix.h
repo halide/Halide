@@ -16,7 +16,7 @@ public:
 
     /** Create an posix code generator. Processor features can be
      * enabled using the appropriate arguments */
-    CodeGen_Posix();
+    CodeGen_Posix(Target t);
 
 protected:
 

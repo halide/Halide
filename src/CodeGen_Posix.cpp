@@ -25,8 +25,8 @@ using std::make_pair;
 
 using namespace llvm;
 
-CodeGen_Posix::CodeGen_Posix() :
-    CodeGen(),
+CodeGen_Posix::CodeGen_Posix(Target t) :
+    CodeGen(t),
 
     // Vector types. These need an LLVMContext before they can be initialized.
     i8x8(NULL),
