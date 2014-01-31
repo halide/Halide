@@ -121,8 +121,7 @@ Expr _u32q(Expr e) {
 }
 }
 
-CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
-                                     target(t) {
+CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     #if !(WITH_ARM)
     assert(false && "arm not enabled for this build of Halide.");
     #endif

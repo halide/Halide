@@ -298,13 +298,13 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
 {
     if (t.features & Target::CUDA) {
         debug(1) << "Constructing CUDA device codegen\n";
-        return new CodeGen_PTX_Dev();
+        return new CodeGen_PTX_Dev(t);
     } else if (t.features & Target::SPIR64) {
         debug(1) << "Constructing SPIR64 device codegen\n";
-        return new CodeGen_SPIR_Dev(64);
+        return new CodeGen_SPIR_Dev(t, 64);
     } else if (t.features & Target::SPIR) {
         debug(1) << "Constructing SPIR device codegen\n";
-        return new CodeGen_SPIR_Dev(32);
+        return new CodeGen_SPIR_Dev(t, 32);
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();

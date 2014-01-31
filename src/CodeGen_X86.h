@@ -31,7 +31,6 @@ public:
     static void test();
 
 protected:
-    Target target;
 
     /** Generate a call to an sse or avx intrinsic */
     // @{
