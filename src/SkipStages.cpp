@@ -243,6 +243,14 @@ class MightBeSkippable : public IRVisitor {
         IRVisitor::visit(op);
     }
 
+    void visit(const Pipeline *op) {
+        if (op->name == func) {
+            op->consume.accept(this);
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
     string func;
     bool guarded;
 
