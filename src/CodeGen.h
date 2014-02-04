@@ -166,7 +166,8 @@ protected:
     void define_buffer_t();
 
     /** Codegen an assertion. If false, it bails out and calls the error handler. */
-    void create_assertion(llvm::Value *condition, const std::string &message);
+    void create_assertion(llvm::Value *condition, const std::string &message,
+                          const std::vector<llvm::Value *> &args = std::vector<llvm::Value *>());
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
     llvm::Constant *create_string_constant(const std::string &str);

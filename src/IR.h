@@ -665,13 +665,15 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     std::string message;
+    std::vector<Expr> args;
 
-    static Stmt make(Expr condition, std::string message) {
+    static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args) {
         assert(condition.defined() && "AssertStmt of undefined");
 
         AssertStmt *node = new AssertStmt;
         node->condition = condition;
         node->message = message;
+        node->args = args;
         return node;
     }
 };

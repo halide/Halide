@@ -1733,7 +1733,11 @@ void CodeGen::visit(const LetStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    create_assertion(codegen(op->condition), op->message);
+    vector<Value *> args(op->args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i] = codegen(op->args[i]);
+    }
+    create_assertion(codegen(op->condition), op->message, args);
 }
 
 Constant *CodeGen::create_string_constant(const string &s) {
@@ -1766,7 +1770,7 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
     return ptr;
 }
 
-void CodeGen::create_assertion(Value *cond, const string &message) {
+void CodeGen::create_assertion(Value *cond, const string &message, const vector<Value *> &args) {
 
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
@@ -1789,15 +1793,16 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     // Build the failure case
     builder->SetInsertPoint(assert_fails_bb);
 
-    // Make the error message string a global constant
-    Value *char_ptr = create_string_constant(message);
-    Value *user_context = get_user_context();
+    vector<Value *> call_args(2);
+    call_args[0] = get_user_context();
+    call_args[1] = create_string_constant(message);
+    call_args.insert(call_args.end(), args.begin(), args.end());
 
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error");
     assert(error_handler && "Could not find halide_error in initial module");
     debug(4) << "Creating call to error handlers\n";
-    builder->CreateCall(error_handler, vec(user_context, char_ptr));
+    builder->CreateCall(error_handler, call_args);
 
     // Do any architecture-specific cleanup necessary
     debug(4) << "Creating cleanup code\n";

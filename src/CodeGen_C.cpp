@@ -743,6 +743,12 @@ void CodeGen_C::visit(const LetStmt *op) {
 
 void CodeGen_C::visit(const AssertStmt *op) {
     string id_cond = print_expr(op->condition);
+
+    vector<string> id_args(op->args.size());
+    for (size_t i = 0; i < op->args.size(); i++) {
+        id_args[i] = print_expr(op->args[i]);
+    }
+
     do_indent();
     // Halide asserts have different semantics to C asserts. The
     // conditions sometimes contain necessary side-effects, and
@@ -752,9 +758,13 @@ void CodeGen_C::visit(const AssertStmt *op) {
 
     stream << "if (!" << id_cond << ") {\n";
     do_indent();
-    stream << " halide_printf(";
-    stream << (have_user_context ? "__user_context," : "NULL,");
-    stream << Expr(op->message + "\n") << ");\n";
+    stream << " halide_printf("
+           << (have_user_context ? "__user_context," : "NULL,")
+           << Expr(op->message + "\n");
+    for (size_t i = 0; i < op->args.size(); i++) {
+        stream << ", " << id_args[i];
+    }
+    stream << ");\n";
     do_indent();
     stream << " return -1;\n";
     do_indent();
