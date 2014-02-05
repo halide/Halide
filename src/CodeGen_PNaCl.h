@@ -32,9 +32,8 @@ public:
      * sandboxing passes, because these must be run after linking
      * (They change linkage qualifiers on everything, marking
      * everything as internal, including weak symbols that Halide
-     * relies on being weak). Pass --pnacl-disable-abi-check to the
-     * final linking step (e.g. with pnacl-clang++) to get it to
-     * accept non-sandboxed inputs. */
+     * relies on being weak). The final linking stage (e.g. using
+     * pnacl-clang++) handles the sandboxing. */
     void compile_to_native(const std::string &filename, bool assembly) {
         // TODO: Emit .ll when assembly is true
         compile_to_bitcode(filename);

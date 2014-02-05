@@ -1,0 +1,10 @@
+{
+  "program": {
+    "portable": {
+      "pnacl-translate": {
+        "url": "hello_pnacl.pexe",
+        "optlevel": 3
+      }
+    }
+  }
+}
