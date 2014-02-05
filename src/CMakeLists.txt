@@ -171,6 +171,7 @@ set(HEADER_FILES
   CodeGen_OpenCL_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_SPIR_Dev.h
+  CodeGen_PNaCl.h
   Deinterleave.h
   Derivative.h
   OneToOne.h
@@ -225,9 +226,9 @@ set(HEADER_FILES
   RemoveUndef.h
   SpecializeClampedRamps.h
   FastIntegerDivide.h
-  AllocationBoundsInference.h 
+  AllocationBoundsInference.h
   Inline.h
-  Qualify.h 
+  Qualify.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -249,6 +250,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
+  CodeGen_PNaCl.cpp
   CodeGen_ARM.cpp
   IR.cpp
   IRMutator.cpp
@@ -298,9 +300,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveUndef.cpp
   SpecializeClampedRamps.cpp
   FastIntegerDivide.cpp
-  AllocationBoundsInference.cpp 
-  Inline.cpp 
-  Qualify.cpp 
+  AllocationBoundsInference.cpp
+  Inline.cpp
+  Qualify.cpp
   UnifyDuplicateLets.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})

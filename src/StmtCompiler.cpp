@@ -3,6 +3,7 @@
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
+#include "CodeGen_PNaCl.h"
 #include <iostream>
 
 namespace Halide {
@@ -24,6 +25,8 @@ StmtCompiler::StmtCompiler(Target target) {
         contents = new CodeGen_X86(target);
     } else if (target.arch == Target::ARM) {
         contents = new CodeGen_ARM(target);
+    } else if (target.arch == Target::PNaCl) {
+        contents = new CodeGen_PNaCl(target);
     }
 }
 
