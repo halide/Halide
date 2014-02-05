@@ -174,6 +174,13 @@ Target parse_target_string(const std::string &target) {
         } else if (tok == "arm") {
             t.arch = Target::ARM;
             is_arch = true;
+        } else if (tok == "pnacl") {
+            t.arch = Target::PNaCl;
+            t.os = Target::NaCl;
+            t.bits = 32;
+            is_os = true;
+            is_arch = true;
+            is_bits = true;
         } else if (tok == "32") {
             t.bits = 32;
             is_bits = true;
