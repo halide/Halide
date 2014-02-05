@@ -43,7 +43,7 @@ OBJECTS_PNACL = nacl_demos_pnacl.bc $(DEMO_OBJECTS:%=%_pnacl.bc)
 all: nacl_demos.zip
 
 nacl_demos.zip: nacl_demos_64.nexe nacl_demos_32.nexe nacl_demos_arm.nexe nacl_demos_pnacl.pexe
-	zip nacl_demos.zip nacl_demos.html nacl_demos.nmf nacl_demos_32.nexe nacl_demos_64.nexe nacl_demos_pnacl.pexe nacl_demos_arm.nexe
+	zip nacl_demos.zip nacl_demos.html nacl_demos.nmf nacl_demos_pnacl.html nacl_demos_pnacl.nmf nacl_demos_32.nexe nacl_demos_64.nexe nacl_demos_pnacl.pexe nacl_demos_arm.nexe
 
 nacl_demos_64.nexe: $(OBJECTS_64)
 	$(CXX_64) -o $@ -m64 $(OBJECTS_64) $(LDFLAGS_64)
