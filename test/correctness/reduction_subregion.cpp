@@ -9,13 +9,9 @@ using namespace Halide;
 
 // Custom error handler. If we don't define this, it'll just print out
 // an error message and quit
-bool error_occurred;
-void halide_error(void *user_context, const char *msg, ...) {
-    __builtin_va_list args;
-    __builtin_va_start(args, msg);
-    printf("Not an error: ");
-    vprintf(msg, args);
-    __builtin_va_end(args);
+bool error_occurred = false;
+void halide_error(void *user_context, const char *msg) {
+    printf("%s\n", msg);
     error_occurred = true;
 }
 
