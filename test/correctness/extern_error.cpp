@@ -10,15 +10,19 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT 
+extern "C" DLLEXPORT
 int extern_error(buffer_t *out) {
     return -1;
 }
 
 bool error_occurred = false;
 extern "C" DLLEXPORT
-void my_halide_error(void *user_context, const char *msg) {
-    printf("Expected: %s\n", msg);
+void my_halide_error(void *user_context, const char *msg, ...) {
+    __builtin_va_list args;
+    __builtin_va_start(args, msg);
+    printf("Not an error: ");
+    vprintf(msg, args);
+    __builtin_va_end(args);
     error_occurred = true;
 }
 
