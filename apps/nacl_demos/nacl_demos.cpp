@@ -89,16 +89,9 @@ extern "C" void halide_shutdown_thread_pool();
 bool pipeline_barfed = false;
 static Instance *inst = NULL;
 // TODO: use user context instead of globals above...
-extern "C" void halide_error(void */* user_context */, char *msg, ...) {
-
-    char buf[4096];
-    __builtin_va_list args;
-    __builtin_va_start(args, msg);
-    vsnprintf(buf, 4096, msg, args);
-    __builtin_va_end(args);
-
+extern "C" void halide_error(void */* user_context */, char *msg) {
     if (inst) {
-        inst->PostMessage(buf);
+        inst->PostMessage(msg);
         pipeline_barfed = true;
     }
 }

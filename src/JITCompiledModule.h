@@ -43,7 +43,7 @@ struct JITCompiledModule {
     // @}
 
     /** The type of a halide runtime error handler function */
-    typedef void (*ErrorHandler)(void *user_context, const char *, ...);
+    typedef void (*ErrorHandler)(void *user_context, const char *);
 
     /** Set the runtime error handler for this module */
     void (*set_error_handler)(ErrorHandler);

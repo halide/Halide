@@ -12,7 +12,7 @@ static bool called_trace = false;
 static bool called_malloc = false;
 static bool called_free = false;
 
-extern "C" void halide_error(void *context, const char *msg, ...) {
+extern "C" void halide_error(void *context, const char *msg) {
     called_error = true;
     assert(context == context_pointer);
 }
