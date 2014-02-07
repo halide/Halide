@@ -1897,7 +1897,8 @@ void CodeGen::visit(const For *op) {
         llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
         FunctionType *func_t = FunctionType::get(i32, vec(voidPointerType, i32, voidPointerType), false);
         llvm::Function *containing_function = function;
-        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par for " + op->name, module);
+        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
+                                          "par for " + function->getName() + "_" + op->name, module);
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function
