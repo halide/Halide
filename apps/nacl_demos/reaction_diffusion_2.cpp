@@ -56,17 +56,15 @@ int main(int argc, char **argv) {
         B *= (1 - s) + s * B * (3 - 2 * B);
 
         // Reaction
-        Expr mR = 1.0f - R;
-        Expr mG = 1.0f - G;
-        Expr mB = 1.0f - B;
+        Expr dR = B * (1 - R - G);
+        Expr dG = (1 - B) * (R - G);
+        Expr dB = 1 - B + 2 * G * R - R - G;
 
-        Expr dR = B * (mR * mG - R * G);
-        Expr dG = mB * (R * mG - mR * G);
-        Expr dB = (mR * (mG * mB - G * B) + R * (G * mB - mG * B));
-
-        // Things brighten faster than they decay
+        // Red and green increase faster than they decay
         dR = select(dR > 0, dR * 2.25f, dR);
         dG = select(dG > 0, dG * 2.5f, dG);
+
+        // Blue decays faster that it increases
         dB = select(dB < 0, dB * 2.5f, dB);
 
         Expr dx = (x - 512)/512.0f, dy = (y - 512)/512.0f;
