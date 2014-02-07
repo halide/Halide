@@ -41,7 +41,7 @@ Expr kernel_cubic(Expr x) {
 }
 
 Expr scaled(Expr x, Expr magnification) {
-    return cast<float>(x + 0.5f) / magnification;
+    return (x + 0.5f) / magnification;
 }
 
 enum Interpolation {
@@ -49,8 +49,37 @@ enum Interpolation {
 };
 
 int main(int argc, char **argv) {
-    if (argc < 3) {
-        std::cerr << "Usage:\n\t./interpolate in.png out.png\n" << std::endl;
+    std::string infile, outfile;
+    Interpolation interpolationType = LINEAR;
+    float magnification = 1.0f;
+    bool show_usage = false;
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "-s" && i+1 < argc) {
+            magnification = atof(argv[++i]);
+        } else if (arg == "-t" && i+1 < argc) {
+            arg = argv[++i];
+            if (arg == "linear") {
+                interpolationType = LINEAR;
+            } else if (arg == "cubic") {
+                interpolationType = CUBIC;
+            } else {
+                fprintf(stderr, "Invalid interpolation type '%s' specified.\n",
+                        arg.c_str());
+                show_usage = true;
+            }
+        } else if (infile.empty()) {
+            infile = arg;
+        } else if (outfile.empty()) {
+            outfile = arg;
+        } else {
+            fprintf(stderr, "Unexpected command line option '%s'.\n", arg.c_str());
+        }
+    }
+    if (infile.empty() || outfile.empty() || show_usage) {
+        fprintf(stderr,
+                "Usage:\n"
+                "\t./resample [-s scalefactor] [-t linear|cubic] in.png out.png\n");
         return 1;
     }
 
@@ -61,37 +90,34 @@ int main(int argc, char **argv) {
     Func clamped("clamped");
     clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
 
-    // Configuration
-    Interpolation interpolationType = LINEAR;
-    float magnification = 1.3f;
-    typedef float AccT;
-
     // Setup interpolation kernels and helper expressions
-    int kernel_size = 0;
+    float kernel_size = 0;
     if (interpolationType == LINEAR) {
-        kernel_size = 2;
+        kernel_size = 1.0f;
     } else if (interpolationType == CUBIC) {
-        kernel_size = 4;
+        kernel_size = 2.0f;
     }
+    float kernelScaling = (magnification < 1.0f) ? magnification : 1.0f;
+    kernel_size /= kernelScaling;
 
     Expr scaledx = scaled(x, magnification);
-    Expr beginx = cast<int>(scaledx - kernel_size/2.0f + 0.5f);
+    Expr beginx = cast<int>(scaledx - kernel_size + 0.5f);
     Expr scaledy = scaled(y, magnification);
-    Expr beginy = cast<int>(scaledy - kernel_size/2.0f + 0.5f);
+    Expr beginy = cast<int>(scaledy - kernel_size + 0.5f);
 
     // Initialize interpolation kernels. Since we allow an arbitrary
     // magnification factor, a different kernel has to be used for each x and
     // y coordinate.
     Func kernel_x, kernel_y;
     Func norm_x, norm_y;
-    RDom domx(0, kernel_size+1, "domx");
-    RDom domy(0, kernel_size+1, "domy");
+    RDom domx(0, static_cast<int>(2.0f*kernel_size)+1, "domx");
+    RDom domy(0, static_cast<int>(2.0f*kernel_size)+1, "domy");
     if (interpolationType == LINEAR) {
-        kernel_x(x, k) = kernel_linear(k + beginx - scaledx);
-        kernel_y(y, k) = kernel_linear(k + beginy - scaledy);
+        kernel_x(x, k) = kernel_linear((k + beginx - scaledx) * kernelScaling);
+        kernel_y(y, k) = kernel_linear((k + beginy - scaledy) * kernelScaling);
     } else if (interpolationType == CUBIC) {
-        kernel_x(x, k) = kernel_cubic(k + beginx - scaledx);
-        kernel_y(y, k) = kernel_cubic(k + beginy - scaledy);
+        kernel_x(x, k) = kernel_cubic((k + beginx - scaledx) * kernelScaling);
+        kernel_y(y, k) = kernel_cubic((k + beginy - scaledy) * kernelScaling);
     }
     Func norm_kernel_x, norm_kernel_y;
     norm_kernel_x(x, k) = kernel_x(x, k) / sum(kernel_x(x, domx));
@@ -101,7 +127,7 @@ int main(int argc, char **argv) {
     Func upsampled_x("upsampled_x");
     Func upsampled_y("upsampled_y");
     upsampled_x(x, y, c) =
-        sum(norm_kernel_x(x, domx) * cast<AccT>(clamped(domx + beginx, y, c)));
+        sum(norm_kernel_x(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
     upsampled_y(x, y, c) =
         sum(norm_kernel_y(y, domy) * upsampled_x(x, domy + beginy, c));
 
@@ -109,7 +135,6 @@ int main(int argc, char **argv) {
     final(x, y, c) = clamp(upsampled_y(x, y, c), 0.0f, 1.0f);
 
     std::cout << "Finished function setup." << std::endl;
-    // upsampled_x.compute_at(final, y);
 
     // Scheduling
     norm_kernel_x.compute_root();
@@ -120,11 +145,17 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     final.compile_jit(target);
 
-    Image<float> in_png = load<float>(argv[1]);
-    Image<float> out(in_png.width() * magnification,
-                     in_png.height() * magnification, 3);
+    Image<float> in_png = load<float>(infile);
+    int out_width = in_png.width() * magnification;
+    int out_height = in_png.height() * magnification;
+    Image<float> out(out_width, out_height, 3);
     input.set(in_png);
-    std::cout << "Running... " << std::endl;
+    printf("Resampling '%s' from %dx%d to %dx%d using %s interpolation\n",
+           infile.c_str(),
+           in_png.width(), in_png.height(),
+           out_width, out_height,
+           (interpolationType == LINEAR) ? "linear" : "cubic");
+
     double min = std::numeric_limits<double>::infinity();
     const unsigned int iters = 2;
 
@@ -139,11 +170,10 @@ int main(int argc, char **argv) {
 
     }
     std::cout << " took " << min * 1000 << " msec." << std::endl;
-//    final.realize(out);
 
     // vector<Argument> args;
     // args.push_back(input);
     // final.compile_to_assembly("test.s", args, target);
 
-    save(out, argv[2]);
+    save(out, outfile);
 }
