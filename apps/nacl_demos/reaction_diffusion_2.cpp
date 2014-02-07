@@ -18,8 +18,12 @@ int main(int argc, char **argv) {
     {
         Func initial;
 
-        // The initial state is a quantity of three chemicals present at each pixel
-        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f);
+        // The initial state is a quantity of three chemicals present
+        // at each pixel near the boundaries
+        Expr dx = (x - 512), dy = (y - 512);
+        Expr r = dx * dx + dy * dy;
+        Expr mask = r < 200 * 200;
+        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f) * select(mask, 1.0f, 0.001f);
         initial.compile_to_file("reaction_diffusion_2_init");
     }
 
@@ -84,6 +88,12 @@ int main(int argc, char **argv) {
 
         Func new_state;
         new_state(x, y, c) = select(c == 0, R, select(c == 1, G, B));
+
+        // Decay at the edges
+        new_state(x,    0, c) *= 0.25f;
+        new_state(x, 1023, c) *= 0.25f;
+        new_state(0,    y, c) *= 0.25f;
+        new_state(1023, y, c) *= 0.25f;
 
         // Add some white where the mouse is
         Expr min_x = clamp(mouse_x - 10, 0, state.width()-1);
