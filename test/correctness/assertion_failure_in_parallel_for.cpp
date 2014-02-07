@@ -4,8 +4,12 @@
 using namespace Halide;
 
 int error_occurred = false;
-void halide_error(void *ctx, const char *msg) {
-    printf("Expected: %s\n", msg);
+void halide_error(void *ctx, const char *msg, ...) {
+    __builtin_va_list args;
+    __builtin_va_start(args, msg);
+    printf("Not an error: ");
+    vprintf(msg, args);
+    __builtin_va_end(args);
     error_occurred = true;
 }
 

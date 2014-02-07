@@ -1691,7 +1691,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     compile_to_assembly(filename, args, "", target);
 }
 
-void Func::set_error_handler(void (*handler)(void *, const char *)) {
+void Func::set_error_handler(void (*handler)(void *, const char *, ...)) {
     error_handler = handler;
     if (compiled_module.set_error_handler) {
         compiled_module.set_error_handler(handler);

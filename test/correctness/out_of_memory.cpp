@@ -31,9 +31,14 @@ extern "C" void test_free(void *user_context, void *ptr) {
     free(ptr);
 }
 
-bool error_occurred  = false;
-extern "C" void handler(void *user_context, const char *msg) {
-    printf("%s\n", msg);
+
+bool error_occurred = false;
+void handler(void *user_context, const char *msg, ...) {
+    __builtin_va_list args;
+    __builtin_va_start(args, msg);
+    printf("Not an error: ");
+    vprintf(msg, args);
+    __builtin_va_end(args);
     error_occurred = true;
 }
 
