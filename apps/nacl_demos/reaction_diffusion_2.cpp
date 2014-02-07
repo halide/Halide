@@ -47,7 +47,10 @@ int main(int argc, char **argv) {
         Expr B = blur_y(x, y, 2);
 
         // Push the colors outwards with a sigmoid
-        Expr s = 0.3f;
+        //Expr s = 0.3f;
+        //Expr s = lerp(1.0f, 3.0f, y / 1024.0f);
+        Expr s = 2.0f;
+        //Expr s = 0.5298f;
         R *= (1 - s) + s * R * (3 - 2 * R);
         G *= (1 - s) + s * G * (3 - 2 * G);
         B *= (1 - s) + s * B * (3 - 2 * B);
@@ -61,10 +64,17 @@ int main(int argc, char **argv) {
         Expr dG = mB * (R * mG - mR * G);
         Expr dB = (mR * (mG * mB - G * B) + R * (G * mB - mG * B));
 
+        // Things brighten faster than they decay
+        dR = select(dR > 0, dR * 2.25f, dR);
+        dG = select(dG > 0, dG * 2.5f, dG);
+        dB = select(dB < 0, dB * 2.5f, dB);
+
         Expr dx = (x - 512)/512.0f, dy = (y - 512)/512.0f;
         Expr radius = dx * dx + dy*dy;
-        //Expr t = 0.1f;
-        Expr t = (2.0f - radius) * 0.05f;
+        //Expr t = lerp(0.195f, 0.198f, x/1024.0f);
+        //Expr t = (2.0f - radius) * 0.05f;
+        //Expr t = 0.0651f;
+        Expr t = 0.196f;
 
         R += t * dR;
         G += t * dG;
