@@ -9,8 +9,6 @@ using namespace Halide;
 
 #include <sys/time.h>
 
-using std::vector;
-
 double now() {
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -22,6 +20,15 @@ double now() {
     }
     assert(tv.tv_sec >= first_sec);
     return (tv.tv_sec - first_sec) + (tv.tv_usec / 1000000.0);
+}
+
+enum InterpolationType {
+    BOX, LINEAR, CUBIC
+};
+
+Expr kernel_box(Expr x) {
+    Expr xx = abs(x);
+    return select(xx <= 0.5f, 1.0f, 0.0f);
 }
 
 Expr kernel_linear(Expr x) {
@@ -40,26 +47,37 @@ Expr kernel_cubic(Expr x) {
                           0.0f));
 }
 
+struct KernelInfo {
+    const char *name;
+    float size;
+    Expr (*kernel)(Expr);
+};
+
+static KernelInfo kernelInfo[] = {
+    { "box", 0.5f, kernel_box },
+    { "linear", 1.0f, kernel_linear },
+    { "cubic", 2.0f, kernel_cubic }
+};
+
+
 Expr scaled(Expr x, Expr magnification) {
     return (x + 0.5f) / magnification;
 }
 
-enum Interpolation {
-    LINEAR, CUBIC
-};
-
 int main(int argc, char **argv) {
     std::string infile, outfile;
-    Interpolation interpolationType = LINEAR;
-    float magnification = 1.0f;
+    InterpolationType interpolationType = LINEAR;
+    float scaleFactor = 1.0f;
     bool show_usage = false;
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "-s" && i+1 < argc) {
-            magnification = atof(argv[++i]);
+            scaleFactor = atof(argv[++i]);
         } else if (arg == "-t" && i+1 < argc) {
             arg = argv[++i];
-            if (arg == "linear") {
+            if (arg == "box") {
+                interpolationType = BOX;
+            } else if (arg == "linear") {
                 interpolationType = LINEAR;
             } else if (arg == "cubic") {
                 interpolationType = CUBIC;
@@ -79,7 +97,7 @@ int main(int argc, char **argv) {
     if (infile.empty() || outfile.empty() || show_usage) {
         fprintf(stderr,
                 "Usage:\n"
-                "\t./resample [-s scalefactor] [-t linear|cubic] in.png out.png\n");
+                "\t./resample [-s scalefactor] [-t box|linear|cubic] in.png out.png\n");
         return 1;
     }
 
@@ -90,46 +108,37 @@ int main(int argc, char **argv) {
     Func clamped("clamped");
     clamped(x, y, c) = input(clamp(x, 0, input.width()-1), clamp(y, 0, input.height()-1), c);
 
-    // Setup interpolation kernels and helper expressions
-    float kernel_size = 0;
-    if (interpolationType == LINEAR) {
-        kernel_size = 1.0f;
-    } else if (interpolationType == CUBIC) {
-        kernel_size = 2.0f;
-    }
-    float kernelScaling = (magnification < 1.0f) ? magnification : 1.0f;
-    kernel_size /= kernelScaling;
+    // For downscaling, widen the interpolation kernel to perform lowpass
+    // filtering.
+    float kernelScaling = (scaleFactor < 1.0f) ? scaleFactor : 1.0f;
+    float kernelSize = kernelInfo[interpolationType].size / kernelScaling;
 
-    Expr scaledx = scaled(x, magnification);
-    Expr beginx = cast<int>(scaledx - kernel_size + 0.5f);
-    Expr scaledy = scaled(y, magnification);
-    Expr beginy = cast<int>(scaledy - kernel_size + 0.5f);
+    Expr scaledx = scaled(x, scaleFactor);
+    Expr scaledy = scaled(y, scaleFactor);
+    Expr beginx = cast<int>(scaledx - kernelSize + 0.5f);
+    Expr beginy = cast<int>(scaledy - kernelSize + 0.5f);
 
     // Initialize interpolation kernels. Since we allow an arbitrary
-    // magnification factor, a different kernel has to be used for each x and
+    // scaleFactor factor, a different kernel has to be used for each x and
     // y coordinate.
-    Func kernel_x, kernel_y;
-    Func norm_x, norm_y;
-    RDom domx(0, static_cast<int>(2.0f*kernel_size)+1, "domx");
-    RDom domy(0, static_cast<int>(2.0f*kernel_size)+1, "domy");
-    if (interpolationType == LINEAR) {
-        kernel_x(x, k) = kernel_linear((k + beginx - scaledx) * kernelScaling);
-        kernel_y(y, k) = kernel_linear((k + beginy - scaledy) * kernelScaling);
-    } else if (interpolationType == CUBIC) {
-        kernel_x(x, k) = kernel_cubic((k + beginx - scaledx) * kernelScaling);
-        kernel_y(y, k) = kernel_cubic((k + beginy - scaledy) * kernelScaling);
+    Func kernelx, kernely;
+    RDom domx(0, static_cast<int>(2.0f*kernelSize)+1, "domx");
+    RDom domy(0, static_cast<int>(2.0f*kernelSize)+1, "domy");
+    {
+        Expr (*kernel)(Expr) = kernelInfo[interpolationType].kernel;
+        Func kx, ky;
+        kx(x, k) = kernel((k + beginx - scaledx) * kernelScaling);
+        ky(y, k) = kernel((k + beginy - scaledy) * kernelScaling);
+
+        kernelx(x, k) = kx(x, k) / sum(kx(x, domx));
+        kernely(y, k) = ky(y, k) / sum(ky(y, domy));
     }
-    Func norm_kernel_x, norm_kernel_y;
-    norm_kernel_x(x, k) = kernel_x(x, k) / sum(kernel_x(x, domx));
-    norm_kernel_y(y, k) = kernel_y(y, k) / sum(kernel_y(y, domy));
 
     // Perform separable upscaling
     Func upsampled_x("upsampled_x");
     Func upsampled_y("upsampled_y");
-    upsampled_x(x, y, c) =
-        sum(norm_kernel_x(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
-    upsampled_y(x, y, c) =
-        sum(norm_kernel_y(y, domy) * upsampled_x(x, domy + beginy, c));
+    upsampled_x(x, y, c) = sum(kernelx(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
+    upsampled_y(x, y, c) = sum(kernely(y, domy) * upsampled_x(x, domy + beginy, c));
 
     Func final("final");
     final(x, y, c) = clamp(upsampled_y(x, y, c), 0.0f, 1.0f);
@@ -137,27 +146,26 @@ int main(int argc, char **argv) {
     std::cout << "Finished function setup." << std::endl;
 
     // Scheduling
-    norm_kernel_x.compute_root();
-    norm_kernel_y.compute_at(final, y);
+    kernelx.compute_root();
+    kernely.compute_at(final, y);
     upsampled_x.compute_root();
 
-    // final.compute_root();
     Target target = get_jit_target_from_environment();
     final.compile_jit(target);
 
     Image<float> in_png = load<float>(infile);
-    int out_width = in_png.width() * magnification;
-    int out_height = in_png.height() * magnification;
+    int out_width = in_png.width() * scaleFactor;
+    int out_height = in_png.height() * scaleFactor;
     Image<float> out(out_width, out_height, 3);
     input.set(in_png);
     printf("Resampling '%s' from %dx%d to %dx%d using %s interpolation\n",
            infile.c_str(),
            in_png.width(), in_png.height(),
            out_width, out_height,
-           (interpolationType == LINEAR) ? "linear" : "cubic");
+           kernelInfo[interpolationType].name);
 
     double min = std::numeric_limits<double>::infinity();
-    const unsigned int iters = 2;
+    const unsigned int iters = 20;
 
     for (unsigned int x = 0; x < iters; ++x) {
         double before = now();
@@ -170,10 +178,6 @@ int main(int argc, char **argv) {
 
     }
     std::cout << " took " << min * 1000 << " msec." << std::endl;
-
-    // vector<Argument> args;
-    // args.push_back(input);
-    // final.compile_to_assembly("test.s", args, target);
 
     save(out, outfile);
 }

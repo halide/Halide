@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-CXXFLAGS += -g
+CXXFLAGS += -g -Wall
 
 .PHONY: all clean
 
