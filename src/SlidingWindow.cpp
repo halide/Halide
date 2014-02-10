@@ -249,7 +249,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
     }
 
     void visit(const LetStmt *op) {
-        scope.push(op->name, expand_expr(op->value, scope));
+        scope.push(op->name, simplify(expand_expr(op->value, scope)));
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
@@ -318,6 +318,7 @@ class SlidingWindow : public IRMutator {
         Stmt new_body = op->body;
 
         debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
+
         new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
 
         new_body = mutate(new_body);
