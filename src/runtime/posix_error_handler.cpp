@@ -10,19 +10,22 @@ extern void exit(int);
 
 WEAK void (*halide_error_handler)(void *, const char *) = NULL;
 
-WEAK void halide_error(void *user_context, const char *msg, ...) {
+WEAK void halide_error(void *user_context, const char *msg) {
+    if (halide_error_handler) {
+        (*halide_error_handler)(user_context, msg);
+    }  else {
+        halide_printf(user_context, "Error: %s\n", msg);
+        exit(1);
+    }
+}
+
+WEAK void halide_error_varargs(void *user_context, const char *msg, ...) {
     char buf[4096];
     __builtin_va_list args;
     __builtin_va_start(args, msg);
     vsnprintf(buf, 4096, msg, args);
     __builtin_va_end(args);
-
-    if (halide_error_handler) {
-        (*halide_error_handler)(user_context, buf);
-    }  else {
-        halide_printf(user_context, "Error: %s\n", buf);
-        exit(1);
-    }
+    halide_error(user_context, buf);
 }
 
 WEAK void halide_set_error_handler(void (*handler)(void *, const char *)) {

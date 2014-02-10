@@ -245,6 +245,10 @@ class VectorizeLoops : public IRMutator {
             }
         }
 
+        void visit(const AssertStmt *op) {
+            stmt = scalarize(op);
+        }
+
         void visit(const IfThenElse *op) {
             Expr cond = mutate(op->condition);
             int width = cond.type().width;

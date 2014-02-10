@@ -12,6 +12,8 @@ Expr rand_float(Expr x, Expr y, Expr c, Expr min, Expr max) {
 
 int main(int argc, char **argv) {
 
+    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
+
     // First define the function that gives the initial state.
     {
         Func initial;
@@ -64,14 +66,20 @@ int main(int argc, char **argv) {
         new_state(0, y, c) += r;
         new_state(1023, y, c) += r;
 
-        new_state.vectorize(x, 4);
+        if (can_vectorize) {
+            new_state.vectorize(x, 4);
+        }
         new_state.bound(c, 0, 2).unroll(c);
 
 
         Var yi;
         new_state.split(y, y, yi, 16).parallel(y);
 
-        blur_x.store_at(new_state, y).compute_at(new_state, yi).vectorize(x, 4);
+        blur_x.store_at(new_state, y).compute_at(new_state, yi);
+        if (can_vectorize) {
+            blur_x.vectorize(x, 4);
+        }
+
         clamped.store_at(new_state, y).compute_at(new_state, yi);
 
         new_state.compile_to_file("reaction_diffusion_update", state, mouse_x, mouse_y);
@@ -91,7 +99,9 @@ int main(int argc, char **argv) {
         Func render;
         render(x, y) = alpha + red + green + blue;
 
-        render.vectorize(x, 4);
+        if (can_vectorize) {
+            render.vectorize(x, 4);
+        }
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 

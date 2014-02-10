@@ -174,6 +174,13 @@ Target parse_target_string(const std::string &target) {
         } else if (tok == "arm") {
             t.arch = Target::ARM;
             is_arch = true;
+        } else if (tok == "pnacl") {
+            t.arch = Target::PNaCl;
+            t.os = Target::NaCl;
+            t.bits = 32;
+            is_os = true;
+            is_arch = true;
+            is_bits = true;
         } else if (tok == "32") {
             t.bits = 32;
             is_bits = true;
@@ -333,6 +340,7 @@ DECLARE_CPP_INITMOD(write_debug_image)
 
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
+DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(ptx_dev)
 #if WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
@@ -464,7 +472,12 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
     // These modules are always used
     modules.push_back(get_initmod_posix_math(c, bits_64));
-    modules.push_back(get_initmod_posix_math_ll(c));
+
+    if (t.arch == Target::PNaCl) {
+        modules.push_back(get_initmod_pnacl_math_ll(c));
+    } else {
+        modules.push_back(get_initmod_posix_math_ll(c));
+    }
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));
