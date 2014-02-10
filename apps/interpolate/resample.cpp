@@ -113,46 +113,54 @@ int main(int argc, char **argv) {
     float kernelScaling = (scaleFactor < 1.0f) ? scaleFactor : 1.0f;
     float kernelSize = kernelInfo[interpolationType].size / kernelScaling;
 
-    Expr scaledx = scaled(x, scaleFactor);
-    Expr scaledy = scaled(y, scaleFactor);
-    Expr beginx = cast<int>(scaledx - kernelSize + 0.5f);
-    Expr beginy = cast<int>(scaledy - kernelSize + 0.5f);
+    // source[xy] are the (non-integer) coordinates inside the source image
+    Expr sourcex = scaled(x, scaleFactor);
+    Expr sourcey = scaled(y, scaleFactor);
 
     // Initialize interpolation kernels. Since we allow an arbitrary
-    // scaleFactor factor, a different kernel has to be used for each x and
-    // y coordinate.
-    Func kernelx, kernely;
+    // scaleFactor factor, the filter coefficients are different for each x
+    // and y coordinate.
+    Func kernelx("kernelx"), kernely("kernely");
+    Expr beginx = cast<int>(sourcex - kernelSize + 0.5f);
+    Expr beginy = cast<int>(sourcey - kernelSize + 0.5f);
     RDom domx(0, static_cast<int>(2.0f*kernelSize)+1, "domx");
     RDom domy(0, static_cast<int>(2.0f*kernelSize)+1, "domy");
     {
-        Expr (*kernel)(Expr) = kernelInfo[interpolationType].kernel;
+        const KernelInfo &info = kernelInfo[interpolationType];
         Func kx, ky;
-        kx(x, k) = kernel((k + beginx - scaledx) * kernelScaling);
-        ky(y, k) = kernel((k + beginy - scaledy) * kernelScaling);
-
+        kx(x, k) = info.kernel((k + beginx - sourcex) * kernelScaling);
+        ky(y, k) = info.kernel((k + beginy - sourcey) * kernelScaling);
         kernelx(x, k) = kx(x, k) / sum(kx(x, domx));
         kernely(y, k) = ky(y, k) / sum(ky(y, domy));
     }
 
-    // Perform separable upscaling
-    Func upsampled_x("upsampled_x");
-    Func upsampled_y("upsampled_y");
-    upsampled_x(x, y, c) = sum(kernelx(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
-    upsampled_y(x, y, c) = sum(kernely(y, domy) * upsampled_x(x, domy + beginy, c));
+    // Perform separable resizing
+    Func resized_x("resized_x");
+    Func resized_y("resized_y");
+    resized_x(x, y, c) = sum(kernelx(x, domx) * cast<float>(clamped(domx + beginx, y, c)));
+    resized_y(x, y, c) = sum(kernely(y, domy) * resized_x(x, domy + beginy, c));
 
     Func final("final");
-    final(x, y, c) = clamp(upsampled_y(x, y, c), 0.0f, 1.0f);
+    final(x, y, c) = clamp(resized_y(x, y, c), 0.0f, 1.0f);
 
     std::cout << "Finished function setup." << std::endl;
 
     // Scheduling
     kernelx.compute_root();
     kernely.compute_at(final, y);
-    upsampled_x.compute_root();
+    resized_x.compute_root();
+
+    resized_x.vectorize(x, 4);
+    final.vectorize(x, 4);
+
+    resized_x.parallel(y);
+    final.parallel(y);
+
 
     Target target = get_jit_target_from_environment();
     final.compile_jit(target);
 
+    printf("Loading '%s'\n", infile.c_str());
     Image<float> in_png = load<float>(infile);
     int out_width = in_png.width() * scaleFactor;
     int out_height = in_png.height() * scaleFactor;
