@@ -1,5 +1,5 @@
-#ifndef UNIQUIFY_VARIABLE_NAMES
-#define UNIQUIFY_VARIABLE_NAMES
+#ifndef HALIDE_UNIQUIFY_VARIABLE_NAMES
+#define HALIDE_UNIQUIFY_VARIABLE_NAMES
 
 /** \file
  * Defines the lowering pass that renames all variables to have unique names.
