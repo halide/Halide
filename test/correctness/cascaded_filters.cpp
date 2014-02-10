@@ -5,27 +5,38 @@ using namespace Halide;
 
 Var x, y;
 
-Func blur(Func in) {
-    Func blurry;
-    blurry(x, y) = (in(x-1, y-1) + in(x+1, y+1) + in(x+1, y-1) + in(x-1, y+1)) / 4;
+Func blur(Func in, std::string n) {
+    Func blurry(n);
+    blurry(x) = (in(x) + in(x+1)) / 2;
     return blurry;
 }
 
 int main(int argc, char **argv) {
-    Image<float> input = lambda(x, y, sin(x + y)).realize(100, 100);
+    Image<float> input = lambda(x, sin(x) + 1.0f).realize(1000);
 
     std::vector<Func> stages;
-    stages.push_back(lambda(x, y, input(x, y)));
-    for (int i = 0; i < 50; i++) {
-        stages.push_back(blur(stages.back()));
+    Func first("S0");
+    first(x) = input(x);
+
+    stages.push_back(first);
+    for (size_t i = 0; i < 100; i++) {
+        stages.push_back(blur(stages.back(), "S" + Internal::int_to_string(i+1)));
     }
 
     for (size_t i = 0; i < stages.size()-1; i++) {
-        stages[i].store_root().compute_at(stages.back(), y).vectorize(x, 4);
+        stages[i].store_root().compute_at(stages.back(), x);
     }
 
-    // We just want to ensure this compiles before the heat death of the universe
-    stages.back().compile_jit();
+    Image<float> result = stages.back().realize(10);
 
+    // After all the averaging, the result should be a flat 1.0f
+    float err = evaluate<float>(sum(abs(result(RDom(result)) - 1.0f)));
+
+    if (err > 0.001f) {
+        printf("Error too large!\n");
+        return -1;
+    }
+
+    printf("Success!\n");
     return 0;
 }
