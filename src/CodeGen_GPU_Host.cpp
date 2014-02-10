@@ -10,7 +10,7 @@
 #include "Debug.h"
 #include "Var.h"
 #include "Param.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
 #include "Bounds.h"

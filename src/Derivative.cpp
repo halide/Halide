@@ -247,6 +247,7 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const Select *op) {
+        // TODO: This is a bug! What if the condition depends on the var.
         op->true_value.accept(this);
         MonotonicResult ra = result;
         op->false_value.accept(this);
