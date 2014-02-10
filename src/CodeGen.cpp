@@ -1271,6 +1271,7 @@ bool function_takes_user_context(const string &name) {
         "halide_do_par_for",
         "halide_do_task",
         "halide_error",
+        "halide_error_varargs",
         "halide_free",
         "halide_init_kernels",
         "halide_malloc",
@@ -1799,8 +1800,8 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     call_args.insert(call_args.end(), args.begin(), args.end());
 
     // Call the error handler
-    llvm::Function *error_handler = module->getFunction("halide_error");
-    assert(error_handler && "Could not find halide_error in initial module");
+    llvm::Function *error_handler = module->getFunction("halide_error_varargs");
+    assert(error_handler && "Could not find halide_error_varargs in initial module");
     debug(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, call_args);
 
@@ -1896,7 +1897,8 @@ void CodeGen::visit(const For *op) {
         llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
         FunctionType *func_t = FunctionType::get(i32, vec(voidPointerType, i32, voidPointerType), false);
         llvm::Function *containing_function = function;
-        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par for " + op->name, module);
+        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
+                                          "par for " + function->getName() + "_" + op->name, module);
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function

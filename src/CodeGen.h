@@ -61,12 +61,12 @@ public:
 
     /** Emit a compiled halide statement as llvm bitcode. Call this
      * after calling compile. */
-    void compile_to_bitcode(const std::string &filename);
+    virtual void compile_to_bitcode(const std::string &filename);
 
     /** Emit a compiled halide statement as either an object file, or
      * as raw assembly, depending on the value of the second
      * argument. Call this after calling compile. */
-    void compile_to_native(const std::string &filename, bool assembly = false);
+    virtual void compile_to_native(const std::string &filename, bool assembly = false);
 
     /** Compile to machine code stored in memory, and return some
      * functions pointers into that machine code. */

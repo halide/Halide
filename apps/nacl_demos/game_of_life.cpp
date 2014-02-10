@@ -8,6 +8,8 @@ HalideExtern_3(int, my_rand, int, int, int);
 
 int main(int argc, char **argv) {
 
+    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
+
     // First define the function that gives the initial state of the
     // game board
     {
@@ -58,7 +60,10 @@ int main(int argc, char **argv) {
         Expr random_bit = cast<uint8_t>(my_rand(clobber.x, clobber.y, c) % 2);
         output(clobber.x, clobber.y, c) = select(r < 100, random_bit & random_bit, output(clobber.x, clobber.y, c));
 
-        output.vectorize(x, 4);
+        if (can_vectorize) {
+            output.vectorize(x, 4);
+        }
+
         Var yi;
         output.split(y, y, yi, 16).reorder(x, yi, c, y).parallel(y);
 
@@ -75,7 +80,10 @@ int main(int argc, char **argv) {
         Expr b = select(state(x, y, 2) == 1, 255, 0);
         render(x, y) = (255 << 24) + (r << 16) + (g << 8) + b;
 
-        render.vectorize(x, 4);
+        if (can_vectorize) {
+            render.vectorize(x, 4);
+        }
+
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 

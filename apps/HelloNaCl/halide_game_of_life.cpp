@@ -60,8 +60,11 @@ int main(int argc, char **argv) {
     // with less developer pain.
 
     // Vectorize the output in chunks of size 4. It's 32-bit so that
-    // will fit nicely in an sse register.
-    output.vectorize(x, 4);
+    // will fit nicely in an sse register. If we're compiling for
+    // PNaCl we can't currently vectorize.
+    if (get_target_from_environment().arch != Halide::Target::PNaCl) {
+        output.vectorize(x, 4);
+    }
 
     // Break the output into strips of 16 scanlines, and process all
     // the strips in parallel (using a task queue and a thread

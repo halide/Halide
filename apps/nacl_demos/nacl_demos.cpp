@@ -90,7 +90,6 @@ bool pipeline_barfed = false;
 static Instance *inst = NULL;
 // TODO: use user context instead of globals above...
 extern "C" void halide_error(void */* user_context */, char *msg) {
-    printf("halide_error: %s\n", msg);
     if (inst) {
         inst->PostMessage(msg);
         pipeline_barfed = true;

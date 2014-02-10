@@ -9,19 +9,19 @@
 
 <head>
 
-  <title>Halide NaCl Demos</title>
+  <title>hello_pnacl</title>
 
   <script type="text/javascript">
-    HalideDemosModule = null;  // Global application object.
+    HelloHalideModule = null;  // Global application object.
     statusText = 'NO-STATUS';
     threads = '8';
-    demo = '0';
+    implementation = '0';
 
     // Indicate load success.
     function moduleDidLoad() {
-      HalideDemosModule = document.getElementById('nacl_demos');
+      HelloHalideModule = document.getElementById('hello_pnacl');
       updateStatus('SUCCESS');
-      window.setInterval(function(){HalideDemosModule.postMessage(demo + ',' + threads)},30);
+      window.setInterval(function(){HelloHalideModule.postMessage(implementation + ',' + threads)},30);
     }
 
     // The 'message' event handler.  This handler is fired when the NaCl module
@@ -36,7 +36,7 @@
     // status message indicating that the module is still loading.  Otherwise,
     // do not change the status message.
     function pageDidLoad() {
-      if (HalideDemosModule == null) {
+      if (HelloHalideModule == null) {
         updateStatus('LOADING...');
       } else {
         // It's possible that the Native Client module onload event fired
@@ -66,8 +66,8 @@
        document.getElementById('thread_pool_size_label').innerHTML = size;
     }
 
-    function setDemo(d) {
-       demo = d;
+    function setImplementation(imp) {
+       implementation = imp;
     }
 
   </script>
@@ -77,20 +77,17 @@
 
 <center>
 <table cellspacing=32><tr><td colspan=2>
-<center><h1>Halide NaCl Demos</h1></center>
+<center><h1>Halide + Portable Native Client game of life</h1></center>
 
 </td></tr><tr><td>
 
 <table cellspacing=8><tr>
 <td width=200 height=30>
-Demo
+Implementation
 </td><td>
-<select id="demo" onchange="setDemo(this.value)">
-<option value="0">Game of life</option>
-<option value="1">Julia set</option>
-<option value="2">Reaction diffusion</option>
-<option value="3">Reaction diffusion 2</option>
-</select>
+<select id="implementation" onchange="setImplementation(this.value)">
+<option value="0">Halide</option>
+<option value="1">C</option></select>
 </td></tr>
 
 <tr><td width=200 height=30>
@@ -104,7 +101,9 @@ Halide thread pool size:
 
 </td><td width=600>
 
-<p>See also the <a href="nacl_demos_pnacl.html">portable NaCl version</a></p>
+<p>This demo is running a <a href="http://github.com/halide/halide">Halide</a> image processing routine compiled for portable native client (pnacl). The source code is <a href="halide_game_of_life.cpp">here</a>, and it compiles to this llvm bitcode: <a href="halide_game_of_life_pnacl.ll">halide_game_of_life_pnacl.ll</a>.</p>
+
+<p>Move your mouse over the app to create life.</p>
 
 </td></tr><tr><td colspan=2><center>
 
@@ -117,10 +116,10 @@ Halide thread pool size:
     </script>
 
     <embed name="nacl_module"
-       id="nacl_demos"
+       id="hello_pnacl"
        width=1024 height=1024
-       src="nacl_demos.nmf"
-       type="application/x-nacl" />
+       src="hello_pnacl.nmf"
+       type="application/x-pnacl" />
   </div>
 </p>
 
