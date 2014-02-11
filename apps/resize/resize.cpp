@@ -23,7 +23,7 @@ double now() {
 }
 
 enum InterpolationType {
-    BOX, LINEAR, CUBIC
+    BOX, LINEAR, CUBIC, LANCZOS
 };
 
 Expr kernel_box(Expr x) {
@@ -47,6 +47,17 @@ Expr kernel_cubic(Expr x) {
                           0.0f));
 }
 
+Expr sinc(Expr x) {
+    return sin(float(M_PI) * x) / x;
+}
+
+Expr kernel_lanczos(Expr x) {
+    Expr value = sinc(x) * sinc(x/3);
+    value = select(x == 0.0f, 1.0f, value); // Take care of singularity at zero
+    value = select(x > 3 || x < -3, 0.0f, value); // Clamp to zero out of bounds
+    return value;
+}
+
 struct KernelInfo {
     const char *name;
     float size;
@@ -56,7 +67,8 @@ struct KernelInfo {
 static KernelInfo kernelInfo[] = {
     { "box", 0.5f, kernel_box },
     { "linear", 1.0f, kernel_linear },
-    { "cubic", 2.0f, kernel_cubic }
+    { "cubic", 2.0f, kernel_cubic },
+    { "lanczos", 3.0f, kernel_lanczos }
 };
 
 
@@ -85,6 +97,8 @@ void parse_commandline(int argc, char **argv) {
                 interpolationType = LINEAR;
             } else if (arg == "cubic") {
                 interpolationType = CUBIC;
+            } else if (arg == "lanczos") {
+                interpolationType = LANCZOS;
             } else {
                 fprintf(stderr, "Invalid interpolation type '%s' specified.\n",
                         arg.c_str());
@@ -105,7 +119,7 @@ int main(int argc, char **argv) {
     if (infile.empty() || outfile.empty() || show_usage) {
         fprintf(stderr,
                 "Usage:\n"
-                "\t./resample [-f scalefactor] [-s schedule] [-t box|linear|cubic] in.png out.png\n"
+                "\t./resample [-f scalefactor] [-s schedule] [-t box|linear|cubic|lanczos] in.png out.png\n"
                 "\t\tSchedules: 0=default 1=vectorized 2=parallel 3=vectorized+parallel\n");
         return 1;
     }
