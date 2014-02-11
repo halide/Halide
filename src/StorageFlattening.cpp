@@ -80,7 +80,7 @@ private:
         vector<bool> make_buffer_t(realize->types.size());
         map<string, Function>::const_iterator it = env.find(realize->name);
         if (it != env.end()) {
-            Schedule &sched = it->second.schedule();
+	    const Schedule &sched = it->second.schedule();
             bool is_kernel_loop = false;
             for (size_t i = 0; i < sched.dims.size(); i++) {
                 if (sched.dims[i].for_type == For::Kernel) {
