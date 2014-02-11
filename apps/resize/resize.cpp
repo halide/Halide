@@ -167,12 +167,11 @@ int main(int argc, char **argv) {
     }
 
     if (parallelize) {
-        resized_x.compute_root();
-        resized_x.parallel(y);
-        final.parallel(y);
+        Var yo, yi;
+        final.split(y, yo, y, 32).parallel(yo);
+        resized_x.store_at(final, yo).compute_at(final, y);
     } else {
-        // resized_x.store_root().compute_at(final, y);
-        resized_x.compute_root();
+        resized_x.store_at(final, c).compute_at(final, y);
     }
 
     Target target = get_jit_target_from_environment();
