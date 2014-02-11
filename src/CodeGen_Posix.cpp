@@ -9,7 +9,7 @@
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 
 
 

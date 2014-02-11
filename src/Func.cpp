@@ -294,25 +294,6 @@ int Func::add_implicit_vars(vector<Var> &args) const {
             iter++;
         }
     }
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    else {
-        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
-        // the provided arguments.
-        placeholder_pos = args.size();
-        if ((int)args.size() < dimensions()) {
-            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
-              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
-
-            int i = 0;
-            placeholder_pos = args.size();
-            while ((int)args.size() < dimensions()) {
-                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
-    }
-#endif
 
     return placeholder_pos;
 }
@@ -336,25 +317,6 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
             iter++;
         }
     }
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    else {
-        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
-        // the provided arguments.
-        placeholder_pos = args.size();
-        if ((int)args.size() < dimensions()) {
-            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
-              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
-
-            int i = 0;
-            placeholder_pos = args.size();
-            while ((int)args.size() < dimensions()) {
-                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
-    }
-#endif
 
     return placeholder_pos;
 }

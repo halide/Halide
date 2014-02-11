@@ -10,7 +10,7 @@
 #include "Var.h"
 #include "Param.h"
 #include "Simplify.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 // Native client llvm relies on global flags to control sandboxing on

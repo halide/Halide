@@ -1,5 +1,5 @@
-add_executable(build_halide_h build_halide_h.cpp)
-add_executable(bitcode2cpp bitcode2cpp.cpp)
+add_executable(build_halide_h ../tools/build_halide_h.cpp)
+add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 
 if (MSVC)
@@ -180,7 +180,7 @@ set(HEADER_FILES
   Function.h
   Image.h
   InlineReductions.h
-  integer_division_table.h
+  IntegerDivisionTable.h
   IntrusivePtr.h
   IREquality.h
   IR.h
@@ -281,7 +281,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundsInference.cpp
   IRMatch.cpp
   StmtCompiler.cpp
-  integer_division_table.cpp
+  IntegerDivisionTable.cpp
   SlidingWindow.cpp
   StorageFolding.cpp
   InlineReductions.cpp

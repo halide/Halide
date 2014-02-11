@@ -1,5 +1,5 @@
-#ifndef QUALIFY_H
-#define QUALIFY_H
+#ifndef HALIDE_QUALIFY_H
+#define HALIDE_QUALIFY_H
 
 #include "IR.h"
 

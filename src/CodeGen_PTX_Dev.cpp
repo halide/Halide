@@ -9,7 +9,7 @@
 #include "Var.h"
 #include "Param.h"
 #include "Target.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
