@@ -1002,7 +1002,7 @@ struct Call : public ExprNode<Call> {
     // pointer to that image's buffer
     Buffer image;
 
-    // If it's a call to an image parameter, this call nodes holds a
+    // If it's a call to an image parameter, this call node holds a
     // pointer to that
     Parameter param;
 

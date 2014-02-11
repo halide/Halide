@@ -265,10 +265,10 @@ class Func {
      * represents */
     Internal::Function func;
 
-    /** When you make a reference to this function to with fewer
-     * arguments that it has dimensions, the argument list is bulked
+    /** When you make a reference to this function with fewer
+     * arguments than it has dimensions, the argument list is bulked
      * up with 'implicit' vars with canonical names. This lets you
-     * pass around partially-applied halide functions. */
+     * pass around partially applied Halide functions. */
     // @{
     int add_implicit_vars(std::vector<Var> &) const;
     int add_implicit_vars(std::vector<Expr> &) const;
