@@ -60,19 +60,23 @@ static KernelInfo kernelInfo[] = {
 };
 
 
-Expr scaled(Expr x, Expr magnification) {
-    return (x + 0.5f) / magnification;
-}
+std::string infile, outfile;
+InterpolationType interpolationType = LINEAR;
+float scaleFactor = 1.0f;
+bool show_usage = false;
+int schedule = 0;
 
-int main(int argc, char **argv) {
-    std::string infile, outfile;
-    InterpolationType interpolationType = LINEAR;
-    float scaleFactor = 1.0f;
-    bool show_usage = false;
+void parse_commandline(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "-s" && i+1 < argc) {
+        if (arg == "-f" && i+1 < argc) {
             scaleFactor = atof(argv[++i]);
+        } else if (arg == "-s" && i+1 < argc) {
+            schedule = atoi(argv[++i]);
+            if (schedule < 0 || schedule > 3) {
+                fprintf(stderr, "Invalid schedule\n");
+                show_usage = true;
+            }
         } else if (arg == "-t" && i+1 < argc) {
             arg = argv[++i];
             if (arg == "box") {
@@ -94,10 +98,15 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Unexpected command line option '%s'.\n", arg.c_str());
         }
     }
+}
+
+int main(int argc, char **argv) {
+    parse_commandline(argc, argv);
     if (infile.empty() || outfile.empty() || show_usage) {
         fprintf(stderr,
                 "Usage:\n"
-                "\t./resample [-s scalefactor] [-t box|linear|cubic] in.png out.png\n");
+                "\t./resample [-f scalefactor] [-s schedule] [-t box|linear|cubic] in.png out.png\n"
+                "\t\tSchedules: 0=default 1=vectorized 2=parallel 3=vectorized+parallel\n");
         return 1;
     }
 
@@ -110,15 +119,15 @@ int main(int argc, char **argv) {
 
     // For downscaling, widen the interpolation kernel to perform lowpass
     // filtering.
-    float kernelScaling = (scaleFactor < 1.0f) ? scaleFactor : 1.0f;
+    float kernelScaling = std::min(scaleFactor, 1.0f);
     float kernelSize = kernelInfo[interpolationType].size / kernelScaling;
 
     // source[xy] are the (non-integer) coordinates inside the source image
-    Expr sourcex = scaled(x, scaleFactor);
-    Expr sourcey = scaled(y, scaleFactor);
+    Expr sourcex = (x + 0.5f) / scaleFactor;
+    Expr sourcey = (y + 0.5f) / scaleFactor;
 
     // Initialize interpolation kernels. Since we allow an arbitrary
-    // scaleFactor factor, the filter coefficients are different for each x
+    // scaling factor, the filter coefficients are different for each x
     // and y coordinate.
     Func kernelx("kernelx"), kernely("kernely");
     Expr beginx = cast<int>(sourcex - kernelSize + 0.5f);
@@ -146,16 +155,25 @@ int main(int argc, char **argv) {
     std::cout << "Finished function setup." << std::endl;
 
     // Scheduling
+    bool parallelize = (schedule >= 2);
+    bool vectorize = (schedule == 1 || schedule == 3);
+
     kernelx.compute_root();
     kernely.compute_at(final, y);
-    resized_x.compute_root();
 
-    resized_x.vectorize(x, 4);
-    final.vectorize(x, 4);
+    if (vectorize) {
+        resized_x.vectorize(x, 4);
+        final.vectorize(x, 4);
+    }
 
-    resized_x.parallel(y);
-    final.parallel(y);
-
+    if (parallelize) {
+        resized_x.compute_root();
+        resized_x.parallel(y);
+        final.parallel(y);
+    } else {
+        // resized_x.store_root().compute_at(final, y);
+        resized_x.compute_root();
+    }
 
     Target target = get_jit_target_from_environment();
     final.compile_jit(target);
