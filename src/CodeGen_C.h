@@ -6,15 +6,18 @@
  * Defines an IRPrinter that emits C++ code equivalent to a halide stmt
  */
 
-#include "IRPrinter.h"
-#include "Argument.h"
-#include "Scope.h"
 #include <string>
 #include <vector>
 #include <ostream>
 #include <map>
 
+#include "IRPrinter.h"
+#include "Scope.h"
+
 namespace Halide {
+
+struct Argument;
+
 namespace Internal {
 
 /** This class emits C++ code equivalent to a halide Stmt. It's

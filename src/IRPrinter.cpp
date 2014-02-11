@@ -1,9 +1,9 @@
+#include <iostream>
+#include <sstream>
+
 #include "IRPrinter.h"
 #include "IROperator.h"
 #include "IR.h"
-
-#include <iostream>
-#include <sstream>
 
 namespace Halide {
 

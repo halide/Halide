@@ -1,8 +1,6 @@
 #include "CodeGen_PNaCl.h"
-#include "IROperator.h"
 #include "Util.h"
 #include "LLVM_Headers.h"
-#include "Debug.h"
 
 namespace Halide {
 namespace Internal {

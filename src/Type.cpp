@@ -1,10 +1,6 @@
-#include "IR.h"
-#include "Util.h"
 #include <sstream>
 
-/** \file
- * Utilities on halide types
- */
+#include "IR.h"
 
 namespace Halide {
 

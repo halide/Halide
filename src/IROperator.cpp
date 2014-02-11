@@ -1,8 +1,9 @@
+#include <iostream>
+#include <math.h>
+
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
-#include <iostream>
-#include <math.h>
 
 namespace Halide {
 namespace Internal {

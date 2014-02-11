@@ -7,7 +7,6 @@
 
 #include "IR.h"
 #include <map>
-#include <set>
 
 namespace Halide {
 namespace Internal {

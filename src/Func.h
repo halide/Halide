@@ -8,14 +8,12 @@
 
 #include "IR.h"
 #include "Var.h"
-#include "IntrusivePtr.h"
 #include "Function.h"
 #include "Param.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITCompiledModule.h"
 #include "Image.h"
-#include "Util.h"
 #include "Target.h"
 #include "Tuple.h"
 

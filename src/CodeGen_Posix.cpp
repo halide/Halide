@@ -1,17 +1,10 @@
-#include "LLVM_Headers.h"
-#include "CodeGen_X86.h"
-#include "IROperator.h"
 #include <iostream>
-#include "buffer_t.h"
-#include "IRPrinter.h"
-#include "IRMatch.h"
+
+#include "CodeGen_Posix.h"
+#include "LLVM_Headers.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Var.h"
-#include "Param.h"
-#include "IntegerDivisionTable.h"
-
-
 
 namespace Halide {
 namespace Internal {
@@ -20,7 +13,6 @@ using std::vector;
 using std::string;
 using std::map;
 using std::pair;
-using std::stack;
 using std::make_pair;
 
 using namespace llvm;

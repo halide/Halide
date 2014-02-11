@@ -2,9 +2,7 @@
 #define HALIDE_BOUNDS_H
 
 #include "IR.h"
-#include "IRVisitor.h"
 #include "Scope.h"
-#include <utility>
 #include <vector>
 
 /** \file

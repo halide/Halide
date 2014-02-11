@@ -2,19 +2,13 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "Bounds.h"
-#include "Debug.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Inline.h"
-#include <sstream>
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::ostringstream;
 using std::vector;
 using std::map;
 using std::pair;

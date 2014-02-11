@@ -1,11 +1,11 @@
+#include <string>
 #include <stdint.h>
+
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
 #include "CodeGen.h"
 #include "LLVM_Headers.h"
 #include "Debug.h"
-
-#include <string>
 
 namespace Halide {
 namespace Internal {

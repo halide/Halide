@@ -1,11 +1,8 @@
 #include "AllocationBoundsInference.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
 #include "Bounds.h"
-#include "CSE.h"
 #include "Simplify.h"
-#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {

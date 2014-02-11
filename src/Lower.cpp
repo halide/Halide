@@ -5,9 +5,9 @@
 
 #include "Lower.h"
 #include "IROperator.h"
+#include "IRMutator.h"
 #include "Substitute.h"
 #include "Function.h"
-#include "Scope.h"
 #include "Bounds.h"
 #include "Simplify.h"
 #include "IRPrinter.h"
@@ -33,6 +33,7 @@
 #include "Inline.h"
 #include "Qualify.h"
 #include "UnifyDuplicateLets.h"
+#include "Func.h"
 
 namespace Halide {
 namespace Internal {

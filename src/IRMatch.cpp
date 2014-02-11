@@ -1,8 +1,8 @@
-#include "IRMatch.h"
+#include <iostream>
 
+#include "IRMatch.h"
 #include "IREquality.h"
 #include "IROperator.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {

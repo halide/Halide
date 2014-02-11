@@ -1,14 +1,12 @@
+#include <iostream>
+#include <sstream>
+
 #include "CodeGen_ARM.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
-#include "IRPrinter.h"
 #include "IRMatch.h"
 #include "IREquality.h"
 #include "Debug.h"
 #include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Simplify.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"

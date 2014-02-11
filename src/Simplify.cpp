@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "Simplify.h"
 #include "IROperator.h"
 #include "IREquality.h"
@@ -9,7 +11,6 @@
 #include "ModulusRemainder.h"
 #include "Substitute.h"
 #include "Bounds.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {

@@ -1,21 +1,16 @@
+#include <sstream>
+
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Var.h"
-#include "Param.h"
-#include "IntegerDivisionTable.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
 #include "Bounds.h"
 #include "Simplify.h"
-#include "Tracing.h"
 
 #ifdef _MSC_VER
 // TODO: This is untested
