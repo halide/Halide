@@ -4,7 +4,6 @@
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
 #include "CodeGen_PNaCl.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {

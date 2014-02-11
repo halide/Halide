@@ -6,10 +6,11 @@
  */
 
 #include "CodeGen_X86.h"
-#include "CodeGen_GPU_Dev.h"
 
 namespace Halide {
 namespace Internal {
+
+class CodeGen_GPU_Dev;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_GPU_Host : public CodeGen_X86 {
@@ -65,7 +66,7 @@ protected:
     /** Reaches inside the module at sets it to use a single shared
      * cuda context */
     void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod, std::vector<void (*)()> *cleanup_routines);
-    
+
     static bool lib_cuda_linked;
 
     static CodeGen_GPU_Dev* make_dev(Target);

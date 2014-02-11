@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "Bounds.h"
 #include "IRVisitor.h"
 #include "IR.h"
@@ -8,9 +10,6 @@
 #include "Util.h"
 #include "Var.h"
 #include "Debug.h"
-#include "CSE.h"
-#include "Derivative.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {

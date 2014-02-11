@@ -1,12 +1,10 @@
-#include "DebugToFile.h"
-#include "IRMutator.h"
-#include "Util.h"
-#include "IROperator.h"
-#include "Debug.h"
-
 #include <map>
 #include <vector>
 #include <sstream>
+
+#include "DebugToFile.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {

@@ -6,8 +6,9 @@
  * into single-dimensional array access
  */
 
-#include "IR.h"
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

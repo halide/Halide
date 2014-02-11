@@ -1,16 +1,14 @@
+#include <iostream>
+
 #include "CodeGen_X86.h"
 #include "IROperator.h"
-#include <iostream>
 #include "buffer_t.h"
-#include "IRMutator.h"
 #include "IRMatch.h"
-#include "Simplify.h"
 #include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
 #include "IntegerDivisionTable.h"
-#include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {

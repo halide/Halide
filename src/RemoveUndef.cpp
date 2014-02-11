@@ -2,7 +2,6 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
 #include "Substitute.h"
 
 namespace Halide {

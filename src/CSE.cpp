@@ -1,15 +1,8 @@
+#include <map>
+
 #include "CSE.h"
 #include "IRMutator.h"
 #include "IREquality.h"
-#include "Substitute.h"
-#include "CSE.h"
-#include "IRPrinter.h"
-#include "Debug.h"
-#include "IREquality.h"
-#include "Scope.h"
-#include "Simplify.h"
-#include <sstream>
-#include <map>
 
 namespace Halide {
 namespace Internal {

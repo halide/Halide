@@ -1,8 +1,9 @@
+#include <sstream>
+
 #include "StorageFlattening.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
-#include <sstream>
 
 namespace Halide {
 namespace Internal {

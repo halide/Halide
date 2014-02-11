@@ -1,15 +1,8 @@
 #include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Target.h"
-#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {

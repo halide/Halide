@@ -1,17 +1,15 @@
 #include <iostream>
+#include <sstream>
+
 #include "IRPrinter.h"
 #include "CodeGen.h"
 #include "IROperator.h"
 #include "Debug.h"
-#include "CodeGen_C.h"
-#include "Function.h"
 #include "Deinterleave.h"
 #include "Simplify.h"
 #include "JITCompiledModule.h"
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
-
-#include <sstream>
 
 namespace Halide {
 namespace Internal {

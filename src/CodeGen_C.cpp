@@ -1,13 +1,12 @@
+#include <sstream>
+#include <iostream>
+#include <limits>
+
 #include "CodeGen_C.h"
 #include "Substitute.h"
 #include "IROperator.h"
 #include "Param.h"
 #include "Var.h"
-#include <sstream>
-#include <iostream>
-#include <limits>
-#include <cmath>
-#include "Debug.h"
 #include "Lerp.h"
 
 namespace Halide {

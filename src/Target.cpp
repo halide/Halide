@@ -3,8 +3,6 @@
 
 #include "Target.h"
 #include "LLVM_Headers.h"
-#include "Debug.h"
-#include "Util.h"
 
 namespace Halide {
 

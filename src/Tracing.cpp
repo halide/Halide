@@ -1,10 +1,6 @@
 #include "Tracing.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
-#include "Substitute.h"
-#include "Debug.h"
-#include "Lower.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {

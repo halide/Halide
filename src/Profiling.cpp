@@ -1,10 +1,10 @@
-#include "Profiling.h"
-#include "IRMutator.h"
-#include "IROperator.h"
-#include "Debug.h"
 #include <algorithm>
 #include <map>
 #include <string>
+
+#include "Profiling.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
