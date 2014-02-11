@@ -113,8 +113,20 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const Cast *op) {
-        // It's possible to reason about this, but for now we punt.
         op->value.accept(this);
+
+        if (op->type.can_represent(op->value.type())) {
+            // No overflow.
+            return;
+        }
+
+        if (op->value.type().bits >= 32 && op->type.bits >= 32) {
+            // We assume 32-bit types don't overflow.
+            return;
+        }
+
+        // A narrowing cast. There may be more cases we can catch, but
+        // for now we punt.
         if (result != Constant) {
             result = Unknown;
         }
