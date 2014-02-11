@@ -42,7 +42,7 @@ Expr kernel_cubic(Expr x) {
     Expr xx3 = xx2 * xx;
     float a = -0.5f;
 
-    return select(xx < 1.0f, (a + 2.0f) * xx3 + (a + 3.0f) * xx2 + 1,
+    return select(xx < 1.0f, (a + 2.0f) * xx3 - (a + 3.0f) * xx2 + 1,
                   select (xx < 2.0f, a * xx3 - 5 * a * xx2 + 8 * a * xx - 4.0f * a,
                           0.0f));
 }
@@ -132,8 +132,8 @@ int main(int argc, char **argv) {
     Func kernelx("kernelx"), kernely("kernely");
     Expr beginx = cast<int>(sourcex - kernelSize + 0.5f);
     Expr beginy = cast<int>(sourcey - kernelSize + 0.5f);
-    RDom domx(0, static_cast<int>(2.0f*kernelSize)+1, "domx");
-    RDom domy(0, static_cast<int>(2.0f*kernelSize)+1, "domy");
+    RDom domx(0, static_cast<int>(2.0f * kernelSize) + 1, "domx");
+    RDom domy(0, static_cast<int>(2.0f * kernelSize) + 1, "domy");
     {
         const KernelInfo &info = kernelInfo[interpolationType];
         Func kx, ky;
