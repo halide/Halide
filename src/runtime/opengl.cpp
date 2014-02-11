@@ -160,7 +160,11 @@ static const GLuint square_indices[] = { 0, 1, 2, 3 };
 
 // Ensure that OpenGL runtime is correctly initialized. Used in all public API
 // functions.
-#define ASSERT_INITIALIZED halide_assert(uctx, ST.initialized && "OpenGL runtime not initialized.")
+#define CHECK_INITIALIZED(ERRORCODE)				\
+    if (!ST.initialized) {					\
+	halide_error(uctx, "OpenGL runtime not initialized.");	\
+	return ERRORCODE;					\
+    }
 
 // Macro for error checking.
 #ifndef DEBUG
@@ -191,11 +195,6 @@ static char* halide_strndup(void* uctx, const char* s, size_t n) {
 
 static GLuint get_texture_id(buffer_t* buf) {
     return buf->dev & 0xffffffff;
-}
-
-static void set_texture_id(void* uctx, buffer_t* buf, GLuint texture) {
-    buf->dev = texture & 0xffffffff;
-    halide_assert(uctx, buf->dev == texture && "Texture ID larger than 32 bit");
 }
 
 WEAK GLuint halide_opengl_make_shader(void* uctx, GLenum type,
@@ -240,7 +239,10 @@ static HalideOpenGLArgument* parse_argument(void* uctx, const char* src, const c
     } else if ((name = match_prefix(src, "buffer "))) {
         type = ARG_BUFFER;
     }
-    halide_assert(uctx, type != ARG_NONE && "Argument type not supported");
+    if (type == ARG_NONE) {
+	halide_error(uctx, "Internal error: argument type not supported");
+	return NULL;
+    }
 
     HalideOpenGLArgument* arg = (HalideOpenGLArgument*)
         halide_malloc(uctx, sizeof(HalideOpenGLArgument));
@@ -274,21 +276,26 @@ static HalideOpenGLKernel* create_kernel(void* uctx, const char* src, int size) 
         if ((args = match_prefix(line, kernel_marker))) {
             kernel->name = halide_strndup(uctx, args, next_line - args - 1);
         } else if ((args = match_prefix(line, input_marker))) {
-            HalideOpenGLArgument* arg = parse_argument(uctx, args, next_line-1);
-            arg->next = kernel->arguments;
-            kernel->arguments = arg;
+            if (HalideOpenGLArgument* arg = parse_argument(uctx, args, next_line-1)) {
+		arg->next = kernel->arguments;
+		kernel->arguments = arg;
+	    }
         } else if ((args = match_prefix(line, output_marker))) {
-            HalideOpenGLArgument* arg = parse_argument(uctx, args, next_line-1);
-            arg->is_output = true;
-            arg->next = kernel->arguments;
-            kernel->arguments = arg;
+            if (HalideOpenGLArgument* arg = parse_argument(uctx, args, next_line-1)) {
+		arg->is_output = true;
+		arg->next = kernel->arguments;
+		kernel->arguments = arg;
+	    }
         } else {
             // Stop parsing if we encounter something we don't recognize
             break;
         }
         line = next_line;
     }
-    halide_assert(uctx, kernel->name && "Kernel name not found");
+    if (!kernel->name) {
+	halide_error(uctx, "Internal error: kernel name not specified");
+	return NULL;
+    }
 
     // Arguments are currently in reverse order, flip the list.
     HalideOpenGLArgument* cur = kernel->arguments;
@@ -354,8 +361,10 @@ EXPORT void halide_opengl_init(void* uctx) {
 
     ST.vertex_shader_id = halide_opengl_make_shader(uctx,
         GL_VERTEX_SHADER, vertex_shader_src, NULL);
-    halide_assert(uctx, ST.vertex_shader_id &&
-                  "Failed to create vertex shader");
+    if (ST.vertex_shader_id == 0) {
+	halide_error(uctx, "Failed to create vertex shader");
+	return;
+    }
 
     GLuint buf;
     ST.GenBuffers(1, &buf);
@@ -380,7 +389,7 @@ EXPORT void halide_opengl_init(void* uctx) {
 // The OpenGL context itself is generally managed by the host application, so
 // we leave it untouched.
 EXPORT void halide_opengl_release(void* uctx) {
-    ASSERT_INITIALIZED;
+    CHECK_INITIALIZED();
     ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
@@ -390,7 +399,9 @@ EXPORT void halide_opengl_release(void* uctx) {
         halide_opengl_delete_kernel(uctx, cur);
         cur = next;
     }
-    halide_assert(uctx, ST.textures == NULL && "Not all textures have been freed");
+    if (ST.textures) {
+	halide_error(uctx, "Internal error: not all textures have been freed");
+    }
 
     ST.DeleteBuffers(1, &ST.vertex_buffer);
     ST.DeleteBuffers(1, &ST.element_buffer);
@@ -404,7 +415,7 @@ EXPORT void halide_opengl_release(void* uctx) {
 }
 
 // Determine OpenGL texture format and channel type for a given buffer_t.
-static void get_texture_format(void* uctx,
+static bool get_texture_format(void* uctx,
                                buffer_t* buf,
                                GLint *format,
                                GLint *type) {
@@ -415,7 +426,8 @@ static void get_texture_format(void* uctx,
     } else if (buf->extent[2] == 4) {
         *format = GL_RGBA;
     } else {
-        halide_assert(uctx, false && "Only 1, 3, or 4 color channels are supported");
+        halide_error(uctx, "Only 1, 3, or 4 color channels are supported");
+	return false;
     }
 
     if (buf->elem_size == 1) {
@@ -423,8 +435,10 @@ static void get_texture_format(void* uctx,
     } else if (buf->elem_size == 2) {
         *type = GL_UNSIGNED_SHORT;
     } else {
-        halide_assert(uctx, false && "Only uint8 and uint16 textures are supported");
+        halide_error(uctx, "Only uint8 and uint16 textures are supported");
+	return false;
     }
+    return true;
 }
 
 
@@ -433,7 +447,10 @@ static void get_texture_format(void* uctx,
 EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
     halide_opengl_init(uctx);
 
-    halide_assert(uctx, buf && "Invalid buffer");
+    if (!buf) {
+	halide_error(uctx, "Invalid buffer");
+	return;
+    }
 
     // If the texture was already created by the host application, check that
     // it has the correct format. Otherwise, allocate and set up an
@@ -446,10 +463,15 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
         CHECK_GLERROR();
-        halide_assert(uctx, width >= buf->extent[0] && "Texture width too small");
-        halide_assert(uctx, height >= buf->extent[1] && "Texture height too small");
+	if (width < buf->extent[0] || height < buf->extent[1]) {
+	    halide_error(uctx, "Preallocated texture is smaller than buffer");
+	    return;
+	}
     } else {
-        halide_assert(uctx, buf->extent[3] <= 1 && "3D textures are not supported");
+        if (buf->extent[3] > 1) {
+	    halide_error(uctx, "3D textures are not supported");
+	    return;
+	}
 
         // Generate texture ID
         ST.GenTextures(1, &tex);
@@ -465,7 +487,9 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
 
         // Create empty texture here and fill it with glTexSubImage2D later.
         GLint type = GL_UNSIGNED_BYTE;
-        get_texture_format(uctx, buf, &format, &type);
+        if (get_texture_format(uctx, buf, &format, &type)) {
+	    return;
+	}
         width = buf->extent[0];
         height = buf->extent[1];
 
@@ -511,7 +535,7 @@ EXPORT HalideOpenGLTexture* halide_opengl_find_texture(GLuint tex) {
 // itself is only deleted if it was actually allocated by Halide and not
 // provided by the host application.
 EXPORT void halide_opengl_dev_free(void* uctx, buffer_t* buf) {
-    ASSERT_INITIALIZED;
+    CHECK_INITIALIZED();
 
     GLuint tex = get_texture_id(buf);
     if (tex == 0)
@@ -527,7 +551,10 @@ EXPORT void halide_opengl_dev_free(void* uctx, buffer_t* buf) {
             break;
         }
     }
-    halide_assert(uctx, texinfo && "Internal error: texture not found");
+    if (!texinfo) {
+	halide_error(uctx, "Internal error: texture not found");
+	return;
+    }
 
     // Delete texture if it was allocated by us.
     if (texinfo->halide_allocated) {
@@ -548,12 +575,17 @@ EXPORT void halide_opengl_init_kernels(void* uctx, const char* src, int size) {
 
     // Use '/// KERNEL' comments to split 'src' into discrete blocks, one for
     // each kernel contained in it.
-    char* begin = strstr(src, kernel_marker);
-    while (begin && begin[0]) {
-        char* end = strstr(begin + sizeof(kernel_marker) - 1, kernel_marker);
+    char *begin = strstr(src, kernel_marker);
+    char *end;
+    for (; begin && begin[0]; begin = end) {
+        end = strstr(begin + sizeof(kernel_marker) - 1, kernel_marker);
         if (end == NULL)
             end = begin + strlen(begin);
         HalideOpenGLKernel *kernel = create_kernel(uctx, begin, end-begin);
+	if (!kernel) {
+	    // Simply skip invalid kernels
+	    continue;
+	}
 
         // Compile shader
         kernel->shader_id = halide_opengl_make_shader(uctx,
@@ -586,13 +618,11 @@ EXPORT void halide_opengl_init_kernels(void* uctx, const char* src, int size) {
             kernel->next = ST.kernels;
             ST.kernels = kernel;
         }
-
-        begin = end;
     }
 }
 
 EXPORT void halide_opengl_dev_sync(void* uctx) {
-    ASSERT_INITIALIZED;
+    CHECK_INITIALIZED();
     // TODO: glFinish()
 }
 
@@ -636,11 +666,14 @@ static void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, 
 // Copy image data from host memory to texture. We assume that the texture has
 // already been allocated using halide_opengl_dev_malloc.
 EXPORT void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf) {
-    ASSERT_INITIALIZED;
+    CHECK_INITIALIZED();
     if (!buf->host_dirty)
         return;
 
-    halide_assert(uctx, buf->host && buf->dev);
+    if (!buf->host || !buf->dev) {
+	halide_error(uctx, "Invalid copy_to_dev operation");
+	return;
+    }
 
     GLuint tex = get_texture_id(buf);
 #ifdef DEBUG
@@ -651,9 +684,10 @@ EXPORT void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf) {
     CHECK_GLERROR();
 
 
-    GLint format;
-    GLint type;
-    get_texture_format(uctx, buf, &format, &type);
+    GLint format, type;
+    if (!get_texture_format(uctx, buf, &format, &type)) {
+	return;
+    }
     GLint width = buf->extent[0];
     GLint height = buf->extent[1];
 
@@ -694,11 +728,14 @@ EXPORT void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf) {
 
 // Copy image data from texture back to host memory.
 EXPORT void halide_opengl_copy_to_host(void* uctx, buffer_t* buf) {
-    ASSERT_INITIALIZED;
+    CHECK_INITIALIZED();
     if (!buf->dev_dirty)
         return;
 
-    halide_assert(uctx, buf->host && buf->dev);
+    if (!buf->host || !buf->dev) {
+	halide_error(uctx, "Invalid copy_to_host operation");
+	return;
+    }
 
     GLuint tex = get_texture_id(buf);
 #ifdef DEBUG
@@ -755,7 +792,7 @@ EXPORT void halide_opengl_dev_run(
     size_t arg_sizes[],
     void* args[])
 {
-    ASSERT_INITIALIZED;
+    CHECK_INITIALIZED();
 
     HalideOpenGLKernel* kernel = halide_opengl_find_kernel(entry_name);
     if (!kernel) {
@@ -772,8 +809,10 @@ EXPORT void halide_opengl_dev_run(
     GLint num_active_textures = 0;
     kernel_arg = kernel->arguments;
     for (int i=0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        halide_assert(uctx, kernel_arg != NULL &&
-                      "Too many arguments passed to halide_opengl_dev_run");
+	if (!kernel_arg) {
+	    halide_error(uctx, "Too many arguments passed to halide_opengl_dev_run");
+	    return;
+	}
 
         if (kernel_arg->is_output)
             continue;
@@ -804,17 +843,20 @@ EXPORT void halide_opengl_dev_run(
                 break;
             }
             default:
-                halide_printf(uctx, "Unexpected argument type for '%s'\n",
-                              kernel_arg->name);
-                halide_assert(uctx, false);
+                halide_error(uctx, "Incorrect kernel argument type");
+		return;
             }
         } else {
             // Argument was probably optimized away by GLSL compiler.
+#ifdef DEBUG
             halide_printf(uctx, "Ignoring argument '%s'\n", kernel_arg->name);
+#endif
         }
     }
-    halide_assert(uctx, kernel_arg == NULL &&
-                  "Too few arguments passed to halide_opengl_dev_run");
+    if (kernel_arg) {
+	halide_error(uctx, "Too few arguments passed to halide_opengl_dev_run");
+	return;
+    }
 
     // Prepare framebuffer for rendering to output textures.
     GLint output_min[2] = { 0, 0 };
@@ -831,20 +873,25 @@ EXPORT void halide_opengl_dev_run(
 
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
-            halide_assert(uctx, false &&
-                          "OpenGL ES 2.0 only supports one single output texture");
+            halide_error(uctx,
+			 "OpenGL ES 2.0 only supports one single output texture");
+	    return;
         }
 
         GLuint tex = *((GLuint*)args[i]);
+#ifdef DEBUG
         halide_printf(uctx, "Output texture %d: %d\n", num_output_textures, tex);
+#endif
         ST.FramebufferTexture2D(GL_FRAMEBUFFER,
                                 GL_COLOR_ATTACHMENT0 + num_output_textures,
                                 GL_TEXTURE_2D, tex, 0);
         CHECK_GLERROR();
 
         HalideOpenGLTexture* texinfo = halide_opengl_find_texture(tex);
-        halide_assert(uctx, texinfo != NULL &&
-                      "Undefined output texture");
+	if (!texinfo) {
+	    halide_error(uctx, "Undefined output texture");
+	    return;
+	}
         output_min[0] = texinfo->min[0];
         output_min[1] = texinfo->min[1];
         output_extent[0] = texinfo->extent[0];
