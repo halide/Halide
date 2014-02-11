@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <iostream>
+#include <string.h>
+#include <fstream>
+
 #include "IR.h"
 #include "Func.h"
 #include "Util.h"
@@ -12,10 +17,6 @@
 #include "Param.h"
 #include "Debug.h"
 #include "Target.h"
-#include <algorithm>
-#include <iostream>
-#include <string.h>
-#include <fstream>
 
 namespace Halide {
 
@@ -282,8 +283,10 @@ FuncRefExpr Func::operator()(vector<Expr> args) const {
 int Func::add_implicit_vars(vector<Var> &args) const {
     int placeholder_pos = -1;
     std::vector<Var>::iterator iter = args.begin();
-    while (iter != args.end() && !iter->same_as(_))
+
+    while (iter != args.end() && !iter->same_as(_)) {
         iter++;
+    }
     if (iter != args.end()) {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
@@ -293,6 +296,12 @@ int Func::add_implicit_vars(vector<Var> &args) const {
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
         }
+    }
+
+    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+        std::cerr << "Func " << name() << " was called with "
+                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+        assert(false);
     }
 
     return placeholder_pos;
@@ -316,6 +325,12 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
             iter = args.insert(iter, Var::implicit(i++));
             iter++;
         }
+    }
+
+    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+        std::cerr << "Func " << name() << " was called with "
+                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+        assert(false);
     }
 
     return placeholder_pos;
@@ -1060,16 +1075,35 @@ public:
 vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<string> a = args;
 
-    if (implicit_placeholder_pos != -1) {
-        CountImplicitVars count(e);
+    CountImplicitVars count(e);
 
-        Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
-          func.name() << " at position " << implicit_placeholder_pos << "\n";
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
+                func.name() << " at position " << implicit_placeholder_pos << "\n";
 
-        vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
-        for (int i = 0; i < count.count; i++) {
-            iter = a.insert(iter, Var::implicit(i).name());
-            iter++;
+            vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i).name());
+                iter++;
+            }
+        }
+    }
+
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (a[j] == v.name()) {
+                found = true;
+            }
+        }
+        if (!found) {
+            std::cerr << "Right-hand-side of pure definition of " << func.name()
+                      << " uses implicit variables, but the left-hand-side does not"
+                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
+            assert(false);
         }
     }
 
@@ -1189,24 +1223,45 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
 vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
 
-    if (implicit_placeholder_pos != -1) {
-        CountImplicitVars f(e);
-        // TODO: Check if there is a test case for this and add one if not.
-        // Implicit vars are also allowed in the lhs of a reduction. E.g.:
-        // f(x, y) = x+y
-        // g(x, y) = 0
-        // g(f(r.x)) = 1   (this means g(f(r.x, i0), i0) = 1)
+    CountImplicitVars count(e);
+    // TODO: Check if there is a test case for this and add one if not.
+    // Implicit vars are also allowed in the lhs of a reduction. E.g.:
+    // f(x, y, z) = x+y
+    // g(x, y, z) = 0
+    // g(f(r.x, _), _) = 1   (this means g(f(r.x, _0, _1), _0, _1) = 1)
 
-        for (size_t i = 0; i < a.size(); i++) {
-            a[i].accept(&f);
+    for (size_t i = 0; i < a.size(); i++) {
+        a[i].accept(&count);
+    }
+
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+
+            vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i));
+                iter++;
+            }
         }
+    }
 
-        Internal::debug(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
-
-        vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
-        for (int i = 0; i < f.count; i++) {
-            iter = a.insert(iter, Var::implicit(i));
-            iter++;
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (const Variable *arg = a[j].as<Variable>()) {
+                if (arg->name == v.name()) {
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            std::cerr << "Right-hand-side of update definition of " << func.name()
+                      << " uses implicit variables, but the left-hand-side does not"
+                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
+            assert(false);
         }
     }
 
@@ -1250,7 +1305,9 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) pure_args[i] = Var(v->name);
+            if (!v->param.defined()) {
+                pure_args[i] = Var(v->name);
+            }
         } else {
             pure_args[i] = Var();
         }
@@ -1690,11 +1747,11 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
-  void Func::realize(Buffer b, const Target &target) {
+void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
 
-  void Func::realize(Realization dst, const Target &target) {
+void Func::realize(Realization dst, const Target &target) {
     if (!compiled_module.wrapped_function) compile_jit(target);
 
     assert(compiled_module.wrapped_function);
