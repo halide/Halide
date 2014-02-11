@@ -12,8 +12,7 @@
 
 // This function must be provided by the host environment to retrieve pointers
 // to OpenGL API functions.
-typedef void (*GLFUNCPTR)();
-extern "C" WEAK GLFUNCPTR halide_opengl_get_proc_address(const char* name) {
+extern "C" WEAK void *halide_opengl_get_proc_address(const char* name) {
     return NULL;
 }
 
