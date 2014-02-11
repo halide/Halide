@@ -256,7 +256,7 @@ void CodeGen::compile(Stmt stmt, string name,
                                             ConstantInt::get(i32, b.min[3]))));
         fields.push_back(ConstantInt::get(i32, b.elem_size));
         assert(!b.dev_dirty && "Can't embed an image with a dirty device pointer\n");
-        fields.push_back(ConstantInt::get(i8, 0));
+        fields.push_back(ConstantInt::get(i8, 1));
         fields.push_back(ConstantInt::get(i8, 0));
 
         Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
