@@ -71,6 +71,7 @@ apps/local_laplacian/local_laplacian.h
 apps/error/error
 apps/error/f7.h
 apps/interpolate/interpolate
+apps/resize/resize
 apps/seam_carving/seam_carving.h
 apps/snake/halide_snake
 apps/wavelet/daubechies_x.h
