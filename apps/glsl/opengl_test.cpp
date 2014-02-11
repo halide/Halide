@@ -20,66 +20,8 @@ extern "C" void halide_opengl_dev_run(
     size_t arg_sizes[],
     void* args[]);
 
+extern "C" int halide_opengl_create_context();
 
-#if defined(unix) || defined(__unix__) || defined(__unix)
-
-#include "GL/glx.h"
-
-typedef void (*GLFUNC)();
-extern "C" GLFUNC halide_opengl_get_proc_address(const char* name) {
-    return glXGetProcAddressARB((const GLubyte*) name);
-}
-
-// Initialize OpenGL
-static bool halide_opengl_create_context() {
-    Display* dpy = XOpenDisplay(NULL);
-    if (!dpy) {
-        fprintf(stderr, "Could not open X11 display.\n");
-        return false;
-    }
-
-    // GLX supported?
-    if (!glXQueryExtension(dpy, NULL, NULL)) {
-        fprintf(stderr, "GLX not supported by X server.\n");
-        return false;
-    }
-
-    int attribs[] = { GLX_RGBA, None };
-    XVisualInfo* vi = glXChooseVisual(dpy, DefaultScreen(dpy), attribs);
-    if (!vi) {
-        fprintf(stderr, "Could not find suitable visual.\n");
-        return false;
-    }
-
-    GLXContext ctx = glXCreateContext(dpy, vi, None, True);
-    if (!ctx) {
-        fprintf(stderr, "Could not create OpenGL context.\n");
-        return false;
-    }
-
-    Colormap cmap = 0;
-    cmap = XCreateColormap(dpy, RootWindow(dpy, vi->screen),
-                           vi->visual, AllocNone);
-    XSetWindowAttributes window_attribs;
-    window_attribs.border_pixel = 0;
-    window_attribs.colormap = cmap;
-    Window wnd = XCreateWindow(dpy, RootWindow(dpy, vi->screen),
-                               0, 0, 1, 1, 0, vi->depth,
-                               InputOutput, vi->visual,
-                               CWBorderPixel | CWColormap,
-                               &window_attribs);
-
-    if (!glXMakeCurrent(dpy, wnd, ctx)) {
-        fprintf(stderr, "Could not activate OpenGL context.\n");
-        return false;
-    }
-    return true;
-}
-#else // unix
-
-#  error "Unsupported platform"
-
-#endif
 
 class Image {
 public:
@@ -268,8 +210,10 @@ void test_mockup() {
 }
 
 int main(int argc, char* argv[]) {
-    if (!halide_opengl_create_context())
+    if (halide_opengl_create_context() != 0) {
+	fprintf(stderr, "Could not create OpenGL context\n");
         exit(1);
+    }
     test_copy();
     test_compiled_filter();
     test_mockup();
