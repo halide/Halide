@@ -356,6 +356,13 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
 
+    // Unset constant flag for embedded image global variables
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+      string name = images_to_embed[i].name();
+      GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
+      global->setConstant(false);
+    }
+
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
     Value *kernel_src_ptr = create_constant_binary_blob(kernel_src, "halide_kernel_src");
