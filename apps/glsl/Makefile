@@ -33,4 +33,4 @@ halide_ycc: ../../bin/libHalide.a halide_ycc.o
 
 clean:
 	rm -f opengl_test
-	rm -f test halide_blur.o halide_blur ycc.o blur.o
+	rm -f test halide_blur.o halide_blur ycc.o blur.o OpenGLSupport.o
