@@ -10,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-class CodeGen_GPU_Dev;
+struct CodeGen_GPU_Dev;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_GPU_Host : public CodeGen_X86 {
