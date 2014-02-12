@@ -118,7 +118,7 @@ struct Schedule {
         Expr min, extent;
     };
     /** You may explicitly bound some of the dimensions of a
-     * function. See \ref ScheduleHandle::bound */
+     * function. See \ref Func::bound */
     std::vector<Bound> bounds;
 };
 

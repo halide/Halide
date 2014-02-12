@@ -1,7 +1,6 @@
 #include "RDom.h"
 #include "Util.h"
 #include "IROperator.h"
-#include "Scope.h"
 #include "IRPrinter.h"
 
 namespace Halide {

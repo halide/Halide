@@ -18,35 +18,10 @@ int main(int argc, char **argv) {
     assert(im2.dimensions() == 2);
     assert(im2(4, 6) == 10);
     // im2 is a 2d image
-      
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    // This syntax is deprecated, should produce a warning. DO NOT USE IN NEW CODE.
-    Func f_old;
-    f_old(x) = im1 + im2(x) + im2;
-    // Equivalent to 
-    // f(x, i, j, k) = im1(i, j, k) + im2(x, i) + im2(i, j);
-    // f(x, i, j, k) = i*j*k + x+i + i+j;
-
-    Image<int> result1_old = f_old.realize(2, 2, 2, 2);
-    for (int k = 0; k < 2; k++) {
-        for (int j = 0; j < 2; j++) {
-            for (int i = 0; i < 2; i++) {
-                for (int x = 0; x < 2; x++) {
-                    int correct = i*j*k + x+i + i+j;
-                    if (result1_old(x, i, j, k) != correct) {
-                        printf("result1_old(%d, %d, %d, %d) = %d instead of %d\n",
-                               x, i, j, k, result1_old(x, i, j, k), correct);
-                        return -1;
-                    }
-                }
-            }
-        }
-    }
-#endif
 
     Func f;
     f(x, _) = im1 + im2(x, _) + im2;
-    // Equivalent to 
+    // Equivalent to
     // f(x, i, j, k) = im1(i, j, k) + im2(x, i) + im2(i, j);
     // f(x, i, j, k) = i*j*k + x+i + i+j;
 
@@ -70,9 +45,9 @@ int main(int argc, char **argv) {
     assert(f.dimensions() == 4);
 
     Func g;
-    g(_) = f(2, 2, _) + im2(Expr(1), _); 
+    g(_) = f(2, 2, _) + im2(Expr(1), _);
     f.compute_root();
-    // Equivalent to 
+    // Equivalent to
     // g(i, j) = f(2, 2, i, j) + im2(1, i);
     // g(i, j) = 2*i*j + 2+2 + 2+i + 1+i
 
@@ -83,7 +58,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 10; i++) {
             int correct = 2*i*j + 2+2 + 2+i + 1+i;
             if (result2(i, j) != correct) {
-                printf("result2(%d, %d) = %d instead of %d\n", 
+                printf("result2(%d, %d) = %d instead of %d\n",
                        i, j, result2(i, j), correct);
                 return -1;
             }
@@ -105,7 +80,7 @@ int main(int argc, char **argv) {
                  for (int l = 0; l < 10; l++) {
                    int correct = (i<<24)|(j<<16)|(l<<8)|k;
                    if (transposed(i, j, k, l) != correct) {
-                         printf("transposed(%d, %d, %d, %d) = %d instead of %d\n", 
+                         printf("transposed(%d, %d, %d, %d) = %d instead of %d\n",
                                 i, j, k, l, transposed(i, j, k, l), correct);
                          return -1;
                      }
@@ -129,7 +104,7 @@ int main(int argc, char **argv) {
                    int correct2 = (l<<24)|(k<<16)|(i<<8)|j;
                    int correct = correct1 + correct2;
                    if (hairy_transposed(i, j, k, l) != correct) {
-                         printf("hairy_transposed(%d, %d, %d, %d) = %d instead of %d\n", 
+                         printf("hairy_transposed(%d, %d, %d, %d) = %d instead of %d\n",
                                 i, j, k, l, hairy_transposed(i, j, k, l), correct);
                          return -1;
                      }
@@ -153,7 +128,7 @@ int main(int argc, char **argv) {
                    int correct2 = (l<<24)|(l<<16)|(i<<8)|j;
                    int correct = correct1 + correct2;
                    if (hairy_transposed2(i, j, k, l) != correct) {
-                         printf("hairy_transposed2(%d, %d, %d, %d) = %d instead of %d\n", 
+                         printf("hairy_transposed2(%d, %d, %d, %d) = %d instead of %d\n",
                                 i, j, k, l, hairy_transposed2(i, j, k, l), correct);
                          return -1;
                      }

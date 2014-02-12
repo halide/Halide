@@ -1,37 +1,14 @@
 {
+  "files": {},
   "program": {
-    "x86-64": {"url": "lib64/runnable-ld.so"},
-    "x86-32": {"url": "lib32/runnable-ld.so"}
-  },
-  "files": {
-    "libpthread.so.7690fd5b" : {
-      "x86-64": {"url": "lib64/libpthread.so.7690fd5b"},
-      "x86-32": {"url": "lib32/libpthread.so.7690fd5b"}
+    "x86-64": {
+      "url": "hello_nacl_64.nexe"
     },
-    "libppapi_cpp.so" : {
-      "x86-64": {"url": "lib64/libppapi_cpp.so"},
-      "x86-32": {"url": "lib32/libppapi_cpp.so"}
+    "x86-32": {
+      "url": "hello_nacl_32.nexe"
     },
-    "libstdc++.so.6" : {
-      "x86-64": {"url": "lib64/libstdc++.so.6"},
-      "x86-32": {"url": "lib32/libstdc++.so.6"}
-    },
-    "libm.so.7690fd5b" : {  
-      "x86-64": {"url": "lib64/libm.so.7690fd5b"},
-      "x86-32": {"url": "lib32/libm.so.7690fd5b"}
-    },
-    "libgcc_s.so.1" : {
-      "x86-64": {"url": "lib64/libgcc_s.so.1"},
-      "x86-32": {"url": "lib32/libgcc_s.so.1"}
-    },
-    "libc.so.7690fd5b" : {  
-      "x86-64": {"url": "lib64/libc.so.7690fd5b"},
-      "x86-32": {"url": "lib32/libc.so.7690fd5b"}
-    },
-    "main.nexe" : {
-      "x86-64": {"url": "hello_nacl_64.nexe"},
-      "x86-32": {"url": "hello_nacl_32.nexe"}
+    "arm": {
+      "url": "hello_nacl_arm.nexe"
     }
   }
 }
-

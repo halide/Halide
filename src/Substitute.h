@@ -6,8 +6,9 @@
  * Defines methods for substituting out variables in expressions and
  * statements. */
 
-#include "IRMutator.h"
 #include <map>
+
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

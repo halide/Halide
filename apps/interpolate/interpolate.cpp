@@ -174,7 +174,7 @@ int main(int argc, char **argv) {
     }
 
     // JIT compile the pipeline eagerly, so we don't interfere with timing
-    final.compile_jit();
+    final.compile_jit(target);
 
     Image<float> in_png = load<float>(argv[1]);
     Image<float> out(in_png.width(), in_png.height(), 3);
@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
 
     vector<Argument> args;
     args.push_back(input);
-    final.compile_to_assembly("test.s", args);
+    final.compile_to_assembly("test.s", args, target);
 
     save(out, argv[2]);
 

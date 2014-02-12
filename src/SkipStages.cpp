@@ -11,6 +11,7 @@ namespace Internal {
 
 using std::string;
 using std::vector;
+using std::map;
 
 class PredicateFinder : public IRVisitor {
 public:
@@ -95,9 +96,15 @@ private:
         varies = false;
         condition.accept(this);
 
-        if (varies) {
-            predicate = (old_predicate || predicate ||
-                         true_predicate || false_predicate);
+        if (is_one(predicate) || is_one(old_predicate)) {
+            predicate = const_true();
+        } else if (varies) {
+            if (is_one(true_predicate) || is_one(false_predicate)) {
+                predicate = const_true();
+            } else {
+                predicate = (old_predicate || predicate ||
+                             true_predicate || false_predicate);
+            }
         } else {
             predicate = (old_predicate || predicate ||
                          (condition && true_predicate) ||
@@ -155,13 +162,13 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &b) : buffer(b) {}
+    StageSkipper(const string &f) : func(f) {}
 private:
-    string buffer;
+    string func;
     using IRMutator::visit;
 
     void visit(const Realize *op) {
-        if (op->name == buffer) {
+        if (op->name == func) {
             PredicateFinder f(op->name);
             op->body.accept(&f);
             Expr predicate = simplify(f.predicate);
@@ -170,7 +177,7 @@ private:
                 ProductionGuarder g(op->name, predicate);
                 Stmt body = g.mutate(op->body);
                 // In the future we may be able to shrink the size
-                // opated, but right now those values may be
+                // updated, but right now those values may be
                 // loaded. They can be incorrect, but they must be
                 // loadable. Perhaps we can mmap some readable junk memory
                 // (e.g. lots of pages of /dev/zero).
@@ -184,10 +191,84 @@ private:
     }
 };
 
+// Check if all calls to a given function are behind an if of some
+// sort (but don't worry about what it is).
+class MightBeSkippable : public IRVisitor {
+
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        IRVisitor::visit(op);
+        if (op->name == func) {
+            if (!found_call) {
+                result = guarded;
+                found_call = true;
+            } else {
+                result &= guarded;
+            }
+        }
+    }
+
+
+    void visit(const IfThenElse *op) {
+        op->condition.accept(this);
+
+        bool old = guarded;
+        guarded = true;
+
+        op->then_case.accept(this);
+        if (op->else_case.defined()) {
+            op->else_case.accept(this);
+        }
+
+        guarded = old;
+    }
+
+    void visit(const Select *op) {
+        op->condition.accept(this);
+
+        bool old = guarded;
+        guarded = true;
+
+        op->true_value.accept(this);
+        op->false_value.accept(this);
+
+        guarded = old;
+    }
+
+    void visit(const Realize *op) {
+        if (op->name == func) {
+            guarded = false;
+        }
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Pipeline *op) {
+        if (op->name == func) {
+            op->consume.accept(this);
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
+    string func;
+    bool guarded;
+
+public:
+    bool result;
+    bool found_call;
+
+    MightBeSkippable(string f) : func(f), result(false), found_call(false) {}
+};
+
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     for (size_t i = order.size()-1; i > 0; i--) {
-        StageSkipper skipper(order[i-1]);
-        stmt = skipper.mutate(stmt);
+        MightBeSkippable check(order[i-1]);
+        stmt.accept(&check);
+        if (check.result) {
+            StageSkipper skipper(order[i-1]);
+            stmt = skipper.mutate(stmt);
+        }
     }
     return stmt;
 }

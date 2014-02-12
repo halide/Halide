@@ -1,16 +1,14 @@
+#include <iostream>
+#include <sstream>
+
 #include "CodeGen_ARM.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
-#include "IRPrinter.h"
 #include "IRMatch.h"
 #include "IREquality.h"
 #include "Debug.h"
 #include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Simplify.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 // Native client llvm relies on global flags to control sandboxing on
@@ -1115,23 +1113,25 @@ void CodeGen_ARM::visit(const Store *op) {
         return;
     }
 
-    // We have builtins for strided stores with fixed but unknown stride
-    ostringstream builtin;
-    builtin << "strided_store_"
-            << (op->value.type().is_float() ? 'f' : 'i')
-            << op->value.type().bits
-            << 'x' << op->value.type().width;
+    // We have builtins for strided stores with fixed but unknown stride, but they use inline assembly
+    if (target.os != Target::NaCl) {
+        ostringstream builtin;
+        builtin << "strided_store_"
+                << (op->value.type().is_float() ? 'f' : 'i')
+                << op->value.type().bits
+                << 'x' << op->value.type().width;
 
-    llvm::Function *fn = module->getFunction(builtin.str());
-    if (fn) {
-        Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), ramp->base);
-        Value *stride = codegen(ramp->stride * op->value.type().bytes());
-        Value *val = codegen(op->value);
-        debug(4) << "Creating call to " << builtin.str() << "\n";
-        Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
-        (void)store;
-        add_tbaa_metadata(store, op->name);
-        return;
+        llvm::Function *fn = module->getFunction(builtin.str());
+        if (fn) {
+            Value *base = codegen_buffer_pointer(op->name, op->value.type().element_of(), ramp->base);
+            Value *stride = codegen(ramp->stride * op->value.type().bytes());
+            Value *val = codegen(op->value);
+            debug(4) << "Creating call to " << builtin.str() << "\n";
+            Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
+            (void)store;
+            add_tbaa_metadata(store, op->name);
+            return;
+        }
     }
 
     CodeGen::visit(op);
@@ -1222,22 +1222,24 @@ void CodeGen_ARM::visit(const Load *op) {
         }
     }
 
-    // We have builtins for strided loads with fixed but unknown stride
-    ostringstream builtin;
-    builtin << "strided_load_"
-            << (op->type.is_float() ? 'f' : 'i')
-            << op->type.bits
-            << 'x' << op->type.width;
+    // We have builtins for strided loads with fixed but unknown stride, but they use inline assembly.
+    if (target.os != Target::NaCl) {
+        ostringstream builtin;
+        builtin << "strided_load_"
+                << (op->type.is_float() ? 'f' : 'i')
+                << op->type.bits
+                << 'x' << op->type.width;
 
-    llvm::Function *fn = module->getFunction(builtin.str());
-    if (fn) {
-        Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
-        Value *stride = codegen(ramp->stride * op->type.bytes());
-        debug(4) << "Creating call to " << builtin.str() << "\n";
-        Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
-        add_tbaa_metadata(load, op->name);
-        value = load;
-        return;
+        llvm::Function *fn = module->getFunction(builtin.str());
+        if (fn) {
+            Value *base = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
+            Value *stride = codegen(ramp->stride * op->type.bytes());
+            debug(4) << "Creating call to " << builtin.str() << "\n";
+            Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
+            add_tbaa_metadata(load, op->name);
+            value = load;
+            return;
+        }
     }
 
     CodeGen::visit(op);

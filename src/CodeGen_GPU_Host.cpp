@@ -1,21 +1,16 @@
+#include <sstream>
+
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Var.h"
-#include "Param.h"
-#include "integer_division_table.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
 #include "Bounds.h"
 #include "Simplify.h"
-#include "Tracing.h"
 
 #ifdef _MSC_VER
 // TODO: This is untested
@@ -361,6 +356,13 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
 
+    // Unset constant flag for embedded image global variables
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+      string name = images_to_embed[i].name();
+      GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
+      global->setConstant(false);
+    }
+
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
     Value *kernel_src_ptr = create_constant_binary_blob(kernel_src, "halide_kernel_src");
@@ -567,14 +569,14 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         vector<Argument> closure_args = c.arguments();
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
-        Value *saved_stack = save_stack();
-        Value *gpu_args_arr = builder->CreateAlloca(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
-                                                    NULL,
-                                                    kernel_name + "_args");
 
-        Value *gpu_arg_sizes_arr = builder->CreateAlloca(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
-                                                         NULL,
-                                                         kernel_name + "_arg_sizes");
+        Value *gpu_args_arr = create_alloca_at_entry(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
+                                                     num_args+1,
+                                                     kernel_name + "_args");
+
+        Value *gpu_arg_sizes_arr = create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
+                                                          num_args+1,
+                                                          kernel_name + "_arg_sizes");
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
@@ -642,8 +644,6 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             sym_pop(shared_mem_allocations[i]);
         }
 
-        // We did a bunch of allocas, so we need to restore the stack.
-        restore_stack(saved_stack);
     } else {
         CodeGen_X86::visit(loop);
     }
@@ -653,8 +653,8 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Allocation host_allocation = {NULL, 0, NULL};
-    Value *saved_stack = NULL;
+    Allocation host_allocation = {NULL, 0};
+
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
         host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
@@ -666,12 +666,8 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     Value *buf = NULL;
     if (usage.used_on_device) {
         debug(2) << alloc->name << " is used on the device\n";
-        // create a buffer_t to track this allocation
-        if (!host_allocation.saved_stack) {
-            // Save the stack pointer if we haven't already
-            saved_stack = save_stack();
-        }
-        buf = builder->CreateAlloca(buffer_t_type);
+
+        buf = create_alloca_at_entry(buffer_t_type, 1);
         Value *zero32 = ConstantInt::get(i32, 0),
             *one32  = ConstantInt::get(i32, 1),
             *null64 = ConstantInt::get(i64, 0),
@@ -714,10 +710,6 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
     }
 
     codegen(alloc->body);
-
-    if (saved_stack) {
-        restore_stack(saved_stack);
-    }
 
     if (usage.used_on_host) {
         destroy_allocation(host_allocation);

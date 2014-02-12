@@ -3,8 +3,6 @@
 
 #include "Target.h"
 #include "LLVM_Headers.h"
-#include "Debug.h"
-#include "Util.h"
 
 namespace Halide {
 
@@ -174,6 +172,13 @@ Target parse_target_string(const std::string &target) {
         } else if (tok == "arm") {
             t.arch = Target::ARM;
             is_arch = true;
+        } else if (tok == "pnacl") {
+            t.arch = Target::PNaCl;
+            t.os = Target::NaCl;
+            t.bits = 32;
+            is_os = true;
+            is_arch = true;
+            is_bits = true;
         } else if (tok == "32") {
             t.bits = 32;
             is_bits = true;
@@ -264,6 +269,16 @@ Target parse_target_string(const std::string &target) {
     return t;
 }
 
+namespace {
+llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMContext *context) {
+    #if LLVM_VERSION < 35
+    return llvm::ParseBitcodeFile(bitcode_buffer, *context);
+    #else
+    return llvm::parseBitcodeFile(bitcode_buffer, *context).get();
+    #endif
+}
+}
+
 #define DECLARE_INITMOD(mod)                                            \
     extern "C" unsigned char halide_internal_initmod_##mod[];           \
     extern "C" int halide_internal_initmod_##mod##_length;              \
@@ -271,7 +286,7 @@ Target parse_target_string(const std::string &target) {
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length); \
         llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
-        llvm::Module *module = llvm::ParseBitcodeFile(bitcode_buffer, *context); \
+        llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
         delete bitcode_buffer;                                          \
         return module;                                                  \
     }
@@ -323,6 +338,7 @@ DECLARE_CPP_INITMOD(write_debug_image)
 
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
+DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(ptx_dev)
 #if WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
@@ -415,7 +431,10 @@ namespace Internal {
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
     assert(t.bits == 32 || t.bits == 64);
-    bool bits_64 = (t.bits == 64);
+    // NaCl always uses the 32-bit runtime modules, because pointers
+    // and size_t are 32-bit in 64-bit NaCl, and that's the only way
+    // in which the 32- and 64-bit runtimes differ.
+    bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
 
     vector<llvm::Module *> modules;
 
@@ -451,7 +470,12 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
     // These modules are always used
     modules.push_back(get_initmod_posix_math(c, bits_64));
-    modules.push_back(get_initmod_posix_math_ll(c));
+
+    if (t.arch == Target::PNaCl) {
+        modules.push_back(get_initmod_pnacl_math_ll(c));
+    } else {
+        modules.push_back(get_initmod_posix_math_ll(c));
+    }
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));

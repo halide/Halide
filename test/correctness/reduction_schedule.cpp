@@ -3,41 +3,51 @@
 
 using namespace Halide;
 
+Expr min3(Expr a, Expr b, Expr c) {
+    return min(min(a, b), c);
+}
+
 int main(int argc, char **argv) {
     Var x, y;
 
     const int size = 32;
 
-    Image<double> noise(size, size);
+    Image<float> noise(size, size);
     for (int i = 0; i < size; i++) {
         for (int j = 0; j < size; j++) {
-            noise(j,i) = (double)rand() / RAND_MAX;
+            noise(j,i) = (float)rand() / RAND_MAX;
         }
     }
 
-    // Define a seam carving-esque energy
-    // The meaning of this depends on the interleaving of the x and y
-    // dimensions during the reduction update
-    Func clamped;
-    clamped(x, y) = noise(clamp(x, 0, size-1), clamp(y, 0, size-1));
+    // Define a seam carving-esque energy.  The meaning of this
+    // depends on the interleaving of the x and y dimensions during
+    // the reduction update. This is why we have RDoms instead of just
+    // using multiple RVars in an update.
 
     Func energy;
-    RDom ry(1, noise.height()-1);
-    energy(x, y)  = clamped(x, y);
-    Expr xm = clamp(x-1, 0, size-1);
-    Expr xp = clamp(x+1, 0, size-1);
-    energy(x, ry) = clamped(x, ry) + min(min(energy(xm, ry-1), energy(x, ry-1)), energy(xp, ry-1));
+    RDom r(0, noise.width(), 1, noise.height()-1);
+    Expr xm = max(r.x - 1, 0), xp = min(r.x + 1, noise.width() - 1);
+    energy(x, y) = 0.0f;
+    energy(x, 0) = noise(x, 0); // The first row is just the first row of the input.
+    energy(r.x, r.y) = noise(r.x, r.y) + min3(energy(xm,  r.y - 1),
+                                              energy(r.x, r.y - 1),
+                                              energy(xp,  r.y - 1));
 
-    Image<double> im_energy = energy.realize(size,size);
-    Image<double> ref_energy(noise);
-    for (int y = 1; y < size; y++) {
+    Image<float> im_energy = energy.realize(size,size);
+    Image<float> ref_energy(size, size);
+    for (int y = 0; y < size; y++) {
         for (int x = 0; x < size; x++) {
-            int xm = std::max(x-1, 0);
-            int xp = std::min(x+1, size-1);
-            double incr = std::min(ref_energy(xm, y-1), std::min(ref_energy(x, y-1), ref_energy(xp, y-1)));
-            ref_energy(x, y) += incr;
-            double delta = ref_energy(x,y) - im_energy(x,y);
-            if (fabs(delta) > 1e-10) {
+            int xm = std::max(x - 1, 0);
+            int xp = std::min(x + 1, size - 1);
+
+            float incr = 0.0f;
+            if (y > 0) {
+                incr = std::min(ref_energy(xm, y-1), std::min(ref_energy(x, y-1), ref_energy(xp, y-1)));
+            }
+            ref_energy(x, y) = noise(x, y) + incr;
+
+            float delta = ref_energy(x,y) - im_energy(x,y);
+            if (fabs(delta) > 1e-5) {
                 printf("energy(%d,%d) was %f instead of %f\n", x, y, im_energy(x,y), ref_energy(x,y));
                 return -1;
             }
