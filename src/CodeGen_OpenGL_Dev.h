@@ -8,6 +8,8 @@
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 
+#include <sstream>
+
 namespace Halide {
 namespace Internal {
 
