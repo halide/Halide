@@ -83,7 +83,7 @@
 
 <table cellspacing=8><tr>
 <td width=200 height=30>
-Implementation 
+Implementation
 </td><td>
 <select id="implementation" onchange="setImplementation(this.value)">
 <option value="0">Halide</option>
@@ -101,9 +101,9 @@ Halide thread pool size:
 
 </td><td width=600>
 
-<p>This demo is running a <a href="http://github.com/halide/halide">Halide</a> image processing routine compiled for x86-64 native client. The source code is <a href="halide_game_of_life.cpp">here</a>, and it compiles to <a href="halide_game_of_life.s">this assembly</a>. It's vectorized and parallelized, and on my machine is close to 10 times faster than <a href="c_game_of_life.cpp">this low-level C</a> compiled with -O3 (3ms vs 28ms). You can try it yourself below. </p>
+<p>This demo is running a <a href="http://github.com/halide/halide">Halide</a> image processing routine compiled for x86-64 native client. The source code is <a href="halide_game_of_life.cpp">here</a>, and it compiles to this assembly: <a href="halide_game_of_life_32.s">x86_32</a> <a href="halide_game_of_life_64.s">x86_64</a> <a href="halide_game_of_life_arm.s">arm</a>. It's vectorized and parallelized, and on my machine is close to 10 times faster than <a href="c_game_of_life.cpp">this low-level C</a> compiled with -O3 (3ms vs 28ms). You can try it yourself below. </p>
 
-<p>This may take a while to load (it downloads native client versions of glibc and pthreads if you don't have them already). You will probably also need to enable NaCl for non-chrome-web-store sources in about://flags and restart chrome.</p>
+<p>If it doesn't load, you probably need to enable NaCl for non-chrome-web-store sources in about://flags and restart chrome.</p>
 
 <p>Move your mouse over the app to create life.</p>
 

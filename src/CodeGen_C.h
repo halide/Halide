@@ -6,15 +6,18 @@
  * Defines an IRPrinter that emits C++ code equivalent to a halide stmt
  */
 
-#include "IRPrinter.h"
-#include "Argument.h"
-#include "Scope.h"
 #include <string>
 #include <vector>
 #include <ostream>
 #include <map>
 
+#include "IRPrinter.h"
+#include "Scope.h"
+
 namespace Halide {
+
+struct Argument;
+
 namespace Internal {
 
 /** This class emits C++ code equivalent to a halide Stmt. It's
@@ -41,7 +44,7 @@ public:
     static void test();
 
 protected:
-    /** An for the most recently generated ssa variable */
+    /** An ID for the most recently generated ssa variable */
     std::string id;
 
     /** A cache of generated values in scope */

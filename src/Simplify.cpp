@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "Simplify.h"
 #include "IROperator.h"
 #include "IREquality.h"
@@ -9,7 +11,6 @@
 #include "ModulusRemainder.h"
 #include "Substitute.h"
 #include "Bounds.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {
@@ -178,7 +179,7 @@ private:
     }
 
     void visit(const Add *op) {
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0, ic = 0;
         float fa = 0.0f, fb = 0.0f;
 
         Expr a = mutate(op->a), b = mutate(op->b);
@@ -203,6 +204,8 @@ private:
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
 
+        const Div *div_a = a.as<Div>();
+
         const Div *div_a_a = mul_a ? mul_a->a.as<Div>() : NULL;
         const Mod *mod_a = a.as<Mod>();
         const Mod *mod_b = b.as<Mod>();
@@ -222,6 +225,8 @@ private:
         sub_a_b = max_a ? max_a->b.as<Sub>() : sub_a_b;
         add_a_a = max_a ? max_a->a.as<Add>() : add_a_a;
         add_a_b = max_a ? max_a->b.as<Add>() : add_a_b;
+
+        add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
 
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
@@ -299,6 +304,12 @@ private:
         } else if (max_a && add_a_a && const_int(add_a_a->b, &ia) && const_int(b, &ib) && ia + ib == 0) {
             // max(a + (-2), b) + 2 -> max(a, b + 2)
             expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
+        } else if (div_a && add_a_a &&
+                   const_int(add_a_a->b, &ia) &&
+                   const_int(div_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
+            expr = mutate((add_a_a->a + (ia + ib*ic)) / ib);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b + mul_b->b));
@@ -308,7 +319,6 @@ private:
             expr = mutate(mul_a->b * (mul_a->a + mul_b->a));
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->b)) {
             expr = mutate(mul_a->a * (mul_a->b + mul_b->a));
-
         } else if (mod_a && mul_b && equal(mod_a->b, mul_b->b)) {
             // (x%3) + y*3 -> y*3 + x%3
             expr = mutate(b + a);
@@ -542,6 +552,7 @@ private:
         const Add *add_a = a.as<Add>();
         const Sub *sub_a = a.as<Sub>();
         const Div *div_a = a.as<Div>();
+        const Div *div_a_a = NULL;
         const Mul *mul_a_a = NULL;
         const Mul *mul_a_b = NULL;
         const Broadcast *broadcast_a = a.as<Broadcast>();
@@ -549,6 +560,7 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
 
         if (add_a) {
+            div_a_a = add_a->a.as<Div>();
             mul_a_a = add_a->a.as<Mul>();
             mul_a_b = add_a->b.as<Mul>();
         } else if (sub_a) {
@@ -620,6 +632,12 @@ private:
         } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
+        } else if (div_a_a && add_a &&
+                   const_int(div_a_a->b, &ia) &&
+                   const_int(add_a->b, &ib) &&
+                   const_int(b, &ic)) {
+            // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
+            expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
                    ia && ib && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
@@ -674,6 +692,14 @@ private:
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
         if (const_int(b, &ib) && a.type() == Int(32)) {
+            // If the LHS is bounded, we can possibly bail out early
+            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
+            if (ia.max.defined() && ia.min.defined() &&
+                is_one(mutate((ia.max < b) && (ia.min >= 0)))) {
+                expr = a;
+                return;
+            }
+
             mod_rem = modulus_remainder(a, alignment_info);
         }
 
@@ -727,6 +753,8 @@ private:
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Min *min_a = a.as<Min>();
@@ -775,8 +803,8 @@ private:
         } else if (op->type == Int(32) && is_simple_const(b)) {
             // Try to remove pointless mins that splitting introduces
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            ia.max = mutate(ia.max);
-            if (ia.max.defined() && is_const(ia.max) && is_one(mutate(ia.max <= b))) {
+            if (ia.max.defined() &&
+                is_one(mutate(ia.max <= b))) {
                 expr = a;
                 return;
             }
@@ -894,6 +922,17 @@ private:
         } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
+
+        } else if (div_a && div_b &&
+                   const_int(div_a->b, &ia) &&
+                   const_int(div_b->b, &ib) &&
+                   (ia == ib)) {
+            // min(a / 4, b / 4) -> min(a, b) / 4
+            if (ia > 0) {
+                expr = mutate(min(div_a->a, div_b->a) / ia);
+            } else {
+                expr = mutate(max(div_a->a, div_b->a) / ia);
+            }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -909,12 +948,14 @@ private:
             std::swap(a, b);
         }
 
-        int ia = 0, ib = 0;
+        int ia = 0, ib = 0; //, ic = 0, id = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
         const Add *add_b = b.as<Add>();
+        const Div *div_a = a.as<Div>();
+        const Div *div_b = b.as<Div>();
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Max *max_a = a.as<Max>();
@@ -927,6 +968,9 @@ private:
 
         const Min *min_a_a = max_a ? max_a->a.as<Min>() : NULL;
         const Min *min_b_a = max_b ? max_b->a.as<Min>() : NULL;
+
+        //const Add *add_a_a = div_a ? div_a->a.as<Add>() : NULL;
+        //const Add *add_b_a = div_b ? div_b->a.as<Add>() : NULL;
 
         if (equal(a, b)) {
             expr = a;
@@ -1045,14 +1089,16 @@ private:
             // max(a + b, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
 
-        } else if (false && add_a && add_b && const_int(add_a->b, &ia) && const_int(add_b->b, &ib)) {
-            // Shuffle constants outside
-            // max(x + 2, y + 3) -> max(x, y + 1) + 2
-            expr = mutate(Max::make(add_a->a, add_b->a + (ib - ia))) + ia;
-        } else if (false && add_a && const_int(add_a->b, &ia) && const_int(b, &ib)) {
-            // max(x + 3, 5) -> max(x, 2) + 3
-            expr = mutate(Max::make(add_a->a, ib - ia) + ia);
-
+        } else if (div_a && div_b &&
+                   const_int(div_a->b, &ia) &&
+                   const_int(div_b->b, &ib) &&
+                   (ia == ib)) {
+            // max(a / 4, b / 4) -> max(a, b) / 4
+            if (ia > 0) {
+                expr = mutate(max(div_a->a, div_b->a) / ia);
+            } else {
+                expr = mutate(min(div_a->a, div_b->a) / ia);
+            }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1085,7 +1131,7 @@ private:
             }
         } else if (is_zero(delta)) {
             expr = const_true(op->type.width);
-        } else if (is_simple_const(delta)) {
+        } else if (is_simple_const(delta) && ((!ramp_a && !ramp_b) || (ramp_a && ramp_b))) {
             expr = const_false(op->type.width);
         } else if (is_simple_const(a) && !is_simple_const(b)) {
             // Move constants to the right
@@ -1428,6 +1474,15 @@ private:
             const Ramp *ramp = new_value.as<Ramp>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
+            const Variable *var_b = NULL;
+            if (add) {
+                var_b = add->b.as<Variable>();
+            } else if (sub) {
+                var_b = sub->b.as<Variable>();
+            } else if (mul) {
+                var_b = mul->b.as<Variable>();
+            }
+
             if (is_const(new_value)) {
                 replacement = substitute(new_name, new_value, replacement);
                 new_value = Expr();
@@ -1436,16 +1491,16 @@ private:
                 replacement = substitute(new_name, var, replacement);
                 new_value = Expr();
                 break;
-            } else if (add && is_const(add->b)) {
+            } else if (add && (is_const(add->b) || var_b)) {
                 replacement = substitute(new_name, Add::make(new_var, add->b), replacement);
                 new_value = add->a;
-            } else if (mul && is_const(mul->b)) {
+            } else if (mul && (is_const(mul->b) || var_b)) {
                 replacement = substitute(new_name, Mul::make(new_var, mul->b), replacement);
                 new_value = mul->a;
             } else if (div && is_const(div->b)) {
                 replacement = substitute(new_name, Div::make(new_var, div->b), replacement);
                 new_value = div->a;
-            } else if (sub && is_const(sub->b)) {
+            } else if (sub && (is_const(sub->b) || var_b)) {
                 replacement = substitute(new_name, Sub::make(new_var, sub->b), replacement);
                 new_value = sub->a;
             } else if (mod && is_const(mod->b)) {
@@ -1505,12 +1560,6 @@ private:
         info = var_info.get(op->name);
         var_info.pop(op->name);
 
-        if (body.same_as(op->body) &&
-            value.same_as(op->value) &&
-            !new_value.defined()) {
-            return op;
-        }
-
         Body result = body;
 
         if (new_value.defined() && info.new_uses > 0) {
@@ -1521,6 +1570,16 @@ private:
         if (info.old_uses > 0 || !remove_dead_lets) {
             // The old name is still in use. We'd better keep it as well.
             result = T::make(op->name, value, result);
+        }
+
+        // Don't needlessly make a new Let/LetStmt node.  (Here's a
+        // piece of template syntax I've never needed before).
+        const T *new_op = result.template as<T>();
+        if (new_op &&
+            new_op->name == op->name &&
+            new_op->body.same_as(op->body) &&
+            new_op->value.same_as(op->value)) {
+            return op;
         }
 
         return result;
@@ -1537,16 +1596,13 @@ private:
     }
 
     void visit(const AssertStmt *op) {
-        Expr condition = mutate(op->condition);
+        IRMutator::visit(op);
 
-        if (is_const(condition, 0)) {
+        const AssertStmt *a = stmt.as<AssertStmt>();
+        if (a && is_zero(a->condition)) {
             std::cerr << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                      << Stmt(op) << "\n";
+                      << stmt << "\n";
             assert(false);
-        } else if (condition.same_as(op->condition)) {
-            stmt = op;
-        } else {
-            stmt = AssertStmt::make(condition, op->message);
         }
     }
 
@@ -1801,6 +1857,9 @@ void simplify_test() {
     check((y + x*4)/2, y/2 + x*2);
     check((x*4 - y)/2, x*2 - y/2);
     check((y - x*4)/2, y/2 - x*2);
+    check((x + 3)/2 + 7, (x + 17)/2);
+    check((x/2 + 3)/5, (x + 6)/10);
+
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
           Expr(Broadcast::make(y/x, 4)));
@@ -1986,6 +2045,15 @@ void simplify_test() {
     check(max(clamp(x, y, z), clamp(x, v, w)),
           clamp(x, max(y, v), max(z, w)));
 
+    check(Ramp::make(0, 1, 4) == Broadcast::make(2, 4),
+          Ramp::make(0, 1, 4) == Broadcast::make(2, 4));
+
+    check(min(x/4, y/4), min(x, y)/4);
+    check(max(x/4, y/4), max(x, y)/4);
+
+    check(min(x/(-4), y/(-4)), max(x, y)/(-4));
+    check(max(x/(-4), y/(-4)), min(x, y)/(-4));
+
     check(!f, t);
     check(!t, f);
     check(!(x < y), y <= x);
@@ -2017,6 +2085,7 @@ void simplify_test() {
 
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
+    check(Let::make("x", 0, 0), 0);
 
     std::cout << "Simplify test passed" << std::endl;
 }

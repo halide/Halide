@@ -19,11 +19,10 @@ int main(int argc, char *argv[]) {
     if (target.has_gpu()) {
         kernel1.gpu_tile(x, 32, GPU_DEFAULT).compute_root();
         kernel2.gpu_tile(x, 32, GPU_DEFAULT).compute_root();
-
         kernel3.gpu_tile(x, 32, GPU_DEFAULT);
     }
 
-    Image<int32_t> result = kernel3.realize(256);
+    Image<int32_t> result = kernel3.realize(256, target);
 
     for (int i = 0; i < 256; i ++)
       assert(result(i) == static_cast<int32_t>(floor(((float)i + 0.5f) / 3.0f) + sqrt(4 * i * i) + i));

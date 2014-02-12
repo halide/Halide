@@ -48,7 +48,7 @@ bool relatively_equal(value_t a, value_t b) {
         if (target.has_gpu()) {                                               \
             test_##name.gpu_tile(x, 8, GPU_DEFAULT);                          \
         }                                                                     \
-        Image<type> result = test_##name.realize(in_buf->extent[0]);          \
+        Image<type> result = test_##name.realize(in_buf->extent[0], target);  \
         for (int i = 0; i < in_buf->extent[0]; i++) {                         \
           type c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i]);  \
           assert(relatively_equal(c_result, result(i)) &&                     \
@@ -69,7 +69,7 @@ bool relatively_equal(value_t a, value_t b) {
         if (target.has_gpu()) {                                                     \
           test_##name.gpu_tile(x, 8, GPU_DEFAULT);                                  \
         }                                                                           \
-        Image<type> result = test_##name.realize(in_buf->extent[1]);                \
+        Image<type> result = test_##name.realize(in_buf->extent[1], target);        \
         for (int i = 0; i < in_buf->extent[1]; i++) {                               \
           type c_result = c_name(reinterpret_cast<type *>(in_buf->host)[i * 2],     \
                                  reinterpret_cast<type *>(in_buf->host)[i * 2 + 1]);\

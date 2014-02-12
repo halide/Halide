@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
     // f should be able to tell that it only needs to compute each value once
     if (count != 101) {
         printf("f was called %d times instead of %d times\n", count, 101);
-        //return -1;
+        return -1;
     }
 
     // Now try with a reduction

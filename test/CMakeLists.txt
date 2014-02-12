@@ -4,9 +4,12 @@ option(WITH_TEST_PERFORMANCE "Build performance tests" ON)
 
 function(tests folder)
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/${folder}" ${CMAKE_CURRENT_SOURCE_DIR}/${folder}/*.cpp)
+  if (WIN32)
+    LIST(REMOVE_ITEM TESTS "simd_op_check.cpp") # Relies on shell stuff that doesn't work on windows
+  endif()
   foreach(file ${TESTS})
     string(REPLACE ".cpp" "" name ${file})
-    halide_project(${name} ${folder} ${folder}/${file})
+    halide_project(${folder}_${name} ${folder} ${folder}/${file})
   endforeach()
 endfunction(tests)
 
@@ -22,3 +25,5 @@ endif()
 if (WITH_TEST_PERFORMANCE)
   tests(performance)
 endif()
+
+#TODO: the static tests

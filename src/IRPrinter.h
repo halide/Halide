@@ -1,10 +1,9 @@
 #ifndef HALIDE_IR_PRINTER_H
 #define HALIDE_IR_PRINTER_H
 
-#include "IRVisitor.h"
-#include "Type.h"
-#include "IR.h"
 #include <ostream>
+
+#include "IR.h"
 
 namespace Halide {
 

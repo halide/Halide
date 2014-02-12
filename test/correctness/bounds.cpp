@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.has_gpu()) {
+        // Resolve why OpenCL used 32,1 tiling
         f.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
         g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
         h.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
@@ -24,9 +25,9 @@ int main(int argc, char **argv) {
 
     printf("Realizing function...\n");
 
-    Image<int> imf = f.realize(32, 32);
-    Image<int> img = g.realize(32, 32);
-    Image<int> imh = h.realize(32, 32);
+    Image<int> imf = f.realize(32, 32, target);
+    Image<int> img = g.realize(32, 32, target);
+    Image<int> imh = h.realize(32, 32, target);
 
     // Check the result was what we expected
     for (int i = 0; i < 32; i++) {

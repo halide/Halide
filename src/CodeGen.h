@@ -61,12 +61,12 @@ public:
 
     /** Emit a compiled halide statement as llvm bitcode. Call this
      * after calling compile. */
-    void compile_to_bitcode(const std::string &filename);
+    virtual void compile_to_bitcode(const std::string &filename);
 
     /** Emit a compiled halide statement as either an object file, or
      * as raw assembly, depending on the value of the second
      * argument. Call this after calling compile. */
-    void compile_to_native(const std::string &filename, bool assembly = false);
+    virtual void compile_to_native(const std::string &filename, bool assembly = false);
 
     /** Compile to machine code stored in memory, and return some
      * functions pointers into that machine code. */
@@ -166,7 +166,8 @@ protected:
     void define_buffer_t();
 
     /** Codegen an assertion. If false, it bails out and calls the error handler. */
-    void create_assertion(llvm::Value *condition, const std::string &message);
+    void create_assertion(llvm::Value *condition, const std::string &message,
+                          const std::vector<llvm::Value *> &args = std::vector<llvm::Value *>());
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
     llvm::Constant *create_string_constant(const std::string &str);
@@ -290,24 +291,17 @@ protected:
      * current context. */
     llvm::Type *llvm_type_of(Type);
 
-    /** Restores the stack pointer to the given value. Call this to
-     * free a stack variable. */
-    void restore_stack(llvm::Value *saved_stack);
-
-    /** Save the stack directly. You only need to call this if you're
-     * doing your own allocas. */
-    llvm::Value *save_stack();
-
-    /** If you're doing an Alloca but can't clean it up right now, set
-     * this to high and it will get cleaned up at the close of the
-     * next For loop. */
-    bool need_stack_restore;
+    /** Perform an alloca at the function entrypoint. Will be cleaned
+     * on function exit. */
+    llvm::Value *create_alloca_at_entry(llvm::Type *type, int n, const std::string &name = "");
 
     /** Which buffers came in from the outside world (and so we can't
      * guarantee their alignment) */
     std::set<std::string> might_be_misaligned;
 
     llvm::Value *get_user_context() const;
+
+
 
 private:
 

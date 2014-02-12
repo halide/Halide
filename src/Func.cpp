@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <iostream>
+#include <string.h>
+#include <fstream>
+
 #include "IR.h"
 #include "Func.h"
 #include "Util.h"
@@ -12,10 +17,6 @@
 #include "Param.h"
 #include "Debug.h"
 #include "Target.h"
-#include <algorithm>
-#include <iostream>
-#include <string.h>
-#include <fstream>
 
 namespace Halide {
 
@@ -282,8 +283,10 @@ FuncRefExpr Func::operator()(vector<Expr> args) const {
 int Func::add_implicit_vars(vector<Var> &args) const {
     int placeholder_pos = -1;
     std::vector<Var>::iterator iter = args.begin();
-    while (iter != args.end() && !iter->same_as(_))
+
+    while (iter != args.end() && !iter->same_as(_)) {
         iter++;
+    }
     if (iter != args.end()) {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
@@ -294,25 +297,12 @@ int Func::add_implicit_vars(vector<Var> &args) const {
             iter++;
         }
     }
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    else {
-        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
-        // the provided arguments.
-        placeholder_pos = args.size();
-        if ((int)args.size() < dimensions()) {
-            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
-              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
-            int i = 0;
-            placeholder_pos = args.size();
-            while ((int)args.size() < dimensions()) {
-                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
+    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+        std::cerr << "Func " << name() << " was called with "
+                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+        assert(false);
     }
-#endif
 
     return placeholder_pos;
 }
@@ -336,25 +326,12 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
             iter++;
         }
     }
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    else {
-        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
-        // the provided arguments.
-        placeholder_pos = args.size();
-        if ((int)args.size() < dimensions()) {
-            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
-              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
-            int i = 0;
-            placeholder_pos = args.size();
-            while ((int)args.size() < dimensions()) {
-                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
+    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+        std::cerr << "Func " << name() << " was called with "
+                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+        assert(false);
     }
-#endif
 
     return placeholder_pos;
 }
@@ -488,7 +465,6 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     vector<Schedule::Dim> &dims = schedule.dims;
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old_var.name())) {
-            debug(0) << dims[i].var << " matches " << old_var.name() << "\n";
             found = true;
             old_name = dims[i].var;
             dims[i].var += "." + new_var.name();
@@ -548,6 +524,13 @@ ScheduleHandle &ScheduleHandle::unroll(Var var) {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::parallel(Var var, Expr factor) {
+    Var tmp;
+    split(var, var, tmp, factor);
+    parallel(var);
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::vectorize(Var var, int factor) {
     Var tmp;
     split(var, var, tmp, factor);
@@ -559,12 +542,6 @@ ScheduleHandle &ScheduleHandle::unroll(Var var, int factor) {
     Var tmp;
     split(var, var, tmp, factor);
     unroll(tmp);
-    return *this;
-}
-
-ScheduleHandle &ScheduleHandle::bound(Var var, Expr min, Expr extent) {
-    Schedule::Bound b = {var.name(), min, extent};
-    schedule.bounds.push_back(b);
     return *this;
 }
 
@@ -582,20 +559,27 @@ ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor,
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::reorder(const std::vector<Var>& vars) {
-    if (vars.size() <= 1) {
-        return *this;
+namespace {
+// An helper function for reordering vars in a schedule.
+ScheduleHandle &reorder_vars(ScheduleHandle& sched, const VarOrRVar *vars, size_t size) {
+    if (size <= 1) {
+        return sched;
     }
-    if (vars.size() == 2) {
-        return reorder(vars[0], vars[1]);
+    if (size == 2) {
+        return sched.reorder(vars[0], vars[1]);
     }
-    for(size_t i = 1; i < vars.size(); ++i) {
-        reorder(vars[0], vars[i]);
+    for (size_t i = 1; i < size; i++) {
+        sched.reorder(vars[0], vars[i]);
     }
-    return reorder(std::vector<Var>(vars.begin() + 1, vars.end()));
+    return reorder_vars(sched, vars + 1, size - 1);
+}
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
+ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
+    return reorder_vars(*this, &vars[0], vars.size());
+}
+
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
     vector<Schedule::Dim> &dims = schedule.dims;
     bool found_y = false;
     size_t y_loc = 0;
@@ -604,7 +588,9 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
             found_y = true;
             y_loc = i;
         } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) std::swap(dims[i], dims[y_loc]);
+            if (found_y) {
+                std::swap(dims[i], dims[y_loc]);
+            }
             return *this;
         }
     }
@@ -612,44 +598,44 @@ ScheduleHandle &ScheduleHandle::reorder(Var x, Var y) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z) {
-    Var vars[]  = {x, y, z};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
+    VarOrRVar vars[] = {x, y, z};
+    return reorder_vars(*this, vars, 3);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w) {
-    Var vars[]  = {x, y, z, w};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
+    VarOrRVar vars[] = {x, y, z, w};
+    return reorder_vars(*this, vars, 4);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t) {
-    Var vars[]  = {x, y, z, w, t};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
+    VarOrRVar vars[] = {x, y, z, w, t};
+    return reorder_vars(*this, vars, 5);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2) {
-    Var vars[]  = {x, y, z, w, t1, t2};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
+    VarOrRVar vars[] = {x, y, z, w, t1, t2};
+    return reorder_vars(*this, vars, 6);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3) {
-    Var vars[]  = {x, y, z, w, t1, t2, t3};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
+    return reorder_vars(*this, vars, 7);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4) {
-    Var vars[]  = {x, y, z, w, t1, t2, t3, t4};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
+    return reorder_vars(*this, vars, 8);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5) {
-    Var vars[]  = {x, y, z, w, t1, t2, t3, t4, t5};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
+    return reorder_vars(*this, vars, 9);
 }
 
-ScheduleHandle &ScheduleHandle::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6) {
-    Var vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    return reorder(std::vector<Var>(vars, vars + (sizeof(vars) / sizeof(Var))));
+ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
+    VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
+    return reorder_vars(*this, vars, 10);
 }
 
   ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
@@ -790,6 +776,11 @@ Func &Func::unroll(Var var) {
     return *this;
 }
 
+Func &Func::parallel(Var var, Expr factor) {
+    ScheduleHandle(func.schedule()).parallel(var, factor);
+    return *this;
+}
+
 Func &Func::vectorize(Var var, int factor) {
     ScheduleHandle(func.schedule()).vectorize(var, factor);
     return *this;
@@ -801,7 +792,22 @@ Func &Func::unroll(Var var, int factor) {
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
-    ScheduleHandle(func.schedule()).bound(var, min, extent);
+    bool found = false;
+    for (size_t i = 0; i < func.args().size(); i++) {
+        if (var.name() == func.args()[i]) {
+            found = true;
+        }
+    }
+    if (!found) {
+        std::cerr << "Can't bound variable " << var.name()
+                  << " of function " << name()
+                  << " because " << var.name()
+                  << " is not one of the pure variables of " << name() << "\n";
+        assert(false);
+    }
+
+    Schedule::Bound b = {var.name(), min, extent};
+    func.schedule().bounds.push_back(b);
     return *this;
 }
 
@@ -815,52 +821,60 @@ Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
     return *this;
 }
 
-Func &Func::reorder(const std::vector<Var> &vars) {
+Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     ScheduleHandle(func.schedule()).reorder(vars);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
     ScheduleHandle(func.schedule()).reorder(x, y);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
     ScheduleHandle(func.schedule()).reorder(x, y, z);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
+                    VarOrRVar t5) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
     return *this;
 }
 
-Func &Func::reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6) {
+Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
+                    VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
+                    VarOrRVar t5, VarOrRVar t6) {
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
     return *this;
 }
@@ -1063,16 +1077,35 @@ public:
 vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<string> a = args;
 
-    if (implicit_placeholder_pos != -1) {
-        CountImplicitVars count(e);
+    CountImplicitVars count(e);
 
-        Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
-          func.name() << " at position " << implicit_placeholder_pos << "\n";
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
+                func.name() << " at position " << implicit_placeholder_pos << "\n";
 
-        vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
-        for (int i = 0; i < count.count; i++) {
-            iter = a.insert(iter, Var::implicit(i).name());
-            iter++;
+            vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i).name());
+                iter++;
+            }
+        }
+    }
+
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (a[j] == v.name()) {
+                found = true;
+            }
+        }
+        if (!found) {
+            std::cerr << "Right-hand-side of pure definition of " << func.name()
+                      << " uses implicit variables, but the left-hand-side does not"
+                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
+            assert(false);
         }
     }
 
@@ -1192,24 +1225,45 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
 vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
 
-    if (implicit_placeholder_pos != -1) {
-        CountImplicitVars f(e);
-        // TODO: Check if there is a test case for this and add one if not.
-        // Implicit vars are also allowed in the lhs of a reduction. E.g.:
-        // f(x, y) = x+y
-        // g(x, y) = 0
-        // g(f(r.x)) = 1   (this means g(f(r.x, i0), i0) = 1)
+    CountImplicitVars count(e);
+    // TODO: Check if there is a test case for this and add one if not.
+    // Implicit vars are also allowed in the lhs of a reduction. E.g.:
+    // f(x, y, z) = x+y
+    // g(x, y, z) = 0
+    // g(f(r.x, _), _) = 1   (this means g(f(r.x, _0, _1), _0, _1) = 1)
 
-        for (size_t i = 0; i < a.size(); i++) {
-            a[i].accept(&f);
+    for (size_t i = 0; i < a.size(); i++) {
+        a[i].accept(&count);
+    }
+
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+
+            vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i));
+                iter++;
+            }
         }
+    }
 
-        Internal::debug(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
-
-        vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
-        for (int i = 0; i < f.count; i++) {
-            iter = a.insert(iter, Var::implicit(i));
-            iter++;
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (const Variable *arg = a[j].as<Variable>()) {
+                if (arg->name == v.name()) {
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            std::cerr << "Right-hand-side of update definition of " << func.name()
+                      << " uses implicit variables, but the left-hand-side does not"
+                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
+            assert(false);
         }
     }
 
@@ -1253,7 +1307,9 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) pure_args[i] = Var(v->name);
+            if (!v->param.defined()) {
+                pure_args[i] = Var(v->name);
+            }
         } else {
             pure_args[i] = Var();
         }
@@ -1342,6 +1398,18 @@ Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const 
     Realization r(outputs);
     realize(r, target);
     return r;
+}
+
+Realization Func::realize(int x_size, int y_size, int z_size, const Target &target) {
+    return realize(x_size, y_size, z_size, 0, target);
+}
+
+Realization Func::realize(int x_size, int y_size, const Target &target) {
+    return realize(x_size, y_size, 0, 0, target);
+}
+
+Realization Func::realize(int x_size, const Target &target) {
+    return realize(x_size, 0, 0, 0, target);
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
@@ -1523,6 +1591,10 @@ void validate_arguments(const string &output,
     cg.compile_to_bitcode(filename);
 }
 
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_bitcode(filename, args, "", target);
+}
+
   void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
     assert(defined() && "Can't compile undefined function");
@@ -1541,6 +1613,10 @@ void validate_arguments(const string &output,
     StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
     cg.compile_to_native(filename, false);
+}
+
+void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_object(filename, args, "", target);
 }
 
 void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {
@@ -1632,6 +1708,10 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     cg.compile_to_native(filename, true);
 }
 
+void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_assembly(filename, args, "", target);
+}
+
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
     error_handler = handler;
     if (compiled_module.set_error_handler) {
@@ -1669,11 +1749,11 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
-  void Func::realize(Buffer b, const Target &target) {
+void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
 
-  void Func::realize(Realization dst, const Target &target) {
+void Func::realize(Realization dst, const Target &target) {
     if (!compiled_module.wrapped_function) compile_jit(target);
 
     assert(compiled_module.wrapped_function);

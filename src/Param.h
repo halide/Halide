@@ -139,20 +139,6 @@ protected:
             args.push_back(last_arg);
         }
 
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-        if (!is_placeholder && !(*placeholder_seen) &&
-            (int)args.size() == total_args &&
-            (int)args.size() < dims) {
-            std::cout << "Implicit arguments without placeholders ('_') are deprecated."
-                      << " Adding " << dims - args.size()
-                      << " arguments to ImageParam " << name() << '\n';
-            int i = 0;
-            while ((int)args.size() < dims) {
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
-#endif
 
     }
 
@@ -342,7 +328,10 @@ public:
     /** Construct an image parameter of the given type and
      * dimensionality, with the given name */
     ImageParam(Type t, int d, const std::string &n) :
-        OutputImageParam(Internal::Parameter(t, true, n), d) {}
+        OutputImageParam(Internal::Parameter(t, true, n), d) {
+        // Discourage future Funcs from having the same name
+        Internal::unique_name(n);
+    }
 
     /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
     void set(Buffer b) {

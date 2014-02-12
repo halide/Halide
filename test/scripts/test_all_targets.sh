@@ -70,15 +70,16 @@ if [[ ! -f testing/deps/libz32.a ]]; then
 fi
 
 if [[ `uname` == Darwin ]]; then
-    export CXX="clang++ -std=c++11 -stdlib=libc++"
-    export GXX="clang++ -std=c++11 -stdlib=libc++"
+    export CXX="clang++ -std=c++98 -stdlib=libc++"
+    export GXX="clang++ -std=c++98 -stdlib=libc++"
     export CC="clang"
-    export LLVMS="trunk pnacl release-3.3"
+    export LLVMS="pnacl trunk release-3.3" 
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
-    export LLVMS="trunk pnacl release-3.2 release-3.3"
+    export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
+    export LLVMS="trunk release-3.2 release-3.3 pnacl"
 fi
 
 
@@ -149,20 +150,22 @@ for LLVM in ${LLVMS}; do
         svn up &&
         cd ../../ &&
         make -j8 -C build-32 &&
-        make -j8 -C build-64 &&
+        make -j8 -C build-64
         cd ../../
     elif [[ "$LLVM" == pnacl ]]; then
         # Update this llvm and rebuild if it's pnacl
         cd llvm/${LLVM}
-        git pull &&
+        # git pull &&
         cd tools/clang &&
-        git pull &&
+        # git pull &&
         cd ../../ &&
         make -j8 -C build-32 &&
-        make -j8 -C build-64 &&
+        make -j8 -C build-64
         cd ../../
     fi
 done
+
+pwd
 
 for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then

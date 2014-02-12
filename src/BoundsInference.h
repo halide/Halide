@@ -1,7 +1,7 @@
 #ifndef HALIDE_BOUNDS_INFERENCE_H
 #define HALIDE_BOUNDS_INFERENCE_H
 
-/** \file 
+/** \file
  * Defines the bounds_inference lowering pass.
  */
 
@@ -15,8 +15,8 @@ namespace Internal {
  * representations of the bounds over which things should be realized,
  * and inject expressions defining those bounds.
  */
-Stmt bounds_inference(Stmt, 
-                      const std::vector<std::string> &realization_order, 
+Stmt bounds_inference(Stmt,
+                      const std::vector<std::string> &realization_order,
                       const std::map<std::string, Function> &environment);
 
 }

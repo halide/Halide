@@ -1,10 +1,6 @@
 #include "Tracing.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
-#include "Substitute.h"
-#include "Debug.h"
-#include "Lower.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -148,9 +144,12 @@ private:
             args.push_back(0); // value index
             args.push_back(0); // value
 
+            // Use the size of the pure step
+
             for (int i = 0; i < f.dimensions(); i++) {
-                Expr min = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".min_produced");
-                Expr extent = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".extent_produced");
+                Expr min = Variable::make(Int(32), f.name() + ".s0." + f.args()[i] + ".min");
+                Expr max = Variable::make(Int(32), f.name() + ".s0." + f.args()[i] + ".max");
+                Expr extent = (max + 1) - min;
                 args.push_back(min);
                 args.push_back(extent);
             }
@@ -208,8 +207,8 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
     // Unless tracing was a no-op, add a call to shut down the trace
     // (which flushes the output stream)
     if (!s.same_as(original)) {
-        Expr flush = Call::make(Int(32), "halide_shutdown_trace", std::vector<Expr>(), Call::Extern);
-        s = Block::make(s, AssertStmt::make(flush == 0, "Failed to flush trace"));
+        Expr flush = Call::make(Int(32), "halide_shutdown_trace", vector<Expr>(), Call::Extern);
+        s = Block::make(s, AssertStmt::make(flush == 0, "Failed to flush trace", vector<Expr>()));
     }
     return s;
 }

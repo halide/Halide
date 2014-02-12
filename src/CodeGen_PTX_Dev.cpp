@@ -1,15 +1,8 @@
 #include "CodeGen_PTX_Dev.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Target.h"
-#include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than

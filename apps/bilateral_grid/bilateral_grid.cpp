@@ -26,32 +26,30 @@ int main(int argc, char **argv) {
     Expr val = clamped(x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2);
     val = clamp(val, 0.0f, 1.0f);
     Expr zi = cast<int>(val * (1.0f/r_sigma) + 0.5f);
-    Func grid("grid"), histogram("histogram");
+    Func histogram("histogram");
+    histogram(x, y, z, c) = 0.0f;
     histogram(x, y, zi, c) += select(c == 0, val, 1.0f);
-
-    // Introduce a dummy function, so we can schedule the histogram within it
-    grid(x, y, z, c) = histogram(x, y, z, c);
 
     // Blur the grid using a five-tap filter
     Func blurx("blurx"), blury("blury"), blurz("blurz");
-    blurx(x, y, z, c) = (grid(x-2, y, z, c) +
-                         grid(x-1, y, z, c)*4 +
-                         grid(x  , y, z, c)*6 +
-                         grid(x+1, y, z, c)*4 +
-                         grid(x+2, y, z, c));
+    blurz(x, y, z, c) = (histogram(x, y, z-2, c) +
+                         histogram(x, y, z-1, c)*4 +
+                         histogram(x, y, z  , c)*6 +
+                         histogram(x, y, z+1, c)*4 +
+                         histogram(x, y, z+2, c));
+    blurx(x, y, z, c) = (blurz(x-2, y, z, c) +
+                         blurz(x-1, y, z, c)*4 +
+                         blurz(x  , y, z, c)*6 +
+                         blurz(x+1, y, z, c)*4 +
+                         blurz(x+2, y, z, c));
     blury(x, y, z, c) = (blurx(x, y-2, z, c) +
                          blurx(x, y-1, z, c)*4 +
                          blurx(x, y  , z, c)*6 +
                          blurx(x, y+1, z, c)*4 +
                          blurx(x, y+2, z, c));
-    blurz(x, y, z, c) = (blury(x, y, z-2, c) +
-                         blury(x, y, z-1, c)*4 +
-                         blury(x, y, z  , c)*6 +
-                         blury(x, y, z+1, c)*4 +
-                         blury(x, y, z+2, c));
 
     // Take trilinear samples to compute the output
-    val = clamp(clamped(x, y), 0.0f, 1.0f);
+    val = clamp(input(x, y), 0.0f, 1.0f);
     Expr zv = val * (1.0f/r_sigma);
     zi = cast<int>(zv);
     Expr zf = zv - zi;
@@ -61,10 +59,10 @@ int main(int argc, char **argv) {
     Expr yi = y/s_sigma;
     Func interpolated("interpolated");
     interpolated(x, y, c) =
-        lerp(lerp(lerp(blurz(xi, yi, zi, c), blurz(xi+1, yi, zi, c), xf),
-                  lerp(blurz(xi, yi+1, zi, c), blurz(xi+1, yi+1, zi, c), xf), yf),
-             lerp(lerp(blurz(xi, yi, zi+1, c), blurz(xi+1, yi, zi+1, c), xf),
-                  lerp(blurz(xi, yi+1, zi+1, c), blurz(xi+1, yi+1, zi+1, c), xf), yf), zf);
+        lerp(lerp(lerp(blury(xi, yi, zi, c), blury(xi+1, yi, zi, c), xf),
+                  lerp(blury(xi, yi+1, zi, c), blury(xi+1, yi+1, zi, c), xf), yf),
+             lerp(lerp(blury(xi, yi, zi+1, c), blury(xi+1, yi, zi+1, c), xf),
+                  lerp(blury(xi, yi+1, zi+1, c), blury(xi+1, yi+1, zi+1, c), xf), yf), zf);
 
     // Normalize
     Func bilateral_grid("bilateral_grid");
@@ -72,29 +70,25 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.has_gpu()) {
-        // GPU schedule
-        grid.compute_root().reorder(z, c, x, y).gpu_tile(x, y, 8, 8, GPU_DEFAULT);
-
-        // Compute the histogram into shared memory before spilling it to global memory
-        histogram.store_at(grid, Var("blockidx")).compute_at(grid, Var("threadidx"));
-
-        blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1, GPU_DEFAULT);
-        blury.compute_root().gpu_tile(x, y, z, 16, 16, 1, GPU_DEFAULT);
-        blurz.compute_root().gpu_tile(x, y, z, 8, 8, 4, GPU_DEFAULT);
-        bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma, GPU_DEFAULT);
+        histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
+        histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
+        blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1);
+        blury.compute_root().gpu_tile(x, y, z, 16, 16, 1);
+        blurz.compute_root().gpu_tile(x, y, z, 8, 8, 4);
+        bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma);
     } else {
 
         // CPU schedule
-        grid.compute_root().reorder(c, z, x, y).parallel(y);
-        histogram.compute_at(grid, x).unroll(c);
-        blurx.compute_root().parallel(z).vectorize(x, 4);
-        blury.compute_root().parallel(z).vectorize(x, 4);
-        blurz.compute_root().parallel(z).vectorize(x, 4);
+        histogram.compute_at(blurz, y);
+        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c);
+        blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 4).unroll(c);
+        blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c);
+        blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c);
         bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
     }
 
-    bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input);
-    
+    bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input, target);
+
     return 0;
 }
 

@@ -8,14 +8,12 @@
 
 #include "IR.h"
 #include "Var.h"
-#include "IntrusivePtr.h"
 #include "Function.h"
 #include "Param.h"
 #include "Argument.h"
 #include "RDom.h"
 #include "JITCompiledModule.h"
 #include "Image.h"
-#include "Util.h"
 #include "Target.h"
 #include "Tuple.h"
 #include "Target.h"
@@ -28,6 +26,23 @@ namespace Halide {
  * until we see how this object gets used.
  */
 class FuncRefExpr;
+
+/** A class that can represent Vars or RVars. Used for reorder calls
+ * which can accept a mix of either. */
+struct VarOrRVar {
+    VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
+    VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
+    VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
+
+    const std::string &name() const {
+        if (is_rvar) return rvar.name();
+        else return var.name();
+    }
+
+    const Var var;
+    const RVar rvar;
+    const bool is_rvar;
+};
 
 class FuncRefVar {
     Internal::Function func;
@@ -194,21 +209,33 @@ public:
     EXPORT ScheduleHandle &parallel(Var var);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
+    EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
     EXPORT ScheduleHandle &unroll(Var var, int factor);
-    EXPORT ScheduleHandle &bound(Var var, Expr min, Expr extent);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
     EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
-    EXPORT ScheduleHandle &reorder(const std::vector<Var> &vars);
-    EXPORT ScheduleHandle &reorder(Var x, Var y);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
-    EXPORT ScheduleHandle &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
+    EXPORT ScheduleHandle &reorder(const std::vector<VarOrRVar> &vars);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                                   VarOrRVar t3);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                                   VarOrRVar t3, VarOrRVar t4);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
+    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                                   VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                                   VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
+                                   VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_DEFAULT);
@@ -396,7 +423,13 @@ public:
      */
     // @{
     EXPORT Realization realize(std::vector<int32_t> sizes, const Target &target = get_jit_target_from_environment());
-    EXPORT Realization realize(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+    EXPORT Realization realize(int x_size, int y_size, int z_size, int w_size,
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size, int y_size, int z_size,
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size, int y_size,
+                               const Target &target = get_jit_target_from_environment());
+    EXPORT Realization realize(int x_size = 0,
                                const Target &target = get_jit_target_from_environment());
     // @}
 
@@ -425,16 +458,24 @@ public:
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
      * as this halide function */
-    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    //@{
+    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                    const Target &target = get_target_from_environment());
+    EXPORT void compile_to_bitcode(const std::string &filename, std::vector<Argument>,
+                                   const Target &target = get_target_from_environment());
+    // @}
 
     /** Statically compile this function to an object file, with the
      * given filename (which should probably end in .o or .obj), type
      * signature, and C function name (which defaults to the same name
      * as this halide function. You probably don't want to use this
      * directly; call compile_to_file instead. */
-    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    //@{
+    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                   const Target &target = get_target_from_environment());
+    EXPORT void compile_to_object(const std::string &filename, std::vector<Argument>,
+                                  const Target &target = get_target_from_environment());
+    // @}
 
     /** Emit a header file with the given filename for this
      * function. The header will define a function with the type
@@ -450,8 +491,12 @@ public:
      * useful for checking what Halide is producing without having to
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
-    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "",
+    //@{
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                     const Target &target = get_target_from_environment());
+    EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>,
+                                    const Target &target = get_target_from_environment());
+    // @}
     /** Statically compile this function to C source code. This is
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
@@ -506,10 +551,11 @@ public:
     EXPORT void set_error_handler(void (*handler)(void *, const char *));
 
     /** Set a custom malloc and free for halide to use. Malloc should
-     * return 32-byte aligned chunks of memory. If compiling
-     * statically, routines with appropriate signatures can be
-     * provided directly
-     \code
+     * return 32-byte aligned chunks of memory, and it should be safe
+     * for Halide to read slightly out of bounds (up to 8 bytes before
+     * the start or beyond the end). If compiling statically, routines
+     * with appropriate signatures can be provided directly
+    \code
      extern "C" void *halide_malloc(void *, size_t)
      extern "C" void halide_free(void *, void *)
      \endcode
@@ -733,6 +779,14 @@ public:
     /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
 
+    /** Split a dimension by the given task_size, and the parallelize the
+     * outer dimension. This creates parallel tasks that have size
+     * task_size. After this call, var refers to the outer dimension of
+     * the split. The inner dimension has a new anonymous name. If you
+     * wish to mutate it, or schedule with respect to it, do the split
+     * manually. */
+    EXPORT Func &parallel(Var var, Expr task_size);
+
     /** Mark a dimension to be computed all-at-once as a single
      * vector. The dimension should have constant extent -
      * e.g. because it is the inner dimension following a split by a
@@ -781,46 +835,58 @@ public:
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(const std::vector<Var> &vars);
+    EXPORT Func &reorder(const std::vector<VarOrRVar> &vars);
 
     /** Reorder two dimensions so that x is traversed inside y. Does
      * not affect the nesting order of other dimensions. E.g, if you
      * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
      * traversed in the order (w, y, z, x), from innermost
      * outwards. */
-    EXPORT Func &reorder(Var x, Var y);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y);
 
     /** Reorder three dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
 
     /** Reorder four dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w);
 
     /** Reorder five dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t);
 
     /** Reorder six dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
 
     /** Reorder seven dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                         VarOrRVar t3);
 
     /** Reorder eight dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                         VarOrRVar t3, VarOrRVar t4);
 
     /** Reorder nine dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
 
     /** Reorder ten dimensions to have the given nesting order, from
      * innermost out */
-    EXPORT Func &reorder(Var x, Var y, Var z, Var w, Var t1, Var t2, Var t3, Var t4, Var t5, Var t6);
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                         VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
+                         VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
+                         VarOrRVar t6);
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);

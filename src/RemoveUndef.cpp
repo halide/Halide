@@ -2,7 +2,6 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -219,17 +218,33 @@ class RemoveUndef : public IRMutator {
             stmt = Stmt();
             return;
         }
-        if (condition.same_as(op->condition)) {
+
+        vector<Expr > new_args(op->args.size());
+        bool changed = false;
+
+        // Mutate the args
+        for (size_t i = 0; i < op->args.size(); i++) {
+            Expr old_arg = op->args[i];
+            Expr new_arg = mutate(old_arg);
+            if (!new_arg.defined()) {
+                stmt = Stmt();
+                return;
+            }
+            if (!new_arg.same_as(old_arg)) changed = true;
+            new_args[i] = new_arg;
+        }
+
+        if (condition.same_as(op->condition) && !changed) {
             stmt = op;
         } else {
-            stmt = AssertStmt::make(condition, op->message);
+            stmt = AssertStmt::make(condition, op->message, new_args);
         }
     }
 
     void visit(const Pipeline *op) {
         Stmt produce = mutate(op->produce);
         if (!produce.defined()) {
-            produce = AssertStmt::make(const_true(), "Produce step elided due to use of Halide::undef");
+            produce = AssertStmt::make(const_true(), "Produce step elided due to use of Halide::undef", vector<Expr>());
         }
         Stmt update = mutate(op->update);
         Stmt consume = mutate(op->consume);
