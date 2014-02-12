@@ -1,6 +1,7 @@
 #include "UnrollLoops.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -11,17 +12,19 @@ class UnrollLoops : public IRMutator {
 
     void visit(const For *for_loop) {
         if (for_loop->for_type == For::Unrolled) {
-            const IntImm *extent = for_loop->extent.as<IntImm>();
-            assert(extent && "Can only unroll for loops over a constant extent");
+            // Give it one last chance to simplify to an int
+            Expr extent = simplify(for_loop->extent);
+            const IntImm *e = extent.as<IntImm>();
+            assert(e && "Can only unroll for loops over a constant extent");
             Stmt body = mutate(for_loop->body);
 
-            if (extent->value == 1) {
+            if (e->value == 1) {
                 std::cerr << "Warning: Unrolling a for loop of extent 1: " << for_loop->name << "\n";
             }
 
             Stmt block;
             // Make n copies of the body, each wrapped in a let that defines the loop var for that body
-            for (int i = extent->value-1; i >= 0; i--) {
+            for (int i = e->value-1; i >= 0; i--) {
                 Stmt iter = substitute(for_loop->name, for_loop->min + i, body);
                 block = Block::make(iter, block);
             }
