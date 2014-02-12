@@ -33,7 +33,7 @@ Expr kernel_box(Expr x) {
 
 Expr kernel_linear(Expr x) {
     Expr xx = abs(x);
-    return select(xx < 1.0f, xx, 0.0f);
+    return select(xx < 1.0f, 1.0f - xx, 0.0f);
 }
 
 Expr kernel_cubic(Expr x) {
