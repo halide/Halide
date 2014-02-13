@@ -1503,7 +1503,13 @@ void CodeGen::visit(const Call *op) {
             Value *event_type = codegen(unbroadcast(op->args[1]));
 
             // Codegen the buffer id
-            Value *realization_id = codegen(unbroadcast(op->args[2]));
+            Expr id = op->args[2];
+            Value *realization_id;
+            if (id.as<Broadcast>()) {
+                realization_id = codegen(unbroadcast(id));
+            } else {
+                realization_id = codegen(id);
+            }
 
             // Codegen the value index. Should be the same for all lanes.
             Value *value_index = codegen(unbroadcast(op->args[3]));
