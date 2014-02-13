@@ -29,11 +29,11 @@ int main(int argc, char **argv) {
         *buf_ptr++ = '\n';
     }
     *buf_ptr++ = 0;
-    printf(buf);
+    printf("%s", buf);
     fflush(stdout);
 
     int64_t time = (t2.tv_usec - t1.tv_usec) / 1000;
     time += (t2.tv_sec - t1.tv_sec) * 1000;
-    printf("Success (%d ms)!\n", time);
+    printf("Success (%lld ms)!\n", time);
     return 0;
 }
