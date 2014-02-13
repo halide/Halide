@@ -882,10 +882,14 @@ private:
                  iter != boxes.end(); ++iter) {
                 Box &box = iter->second;
                 for (size_t i = 0; i < box.size(); i++) {
-                    box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                    box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
-                    box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                    box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                    if (box[i].min.defined()) {
+                        box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                        box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                    }
+                    if (box[i].max.defined()) {
+                        box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                        box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                    }
                 }
             }
         }
