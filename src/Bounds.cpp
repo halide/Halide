@@ -736,7 +736,7 @@ void merge_boxes(Box &a, const Box &b) {
             }
         }
         if (!a[i].max.same_as(b[i].max)) {
-            if (a[i].min.defined() && b[i].min.defined()) {
+            if (a[i].max.defined() && b[i].max.defined()) {
                 a[i].max = max(a[i].max, b[i].max);
             } else {
                 a[i].max = Expr();
