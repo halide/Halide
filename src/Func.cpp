@@ -701,7 +701,7 @@ ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by, Var bz,
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-ScheduleHandle &ScheduleHandle::gpu_tile(Var x, int x_size, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api */) {
     Var bx("blockidx"), tx("threadidx");
     split(x, bx, tx, x_size);
     parallel(bx);
@@ -711,7 +711,8 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, int x_size, GPUAPI /* gpu_api */
 
 
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
-                                          int x_size, int y_size, GPUAPI /* gpu_api */) {
+                                         Expr x_size, Expr y_size,
+					 GPUAPI /* gpu_api */) {
     Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
@@ -722,7 +723,7 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
 }
 
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
-                                         int x_size, int y_size, int z_size,
+                                         Expr x_size, Expr y_size, Expr z_size,
 					 GPUAPI /* gpu_api */) {
     Var bx("blockidx"), by("blockidy"), bz("blockidz"),
         tx("threadidx"), ty("threadidy"), tz("threadidz");
