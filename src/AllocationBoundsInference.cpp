@@ -22,6 +22,7 @@ class AllocationInference : public IRMutator {
     using IRMutator::visit;
 
     const map<string, Function> &env;
+    const FuncValueBounds &func_bounds;
     set<string> touched_by_extern;
 
     void visit(const Realize *op) {
@@ -29,7 +30,7 @@ class AllocationInference : public IRMutator {
         assert (iter != env.end());
         Function f = iter->second;
 
-        Box b = box_touched(op->body, op->name);
+        Box b = box_touched(op->body, op->name, func_bounds);
 
         if (touched_by_extern.count(f.name())) {
             // The region touched is at least the region required at this
@@ -64,7 +65,8 @@ class AllocationInference : public IRMutator {
     }
 
 public:
-    AllocationInference(const map<string, Function> &e) : env(e) {
+    AllocationInference(const map<string, Function> &e, const FuncValueBounds &fb) :
+        env(e), func_bounds(fb) {
         // Figure out which buffers are touched by extern stages
         for (map<string, Function>::const_iterator iter = e.begin();
              iter != e.end(); ++iter) {
@@ -82,8 +84,10 @@ public:
     }
 };
 
-Stmt allocation_bounds_inference(Stmt s, const map<string, Function> &env) {
-    AllocationInference inf(env);
+Stmt allocation_bounds_inference(Stmt s,
+                                 const map<string, Function> &env,
+                                 const FuncValueBounds &fb) {
+    AllocationInference inf(env, fb);
     s = inf.mutate(s);
     return s;
 }
