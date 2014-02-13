@@ -253,11 +253,11 @@ public:
     EXPORT ScheduleHandle &gpu(Var block_x, Var block_y, Var block_z,
                                Var thread_x, Var thread_y, Var thread_z,
 			       GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_tile(Var x, int x_size, GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, int x_size, int y_size,
+    EXPORT ScheduleHandle &gpu_tile(Var x, Expr x_size, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Expr x_size, Expr y_size,
 				    GPUAPI gpu_api = GPU_DEFAULT);
     EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Var z,
-                                    int x_size, int y_size, int z_size, GPUAPI gpu_api = GPU_DEFAULT);
+                                    Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_DEFAULT);
     // @}
 
     // These calls are for legacy compatibility only.
