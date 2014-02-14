@@ -955,129 +955,6 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
     return b.boxes;
 }
 
-map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
-                               string fn, const Scope<Interval> &scope) {
-    FuncValueBounds fb;
-    return boxes_touched(e, s, consider_calls, consider_provides, fn, scope, fb);
-}
-
-Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
-                string fn, const Scope<Interval> &scope) {
-    return boxes_touched(e, s, consider_calls, consider_provides, fn, scope)[fn];
-}
-
-map<string, Box> boxes_required(Expr e, const Scope<Interval> &scope) {
-    return boxes_touched(e, Stmt(), true, false, "", scope);
-}
-
-Box box_required(Expr e, string fn, const Scope<Interval> &scope) {
-    return box_touched(e, Stmt(), true, false, fn, scope);
-}
-
-map<string, Box> boxes_required(Stmt s, const Scope<Interval> &scope) {
-    return boxes_touched(Expr(), s, true, false, "", scope);
-}
-
-Box box_required(Stmt s, string fn, const Scope<Interval> &scope) {
-    return box_touched(Expr(), s, true, false, fn, scope);
-}
-
-map<string, Box> boxes_required(Expr e) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), true, false, "", scope);
-}
-
-Box box_required(Expr e, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), true, false, fn, scope);
-}
-
-map<string, Box> boxes_required(Stmt s) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, true, false, "", scope);
-}
-
-Box box_required(Stmt s, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, true, false, fn, scope);
-}
-
-
-map<string, Box> boxes_provided(Expr e, const Scope<Interval> &scope) {
-    return boxes_touched(e, Stmt(), false, true, "", scope);
-}
-
-Box box_provided(Expr e, string fn, const Scope<Interval> &scope) {
-    return box_touched(e, Stmt(), false, true, fn, scope);
-}
-
-map<string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope) {
-    return boxes_touched(Expr(), s, false, true, "", scope);
-}
-
-Box box_provided(Stmt s, string fn, const Scope<Interval> &scope) {
-    return box_touched(Expr(), s, false, true, fn, scope);
-}
-
-map<string, Box> boxes_provided(Expr e) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), false, true, "", scope);
-}
-
-Box box_provided(Expr e, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), false, true, fn, scope);
-}
-
-map<string, Box> boxes_provided(Stmt s) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, false, true, "", scope);
-}
-
-Box box_provided(Stmt s, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, false, true, fn, scope);
-}
-
-
-map<string, Box> boxes_touched(Expr e, const Scope<Interval> &scope) {
-    return boxes_touched(e, Stmt(), true, true, "", scope);
-}
-
-Box box_touched(Expr e, string fn, const Scope<Interval> &scope) {
-    return box_touched(e, Stmt(), true, true, fn, scope);
-}
-
-map<string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope) {
-    return boxes_touched(Expr(), s, true, true, "", scope);
-}
-
-Box box_touched(Stmt s, string fn, const Scope<Interval> &scope) {
-    return box_touched(Expr(), s, true, true, fn, scope);
-}
-
-map<string, Box> boxes_touched(Expr e) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), true, true, "", scope);
-}
-
-Box box_touched(Expr e, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), true, true, fn, scope);
-}
-
-map<string, Box> boxes_touched(Stmt s) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, true, true, "", scope);
-}
-
-Box box_touched(Stmt s, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, true, true, fn, scope);
-}
-
-
-
 Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                 string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, s, consider_calls, consider_provides, fn, scope, fb)[fn];
@@ -1099,27 +976,6 @@ Box box_required(Stmt s, string fn, const Scope<Interval> &scope, const FuncValu
     return box_touched(Expr(), s, true, false, fn, scope, fb);
 }
 
-map<string, Box> boxes_required(Expr e, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), true, false, "", scope, fb);
-}
-
-Box box_required(Expr e, string fn, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), true, false, fn, scope, fb);
-}
-
-map<string, Box> boxes_required(Stmt s, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, true, false, "", scope, fb);
-}
-
-Box box_required(Stmt s, string fn, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, true, false, fn, scope, fb);
-}
-
-
 map<string, Box> boxes_provided(Expr e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), false, true, "", scope, fb);
 }
@@ -1136,27 +992,6 @@ Box box_provided(Stmt s, string fn, const Scope<Interval> &scope, const FuncValu
     return box_touched(Expr(), s, false, true, fn, scope, fb);
 }
 
-map<string, Box> boxes_provided(Expr e, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), false, true, "", scope, fb);
-}
-
-Box box_provided(Expr e, string fn, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), false, true, fn, scope, fb);
-}
-
-map<string, Box> boxes_provided(Stmt s, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, false, true, "", scope, fb);
-}
-
-Box box_provided(Stmt s, string fn, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, false, true, fn, scope, fb);
-}
-
-
 map<string, Box> boxes_touched(Expr e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return boxes_touched(e, Stmt(), true, true, "", scope, fb);
 }
@@ -1172,28 +1007,6 @@ map<string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope, const FuncV
 Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     return box_touched(Expr(), s, true, true, fn, scope, fb);
 }
-
-map<string, Box> boxes_touched(Expr e, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), true, true, "", scope, fb);
-}
-
-Box box_touched(Expr e, string fn, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), true, true, fn, scope, fb);
-}
-
-map<string, Box> boxes_touched(Stmt s, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, true, true, "", scope, fb);
-}
-
-Box box_touched(Stmt s, string fn, const FuncValueBounds &fb) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, true, true, fn, scope, fb);
-}
-
-
 
 void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
     FuncValueBounds fb;
