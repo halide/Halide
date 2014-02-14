@@ -882,7 +882,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     // as this seems like an easy to catch gotcha.
     if (!zero_val.type().is_float()) {
         const float *const_weight = as_const_float(weight);
-        if (const_weight != NULL) {
+        if (const_weight) {
             assert(*const_weight >= 0.0f && *const_weight <= 1.0f &&
                    "floating-point weight for lerp with integer arguments must be between 0.0f and 1.0f.");
         }
