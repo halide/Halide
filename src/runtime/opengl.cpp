@@ -69,13 +69,16 @@ extern "C" WEAK void *halide_opengl_get_proc_address(const char* name) {
 
 // ---------- Types ----------
 
-#define ARG_NONE 0
-#define ARG_BUFFER 1
-#define ARG_FLOAT 2
-#define ARG_INT 3
+enum ArgumentType {
+    ARG_NONE = 0,
+    ARG_BUFFER = 1,
+    ARG_FLOAT = 2,
+    ARG_INT = 3
+};
+
 struct HalideOpenGLArgument {
     char* name;
-    int type;
+    ArgumentType type;
     bool is_output;
     HalideOpenGLArgument *next;
 };
@@ -89,12 +92,12 @@ struct HalideOpenGLKernel {
     HalideOpenGLKernel *next;
 };
 
-// Information about each texture accessed by any shader.
+// Information about each known texture.
 struct HalideOpenGLTexture {
     GLuint id;
     GLint min[4];
     GLint extent[4];
-    GLenum format;                      // internal format: GL_RGBA32F, ...
+    GLenum format;                      // internal format: GL_RGBA, ...
     bool halide_allocated;              // allocated by us or host app?
     HalideOpenGLTexture* next;
 };
@@ -167,17 +170,22 @@ static const GLuint square_indices[] = { 0, 1, 2, 3 };
     }
 
 // Macro for error checking.
-#ifndef DEBUG
-#  define CHECK_GLERROR()
+#ifdef DEBUG
+#define LOG_GLERROR(ERR)                                        \
+    halide_printf(uctx,                                         \
+                  "%s:%d: OpenGL error 0x%04x\n",               \
+                  __FILE__, __LINE__, (ERR))
 #else
-#  define CHECK_GLERROR() {                                     \
+#define LOG_GLERROR(ERR)
+#endif
+
+#define CHECK_GLERROR(ERRORCODE) {                              \
         GLenum err;                                             \
         if ((err = ST.GetError()) != GL_NO_ERROR) {             \
-            halide_printf(uctx,                                 \
-                          "%s:%d: OpenGL error 0x%04x\n",       \
-                          __FILE__, __LINE__, err);             \
+            LOG_GLERROR(err);                                   \
+            halide_error(uctx, "OpenGL error");                 \
+            return ERRORCODE;                                   \
         }}
-#endif // DEBUG
 
 
 // ---------- Helper functions ----------
@@ -231,7 +239,7 @@ static const char* match_prefix(const char *s, const char* prefix) {
 // matching HalideOpenGLArgument.
 static HalideOpenGLArgument* parse_argument(void* uctx, const char* src, const char* end) {
     const char *name;
-    int type = ARG_NONE;
+    ArgumentType type = ARG_NONE;
     if ((name = match_prefix(src, "float "))) {
         type = ARG_FLOAT;
     } else if ((name = match_prefix(src, "int "))) {
@@ -487,7 +495,8 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
 
         // Create empty texture here and fill it with glTexSubImage2D later.
         GLint type = GL_UNSIGNED_BYTE;
-        if (get_texture_format(uctx, buf, &format, &type)) {
+        if (!get_texture_format(uctx, buf, &format, &type)) {
+            halide_error(uctx, "Invalid texture format\n");
 	    return;
 	}
         width = buf->extent[0];
@@ -686,6 +695,7 @@ EXPORT void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf) {
 
     GLint format, type;
     if (!get_texture_format(uctx, buf, &format, &type)) {
+        halide_error(uctx, "Invalid texture format\n");
 	return;
     }
     GLint width = buf->extent[0];
@@ -744,7 +754,10 @@ EXPORT void halide_opengl_copy_to_host(void* uctx, buffer_t* buf) {
 
     GLint format;
     GLint type;
-    get_texture_format(uctx, buf, &format, &type);
+    if (!get_texture_format(uctx, buf, &format, &type)) {
+        halide_error(uctx, "Invalid texture format\n");
+        return;
+    }
     GLint width = buf->extent[0];
     GLint height = buf->extent[1];
 

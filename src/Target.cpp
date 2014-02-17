@@ -221,7 +221,6 @@ Target parse_target_string(const std::string &target) {
             t.features |= Target::GPUDebug;
         } else if (tok == "opengl") {
             t.features |= Target::OpenGL;
-
         } else {
             std::cerr << "Did not understand HL_TARGET=" << target << "\n"
                       << "Expected format is arch-os-feature1-feature2-... "

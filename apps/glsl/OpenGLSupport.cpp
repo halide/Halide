@@ -1,9 +1,10 @@
 #if defined(unix) || defined(__unix__) || defined(__unix)
 
 #include "GL/glx.h"
+#include <stdio.h>
 
 extern "C" void *halide_opengl_get_proc_address(const char* name) {
-    return glXGetProcAddressARB((const GLubyte*) name);
+    return (void*)glXGetProcAddressARB((const GLubyte*) name);
 }
 
 // Initialize OpenGL
