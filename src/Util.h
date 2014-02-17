@@ -91,6 +91,33 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
     v[5] = f;
     return v;
 }
+
+template<typename T>
+std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g) {
+    std::vector<T> v(7);
+    v[0] = a;
+    v[1] = b;
+    v[2] = c;
+    v[3] = d;
+    v[4] = e;
+    v[5] = f;
+    v[6] = g;
+    return v;
+}
+
+template<typename T>
+std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g, T h) {
+    std::vector<T> v(8);
+    v[0] = a;
+    v[1] = b;
+    v[2] = c;
+    v[3] = d;
+    v[4] = e;
+    v[5] = f;
+    v[6] = g;
+    v[7] = h;
+    return v;
+}
 // @}
 
 /** Convert an integer to a string. */

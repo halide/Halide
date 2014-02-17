@@ -1189,7 +1189,7 @@ Stmt add_parameter_checks(Stmt s) {
 // inserted. The second is a piece of code which will rewrite the
 // buffer_t sizes, mins, and strides in order to satisfy the
 // requirements.
-Stmt add_image_checks(Stmt s, Function f) {
+Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
 
     // First hunt for all the referenced buffers
     FindBuffers finder;
@@ -1209,7 +1209,7 @@ Stmt add_image_checks(Stmt s, Function f) {
         }
     }
 
-    map<string, Box> boxes = boxes_touched(s);
+    map<string, Box> boxes = boxes_touched(s, Scope<Interval>(), fb);
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
@@ -1564,17 +1564,22 @@ Stmt lower(Function f) {
     s = add_parameter_checks(s);
     debug(2) << "Parameter checks injected:\n" << s << '\n';
 
+    // Compute the maximum and minimum possible value of each
+    // function. Used in later bounds inference passes.
+    debug(1) << "Computing bounds of each function's value\n";
+    FuncValueBounds func_bounds = compute_function_value_bounds(order, env);
+
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, f);
+    s = add_image_checks(s, f, func_bounds);
     debug(2) << "Image checks injected:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
-    s = bounds_inference(s, order, env);
+    s = bounds_inference(s, order, env, func_bounds);
     debug(2) << "Computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
@@ -1582,7 +1587,7 @@ Stmt lower(Function f) {
     debug(2) << "Sliding window:\n" << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
-    s = allocation_bounds_inference(s, env);
+    s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Allocation bounds inference:\n" << s << '\n';
 
     // This uniquifies the variable names, so we're good to simplify
@@ -1614,7 +1619,7 @@ Stmt lower(Function f) {
 
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
-    debug(2) << "Removed code that depends on undef values: \n" << s << "\n\n;";
+    debug(2) << "Removed code that depends on undef values: \n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);

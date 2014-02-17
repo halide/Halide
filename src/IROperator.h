@@ -882,7 +882,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     // as this seems like an easy to catch gotcha.
     if (!zero_val.type().is_float()) {
         const float *const_weight = as_const_float(weight);
-        if (const_weight != NULL) {
+        if (const_weight) {
             assert(*const_weight >= 0.0f && *const_weight <= 1.0f &&
                    "floating-point weight for lerp with integer arguments must be between 0.0f and 1.0f.");
         }
@@ -914,6 +914,77 @@ inline Expr count_trailing_zeros(Expr x) {
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
                                 vec(x), Internal::Call::Intrinsic);
 }
+
+// For the purposes of a call to print, const char * can convert
+// silently to an Expr
+struct PrintArg {
+    Expr expr;
+    PrintArg(const char *str) : expr(std::string(str)) {}
+    template<typename T> PrintArg(T e) : expr(e) {}
+    operator Expr() {return expr;}
+};
+
+/** Create an Expr that prints out its value whenever it is
+ * evaluated. It also prints out everything else in the arguments
+ * list, separated by spaces. This can include string literals. */
+// @{
+EXPORT Expr print(const std::vector<Expr> &values);
+inline Expr print(PrintArg a) {
+    return print(Internal::vec<Expr>(a));
+}
+inline Expr print(PrintArg a, PrintArg b) {
+    return print(Internal::vec<Expr>(a, b));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c) {
+    return print(Internal::vec<Expr>(a, b, c));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d) {
+    return print(Internal::vec<Expr>(a, b, c, d));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e) {
+    return print(Internal::vec<Expr>(a, b, c, d, e));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f) {
+    return print(Internal::vec<Expr>(a, b, c, d, e, f));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g) {
+    return print(Internal::vec<Expr>(a, b, c, d, e, f, g));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g, PrintArg h) {
+    return print(Internal::vec<Expr>(a, b, c, d, e, f, g, h));
+}
+// @}
+
+/** Create an Expr that prints whenever it is evaluated, provided that
+ * the condition is true. */
+// @{
+EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
+inline Expr print_when(Expr condition, PrintArg a) {
+    return print_when(condition, Internal::vec<Expr>(a));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b) {
+    return print_when(condition, Internal::vec<Expr>(a, b));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e, f));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e, f, g));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g, PrintArg h) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e, f, g, h));
+}
+// @}
+
 
 /** Return an undef value of the given type. Halide skips stores that
  * depend on undef values, so you can use this to mean "do not modify

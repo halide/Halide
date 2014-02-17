@@ -126,7 +126,7 @@ protected:
                                           int total_args,
                                           bool *placeholder_seen) const {
         const Internal::Variable *var = last_arg.as<Internal::Variable>();
-        bool is_placeholder = var != NULL && Var::is_placeholder(var->name);
+        bool is_placeholder = var && Var::is_placeholder(var->name);
         if (is_placeholder) {
             assert(!(*placeholder_seen) && "Only one implicit placeholder ('_') allowed in argument list for ImageParam.");
             *placeholder_seen = true;

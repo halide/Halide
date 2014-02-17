@@ -1254,9 +1254,7 @@ Expr unbroadcast(Expr e) {
 
 // Returns true if the given function name is one of the Halide runtime
 // functions that takes a user_context pointer as its first parameter.
-namespace {
-
-bool function_takes_user_context(const string &name) {
+bool CodeGen::function_takes_user_context(const string &name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_copy_to_host",
         "halide_copy_to_dev",
@@ -1289,8 +1287,6 @@ bool function_takes_user_context(const string &name) {
     return false;
 }
 
-}
-
 void CodeGen::visit(const Call *op) {
     assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) &&
            "Can only codegen extern calls and intrinsics");
@@ -1310,6 +1306,10 @@ void CodeGen::visit(const Call *op) {
             }
             Value *arg = codegen(op->args[0]);
             value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
+
+            if (op->type.is_scalar()) {
+                value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+            }
 
         } else if (op->name == Call::interleave_vectors) {
             assert(op->args.size() == 2);
@@ -1503,7 +1503,13 @@ void CodeGen::visit(const Call *op) {
             Value *event_type = codegen(unbroadcast(op->args[1]));
 
             // Codegen the buffer id
-            Value *realization_id = codegen(unbroadcast(op->args[2]));
+            Expr id = op->args[2];
+            Value *realization_id;
+            if (id.as<Broadcast>()) {
+                realization_id = codegen(unbroadcast(id));
+            } else {
+                realization_id = codegen(id);
+            }
 
             // Codegen the value index. Should be the same for all lanes.
             Value *value_index = codegen(unbroadcast(op->args[3]));
@@ -1564,8 +1570,7 @@ void CodeGen::visit(const Call *op) {
             assert(op->args.size() == 1);
             std::vector<llvm::Type*> arg_type(1);
             arg_type[0] = llvm_type_of(op->args[0].type());
-            llvm::Function *fn = Intrinsic::getDeclaration(module,
-                Intrinsic::ctpop, arg_type);
+            llvm::Function *fn = Intrinsic::getDeclaration(module, Intrinsic::ctpop, arg_type);
             CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
             value = call;
         } else if (op->name == Call::count_leading_zeros ||
@@ -1581,6 +1586,47 @@ void CodeGen::visit(const Call *op) {
             llvm::Value *args[2] = { codegen(op->args[0]), zero_is_undef };
             CallInst *call = builder->CreateCall(fn, args);
             value = call;
+        } else if (op->name == Call::return_second) {
+            assert(op->args.size() == 2);
+            codegen(op->args[0]);
+            value = codegen(op->args[1]);
+        } else if (op->name == Call::if_then_else) {
+            if (op->type.is_vector()) {
+                // Scalarize
+                llvm::Type *result_type = llvm_type_of(op->type);
+
+                Value *result = UndefValue::get(result_type);
+
+                for (int i = 0; i < op->args[0].type().width; i++) {
+                    Value *v = codegen(extract_lane(op, i));
+                    result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+                }
+                value = result;
+
+            } else {
+
+                assert(op->args.size() == 3);
+
+                BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+                BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+                BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+                builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+                builder->SetInsertPoint(true_bb);
+                Value *true_value = codegen(op->args[1]);
+                builder->CreateBr(after_bb);
+
+                builder->SetInsertPoint(false_bb);
+                Value *false_value = codegen(op->args[2]);
+                builder->CreateBr(after_bb);
+
+                builder->SetInsertPoint(after_bb);
+
+                PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+                phi->addIncoming(true_value, true_bb);
+                phi->addIncoming(false_value, false_bb);
+
+                value = phi;
+            }
         } else {
             std::cerr << "Unknown intrinsic: " << op->name << "\n";
             assert(false);
@@ -1633,6 +1679,15 @@ void CodeGen::visit(const Call *op) {
             for (size_t i = 0; i < args.size(); i++) {
                 if (op->args[i].type().is_handle()) {
                     llvm::Type *t = func_t->getParamType(i);
+
+                    // Widen to vector-width as needed. If the
+                    // function doesn't actually take a vector,
+                    // individual lanes will be extracted below.
+                    if (op->args[i].type().is_vector() &&
+                        !t->isVectorTy()) {
+                        t = VectorType::get(t, op->args[i].type().width);
+                    }
+
                     if (t != args[i]->getType()) {
                         debug(4) << "Pointer casting argument to extern call: "
                                  << op->args[i] << "\n";
@@ -1650,7 +1705,13 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
-        // TODO: Need a general solution here
+        // Add a user context arg as needed. It's never a vector.
+        if (function_takes_user_context(op->name)) {
+            debug(4) << "Adding user_context to " << op->name << " args\n";
+            args.insert(args.begin(), get_user_context());
+        }
+
+        // TODO: Need a general solution here to side-effecty functions
         if (op->name == "halide_current_time_ns") {
             assert(op->args.size() == 0);
             debug(4) << "Creating scalar call to " << op->name << "\n";
@@ -1658,10 +1719,6 @@ void CodeGen::visit(const Call *op) {
             value = call;
         } else if (op->type.is_scalar()) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
-            if (function_takes_user_context(op->name)) {
-                debug(4) << "Adding user_context to " << op->name << " args\n";
-                args.insert(args.begin(), get_user_context());
-            }
             CallInst *call = builder->CreateCall(fn, args);
             if (pure) {
                 call->setDoesNotAccessMemory();
@@ -1669,7 +1726,7 @@ void CodeGen::visit(const Call *op) {
             call->setDoesNotThrow();
             value = call;
         } else {
-            assert(function_takes_user_context(op->name) == false);
+
             // Check if a vector version of the function already
             // exists. We use the naming convention that a N-wide
             // version of a function foo is called fooxN.
@@ -1692,7 +1749,11 @@ void CodeGen::visit(const Call *op) {
                     Value *idx = ConstantInt::get(i32, i);
                     vector<Value *> arg_lane(args.size());
                     for (size_t j = 0; j < args.size(); j++) {
-                        arg_lane[j] = builder->CreateExtractElement(args[j], idx);
+                        if (args[j]->getType()->isVectorTy()) {
+                            arg_lane[j] = builder->CreateExtractElement(args[j], idx);
+                        } else {
+                            arg_lane[j] = args[j];
+                        }
                     }
                     CallInst *call = builder->CreateCall(fn, arg_lane);
                     if (pure) {
