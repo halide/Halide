@@ -208,6 +208,12 @@ string CodeGen_C::print_type(Type type) {
     return oss.str();
 }
 
+string CodeGen_C::print_reinterpret(Type type, Expr e) {
+    ostringstream oss;
+    oss << "reinterpret<" << print_type(type) << ">(" << print_expr(e) << ")";
+    return oss.str();
+}
+
 string CodeGen_C::print_name(const string &name) {
     ostringstream oss;
     for (size_t i = 0; i < name.size(); i++) {
@@ -612,7 +618,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "~" << print_expr(op->args[0]);
         } else if (op->name == Call::reinterpret) {
             assert(op->args.size() == 1);
-            rhs << "reinterpret<" << print_type(op->type) << ">(" << print_expr(op->args[0]) << ")";
+            rhs << print_reinterpret(op->type, op->args[0]);
         } else if (op->name == Call::shift_left) {
             assert(op->args.size() == 2);
             rhs << print_expr(op->args[0]) << " << " << print_expr(op->args[1]);

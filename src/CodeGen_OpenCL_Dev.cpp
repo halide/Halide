@@ -59,6 +59,13 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
     return oss.str();
 }
 
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e) {
+    ostringstream oss;
+    oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
+    return oss.str();
+}
+
+
 
 namespace {
 Expr simt_intrinsic(const string &name) {
