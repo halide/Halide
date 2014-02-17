@@ -72,6 +72,9 @@ void test_compiled_filter() {
 }
 
 void test_copy() {
+    fprintf(stderr, "test_copy: ");
+    fflush(stderr);
+
     bool success = true;
     const int W = 12, H = 32, C = 3;
     const uint8_t VAL = 0x1c;
@@ -97,7 +100,7 @@ void test_copy() {
             success = false;
         }
     }
-    fprintf(stderr, "test_copy %s\n", success ? "SUCCEEDED" : "FAILED");
+    fprintf(stderr, "%s\n", success ? "SUCCEEDED" : "FAILED");
 }
 
 
