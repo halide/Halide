@@ -191,6 +191,9 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 
 -include $(OBJECTS:.o=.d)
 
+$(BUILD_DIR)/initmod.opengl_debug_64.ll: src/runtime/opengl.cpp
+$(BUILD_DIR)/initmod.opengl_debug_32.ll: src/runtime/opengl.cpp
+
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
 	$(CLANG) -nobuiltininc -fno-blocks -m64 -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
