@@ -312,7 +312,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var != NULL && Var::is_implicit(var->name))
+        if (var && Var::is_implicit(var->name))
             break;
         iter++;
     }
@@ -1785,7 +1785,7 @@ void Func::realize(Realization dst, const Target &target) {
 
     for (size_t i = 0; i < arg_values.size(); i++) {
         Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
+        assert(arg_values[i] && "An argument to a jitted function is null\n");
     }
 
     Internal::debug(2) << "Calling jitted function\n";
@@ -1843,7 +1843,7 @@ void Func::infer_input_bounds(Realization dst) {
 
     for (size_t i = 0; i < arg_values.size(); i++) {
         Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
+        assert(arg_values[i] && "An argument to a jitted function is null\n");
     }
 
     Internal::debug(2) << "Calling jitted function\n";

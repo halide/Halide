@@ -7,15 +7,18 @@
 
 #include <map>
 #include <string>
+
 #include "IR.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
 
 /** Take a partially statement with Realize nodes in terms of
  * variables, and define values for those variables. */
-Stmt allocation_bounds_inference(Stmt s, const std::map<std::string, Function> &env);
-
+Stmt allocation_bounds_inference(Stmt s,
+                                 const std::map<std::string, Function> &env,
+                                 const std::map<std::pair<std::string, int>, Interval> &func_bounds);
 }
 }
 
