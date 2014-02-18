@@ -955,7 +955,10 @@ struct Call : public ExprNode<Call> {
         undef,
         null_handle,
         address_of,
-        trace, trace_expr;
+        return_second,
+        if_then_else,
+        trace,
+        trace_expr;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

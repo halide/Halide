@@ -60,6 +60,9 @@ protected:
     /** Emit the C name for a halide type */
     virtual std::string print_type(Type);
 
+    /** Emit a statement to reinterpret an expression as another type */
+    virtual std::string print_reinterpret(Type, Expr);
+
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     std::string print_name(const std::string &);
 
@@ -88,6 +91,7 @@ protected:
 
     void visit(const Variable *);
     void visit(const IntImm *);
+    void visit(const StringImm *);
     void visit(const FloatImm *);
     void visit(const Cast *);
     void visit(const Add *);

@@ -46,78 +46,60 @@ void merge_boxes(Box &a, const Box &b);
  * expression. This is useful for figuring out what regions of things
  * to evaluate. */
 // @{
-std::map<std::string, Box> boxes_required(Expr e, const Scope<Interval> &scope);
-std::map<std::string, Box> boxes_required(Stmt s, const Scope<Interval> &scope);
-std::map<std::string, Box> boxes_required(Expr e);
-std::map<std::string, Box> boxes_required(Stmt s);
-
-std::map<std::string, Box> boxes_required(Expr e, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_required(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_required(Expr e, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_required(Stmt s, const FuncValueBounds &func_bounds);
+std::map<std::string, Box> boxes_required(Expr e,
+                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const FuncValueBounds &func_bounds = FuncValueBounds());
+std::map<std::string, Box> boxes_required(Stmt s,
+                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the
  * 'Provides's to each function that occurs within a given statement
  * or expression. */
 // @{
-std::map<std::string, Box> boxes_provided(Expr e, const Scope<Interval> &scope);
-std::map<std::string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope);
-std::map<std::string, Box> boxes_provided(Expr e);
-std::map<std::string, Box> boxes_provided(Stmt s);
-
-std::map<std::string, Box> boxes_provided(Expr e, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_provided(Expr e, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_provided(Stmt s, const FuncValueBounds &func_bounds);
+std::map<std::string, Box> boxes_provided(Expr e,
+                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const FuncValueBounds &func_bounds = FuncValueBounds());
+std::map<std::string, Box> boxes_provided(Stmt s,
+                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * and 'Provides's to each function that occurs within a given
  * statement or expression. */
 // @{
-std::map<std::string, Box> boxes_touched(Expr e, const Scope<Interval> &scope);
-std::map<std::string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope);
-std::map<std::string, Box> boxes_touched(Expr e);
-std::map<std::string, Box> boxes_touched(Stmt s);
-
-std::map<std::string, Box> boxes_touched(Expr e, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_touched(Expr e, const FuncValueBounds &func_bounds);
-std::map<std::string, Box> boxes_touched(Stmt s, const FuncValueBounds &func_bounds);
+std::map<std::string, Box> boxes_touched(Expr e,
+                                         const Scope<Interval> &scope = Scope<Interval>(),
+                                         const FuncValueBounds &func_bounds = FuncValueBounds());
+std::map<std::string, Box> boxes_touched(Stmt s,
+                                         const Scope<Interval> &scope = Scope<Interval>(),
+                                         const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
 /** Variants of the above that are only concerned with a single function. */
 // @{
-Box box_required(Expr e, std::string fn, const Scope<Interval> &scope);
-Box box_required(Stmt s, std::string fn, const Scope<Interval> &scope);
-Box box_required(Expr e, std::string fn);
-Box box_required(Stmt s, std::string fn);
+Box box_required(Expr e, std::string fn,
+                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const FuncValueBounds &func_bounds = FuncValueBounds());
+Box box_required(Stmt s, std::string fn,
+                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const FuncValueBounds &func_bounds = FuncValueBounds());
 
-Box box_provided(Expr e, std::string fn, const Scope<Interval> &scope);
-Box box_provided(Stmt s, std::string fn, const Scope<Interval> &scope);
-Box box_provided(Expr e, std::string fn);
-Box box_provided(Stmt s, std::string fn);
+Box box_provided(Expr e, std::string fn,
+                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const FuncValueBounds &func_bounds = FuncValueBounds());
+Box box_provided(Stmt s, std::string fn,
+                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const FuncValueBounds &func_bounds = FuncValueBounds());
 
-Box box_touched(Expr e, std::string fn, const Scope<Interval> &scope);
-Box box_touched(Stmt s, std::string fn, const Scope<Interval> &scope);
-Box box_touched(Expr e, std::string fn);
-Box box_touched(Stmt s, std::string fn);
-
-Box box_required(Expr e, std::string fn, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-Box box_required(Stmt s, std::string fn, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-Box box_required(Expr e, std::string fn, const FuncValueBounds &func_bounds);
-Box box_required(Stmt s, std::string fn, const FuncValueBounds &func_bounds);
-
-Box box_provided(Expr e, std::string fn, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-Box box_provided(Stmt s, std::string fn, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-Box box_provided(Expr e, std::string fn, const FuncValueBounds &func_bounds);
-Box box_provided(Stmt s, std::string fn, const FuncValueBounds &func_bounds);
-
-Box box_touched(Expr e, std::string fn, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-Box box_touched(Stmt s, std::string fn, const Scope<Interval> &scope, const FuncValueBounds &func_bounds);
-Box box_touched(Expr e, std::string fn, const FuncValueBounds &func_bounds);
-Box box_touched(Stmt s, std::string fn, const FuncValueBounds &func_bounds);
+Box box_touched(Expr e, std::string fn,
+                const Scope<Interval> &scope = Scope<Interval>(),
+                const FuncValueBounds &func_bounds = FuncValueBounds());
+Box box_touched(Stmt s, std::string fn,
+                const Scope<Interval> &scope = Scope<Interval>(),
+                const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
 /** Compute the maximum and minimum possible value for each function

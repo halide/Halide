@@ -93,7 +93,11 @@ public:
      * module cleanup routines. */
     virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<void (*)()> *) {}
 
+    /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
+
+    /** Which built-in functions require a user-context first argument? */
+    static bool function_takes_user_context(const std::string &name);
 
 protected:
 
