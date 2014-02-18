@@ -59,6 +59,13 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
     return oss.str();
 }
 
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e) {
+    ostringstream oss;
+    oss << "as_" << print_type(type) << "(" << print_expr(e) << ")";
+    return oss.str();
+}
+
+
 
 namespace {
 Expr simt_intrinsic(const string &name) {
@@ -135,6 +142,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
         if (args[i].is_buffer) {
             stream << " __global " << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
+            allocations.push(args[i].name, args[i].type);
         } else {
             stream << " const "
                    << print_type(args[i].type)
@@ -151,6 +159,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
     print(s);
 
     stream << "}\n";
+
+    // Remove buffer arguments from allocation scope
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            allocations.pop(args[i].name);
+        }
+    }
 }
 
 void CodeGen_OpenCL_Dev::init_module() {

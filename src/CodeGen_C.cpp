@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "CodeGen_C.h"
+#include "CodeGen.h"
 #include "Substitute.h"
 #include "IROperator.h"
 #include "Param.h"
@@ -204,6 +205,12 @@ string CodeGen_C::print_type(Type type) {
             assert(false && "Can't represent an integer with this many bits in C");
         }
     }
+    return oss.str();
+}
+
+string CodeGen_C::print_reinterpret(Type type, Expr e) {
+    ostringstream oss;
+    oss << "reinterpret<" << print_type(type) << ">(" << print_expr(e) << ")";
     return oss.str();
 }
 
@@ -524,8 +531,15 @@ void CodeGen_C::visit(const IntImm *op) {
     id = oss.str();
 }
 
+void CodeGen_C::visit(const StringImm *op) {
+    ostringstream oss;
+    oss << Expr(op);
+    id = oss.str();
+}
 
-// NaN is the only float/double for which this is true... and surprisingly, there doesn't seem to be a portable isnan function (dsharlet).
+// NaN is the only float/double for which this is true... and
+// surprisingly, there doesn't seem to be a portable isnan function
+// (dsharlet).
 template <typename T>
 static bool isnan(T x) { return x != x; }
 
@@ -604,7 +618,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "~" << print_expr(op->args[0]);
         } else if (op->name == Call::reinterpret) {
             assert(op->args.size() == 1);
-            rhs << "reinterpret<" << print_type(op->type) << ">(" << print_expr(op->args[0]) << ")";
+            rhs << print_reinterpret(op->type, op->args[0]);
         } else if (op->name == Call::shift_left) {
             assert(op->args.size() == 2);
             rhs << print_expr(op->args[0]) << " << " << print_expr(op->args[1]);
@@ -646,9 +660,42 @@ void CodeGen_C::visit(const Call *op) {
             assert(op->args.size() == 1 && op->args[0].as<Load>());
             string arg = print_expr(op->args[0]);
             rhs << "&(" << arg << ")";
+        } else if (op->name == Call::return_second) {
+            assert(op->args.size() == 2);
+            string arg0 = print_expr(op->args[0]);
+            string arg1 = print_expr(op->args[1]);
+            rhs << "(" << arg0 << ", " << arg1 << ")";
+        } else if (op->name == Call::if_then_else) {
+            assert(op->args.size() == 3);
+
+            string result_id = unique_name('V');
+
+            do_indent();
+            stream << print_type(op->args[1].type())
+                   << " " << result_id << ";\n";
+
+            string cond_id = print_expr(op->args[0]);
+
+            do_indent();
+            stream << "if (" << cond_id << ")\n";
+            open_scope();
+            string true_case = print_expr(op->args[1]);
+            do_indent();
+            stream << result_id << " = " << true_case << ";\n";
+            close_scope("if " + cond_id);
+            do_indent();
+            stream << "else\n";
+            open_scope();
+            string false_case = print_expr(op->args[2]);
+            do_indent();
+            stream << result_id << " = " << false_case << ";\n";
+            close_scope("if " + cond_id + " else");
+
+            rhs << result_id;
+
         } else {
           // TODO: other intrinsics
-          std::cerr << "Unhandled intrinsic: " << op->name << std::endl;
+          std::cerr << "Unhandled intrinsic: " << op->name << '\n';
           assert(false);
         }
 
@@ -659,6 +706,11 @@ void CodeGen_C::visit(const Call *op) {
             args[i] = print_expr(op->args[i]);
         }
         rhs << print_name(op->name) << "(";
+
+        if (CodeGen::function_takes_user_context(op->name)) {
+            rhs << (have_user_context ? "__user_context, " : "NULL, ");
+        }
+
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
             rhs << args[i];
@@ -758,7 +810,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     stream << "if (!" << id_cond << ") {\n";
     do_indent();
     stream << " halide_printf("
-           << (have_user_context ? "__user_context," : "NULL,")
+           << (have_user_context ? "__user_context, " : "NULL, ")
            << Expr(op->message + "\n");
     for (size_t i = 0; i < op->args.size(); i++) {
         stream << ", " << id_args[i];
@@ -864,7 +916,7 @@ void CodeGen_C::visit(const Free *op) {
     if (heap_allocations.contains(op->name)) {
         do_indent();
         stream << "halide_free("
-               << (have_user_context ? "__user_context," : "NULL,")
+               << (have_user_context ? "__user_context, " : "NULL, ")
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
@@ -886,6 +938,8 @@ void CodeGen_C::visit(const IfThenElse *op) {
     close_scope("if " + cond_id);
 
     if (op->else_case.defined()) {
+        do_indent();
+        stream << "else\n";
         open_scope();
         op->else_case.accept(this);
         close_scope("if " + cond_id + " else");
@@ -911,7 +965,7 @@ void CodeGen_C::test() {
     Var x("x");
     Param<float> alpha("alpha");
     Param<int> beta("beta");
-    Expr e = Select::make(alpha > 4.0f, 3, 2);
+    Expr e = Select::make(alpha > 4.0f, print_when(x < 1, 3), 2);
     Stmt s = Store::make("buf", e, x);
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
@@ -959,20 +1013,34 @@ void CodeGen_C::test() {
         " {\n"
         "  int32_t tmp_stack[127];\n"
         "  int32_t V1 = beta + 1;\n"
-        "  bool V2 = alpha > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t V3 = (int32_t)(V2 ? 3 : 2);\n"
-        "  buf[V1] = V3;\n"
+        "  int32_t V2;\n"
+        "  bool V3 = V1 < 1;\n"
+        "  if (V3)\n"
+        "  {\n"
+        "   int64_t V4 = (int64_t)(3);\n"
+        "   int32_t V5 = halide_printf(__user_context, \"%lld \\n\", V4);\n"
+        "   int32_t V6 = (V5, 3);\n"
+        "   V2 = V6;\n"
+        "  } // if V3\n"
+        "  else\n"
+        "  {\n"
+        "   V2 = 3;\n"
+        "  } // if V3 else\n"
+        "  int32_t V7 = V2;\n"
+        "  bool V8 = alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  int32_t V9 = (int32_t)(V8 ? V7 : 2);\n"
+        "  buf[V1] = V9;\n"
         " } // alloc tmp_stack\n"
-        " halide_free(__user_context,tmp_heap);\n"
+        " halide_free(__user_context, tmp_heap);\n"
         "} // alloc tmp_heap\n"
         "return 0;\n"
         "}\n";
     if (source.str() != correct_source) {
-        std::cout << "Correct source code:" << std::endl << correct_source;
-        std::cout << "Actual source code:" << std::endl << source.str();
+        std::cout << "Correct source code:\n" << correct_source;
+        std::cout << "Actual source code:\n" << source.str();
         assert(false);
     }
-    std::cout << "CodeGen_C test passed" << std::endl;
+    std::cout << "CodeGen_C test passed\n";
 }
 
 }
