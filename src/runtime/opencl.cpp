@@ -426,7 +426,9 @@ WEAK void halide_dev_run(
     size_t arg_sizes[],
     void* args[])
 {
+    halide_assert(user_context, state_ptr);
     cl_program program = ((module_state*)state_ptr)->program;
+    halide_assert(user_context, program);
     cl_kernel f = __get_kernel(user_context, program, entry_name);
     #ifdef DEBUG
     halide_printf(user_context,
