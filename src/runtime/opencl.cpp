@@ -72,14 +72,7 @@ static cl_command_queue* cl_q = &weak_cl_q;
 struct _module_state_ WEAK *state_list = NULL;
 typedef struct _module_state_ {
     cl_program program;
-
     _module_state_ *next;
-    _module_state_()
-    {
-        program = NULL;
-        next = state_list;
-        state_list = this;
-    }
 } module_state;
 
 WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q) {
@@ -231,7 +224,10 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     // Create the module state if necessary
     module_state *state = (module_state*)state_ptr;
     if (!state) {
-        state = new module_state;
+        state = (module_state*)malloc(sizeof(module_state));
+        state->program = NULL;
+        state->next = state_list;
+        state_list = state;
     }
 
     // Initialize a module for just this Halide module
