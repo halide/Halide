@@ -65,8 +65,21 @@ cl_command_queue WEAK weak_cl_q = 0;
 static cl_context* cl_ctx = &weak_cl_ctx;
 static cl_command_queue* cl_q = &weak_cl_q;
 
-typedef struct {
+// Structure to hold the state of a module attached to the context.
+// Also used as a linked-list to keep track of all the different
+// modules that are attached to a context in order to release them all
+// when then context is released.
+struct _module_state_ WEAK *state_list = NULL;
+typedef struct _module_state_ {
     cl_program program;
+
+    _module_state_ *next;
+    _module_state_()
+    {
+        program = NULL;
+        next = state_list;
+        state_list = this;
+    }
 } module_state;
 
 WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q) {
@@ -219,7 +232,6 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     module_state *state = (module_state*)state_ptr;
     if (!state) {
         state = new module_state;
-        state->program = NULL;
     }
 
     // Initialize a module for just this Halide module
@@ -279,16 +291,19 @@ WEAK void halide_release(void *user_context) {
     #endif
     halide_dev_sync(user_context);
 
-    // Unload the module
-    // TODO: Release any module states attached to this context
-    //if (__mod) {
-    //    #ifdef DEBUG
-    //    halide_printf(user_context, "clReleaseProgram %p\n", __mod);
-    //    #endif
-    //
-    //    CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
-    //    __mod = 0;
-    //}
+    // Unload the modules attached to this context
+    module_state *state = state_list;
+    while (state) {
+        if (state->program) {
+            #ifdef DEBUG
+            halide_printf(user_context, "clReleaseProgram %p\n", state->program);
+            #endif
+
+            CHECK_CALL( clReleaseProgram(state->program), "clReleaseProgram" );
+            state->program = NULL;
+        }
+        state = state->next;
+    }
 
     // TODO: This is not a good solution to deal with this problem (finding out if the
     // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
