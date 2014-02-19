@@ -1780,7 +1780,9 @@ void Func::realize(Realization dst, const Target &target) {
         Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
         assert(b.defined() && "An ImageParam is not bound to a buffer");
-        arg_values[image_param_args[i].first] = b.raw_buffer();
+        buffer_t *buf = b.raw_buffer();
+        arg_values[image_param_args[i].first] = buf;
+        assert((buf->host || buf->dev) && "An ImageParam is bound to a buffer with NULL host and dev pointers");
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
