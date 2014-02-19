@@ -388,6 +388,79 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Internal::Select::make(condition, true_value, false_value);
 }
 
+/** A multi-way variant of select similar to a switch statement in C,
+ * which can accept multiple conditions and values in pairs. Evaluates
+ * to the first value for which the condition is true. Returns the
+ * final value if all conditions are false. */
+// @{
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr default_val) {
+    return select(c1, v1,
+                  select(c2, v2, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  select(c3, v3, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  select(c4, v4, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  select(c5, v5, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr c6, Expr v6,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  c5, v5,
+                  select(c6, v6, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr c6, Expr v6,
+                   Expr c7, Expr v7,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  c5, v5,
+                  c6, v6,
+                  select(c7, v7, default_val));
+}
+// @}
+
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
