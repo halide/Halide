@@ -3,8 +3,6 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
 int main(int argc, char **argv) {
 
     bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
