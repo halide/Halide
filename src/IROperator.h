@@ -988,6 +988,14 @@ inline Expr count_trailing_zeros(Expr x) {
                                 vec(x), Internal::Call::Intrinsic);
 }
 
+/** Return a random float in the half-open interval [0.0f, 1.0f). For
+ * random numbers of other types, use lerp with a random float as the
+ * last parameter. */
+inline Expr random_float() {
+    return Internal::Call::make(Float(32), "rand_f32",
+                                std::vector<Expr>(), Internal::Call::Extern);
+}
+
 // For the purposes of a call to print, const char * can convert
 // silently to an Expr
 struct PrintArg {

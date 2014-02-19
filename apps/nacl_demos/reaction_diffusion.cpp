@@ -3,13 +3,6 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
-Expr rand_float(Expr x, Expr y, Expr c, Expr min, Expr max) {
-    Expr r = cast<float>(my_rand(x, y, c)) / RAND_MAX;
-    return lerp(min, max, r);
-}
-
 int main(int argc, char **argv) {
 
     bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
@@ -19,7 +12,7 @@ int main(int argc, char **argv) {
         Func initial;
 
         // The initial state is a quantity of two chemicals present at each pixel
-        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f);
+        initial(x, y, c) = random_float();
         initial.compile_to_file("reaction_diffusion_init");
     }
 
@@ -59,10 +52,9 @@ int main(int argc, char **argv) {
         new_state(x, y, c) = select(c == 0, new_a, new_b);
 
         // Finally add some noise at the edges to keep things moving
-        Expr r = rand_float(x, 0, c, -0.05f, 0.05f);
+        Expr r = lerp(-0.05f, 0.05f, random_float());
         new_state(x, 0, c) += r;
         new_state(x, 1023, c) += r;
-        r = rand_float(0, y, c, -0.05f, 0.05f);
         new_state(0, y, c) += r;
         new_state(1023, y, c) += r;
 

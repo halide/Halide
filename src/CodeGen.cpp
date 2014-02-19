@@ -1712,7 +1712,7 @@ void CodeGen::visit(const Call *op) {
         }
 
         // TODO: Need a general solution here to side-effecty functions
-        if (op->name == "halide_current_time_ns") {
+        if (op->name == "halide_current_time_ns" || op->name == "rand_f32") {
             assert(op->args.size() == 0);
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, get_user_context());

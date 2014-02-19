@@ -36,7 +36,8 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_free(NULL),
                                  custom_do_par_for(NULL),
                                  custom_do_task(NULL),
-                                 custom_trace(NULL) {
+                                 custom_trace(NULL),
+                                 random_seed(0) {
 }
 
 Func::Func() : func(unique_name('f')),
@@ -45,7 +46,8 @@ Func::Func() : func(unique_name('f')),
                custom_free(NULL),
                custom_do_par_for(NULL),
                custom_do_task(NULL),
-               custom_trace(NULL) {
+               custom_trace(NULL),
+               random_seed(0) {
 }
 
 Func::Func(Expr e) : func(unique_name('f')),
@@ -54,7 +56,8 @@ Func::Func(Expr e) : func(unique_name('f')),
                      custom_free(NULL),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
-                     custom_trace(NULL) {
+                     custom_trace(NULL),
+                     random_seed(0) {
     (*this)(_) = e;
 }
 
@@ -1747,6 +1750,13 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
+void Func::set_random_seed(uint32_t s) {
+    random_seed = s;
+    if (compiled_module.set_random_seed) {
+        compiled_module.set_random_seed(s);
+    }
+}
+
 void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
@@ -1768,6 +1778,7 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_random_seed(random_seed);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -1820,6 +1831,8 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_allocator(custom_malloc, custom_free);
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
+    compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_random_seed(random_seed);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {

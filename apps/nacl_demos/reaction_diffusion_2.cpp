@@ -3,13 +3,6 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
-Expr rand_float(Expr x, Expr y, Expr c, Expr min, Expr max) {
-    Expr r = cast<float>(my_rand(x, y, c)) / RAND_MAX;
-    return lerp(min, max, r);
-}
-
 int main(int argc, char **argv) {
 
     bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
@@ -23,7 +16,7 @@ int main(int argc, char **argv) {
         Expr dx = (x - 512), dy = (y - 512);
         Expr r = dx * dx + dy * dy;
         Expr mask = r < 200 * 200;
-        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f) * select(mask, 1.0f, 0.001f);
+        initial(x, y, c) = random_float() * select(mask, 1.0f, 0.001f);
         initial.compile_to_file("reaction_diffusion_2_init");
     }
 

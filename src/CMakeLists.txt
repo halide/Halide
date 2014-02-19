@@ -74,6 +74,7 @@ set(RUNTIME_CPP
   nacl_io
   osx_io
   posix_math
+  random
   posix_thread_pool
   android_host_cpu_count
   linux_host_cpu_count
