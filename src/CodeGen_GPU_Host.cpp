@@ -811,7 +811,7 @@ Value *CodeGen_GPU_Host::get_module_state() {
     GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
     if (!module_state)
     {
-        // Create a global variable to hold the generated program
+        // Create a global variable to hold the module state
         PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
         module_state = new GlobalVariable(*module, void_ptr_type,
                                           false, GlobalVariable::PrivateLinkage,
