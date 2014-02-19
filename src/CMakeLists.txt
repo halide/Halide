@@ -229,6 +229,7 @@ set(HEADER_FILES
   AllocationBoundsInference.h
   Inline.h
   Qualify.h
+  ExprUsesVar.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -304,6 +305,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Inline.cpp
   Qualify.cpp
   UnifyDuplicateLets.cpp
+  ExprUsesVar.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
 

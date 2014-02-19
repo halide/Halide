@@ -5,6 +5,7 @@
 #include "Scope.h"
 #include "Simplify.h"
 #include "Substitute.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -141,6 +142,8 @@ private:
     using IRMutator::visit;
 
     void visit(const Pipeline *op) {
+        // If the predicate at this stage depends on something
+        // vectorized we should bail out.
         if (op->name == buffer) {
             Stmt produce = op->produce, update = op->update;
             if (update.defined()) {
@@ -167,11 +170,56 @@ private:
     string func;
     using IRMutator::visit;
 
+    Scope<int> vector_vars;
+    bool in_vector_loop;
+
+    void visit(const For *op) {
+        bool old_in_vector_loop = in_vector_loop;
+
+        // We want to be sure that the predicate doesn't vectorize.
+        if (op->for_type == For::Vectorized) {
+            vector_vars.push(op->name, 0);
+            in_vector_loop = true;
+        }
+
+        IRMutator::visit(op);
+
+        if (op->for_type == For::Vectorized) {
+            vector_vars.pop(op->name);
+        }
+
+        in_vector_loop = old_in_vector_loop;
+    }
+
+    void visit(const LetStmt *op) {
+        bool should_pop = false;
+        if (in_vector_loop &&
+            expr_uses_vars(op->value, vector_vars)) {
+            should_pop = true;
+            vector_vars.push(op->name, 0);
+        }
+
+        IRMutator::visit(op);
+
+        if (should_pop) {
+            vector_vars.pop(op->name);
+        }
+    }
+
     void visit(const Realize *op) {
         if (op->name == func) {
             PredicateFinder f(op->name);
             op->body.accept(&f);
             Expr predicate = simplify(f.predicate);
+
+            if (expr_uses_vars(predicate, vector_vars)) {
+                // Don't try to skip stages if the predicate may vary
+                // per lane. This will just unvectorize the
+                // production, which is probably contrary to the
+                // intent of the user.
+                predicate = const_true();
+            }
+
             debug(3) << "Realization " << op->name << " only used when " << predicate << "\n";
             if (!is_one(predicate)) {
                 ProductionGuarder g(op->name, predicate);
