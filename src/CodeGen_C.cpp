@@ -234,7 +234,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
     // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
     stream << "#ifndef HALIDE_FUNCTION_ATTRS\n";
-    stream << "#define HALIDE_FUNCTION_ATTRS __attribute__((warn_unused_result))\n";
+    stream << "#define HALIDE_FUNCTION_ATTRS\n";
     stream << "#endif\n";
 
     // Now the function prototype
