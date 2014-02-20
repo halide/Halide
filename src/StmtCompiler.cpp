@@ -19,10 +19,10 @@ StmtCompiler::StmtCompiler(Target target) {
     // The awkward mapping from targets to code generators
     if ((target.features & Target::CUDA) || (target.features & Target::OpenCL)) {
         if (target.arch == Target::X86) {
-            contents = new CodeGen_GPU_Host_X86(target);
+            contents = new CodeGen_GPU_Host<CodeGen_X86>(target);
         }
         else if (target.arch == Target::ARM) {
-            contents = new CodeGen_GPU_Host_ARM(target);
+            contents = new CodeGen_GPU_Host<CodeGen_ARM>(target);
         }
         else {
             assert(false && "Invalid target architecture for GPU backend.");
