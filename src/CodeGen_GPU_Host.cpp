@@ -671,7 +671,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Allocation host_allocation = {NULL, 0};
+    typename CodeGen_CPU::Allocation host_allocation = {NULL, 0};
 
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
@@ -739,7 +739,7 @@ template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
     // Free any host allocation
     if (sym_exists(f->name + ".host")) {
-        CodeGen_Posix::visit(f);
+        CodeGen_CPU::visit(f);
     }
 
     if (sym_exists(f->name + ".buffer")) {
