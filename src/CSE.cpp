@@ -3,6 +3,7 @@
 #include "CSE.h"
 #include "IRMutator.h"
 #include "IREquality.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -133,9 +134,10 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
         set<const IRNode *>::iterator iter = visited.find(e.ptr);
 
         if (iter != visited.end()) {
-            if (e.as<IntImm>() || e.as<FloatImm>() || e.as<Variable>() || e.as<Cast>()) {
+            if (e.as<Variable>() || is_const(e)) {
                 return;
             }
+
             result = e;
         } else {
             e.accept(this);

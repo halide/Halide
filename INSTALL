@@ -20,6 +20,8 @@ cd llvm3.2
 ./configure --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
 make -j8
 
+(Users of OSX 10.8+ may need to add --enable-libcpp as well)
+
 Then finally tell Halide's Makefile about it like so:
 
 export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config

@@ -373,7 +373,10 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     assert(init && "Could not find function halide_init_kernels in initial module");
-    builder->CreateCall3(init, user_context, kernel_src_ptr, kernel_size);
+    Value *state = builder->CreateCall4(init, user_context,
+                                        builder->CreateLoad(get_module_state()),
+                                        kernel_src_ptr, kernel_size);
+    builder->CreateStore(state, get_module_state());
 
     // Optimize the module
     CodeGen::optimize_module();
@@ -621,6 +624,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         // cuLaunchKernel. How should we handle blkid_w?
         Value *launch_args[] = {
             get_user_context(),
+            builder->CreateLoad(get_module_state()),
             entry_name_str,
             codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
             codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
@@ -802,4 +806,20 @@ void CodeGen_GPU_Host::visit(const Call *call) {
 
     CodeGen::visit(call);
 }
+
+Value *CodeGen_GPU_Host::get_module_state() {
+    GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
+    if (!module_state)
+    {
+        // Create a global variable to hold the module state
+        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
+        module_state = new GlobalVariable(*module, void_ptr_type,
+                                          false, GlobalVariable::PrivateLinkage,
+                                          ConstantPointerNull::get(void_ptr_type),
+                                          "module_state");
+        debug(4) << "Created device module state global variable\n";
+    }
+    return module_state;
+}
+
 }}

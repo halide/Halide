@@ -19,10 +19,17 @@ class VectorizeLoops : public IRMutator {
         Scope<Expr> scope;
         Scope<int> internal_allocations;
 
+        bool scalarized;
+        int scalar_lane;
+
         Expr widen(Expr e, int width) {
-            if (e.type().width == width) return e;
-            else if (e.type().width == 1) return Broadcast::make(e, width);
-            else assert(false && "Mismatched vector widths in VectorSubs");
+            if (e.type().width == width) {
+                return e;
+            } else if (e.type().width == 1) {
+                return Broadcast::make(e, width);
+            } else {
+                assert(false && "Mismatched vector widths in VectorSubs");
+            }
             return Expr();
         }
 
@@ -49,6 +56,12 @@ class VectorizeLoops : public IRMutator {
                 expr = Variable::make(scope.get(op->name).type(), op->name);
             } else {
                 expr = op;
+            }
+
+            if (scalarized) {
+                // When we're scalarized, we were supposed to hide all
+                // the vector vars in scope.
+                assert(expr.type().is_scalar());
             }
         }
 
@@ -104,8 +117,13 @@ class VectorizeLoops : public IRMutator {
             if (internal_allocations.contains(op->name)) {
                 int width = replacement.type().width;
                 if (index.type().is_scalar()) {
-                    index = Ramp::make(Mul::make(index, width), 1, width);
+                    if (scalarized) {
+                        index = Add::make(Mul::make(index, width), scalar_lane);
+                    } else {
+                        index = Ramp::make(Mul::make(index, width), 1, width);
+                    }
                 } else {
+                    assert(!scalarized);
                     index = Mul::make(index, Broadcast::make(width, width));
                     index = Add::make(index, Ramp::make(0, 1, width));
                 }
@@ -230,8 +248,13 @@ class VectorizeLoops : public IRMutator {
             if (internal_allocations.contains(op->name)) {
                 int width = replacement.type().width;
                 if (index.type().is_scalar()) {
-                    index = Ramp::make(Mul::make(index, width), 1, width);
+                    if (scalarized) {
+                        index = Add::make(Mul::make(index, width), scalar_lane);
+                    } else {
+                        index = Ramp::make(Mul::make(index, width), 1, width);
+                    }
                 } else {
+                    assert(!scalarized);
                     index = Mul::make(index, Broadcast::make(width, width));
                     index = Add::make(index, Ramp::make(0, 1, width));
                 }
@@ -279,7 +302,10 @@ class VectorizeLoops : public IRMutator {
         void visit(const For *op) {
             Expr min = mutate(op->min);
             Expr extent = mutate(op->extent);
-            assert(extent.type().is_scalar() && "Vectorizing a for loop with an extent that varies per vector lane. You're probably scheduling something inside a vectorized dimension.");
+            assert(extent.type().is_scalar() &&
+                   "Vectorizing a for loop with an extent that varies per vector "
+                   "lane. You're probably scheduling something inside a vectorized "
+                   "dimension.");
 
             if (min.type().is_vector()) {
                 // for (x from vector_min to scalar_extent)
@@ -327,9 +353,16 @@ class VectorizeLoops : public IRMutator {
         Stmt scalarize(Stmt s) {
             Stmt result;
             int width = replacement.type().width;
+            Expr old_replacement = replacement;
+            assert(!scalarized);
+            scalarized = true;
+
             for (int i = 0; i < width; i++) {
                 // Replace the var with a scalar version in the appropriate lane.
-                Stmt new_stmt = substitute(var, extract_lane(replacement, i), s);
+                replacement = extract_lane(old_replacement, i);
+                scalar_lane = i;
+
+                Stmt new_stmt = s;
 
                 // Hide all the vectors in scope with a scalar version
                 // in the appropriate lane.
@@ -340,17 +373,26 @@ class VectorizeLoops : public IRMutator {
                     new_stmt = LetStmt::make(name, lane, new_stmt);
                 }
 
+                // Should only serve to rewrite access to internal allocations:
+                // foo[x] -> foo[x * width + i]
+                new_stmt = mutate(new_stmt);
+
                 if (i == 0) {
                     result = new_stmt;
                 } else {
                     result = Block::make(result, new_stmt);
                 }
             }
+
+            replacement = old_replacement;
+            scalarized = false;
+
             return result;
         }
 
     public:
-        VectorSubs(string v, Expr r) : var(v), replacement(r) {
+        VectorSubs(string v, Expr r) : var(v), replacement(r),
+                                       scalarized(false), scalar_lane(0) {
         }
     };
 

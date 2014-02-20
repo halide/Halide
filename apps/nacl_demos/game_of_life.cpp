@@ -4,18 +4,18 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
 int main(int argc, char **argv) {
 
     bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
+
+    Expr random_bit = cast<uint8_t>(random_int() % 2);
 
     // First define the function that gives the initial state of the
     // game board
     {
         Func initial;
 
-        initial(x, y, c) = cast<uint8_t>(my_rand(x, y, c) % 2);
+        initial(x, y, c) = random_bit;
         initial.compile_to_file("game_of_life_init");
     }
 
@@ -57,7 +57,6 @@ int main(int argc, char **argv) {
         Expr dy = clobber.y - mouse_y;
         Expr r = dx*dx + dy*dy;
 
-        Expr random_bit = cast<uint8_t>(my_rand(clobber.x, clobber.y, c) % 2);
         output(clobber.x, clobber.y, c) = select(r < 100, random_bit & random_bit, output(clobber.x, clobber.y, c));
 
         if (can_vectorize) {

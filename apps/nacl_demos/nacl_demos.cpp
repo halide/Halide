@@ -65,10 +65,6 @@ void completion_callback(void *data, int32_t flags) {
     busy = false;
 }
 
-extern "C" int my_rand(int, int, int) {
-    return rand();
-}
-
 extern "C" void *halide_malloc(void *, size_t);
 extern "C" void halide_free(void *, void *);
 

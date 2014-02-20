@@ -42,23 +42,25 @@ class Image {
 
     Contents *contents;
 
-    void initialize(int w, int h, int c) {
-        buffer_t buf;
-        buf.extent[0] = w;
-        buf.extent[1] = h;
-        buf.extent[2] = c;
-        buf.extent[3] = 1;
+    void initialize(int x, int y, int z, int w) {
+        buffer_t buf = {0};
+        buf.extent[0] = x;
+        buf.extent[1] = y;
+        buf.extent[2] = z;
+        buf.extent[3] = w;
         buf.stride[0] = 1;
-        buf.stride[1] = w;
-        buf.stride[2] = w*h;
-        buf.stride[3] = 0;
-        buf.min[0] = 0;
-        buf.min[1] = 0;
-        buf.min[2] = 0;
-        buf.min[3] = 0;
+        buf.stride[1] = x;
+        buf.stride[2] = x*y;
+        buf.stride[3] = x*y*z;
         buf.elem_size = sizeof(T);
 
-        uint8_t *ptr = new uint8_t[sizeof(T)*w*h*c+32];
+        size_t size = 1;
+        if (x) size *= x;
+        if (y) size *= y;
+        if (z) size *= z;
+        if (w) size *= w;
+
+        uint8_t *ptr = new uint8_t[sizeof(T)*size + 40];
         buf.host = ptr;
         buf.host_dirty = false;
         buf.dev_dirty = false;
@@ -71,8 +73,8 @@ public:
     Image() : contents(NULL) {
     }
 
-    Image(int w, int h = 1, int c = 1) {
-        initialize(w, h, c);
+    Image(int x, int y = 0, int z = 0, int w = 0) {
+        initialize(x, y, z, w);
     }
 
     Image(const Image &other) : contents(other.contents) {
@@ -107,7 +109,7 @@ public:
         return *this;
     }
 
-    T *data() {return (T*)contents->buf.host;}
+    T *data() const {return (T*)contents->buf.host;}
 
     void set_host_dirty(bool dirty = true) {
         // If you use data directly, you must also call this so that
@@ -123,33 +125,38 @@ public:
     }
 
     Image(T vals[]) {
-        initialize(sizeof(vals)/sizeof(T), 1, 1);
-        for (int i = 0; i < sizeof(vals); i++) (*this)(i, 0, 0) = vals[i];
-    }
-
-    void copy(T* vals, int width, int height) {
-        assert(contents && "Copying into an uninitialized image");
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < height; x++) {
-                (*this)(x, y, 0) = vals[y * width + x];
-            }
-        }
+        initialize(sizeof(vals)/sizeof(T));
+        for (int i = 0; i < sizeof(vals); i++) (*this)(i) = vals[i];
     }
 
     /** Make sure you've called copy_to_host before you start
      * accessing pixels directly. */
-    T &operator()(int x, int y = 0, int c = 0) {
+    T &operator()(int x, int y = 0, int z = 0, int w = 0) {
         T *ptr = (T *)contents->buf.host;
-        int w = contents->buf.extent[0];
-        int h = contents->buf.extent[1];
-        return ptr[(c*h + y)*w + x];
+        x -= contents->buf.min[0];
+        y -= contents->buf.min[1];
+        z -= contents->buf.min[2];
+        w -= contents->buf.min[3];
+        size_t s0 = contents->buf.stride[0];
+        size_t s1 = contents->buf.stride[1];
+        size_t s2 = contents->buf.stride[2];
+        size_t s3 = contents->buf.stride[3];
+        return ptr[s0 * x + s1 * y + s2 * z + s3 * w];
     }
 
     /** Make sure you've called copy_to_host before you start
      * accessing pixels directly */
-    const T &operator()(int x, int y = 0, int c = 0) const {
+    const T &operator()(int x, int y = 0, int z = 0, int w = 0) const {
         const T *ptr = (const T *)contents->buf.host;
-        return ptr[c*contents->buf.stride[2] + y*contents->buf.stride[1] + x*contents->buf.stride[0]];
+        x -= contents->buf.min[0];
+        y -= contents->buf.min[1];
+        z -= contents->buf.min[2];
+        w -= contents->buf.min[3];
+        size_t s0 = contents->buf.stride[0];
+        size_t s1 = contents->buf.stride[1];
+        size_t s2 = contents->buf.stride[2];
+        size_t s3 = contents->buf.stride[3];
+        return ptr[s0 * x + s1 * y + s2 * z + s3 * w];
     }
 
     operator buffer_t *() const {
@@ -157,23 +164,43 @@ public:
     }
 
     int width() const {
-        return contents->buf.extent[0];
+        return dimensions() > 0 ? contents->buf.extent[0] : 1;
     }
 
     int height() const {
-        return contents->buf.extent[1];
+        return dimensions() > 1 ? contents->buf.extent[1] : 1;
     }
 
     int channels() const {
-        return contents->buf.extent[2];
+        return dimensions() > 2 ? contents->buf.extent[2] : 1;
+    }
+
+    int dimensions() const {
+        for (int i = 0; i < 4; i++) {
+            if (contents->buf.extent[i] == 0) {
+                return i;
+            }
+        }
+        return 4;
     }
 
     int stride(int dim) const {
         return contents->buf.stride[dim];
     }
 
-    int size(int dim) const {
+    int min(int dim) const {
+        return contents->buf.min[dim];
+    }
+
+    int extent(int dim) const {
         return contents->buf.extent[dim];
+    }
+
+    void set_min(int x, int y = 0, int z = 0, int w = 0) {
+        contents->buf.min[0] = x;
+        contents->buf.min[1] = y;
+        contents->buf.min[2] = z;
+        contents->buf.min[3] = w;
     }
 
 };

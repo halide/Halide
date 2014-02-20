@@ -74,6 +74,7 @@ set(RUNTIME_CPP
   nacl_io
   osx_io
   posix_math
+  random
   posix_thread_pool
   android_host_cpu_count
   linux_host_cpu_count
@@ -230,6 +231,7 @@ set(HEADER_FILES
   AllocationBoundsInference.h
   Inline.h
   Qualify.h
+  ExprUsesVar.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -305,6 +307,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Inline.cpp
   Qualify.cpp
   UnifyDuplicateLets.cpp
+  ExprUsesVar.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
 

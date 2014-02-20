@@ -150,6 +150,11 @@ extern int32_t halide_trace(void *user_context, const char *func,
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
 
+/** Set the seed for the random number generator used by
+ * random_float. Also clears all other internal state for the random
+ * number generator. */
+extern void halide_set_random_seed(uint32_t seed);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

@@ -388,6 +388,79 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Internal::Select::make(condition, true_value, false_value);
 }
 
+/** A multi-way variant of select similar to a switch statement in C,
+ * which can accept multiple conditions and values in pairs. Evaluates
+ * to the first value for which the condition is true. Returns the
+ * final value if all conditions are false. */
+// @{
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr default_val) {
+    return select(c1, v1,
+                  select(c2, v2, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  select(c3, v3, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  select(c4, v4, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  select(c5, v5, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr c6, Expr v6,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  c5, v5,
+                  select(c6, v6, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr c6, Expr v6,
+                   Expr c7, Expr v7,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  c5, v5,
+                  c6, v6,
+                  select(c7, v7, default_val));
+}
+// @}
+
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
@@ -913,6 +986,44 @@ inline Expr count_trailing_zeros(Expr x) {
     assert(x.defined() && "count trailing zeros of undefined");
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
                                 vec(x), Internal::Call::Intrinsic);
+}
+
+/** Return a random variable representing a uniformly distributed
+ * float in the half-open interval [0.0f, 1.0f). For random numbers of
+ * other types, use lerp with a random float as the last parameter.
+ *
+ * Note that:
+ \code
+ Expr x = random_float();
+ Expr y = x + x;
+ \endcode
+ *
+ * is very different to
+ *
+ \code
+ Expr y = random_float() + random_float();
+ \endcode
+ *
+ * The first doubles a random variable, and the second adds two
+ * independent random variables.
+ *
+ */
+inline Expr random_float() {
+    // Generate a unique tag to pass as an argument so that this
+    // doesn't get coalesced with other calls to rand_f32 in the same
+    // expression.
+    static int counter = 0;
+    return Internal::Call::make(Float(32), "rand_f32",
+                                Internal::vec<Expr>(counter++),
+                                Internal::Call::Extern);
+}
+
+/** Return a random variable representing a 32-bit integer. */
+inline Expr random_int() {
+    static int counter = 0;
+    return Internal::Call::make(Int(32), "rand_i32",
+                                Internal::vec<Expr>(counter++),
+                                Internal::Call::Extern);
 }
 
 // For the purposes of a call to print, const char * can convert

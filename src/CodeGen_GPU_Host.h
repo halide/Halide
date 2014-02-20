@@ -71,6 +71,8 @@ protected:
 
     static CodeGen_GPU_Dev* make_dev(Target);
 
+    llvm::Value *get_module_state();
+
 private:
     /** Child code generator for device kernels. */
     CodeGen_GPU_Dev *cgdev;
