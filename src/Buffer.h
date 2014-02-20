@@ -56,6 +56,10 @@ struct BufferContents {
         if (!data) {
             size = buf.elem_size*size + 32;
             allocation = (uint8_t *)calloc(1, size);
+            if (!allocation) {
+                std::cerr << "Out of memory allocating buffer of size " << size << "\n";
+                assert(false);
+            }
             buf.host = allocation;
             while ((size_t)(buf.host) & 0x1f) buf.host++;
         } else {

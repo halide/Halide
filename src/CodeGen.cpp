@@ -1717,6 +1717,12 @@ void CodeGen::visit(const Call *op) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, get_user_context());
             value = call;
+        } else if (op->name == "rand_i32" || op->name == "rand_f32") {
+            assert(op->args.size() == 1);
+            debug(4) << "Creating scalar call to " << op->name << "\n";
+            Value *arg = codegen(op->args[0]);
+            CallInst *call = builder->CreateCall2(fn, get_user_context(), arg);
+            value = call;
         } else if (op->type.is_scalar()) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);

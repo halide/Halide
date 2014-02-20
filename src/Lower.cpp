@@ -34,6 +34,7 @@
 #include "Qualify.h"
 #include "UnifyDuplicateLets.h"
 #include "Func.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -69,27 +70,6 @@ void lower_test() {
 
     std::cout << "Lowering test passed" << std::endl;
 }
-
-class ExprUsesVar : public IRVisitor {
-    using IRVisitor::visit;
-
-    string var;
-
-    void visit(const Variable *v) {
-        if (v->name == var) {
-            result = true;
-        }
-    }
-public:
-    ExprUsesVar(const string &v) : var(v), result(false) {}
-    bool result;
-};
-bool expr_uses_var(Expr e, const string &v) {
-    ExprUsesVar uses(v);
-    e.accept(&uses);
-    return uses.result;
-}
-
 
 namespace {
 // A structure representing a containing LetStmt or For loop. Used in

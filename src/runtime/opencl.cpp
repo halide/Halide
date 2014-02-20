@@ -65,12 +65,20 @@ cl_command_queue WEAK weak_cl_q = 0;
 static cl_context* cl_ctx = &weak_cl_ctx;
 static cl_command_queue* cl_q = &weak_cl_q;
 
+// Structure to hold the state of a module attached to the context.
+// Also used as a linked-list to keep track of all the different
+// modules that are attached to a context in order to release them all
+// when then context is released.
+struct _module_state_ WEAK *state_list = NULL;
+typedef struct _module_state_ {
+    cl_program program;
+    _module_state_ *next;
+} module_state;
+
 WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q) {
     cl_ctx = ctx;
     cl_q = q;
 }
-
-static cl_program __mod;
 
 WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
     if (buf->dev == 0)
@@ -107,7 +115,7 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
     buf->dev = 0;
 }
 
-WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
+WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* src, int size) {
     int err;
     cl_device_id dev;
     // Initialize one shared context for all Halide compiled instances
@@ -141,7 +149,7 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         }
         if (platform == NULL){
             halide_printf(user_context, "Failed to find OpenCL platform\n");
-            return;
+            return NULL;
         }
 
         #ifdef DEBUG
@@ -175,7 +183,7 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         CHECK_ERR( err, "clGetDeviceIDs" );
         if (deviceCount == 0) {
             halide_printf(user_context, "Failed to get device\n");
-            return;
+            return NULL;
         }
 
         dev = devices[deviceCount-1];
@@ -213,8 +221,17 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
         CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
     }
 
+    // Create the module state if necessary
+    module_state *state = (module_state*)state_ptr;
+    if (!state) {
+        state = (module_state*)malloc(sizeof(module_state));
+        state->program = NULL;
+        state->next = state_list;
+        state_list = state;
+    }
+
     // Initialize a module for just this Halide module
-    if ((!__mod) && (size > 1)) {
+    if ((!state->program) && (size > 1)) {
         // Create module
 
         cl_device_id devices[] = { dev };
@@ -228,7 +245,7 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
             #endif
 
             const char * sources[] = { src };
-            __mod = clCreateProgramWithSource(*cl_ctx, 1, &sources[0], NULL, &err );
+            state->program = clCreateProgramWithSource(*cl_ctx, 1, &sources[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithSource" );
         } else {
             // Program is SPIR binary.
@@ -238,23 +255,24 @@ WEAK void halide_init_kernels(void *user_context, const char* src, int size) {
             #endif
 
             const unsigned char * binaries[] = { (unsigned char *)src };
-            __mod = clCreateProgramWithBinary(*cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
+            state->program = clCreateProgramWithBinary(*cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithBinary" );
         }
 
-        err = clBuildProgram( __mod, 1, &dev, NULL, NULL, NULL );
+        err = clBuildProgram(state->program, 1, &dev, NULL, NULL, NULL );
         if (err != CL_SUCCESS) {
             size_t len;
             char buffer[2048];
 
             halide_printf(user_context, "Error: Failed to build program executable! err = %d\n", err);
-            if (clGetProgramBuildInfo(__mod, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len) == CL_SUCCESS)
+            if (clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len) == CL_SUCCESS)
                 halide_printf(user_context, "Build Log:\n %s\n-----\n", buffer);
             else
                 halide_printf(user_context, "clGetProgramBuildInfo failed to get build log!\n");
             halide_assert(user_context, err == CL_SUCCESS);
         }
     }
+    return state;
 }
 
 // Used to generate correct timings when tracing
@@ -269,14 +287,18 @@ WEAK void halide_release(void *user_context) {
     #endif
     halide_dev_sync(user_context);
 
-    // Unload the module
-    if (__mod) {
-        #ifdef DEBUG
-        halide_printf(user_context, "clReleaseProgram %p\n", __mod);
-        #endif
+    // Unload the modules attached to this context
+    module_state *state = state_list;
+    while (state) {
+        if (state->program) {
+            #ifdef DEBUG
+            halide_printf(user_context, "clReleaseProgram %p\n", state->program);
+            #endif
 
-        CHECK_CALL( clReleaseProgram(__mod), "clReleaseProgram" );
-        __mod = 0;
+            CHECK_CALL( clReleaseProgram(state->program), "clReleaseProgram" );
+            state->program = NULL;
+        }
+        state = state->next;
     }
 
     // TODO: This is not a good solution to deal with this problem (finding out if the
@@ -299,14 +321,14 @@ WEAK void halide_release(void *user_context) {
     }
 }
 
-static cl_kernel __get_kernel(void *user_context, const char* entry_name) {
+static cl_kernel __get_kernel(void *user_context, cl_program program, const char* entry_name) {
     cl_kernel f;
     #ifdef DEBUG
     halide_printf(user_context, "get_kernel %s\n", entry_name);
     #endif
     // Get kernel function ptr
     int err;
-    f = clCreateKernel(__mod, entry_name, &err);
+    f = clCreateKernel(program, entry_name, &err);
     CHECK_ERR(err, "clCreateKernel");
     return f;
 }
@@ -396,6 +418,7 @@ WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
 
 WEAK void halide_dev_run(
     void *user_context,
+    void *state_ptr,
     const char* entry_name,
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
@@ -403,7 +426,10 @@ WEAK void halide_dev_run(
     size_t arg_sizes[],
     void* args[])
 {
-    cl_kernel f = __get_kernel(user_context, entry_name);
+    halide_assert(user_context, state_ptr);
+    cl_program program = ((module_state*)state_ptr)->program;
+    halide_assert(user_context, program);
+    cl_kernel f = __get_kernel(user_context, program, entry_name);
     #ifdef DEBUG
     halide_printf(user_context,
         "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem\n",
@@ -489,7 +515,7 @@ int f( buffer_t *input, buffer_t *result, int N )
 }
 
 int main(int argc, char* argv[]) {
-    halide_init_kernels(NULL, src, 0);
+    void *program = halide_init_kernels(NULL, src, 0, NULL);
 
     const int N = 2048;
     buffer_t in, out;
