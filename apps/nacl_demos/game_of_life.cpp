@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
 
-    Expr random_bit = select(random_float() < 0.5f, cast<uint8_t>(0), cast<uint8_t>(1));
+    Expr random_bit = cast<uint8_t>(random_int() % 2);
 
     // First define the function that gives the initial state of the
     // game board
