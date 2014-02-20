@@ -20,7 +20,8 @@ WEAK void halide_set_random_seed(uint32_t s) {
     halide_random_state_pool_index = 0;
 }
 
-WEAK float rand_f32(void *user_context) {
+// Get 31 random bits.
+WEAK uint32_t rand_u31(void *user_context, int tag) {
     // Claim an entry from the state pool. This is mostly
     // thread-safe. It's possible but unlikely that another thread
     // will catch up with me and use the same state as me.
@@ -40,11 +41,22 @@ WEAK float rand_f32(void *user_context) {
         state = state & 0x7fffffff;
     }
 
+    // Incorporate the tag, so that different tags result in different
+    // sequences.
+    state += tag;
+
     // Update the state using a classic 31-bit linear congruential rng.
     state = (state * 1103515245 + 12345) & 0x7fffffff;
 
     // Also set the top bit so we know we're initialized.
     halide_random_state_pool[idx] = state | 0x80000000;
+
+    return state;
+}
+
+WEAK float rand_f32(void *user_context, int tag) {
+
+    uint32_t bits = rand_u31(user_context, tag);
 
     // Use the top 23 bits for the mantissa of a float in [1.0f, 2.0f)
     union {
@@ -52,10 +64,21 @@ WEAK float rand_f32(void *user_context) {
         float as_float;
     } u;
 
-    u.as_uint = (127 << 23) | (state >> 8);
+    u.as_uint = (127 << 23) | (bits >> 8);
 
     // Subtract one to get a float in [0.0f, 1.0f)
     return u.as_float - 1.0f;
+}
+
+WEAK int32_t rand_i32(void *user_context, int tag) {
+
+    // Get 31 random bits for the high part.
+    uint32_t bits_1 = rand_u31(user_context, tag);
+
+    // Get some more bits to randomize up the low part.
+    uint32_t bits_2 = rand_u31(user_context, tag);
+
+    return (bits_1 << 1) ^ (bits_2 >> 15);
 }
 
 }

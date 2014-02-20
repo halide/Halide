@@ -988,12 +988,42 @@ inline Expr count_trailing_zeros(Expr x) {
                                 vec(x), Internal::Call::Intrinsic);
 }
 
-/** Return a random float in the half-open interval [0.0f, 1.0f). For
- * random numbers of other types, use lerp with a random float as the
- * last parameter. */
+/** Return a random variable representing a uniformly distributed
+ * float in the half-open interval [0.0f, 1.0f). For random numbers of
+ * other types, use lerp with a random float as the last parameter.
+ *
+ * Note that:
+ \code
+ Expr x = random_float();
+ Expr y = x + x;
+ \endcode
+ *
+ * is very different to
+ *
+ \code
+ Expr y = random_float() + random_float();
+ \endcode
+ *
+ * The first doubles a random variable, and the second adds two
+ * independent random variables.
+ *
+ */
 inline Expr random_float() {
+    // Generate a unique tag to pass as an argument so that this
+    // doesn't get coalesced with other calls to rand_f32 in the same
+    // expression.
+    static int counter = 0;
     return Internal::Call::make(Float(32), "rand_f32",
-                                std::vector<Expr>(), Internal::Call::Extern);
+                                Internal::vec<Expr>(counter++),
+                                Internal::Call::Extern);
+}
+
+/** Return a random variable representing a 32-bit integer. */
+inline Expr random_int() {
+    static int counter = 0;
+    return Internal::Call::make(Int(32), "rand_i32",
+                                Internal::vec<Expr>(counter++),
+                                Internal::Call::Extern);
 }
 
 // For the purposes of a call to print, const char * can convert
