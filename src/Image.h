@@ -85,21 +85,16 @@ private:
             args.push_back(last_arg);
         }
 
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
         if (!is_placeholder && !placeholder_seen &&
             (int)args.size() == total_args &&
             (int)args.size() < dims) {
-            std::cout << "Implicit arguments without placeholders ('_') are deprecated. "
-                      << "Adding " << dims - args.size()
-                      << " arguments to Image " << buffer.name() << '\n';
-            int i = 0;
-            while ((int)args.size() < dims) {
-                args.push_back(Var::implicit(i++));
-
-            }
+            std::cerr << "Can't construct a " << args.size()
+                      << "-argument reference to an image with " << dims
+                      << " dimensions. This used to result in implicit"
+                      << " arguments being automatically appended, but"
+                      << " that behavior has been deprecated. ";
+            assert(false);
         }
-#endif
-
         return is_placeholder;
     }
 
@@ -287,7 +282,7 @@ public:
     /** Assuming this image is one-dimensional, get the value of the
      * element at position x */
     T operator()(int x) const {
-        return origin[x];
+        return origin[x*stride_0];
     }
 
     /** Assuming this image is two-dimensional, get the value of the
