@@ -5,6 +5,7 @@
  * Defines the code-generator for producing GPU host code
  */
 
+#include "CodeGen_ARM.h"
 #include "CodeGen_X86.h"
 
 namespace Halide {
@@ -13,7 +14,8 @@ namespace Internal {
 struct CodeGen_GPU_Dev;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
-class CodeGen_GPU_Host : public CodeGen_X86 {
+template<typename CodeGen_CPU>
+class CodeGen_GPU_Host : public CodeGen_CPU {
 public:
 
     /** Create a GPU code generator. GPU target is selected via
@@ -34,9 +36,40 @@ public:
                  const std::vector<Buffer> &images_to_embed);
 
 protected:
-    using CodeGen_X86::visit;
-
-    class Closure;
+    /** Declare members of the base class that must exist to help the
+     * compiler do name lookup. Annoying but necessary, because the
+     * compiler doesn't know that CodeGen_CPU will in fact inherit
+     * from CodeGen for every instantiation of this template. */
+    using CodeGen_CPU::module;
+    using CodeGen_CPU::init_module;
+    using CodeGen_CPU::target;
+    using CodeGen_CPU::builder;
+    using CodeGen_CPU::context;
+    using CodeGen_CPU::function;
+    using CodeGen_CPU::get_user_context;
+    using CodeGen_CPU::visit;
+    using CodeGen_CPU::codegen;
+    using CodeGen_CPU::sym_push;
+    using CodeGen_CPU::sym_pop;
+    using CodeGen_CPU::sym_get;
+    using CodeGen_CPU::sym_exists;
+    using CodeGen_CPU::buffer_dev_dirty_ptr;
+    using CodeGen_CPU::buffer_host_dirty_ptr;
+    using CodeGen_CPU::buffer_elem_size_ptr;
+    using CodeGen_CPU::buffer_min_ptr;
+    using CodeGen_CPU::buffer_stride_ptr;
+    using CodeGen_CPU::buffer_extent_ptr;
+    using CodeGen_CPU::buffer_host_ptr;
+    using CodeGen_CPU::buffer_dev;
+    using CodeGen_CPU::buffer_dev_ptr;
+    using CodeGen_CPU::llvm_type_of;
+    using CodeGen_CPU::create_alloca_at_entry;
+    using CodeGen_CPU::create_allocation;
+    using CodeGen_CPU::destroy_allocation;
+    using CodeGen_CPU::i8;
+    using CodeGen_CPU::i32;
+    using CodeGen_CPU::i64;
+    using CodeGen_CPU::buffer_t_type;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
@@ -77,6 +110,7 @@ private:
     /** Child code generator for device kernels. */
     CodeGen_GPU_Dev *cgdev;
 };
+
 
 }}
 
