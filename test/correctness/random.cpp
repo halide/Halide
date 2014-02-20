@@ -111,6 +111,67 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Test random ints as well.
+    {
+        Func f;
+        f(x, y) = random_int();
+        Image<int> im = f.realize(1024, 1024);
+
+        // Count the number of set bits;
+        RDom r(im);
+        Expr val = f(r.x, r.y);
+
+        int set_bits = evaluate<int>(sum(popcount(val)));
+
+        // It should be that about half of them are set
+        int correct = 512 * 1024 * 32;
+        if (fabs(double(set_bits) / correct - 1) > tol) {
+            printf("Set bits was %d instead of %d\n", set_bits, correct);
+            return -1;
+        }
+
+        // Check to make sure adjacent bits are uncorrelated.
+        Expr val2 = val ^ (val * 2);
+        set_bits = evaluate<int>(sum(popcount(val2)));
+        if (fabs(double(set_bits) / correct - 1) > tol) {
+            printf("Set bits was %d instead of %d\n", set_bits, correct);
+            return -1;
+        }
+
+    }
+
+    // Check independence and dependence.
+    {
+        // Make two random variables
+        Expr r1 = cast<double>(random_float());
+        Expr r2 = cast<double>(random_float());
+
+        Func f;
+        f(x, y) = r1 + r1 - 1.0f;
+
+        Func g;
+        g(x, y) = r1 + r2 - 1.0f;
+
+        // f is the sum of two dependent (equal) random variables, so should have variance 1/3
+        // g is the sum of two independent random variables, so should have variance 1/6
+
+        RDom r(0, 1024, 0, 1024);
+        Expr f_val = f(r.x, r.y);
+        Expr g_val = g(r.x, r.y);
+        double f_var = evaluate<double>(sum(f_val * f_val)) / (1024 * 1024);
+        double g_var = evaluate<double>(sum(g_val * g_val)) / (1024 * 1024);
+
+        if (fabs(f_var - 1.0/3) > tol) {
+            printf("Variance of f was supposed to be 1/3\n");
+            return -1;
+        }
+
+        if (fabs(g_var - 1.0/6) > tol) {
+            printf("Variance of g was supposed to be 1/6\n");
+            return -1;
+        }
+    }
+
     return 0;
 }
 
