@@ -321,12 +321,14 @@ class VectorizeLoops : public IRMutator {
                 // for (x.scalar from 0 to scalar_extent) {
                 //   let x = vector_min + broadcast(scalar_extent)
                 // }
-
                 Expr var = Variable::make(Int(32), op->name + ".scalar");
                 Expr value = Add::make(min, Broadcast::make(var, min.type().width));
-                Stmt body = LetStmt::make(op->name, value, op->body);
-                Stmt transformed = For::make(op->name + ".scalar", 0, extent, op->for_type, body);
-                stmt = mutate(transformed);
+                scope.push(op->name, value);
+                Stmt body = mutate(op->body);
+                scope.pop(op->name);
+                body = LetStmt::make(op->name, value, body);
+                Stmt transformed = For::make(op->name + ".scalar", 0, extent, for_type, body);
+                stmt = transformed;
                 return;
             }
 
