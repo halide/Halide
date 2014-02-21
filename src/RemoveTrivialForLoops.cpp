@@ -15,6 +15,10 @@ class RemoveTrivialForLoops : public IRMutator {
                 std::cerr << "Warning: Parallel for loop over "
                           << for_loop->name << " has extent one. "
                           << "Can't do one piece of work in parallel.\n";
+            } else if (for_loop->for_type == For::Vectorized) {
+                std::cerr << "Warning: Vectorized for loop over "
+                          << for_loop->name << " has extent one. "
+                          << "Not vectorizing.\n";
             }
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
         } else if (body.same_as(for_loop->body)) {
