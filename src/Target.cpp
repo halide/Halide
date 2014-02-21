@@ -255,7 +255,7 @@ Target parse_target_string(const std::string &target) {
     }
 
     if (arch_specified && !bits_specified) {
-        std::cerr << "WARNING: If architecture is specified (e.g. \"arm\"), "
+        std::cerr << "Warning: If architecture is specified (e.g. \"arm\"), "
                   << "then bit width should also be specified (e.g. \"arm-32\"). "
                   << "In the future this will be an error. ";
         if (t.arch == Target::X86) {
