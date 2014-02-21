@@ -231,6 +231,12 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     // Throw in a definition of a buffer_t
     stream << buffer_t_definition;
 
+    // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
+    // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
+    stream << "#ifndef HALIDE_FUNCTION_ATTRS\n";
+    stream << "#define HALIDE_FUNCTION_ATTRS\n";
+    stream << "#endif\n";
+
     // Now the function prototype
     stream << "extern \"C\" int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
@@ -243,7 +249,7 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
                    << " " << print_name(args[i].name);
         }
     }
-    stream << ");\n";
+    stream << ") HALIDE_FUNCTION_ATTRS;\n";
 
     stream << "#endif\n";
 }
