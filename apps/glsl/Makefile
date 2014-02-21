@@ -9,7 +9,7 @@ $(HALIDE_LIB): $(TOP)
 
 CXXFLAGS += -g -O0 -I../../include
 
-UNAME = $(shell uname)
+UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
 OPENGL_LIBS = -lX11 -lGL
 endif
