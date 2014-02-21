@@ -1,7 +1,4 @@
-
-#include "IR.h"
-#include "IRPrinter.h"
-#include "Debug.h"
+#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {

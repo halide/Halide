@@ -1,16 +1,14 @@
+#include <iostream>
+
 #include "CodeGen_X86.h"
 #include "IROperator.h"
-#include <iostream>
 #include "buffer_t.h"
-#include "IRMutator.h"
 #include "IRMatch.h"
-#include "Simplify.h"
 #include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
-#include "integer_division_table.h"
-#include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -34,14 +32,7 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(),
     #endif
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
+llvm::Triple CodeGen_X86::get_target_triple() const {
     llvm::Triple triple;
 
     if (target.bits == 32) {
@@ -84,6 +75,19 @@ void CodeGen_X86::compile(Stmt stmt, string name,
         assert(false && "Not sure what llvm target triple to use when compiling to IOS on x86 (does this even exist?)");
     }
 
+    return triple;
+}
+
+void CodeGen_X86::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
+
+    init_module();
+
+    // Fix the target triple
+    module = get_initial_module_for_target(target, context);
+
+    llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";

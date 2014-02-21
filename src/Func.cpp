@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <iostream>
+#include <string.h>
+#include <fstream>
+
 #include "IR.h"
 #include "Func.h"
 #include "Util.h"
@@ -12,10 +17,6 @@
 #include "Param.h"
 #include "Debug.h"
 #include "Target.h"
-#include <algorithm>
-#include <iostream>
-#include <string.h>
-#include <fstream>
 
 namespace Halide {
 
@@ -35,7 +36,8 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_free(NULL),
                                  custom_do_par_for(NULL),
                                  custom_do_task(NULL),
-                                 custom_trace(NULL) {
+                                 custom_trace(NULL),
+                                 random_seed(0) {
 }
 
 Func::Func() : func(unique_name('f')),
@@ -44,7 +46,8 @@ Func::Func() : func(unique_name('f')),
                custom_free(NULL),
                custom_do_par_for(NULL),
                custom_do_task(NULL),
-               custom_trace(NULL) {
+               custom_trace(NULL),
+               random_seed(0) {
 }
 
 Func::Func(Expr e) : func(unique_name('f')),
@@ -53,7 +56,8 @@ Func::Func(Expr e) : func(unique_name('f')),
                      custom_free(NULL),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
-                     custom_trace(NULL) {
+                     custom_trace(NULL),
+                     random_seed(0) {
     (*this)(_) = e;
 }
 
@@ -282,8 +286,10 @@ FuncRefExpr Func::operator()(vector<Expr> args) const {
 int Func::add_implicit_vars(vector<Var> &args) const {
     int placeholder_pos = -1;
     std::vector<Var>::iterator iter = args.begin();
-    while (iter != args.end() && !iter->same_as(_))
+
+    while (iter != args.end() && !iter->same_as(_)) {
         iter++;
+    }
     if (iter != args.end()) {
         placeholder_pos = (int)(iter - args.begin());
         int i = 0;
@@ -294,25 +300,12 @@ int Func::add_implicit_vars(vector<Var> &args) const {
             iter++;
         }
     }
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    else {
-        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
-        // the provided arguments.
-        placeholder_pos = args.size();
-        if ((int)args.size() < dimensions()) {
-            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
-              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
-            int i = 0;
-            placeholder_pos = args.size();
-            while ((int)args.size() < dimensions()) {
-                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
+    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+        std::cerr << "Func " << name() << " was called with "
+                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+        assert(false);
     }
-#endif
 
     return placeholder_pos;
 }
@@ -322,7 +315,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     std::vector<Expr>::iterator iter = args.begin();
     while (iter != args.end()) {
         const Variable *var = iter->as<Variable>();
-        if (var != NULL && Var::is_implicit(var->name))
+        if (var && Var::is_implicit(var->name))
             break;
         iter++;
     }
@@ -336,25 +329,12 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
             iter++;
         }
     }
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-    else {
-        // The placeholder_pos is used in lhs context. This line fakes an _ at the end of
-        // the provided arguments.
-        placeholder_pos = args.size();
-        if ((int)args.size() < dimensions()) {
-            std::cerr << "Implicit arguments without placeholders are deprecated. Adding " <<
-              dimensions() - args.size() << " arguments to Func " << name() << std::endl;
 
-            int i = 0;
-            placeholder_pos = args.size();
-            while ((int)args.size() < dimensions()) {
-                Internal::debug(2) << "Adding implicit var " << i << " to call to " << name() << "\n";
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
+    if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
+        std::cerr << "Func " << name() << " was called with "
+                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
+        assert(false);
     }
-#endif
 
     return placeholder_pos;
 }
@@ -1118,16 +1098,35 @@ public:
 vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<string> a = args;
 
-    if (implicit_placeholder_pos != -1) {
-        CountImplicitVars count(e);
+    CountImplicitVars count(e);
 
-        Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
-          func.name() << " at position " << implicit_placeholder_pos << "\n";
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " <<
+                func.name() << " at position " << implicit_placeholder_pos << "\n";
 
-        vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
-        for (int i = 0; i < count.count; i++) {
-            iter = a.insert(iter, Var::implicit(i).name());
-            iter++;
+            vector<std::string>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i).name());
+                iter++;
+            }
+        }
+    }
+
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (a[j] == v.name()) {
+                found = true;
+            }
+        }
+        if (!found) {
+            std::cerr << "Right-hand-side of pure definition of " << func.name()
+                      << " uses implicit variables, but the left-hand-side does not"
+                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
+            assert(false);
         }
     }
 
@@ -1247,24 +1246,45 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
 vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
 
-    if (implicit_placeholder_pos != -1) {
-        CountImplicitVars f(e);
-        // TODO: Check if there is a test case for this and add one if not.
-        // Implicit vars are also allowed in the lhs of a reduction. E.g.:
-        // f(x, y) = x+y
-        // g(x, y) = 0
-        // g(f(r.x)) = 1   (this means g(f(r.x, i0), i0) = 1)
+    CountImplicitVars count(e);
+    // TODO: Check if there is a test case for this and add one if not.
+    // Implicit vars are also allowed in the lhs of a reduction. E.g.:
+    // f(x, y, z) = x+y
+    // g(x, y, z) = 0
+    // g(f(r.x, _), _) = 1   (this means g(f(r.x, _0, _1), _0, _1) = 1)
 
-        for (size_t i = 0; i < a.size(); i++) {
-            a[i].accept(&f);
+    for (size_t i = 0; i < a.size(); i++) {
+        a[i].accept(&count);
+    }
+
+    if (count.count > 0) {
+        if (implicit_placeholder_pos != -1) {
+            Internal::debug(2) << "Adding " << count.count << " implicit vars to LHS of " << func.name() << "\n";
+
+            vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
+            for (int i = 0; i < count.count; i++) {
+                iter = a.insert(iter, Var::implicit(i));
+                iter++;
+            }
         }
+    }
 
-        Internal::debug(2) << "Adding " << f.count << " implicit vars to LHS of " << func.name() << "\n";
-
-        vector<Expr>::iterator iter = a.begin() + implicit_placeholder_pos;
-        for (int i = 0; i < f.count; i++) {
-            iter = a.insert(iter, Var::implicit(i));
-            iter++;
+    // Check the implicit vars in the RHS also exist in the LHS
+    for (int i = 0; i < count.count; i++) {
+        Var v = Var::implicit(i);
+        bool found = false;
+        for (size_t j = 0; j < a.size(); j++) {
+            if (const Variable *arg = a[j].as<Variable>()) {
+                if (arg->name == v.name()) {
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            std::cerr << "Right-hand-side of update definition of " << func.name()
+                      << " uses implicit variables, but the left-hand-side does not"
+                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
+            assert(false);
         }
     }
 
@@ -1308,7 +1328,9 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
     // Reuse names of existing pure args
     for (size_t i = 0; i < a.size(); i++) {
         if (const Variable *v = a[i].as<Variable>()) {
-            if (!v->param.defined()) pure_args[i] = Var(v->name);
+            if (!v->param.defined()) {
+                pure_args[i] = Var(v->name);
+            }
         } else {
             pure_args[i] = Var();
         }
@@ -1748,11 +1770,18 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
-  void Func::realize(Buffer b, const Target &target) {
+void Func::set_random_seed(uint32_t s) {
+    random_seed = s;
+    if (compiled_module.set_random_seed) {
+        compiled_module.set_random_seed(s);
+    }
+}
+
+void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
 
-  void Func::realize(Realization dst, const Target &target) {
+void Func::realize(Realization dst, const Target &target) {
     if (!compiled_module.wrapped_function) compile_jit(target);
 
     assert(compiled_module.wrapped_function);
@@ -1769,6 +1798,7 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_random_seed(random_seed);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -1781,12 +1811,14 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
         Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
         assert(b.defined() && "An ImageParam is not bound to a buffer");
-        arg_values[image_param_args[i].first] = b.raw_buffer();
+        buffer_t *buf = b.raw_buffer();
+        arg_values[image_param_args[i].first] = buf;
+        assert((buf->host || buf->dev) && "An ImageParam is bound to a buffer with NULL host and dev pointers");
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
         Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
+        assert(arg_values[i] && "An argument to a jitted function is null\n");
     }
 
     Internal::debug(2) << "Calling jitted function\n";
@@ -1819,6 +1851,8 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_allocator(custom_malloc, custom_free);
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
+    compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_random_seed(random_seed);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -1844,7 +1878,7 @@ void Func::infer_input_bounds(Realization dst) {
 
     for (size_t i = 0; i < arg_values.size(); i++) {
         Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] != NULL && "An argument to a jitted function is null\n");
+        assert(arg_values[i] && "An argument to a jitted function is null\n");
     }
 
     Internal::debug(2) << "Calling jitted function\n";

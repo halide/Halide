@@ -101,6 +101,8 @@ const string Call::address_of = "address_of";
 const string Call::null_handle = "null_handle";
 const string Call::trace = "trace";
 const string Call::trace_expr = "trace_expr";
+const string Call::return_second = "return_second";
+const string Call::if_then_else = "if_then_else";
 
 }
 }

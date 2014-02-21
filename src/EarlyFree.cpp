@@ -1,18 +1,13 @@
+#include <map>
+
 #include "EarlyFree.h"
 #include "IRVisitor.h"
 #include "IRMutator.h"
-#include "Debug.h"
-#include "IRPrinter.h"
-#include "IROperator.h"
-#include "Scope.h"
-#include <map>
 
 namespace Halide {
 namespace Internal {
 
 using std::map;
-using std::pair;
-using std::make_pair;
 using std::string;
 using std::vector;
 

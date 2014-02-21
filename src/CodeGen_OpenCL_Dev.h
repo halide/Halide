@@ -5,6 +5,8 @@
  * Defines the code-generator for producing OpenCL C kernel code
  */
 
+#include <sstream>
+
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
 
@@ -41,6 +43,7 @@ protected:
     protected:
         using CodeGen_C::visit;
         std::string print_type(Type type);
+        std::string print_reinterpret(Type type, Expr e);
 
         void visit(const For *);
     };

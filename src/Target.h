@@ -1,6 +1,10 @@
 #ifndef HALIDE_TARGET_H
 #define HALIDE_TARGET_H
 
+/** \file
+ * Defines the structure that describes a Halide target.
+ */
+
 #include <stdint.h>
 #include <string>
 #include "Util.h"
@@ -12,22 +16,34 @@ class LLVMContext;
 
 namespace Halide {
 
+/** A struct representing a target machine and os to generate code for. */
 struct Target {
+    /** The operating system used by the target. Determines which
+     * system calls to generate. */
     enum OS {OSUnknown = 0, Linux, Windows, OSX, Android, IOS, NaCl} os;
-    enum Arch {ArchUnknown = 0, X86, ARM} arch;
-    int bits; // Must be 0 for unknown, or 32 or 64
-    enum Features {
-        JIT      = 1 << 0,
-        SSE41    = 1 << 1,
-        AVX      = 1 << 2,
-        AVX2     = 1 << 3,
-        CUDA     = 1 << 4,
-        OpenCL   = 1 << 5,
-        GPUDebug = 1 << 6,
-        SPIR     = 1 << 7,
-        SPIR64   = 1 << 8,
-        OpenGL   = 1 << 9
+
+    /** The architecture used by the target. Determines the
+     * instruction set to use. For the PNaCl target, the "instruction
+     * set" is actually llvm bitcode. */
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl} arch;
+
+    /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
+    int bits;
+
+    /** Optional features a target can have. */
+    enum Features {JIT = 1,       /// Generate code that will run immediately inside the calling process.
+                   SSE41 = 2,     /// Use SSE 4.1 and earlier instructions. Only relevant on x86.
+                   AVX = 4,       /// Use AVX 1 instructions. Only relevant on x86.
+                   AVX2 = 8,      /// Use AVX 2 instructions. Only relevant on x86.
+                   CUDA = 16,     /// Enable the CUDA runtime.
+                   OpenCL = 32,   /// Enable the OpenCL runtime.
+                   GPUDebug = 64, /// Increase the level of checking and the verbosity of the gpu runtimes.
+                   SPIR = 128,    /// Enable the OpenCL SPIR runtime in 32-bit mode
+                   SPIR64 = 256,  /// Enable the OpenCL SPIR runtime in 64-bit mode
+                   OpenGL = 512
     };
+
+    /** A bitmask that stores the active features. */
     uint64_t features;
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}

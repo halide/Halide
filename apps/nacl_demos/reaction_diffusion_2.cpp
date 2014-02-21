@@ -3,21 +3,20 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
-Expr rand_float(Expr x, Expr y, Expr c, Expr min, Expr max) {
-    Expr r = cast<float>(my_rand(x, y, c)) / RAND_MAX;
-    return lerp(min, max, r);
-}
-
 int main(int argc, char **argv) {
+
+    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
 
     // First define the function that gives the initial state.
     {
         Func initial;
 
-        // The initial state is a quantity of three chemicals present at each pixel
-        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f);
+        // The initial state is a quantity of three chemicals present
+        // at each pixel near the boundaries
+        Expr dx = (x - 512), dy = (y - 512);
+        Expr r = dx * dx + dy * dy;
+        Expr mask = r < 200 * 200;
+        initial(x, y, c) = random_float() * select(mask, 1.0f, 0.001f);
         initial.compile_to_file("reaction_diffusion_2_init");
     }
 
@@ -45,24 +44,32 @@ int main(int argc, char **argv) {
         Expr B = blur_y(x, y, 2);
 
         // Push the colors outwards with a sigmoid
-        Expr s = 0.3f;
+        //Expr s = 0.3f;
+        //Expr s = lerp(1.0f, 3.0f, y / 1024.0f);
+        Expr s = 2.0f;
+        //Expr s = 0.5298f;
         R *= (1 - s) + s * R * (3 - 2 * R);
         G *= (1 - s) + s * G * (3 - 2 * G);
         B *= (1 - s) + s * B * (3 - 2 * B);
 
         // Reaction
-        Expr mR = 1.0f - R;
-        Expr mG = 1.0f - G;
-        Expr mB = 1.0f - B;
+        Expr dR = B * (1 - R - G);
+        Expr dG = (1 - B) * (R - G);
+        Expr dB = 1 - B + 2 * G * R - R - G;
 
-        Expr dR = B * (mR * mG - R * G);
-        Expr dG = mB * (R * mG - mR * G);
-        Expr dB = (mR * (mG * mB - G * B) + R * (G * mB - mG * B));
+        // Red and green increase faster than they decay
+        dR = select(dR > 0, dR * 2.25f, dR);
+        dG = select(dG > 0, dG * 2.5f, dG);
+
+        // Blue decays faster that it increases
+        dB = select(dB < 0, dB * 2.5f, dB);
 
         Expr dx = (x - 512)/512.0f, dy = (y - 512)/512.0f;
         Expr radius = dx * dx + dy*dy;
-        //Expr t = 0.1f;
-        Expr t = (2.0f - radius) * 0.05f;
+        //Expr t = lerp(0.195f, 0.198f, x/1024.0f);
+        //Expr t = (2.0f - radius) * 0.05f;
+        //Expr t = 0.0651f;
+        Expr t = 0.196f;
 
         R += t * dR;
         G += t * dG;
@@ -74,6 +81,12 @@ int main(int argc, char **argv) {
 
         Func new_state;
         new_state(x, y, c) = select(c == 0, R, select(c == 1, G, B));
+
+        // Decay at the edges
+        new_state(x,    0, c) *= 0.25f;
+        new_state(x, 1023, c) *= 0.25f;
+        new_state(0,    y, c) *= 0.25f;
+        new_state(1023, y, c) *= 0.25f;
 
         // Add some white where the mouse is
         Expr min_x = clamp(mouse_x - 10, 0, state.width()-1);
@@ -87,15 +100,20 @@ int main(int argc, char **argv) {
         radius = dx * dx + dy * dy;
         new_state(clobber.x, clobber.y, c) = select(radius < 100.0f, 1.0f, new_state(clobber.x, clobber.y, c));
 
-        new_state.vectorize(x, 4);
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
 
         Var yi;
         new_state.split(y, y, yi, 16).parallel(y);
 
-        blur_x.store_at(new_state, y).compute_at(new_state, yi).vectorize(x, 4);
-        blur_y.store_at(new_state, y).compute_at(new_state, yi).vectorize(x, 4);
+        blur_x.store_at(new_state, y).compute_at(new_state, yi);
+        blur_y.store_at(new_state, y).compute_at(new_state, yi);
         clamped.store_at(new_state, y).compute_at(new_state, yi);
+
+        if (can_vectorize) {
+            new_state.vectorize(x, 4);
+            blur_x.vectorize(x, 4);
+            blur_y.vectorize(x, 4);
+        }
 
         new_state.compile_to_file("reaction_diffusion_2_update", state, mouse_x, mouse_y);
     }
@@ -114,7 +132,9 @@ int main(int argc, char **argv) {
         Func render;
         render(x, y) = alpha + red + green + blue;
 
-        render.vectorize(x, 4);
+        if (can_vectorize) {
+            render.vectorize(x, 4);
+        }
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 

@@ -1,7 +1,6 @@
 #include "InlineReductions.h"
 #include "Func.h"
 #include "Scope.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
 
 namespace Halide {

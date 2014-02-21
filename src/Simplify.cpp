@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "Simplify.h"
 #include "IROperator.h"
 #include "IREquality.h"
@@ -9,7 +11,6 @@
 #include "ModulusRemainder.h"
 #include "Substitute.h"
 #include "Bounds.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {
@@ -1610,16 +1611,13 @@ private:
     }
 
     void visit(const AssertStmt *op) {
-        Expr condition = mutate(op->condition);
+        IRMutator::visit(op);
 
-        if (is_const(condition, 0)) {
+        const AssertStmt *a = stmt.as<AssertStmt>();
+        if (a && is_zero(a->condition)) {
             std::cerr << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                      << Stmt(op) << "\n";
+                      << stmt << "\n";
             assert(false);
-        } else if (condition.same_as(op->condition)) {
-            stmt = op;
-        } else {
-            stmt = AssertStmt::make(condition, op->message);
         }
     }
 

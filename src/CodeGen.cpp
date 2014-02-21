@@ -1,17 +1,15 @@
 #include <iostream>
+#include <sstream>
+
 #include "IRPrinter.h"
 #include "CodeGen.h"
 #include "IROperator.h"
 #include "Debug.h"
-#include "CodeGen_C.h"
-#include "Function.h"
 #include "Deinterleave.h"
 #include "Simplify.h"
 #include "JITCompiledModule.h"
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
-
-#include <sstream>
 
 namespace Halide {
 namespace Internal {
@@ -258,7 +256,7 @@ void CodeGen::compile(Stmt stmt, string name,
                                             ConstantInt::get(i32, b.min[3]))));
         fields.push_back(ConstantInt::get(i32, b.elem_size));
         assert(!b.dev_dirty && "Can't embed an image with a dirty device pointer\n");
-        fields.push_back(ConstantInt::get(i8, 0));
+        fields.push_back(ConstantInt::get(i8, 1));
         fields.push_back(ConstantInt::get(i8, 0));
 
         Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
@@ -1256,9 +1254,7 @@ Expr unbroadcast(Expr e) {
 
 // Returns true if the given function name is one of the Halide runtime
 // functions that takes a user_context pointer as its first parameter.
-namespace {
-
-bool function_takes_user_context(const string &name) {
+bool CodeGen::function_takes_user_context(const string &name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_copy_to_host",
         "halide_copy_to_dev",
@@ -1271,6 +1267,7 @@ bool function_takes_user_context(const string &name) {
         "halide_do_par_for",
         "halide_do_task",
         "halide_error",
+        "halide_error_varargs",
         "halide_free",
         "halide_init_kernels",
         "halide_malloc",
@@ -1288,8 +1285,6 @@ bool function_takes_user_context(const string &name) {
         }
     }
     return false;
-}
-
 }
 
 void CodeGen::visit(const Call *op) {
@@ -1311,6 +1306,10 @@ void CodeGen::visit(const Call *op) {
             }
             Value *arg = codegen(op->args[0]);
             value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
+
+            if (op->type.is_scalar()) {
+                value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
+            }
 
         } else if (op->name == Call::interleave_vectors) {
             assert(op->args.size() == 2);
@@ -1505,7 +1504,13 @@ void CodeGen::visit(const Call *op) {
             Value *event_type = codegen(unbroadcast(op->args[1]));
 
             // Codegen the buffer id
-            Value *realization_id = codegen(unbroadcast(op->args[2]));
+            Expr id = op->args[2];
+            Value *realization_id;
+            if (id.as<Broadcast>()) {
+                realization_id = codegen(unbroadcast(id));
+            } else {
+                realization_id = codegen(id);
+            }
 
             // Codegen the value index. Should be the same for all lanes.
             Value *value_index = codegen(unbroadcast(op->args[3]));
@@ -1566,8 +1571,7 @@ void CodeGen::visit(const Call *op) {
             assert(op->args.size() == 1);
             std::vector<llvm::Type*> arg_type(1);
             arg_type[0] = llvm_type_of(op->args[0].type());
-            llvm::Function *fn = Intrinsic::getDeclaration(module,
-                Intrinsic::ctpop, arg_type);
+            llvm::Function *fn = Intrinsic::getDeclaration(module, Intrinsic::ctpop, arg_type);
             CallInst *call = builder->CreateCall(fn, codegen(op->args[0]));
             value = call;
         } else if (op->name == Call::count_leading_zeros ||
@@ -1583,6 +1587,47 @@ void CodeGen::visit(const Call *op) {
             llvm::Value *args[2] = { codegen(op->args[0]), zero_is_undef };
             CallInst *call = builder->CreateCall(fn, args);
             value = call;
+        } else if (op->name == Call::return_second) {
+            assert(op->args.size() == 2);
+            codegen(op->args[0]);
+            value = codegen(op->args[1]);
+        } else if (op->name == Call::if_then_else) {
+            if (op->type.is_vector()) {
+                // Scalarize
+                llvm::Type *result_type = llvm_type_of(op->type);
+
+                Value *result = UndefValue::get(result_type);
+
+                for (int i = 0; i < op->args[0].type().width; i++) {
+                    Value *v = codegen(extract_lane(op, i));
+                    result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+                }
+                value = result;
+
+            } else {
+
+                assert(op->args.size() == 3);
+
+                BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
+                BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
+                BasicBlock *after_bb = BasicBlock::Create(*context, "after_bb", function);
+                builder->CreateCondBr(codegen(op->args[0]), true_bb, false_bb);
+                builder->SetInsertPoint(true_bb);
+                Value *true_value = codegen(op->args[1]);
+                builder->CreateBr(after_bb);
+
+                builder->SetInsertPoint(false_bb);
+                Value *false_value = codegen(op->args[2]);
+                builder->CreateBr(after_bb);
+
+                builder->SetInsertPoint(after_bb);
+
+                PHINode *phi = builder->CreatePHI(true_value->getType(), 2);
+                phi->addIncoming(true_value, true_bb);
+                phi->addIncoming(false_value, false_bb);
+
+                value = phi;
+            }
         } else {
             std::cerr << "Unknown intrinsic: " << op->name << "\n";
             assert(false);
@@ -1635,6 +1680,15 @@ void CodeGen::visit(const Call *op) {
             for (size_t i = 0; i < args.size(); i++) {
                 if (op->args[i].type().is_handle()) {
                     llvm::Type *t = func_t->getParamType(i);
+
+                    // Widen to vector-width as needed. If the
+                    // function doesn't actually take a vector,
+                    // individual lanes will be extracted below.
+                    if (op->args[i].type().is_vector() &&
+                        !t->isVectorTy()) {
+                        t = VectorType::get(t, op->args[i].type().width);
+                    }
+
                     if (t != args[i]->getType()) {
                         debug(4) << "Pointer casting argument to extern call: "
                                  << op->args[i] << "\n";
@@ -1652,18 +1706,26 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
-        // TODO: Need a general solution here
+        // Add a user context arg as needed. It's never a vector.
+        if (function_takes_user_context(op->name)) {
+            debug(4) << "Adding user_context to " << op->name << " args\n";
+            args.insert(args.begin(), get_user_context());
+        }
+
+        // TODO: Need a general solution here to side-effecty functions
         if (op->name == "halide_current_time_ns") {
             assert(op->args.size() == 0);
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, get_user_context());
             value = call;
+        } else if (op->name == "rand_i32" || op->name == "rand_f32") {
+            assert(op->args.size() == 1);
+            debug(4) << "Creating scalar call to " << op->name << "\n";
+            Value *arg = codegen(op->args[0]);
+            CallInst *call = builder->CreateCall2(fn, get_user_context(), arg);
+            value = call;
         } else if (op->type.is_scalar()) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
-            if (function_takes_user_context(op->name)) {
-                debug(4) << "Adding user_context to " << op->name << " args\n";
-                args.insert(args.begin(), get_user_context());
-            }
             CallInst *call = builder->CreateCall(fn, args);
             if (pure) {
                 call->setDoesNotAccessMemory();
@@ -1671,7 +1733,7 @@ void CodeGen::visit(const Call *op) {
             call->setDoesNotThrow();
             value = call;
         } else {
-            assert(function_takes_user_context(op->name) == false);
+
             // Check if a vector version of the function already
             // exists. We use the naming convention that a N-wide
             // version of a function foo is called fooxN.
@@ -1694,7 +1756,11 @@ void CodeGen::visit(const Call *op) {
                     Value *idx = ConstantInt::get(i32, i);
                     vector<Value *> arg_lane(args.size());
                     for (size_t j = 0; j < args.size(); j++) {
-                        arg_lane[j] = builder->CreateExtractElement(args[j], idx);
+                        if (args[j]->getType()->isVectorTy()) {
+                            arg_lane[j] = builder->CreateExtractElement(args[j], idx);
+                        } else {
+                            arg_lane[j] = args[j];
+                        }
                     }
                     CallInst *call = builder->CreateCall(fn, arg_lane);
                     if (pure) {
@@ -1734,7 +1800,11 @@ void CodeGen::visit(const LetStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    create_assertion(codegen(op->condition), op->message);
+    vector<Value *> args(op->args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i] = codegen(op->args[i]);
+    }
+    create_assertion(codegen(op->condition), op->message, args);
 }
 
 Constant *CodeGen::create_string_constant(const string &s) {
@@ -1767,7 +1837,7 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
     return ptr;
 }
 
-void CodeGen::create_assertion(Value *cond, const string &message) {
+void CodeGen::create_assertion(Value *cond, const string &message, const vector<Value *> &args) {
 
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
@@ -1790,15 +1860,16 @@ void CodeGen::create_assertion(Value *cond, const string &message) {
     // Build the failure case
     builder->SetInsertPoint(assert_fails_bb);
 
-    // Make the error message string a global constant
-    Value *char_ptr = create_string_constant(message);
-    Value *user_context = get_user_context();
+    vector<Value *> call_args(2);
+    call_args[0] = get_user_context();
+    call_args[1] = create_string_constant(message);
+    call_args.insert(call_args.end(), args.begin(), args.end());
 
     // Call the error handler
-    llvm::Function *error_handler = module->getFunction("halide_error");
-    assert(error_handler && "Could not find halide_error in initial module");
+    llvm::Function *error_handler = module->getFunction("halide_error_varargs");
+    assert(error_handler && "Could not find halide_error_varargs in initial module");
     debug(4) << "Creating call to error handlers\n";
-    builder->CreateCall(error_handler, vec(user_context, char_ptr));
+    builder->CreateCall(error_handler, call_args);
 
     // Do any architecture-specific cleanup necessary
     debug(4) << "Creating cleanup code\n";
@@ -1892,7 +1963,8 @@ void CodeGen::visit(const For *op) {
         llvm::Type *voidPointerType = (llvm::Type *)(i8->getPointerTo());
         FunctionType *func_t = FunctionType::get(i32, vec(voidPointerType, i32, voidPointerType), false);
         llvm::Function *containing_function = function;
-        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage, "par for " + op->name, module);
+        function = llvm::Function::Create(func_t, llvm::Function::InternalLinkage,
+                                          "par for " + function->getName() + "_" + op->name, module);
         function->setDoesNotAlias(3);
 
         // Make the initial basic block and jump the builder into the new function

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     Image<uint16_t> input = load<uint16_t>(argv[1]);
     int levels = atoi(argv[2]);
-    float alpha = atof(argv[3]), beta = atof(argv[4]);    
+    float alpha = atof(argv[3]), beta = atof(argv[4]);
     Image<uint16_t> output(input.width(), input.height(), 3);
 
     // Timing code
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
       if (t < bestT) bestT = t;
     }
     printf("%u\n", bestT);
-    
+
 
     local_laplacian(levels, alpha/(levels-1), beta, input, output);
 
