@@ -261,14 +261,24 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
         err = clBuildProgram(state->program, 1, &dev, NULL, NULL, NULL );
         if (err != CL_SUCCESS) {
-            size_t len;
-            char buffer[2048];
+            size_t len = 0;
+            char *buffer = NULL;
 
             halide_printf(user_context, "Error: Failed to build program executable! err = %d\n", err);
-            if (clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, sizeof(buffer), buffer, &len) == CL_SUCCESS)
+
+            // Get size of build log
+            if (clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len) == CL_SUCCESS)
+                buffer = (char*)malloc((++len)*sizeof(char));
+
+            // Get build log
+            if (buffer && clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, len, buffer, NULL) == CL_SUCCESS)
                 halide_printf(user_context, "Build Log:\n %s\n-----\n", buffer);
             else
                 halide_printf(user_context, "clGetProgramBuildInfo failed to get build log!\n");
+
+            if (buffer)
+                free(buffer);
+
             halide_assert(user_context, err == CL_SUCCESS);
         }
     }
