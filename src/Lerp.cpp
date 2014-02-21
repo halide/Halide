@@ -1,7 +1,8 @@
+#include <math.h>
+
 #include "Lerp.h"
 #include "IROperator.h"
 #include "Simplify.h"
-#include <math.h>
 
 namespace Halide {
 namespace Internal {

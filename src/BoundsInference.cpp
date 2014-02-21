@@ -2,19 +2,13 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "Bounds.h"
-#include "Debug.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
-#include "Simplify.h"
-#include "Substitute.h"
 #include "Inline.h"
-#include <sstream>
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
-using std::ostringstream;
 using std::vector;
 using std::map;
 using std::pair;
@@ -70,6 +64,7 @@ bool func_is_called_by_expr(Function f, Expr e) {
 class BoundsInference : public IRMutator {
 public:
     const vector<Function> &funcs;
+    const FuncValueBounds &func_bounds;
     set<string> in_pipeline, inner_productions;
     Scope<int> in_stages;
 
@@ -252,8 +247,11 @@ public:
             Expr e = Call::make(Int(32), extern_name,
                                 bounds_inference_args, Call::Extern);
             // Check if it succeeded
-            Stmt check = AssertStmt::make(EQ::make(e, 0), "Bounds inference call to external func " +
-                                          extern_name + " returned non-zero value");
+            string result_name = unique_name('t');
+            Expr result = Variable::make(Int(32), result_name);
+            Stmt check = AssertStmt::make(EQ::make(result, 0), "Bounds inference call to external func " +
+                                          extern_name + " returned non-zero value: %d", vec<Expr>(result));
+            check = LetStmt::make(result_name, e, check);
 
             // Now inner code is free to extract the fields from the buffer_t
             s = Block::make(check, s);
@@ -301,7 +299,9 @@ public:
     };
     vector<Stage> stages;
 
-    BoundsInference(const vector<Function> &f) : funcs(f) {
+    BoundsInference(const vector<Function> &f,
+                    const FuncValueBounds &fb) :
+        funcs(f), func_bounds(fb) {
         assert(!f.empty());
         Function output_function = f[f.size()-1];
 
@@ -415,7 +415,7 @@ public:
             } else {
                 const vector<Expr> &exprs = consumer.exprs;
                 for (size_t j = 0; j < exprs.size(); j++) {
-                    map<string, Box> new_boxes = boxes_required(exprs[j], scope);
+                    map<string, Box> new_boxes = boxes_required(exprs[j], scope, func_bounds);
                     for (map<string, Box>::iterator iter = new_boxes.begin();
                          iter != new_boxes.end(); ++iter) {
                         merge_boxes(boxes[iter->first], iter->second);
@@ -538,7 +538,7 @@ public:
         // Figure out how much of it we're producing
         Box box;
         if (producing >= 0) {
-            box = box_provided(body, stages[producing].name);
+            box = box_provided(body, stages[producing].name, Scope<Interval>(), func_bounds);
             assert((int)box.size() == f.dimensions());
         }
 
@@ -626,7 +626,8 @@ public:
 
 
 Stmt bounds_inference(Stmt s, const vector<string> &order,
-                      const map<string, Function> &env) {
+                      const map<string, Function> &env,
+                      const FuncValueBounds &func_bounds) {
 
     vector<Function> funcs(order.size());
     for (size_t i = 0; i < order.size(); i++) {
@@ -635,7 +636,7 @@ Stmt bounds_inference(Stmt s, const vector<string> &order,
 
     // Add an outermost bounds inference marker
     s = For::make("<outermost>", 0, 1, For::Serial, s);
-    s = BoundsInference(funcs).mutate(s);
+    s = BoundsInference(funcs, func_bounds).mutate(s);
     return s.as<For>()->body;
 }
 

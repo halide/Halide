@@ -1,10 +1,10 @@
+#include <set>
+
 #include "Inline.h"
 #include "CSE.h"
 #include "IRPrinter.h"
-#include "Debug.h"
 #include "IRMutator.h"
 #include "Qualify.h"
-#include <set>
 
 namespace Halide {
 namespace Internal {

@@ -113,8 +113,20 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const Cast *op) {
-        // It's possible to reason about this, but for now we punt.
         op->value.accept(this);
+
+        if (op->type.can_represent(op->value.type())) {
+            // No overflow.
+            return;
+        }
+
+        if (op->value.type().bits >= 32 && op->type.bits >= 32) {
+            // We assume 32-bit types don't overflow.
+            return;
+        }
+
+        // A narrowing cast. There may be more cases we can catch, but
+        // for now we punt.
         if (result != Constant) {
             result = Unknown;
         }
@@ -210,48 +222,67 @@ class Monotonic : public IRVisitor {
         result = unify(ra, rb);
     }
 
+    void visit_cmp(Expr a, Expr b) {
+        a.accept(this);
+        MonotonicResult ra = result;
+        b.accept(this);
+        MonotonicResult rb = result;
+        if (ra == Constant && rb == Constant) {
+            result = Constant;
+        } else {
+            result = Unknown;
+        }
+    }
+
     void visit(const EQ *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const NE *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const LT *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const LE *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const GT *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const GE *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const And *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const Or *op) {
-        assert(false && "Monotonic of bool");
+        visit_cmp(op->a, op->b);
     }
 
     void visit(const Not *op) {
-        assert(false && "Monotonic of bool");
+        op->a.accept(this);
     }
 
     void visit(const Select *op) {
-        op->true_value.accept(this);
-        MonotonicResult ra = result;
-        op->false_value.accept(this);
-        MonotonicResult rb = result;
-        result = unify(ra, rb);
+        op->condition.accept(this);
+        MonotonicResult rcond = result;
+
+        if (rcond != Constant) {
+            result = Unknown;
+        } else {
+            op->true_value.accept(this);
+            MonotonicResult ra = result;
+            op->false_value.accept(this);
+            MonotonicResult rb = result;
+            result = unify(ra, rb);
+        }
     }
 
     void visit(const Load *op) {

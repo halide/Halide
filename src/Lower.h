@@ -8,7 +8,6 @@
  */
 
 #include "IR.h"
-#include "Func.h"
 
 namespace Halide {
 namespace Internal {

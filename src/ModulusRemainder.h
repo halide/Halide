@@ -5,7 +5,6 @@
  * Routines for statically determining what expressions are divisible by.
  */
 
-#include "IRVisitor.h"
 #include "Scope.h"
 
 namespace Halide {

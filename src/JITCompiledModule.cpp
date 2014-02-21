@@ -1,11 +1,11 @@
+#include <string>
 #include <stdint.h>
+
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
 #include "CodeGen.h"
 #include "LLVM_Headers.h"
 #include "Debug.h"
-
-#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -181,6 +181,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(ee, m, "halide_set_custom_do_par_for", true, &set_custom_do_par_for);
     hook_up_function_pointer(ee, m, "halide_set_custom_do_task", true, &set_custom_do_task);
     hook_up_function_pointer(ee, m, "halide_set_custom_trace", true, &set_custom_trace);
+    hook_up_function_pointer(ee, m, "halide_set_random_seed", true, &set_random_seed);
     hook_up_function_pointer(ee, m, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
 
     debug(2) << "Finalizing object\n";

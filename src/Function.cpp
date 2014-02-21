@@ -1,15 +1,9 @@
+#include <set>
+
 #include "IR.h"
-#include "IRMutator.h"
 #include "Function.h"
 #include "Scope.h"
-#include "IRPrinter.h"
-#include "IREquality.h"
-#include "Simplify.h"
-#include "ModulusRemainder.h"
-#include "Debug.h"
 #include "CSE.h"
-#include "IROperator.h"
-#include <set>
 
 namespace Halide {
 namespace Internal {
@@ -93,8 +87,7 @@ struct CheckVars : public IRGraphVisitor {
         }
 
         std::cerr << "Undefined variable in function definition: " << var->name
-            << " (Func: " << name << ")"
-            << std::endl;
+                  << " (Func: " << name << ")\n";
         assert(false);
     }
 };

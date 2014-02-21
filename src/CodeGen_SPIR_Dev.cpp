@@ -1,15 +1,8 @@
 #include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Target.h"
-#include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -65,14 +58,14 @@ void CodeGen_SPIR_Dev::add_kernel(Stmt stmt, std::string name, const std::vector
     // Make the initial basic block
     entry_block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(entry_block);
-    
+
     vector<Value *> kernel_arg_address_space = init_kernel_metadata(*context, "kernel_arg_addr_space");
     vector<Value *> kernel_arg_access_qual = init_kernel_metadata(*context, "kernel_arg_access_qual");
     vector<Value *> kernel_arg_type = init_kernel_metadata(*context, "kernel_arg_type");
     vector<Value *> kernel_arg_base_type = init_kernel_metadata(*context, "kernel_arg_base_type");
     vector<Value *> kernel_arg_type_qual = init_kernel_metadata(*context, "kernel_arg_type_qual");
     vector<Value *> kernel_arg_name = init_kernel_metadata(*context, "kernel_arg_name");
-    
+
     // Put the arguments in the symbol table
     {
         llvm::Function::arg_iterator arg = function->arg_begin();
@@ -84,7 +77,7 @@ void CodeGen_SPIR_Dev::add_kernel(Stmt stmt, std::string name, const std::vector
                 // address 'foo.host', so we store the device pointer
                 // as foo.host in this scope.
                 sym_push(iter->name + ".host", arg);
-                
+
                 kernel_arg_address_space.push_back(ConstantInt::get(i32, 1));
             } else {
                 sym_push(iter->name, arg);
@@ -133,11 +126,11 @@ void CodeGen_SPIR_Dev::add_kernel(Stmt stmt, std::string name, const std::vector
     // Add the nvvm annotation that it is a kernel function.
     Value *kernel_metadata[] =
     {
-        function, 
-        MDNode::get(*context, kernel_arg_address_space), 
-        MDNode::get(*context, kernel_arg_access_qual), 
-        MDNode::get(*context, kernel_arg_type), 
-        MDNode::get(*context, kernel_arg_type_qual), 
+        function,
+        MDNode::get(*context, kernel_arg_address_space),
+        MDNode::get(*context, kernel_arg_access_qual),
+        MDNode::get(*context, kernel_arg_type),
+        MDNode::get(*context, kernel_arg_type_qual),
         MDNode::get(*context, kernel_arg_name)
     };
     MDNode *mdNode = MDNode::get(*context, kernel_metadata);
@@ -295,7 +288,7 @@ bool CodeGen_SPIR_Dev::use_soft_float_abi() const {
 }
 
 vector<char> CodeGen_SPIR_Dev::compile_to_src() {
-    
+
     optimize_module();
 
     SmallVector<char, 1024> buffer;

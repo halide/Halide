@@ -686,13 +686,15 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     std::string message;
+    std::vector<Expr> args;
 
-    static Stmt make(Expr condition, std::string message) {
+    static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args) {
         assert(condition.defined() && "AssertStmt of undefined");
 
         AssertStmt *node = new AssertStmt;
         node->condition = condition;
         node->message = message;
+        node->args = args;
         return node;
     }
 };
@@ -988,7 +990,10 @@ struct Call : public ExprNode<Call> {
         undef,
         null_handle,
         address_of,
-        trace, trace_expr;
+        return_second,
+        if_then_else,
+        trace,
+        trace_expr;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

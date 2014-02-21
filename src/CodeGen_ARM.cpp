@@ -1,16 +1,14 @@
+#include <iostream>
+#include <sstream>
+
 #include "CodeGen_ARM.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
-#include "IRPrinter.h"
 #include "IRMatch.h"
 #include "IREquality.h"
 #include "Debug.h"
 #include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Simplify.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 // Native client llvm relies on global flags to control sandboxing on
@@ -339,22 +337,13 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
 
 }
 
+llvm::Triple CodeGen_ARM::get_target_triple() const {
+    llvm::Triple triple;
 
-void CodeGen_ARM::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // Fix the target triple.
     if (target.bits == 64) {
 
     }
 
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    llvm::Triple triple;
     if (target.bits == 32) {
         triple.setArch(llvm::Triple::arm);
     } else {
@@ -398,7 +387,24 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
     } else {
         assert(false && "No arm support for this OS");
     }
+
+    return triple;
+}
+
+void CodeGen_ARM::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
+
+    init_module();
+
+    module = get_initial_module_for_target(target, context);
+
+    // Fix the target triple.
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+    llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
+
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen

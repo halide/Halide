@@ -68,6 +68,9 @@ struct JITCompiledModule {
     typedef int (*TraceFn)(void *, const char *, int, int, int, int, int, int, const void *, int, const int *);
     void (*set_custom_trace)(TraceFn);
 
+    /** Set a random seed and clear the random state. See \ref Func::set_random_seed. */
+    void (*set_random_seed)(uint32_t);
+
     /** Shutdown the thread pool maintained by this JIT module. This
      * is also done automatically when the last reference to this
      * module is destroyed. */
@@ -87,6 +90,7 @@ struct JITCompiledModule {
         set_custom_do_par_for(NULL),
         set_custom_do_task(NULL),
         set_custom_trace(NULL),
+        set_random_seed(NULL),
         shutdown_thread_pool(NULL) {}
 
     /** Take an llvm module and compile it. Populates the function

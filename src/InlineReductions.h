@@ -3,7 +3,6 @@
 
 #include "IR.h"
 #include "Tuple.h"
-#include "Var.h"
 
 /** \file
  * Defines some inline reductions: sum, product, minimum, maximum.
