@@ -205,6 +205,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // The pure args are those naked vars in the args that are not in
     // a reduction domain and are not parameters and line up with the
     // pure args in the pure definition.
+    bool pure = true;
     vector<string> pure_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
@@ -214,7 +215,11 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
                 !var->reduction_domain.defined() &&
                 var->name == contents.ptr->args[i]) {
                 pure_args[i] = var->name;
+            } else {
+                pure = false;
             }
+        } else {
+            pure = false;
         }
     }
 
@@ -269,6 +274,19 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
             Schedule::Dim d = {pure_args[i], For::Serial};
             r.schedule.dims.push_back(d);
         }
+    }
+
+    // If there's no recursive reference, no reduction domain, and all
+    // the args are pure, then this definition completely hides
+    // earlier ones!
+    if (!r.domain.defined() &&
+        counter.calls.empty() &&
+        pure) {
+        std::cerr << "Warning: update definition " << contents.ptr->reductions.size()
+                  << " of function " << name() << " completely hides earlier definitions, "
+                  << " because all the arguments are pure, it contains no self-references, "
+                  << " and no reduction domain. This may be an accidental re-definition of "
+                  << " an already-defined function.\n";
     }
 
     contents.ptr->reductions.push_back(r);

@@ -32,14 +32,7 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(),
     #endif
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
+llvm::Triple CodeGen_X86::get_target_triple() const {
     llvm::Triple triple;
 
     if (target.bits == 32) {
@@ -69,7 +62,7 @@ void CodeGen_X86::compile(Stmt stmt, string name,
         triple.setEnvironment(llvm::Triple::Android);
 
         if (target.bits == 64) {
-            std::cerr << "WARNING: x86-64 android is untested\n";
+            std::cerr << "Warning: x86-64 android is untested\n";
         }
     } else if (target.os == Target::NaCl) {
         #if WITH_NATIVE_CLIENT
@@ -82,6 +75,19 @@ void CodeGen_X86::compile(Stmt stmt, string name,
         assert(false && "Not sure what llvm target triple to use when compiling to IOS on x86 (does this even exist?)");
     }
 
+    return triple;
+}
+
+void CodeGen_X86::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
+
+    init_module();
+
+    // Fix the target triple
+    module = get_initial_module_for_target(target, context);
+
+    llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";

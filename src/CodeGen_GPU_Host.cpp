@@ -60,27 +60,6 @@ using std::map;
 
 using namespace llvm;
 
-bool CodeGen_GPU_Host::lib_cuda_linked = false;
-
-class CodeGen_GPU_Host::Closure : public Halide::Internal::Closure {
-public:
-    static Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
-        Closure c;
-        c.skip_gpu_loops = skip_gpu_loops;
-        c.ignore.push(lv, 0);
-        s.accept(&c);
-        return c;
-    }
-
-    vector<Argument> arguments();
-
-protected:
-    using Internal::Closure::visit;
-
-    void visit(const For *op);
-
-    bool skip_gpu_loops;
-};
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the max
@@ -251,7 +230,28 @@ private:
     }
 };
 
-vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
+
+class GPU_Host_Closure : public Halide::Internal::Closure {
+public:
+    static GPU_Host_Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
+        GPU_Host_Closure c;
+        c.skip_gpu_loops = skip_gpu_loops;
+        c.ignore.push(lv, 0);
+        s.accept(&c);
+        return c;
+    }
+
+    vector<Argument> arguments();
+
+protected:
+    using Internal::Closure::visit;
+
+    void visit(const For *op);
+
+    bool skip_gpu_loops;
+};
+
+vector<Argument> GPU_Host_Closure::arguments() {
     vector<Argument> res;
     for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "var: " << iter->first << "\n";
@@ -269,7 +269,7 @@ vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
 }
 
 
-void CodeGen_GPU_Host::Closure::visit(const For *loop) {
+void GPU_Host_Closure::visit(const For *loop) {
     if (skip_gpu_loops &&
         CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         return;
@@ -278,8 +278,12 @@ void CodeGen_GPU_Host::Closure::visit(const For *loop) {
 }
 
 
-CodeGen_GPU_Host::CodeGen_GPU_Host(Target target) :
-    CodeGen_X86(target),
+template<typename CodeGen_CPU>
+bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
+
+template<typename CodeGen_CPU>
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
+    CodeGen_CPU(target),
     dev_malloc_fn(NULL),
     dev_free_fn(NULL),
     copy_to_dev_fn(NULL),
@@ -289,7 +293,8 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(Target target) :
     cgdev(make_dev(target)) {
 }
 
-CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
+template<typename CodeGen_CPU>
+CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
 {
     if (t.features & Target::CUDA) {
         debug(1) << "Constructing CUDA device codegen\n";
@@ -309,13 +314,15 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
     }
 }
 
-CodeGen_GPU_Host::~CodeGen_GPU_Host() {
+template<typename CodeGen_CPU>
+CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
     delete cgdev;
 }
 
-void CodeGen_GPU_Host::compile(Stmt stmt, string name,
-                               const vector<Argument> &args,
-                               const vector<Buffer> &images_to_embed) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
+                                            const vector<Argument> &args,
+                                            const vector<Buffer> &images_to_embed) {
 
     init_module();
 
@@ -348,10 +355,11 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     // Fix the target triple
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-    // For now we'll just leave it as whatever the module was
-    // compiled as. This assumes that we're not cross-compiling
-    // between different x86 operating systems
-    // module->setTargetTriple( ... );
+    llvm::Triple triple = CodeGen_CPU::get_target_triple();
+    module->setTargetTriple(triple.str());
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
@@ -365,7 +373,7 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
 
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
-    Value *kernel_src_ptr = create_constant_binary_blob(kernel_src, "halide_kernel_src");
+    Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src");
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
@@ -382,7 +390,8 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     CodeGen::optimize_module();
 }
 
-void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module) {
 
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
@@ -441,7 +450,8 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
     }
 }
 
-void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
     if (target.features & Target::CUDA) {
         // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
         // CUDA behaves much better when you don't initialize >2 contexts.
@@ -482,7 +492,8 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
     }
 }
 
-void CodeGen_GPU_Host::visit(const For *loop) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         debug(2) << "Kernel launch: " << loop->name << "\n";
 
@@ -502,7 +513,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
                << n_blkid_x << ", " << n_blkid_y << ", " << n_blkid_z << ", " << n_blkid_w << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
-        Closure c = Closure::make(loop, loop->name);
+        GPU_Host_Closure c = GPU_Host_Closure::make(loop, loop->name);
 
         // Note that we currently do nothing with the thread-local
         // allocations found. Currently we only handle const-sized
@@ -573,13 +584,15 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
-        Value *gpu_args_arr = create_alloca_at_entry(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
-                                                     num_args+1,
-                                                     kernel_name + "_args");
+        Value *gpu_args_arr =
+            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
+                                   num_args+1,
+                                   kernel_name + "_args");
 
-        Value *gpu_arg_sizes_arr = create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
-                                                          num_args+1,
-                                                          kernel_name + "_arg_sizes");
+        Value *gpu_arg_sizes_arr =
+            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
+                                   num_args+1,
+                                   kernel_name + "_arg_sizes");
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
@@ -649,15 +662,16 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         }
 
     } else {
-        CodeGen_X86::visit(loop);
+        CodeGen_CPU::visit(loop);
     }
 }
 
-void CodeGen_GPU_Host::visit(const Allocate *alloc) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Allocation host_allocation = {NULL, 0};
+    typename CodeGen_CPU::Allocation host_allocation = {NULL, 0};
 
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
@@ -721,10 +735,11 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
 
 }
 
-void CodeGen_GPU_Host::visit(const Free *f) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
     // Free any host allocation
     if (sym_exists(f->name + ".host")) {
-        CodeGen_Posix::visit(f);
+        CodeGen_CPU::visit(f);
     }
 
     if (sym_exists(f->name + ".buffer")) {
@@ -735,13 +750,14 @@ void CodeGen_GPU_Host::visit(const Free *f) {
     }
 }
 
-void CodeGen_GPU_Host::visit(const Pipeline *n) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Pipeline *n) {
 
     Value *buf = sym_get(n->name + ".buffer", false);
     Value *host = sym_get(n->name + ".host", false);
 
     if (!(buf && host)) {
-        CodeGen_X86::visit(n);
+        CodeGen_CPU::visit(n);
         return;
     }
 
@@ -787,7 +803,8 @@ void CodeGen_GPU_Host::visit(const Pipeline *n) {
     codegen(n->consume);
 }
 
-void CodeGen_GPU_Host::visit(const Call *call) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
     // The other way in which buffers might be read by the host is in
     // calls to whole-buffer builtins like debug_to_file.
     if (call->call_type == Call::Intrinsic &&
@@ -807,7 +824,8 @@ void CodeGen_GPU_Host::visit(const Call *call) {
     CodeGen::visit(call);
 }
 
-Value *CodeGen_GPU_Host::get_module_state() {
+template<typename CodeGen_CPU>
+Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
     GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
     if (!module_state)
     {
@@ -821,5 +839,16 @@ Value *CodeGen_GPU_Host::get_module_state() {
     }
     return module_state;
 }
+
+
+// Force template instantiation for x86 and arm.
+#ifdef WITH_X86
+template class CodeGen_GPU_Host<CodeGen_X86>;
+#endif
+
+#ifdef WITH_ARM
+template class CodeGen_GPU_Host<CodeGen_ARM>;
+#endif
+
 
 }}
