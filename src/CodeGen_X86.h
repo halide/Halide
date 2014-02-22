@@ -33,6 +33,8 @@ public:
 protected:
     Target target;
 
+    llvm::Triple get_target_triple() const;
+
     /** Generate a call to an sse or avx intrinsic */
     // @{
     llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);

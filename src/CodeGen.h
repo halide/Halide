@@ -22,6 +22,7 @@ class CallInst;
 class ExecutionEngine;
 class AllocaInst;
 class Constant;
+class Triple;
 }
 
 #include <map>

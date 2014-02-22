@@ -235,6 +235,7 @@ CORRECTNESS_TESTS = $(shell ls test/correctness/*.cpp)
 STATIC_TESTS = $(shell ls test/static/*_generate.cpp)
 PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
+WARNING_TESTS = $(shell ls test/warning/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
 STATIC_TEST_CXX ?= $(CXX)
@@ -246,6 +247,7 @@ test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
 test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
+test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 
@@ -255,6 +257,7 @@ run_tests: test_correctness test_errors test_tutorials test_static
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
+	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
 	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
 	$(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
@@ -268,6 +271,9 @@ $(BIN_DIR)/performance_%: test/performance/%.cpp $(BIN_DIR)/libHalide.so include
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+
+$(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
 $(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -313,6 +319,11 @@ performance_%: $(BIN_DIR)/performance_%
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p tmp
 	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "Assertion.*failed"
+	@-echo
+
+warning_%: $(BIN_DIR)/warning_%
+	@-mkdir -p tmp
+	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^Warning: "
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%

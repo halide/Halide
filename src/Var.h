@@ -145,15 +145,6 @@ public:
     }
 };
 
-/** This is used to provide a grace period during which old style
- * implicits code will continue to compile with a warning. This makes
- * it easier to convert to the new required placeholder ('_') style.
- * Both variants will work during the transition period. The code under
- * these ifdef blocks can be completely removed after we finalize the
- * language change.
- */
-#define HALIDE_WARNINGS_FOR_OLD_IMPLICITS 1
-
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
 EXPORT extern Var _;
 
