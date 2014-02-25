@@ -3,6 +3,7 @@
 
 #include <set>
 #include <map>
+#include <string>
 
 /** \file
  * Defines the base class for things that recursively walk over the IR
