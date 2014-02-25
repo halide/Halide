@@ -415,6 +415,29 @@ void IRGraphVisitor::visit(const Evaluate *op) {
     include(op->value);
 }
 
+void visit_function(IRVisitor *v, const Function &f) {
+    // recursively add everything called in the definition of f
+    for (size_t i = 0; i < f.values().size(); i++) {
+        f.values()[i].accept(v);
+    }
+    // recursively add everything called in the definition of f's update steps
+    for (size_t i = 0; i < f.reductions().size(); i++) {
+        // Update value definition
+        for (size_t j = 0; j < f.reductions()[i].values.size(); j++) {
+            f.reductions()[i].values[j].accept(v);
+        }
+        // Update index expressions
+        for (size_t j = 0; j < f.reductions()[i].args.size(); j++) {
+            f.reductions()[i].args[j].accept(v);
+        }
+        // Reduction domain min/extent expressions
+        for (size_t j = 0; j < f.reductions()[i].domain.domain().size(); j++) {
+            f.reductions()[i].domain.domain()[j].min.accept(v);
+            f.reductions()[i].domain.domain()[j].extent.accept(v);
+        }
+    }
+}
+
 }
 }
 
