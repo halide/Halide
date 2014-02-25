@@ -55,6 +55,8 @@ struct Block;
 struct IfThenElse;
 struct Evaluate;
 
+class Function;
+
 /** A base class for algorithms that need to recursively walk over the
  * IR. The default implementations just recursively walk over the
  * children. Override the ones you care about.
@@ -166,6 +168,12 @@ public:
     virtual void visit(const Evaluate *);
     // @}
 };
+
+/** Apply an IRVisitor to all Exprs in the definition of the Function f.
+ *  This includes pure definitions, update definitions, update indices,
+ *  and referenced RDom min/extent expressions.
+ */
+void visit_function(IRVisitor *v, const Function &f);
 
 }
 }
