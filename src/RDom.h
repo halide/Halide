@@ -162,7 +162,7 @@ public:
  * rows, it also improves the locality of the entire pipeline.
  */
 class RDom {
-    Internal::ReductionDomain domain;
+    Internal::ReductionDomain dom;
 public:
     /** Construct an undefined reduction domain. */
     EXPORT RDom() {}
@@ -197,11 +197,14 @@ public:
     /** Construct a reduction domain that wraps an Internal ReductionDomain object. */
     EXPORT RDom(Internal::ReductionDomain d);
 
+    /** Get at the internal reduction domain object that this wraps. */
+    Internal::ReductionDomain domain() const {return dom;}
+
     /** Check if this reduction domain is non-NULL */
-    bool defined() const {return domain.defined();}
+    bool defined() const {return dom.defined();}
 
     /** Compare two reduction domains for equality of reference */
-    bool same_as(const RDom &other) const {return domain.same_as(other.domain);}
+    bool same_as(const RDom &other) const {return dom.same_as(other.dom);}
 
     /** Get the dimensionality of a reduction domain */
     EXPORT int dimensions() const;
