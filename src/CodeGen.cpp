@@ -376,7 +376,11 @@ void CodeGen::compile_to_bitcode(const string &filename) {
     assert(module && "No module defined. Must call compile before calling compile_to_bitcode");
 
     string error_string;
+#if LLVM_VERSION < 35
     raw_fd_ostream out(filename.c_str(), error_string);
+#else
+    raw_fd_ostream out(filename.c_str(), error_string, llvm::sys::fs::F_None);
+#endif
     WriteBitcodeToFile(module, out);
 }
 
@@ -428,7 +432,11 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     assert(target_machine && "Could not allocate target machine!");
 
     // Figure out where we are going to send the output.
+#if LLVM_VERSION < 35
     raw_fd_ostream raw_out(filename.c_str(), error_string);
+#else
+    raw_fd_ostream raw_out(filename.c_str(), error_string, llvm::sys::fs::F_None);
+#endif
     if (!error_string.empty()) {
         std::cerr << "Error opening output " << filename << ": " << error_string << std::endl;
         assert(false);

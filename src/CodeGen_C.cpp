@@ -512,7 +512,9 @@ void CodeGen_C::visit(const Cast *op) {
 }
 
 void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
-    print_assignment(t, print_expr(a) + " " + op + " " + print_expr(b));
+    string sa = print_expr(a);
+    string sb = print_expr(b);
+    print_assignment(t, sa + " " + op + " " + sb);
 }
 
 void CodeGen_C::visit(const Add *op) {
@@ -676,13 +678,19 @@ void CodeGen_C::visit(const Call *op) {
             rhs << ")";
         } else if (op->name == Call::bitwise_and) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " & " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " & " << a1;
         } else if (op->name == Call::bitwise_xor) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " ^ " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " ^ " << a1;
         } else if (op->name == Call::bitwise_or) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " | " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " | " << a1;
         } else if (op->name == Call::bitwise_not) {
             assert(op->args.size() == 1);
             rhs << "~" << print_expr(op->args[0]);
@@ -691,10 +699,14 @@ void CodeGen_C::visit(const Call *op) {
             rhs << print_reinterpret(op->type, op->args[0]);
         } else if (op->name == Call::shift_left) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " << " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
         } else if (op->name == Call::shift_right) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " >> " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " >> " << a1;
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
             assert((int)(op->args.size()) == dims*3 + 2);
@@ -793,10 +805,14 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "(&" + buf_id + ")";
         } else if (op->name == Call::extract_buffer_extent) {
             assert(op->args.size() == 2);
-            rhs << "((buffer_t *)(" << print_expr(op->args[0]) << "))->extent[" << print_expr(op->args[1]) << "];\n";
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "];\n";
         } else if (op->name == Call::extract_buffer_min) {
             assert(op->args.size() == 2);
-            rhs << "((buffer_t *)(" << print_expr(op->args[0]) << "))->min[" << print_expr(op->args[1]) << "];\n";
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "];\n";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << '\n';
@@ -881,10 +897,13 @@ void CodeGen_C::visit(const Let *op) {
 
 void CodeGen_C::visit(const Select *op) {
     ostringstream rhs;
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
     rhs << "(" << print_type(op->type) << ")"
-        << "(" << print_expr(op->condition)
-        << " ? " << print_expr(op->true_value)
-        << " : " << print_expr(op->false_value)
+        << "(" << cond
+        << " ? " << true_val
+        << " : " << false_val
         << ")";
     print_assignment(op->type, rhs.str());
 }
