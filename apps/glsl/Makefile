@@ -18,14 +18,14 @@ OPENGL_LIBS = -framework AGL
 endif
 
 HALIDE_LIBS = $(HALIDE_LIB) -ldl -lpthread
-HALIDE_LIBS += -lcurses
 
-all: opengl_test
+all: opengl_test test_jit
 
-OBJS = blur.o ycc.o opengl_test.o OpenGLSupport.o
+test_jit: test_jit.o $(HALIDE_LIB)
+	$(CXX) $(CXXFLAGS) $< -o $@ $(HALIDE_LIBS)
 
-opengl_test: $(OBJS)
-	$(CXX) $(CXXFLAGS) $(OBJS) -o $@  $(OPENGL_LIBS)
+opengl_test: blur.o ycc.o opengl_test.o
+	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin -lHalideOpenGLRuntime
 
 blur.h blur.o: halide_blur
 	HL_TARGET=host-opengl-gpu_debug ./halide_blur
@@ -41,4 +41,4 @@ halide_ycc: halide_ycc.o $(HALIDE_LIB)
 
 .PHONY: clean
 clean:
-	rm -f opengl_test halide_blur halide_ycc *.o blur.h ycc.h
+	rm -f opengl_test test_jit halide_blur halide_ycc *.o blur.h ycc.h
