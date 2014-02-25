@@ -465,7 +465,22 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             assert(error.empty() && "Could not find libopencl.so, OpenCL.framework, or opencl.dll");
         }
     } else if (target.features & Target::OpenGL) {
-        assert(false && "OpenGL backend currently doesn't support JIT compilation");
+        const char *funcname = "halide_opengl_create_context";
+        if (have_symbol(funcname)) {
+            debug(1) << "OpenGL support code already linked in...\n";
+        } else {
+            debug(1) << "Looking for OpenGL support code...\n";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libHalideOpenGLRuntime.so", &error);
+            assert (error.empty() && "Could not find libHalideOpenGLRuntime.so");
+
+            void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(funcname);
+            assert(ptr && "Could not find halide_opengl_create_context in HalideOpenGLRuntime library");
+
+            void (*create_context)() = reinterpret_bits<void (*)()>(ptr);
+
+            create_context();
+        }
     }
 }
 
@@ -509,10 +524,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
             reinterpret_bits<void (*)()>(f);
         cleanup_routines->push_back(cleanup_routine);
     } else if (target.features & Target::OpenGL) {
-        llvm::Function *fn;
-
-        fn = module->getFunction("halide_opengl_release");
-        assert(fn && "Could not find halide_opengl_release in module");
+        llvm::Function *fn = module->getFunction("halide_release");
+        assert(fn && "Could not find halide_release in module");
         void* f = ee->getPointerToFunction(fn);
         assert(f && "Could not find compiled form of halide_release in module");
         void (*cleanup_routine)() =

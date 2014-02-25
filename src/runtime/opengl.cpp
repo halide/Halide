@@ -12,9 +12,7 @@
 
 // This function must be provided by the host environment to retrieve pointers
 // to OpenGL API functions.
-extern "C" WEAK void *halide_opengl_get_proc_address(const char* name) {
-    return NULL;
-}
+extern "C" void *halide_opengl_get_proc_address(const char *name);
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
@@ -69,17 +67,24 @@ extern "C" WEAK void *halide_opengl_get_proc_address(const char* name) {
 
 // ---------- Types ----------
 
+enum ArgumentKind {
+    ARGKIND_NONE,
+    ARGKIND_VAR,
+    ARGKIND_INBUF,
+    ARGKIND_OUTBUF
+};
+
 enum ArgumentType {
-    ARG_NONE = 0,
-    ARG_BUFFER = 1,
-    ARG_FLOAT = 2,
-    ARG_INT = 3
+    ARGTYPE_NONE,
+    ARGTYPE_FLOAT,
+    ARGTYPE_INT,
+    ARGTYPE_UINT8
 };
 
 struct HalideOpenGLArgument {
-    char* name;
+    char *name;
+    ArgumentKind kind;
     ArgumentType type;
-    bool is_output;
     HalideOpenGLArgument *next;
 };
 
@@ -141,8 +146,9 @@ static const char* vertex_shader_src =
     "}\n";
 
 static const char kernel_marker[] = "/// KERNEL ";
-static const char input_marker[] = "/// IN ";
-static const char output_marker[] = "/// OUT ";
+static const char input_marker[] = "/// IN_BUFFER ";
+static const char output_marker[] = "/// OUT_BUFFER ";
+static const char var_marker[] = "/// VAR ";
 
 // Vertex coordinates for unit square
 static const GLfloat square_vertices[] = {
@@ -238,28 +244,29 @@ static const char* match_prefix(const char *s, const char* prefix) {
     return NULL;
 }
 
-// Parse declaration of the form "(float|int|buffer) name" and construct
+// Parse declaration of the form "type name" and construct
 // matching HalideOpenGLArgument.
-static HalideOpenGLArgument* parse_argument(void* uctx, const char* src, const char* end) {
+static HalideOpenGLArgument *parse_argument(void *uctx, const char *src,
+                                            const char *end) {
     const char *name;
-    ArgumentType type = ARG_NONE;
+    ArgumentType type = ARGTYPE_NONE;
     if ((name = match_prefix(src, "float "))) {
-        type = ARG_FLOAT;
+        type = ARGTYPE_FLOAT;
     } else if ((name = match_prefix(src, "int "))) {
-        type = ARG_INT;
-    } else if ((name = match_prefix(src, "buffer "))) {
-        type = ARG_BUFFER;
+        type = ARGTYPE_INT;
+    } else if ((name = match_prefix(src, "uint8 "))) {
+        type = ARGTYPE_UINT8;
     }
-    if (type == ARG_NONE) {
-	halide_error(uctx, "Internal error: argument type not supported");
-	return NULL;
+    if (type == ARGTYPE_NONE) {
+        halide_error(uctx, "Internal error: argument type not supported");
+        return NULL;
     }
 
-    HalideOpenGLArgument* arg = (HalideOpenGLArgument*)
-        malloc(sizeof(HalideOpenGLArgument));
-    arg->name = strndup(name, end-name);
+    HalideOpenGLArgument *arg =
+        (HalideOpenGLArgument *)malloc(sizeof(HalideOpenGLArgument));
+    arg->name = strndup(name, end - name);
     arg->type = type;
-    arg->is_output = false;
+    arg->kind = ARGKIND_NONE;
     arg->next = 0;
     return arg;
 }
@@ -286,17 +293,27 @@ static HalideOpenGLKernel* create_kernel(void* uctx, const char* src, int size) 
         const char* args;
         if ((args = match_prefix(line, kernel_marker))) {
             kernel->name = strndup(args, next_line - args - 1);
+        } else if ((args = match_prefix(line, var_marker))) {
+            if (HalideOpenGLArgument *arg =
+                    parse_argument(uctx, args, next_line - 1)) {
+                arg->kind = ARGKIND_VAR;
+                arg->next = kernel->arguments;
+                kernel->arguments = arg;
+            }
         } else if ((args = match_prefix(line, input_marker))) {
-            if (HalideOpenGLArgument* arg = parse_argument(uctx, args, next_line-1)) {
-		arg->next = kernel->arguments;
-		kernel->arguments = arg;
-	    }
+            if (HalideOpenGLArgument *arg =
+                    parse_argument(uctx, args, next_line - 1)) {
+                arg->kind = ARGKIND_INBUF;
+                arg->next = kernel->arguments;
+                kernel->arguments = arg;
+            }
         } else if ((args = match_prefix(line, output_marker))) {
-            if (HalideOpenGLArgument* arg = parse_argument(uctx, args, next_line-1)) {
-		arg->is_output = true;
-		arg->next = kernel->arguments;
-		kernel->arguments = arg;
-	    }
+            if (HalideOpenGLArgument *arg =
+                    parse_argument(uctx, args, next_line - 1)) {
+                arg->kind = ARGKIND_OUTBUF;
+                arg->next = kernel->arguments;
+                kernel->arguments = arg;
+            }
         } else {
             // Stop parsing if we encounter something we don't recognize
             break;
@@ -304,8 +321,8 @@ static HalideOpenGLKernel* create_kernel(void* uctx, const char* src, int size) 
         line = next_line;
     }
     if (!kernel->name) {
-	halide_error(uctx, "Internal error: kernel name not specified");
-	return NULL;
+        halide_error(uctx, "Internal error: kernel name not specified");
+        return NULL;
     }
 
     // Arguments are currently in reverse order, flip the list.
@@ -411,7 +428,7 @@ EXPORT void halide_opengl_release(void* uctx) {
         cur = next;
     }
     if (ST.textures) {
-	halide_error(uctx, "Internal error: not all textures have been freed");
+        halide_error(uctx, "Internal error: not all textures have been freed");
     }
 
     ST.DeleteBuffers(1, &ST.vertex_buffer);
@@ -438,7 +455,7 @@ static bool get_texture_format(void* uctx,
         *format = GL_RGBA;
     } else {
         halide_error(uctx, "Only 1, 3, or 4 color channels are supported");
-	return false;
+        return false;
     }
 
     if (buf->elem_size == 1) {
@@ -447,7 +464,7 @@ static bool get_texture_format(void* uctx,
         *type = GL_UNSIGNED_SHORT;
     } else {
         halide_error(uctx, "Only uint8 and uint16 textures are supported");
-	return false;
+        return false;
     }
     return true;
 }
@@ -459,8 +476,8 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
     halide_opengl_init(uctx);
 
     if (!buf) {
-	halide_error(uctx, "Invalid buffer");
-	return;
+        halide_error(uctx, "Invalid buffer");
+        return;
     }
 
     // If the texture was already created by the host application, check that
@@ -474,15 +491,15 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
         CHECK_GLERROR();
-	if (width < buf->extent[0] || height < buf->extent[1]) {
-	    halide_error(uctx, "Preallocated texture is smaller than buffer");
-	    return;
-	}
+        if (width < buf->extent[0] || height < buf->extent[1]) {
+            halide_error(uctx, "Preallocated texture is smaller than buffer");
+            return;
+        }
     } else {
         if (buf->extent[3] > 1) {
-	    halide_error(uctx, "3D textures are not supported");
-	    return;
-	}
+            halide_error(uctx, "3D textures are not supported");
+            return;
+        }
 
         // Generate texture ID
         ST.GenTextures(1, &tex);
@@ -500,8 +517,8 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
         GLint type = GL_UNSIGNED_BYTE;
         if (!get_texture_format(uctx, buf, &format, &type)) {
             halide_error(uctx, "Invalid texture format\n");
-	    return;
-	}
+            return;
+        }
         width = buf->extent[0];
         height = buf->extent[1];
 
@@ -564,8 +581,8 @@ EXPORT void halide_opengl_dev_free(void* uctx, buffer_t* buf) {
         }
     }
     if (!texinfo) {
-	halide_error(uctx, "Internal error: texture not found");
-	return;
+        halide_error(uctx, "Internal error: texture not found");
+        return;
     }
 
     // Delete texture if it was allocated by us.
@@ -592,17 +609,19 @@ EXPORT void* halide_opengl_init_kernels(void* uctx, void* state_ptr,
     char *end;
     for (; begin && begin[0]; begin = end) {
         end = strstr(begin + sizeof(kernel_marker) - 1, kernel_marker);
-        if (end == NULL)
-            end = begin + strlen(begin);
-        HalideOpenGLKernel *kernel = create_kernel(uctx, begin, end-begin);
-	if (!kernel) {
-	    // Simply skip invalid kernels
-	    continue;
-	}
+        if (end == NULL) end = begin + strlen(begin);
+        HalideOpenGLKernel *kernel = create_kernel(uctx, begin, end - begin);
+        if (!kernel) {
+            // Simply skip invalid kernels
+            continue;
+        }
 
+#ifdef DEBUG
+        halide_printf(uctx, "Defining kernel '%s'\n", kernel->name);
+#endif
         // Compile shader
-        kernel->shader_id = halide_opengl_make_shader(uctx,
-            GL_FRAGMENT_SHADER, kernel->source, NULL);
+        kernel->shader_id = halide_opengl_make_shader(uctx, GL_FRAGMENT_SHADER,
+                                                      kernel->source, NULL);
 
         // Link GLSL program
         GLuint program = ST.CreateProgram();
@@ -641,14 +660,15 @@ EXPORT void halide_opengl_dev_sync(void* uctx) {
 }
 
 template <class T>
-static void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, int channels) {
-    T *src = (T*)buf->host;
+static void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height,
+                                  int channels) {
+    T *src = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
         for (int x = 0; x < width; x++) {
-            int srcidx = (y - buf->min[1]) * buf->stride[1]
-                + (x - buf->min[0]) * buf->stride[0]
-                - buf->min[2] * buf->stride[2];
+            int srcidx = (y - buf->min[1]) * buf->stride[1] +
+                         (x - buf->min[0]) * buf->stride[0] +
+                         -buf->min[2] * buf->stride[2];
             for (int c = 0; c < channels; c++) {
                 dst[dstidx] = src[srcidx];
                 dstidx++;
@@ -659,14 +679,15 @@ static void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, 
 }
 
 template <class T>
-static void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, int channels) {
-    T *dst = (T*)buf->host;
+static void interleaved_to_halide(buffer_t *buf, T *src, int width, int height,
+                                  int channels) {
+    T *dst = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * channels;
         for (int x = 0; x < width; x++) {
-            int dstidx = (y - buf->min[1]) * buf->stride[1]
-                + (x - buf->min[0]) * buf->stride[0]
-                - buf->min[2] * buf->stride[2];
+            int dstidx = (y - buf->min[1]) * buf->stride[1] +
+                         (x - buf->min[0]) * buf->stride[0] +
+                         -buf->min[2] * buf->stride[2];
             for (int c = 0; c < channels; c++) {
                 dst[dstidx] = src[srcidx];
                 srcidx++;
@@ -676,17 +697,15 @@ static void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, 
     }
 }
 
-
 // Copy image data from host memory to texture. We assume that the texture has
 // already been allocated using halide_opengl_dev_malloc.
-EXPORT void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf) {
+EXPORT void halide_opengl_copy_to_dev(void *uctx, buffer_t *buf) {
     CHECK_INITIALIZED();
-    if (!buf->host_dirty)
-        return;
+    if (!buf->host_dirty) return;
 
     if (!buf->host || !buf->dev) {
-	halide_error(uctx, "Invalid copy_to_dev operation");
-	return;
+        halide_error(uctx, "Invalid copy_to_dev operation");
+        return;
     }
 
     GLuint tex = get_texture_id(buf);
@@ -697,17 +716,16 @@ EXPORT void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf) {
     ST.BindTexture(GL_TEXTURE_2D, tex);
     CHECK_GLERROR();
 
-
     GLint format, type;
     if (!get_texture_format(uctx, buf, &format, &type)) {
         halide_error(uctx, "Invalid texture format\n");
-	return;
+        return;
     }
     GLint width = buf->extent[0];
     GLint height = buf->extent[1];
 
-    bool is_interleaved = (buf->stride[2] == 1 &&
-                           buf->stride[0] == buf->extent[2]);
+    bool is_interleaved =
+        (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
     if (is_interleaved) {
         // TODO: GL_UNPACK_ROW_LENGTH
         ST.TexSubImage2D(GL_TEXTURE_2D, 0,
@@ -748,8 +766,8 @@ EXPORT void halide_opengl_copy_to_host(void* uctx, buffer_t* buf) {
         return;
 
     if (!buf->host || !buf->dev) {
-	halide_error(uctx, "Invalid copy_to_host operation");
-	return;
+        halide_error(uctx, "Invalid copy_to_host operation");
+        return;
     }
 
     GLuint tex = get_texture_id(buf);
@@ -768,8 +786,8 @@ EXPORT void halide_opengl_copy_to_host(void* uctx, buffer_t* buf) {
 
     ST.BindTexture(GL_TEXTURE_2D, tex);
     CHECK_GLERROR();
-    bool is_interleaved = (buf->stride[2] == 1 &&
-                           buf->stride[0] == buf->extent[2]);
+    bool is_interleaved =
+        (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
     if (is_interleaved) {
         // TODO: GL_UNPACK_ROW_LENGTH
         ST.GetTexImage(GL_TEXTURE_2D, 0, format, type, buf->host);
@@ -827,54 +845,67 @@ EXPORT void halide_opengl_dev_run(
     // Copy input arguments to corresponding GLSL uniforms.
     GLint num_active_textures = 0;
     kernel_arg = kernel->arguments;
-    for (int i=0; args[i]; i++, kernel_arg = kernel_arg->next) {
-	if (!kernel_arg) {
-	    halide_error(uctx, "Too many arguments passed to halide_opengl_dev_run");
-	    return;
-	}
+    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+        if (!kernel_arg) {
+            halide_printf(uctx, "Argument %d: size=%d value=%p\n", i,
+                          arg_sizes[i], args[i]);
+            halide_error(uctx,
+                         "Too many arguments passed to halide_opengl_dev_run");
+            return;
+        }
 
-        if (kernel_arg->is_output)
+        if (kernel_arg->kind == ARGKIND_OUTBUF) {
+            // Outbuf textures are handled explicitly below
             continue;
-
-        GLint loc = ST.GetUniformLocation(kernel->program_id,
-                                          kernel_arg->name);
-        if (loc != -1) {
-            switch (kernel_arg->type) {
-            case ARG_INT:
-                halide_printf(uctx, "Int argument %d (%s): %d\n",
-                              i, kernel_arg->name, *((int*)args[i]));
-                ST.Uniform1iv(loc, 1, (GLint*)args[i]);
-                break;
-            case ARG_FLOAT:
-                halide_printf(uctx, "Float argument %d (%s): %g\n",
-                              i, kernel_arg->name, *((float*)args[i]));
-                ST.Uniform1fv(loc, 1, (GLfloat*)args[i]);
-                break;
-            case ARG_BUFFER: {
-                GLuint tex = *((GLuint*)args[i]);
-                halide_printf(uctx, "Buffer argument %d (%s): %u\n",
-                              i, kernel_arg->name, tex);
-                ST.ActiveTexture(GL_TEXTURE0 + num_active_textures);
-                ST.BindTexture(GL_TEXTURE_2D, tex);
-                ST.Uniform1iv(loc, 1, &num_active_textures);
-                num_active_textures++;
-                // TODO: check maximum number of active textures
-                break;
+        } else if (kernel_arg->kind == ARGKIND_INBUF) {
+            GLint loc =
+                ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
+            if (loc == -1) {
+                halide_error(uctx, "No sampler defined for input texture.\n");
+                return;
             }
-            default:
-                halide_error(uctx, "Incorrect kernel argument type");
-		return;
-            }
-        } else {
-            // Argument was probably optimized away by GLSL compiler.
+            GLuint tex = *((GLuint *)args[i]);
+            halide_printf(uctx, "Buffer argument %d (%s): %u\n", i,
+                          kernel_arg->name, tex);
+            ST.ActiveTexture(GL_TEXTURE0 + num_active_textures);
+            ST.BindTexture(GL_TEXTURE_2D, tex);
+            ST.Uniform1iv(loc, 1, &num_active_textures);
+            num_active_textures++;
+            // TODO: check maximum number of active textures
+        } else if (kernel_arg->kind == ARGKIND_VAR) {
+            GLint loc =
+                ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
+            if (loc == -1) {
+// Argument was probably optimized away by GLSL compiler.
 #ifdef DEBUG
-            halide_printf(uctx, "Ignoring argument '%s'\n", kernel_arg->name);
+                halide_printf(uctx, "Ignoring argument '%s'\n",
+                              kernel_arg->name);
 #endif
+                continue;
+            }
+
+            switch (kernel_arg->type) {
+            case ARGTYPE_INT:
+                halide_printf(uctx, "Int argument %d (%s): %d\n", i,
+                              kernel_arg->name, *((int *)args[i]));
+                ST.Uniform1iv(loc, 1, (GLint *)args[i]);
+                break;
+            case ARGTYPE_FLOAT: {
+                halide_printf(uctx, "Float argument %d (%s): %g\n", i,
+                              kernel_arg->name, *((float *)args[i]));
+                ST.Uniform1fv(loc, 1, (GLfloat *)args[i]);
+                break;
+            }
+            case ARGTYPE_NONE:
+            default:
+                halide_error(uctx, "Unknown kernel argument type");
+                return;
+            }
         }
     }
     if (kernel_arg) {
-	halide_error(uctx, "Too few arguments passed to halide_opengl_dev_run");
-	return;
+        halide_error(uctx, "Too few arguments passed to halide_opengl_dev_run");
+        return;
     }
 
     // Prepare framebuffer for rendering to output textures.
@@ -886,9 +917,8 @@ EXPORT void halide_opengl_dev_run(
 
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
-    for (int i=0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (!kernel_arg->is_output)
-            continue;
+    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+        if (kernel_arg->kind != ARGKIND_OUTBUF) continue;
 
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
@@ -977,9 +1007,21 @@ EXPORT void halide_opengl_dev_run(
     ST.DisableVertexAttribArray(position);
 
     // Cleanup
-    for (int i=0; i<num_active_textures; i++) {
+    for (int i = 0; i < num_active_textures; i++) {
         ST.ActiveTexture(GL_TEXTURE0 + i);
         ST.BindTexture(GL_TEXTURE_2D, 0);
     }
     ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
+//  Create wrappers that satisfy old naming conventions
+
+EXPORT void halide_copy_to_dev(void *uctx, buffer_t *buf) {
+    halide_opengl_copy_to_dev(uctx, buf);
+}
+
+EXPORT void halide_copy_to_host(void *uctx, buffer_t *buf) {
+    halide_opengl_copy_to_host(uctx, buf);
+}
+
+EXPORT void halide_release(void *uctx) { halide_opengl_release(uctx); }

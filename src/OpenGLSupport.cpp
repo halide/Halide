@@ -3,13 +3,13 @@
 #include "GL/glx.h"
 #include <stdio.h>
 
-extern "C" void *halide_opengl_get_proc_address(const char* name) {
-    return (void*)glXGetProcAddressARB((const GLubyte*) name);
+extern "C" void *halide_opengl_get_proc_address(const char *name) {
+    return (void *)glXGetProcAddressARB((const GLubyte *)name);
 }
 
 // Initialize OpenGL
 extern "C" int halide_opengl_create_context() {
-    Display* dpy = XOpenDisplay(NULL);
+    Display *dpy = XOpenDisplay(NULL);
     if (!dpy) {
         fprintf(stderr, "Could not open X11 display.\n");
         return 1;
@@ -21,8 +21,8 @@ extern "C" int halide_opengl_create_context() {
         return 1;
     }
 
-    int attribs[] = { GLX_RGBA, None };
-    XVisualInfo* vi = glXChooseVisual(dpy, DefaultScreen(dpy), attribs);
+    int attribs[] = {GLX_RGBA, None};
+    XVisualInfo *vi = glXChooseVisual(dpy, DefaultScreen(dpy), attribs);
     if (!vi) {
         fprintf(stderr, "Could not find suitable visual.\n");
         return 1;
@@ -35,16 +35,14 @@ extern "C" int halide_opengl_create_context() {
     }
 
     Colormap cmap = 0;
-    cmap = XCreateColormap(dpy, RootWindow(dpy, vi->screen),
-                           vi->visual, AllocNone);
+    cmap = XCreateColormap(dpy, RootWindow(dpy, vi->screen), vi->visual,
+                           AllocNone);
     XSetWindowAttributes window_attribs;
     window_attribs.border_pixel = 0;
     window_attribs.colormap = cmap;
-    Window wnd = XCreateWindow(dpy, RootWindow(dpy, vi->screen),
-                               0, 0, 1, 1, 0, vi->depth,
-                               InputOutput, vi->visual,
-                               CWBorderPixel | CWColormap,
-                               &window_attribs);
+    Window wnd = XCreateWindow(dpy, RootWindow(dpy, vi->screen), 0, 0, 1, 1, 0,
+                               vi->depth, InputOutput, vi->visual,
+                               CWBorderPixel | CWColormap, &window_attribs);
 
     if (!glXMakeCurrent(dpy, wnd, ctx)) {
         fprintf(stderr, "Could not activate OpenGL context.\n");
@@ -52,7 +50,7 @@ extern "C" int halide_opengl_create_context() {
     }
     return 0;
 }
-#elif defined (__APPLE__)
+#elif defined(__APPLE__)
 
 #include <AGL/agl.h>
 #include <dlfcn.h>
@@ -60,10 +58,11 @@ extern "C" int halide_opengl_create_context() {
 extern "C" void *halide_opengl_get_proc_address(const char *name) {
     static void *dylib = NULL;
     if (!dylib) {
-	dylib = dlopen("/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL", 
-		       RTLD_LAZY);
-	if (!dylib)
-	    return NULL;
+        dylib = dlopen(
+            "/System/Library/Frameworks/OpenGL.framework/Versions/Current/"
+            "OpenGL",
+            RTLD_LAZY);
+        if (!dylib) return NULL;
     }
     return dlsym(dylib, name);
 
@@ -81,26 +80,25 @@ extern "C" void *halide_opengl_get_proc_address(const char *name) {
 extern "C" int halide_opengl_create_context() {
     AGLContext ctx = NULL;
 
-    int attrib[] = { AGL_RGBA, AGL_NONE };
+    int attrib[] = {AGL_RGBA, AGL_NONE};
     AGLPixelFormat pf = aglChoosePixelFormat(NULL, 0, attrib);
     if (!pf) {
-	fprintf(stderr, "Could not create pixel format\n");
-	return 1;
+        fprintf(stderr, "Could not create pixel format\n");
+        return 1;
     }
     ctx = aglCreateContext(pf, NULL);
     if (!ctx || aglGetError() != AGL_NO_ERROR) {
-	fprintf(stderr, "Could not create context\n");
-	return 1;
+        fprintf(stderr, "Could not create context\n");
+        return 1;
     }
     aglDestroyPixelFormat(pf);
     if (aglSetCurrentContext(ctx) == GL_FALSE) {
-	fprintf(stderr, "Could not activate OpenGL context\n");
-	return 1;
+        fprintf(stderr, "Could not activate OpenGL context\n");
+        return 1;
     }
-    
     return 0;
 }
 
 #else
-#  error "Unsupported platform"
+#error "Unsupported platform"
 #endif

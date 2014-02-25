@@ -56,8 +56,7 @@ PTX_DEVICE_INITIAL_MODULES=$(if $(WITH_PTX), libdevice.compute_20.10.bc libdevic
 OPENCL_CXX_FLAGS=$(if $(WITH_OPENCL), -DWITH_OPENCL=1, )
 OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
-OPENCL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
-OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENGL), , )
+OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 
 SPIR_CXX_FLAGS=$(if $(WITH_SPIR), -DWITH_SPIR=1, )
 SPIR_LLVM_CONFIG_LIB=$(if $(WITH_SPIR), , )
@@ -77,6 +76,11 @@ CXX_FLAGS += $(OPENGL_CXX_FLAGS)
 CXX_FLAGS += $(SPIR_CXX_FLAGS)
 LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
+
+OPENGL_LDFLAGS =
+ifneq ($(WITH_OPENGL), )
+OPENGL_LDFLAGS = -lX11 -lGL
+endif
 
 # Remove some non-llvm libs that llvm-config has helpfully included
 LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_LIBS))
@@ -168,6 +172,7 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNT
 
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
+all: $(BIN_DIR)/libHalideOpenGLRuntime.so
 
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
@@ -178,6 +183,9 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
 	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) -ldl -lpthread -o $(BIN_DIR)/libHalide.so
+
+$(BIN_DIR)/libHalideOpenGLRuntime.so: $(BUILD_DIR)/OpenGLSupport.o
+	$(CXX) $(BUILD_BIT_SIZE) -shared $< -o $@ $(OPENGL_LDFLAGS)
 
 include/Halide.h: $(HEADERS) $(BIN_DIR)/build_halide_h
 	mkdir -p include
