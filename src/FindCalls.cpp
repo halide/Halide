@@ -1,11 +1,11 @@
 #include "FindCalls.h"
 
+namespace Halide{
+namespace Internal {
+
 using std::map;
 using std::vector;
 using std::string;
-
-namespace Halide{
-namespace Internal {
 
 /* Find all the internal halide calls in an expr */
 class FindCalls : public IRVisitor {
