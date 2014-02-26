@@ -353,7 +353,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         #else
         assert(false && "AArch64 llvm target not enabled in this build of Halide");
         #endif
-        std::cerr << "WARNING: 64-bit arm builds are completely untested\n";
+        std::cerr << "Warning: 64-bit arm builds are completely untested\n";
     }
 
     if (target.os == Target::Android) {

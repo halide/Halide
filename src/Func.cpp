@@ -61,6 +61,16 @@ Func::Func(Expr e) : func(unique_name('f')),
     (*this)(_) = e;
 }
 
+Func::Func(Function f) : func(f),
+                     error_handler(NULL),
+                     custom_malloc(NULL),
+                     custom_free(NULL),
+                     custom_do_par_for(NULL),
+                     custom_do_task(NULL),
+                     custom_trace(NULL),
+                     random_seed(0) {
+}
+
 /*
 Func::Func(Buffer b) : func(unique_name('f')),
                        error_handler(NULL),
