@@ -2,6 +2,7 @@
 #include <string>
 
 #include "Target.h"
+#include "Debug.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -287,6 +288,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
                                              halide_internal_initmod_##mod##_length); \
         llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
         llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
+        module->setModuleIdentifier(#mod);                              \
         delete bitcode_buffer;                                          \
         return module;                                                  \
     }
@@ -360,6 +362,7 @@ namespace {
 void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
+        modules[i]->setDataLayout(NULL); // Use the datalayout of the first module.
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);

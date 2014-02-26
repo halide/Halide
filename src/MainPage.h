@@ -59,4 +59,8 @@
  * \example tutorial/lesson_03_debugging_1.cpp
  * \example tutorial/lesson_04_debugging_2.cpp
  * \example tutorial/lesson_05_scheduling_1.cpp
+ * \example tutorial/lesson_06_realizing_over_shifted_domains.cpp
+ * \example tutorial/lesson_07_multi_stage_pipelines.cpp
+ * \example tutorial/lesson_08_scheduling_2.cpp
+ * \example tutorial/lesson_09_update_definitions.cpp
  */
