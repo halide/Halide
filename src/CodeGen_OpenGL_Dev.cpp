@@ -1,6 +1,7 @@
 #include "CodeGen_OpenGL_Dev.h"
 #include "IRMatch.h"
 #include "Debug.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -182,7 +183,6 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     return "";
 }
 
-
 void CodeGen_GLSL::visit(const Load *op) {
     assert(op->index.size() == 3 && "Load from texture requires multi-index");
 
@@ -201,10 +201,24 @@ void CodeGen_GLSL::visit(const Store *op) {
     std::vector<Expr> matches;
 
     const Cast *cast = op->value.as<Cast>();
-    if (cast && cast->type.element_of() == UInt(8)) {
+    if (cast) {
         // Writing to gl_FragColor performs implicit conversion from float to
-        // the internal texture format to float, so drop the explicit cast.
-        Stmt new_store = Store::make(op->name, cast->value, op->index);
+        // the internal texture format, so drop the explicit cast.
+        float max_value = 1.0f;
+        if (cast->type.element_of() == UInt(8)) {
+            max_value = 255.0f;
+        } else if (cast->type.element_of() == UInt(16)) {
+            max_value = 65535.0f;
+        } else {
+            assert(false && "Cannot store this type in a texture");
+        }
+
+        Stmt new_store =
+            Internal::simplify(
+                Store::make(op->name,
+                            Div::make(Cast::make(Float(32), cast->value),
+                                      max_value),
+                            op->index));
         new_store.accept(this);
     } else {
         string val = print_expr(op->value);
