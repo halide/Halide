@@ -2,6 +2,8 @@
 #define HALIDE_IR_VISITOR_H
 
 #include <set>
+#include <map>
+#include <string>
 
 /** \file
  * Defines the base class for things that recursively walk over the IR
@@ -54,6 +56,8 @@ struct Realize;
 struct Block;
 struct IfThenElse;
 struct Evaluate;
+
+class Function;
 
 /** A base class for algorithms that need to recursively walk over the
  * IR. The default implementations just recursively walk over the
@@ -166,6 +170,27 @@ public:
     virtual void visit(const Evaluate *);
     // @}
 };
+
+/** A base class for algorithms that recursively visit IR through Halide
+ * function calls. */
+class IRDeepVisitor : public IRVisitor {
+protected:
+    /** The set of functions visited so far, organized by name. */
+    std::map<std::string, Function> funcs;
+public:
+    using IRVisitor::visit;
+
+    /** All recursion logic is in Call node handling. To extend this, be sure
+     * you invoke IRDeepVisitor::visit for Call nodes. */
+    virtual void visit(const Call *call);
+};
+
+
+/** Apply an IRVisitor to all Exprs in the definition of the Function f.
+ *  This includes pure definitions, update definitions, update indices,
+ *  and referenced RDom min/extent expressions.
+ */
+void visit_function(IRVisitor *v, const Function &f);
 
 }
 }
