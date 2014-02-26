@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     g(x, y) = clamp(f(x, y), 20, 100);
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         f.compute_root().gpu_tile(x, y, 16, 16, GPU_DEFAULT);
         g.compute_root().gpu_tile(x, y, 16, 16, GPU_DEFAULT);
     }

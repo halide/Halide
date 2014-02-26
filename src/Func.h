@@ -1388,13 +1388,13 @@ template<typename T>
  * Func::realize . Can use GPU if target from environment specifies
  * one.*/
 template<typename T>
-T evaluate_can_gpu(Expr e) {
+T evaluate_may_gpu(Expr e) {
     assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
     Image<T> im;
     Func f;
     f(_) = e;
 	
-    if (get_target_from_environment().has_gpu()) {
+    if (get_target_from_environment().has_gpu_feature()) {
         Func g;
 	Var x;
 	g(x, _) = f(_);
@@ -1411,17 +1411,17 @@ T evaluate_can_gpu(Expr e) {
  *  use GPU if target from environment specifies one. */
 // @{
 template<typename A, typename B>
-void evaluate_can_gpu(Tuple t, A *a, B *b) {
+void evaluate_may_gpu(Tuple t, A *a, B *b) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu = get_target_from_environment().has_gpu();
+    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
-    Image<A> result_a(has_gpu ? 1 : 0);
-    Image<B> result_b(has_gpu ? 1 : 0);
+    Image<A> result_a(has_gpu_feature ? 1 : 0);
+    Image<B> result_b(has_gpu_feature ? 1 : 0);
     Realization r(result_a, result_b);
-    if (has_gpu) {
+    if (has_gpu_feature) {
         Func g;
 	Var x;
 	g(x, _) = f(_);
@@ -1437,19 +1437,19 @@ void evaluate_can_gpu(Tuple t, A *a, B *b) {
 }
 
 template<typename A, typename B, typename C>
-void evaluate_can_gpu(Tuple t, A *a, B *b, C *c) {
+void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu = get_target_from_environment().has_gpu();
+    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
-    Image<A> result_a(has_gpu ? 1 : 0);
-    Image<B> result_b(has_gpu ? 1 : 0);
-    Image<C> result_c(has_gpu ? 1 : 0);
+    Image<A> result_a(has_gpu_feature ? 1 : 0);
+    Image<B> result_b(has_gpu_feature ? 1 : 0);
+    Image<C> result_c(has_gpu_feature ? 1 : 0);
     Realization r(result_a, result_b, result_c);
-    if (has_gpu) {
+    if (has_gpu_feature) {
         Func g;
 	Var x;
 	g(x, _) = f(_);
@@ -1467,21 +1467,21 @@ void evaluate_can_gpu(Tuple t, A *a, B *b, C *c) {
 }
 
 template<typename A, typename B, typename C, typename D>
-void evaluate_can_gpu(Tuple t, A *a, B *b, C *c, D *d) {
+void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu = get_target_from_environment().has_gpu();
+    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
-    Image<A> result_a(has_gpu ? 1 : 0);
-    Image<B> result_b(has_gpu ? 1 : 0);
-    Image<C> result_c(has_gpu ? 1 : 0);
-    Image<D> result_d(has_gpu ? 1 : 0);
+    Image<A> result_a(has_gpu_feature ? 1 : 0);
+    Image<B> result_b(has_gpu_feature ? 1 : 0);
+    Image<C> result_c(has_gpu_feature ? 1 : 0);
+    Image<D> result_d(has_gpu_feature ? 1 : 0);
     Realization r(result_a, result_b, result_c, result_d);
-    if (has_gpu) {
+    if (has_gpu_feature) {
         Func g;
 	Var x;
 	g(x, _) = f(_);

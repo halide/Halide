@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
     }
 
     RDom r(0, 8);
-    uint32_t err = evaluate<uint32_t>(sum(abs(g(r) - f(r))));
+    uint32_t err = evaluate_may_gpu<uint32_t>(sum(abs(g(r) - f(r))));
 
     if (err != 0) {
         printf("Multi-way select didn't equal equivalent reduction!\n");

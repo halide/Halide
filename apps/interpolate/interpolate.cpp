@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
     int sched;
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         sched = 4;
     } else {
         sched = 2;

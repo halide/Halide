@@ -45,7 +45,7 @@ bool relatively_equal(value_t a, value_t b) {
         Buffer in_buffer(type_of<type>(), in_buf);                            \
         input.set(in_buffer);                                                 \
         Target target = get_target_from_environment();                        \
-        if (target.has_gpu()) {                                               \
+        if (target.has_gpu_feature()) {                                               \
             test_##name.gpu_tile(x, 8, GPU_DEFAULT);                          \
         }                                                                     \
         Image<type> result = test_##name.realize(in_buf->extent[0], target);  \
@@ -66,7 +66,7 @@ bool relatively_equal(value_t a, value_t b) {
         Buffer in_buffer(type_of<type>(), in_buf);                                  \
         input.set(in_buffer);                                                       \
         Target target = get_target_from_environment();                              \
-        if (target.has_gpu()) {                                                     \
+        if (target.has_gpu_feature()) {                                                     \
           test_##name.gpu_tile(x, 8, GPU_DEFAULT);                                  \
         }                                                                           \
         Image<type> result = test_##name.realize(in_buf->extent[1], target);        \

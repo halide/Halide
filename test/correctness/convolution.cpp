@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
     blur2(x, y) = sum(tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1));
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         // Initialization (basically memset) done in a GPU kernel
         blur1.gpu_tile(x, y, 16, 16, GPU_DEFAULT);
 

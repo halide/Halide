@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
     h(x, y) = clamp(x+y, 20, 100);
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         // Resolve why OpenCL used 32,1 tiling
         f.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
         g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);

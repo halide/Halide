@@ -69,7 +69,7 @@ int main(int argc, char **argv) {
     bilateral_grid(x, y) = interpolated(x, y, 0)/interpolated(x, y, 1);
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
         histogram.update().reorder(c, r.x, r.y, x, y).gpu_tile(x, y, 8, 8).unroll(c);
         blurx.compute_root().gpu_tile(x, y, z, 16, 16, 1);
