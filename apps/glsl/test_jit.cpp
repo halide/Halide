@@ -17,10 +17,19 @@ int main() {
     f.glsl(x, y, c);
     f.realize(out);
 
-
     out.copy_to_host();
-//    printf("dev_dirty=%d\n",
-    printf("%d %d %d\n", out(0, 0, 0), out(0, 0, 1), out(0, 0, 2));
-
+    for (int y=0; y<out.height(); y++) {
+        for (int x=0; x<out.width(); x++) {
+            if (!(out(x, y, 0) == 255 &&
+                  out(x, y, 1) == 127 &&
+                  out(x, y, 2) == 12)) {
+                fprintf(stderr, "Incorrect pixel (%d, %d, %d) at x=%d y=%d.\n",
+                        out(x, y, 0), out(x, y, 1), out(x, y, 1),
+                        x, y);
+//                return 1;
+            }
+        }
+    }
     printf("Finished!\n");
+    return 0;
 }

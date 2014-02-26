@@ -63,7 +63,8 @@ extern "C" void *halide_opengl_get_proc_address(const char *name);
     GLFUNC(PFNGLDRAWELEMENTSPROC, DrawElements);                        \
     GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);  \
     GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
-    GLFUNC(PFNGLGETTEXLEVELPARAMETERIVPROC, GetTexLevelParameteriv)
+    GLFUNC(PFNGLGETTEXLEVELPARAMETERIVPROC, GetTexLevelParameteriv);    \
+    GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei)
 
 // ---------- Types ----------
 
@@ -796,6 +797,7 @@ EXPORT void halide_opengl_copy_to_host(void* uctx, buffer_t* buf) {
         size_t size = width * height * buf->extent[2] * buf->elem_size;
         uint8_t *tmp = (uint8_t*)halide_malloc(uctx, size);
 
+        ST.PixelStorei(GL_PACK_ALIGNMENT, 1);
         ST.GetTexImage(GL_TEXTURE_2D, 0, format, type, tmp);
         CHECK_GLERROR();
 
@@ -981,12 +983,7 @@ EXPORT void halide_opengl_dev_run(
     ST.Uniform2iv(loc, 1, output_min);
     CHECK_GLERROR();
 
-    // Setup coordinate transformations
-    ST.MatrixMode(GL_MODELVIEW);
-    ST.LoadIdentity();
-    ST.MatrixMode(GL_PROJECTION);
-    ST.LoadIdentity();
-    ST.Ortho(-1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f);
+    // Setup viewport
     ST.Viewport(0, 0, output_extent[0], output_extent[1]);
 
 
