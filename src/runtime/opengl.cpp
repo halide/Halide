@@ -428,9 +428,27 @@ EXPORT void halide_opengl_release(void* uctx) {
         halide_opengl_delete_kernel(uctx, cur);
         cur = next;
     }
-    if (ST.textures) {
-        halide_error(uctx, "Internal error: not all textures have been freed");
+
+    // Delete all textures that were allocated by us.
+    HalideOpenGLTexture *tex = ST.textures;
+    int freed_textures = 0;
+    while (tex) {
+        HalideOpenGLTexture *next = tex->next;
+        if (tex->halide_allocated) {
+            ST.DeleteTextures(1, &tex->id);
+            CHECK_GLERROR();
+            freed_textures++;
+        }
+        free(tex);
+        tex = next;
     }
+#ifdef DEBUG
+    if (freed_textures > 0) {
+        halide_printf(uctx,
+            "halide_opengl_release: deleted %d dangling texture(s).\n",
+            freed_textures);
+    }
+#endif
 
     ST.DeleteBuffers(1, &ST.vertex_buffer);
     ST.DeleteBuffers(1, &ST.element_buffer);
@@ -440,6 +458,7 @@ EXPORT void halide_opengl_release(void* uctx) {
     ST.vertex_buffer = 0;
     ST.element_buffer = 0;
     ST.kernels = NULL;
+    ST.textures = NULL;
     ST.initialized = false;
 }
 
