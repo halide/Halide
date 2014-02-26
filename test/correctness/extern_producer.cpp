@@ -70,7 +70,7 @@ int main(int argc, char **argv) {
 
     // Should be all zeroes.
     RDom r(output);
-    float error = evaluate_can_gpu<float>(sum(abs(output(r.x, r.y))));
+    float error = evaluate_may_gpu<float>(sum(abs(output(r.x, r.y))));
     if (error != 0) {
         printf("Something went wrong\n");
         return -1;

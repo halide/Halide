@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
     remap.compute_root();
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         // gpu schedule
         output.compute_root().gpu_tile(x, y, 32, 32, GPU_DEFAULT);
         for (int j = 0; j < J; j++) {

@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(x+1, y) + f(x-1, y);
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         Var xi, yi;
         g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
         f.compute_at(g, Var("blockidx")).gpu_threads(x, y, GPU_DEFAULT);

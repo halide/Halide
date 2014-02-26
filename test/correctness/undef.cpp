@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     Image<int> fib2 = f2.realize(102);
 
-    int err = evaluate<int>(maximum(fib1(r) - fib2(r)));
+    int err = evaluate_may_gpu<int>(maximum(fib1(r) - fib2(r)));
     if (err > 0) {
         printf("Failed\n");
         return -1;

@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     f(x, y) = x*y + 2.4f;
 
     Target target = get_target_from_environment();
-    if (target.has_gpu()) {
+    if (target.has_gpu_feature()) {
         f.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
     } 
 

@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
         h(x, y) = f(x, y) + g(x, y);
 
         Target target = get_target_from_environment();
-        if (target.has_gpu()) {
+        if (target.has_gpu_feature()) {
             f.compute_root().gpu_tile(x, y, 1, 1, GPU_DEFAULT).debug_to_file("f.tmp");
             g.compute_root().gpu_tile(x, y, 1, 1, GPU_DEFAULT).debug_to_file("g.tmp");
             h.compute_root().gpu_tile(x, y, 1, 1, GPU_DEFAULT).debug_to_file("h.tmp");
