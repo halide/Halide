@@ -2,6 +2,7 @@
 #include <string>
 
 #include "Target.h"
+#include "Debug.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -257,7 +258,7 @@ Target parse_target_string(const std::string &target) {
     }
 
     if (arch_specified && !bits_specified) {
-        std::cerr << "WARNING: If architecture is specified (e.g. \"arm\"), "
+        std::cerr << "Warning: If architecture is specified (e.g. \"arm\"), "
                   << "then bit width should also be specified (e.g. \"arm-32\"). "
                   << "In the future this will be an error. ";
         if (t.arch == Target::X86) {
@@ -289,6 +290,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
                                              halide_internal_initmod_##mod##_length); \
         llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
         llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
+        module->setModuleIdentifier(#mod);                              \
         delete bitcode_buffer;                                          \
         return module;                                                  \
     }
@@ -364,6 +366,9 @@ namespace {
 void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
+        #if LLVM_VERSION >= 35
+        modules[i]->setDataLayout(NULL); // Use the datalayout of the first module.
+        #endif
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);

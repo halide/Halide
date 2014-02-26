@@ -35,6 +35,7 @@
 #include "UnifyDuplicateLets.h"
 #include "Func.h"
 #include "ExprUsesVar.h"
+#include "FindCalls.h"
 
 namespace Halide {
 namespace Internal {
@@ -704,34 +705,6 @@ private:
     }
 };
 
-/* Find all the internal halide calls in an expr */
-class FindCalls : public IRVisitor {
-public:
-    map<string, Function> calls;
-
-    using IRVisitor::visit;
-
-    void include_function(Function f) {
-        map<string, Function>::iterator iter = calls.find(f.name());
-        if (iter == calls.end()) {
-            calls[f.name()] = f;
-        } else {
-            assert(iter->second.same_as(f) &&
-                   "Can't compile a pipeline using multiple functions with same name");
-        }
-    }
-
-    void visit(const Call *call) {
-        IRVisitor::visit(call);
-
-        if (call->call_type == Call::Halide) {
-            Function f = call->func;
-            include_function(f);
-        }
-
-    }
-};
-
 /* Find all the externally referenced buffers in a stmt */
 class FindBuffers : public IRGraphVisitor {
 public:
@@ -779,68 +752,12 @@ public:
     }
 };
 
-void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
-    map<string, Function>::const_iterator iter = env.find(f.name());
-    if (iter != env.end()) {
-        assert(iter->second.same_as(f) &&
-               "Can't compile a pipeline using multiple functions with same name");
-        return;
-    }
-
-    FindCalls calls;
-    for (size_t i = 0; i < f.values().size(); i++) {
-        f.values()[i].accept(&calls);
-    }
-
-    // Consider reductions
-    for (size_t j = 0; j < f.reductions().size(); j++) {
-        ReductionDefinition r = f.reductions()[j];
-        for (size_t i = 0; i < r.values.size(); i++) {
-            r.values[i].accept(&calls);
-        }
-        for (size_t i = 0; i < r.args.size(); i++) {
-            r.args[i].accept(&calls);
-        }
-
-        ReductionDomain d = r.domain;
-        if (r.domain.defined()) {
-            for (size_t i = 0; i < d.domain().size(); i++) {
-                d.domain()[i].min.accept(&calls);
-                d.domain()[i].extent.accept(&calls);
-            }
-        }
-    }
-
-    // Consider extern calls
-    if (f.has_extern_definition()) {
-        for (size_t i = 0; i < f.extern_arguments().size(); i++) {
-            ExternFuncArgument arg = f.extern_arguments()[i];
-            if (arg.is_func()) {
-                Function g(arg.func);
-                calls.calls[g.name()] = g;
-            }
-        }
-    }
-
-    if (!recursive) {
-        env.insert(calls.calls.begin(), calls.calls.end());
-    } else {
-        env[f.name()] = f;
-
-        for (map<string, Function>::const_iterator iter = calls.calls.begin();
-             iter != calls.calls.end(); ++iter) {
-            populate_environment(iter->second, env);
-        }
-    }
-}
-
 vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
     // Make a DAG representing the pipeline. Each function maps to the set describing its inputs.
     // Populate the graph
     for (map<string, Function>::const_iterator iter = env.begin();
          iter != env.end(); ++iter) {
-        map<string, Function> calls;
-        populate_environment(iter->second, calls, false);
+        map<string, Function> calls = find_direct_calls(iter->second);
 
         for (map<string, Function>::const_iterator j = calls.begin();
              j != calls.end(); ++j) {
@@ -1520,8 +1437,7 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
 Stmt lower(Function f) {
 
     // Compute an environment
-    map<string, Function> env;
-    populate_environment(f, env);
+    map<string, Function> env = find_transitive_calls(f);
 
     // Compute a realization order
     map<string, set<string> > graph;

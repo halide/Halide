@@ -178,7 +178,8 @@ const string preamble =
 
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
 
-string CodeGen_C::print_type(Type type) {
+namespace {
+string type_to_c_type(Type type) {
     ostringstream oss;
     assert(type.width == 1 && "Can't codegen vector types to C (yet)");
     if (type.is_float()) {
@@ -206,6 +207,11 @@ string CodeGen_C::print_type(Type type) {
         }
     }
     return oss.str();
+}
+}
+
+string CodeGen_C::print_type(Type type) {
+    return type_to_c_type(type);
 }
 
 string CodeGen_C::print_reinterpret(Type type, Expr e) {
@@ -252,6 +258,56 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << ") HALIDE_FUNCTION_ATTRS;\n";
 
     stream << "#endif\n";
+}
+
+namespace {
+class ExternCallPrototypes : public IRGraphVisitor {
+    std::set<string> emitted;
+    using IRGraphVisitor::visit;
+
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
+
+        if (op->call_type == Call::Extern) {
+            if (!emitted.count(op->name)) {
+                stream << "extern \"C\" " << type_to_c_type(op->type)
+                       << " " << op->name << "(";
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    if (i > 0) {
+                        stream << ", ";
+                    }
+                    stream << type_to_c_type(op->args[i].type());
+                }
+                stream << ");\n";
+                emitted.insert(op->name);
+            }
+        }
+    }
+
+public:
+    ostream &stream;
+    ExternCallPrototypes(ostream &s) : stream(s) {
+        size_t j = 0;
+        // Make sure we don't catch calls that are already in the preamble
+        for (size_t i = 0; i < preamble.size(); i++) {
+            char c = preamble[i];
+            if (c == '(' && i > j+1) {
+                // Could be the end of a function_name.
+                emitted.insert(preamble.substr(j+1, i-j-1));
+            }
+
+            if (('A' <= c && c <= 'Z') ||
+                ('a' <= c && c <= 'z') ||
+                c == '_' ||
+                ('0' <= c && c <= '9')) {
+                // Could be part of a function name.
+            } else {
+                j = i;
+            }
+
+        }
+    }
+};
 }
 
 void CodeGen_C::compile(Stmt s, string name,
@@ -301,6 +357,14 @@ void CodeGen_C::compile(Stmt s, string name,
     for (size_t i = 0; i < args.size(); i++) {
         // TODO: check that its type is void *?
         have_user_context |= (args[i].name == "__user_context");
+    }
+
+    // Emit prototypes for any extern calls used.
+    {
+        stream << "\n";
+        ExternCallPrototypes e(stream);
+        s.accept(&e);
+        stream << "\n";
     }
 
     // Emit the function prototype
@@ -448,7 +512,9 @@ void CodeGen_C::visit(const Cast *op) {
 }
 
 void CodeGen_C::visit_binop(Type t, Expr a, Expr b, const char * op) {
-    print_assignment(t, print_expr(a) + " " + op + " " + print_expr(b));
+    string sa = print_expr(a);
+    string sb = print_expr(b);
+    print_assignment(t, sa + " " + op + " " + sb);
 }
 
 void CodeGen_C::visit(const Add *op) {
@@ -612,13 +678,19 @@ void CodeGen_C::visit(const Call *op) {
             rhs << ")";
         } else if (op->name == Call::bitwise_and) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " & " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " & " << a1;
         } else if (op->name == Call::bitwise_xor) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " ^ " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " ^ " << a1;
         } else if (op->name == Call::bitwise_or) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " | " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " | " << a1;
         } else if (op->name == Call::bitwise_not) {
             assert(op->args.size() == 1);
             rhs << "~" << print_expr(op->args[0]);
@@ -627,10 +699,14 @@ void CodeGen_C::visit(const Call *op) {
             rhs << print_reinterpret(op->type, op->args[0]);
         } else if (op->name == Call::shift_left) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " << " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " << " << a1;
         } else if (op->name == Call::shift_right) {
             assert(op->args.size() == 2);
-            rhs << print_expr(op->args[0]) << " >> " << print_expr(op->args[1]);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << a0 << " >> " << a1;
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
             assert((int)(op->args.size()) == dims*3 + 2);
@@ -663,9 +739,15 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::null_handle) {
             rhs << "NULL";
         } else if (op->name == Call::address_of) {
-            assert(op->args.size() == 1 && op->args[0].as<Load>());
-            string arg = print_expr(op->args[0]);
-            rhs << "&(" << arg << ")";
+            const Load *l = op->args[0].as<Load>();
+            assert(op->args.size() == 1 && l && l->index.size() == 1);
+            rhs << "(("
+                << print_type(l->type)
+                << " *)"
+                << print_name(l->name)
+                << " + "
+                << print_expr(l->index[0])
+                << ")";
         } else if (op->name == Call::return_second) {
             assert(op->args.size() == 2);
             string arg0 = print_expr(op->args[0]);
@@ -698,7 +780,39 @@ void CodeGen_C::visit(const Call *op) {
             close_scope("if " + cond_id + " else");
 
             rhs << result_id;
-
+        } else if (op->name == Call::create_buffer_t) {
+            assert(op->args.size() >= 2);
+            vector<string> args;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                args.push_back(print_expr(op->args[i]));
+            }
+            string buf_id = unique_name('B');
+            do_indent();
+            stream << "buffer_t " << buf_id << " = {0};\n";
+            do_indent();
+            stream << buf_id << ".host = (uint8_t *)(" << args[0] << ");\n";
+            do_indent();
+            stream << buf_id << ".elem_size = " << args[1] << ";\n";
+            int dims = ((int)op->args.size() - 2)/3;
+            for (int i = 0; i < dims; i++) {
+                do_indent();
+                stream << buf_id << ".min[" << i << "] = " << args[i*3+2] << ";\n";
+                do_indent();
+                stream << buf_id << ".extent[" << i << "] = " << args[i*3+3] << ";\n";
+                do_indent();
+                stream << buf_id << ".stride[" << i << "] = " << args[i*3+4] << ";\n";
+            }
+            rhs << "(&" + buf_id + ")";
+        } else if (op->name == Call::extract_buffer_extent) {
+            assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "];\n";
+        } else if (op->name == Call::extract_buffer_min) {
+            assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "];\n";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << '\n';
@@ -785,10 +899,13 @@ void CodeGen_C::visit(const Let *op) {
 
 void CodeGen_C::visit(const Select *op) {
     ostringstream rhs;
+    string true_val = print_expr(op->true_value);
+    string false_val = print_expr(op->false_value);
+    string cond = print_expr(op->condition);
     rhs << "(" << print_type(op->type) << ")"
-        << "(" << print_expr(op->condition)
-        << " ? " << print_expr(op->true_value)
-        << " : " << print_expr(op->false_value)
+        << "(" << cond
+        << " ? " << true_val
+        << " : " << false_val
         << ")";
     print_assignment(op->type, rhs.str());
 }
@@ -986,6 +1103,7 @@ void CodeGen_C::test() {
     cg.compile(s, "test1", args, vector<Buffer>());
 
     string correct_source = preamble +
+        "\n\n"
         "extern \"C\" int test1(buffer_t *_buf, const float alpha, const int32_t beta, const void * __user_context) {\n"
         "int32_t *buf = (int32_t *)(_buf->host);\n"
         "const bool buf_host_and_dev_are_null = (_buf->host == NULL) && (_buf->dev == 0);\n"

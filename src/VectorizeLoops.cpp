@@ -342,6 +342,14 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const For *op) {
+            For::ForType for_type = op->for_type;
+            if (for_type == For::Vectorized) {
+                std::cerr << "Warning: Encountered vector for loop over " << op->name
+                          << " inside vector for loop over " << var << "."
+                          << " Ignoring the vectorize directive for the inner for loop.\n";
+                for_type = For::Serial;
+            }
+
             Expr min = mutate(op->min);
             Expr extent = mutate(op->extent);
             assert(extent.type().is_scalar() &&
@@ -355,12 +363,14 @@ class VectorizeLoops : public IRMutator {
                 // for (x.scalar from 0 to scalar_extent) {
                 //   let x = vector_min + broadcast(scalar_extent)
                 // }
-
                 Expr var = Variable::make(Int(32), op->name + ".scalar");
                 Expr value = Add::make(min, Broadcast::make(var, min.type().width));
-                Stmt body = LetStmt::make(op->name, value, op->body);
-                Stmt transformed = For::make(op->name + ".scalar", 0, extent, op->for_type, body);
-                stmt = mutate(transformed);
+                scope.push(op->name, value);
+                Stmt body = mutate(op->body);
+                scope.pop(op->name);
+                body = LetStmt::make(op->name, value, body);
+                Stmt transformed = For::make(op->name + ".scalar", 0, extent, for_type, body);
+                stmt = transformed;
                 return;
             }
 
@@ -368,10 +378,11 @@ class VectorizeLoops : public IRMutator {
 
             if (min.same_as(op->min) &&
                 extent.same_as(op->extent) &&
-                body.same_as(op->body)) {
+                body.same_as(op->body) &&
+                for_type == op->for_type) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, min, extent, op->for_type, body);
+                stmt = For::make(op->name, min, extent, for_type, body);
             }
         }
 

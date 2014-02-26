@@ -2,6 +2,8 @@
 #define HALIDE_IR_VISITOR_H
 
 #include <set>
+#include <map>
+#include <string>
 
 /** \file
  * Defines the base class for things that recursively walk over the IR
@@ -54,6 +56,8 @@ struct Realize;
 struct Block;
 struct IfThenElse;
 struct Evaluate;
+
+class Function;
 
 /** A base class for algorithms that need to recursively walk over the
  * IR. The default implementations just recursively walk over the
