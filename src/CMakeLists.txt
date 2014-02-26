@@ -178,6 +178,7 @@ set(HEADER_FILES
   Derivative.h
   OneToOne.h
   Extern.h
+  FindCalls.h
   Func.h
   Function.h
   Image.h
@@ -265,6 +266,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Bounds.cpp
   Derivative.cpp
   OneToOne.cpp
+  FindCalls.cpp
   Func.cpp
   Simplify.cpp
   IREquality.cpp
