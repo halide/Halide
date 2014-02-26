@@ -455,9 +455,14 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     #else
     target_machine->addAnalysisPasses(pass_manager);
     #endif
+    #if LLVM_VERSION < 35
     DataLayout *layout = new DataLayout(module);
     debug(2) << "Data layout: " << layout->getStringRepresentation();
     pass_manager.add(layout);
+    #else
+    DataLayoutPass *layout = new DataLayoutPass(module);
+    pass_manager.add(layout);
+    #endif
 
     // Make sure things marked as always-inline get inlined
     pass_manager.add(createAlwaysInlinerPass());

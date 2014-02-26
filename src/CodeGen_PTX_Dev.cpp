@@ -341,10 +341,19 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
 
     // Add the target data from the target machine, if it exists, or the module.
-    if (const DataLayout *TD = Target.getDataLayout())
+    #if LLVM_VERSION < 35
+    if (const DataLayout *TD = Target.getDataLayout()) {
         PM.add(new DataLayout(*TD));
-    else
+    } else {
         PM.add(new DataLayout(module));
+    }
+    #else
+    if (const DataLayout *TD = Target.getDataLayout()) {
+        PM.add(new DataLayoutPass(*TD));
+    } else {
+        PM.add(new DataLayoutPass(module));
+    }
+    #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls
