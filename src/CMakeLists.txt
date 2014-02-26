@@ -87,6 +87,7 @@ set(RUNTIME_CPP
 set (RUNTIME_LL
   arm
   posix_math
+  pnacl_math
   ptx_dev
   spir_dev
   spir64_dev
