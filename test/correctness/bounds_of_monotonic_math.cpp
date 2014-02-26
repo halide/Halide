@@ -9,13 +9,13 @@ int main(int argc, char **argv) {
 
     ImageParam input(Float(32), 1);
 
-    f(x) = input(cast<int>(round(0.3f * ceil(0.4f * floor(x * 22.5f)))));
+    f(x) = input(cast<int>(ceil(0.3f * ceil(0.4f * floor(x * 22.5f)))));
 
     f.infer_input_bounds(10);
 
     Image<float> in = input.get();
 
-    int correct = roundf(0.3f * ceilf(0.4f * floorf(9 * 22.5f))) + 1;
+    int correct = 26;
     if (in.width() != correct) {
         printf("Width is %d instead of %d\n", in.width(), correct);
         return -1;
