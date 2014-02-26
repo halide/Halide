@@ -362,7 +362,9 @@ namespace {
 void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
+        #if LLVM_VERSION >= 35
         modules[i]->setDataLayout(NULL); // Use the datalayout of the first module.
+        #endif
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
