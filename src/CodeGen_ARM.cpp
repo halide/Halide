@@ -242,6 +242,14 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     casts.push_back(Pattern("vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), Pattern::RightShift));
+
+    // Widening left shifts
+    left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
     #endif
 
     casts.push_back(Pattern("vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
@@ -282,14 +290,6 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     casts.push_back(Pattern("vqmovnsu.v8i8", _u8q(wild_i16x8)));
     casts.push_back(Pattern("vqmovnsu.v4i16", _u16q(wild_i32x4)));
     casts.push_back(Pattern("vqmovnsu.v2i32", _u32q(wild_i64x2)));
-
-    // Widening left shifts
-    left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
 
     // Non-widening left shifts
     left_shifts.push_back(Pattern("vshifts.v16i8", wild_i8x16*wild_i8x16, Pattern::LeftShift));
@@ -913,12 +913,22 @@ void CodeGen_ARM::visit(const LT *op) {
         if (va.type() == Float(32, 4) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 4), "vacgtq", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacgtq";
+            #else
+            string name = "vacgt.v4i32";
+            #endif
+            value = call_intrin(Int(32, 4), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else if (va.type() == Float(32, 2) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 2), "vacgtd", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacgtd";
+            #else
+            string name = "vacgt.v2i32";
+            #endif
+            value = call_intrin(Int(32, 2), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -950,12 +960,22 @@ void CodeGen_ARM::visit(const LE *op) {
         if (va.type() == Float(32, 4) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 4), "vacgeq", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacgeq";
+            #else
+            string name = "vacge.v4i32";
+            #endif
+            value = call_intrin(Int(32, 4), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else if (va.type() == Float(32, 2) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 2), "vacged", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacged";
+            #else
+            string name = "vacge.v4i32";
+            #endif
+            value = call_intrin(Int(32, 2), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
