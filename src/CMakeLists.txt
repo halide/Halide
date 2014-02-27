@@ -76,6 +76,7 @@ set(RUNTIME_CPP
   posix_math
   random
   posix_thread_pool
+  windows_thread_pool
   android_host_cpu_count
   linux_host_cpu_count
   osx_host_cpu_count
