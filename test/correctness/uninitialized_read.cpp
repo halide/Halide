@@ -3,13 +3,10 @@
 
 using namespace Halide;
 
-int my_trace(void *user_context, const char *function,
-             int event_type, int parent_id,
-             int type_code, int bits, int width,
-             int value_index, const void *value,
-             int num_int_args, const int *int_args) {
-    if (event_type == 2) { // begin realization
-        if (int_args[1] != 4) {
+int my_trace(void *user_context, const halide_trace_event *e) {
+
+    if (e->event == 2) { // begin realization
+        if (e->coordinates[1] != 4) {
             printf("Realization of f was supposed to be 4-wide\n");
             exit(-1);
         }

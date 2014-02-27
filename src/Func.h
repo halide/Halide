@@ -302,10 +302,8 @@ class Func {
 
     /** The current custom tracing function. May be NULL. */
     // @{
-    int32_t (*custom_trace)(void *, const char *, int32_t,
-                            int32_t, int32_t, int32_t,
-                            int32_t, int32_t, const void *,
-                            int32_t, const int32_t *);
+    int32_t (*custom_trace)(void *, const halide_trace_event *);
+
     // @}
 
     /** The random seed to use for realizations of this function. */
@@ -339,7 +337,7 @@ public:
      * not contain free variables). */
     EXPORT explicit Func(Expr e);
 
-    /** Construct a new Func to wrap an existing, already-define 
+    /** Construct a new Func to wrap an existing, already-define
      * Function object. */
     EXPORT explicit Func(Internal::Function f);
 
