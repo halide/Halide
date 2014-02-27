@@ -27,7 +27,7 @@ typedef struct {
     uint8_t buf[40];
 } CriticalSection;
 
-extern WIN32API Thread CreateThread(void *, size_t, void *, void *, int32_t, int32_t *);
+extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
 extern WIN32API void InitializeConditionVariable(ConditionVariable *);
 extern WIN32API void WakeAllConditionVariable(ConditionVariable *);
 extern WIN32API void SleepConditionVariableCS(ConditionVariable *, CriticalSection *, int);
