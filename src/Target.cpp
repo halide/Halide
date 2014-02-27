@@ -335,6 +335,7 @@ DECLARE_CPP_INITMOD(nacl_io)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
+DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(random)
 DECLARE_CPP_INITMOD(write_debug_image)
@@ -463,7 +464,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     } else if (t.os == Target::Windows) {
         modules.push_back(get_initmod_windows_clock(c, bits_64));
         modules.push_back(get_initmod_windows_io(c, bits_64));
-        modules.push_back(get_initmod_fake_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_windows_thread_pool(c, bits_64));
     } else if (t.os == Target::IOS) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
         modules.push_back(get_initmod_ios_io(c, bits_64));
