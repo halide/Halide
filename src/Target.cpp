@@ -2,6 +2,7 @@
 #include <string>
 
 #include "Target.h"
+#include "Debug.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -287,6 +288,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
                                              halide_internal_initmod_##mod##_length); \
         llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
         llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
+        module->setModuleIdentifier(#mod);                              \
         delete bitcode_buffer;                                          \
         return module;                                                  \
     }
@@ -333,6 +335,7 @@ DECLARE_CPP_INITMOD(nacl_io)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
+DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(random)
 DECLARE_CPP_INITMOD(write_debug_image)
@@ -360,6 +363,9 @@ namespace {
 void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
+        #if LLVM_VERSION >= 35
+        modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
+        #endif
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
@@ -458,7 +464,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     } else if (t.os == Target::Windows) {
         modules.push_back(get_initmod_windows_clock(c, bits_64));
         modules.push_back(get_initmod_windows_io(c, bits_64));
-        modules.push_back(get_initmod_fake_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_windows_thread_pool(c, bits_64));
     } else if (t.os == Target::IOS) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
         modules.push_back(get_initmod_ios_io(c, bits_64));

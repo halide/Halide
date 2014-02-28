@@ -76,6 +76,7 @@ set(RUNTIME_CPP
   posix_math
   random
   posix_thread_pool
+  windows_thread_pool
   android_host_cpu_count
   linux_host_cpu_count
   osx_host_cpu_count
@@ -87,6 +88,7 @@ set(RUNTIME_CPP
 set (RUNTIME_LL
   arm
   posix_math
+  pnacl_math
   ptx_dev
   spir_dev
   spir64_dev
@@ -178,6 +180,7 @@ set(HEADER_FILES
   Derivative.h
   OneToOne.h
   Extern.h
+  FindCalls.h
   Func.h
   Function.h
   Image.h
@@ -265,6 +268,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Bounds.cpp
   Derivative.cpp
   OneToOne.cpp
+  FindCalls.cpp
   Func.cpp
   Simplify.cpp
   IREquality.cpp
