@@ -460,10 +460,6 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     DataLayout *layout = new DataLayout(module);
     debug(2) << "Data layout: " << layout->getStringRepresentation();
     pass_manager.add(layout);
-    #else
-    DataLayoutPass *layoutPass = new DataLayoutPass(module);
-    debug(2) << "Data layout: " << layoutPass->getDataLayout().getStringRepresentation();
-    pass_manager.add(layoutPass);
     #endif
 
     // Make sure things marked as always-inline get inlined
