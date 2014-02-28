@@ -136,10 +136,8 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     #endif
 
     // These patterns went away in llvm commit r189481, which is
-    // unfortunate, because they don't always get generated
-    // automatically. It also means that vshiftn catches these
-    // patterns instead of letting them fall through to the natural
-    // bitcode that triggers llvm's recognition.
+    // unfortunate, because they don't get generated automatically in
+    // the signed case.
     #if LLVM_VERSION < 34
     casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
     casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
@@ -535,6 +533,25 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+
+    // Catch extract-high-half-of-signed integer pattern and convert
+    // it to extract-high-half-of-unsigned-integer. llvm peephole
+    // optimization recognizes logical shift right but not arithemtic
+    // shift right for this pattern. This matters for vaddhn of signed
+    // integers.
+    if ((op->type.is_int() || op->type.is_uint()) &&
+        op->value.type().is_int() &&
+        op->type.bits == op->value.type().bits / 2) {
+        const Div *d = op->value.as<Div>();
+        if (d && is_const(d->b, 1 << op->type.bits)) {
+            Type unsigned_type = UInt(op->type.bits * 2, op->type.width);
+            Expr replacement = cast(op->type,
+                                    cast(unsigned_type, d->a) /
+                                    cast(unsigned_type, d->b));
+            replacement.accept(this);
+            return;
+        }
+    }
 
     CodeGen::visit(op);
 

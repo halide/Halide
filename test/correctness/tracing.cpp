@@ -75,28 +75,24 @@ bool events_match(event a, event b) {
             float_match(a.value[3], b.value[3]));
 }
 
-int my_trace(void *user_context, const char *function,
-             int event_type, int parent_id,
-             int type_code, int bits, int width,
-             int value_index, const void *value,
-             int num_int_args, const int *int_args) {
+int my_trace(void *user_context, const halide_trace_event *ev) {
 
-    assert(num_int_args <= 4 && width <= 4);
+    assert(ev->dimensions <= 4 && ev->vector_width <= 4);
 
     // Record this event in the trace array
     event e = {0};
-    e.func = function[0];
-    e.event_type = event_type;
-    e.type_code = type_code;
-    e.bits = bits;
-    e.width = width;
-    e.value_index = value_index;
-    e.num_int_args = num_int_args;
-    for (int i = 0; i < num_int_args; i++) {
-        e.int_args[i] = int_args[i];
+    e.func = ev->func[0];
+    e.event_type = ev->event;
+    e.type_code = ev->type_code;
+    e.bits = ev->bits;
+    e.width = ev->vector_width;
+    e.value_index = ev->value_index;
+    e.num_int_args = ev->dimensions;
+    for (int i = 0; i < ev->dimensions; i++) {
+        e.int_args[i] = ev->coordinates[i];
     }
-    for (int i = 0; i < width; i++) {
-        e.value[i] = ((const float *)value)[i];
+    for (int i = 0; i < ev->vector_width; i++) {
+        e.value[i] = ((const float *)(ev->value))[i];
     }
     trace[n_trace++] = e;
 

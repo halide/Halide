@@ -460,10 +460,6 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     DataLayout *layout = new DataLayout(module);
     debug(2) << "Data layout: " << layout->getStringRepresentation();
     pass_manager.add(layout);
-    #else
-    DataLayoutPass *layoutPass = new DataLayoutPass(module);
-    debug(2) << "Data layout: " << layoutPass->getDataLayout().getStringRepresentation();
-    pass_manager.add(layoutPass);
     #endif
 
     // Make sure things marked as always-inline get inlined
@@ -1549,19 +1545,31 @@ void CodeGen::visit(const Call *op) {
                 coords = Constant::getNullValue(i32->getPointerTo());
             }
 
+            StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
+            assert(trace_event_type);
+            Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
+
+            Value *members[10] = {
+                name,
+                event_type,
+                realization_id,
+                ConstantInt::get(i32, type.code),
+                ConstantInt::get(i32, type.bits),
+                ConstantInt::get(i32, type.width),
+                value_index,
+                value_stored_array,
+                ConstantInt::get(i32, int_args * type.width),
+                coords};
+
+            for (size_t i = 0; i < sizeof(members)/sizeof(members[0]); i++) {
+                Value *field_ptr = builder->CreateConstInBoundsGEP2_32(trace_event, 0, i);
+                builder->CreateStore(members[i], field_ptr);
+            }
+
             // Call the runtime function
-            vector<Value *> args(11);
+            vector<Value *> args(2);
             args[0] = get_user_context();
-            args[1] = name;
-            args[2] = event_type;
-            args[3] = realization_id;
-            args[4] = ConstantInt::get(i32, type.code);
-            args[5] = ConstantInt::get(i32, type.bits);
-            args[6] = ConstantInt::get(i32, type.width);
-            args[7] = value_index;
-            args[8] = value_stored_array;
-            args[9] = ConstantInt::get(i32, int_args * type.width);
-            args[10] = coords;
+            args[1] = trace_event;
 
             llvm::Function *trace_fn = module->getFunction("halide_trace");
             assert(trace_fn);

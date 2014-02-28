@@ -349,9 +349,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
     #else
     if (const DataLayout *TD = Target.getDataLayout()) {
-        PM.add(new DataLayoutPass(*TD));
-    } else {
-        PM.add(new DataLayoutPass(module));
+        module->setDataLayout(TD);
     }
     #endif
 
