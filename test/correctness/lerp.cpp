@@ -5,7 +5,6 @@
 using namespace Halide;
 
 Var zero_val, one_val, weight;
-Param<int> step;
 
 template <typename weight_t>
 double weight_type_scale() {
