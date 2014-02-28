@@ -185,7 +185,11 @@ Expr f64(Expr e) {
 }
 
 Expr absd(Expr a, Expr b) {
-    return select(a > b, a-b, b-a);
+    Expr e = select(a > b, a-b, b-a);
+    if (e.type().is_int()) {
+        e = cast(UInt(e.type().bits), e);
+    }
+    return e;
 }
 
 void check_sse_all() {
@@ -537,12 +541,12 @@ void check_neon_all() {
     check("vaba.u32", 4, u32_1 + absd(u32_2, u32_3));
 
     // VABAL	I	-	Absolute Difference and Accumulate Long
-    check("vabal.s8", 8, i16_1 + absd(i16(i8_2), i16(i8_3)));
-    check("vabal.u8", 8, u16_1 + absd(u16(u8_2), u16(u8_3)));
-    check("vabal.s16", 4, i32_1 + absd(i32(i16_2), i32(i16_3)));
-    check("vabal.u16", 4, u32_1 + absd(u32(u16_2), u32(u16_3)));
-    check("vabal.s32", 2, i64_1 + absd(i64(i32_2), i64(i32_3)));
-    check("vabal.u32", 2, u64_1 + absd(u64(u32_2), u64(u32_3)));
+    check("vabal.s8", 8, i16_1 + absd(i8_2, i8_3));
+    check("vabal.u8", 8, u16_1 + absd(u8_2, u8_3));
+    check("vabal.s16", 4, i32_1 + absd(i16_2, i16_3));
+    check("vabal.u16", 4, u32_1 + absd(u16_2, u16_3));
+    check("vabal.s32", 2, i64_1 + absd(i32_2, i32_3));
+    check("vabal.u32", 2, u64_1 + absd(u32_2, u32_3));
 
     // VABD	I, F	-	Absolute Difference
     check("vabd.s8", 8, absd(i8_2, i8_3));
@@ -559,12 +563,12 @@ void check_neon_all() {
     check("vabd.u32", 4, absd(u32_2, u32_3));
 
     // VABDL	I	-	Absolute Difference Long
-    check("vabdl.s8", 8, absd(i16(i8_2), i16(i8_3)));
-    check("vabdl.u8", 8, absd(u16(u8_2), u16(u8_3)));
-    check("vabdl.s16", 4, absd(i32(i16_2), i32(i16_3)));
-    check("vabdl.u16", 4, absd(u32(u16_2), u32(u16_3)));
-    check("vabdl.s32", 2, absd(i64(i32_2), i64(i32_3)));
-    check("vabdl.u32", 2, absd(u64(u32_2), u64(u32_3)));
+    check("vabdl.s8", 8, i16(absd(i8_2, i8_3)));
+    check("vabdl.u8", 8, u16(absd(u8_2, u8_3)));
+    check("vabdl.s16", 4, i32(absd(i16_2, i16_3)));
+    check("vabdl.u16", 4, u32(absd(u16_2, u16_3)));
+    check("vabdl.s32", 2, i64(absd(i32_2, i32_3)));
+    check("vabdl.u32", 2, u64(absd(u32_2, u32_3)));
 
     // VABS	I, F	F, D	Absolute
     check("vabs.f32", 2, abs(f32_1));
