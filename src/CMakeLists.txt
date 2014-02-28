@@ -72,6 +72,7 @@ set(RUNTIME_CPP
   posix_error_handler
   posix_io
   nacl_io
+  ssp
   osx_io
   posix_math
   random
