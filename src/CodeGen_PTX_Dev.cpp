@@ -325,6 +325,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     assert(target.get() && "Could not allocate target machine!");
     TargetMachine &Target = *target.get();
 
+    // Set the module's data layout using the target machine.
+    if (const DataLayout *TD = Target.getDataLayout()) {
+        module->setDataLayout(TD);
+    }
+
     // Set up passes
     PassManager PM;
 
@@ -346,12 +351,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(*TD));
     } else {
         PM.add(new DataLayout(module));
-    }
-    #else
-    if (const DataLayout *TD = Target.getDataLayout()) {
-        PM.add(new DataLayoutPass(*TD));
-    } else {
-        PM.add(new DataLayoutPass(module));
     }
     #endif
 

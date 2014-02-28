@@ -112,12 +112,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     debug(2) << "Creating new execution engine\n";
     string error_string;
 
-    // Make an ELF on windows, MCJIT doesn't support the default (COFF).
-    // TODO: This #ifdef might be better
-#ifdef _WIN32
-    m->setTargetTriple(m->getTargetTriple() + "-elf");
-#endif
-
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
