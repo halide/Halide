@@ -13,18 +13,12 @@ int main(int argc, char **argv) {
     h.compute_root();
     g.compute_root();
 
-    Target target = get_jit_target_from_environment();
-    if (target.features & Target::CUDA) {
-        f.cuda_tile(x, y, 16, 16);
-        g.cuda_tile(x, 128);
-        h.cuda_tile(x, 128);
+    Target target = get_target_from_environment();
+    if (target.has_gpu_feature()) {
+        f.gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+        g.gpu_tile(x, 128, GPU_DEFAULT);
+        h.gpu_tile(x, 128, GPU_DEFAULT);
     }
-    if (target.features & Target::OpenCL) {
-        f.cuda_tile(x, y, 16, 16);
-        g.cuda_tile(x, 128);
-        h.cuda_tile(x, 128);
-    }
-
 
     Image<int> out = f.realize(32, 32, target);
 
