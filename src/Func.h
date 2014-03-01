@@ -189,7 +189,7 @@ enum GPUAPI {
     GPU_DEFAULT,
     GPU_CUDA,
     GPU_OpenCL,
-    GPU_GLSL,
+    GPU_GLSL
 };
 
 /** A wrapper around a schedule used for common schedule manipulations */
@@ -1391,7 +1391,7 @@ T evaluate_may_gpu(Expr e) {
     Image<T> im;
     Func f;
     f(_) = e;
-	
+
     if (get_target_from_environment().has_gpu_feature()) {
         Func g;
 	Var x;
