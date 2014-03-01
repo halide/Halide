@@ -353,6 +353,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     if (const DataLayout *TD = Target.getDataLayout()) {
         module->setDataLayout(TD);
     }
+    PM.add(new DataLayoutPass(module));
     #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
