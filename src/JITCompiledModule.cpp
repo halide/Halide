@@ -199,7 +199,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // isn't right.
     debug(2) << "Flushing cache from " << (void *)start
              << " to " << (void *)end << "\n";
-    __clear_cache(start, end);
+    __builtin___clear_cache(start, end);
     #endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
