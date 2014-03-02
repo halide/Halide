@@ -1,4 +1,5 @@
 #include <math.h>
+#include <algorithm>
 
 #include "Lerp.h"
 #include "IROperator.h"

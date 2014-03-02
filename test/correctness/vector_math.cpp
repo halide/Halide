@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <cmath>
+#include <algorithm>
 
 using namespace Halide;
 
