@@ -9,9 +9,7 @@ extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
 extern int snprintf(char *str, size_t size, const char *format, ...);
 extern int fclose(void *f);
 
-typedef int32_t (*trace_fn)(void *, const char *, halide_trace_event_t, int32_t,
-                            int32_t, int32_t, int32_t, int32_t,
-                            const void *, int32_t, const int32_t *);
+typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 
 WEAK trace_fn halide_custom_trace = NULL;
 
@@ -21,15 +19,12 @@ WEAK void halide_set_custom_trace(trace_fn t) {
 
 WEAK void *halide_trace_file = NULL;
 WEAK bool halide_trace_initialized = false;
+WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
 
-WEAK int32_t halide_trace(void *user_context, const char *func, halide_trace_event_t event, int32_t parent_id,
-                          int32_t type_code, int32_t bits, int32_t width, int32_t value_idx, void *value,
-                          int32_t num_int_args, const int32_t *int_args) {
     static int32_t ids = 1;
 
     if (halide_custom_trace) {
-        return (*halide_custom_trace)(user_context, func, event, parent_id, type_code,
-                                      bits, width, value_idx, value, num_int_args, int_args);
+        return (*halide_custom_trace)(user_context, e);
     } else {
 
         int32_t my_id = __sync_fetch_and_add(&ids, 1);
@@ -46,35 +41,35 @@ WEAK int32_t halide_trace(void *user_context, const char *func, halide_trace_eve
         // If we're dumping to a file, use a binary format
         if (halide_trace_file) {
             // A 32-byte header. The first 6 bytes are metadata, then the rest is a zero-terminated string.
-            uint8_t clamped_width = width < 256 ? width : 255;
-            uint8_t clamped_num_int_args = num_int_args < 256 ? num_int_args : 255;
+            uint8_t clamped_width = e->vector_width < 256 ? e->vector_width : 255;
+            uint8_t clamped_dimensions = e->dimensions < 256 ? e->dimensions : 255;
 
             // Upgrade the bit count to a power of two, because that's
             // how it will be stored on the stack.
             int bytes = 1;
-            while (bytes*8 < bits) bytes <<= 1;
+            while (bytes*8 < e->bits) bytes <<= 1;
 
             // Compute the size of each portion of the tracing packet
             size_t header_bytes = 32;
             size_t value_bytes = clamped_width * bytes;
-            size_t int_arg_bytes = clamped_num_int_args * sizeof(int32_t);
+            size_t int_arg_bytes = clamped_dimensions * sizeof(int32_t);
             size_t total_bytes = header_bytes + value_bytes + int_arg_bytes;
             uint8_t buffer[4096];
             halide_assert(user_context, total_bytes <= 4096 && "Tracing packet too large");
 
             ((int32_t *)buffer)[0] = my_id;
-            ((int32_t *)buffer)[1] = parent_id;
-            buffer[8] = event;
-            buffer[9] = type_code;
-            buffer[10] = bits;
+            ((int32_t *)buffer)[1] = e->parent_id;
+            buffer[8] = e->event;
+            buffer[9] = e->type_code;
+            buffer[10] = e->bits;
             buffer[11] = clamped_width;
-            buffer[12] = value_idx;
-            buffer[13] = clamped_num_int_args;
+            buffer[12] = e->value_index;
+            buffer[13] = clamped_dimensions;
 
             // Use up to 17 bytes for the function name
             int i = 14;
             for (; i < header_bytes-1; i++) {
-                buffer[i] = func[i-14];
+                buffer[i] = e->func[i-14];
                 if (buffer[i] == 0) break;
             }
             // Fill the rest with zeros
@@ -84,12 +79,12 @@ WEAK int32_t halide_trace(void *user_context, const char *func, halide_trace_eve
 
             // Next comes the value
             for (size_t i = 0; i < value_bytes; i++) {
-                buffer[header_bytes + i] = ((uint8_t *)value)[i];
+                buffer[header_bytes + i] = ((uint8_t *)(e->value))[i];
             }
 
             // Then the int args
             for (size_t i = 0; i < int_arg_bytes; i++) {
-                buffer[header_bytes + value_bytes + i] = ((uint8_t *)int_args)[i];
+                buffer[header_bytes + value_bytes + i] = ((uint8_t *)(e->coordinates))[i];
             }
 
 
@@ -103,7 +98,7 @@ WEAK int32_t halide_trace(void *user_context, const char *func, halide_trace_eve
 
             // Round up bits to 8, 16, 32, or 64
             int print_bits = 8;
-            while (print_bits < bits) print_bits <<= 1;
+            while (print_bits < e->bits) print_bits <<= 1;
             halide_assert(user_context, print_bits <= 64 && "Tracing bad type");
 
             // Otherwise, use halide_printf and a plain-text format
@@ -117,26 +112,27 @@ WEAK int32_t halide_trace(void *user_context, const char *func, halide_trace_eve
                                          "End consume"};
 
             // Only print out the value on stores and loads.
-            bool print_value = (event < 2);
+            bool print_value = (e->event < 2);
 
             if (buf_ptr < buf_end) {
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%s %s.%d[", event_types[event], func, value_idx);
+                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%s %s.%d[",
+                                    event_types[e->event], e->func, e->value_index);
             }
-            if (width > 1) {
+            if (e->vector_width > 1) {
                 buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "<");
             }
-            for (int i = 0; i < num_int_args && buf_ptr < buf_end; i++) {
+            for (int i = 0; i < e->dimensions && buf_ptr < buf_end; i++) {
                 if (i > 0) {
-                    if ((width > 1) && (i % width) == 0) {
+                    if ((e->vector_width > 1) && (i % e->vector_width) == 0) {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">, <");
                     } else {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
                     }
                 }
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", int_args[i]);
+                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", e->coordinates[i]);
             }
             if (buf_ptr < buf_end) {
-                if (width > 1) {
+                if (e->vector_width > 1) {
                     buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">]");
                 } else {
                     buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "]");
@@ -145,49 +141,49 @@ WEAK int32_t halide_trace(void *user_context, const char *func, halide_trace_eve
 
             if (print_value) {
                 if (buf_ptr < buf_end) {
-                    if (width > 1) {
+                    if (e->vector_width > 1) {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, " = <");
                     } else {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, " = ");
                     }
                 }
-                for (int i = 0; i < width && buf_ptr < buf_end; i++) {
+                for (int i = 0; i < e->vector_width && buf_ptr < buf_end; i++) {
                     if (i > 0) {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
                     }
-                    if (type_code == 0) {
+                    if (e->type_code == 0) {
                         if (print_bits == 8) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int8_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int8_t *)(e->value))[i]);
                         } else if (print_bits == 16) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int16_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int16_t *)(e->value))[i]);
                         } else if (print_bits == 32) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int32_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int32_t *)(e->value))[i]);
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", (int32_t)((int64_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", (int32_t)((int64_t *)(e->value))[i]);
                         }
-                    } else if (type_code == 1) {
+                    } else if (e->type_code == 1) {
                         if (print_bits == 8) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint8_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint8_t *)(e->value))[i]);
                             if (buf_ptr > buf_end) buf_ptr = buf_end;
                         } else if (print_bits == 16) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint16_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint16_t *)(e->value))[i]);
                         } else if (print_bits == 32) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint32_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint32_t *)(e->value))[i]);
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", (uint32_t)((uint64_t *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", (uint32_t)((uint64_t *)(e->value))[i]);
                         }
-                    } else if (type_code == 2) {
+                    } else if (e->type_code == 2) {
                         halide_assert(user_context, print_bits >= 32 && "Tracing a bad type");
                         if (print_bits == 32) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(e->value))[i]);
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((double *)(value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((double *)(e->value))[i]);
                         }
-                    } else if (type_code == 3) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(value))[i]);
+                    } else if (e->type_code == 3) {
+                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(e->value))[i]);
                     }
                 }
-                if (width > 1 && buf_ptr < buf_end) {
+                if (e->vector_width > 1 && buf_ptr < buf_end) {
                     buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">");
                 }
             }

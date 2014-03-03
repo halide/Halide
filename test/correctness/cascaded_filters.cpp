@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     Image<float> result = stages.back().realize(10);
 
     // After all the averaging, the result should be a flat 1.0f
-    float err = evaluate<float>(sum(abs(result(RDom(result)) - 1.0f)));
+    float err = evaluate_may_gpu<float>(sum(abs(result(RDom(result)) - 1.0f)));
 
     if (err > 0.001f) {
         printf("Error too large!\n");

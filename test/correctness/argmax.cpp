@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
     Expr best_so_far = f(clamp(arg_max_f(), 0, 100));
     arg_max_f() = select(f(r) > best_so_far, r, arg_max_f());
 
-    int result_f = evaluate<int>(arg_max_f());
+    int result_f = evaluate_may_gpu<int>(arg_max_f());
 
     // Now try a multi-dimensional argmax.
     Func g, arg_max_g;
@@ -34,7 +34,7 @@ int main(int argc, char **argv) {
                                arg_max_g());
 
     int best_x, best_y, best_val;
-    evaluate(arg_max_g(), &best_x, &best_y, &best_val);
+    evaluate_may_gpu(arg_max_g(), &best_x, &best_y, &best_val);
 
     if (result_f != 50) {
         printf("Arg max of f is %d, but should have been 50\n", result_f);
@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     }
 
     // Now try some inline argmaxs
-    evaluate(argmax(g(r.x, r.y)), &best_x, &best_y, &best_val);
+    evaluate_may_gpu(argmax(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
     if (best_x != 50 || best_y != 40 || best_val != 4100) {
         printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
@@ -56,7 +56,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    evaluate(argmin(g(r.x, r.y)), &best_x, &best_y, &best_val);
+    evaluate_may_gpu(argmin(g(r.x, r.y)), &best_x, &best_y, &best_val);
 
     if (best_x != 0 || best_y != 99 || best_val != -1881) {
         printf("Inline arg max of g is %d %d (%d), but should have been %d %d (%d)\n",
