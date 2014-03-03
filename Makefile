@@ -39,6 +39,11 @@ ifneq ($(LLVM_VERSION), 3.2)
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 endif
 
+# turn on c++11 for llvm 3.5
+ifeq ($(LLVM_VERSION_TIMES_10), 35)
+LLVM_CXX_FLAGS += -std=c++11
+endif
+
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 
