@@ -17,8 +17,6 @@ int main(int argc, char **argv) {
         f.parallel(y);
         Image<float> rand_image = f.realize(1024, 1024);
 
-        f.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "f");
-
         // Do some tests for randomness.
 
         Func g;
@@ -84,7 +82,6 @@ int main(int argc, char **argv) {
 
         seed.set(0);
 
-        f.debug_to_file("im1.tmp");
         Image<double> im1 = f.realize(1024, 1024);
         Image<double> im2 = f.realize(1024, 1024);
 
@@ -92,7 +89,6 @@ int main(int argc, char **argv) {
         g(x, y) = f(x, y);
         seed.set(1);
 
-        g.debug_to_file("im3.tmp");
         Image<double> im3 = g.realize(1024, 1024);
 
         RDom r(im1);
