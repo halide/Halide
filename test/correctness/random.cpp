@@ -7,15 +7,17 @@ using namespace Halide;
 int main(int argc, char **argv) {
     Var x, y;
 
-    const double tol = 0.001;
+    const double tol = 0.01;
 
     {
         // Make a random image and check its statistics.
         Func f;
         f(x, y) = random_float();
-
+        f.vectorize(x, 4);
         f.parallel(y);
         Image<float> rand_image = f.realize(1024, 1024);
+
+        f.compile_to_assembly("/dev/stdout", std::vector<Argument>(), "f");
 
         // Do some tests for randomness.
 
@@ -75,10 +77,12 @@ int main(int argc, char **argv) {
     // different random seeds should produce statistically independent
     // images.
     {
-        Func f;
-        f(x, y) = cast<double>(random_float());
+        Param<int> seed;
 
-        f.set_random_seed(0);
+        Func f;
+        f(x, y) = cast<double>(random_float(seed));
+
+        seed.set(0);
 
         f.debug_to_file("im1.tmp");
         Image<double> im1 = f.realize(1024, 1024);
@@ -86,7 +90,8 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y);
-        g.set_random_seed(1);
+        seed.set(1);
+
         g.debug_to_file("im3.tmp");
         Image<double> im3 = g.realize(1024, 1024);
 
@@ -155,19 +160,20 @@ int main(int argc, char **argv) {
         // f is the sum of two dependent (equal) random variables, so should have variance 1/3
         // g is the sum of two independent random variables, so should have variance 1/6
 
-        RDom r(0, 1024, 0, 1024);
+        const int S = 1024;
+        RDom r(0, S, 0, S);
         Expr f_val = f(r.x, r.y);
         Expr g_val = g(r.x, r.y);
-        double f_var = evaluate<double>(sum(f_val * f_val)) / (1024 * 1024);
-        double g_var = evaluate<double>(sum(g_val * g_val)) / (1024 * 1024);
+        double f_var = evaluate<double>(sum(f_val * f_val)) / (S * S - 1);
+        double g_var = evaluate<double>(sum(g_val * g_val)) / (S * S - 1);
 
         if (fabs(f_var - 1.0/3) > tol) {
-            printf("Variance of f was supposed to be 1/3\n");
+            printf("Variance of f was supposed to be 1/3: %f\n", f_var);
             return -1;
         }
 
         if (fabs(g_var - 1.0/6) > tol) {
-            printf("Variance of g was supposed to be 1/6\n");
+            printf("Variance of g was supposed to be 1/6 %f\n", g_var);
             return -1;
         }
     }

@@ -4,6 +4,7 @@
 #include "Function.h"
 #include "Scope.h"
 #include "CSE.h"
+#include "Random.h"
 
 namespace Halide {
 namespace Internal {
@@ -105,6 +106,11 @@ struct CountSelfReferences : public IRGraphVisitor {
     }
 };
 
+// A counter to use in tagging random variables
+namespace {
+static int rand_counter = 0;
+}
+
 void Function::define(const vector<string> &args, vector<Expr> values) {
     assertf(!has_extern_definition(), "Function with extern definition cannot be given a pure definition", name());
     assertf(!name().empty(), "A function needs a name", name());
@@ -138,6 +144,12 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     for (size_t i = 0; i < values.size(); i++) {
         values[i] = common_subexpression_elimination(values[i]);
+    }
+
+    // Tag calls to random() with the free vars
+    int tag = rand_counter++;    
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = lower_random(values[i], args, tag);
     }
 
     assertf(!check.reduction_domain.defined(), "Reduction domain referenced in pure function definition", name());
@@ -234,6 +246,22 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     }
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&check);
+    }
+
+    // Tag calls to random() with the free vars
+    vector<string> free_vars = pure_args;
+    if (check.reduction_domain.defined()) {
+        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
+            string rvar = check.reduction_domain.domain()[i].var;
+            free_vars.push_back(rvar);
+        }
+    }
+    int tag = rand_counter++;    
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i] = lower_random(args[i], free_vars, tag);
+    }
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = lower_random(values[i], free_vars, tag);
     }
 
     ReductionDefinition r;
