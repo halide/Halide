@@ -48,6 +48,10 @@ struct Target {
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}
     Target(OS o, Arch a, int b, uint64_t f) : os(o), arch(a), bits(b), features(f) {}
+
+    bool has_gpu_feature() {
+        return (features & (CUDA|OpenCL|SPIR|SPIR64));
+    }
 };
 
 /** Return the target corresponding to the host machine. */

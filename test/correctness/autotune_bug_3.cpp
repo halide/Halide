@@ -3,16 +3,12 @@
 
 using namespace Halide;
 
-int my_trace(void *user_context, const char *function,
-             int event_type, int parent_id,
-             int type_code, int bits, int width,
-             int value_index, const void *value,
-             int num_int_args, const int *int_args) {
+int my_trace(void *user_context, const halide_trace_event *e) {
     // The schedule implies that f will be stored from 0 to 8
-    if (event_type == 2) {
-        if (int_args[1] < 8) {
+    if (e->event == 2) {
+        if (e->coordinates[1] < 8) {
             printf("Bounds on realization of f were supposed to be >= [0, 8]\n"
-                   "Instead they are: %d %d\n", int_args[0], int_args[1]);
+                   "Instead they are: %d %d\n", e->coordinates[0], e->coordinates[1]);
             exit(-1);
         }
     }

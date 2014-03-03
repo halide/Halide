@@ -3,11 +3,11 @@
 // This lesson demonstrates how to define a Func in multiple passes, including scattering.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=../bin ./lesson_09
 
 // On os x:
-// g++ lesson_09*.cpp -I ../include -L ../bin -lHalide -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -I ../include -L ../bin -lHalide -lpng -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
 #include <Halide.h>

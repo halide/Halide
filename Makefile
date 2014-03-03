@@ -163,7 +163,7 @@ SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
 
-RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io nacl_io osx_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug windows_io random
+RUNTIME_CPP_COMPONENTS = android_io cuda fake_thread_pool gcd_thread_pool ios_io android_clock linux_clock nogpu opencl posix_allocator posix_clock osx_clock windows_clock posix_error_handler posix_io nacl_io osx_io posix_math posix_thread_pool android_host_cpu_count linux_host_cpu_count osx_host_cpu_count tracing write_debug_image cuda_debug opencl_debug windows_io random windows_thread_pool ssp
 RUNTIME_LL_COMPONENTS = arm posix_math ptx_dev spir_dev spir64_dev spir_common_dev x86_avx x86 x86_sse41 pnacl_math
 
 RUNTIME_CPP_COMPONENTS += opengl opengl_debug
@@ -210,7 +210,7 @@ $(BUILD_DIR)/initmod.opengl_debug_32.ll: src/runtime/opengl.cpp
 
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -nobuiltininc -fno-blocks -m64 -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
+	$(CLANG) -nobuiltininc -fno-blocks -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ # -m64 isn't respected unless we also use a 64-bit target
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)

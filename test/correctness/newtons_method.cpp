@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     // We have to introduce a dummy dependence on r, because the iteration domain isn't otherwise referenced.
     f() -= value/deriv + (r*0);
 
-    double newton_result = evaluate<double>(f());
+    double newton_result = evaluate_may_gpu<double>(f());
 
     // Now try the secant method, starting with an estimate on either
     // side of 3. We'll reduce onto four values tracking the interval
@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
 
     g() = Tuple(x0, y0, x1, y1);
 
-    double secant_result = evaluate<double>(g()[0]);
+    double secant_result = evaluate_may_gpu<double>(g()[0]);
 
     double correct = M_PI;
     if (newton_result != correct ||

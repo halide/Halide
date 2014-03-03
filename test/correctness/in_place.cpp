@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     g(r) += g(r-1);
     Image<float> reference_out = g.realize(100);
 
-    float err = evaluate<float>(sum(abs(data(r) - reference_out(r))));
+    float err = evaluate_may_gpu<float>(sum(abs(data(r) - reference_out(r))));
 
     if (err > 0.0001f) {
         printf("Failed\n");

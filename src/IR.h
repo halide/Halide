@@ -118,8 +118,9 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr->type_info() == &T::_type_info)
+        if (ptr->type_info() == &T::_type_info) {
             return (const T *)ptr;
+        }
         return NULL;
     }
 };
@@ -129,7 +130,10 @@ struct IntImm : public ExprNode<IntImm> {
     int value;
 
     static IntImm *make(int value) {
-        if (value >= -8 && value <= 8) return small_int_cache + value + 8;
+        if (value >= -8 && value <= 8 && 
+            !small_int_cache[value + 8].ref_count.is_zero()) {
+            return &small_int_cache[value + 8];
+        }
         IntImm *node = new IntImm;
         node->type = Int(32);
         node->value = value;

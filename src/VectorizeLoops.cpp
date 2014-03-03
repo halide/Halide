@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include "VectorizeLoops.h"
 #include "IRMutator.h"
 #include "Scope.h"
