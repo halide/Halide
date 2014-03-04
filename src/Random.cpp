@@ -117,6 +117,7 @@ public:
     LowerRandom(const vector<string> &free_vars, int tag) {
         extra_args.push_back(tag);
         for (size_t i = 0; i < free_vars.size(); i++) {
+            assert(!free_vars[i].empty());
             extra_args.push_back(Variable::make(Int(32), free_vars[i]));            
         }
     }
