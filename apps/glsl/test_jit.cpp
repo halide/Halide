@@ -11,10 +11,7 @@ int main() {
                                       select(c == 1, 127, 12)));
 
     Image<uint8_t> out(10, 10, 3);
-    f.reorder(c, x, y);
-    f.bound(c, 0, 3);
-    f.unroll(c);
-    f.glsl(x, y, c);
+    f.glsl(x, y, c, 3);
     f.realize(out);
 
     out.copy_to_host();

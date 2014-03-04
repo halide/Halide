@@ -1002,7 +1002,7 @@ public:
     // @}
 
     /** Scheduling for GLSL. */
-    EXPORT Func &glsl(Var x, Var y, Var c);
+    EXPORT Func &glsl(Var x, Var y, Var c, int num_channels);
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For
