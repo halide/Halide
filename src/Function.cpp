@@ -249,7 +249,12 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     }
 
     // Tag calls to random() with the free vars
-    vector<string> free_vars = pure_args;
+    vector<string> free_vars;
+    for (size_t i = 0; i < pure_args.size(); i++) {
+        if (!pure_args[i].empty()) {
+            free_vars.push_back(pure_args[i]);
+        }
+    }
     if (check.reduction_domain.defined()) {
         for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
             string rvar = check.reduction_domain.domain()[i].var;
