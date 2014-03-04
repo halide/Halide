@@ -768,6 +768,7 @@ EXPORT void halide_opengl_copy_to_dev(void *uctx, buffer_t *buf) {
             break;
         }
 
+        ST.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         ST.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
                          format, type, tmp);
