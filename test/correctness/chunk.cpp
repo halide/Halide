@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     f(x, y) = cast<float>(x);
     g(x, y) = f(x+1, y) + f(x-1, y);
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         Var xi, yi;
         g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
