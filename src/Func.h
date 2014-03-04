@@ -634,11 +634,6 @@ public:
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
 
-    /** Choose the random seed to use when this function is
-     * realized. Defaults to zero. Only relevant for jitting. For AOT
-     * compilation see \ref halide_set_random_seed */
-    EXPORT void set_random_seed(uint32_t seed);
-
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
      * debugging.

@@ -1783,13 +1783,6 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
-void Func::set_random_seed(uint32_t s) {
-    random_seed = s;
-    if (compiled_module.set_random_seed) {
-        compiled_module.set_random_seed(s);
-    }
-}
-
 void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
@@ -1811,7 +1804,6 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_random_seed(random_seed);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -1865,7 +1857,6 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_random_seed(random_seed);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
