@@ -15,11 +15,8 @@ void Blur() {
                         (blur_x(x, y, c) + blur_x(x, y+1, c) + blur_x(x, y+2, c))/3);
 
     // Schedule for GLSL
-    out.reorder(c, x, y);
-    out.glsl(x, y, c);
-    out.bound(c, 0, 4);
-    out.vectorize(c);
-//    out.unroll(c);
+    out.glsl(x, y, c, 4);
+    //    out.vectorize(c);
 
     std::vector<Argument> args;
     args.push_back(input8);

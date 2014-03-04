@@ -967,8 +967,11 @@ Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GP
     return *this;
 }
 
-Func &Func::glsl(Var x, Var y, Var c) {
+Func &Func::glsl(Var x, Var y, Var c, int num_channels) {
+    reorder(c, x, y);
     ScheduleHandle(func.schedule()).glsl(x, y, c);
+    bound(c, 0, num_channels);
+    unroll(c);
     return *this;
 }
 
