@@ -527,8 +527,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin();
              iter != bounds.shared_allocations.end(); ++iter) {
 
+            // TODO: Might offsets into shared memory need to be
+            // aligned? What if it's OpenCL and the kernel does vector
+            // loads?
             debug(2) << "Internal shared allocation" << iter->first
-                   << " has max size " << iter->second << "\n";
+                     << " has max size " << iter->second << "\n";
 
             Value *size = codegen(iter->second);
 
