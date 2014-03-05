@@ -65,6 +65,9 @@ protected:
     /** Map from simt variable names (e.g. foo.blockidx) to the llvm
      * SPIR intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
+
+    /* The pointer to the beginning of shared memory */
+    llvm::Value *shared_mem;
 };
 
 }}
