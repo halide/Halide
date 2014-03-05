@@ -88,8 +88,12 @@ int main(int argc, char **argv) {
         }
 
         // Schedule the even update steps on the gpu
-        for (int i = 0; i < 10; i += 2) {
-            f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+        for (int i = 0; i < 10; i ++) {
+            if (i & 1) {
+                f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+            } else {
+                f.update(i);
+            }
         }
 
         Realization result = f.realize(1024, 1024);
@@ -124,8 +128,12 @@ int main(int argc, char **argv) {
         }
 
         // Schedule the even update steps on the gpu
-        for (int i = 0; i < 2; i += 10) {
-            f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+        for (int i = 0; i < 10; i++) {
+            if (i & 1) {
+                f.update(i);
+            } else {
+                f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+            }
         }
 
         Realization result = f.realize(1024, 1024);

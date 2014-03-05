@@ -900,6 +900,27 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
     }
 
+    // Emit a warning if only some of the steps have been scheduled.
+    bool any_scheduled = f.schedule().touched;
+    for (size_t i = 0; i < f.reductions().size(); i++) {
+        const ReductionDefinition &r = f.reductions()[i];
+        any_scheduled = any_scheduled || r.schedule.touched;
+    }
+    if (any_scheduled) {
+        for (size_t i = 0; i < f.reductions().size(); i++) {
+            const ReductionDefinition &r = f.reductions()[i];
+            if (!r.schedule.touched) {
+                std::cerr << "Warning: Update step " << i
+                          << " of function " << f.name()
+                          << " has not been scheduled, even though some other"
+                          << " steps have been. You may have forgotten to"
+                          << " schedule it. If this was intentional, call "
+                          << f.name() << ".update(" << i << ") to suppress"
+                          << " this warning.\n";
+            }
+        }
+    }
+
     // Check the rvars haven't been illegally reordered
     for (size_t i = 0; i < f.reductions().size(); i++) {
         const ReductionDefinition &r = f.reductions()[i];

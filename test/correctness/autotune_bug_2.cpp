@@ -28,6 +28,7 @@ int main(int argc, char **argv) {
 
     Var xo("xo"), xi("xi");
     f.split(x, xo, xi, 8);
+    f.update();
 
     f.trace_realizations().trace_stores();
 

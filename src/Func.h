@@ -198,7 +198,7 @@ class ScheduleHandle {
     void set_dim_type(Var var, Internal::For::ForType t);
     void dump_argument_list();
 public:
-    ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
+    ScheduleHandle(Internal::Schedule &s) : schedule(s) {s.touched = true;}
 
     /** Scheduling calls that control how the domain of this update is
      * traversed. See the documentation for Func for the meanings. */
