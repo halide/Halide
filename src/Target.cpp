@@ -140,16 +140,11 @@ Target get_jit_target_from_environment() {
 }
 
 Target parse_target_string(const std::string &target) {
-    //Internal::debug(0) << "Getting host target \n";
+    if (target.empty() || target == "host") {
+        return get_host_target();
+    }
 
-    Target t = get_host_target();
-
-    //Internal::debug(0) << "Got host target \n";
-
-    if (target.empty()) return t;
-
-    uint64_t host_features = t.features;
-    t.features = 0;
+    Target t;
 
     // HL_TARGET should be arch-os-feature1-feature2...
     string rest = target;
@@ -204,11 +199,6 @@ Target parse_target_string(const std::string &target) {
         } else if (tok == "ios") {
             t.os = Target::IOS;
             is_os = true;
-        } else if (tok == "host") {
-            t.features |= host_features;
-            is_os = true;
-            is_arch = true;
-            is_bits = true;
         } else if (tok == "sse41") {
             t.features |= Target::SSE41;
         } else if (tok == "avx") {
@@ -255,17 +245,9 @@ Target parse_target_string(const std::string &target) {
         }
     }
 
-    if (arch_specified && !bits_specified) {
-        std::cerr << "Warning: If architecture is specified (e.g. \"arm\"), "
-                  << "then bit width should also be specified (e.g. \"arm-32\"). "
-                  << "In the future this will be an error. ";
-        if (t.arch == Target::X86) {
-            std::cerr << "For x86 we default to the bit width of the host: " << t.bits << "\n;";
-        } else {
-            std::cerr << "For this target we default to 32-bits\n";
-            t.bits = 32;
-        }
-    }
+    assert(!(arch_specified && !bits_specified) &&
+        "If architecture is specified (e.g. \"arm\"), "
+        "bit width must also be specified (e.g. \"arm-32\"). ");
 
     return t;
 }
