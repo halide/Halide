@@ -1074,6 +1074,12 @@ void check_neon_all() {
     check("vqadd.u8",  8,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
     check("vqadd.u16", 4, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
 
+    // Check the case where we add a constant that could be narrowed
+    check("vqadd.u8", 16,  u8(min(u16(u8_1)  + 17,  max_u8)));
+    check("vqadd.u16", 8, u16(min(u32(u16_1) + 17, max_u16)));
+    check("vqadd.u8",  8,  u8(min(u16(u8_1)  + 17,  max_u8)));
+    check("vqadd.u16", 4, u16(min(u32(u16_1) + 17, max_u16)));
+
     // Can't do larger ones because we only have i32 constants
 
     // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long

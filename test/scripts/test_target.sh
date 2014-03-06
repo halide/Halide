@@ -3,10 +3,11 @@ LLVM=$1
 export HL_TARGET=$2
 export HL_JIT_TARGET=$2
 
+HOST=`uname`
+
 if [[ "$HL_TARGET" == x86-3* ]]; then
     BITS=32
-    UNAME=`uname`
-    if [[ `uname` == Linux ]]; then
+    if [ "$HOST" == Linux ]; then
         export LD="ld -melf_i386"
     else
         # OS X auto-detects the output format correctly
@@ -40,16 +41,20 @@ make clean &&
 make -j8 build_tests || exit 1
 make distrib || exit 1
 DATE=`date +%Y_%m_%d`
-HOST=`uname`
 COMMIT=`git rev-parse HEAD`
 mv distrib/halide.tgz distrib/halide_${HOST}_${BITS}_${LLVM}_${COMMIT}_${DATE}.tgz
 chmod a+r distrib/*
-if [[ "$HL_TARGET" == *nacl ]]; then
+
+if [ "$HL_TARGET" == ptx -a "$HOST" == Darwin ]; then
+    echo "Halide builds but tests not run"
+elif [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
 
-    # Also check that the HelloNacl test compiles.
-    # (Disabled until we switch it to newlib)
-    # make -C apps/HelloNaCl &&
+    # Also check that the nacl apps compile.
+    make -C apps/HelloNaCl clean &&
+    make -C apps/nacl_demos &&
+    make -C apps/HelloNaCl clean &&
+    make -C apps/nacl_demos &&
     echo "Halide builds but tests not run."
 else
     make test_correctness -j8 &&

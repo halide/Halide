@@ -949,6 +949,7 @@ struct Call : public ExprNode<Call> {
         abs,
         rewrite_buffer,
         profiling_timer,
+        random, 
         lerp,
         create_buffer_t,
         extract_buffer_min,

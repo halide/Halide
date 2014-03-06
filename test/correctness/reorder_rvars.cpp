@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
         RDom r3(0, 20, 0, 20);
         Expr check = sum(abs(f(r3.x, r3.y) - g(r3.x, r3.y)));
         
-        int err = evaluate<int>(cast<int>(check));
+        int err = evaluate_may_gpu<int>(cast<int>(check));
         
         if (err != 0) {
             printf("Reordering rvars affected the meaning!\n");
