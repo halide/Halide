@@ -278,21 +278,21 @@ bool Target::merge_string(const std::string &target) {
 }
 
 std::string Target::to_string() const {
-  const char* const kArchs[] = {
+  const char* const arch_names[] = {
     "arch_unknown", "x86", "arm", "pnacl"
   };
-  const char* const kOs[] = {
+  const char* const os_names[] = {
     "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
-  const char* const kFeatures[] = {
+  const char* const feature_names[] = {
     "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64"
   };
-  string result = string(kArchs[arch])
+  string result = string(arch_names[arch])
       + "-" + std::to_string(bits)
-      + "-" + string(kOs[os]);
+      + "-" + string(os_names[os]);
   for (int i = 0; i < 9; ++i) {
     if (features & (1 << i)) {
-      result += "-" + string(kFeatures[i]);
+      result += "-" + string(feature_names[i]);
     }
   }
   return result;
