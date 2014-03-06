@@ -155,10 +155,6 @@ void CodeGen_SPIR_Dev::init_module() {
     // Fix the target triple
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-
-    assert(module->getDataLayout()->getPointerSizeInBits() == (size_t)bits);
-
-
     module->setModuleIdentifier("<halide_spir>");
 
     for(Module::iterator i = module->begin(); i != module->end(); ++i)
