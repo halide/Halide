@@ -4,6 +4,7 @@
 #include "Target.h"
 #include "Debug.h"
 #include "LLVM_Headers.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -288,7 +289,7 @@ std::string Target::to_string() const {
     "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64"
   };
   string result = string(arch_names[arch])
-      + "-" + std::to_string(bits)
+      + "-" + Internal::int_to_string(bits)
       + "-" + string(os_names[os]);
   for (int i = 0; i < 9; ++i) {
     if (features & (1 << i)) {
