@@ -1918,6 +1918,16 @@ void Func::infer_input_bounds(Realization dst) {
     }
 }
 
+void Func::unbind_image_params() {
+    // Update the addresses of the image param args
+    Internal::debug(3) << image_param_args.size() << " image param args to unbind\n";
+    for (size_t i = 0; i < image_param_args.size(); i++) {
+        Internal::debug(3) << "Unbinding buffer from image param: " << image_param_args[i].second.name() << "\n";
+        image_param_args[i].second.set_buffer(Buffer());
+        assert(!image_param_args[i].second.get_buffer().defined());
+    }
+}
+
 void *Func::compile_jit(const Target &target) {
     assert(defined() && "Can't realize undefined function");
 
