@@ -807,12 +807,16 @@ void CodeGen_C::visit(const Call *op) {
             assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "];\n";
+            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "]";
         } else if (op->name == Call::extract_buffer_min) {
             assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "];\n";
+            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+        } else if (op->name == Call::abs) {
+            assert(op->args.size() == 1);
+            string arg = print_expr(op->args[0]);
+            rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << '\n';

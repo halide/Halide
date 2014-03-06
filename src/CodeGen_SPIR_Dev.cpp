@@ -96,6 +96,7 @@ void CodeGen_SPIR_Dev::add_kernel(Stmt stmt, std::string name, const std::vector
             kernel_arg_base_type.push_back(MDString::get(*context, "type"));
         }
         arg->setName("shared");
+        shared_mem = arg;
 
         kernel_arg_address_space.push_back(ConstantInt::get(i32, 3)); // __local = addrspace(3)
         kernel_arg_name.push_back(MDString::get(*context, "shared"));
@@ -247,7 +248,13 @@ void CodeGen_SPIR_Dev::visit(const Allocate *alloc) {
 
     if (offset) {
         // Bit-cast it to a shared memory pointer (address-space 3 is shared memory)
-        ptr = builder->CreateIntToPtr(offset, PointerType::get(llvm_type, 3));
+        //ptr = builder->CreateIntToPtr(offset, PointerType::get(llvm_type, 3));
+        if (bits == 64) {
+            llvm::Type *i64 = llvm::Type::getInt64Ty(*context);
+            offset = builder->CreateIntCast(offset, i64, false);
+        }
+        ptr = builder->CreateInBoundsGEP(shared_mem, offset);
+        ptr = builder->CreatePointerCast(ptr, PointerType::get(llvm_type, 3));
     } else {
         // Otherwise jump back to the entry and generate an
         // alloca. Note that by jumping back we're rendering any

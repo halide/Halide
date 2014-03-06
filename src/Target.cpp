@@ -332,12 +332,12 @@ DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(nacl_io)
+DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
-DECLARE_CPP_INITMOD(random)
 DECLARE_CPP_INITMOD(write_debug_image)
 
 DECLARE_LL_INITMOD(arm)
@@ -390,7 +390,6 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_set_custom_trace",
                        "halide_set_custom_do_par_for",
                        "halide_set_custom_do_task",
-                       "halide_set_random_seed",
                        "halide_shutdown_thread_pool",
                        "halide_shutdown_trace",
                        "halide_set_cuda_context",
@@ -399,6 +398,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",
+                       "__stack_chk_guard",
+                       "__stack_chk_fail",
                        ""};
 
     llvm::Module *module = modules[0];
@@ -474,6 +475,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_nacl_io(c, bits_64));
         modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_ssp(c, bits_64));
     }
 
     // These modules are always used
@@ -484,7 +486,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     } else {
         modules.push_back(get_initmod_posix_math_ll(c));
     }
-    modules.push_back(get_initmod_random(c, bits_64));
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));
