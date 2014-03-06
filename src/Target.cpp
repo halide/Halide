@@ -140,7 +140,7 @@ Target get_jit_target_from_environment() {
 }
 
 Target parse_target_string(const std::string &target) {
-    if (target.empty() || target == "host") {
+    if (target.empty()) {
         return get_host_target();
     }
 
@@ -162,7 +162,16 @@ Target parse_target_string(const std::string &target) {
     for (size_t i = 0; i < tokens.size(); i++) {
         bool is_arch = false, is_os = false, is_bits = false;
         const string &tok = tokens[i];
-        if (tok == "x86") {
+        if (tok == "host") {
+            if (i > 0) {
+                std::cerr << "\"host\" must be the first token in a target string";
+                assert(false);
+            }
+            t = get_host_target();
+            is_os = true;
+            is_arch = true;
+            is_bits = true;
+        } else if (tok == "x86") {
             t.arch = Target::X86;
             is_arch = true;
         } else if (tok == "arm") {
