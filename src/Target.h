@@ -47,6 +47,17 @@ struct Target {
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}
     Target(OS o, Arch a, int b, uint64_t f) : os(o), arch(a), bits(b), features(f) {}
+
+    bool operator==(const Target &other) const {
+      return os == other.os &&
+          arch == other.arch &&
+          bits == other.bits &&
+          features == other.features;
+    }
+
+    bool operator!=(const Target &other) const {
+      return !(*this == other);
+    }
 };
 
 /** Return the target corresponding to the host machine. */
