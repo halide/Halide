@@ -255,17 +255,9 @@ Target parse_target_string(const std::string &target) {
         }
     }
 
-    if (arch_specified && !bits_specified) {
-        std::cerr << "Warning: If architecture is specified (e.g. \"arm\"), "
-                  << "then bit width should also be specified (e.g. \"arm-32\"). "
-                  << "In the future this will be an error. ";
-        if (t.arch == Target::X86) {
-            std::cerr << "For x86 we default to the bit width of the host: " << t.bits << "\n;";
-        } else {
-            std::cerr << "For this target we default to 32-bits\n";
-            t.bits = 32;
-        }
-    }
+    assert(!(arch_specified && !bits_specified) &&
+        "If architecture is specified (e.g. \"arm\"), "
+        "bit width must also be specified (e.g. \"arm-32\"). ");
 
     return t;
 }
