@@ -80,9 +80,9 @@ private:
         }
 
         // Compute the size
-        Expr size = 1;
+        std::vector<Expr> extents;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
-            size *= realize->bounds[i].extent;
+          extents.push_back(realize->bounds[i].extent);
         }
 
         vector<int> storage_permutation;
@@ -103,7 +103,12 @@ private:
 
         assert(storage_permutation.size() == realize->bounds.size());
 
-        size = mutate(size);
+        // QUESTION: Andrew, can this be moved up to the loop that
+        // fills in extents or does it depend on the change to storage
+        // permutation?
+        for (size_t i = 0; i < realize->bounds.size(); i++) {
+          extents[i] = mutate(extents[i]);
+        }
 
         stmt = body;
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
@@ -150,7 +155,7 @@ private:
             t.bits = t.bytes() * 8;
 
             // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, size, stmt);
+            stmt = Allocate::make(buffer_name, t, extents, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
