@@ -349,11 +349,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(module));
     }
     #else
+    // FIXME: This doesn't actually do the job. Now that
+    // DataLayoutPass is gone, I have no idea how to get this to work.
     if (const DataLayout *TD = Target.getDataLayout()) {
-        PM.add(new DataLayoutPass(*TD));
-    } else {
-        PM.add(new DataLayoutPass(module));
+        module->setDataLayout(TD);
     }
+    PM.add(new DataLayoutPass(module));
     #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose

@@ -20,8 +20,10 @@
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
+#include <llvm/Linker.h>
 #else
 #include <llvm/IR/Verifier.h>
+#include <llvm/Linker/Linker.h>
 #endif
 
 #include <llvm/Bitcode/ReaderWriter.h>
@@ -36,7 +38,6 @@
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
-#include <llvm/Linker.h>
 #include <llvm/ADT/StringMap.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3+

@@ -6,7 +6,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
-
+#include <unistd.h>
 
 using std::string;
 using std::map;

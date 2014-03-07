@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <math.h>
+#include <algorithm>
 
 #include "IROperator.h"
 #include "IRPrinter.h"

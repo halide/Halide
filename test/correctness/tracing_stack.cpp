@@ -18,12 +18,8 @@ using std::string;
 
 stack<string> stack_trace;
 
-int my_trace(void *user_context, const char *function,
-             int event_type, int parent_id,
-             int type_code, int bits, int width,
-             int value_index, const void *value,
-             int num_int_args, const int *int_args) {
 
+int my_trace(void *user_context, const halide_trace_event *e) {
     const string event_types[] = {"Load ",
                                   "Store ",
                                   "Begin realization ",
@@ -33,13 +29,13 @@ int my_trace(void *user_context, const char *function,
                                   "Consume ",
                                   "End consume "};
 
-    if (event_type == 3 || event_type > 4) {
+    if (e->event == 3 || e->event > 4) {
         // These events signal the end of some previous event
         stack_trace.pop();
     }
-    if (event_type == 2 || event_type == 4 || event_type == 5 || event_type == 6) {
+    if (e->event == 2 || e->event == 4 || e->event == 5 || e->event == 6) {
         // These events signal the start of some new region
-        stack_trace.push(event_types[event_type] + function);
+        stack_trace.push(event_types[e->event] + e->func);
     }
 
     return 0;
