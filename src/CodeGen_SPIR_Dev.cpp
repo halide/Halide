@@ -1,4 +1,5 @@
 #include "CodeGen_SPIR_Dev.h"
+#include "CodeGen_Internal.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -253,13 +254,14 @@ void CodeGen_SPIR_Dev::visit(const Allocate *alloc) {
         // alloca. Note that by jumping back we're rendering any
         // expression we carry back meaningless, so we had better only
         // be dealing with constants here.
-        const IntImm *size = alloc->size.as<IntImm>();
-        assert(size && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
+        int32_t size = 0;
+        bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
+        assert(is_constant && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
 
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size->value));
+        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
         builder->SetInsertPoint(here);
     }
 

@@ -59,7 +59,9 @@ void Closure::visit(const Store *op) {
 
 void Closure::visit(const Allocate *op) {
     ignore.push(op->name, 0);
-    op->size.accept(this);
+    for (int i = 0; i < op->extents.size(); i++) {
+        op->extents[i].accept(this);
+    }
     op->body.accept(this);
     ignore.pop(op->name);
 }
@@ -181,6 +183,33 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
         llvm::Type *element_type = llvm_type_of(c, t.element_of());
         return VectorType::get(element_type, t.width);
     }
+}
+
+bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size) {
+    int64_t result = 0;
+
+    if (extents.size() > 0)
+      result = 1;
+
+    for (size_t i = 0; i < extents.size(); i++) {
+        if (const IntImm *int_size = extents[i].as<IntImm>()) {
+            if ((int64_t)int_size->value > (static_cast<int64_t>(1)<<31) - 1) {
+                std::cerr << "Dimension " << i << " for allocation " << name << " has size " <<
+                    int_size->value << " which is greater than 2^31 - 1.";
+                assert(false);
+            }
+            result *= int_size->value;
+            if (result > (static_cast<int64_t>(1)<<31) - 1) {
+                std::cerr << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
+                assert(false);
+            }
+        } else {
+            return false;
+        }
+    }
+  
+    size = static_cast<int32_t>(result);
+    return true;
 }
 
 }

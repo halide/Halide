@@ -791,18 +791,21 @@ struct Provide : public StmtNode<Provide> {
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
-    Expr size;
+    std::vector<Expr> extents;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, Expr size, Stmt body) {
-        assert(size.defined() && "Allocate of undefined");
+    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents, Stmt body) {
+        for (int i = 0; i < extents.size(); i++) {
+            assert(extents[i].defined() && "Allocate of undefined extent");
+            assert(extents[i].type().is_scalar() == 1 && "Allocate of vector extent");
+        }
         assert(body.defined() && "Allocate of undefined");
-        assert(size.type().is_scalar() == 1 && "Allocate of vector size");
 
         Allocate *node = new Allocate;
         node->name = name;
         node->type = type;
-        node->size = size;
+        node->extents = extents;
+
         node->body = body;
         return node;
     }
