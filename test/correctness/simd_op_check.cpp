@@ -1318,6 +1318,25 @@ void check_neon_all() {
         }
     }
 
+    // Also check when the two expressions interleaved have a common
+    // subexpression, which results in a vector var being lifted out.
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 128; width <= 256; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*2) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                Expr e = (tmp1(x/2)*2 + 7)/4;
+                tmp2(x, y) = select(x%2 == 0, e*3, e + 17);
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst2.%d", bits);
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 63));
+            }
+        }
+    }
+
     // VST3	X	-	Store three-element structures
     // VST4	X	-	Store four-element structures
     // Not supported for now. We need a better syntax for interleaving to take advantage of these
