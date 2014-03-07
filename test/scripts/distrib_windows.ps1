@@ -1,4 +1,4 @@
-��# Set the root dir of the Halide checkout
+# Set the root dir of the Halide checkout
 
 $ROOT = "J:\Code\Halide"
 
