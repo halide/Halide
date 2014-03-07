@@ -53,8 +53,12 @@ int main(int argc, char **argv) {
 
         // Schedule the pure step and the odd update steps on the gpu
         f.gpu_tile(x, y, 16, 16, GPU_DEFAULT);
-        for (int i = 1; i < 10; i += 2) {
-            f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+        for (int i = 0; i < 10; i ++) {
+	    if (i & 1) {
+		f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+	    } else {
+		f.update(i);
+	    }
         }
 
         Realization result = f.realize(1024, 1024);
