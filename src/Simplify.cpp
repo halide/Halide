@@ -1,4 +1,5 @@
 #include <iostream>
+#include <algorithm>
 
 #include "Simplify.h"
 #include "IROperator.h"

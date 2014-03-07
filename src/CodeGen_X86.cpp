@@ -55,7 +55,11 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
         triple.setOS(llvm::Triple::Win32);
         if (target.features & Target::JIT) {
             // Use ELF for jitting
+            #if LLVM_VERSION < 35
             triple.setEnvironment(llvm::Triple::ELF);
+            #else
+            triple.setObjectFormat(llvm::Triple::ELF);
+            #endif
         }
     } else if (target.os == Target::Android) {
         triple.setOS(llvm::Triple::Linux);

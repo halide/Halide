@@ -97,6 +97,8 @@ int main(int argc, char **argv) {
         f(x, y) = call_count(f(x, y));
 
         f.unroll(y, 2);
+        f.update(0);
+        f.update(1);
 
         Func g("g");
         g(x, y) = f(x, y) + f(x, y-1) + f(x, y-2);
