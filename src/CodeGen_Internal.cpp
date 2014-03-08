@@ -193,7 +193,7 @@ bool constant_allocation_size(const std::vector<Expr> &extents, const std::strin
 
     for (size_t i = 0; i < extents.size(); i++) {
         if (const IntImm *int_size = extents[i].as<IntImm>()) {
-            if ((int64_t)int_size->value > (static_cast<int64_t>(1)<<31) - 1) {
+            if ((int64_t)int_size->value > ((int64_t)(1)<<31) - 1) {
                 std::cerr << "Dimension " << i << " for allocation " << name << " has size " <<
                     int_size->value << " which is greater than 2^31 - 1.";
                 assert(false);

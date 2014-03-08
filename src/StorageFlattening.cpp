@@ -83,6 +83,7 @@ private:
         std::vector<Expr> extents;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
           extents.push_back(realize->bounds[i].extent);
+          extents[i] = mutate(extents[i]);
         }
 
         vector<int> storage_permutation;
@@ -102,13 +103,6 @@ private:
         }
 
         assert(storage_permutation.size() == realize->bounds.size());
-
-        // QUESTION: Andrew, can this be moved up to the loop that
-        // fills in extents or does it depend on the change to storage
-        // permutation?
-        for (size_t i = 0; i < realize->bounds.size(); i++) {
-          extents[i] = mutate(extents[i]);
-        }
 
         stmt = body;
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
