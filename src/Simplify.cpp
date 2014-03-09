@@ -139,11 +139,17 @@ private:
             expr = IntImm::make((int)f);
         } else if (op->type == Float(32) && const_int(value, &i)) {
             expr = FloatImm::make((float)i);
-        } else if (cast && const_castint(cast->value, &i)) {
+        } else if (cast && const_castint(cast->value, &i) && 
+                   (cast->type.is_int() || i >= 0)) {
             // cast of cast of const int can just be cast of const
             // int (with the int suitably munged to fit in the
             // intermediate type).
             // u16(u8(255)) -> u16(255)
+
+            // However, this only works if the returned bits fit into
+            // the intermediate type, which fails when casting
+            // negative 32-bit values to unsigned.
+
             expr = mutate(Cast::make(op->type, i));
         } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
             // Cast to something then back to int
