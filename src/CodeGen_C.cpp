@@ -1041,7 +1041,10 @@ void CodeGen_C::visit(const Allocate *op) {
           " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
         open_scope();
         do_indent();
-        stream << "halide_printf(\"32-bit signed overflow computing size of allocation " << op->name << "\\n\");\n";
+        stream << "halide_printf("
+               << (have_user_context ? "__user_context" : "NULL")
+               << ", \"32-bit signed overflow computing size of allocation "
+               << op->name << "\\n\");\n";
         close_scope("overflow test " + op->name);
     }
 
