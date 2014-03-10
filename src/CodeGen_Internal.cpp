@@ -59,7 +59,7 @@ void Closure::visit(const Store *op) {
 
 void Closure::visit(const Allocate *op) {
     ignore.push(op->name, 0);
-    for (int i = 0; i < op->extents.size(); i++) {
+    for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
     }
     op->body.accept(this);
@@ -207,7 +207,7 @@ bool constant_allocation_size(const std::vector<Expr> &extents, const std::strin
             return false;
         }
     }
-  
+
     size = static_cast<int32_t>(result);
     return true;
 }

@@ -457,7 +457,7 @@ void IRPrinter::visit(const Provide *op) {
 void IRPrinter::visit(const Allocate *op) {
     do_indent();
     stream << "allocate " << op->name << "[" << op->type;
-    for (int i = 0; i < op->extents.size(); i++) {
+    for (size_t i = 0; i < op->extents.size(); i++) {
         stream  << " * ";
         print(op->extents[i]);
     }
