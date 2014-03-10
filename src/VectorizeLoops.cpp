@@ -348,7 +348,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Allocate *op) {
             std::vector<Expr> new_extents;
-            for (int i = 0; i < op->extents.size(); i++) {
+            for (size_t i = 0; i < op->extents.size(); i++) {
                 new_extents.push_back(mutate(op->extents[i]));
                 // Only support scalar sizes for now. For vector sizes, we
                 // would need to take the horizontal max to convert to a

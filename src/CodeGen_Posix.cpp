@@ -149,7 +149,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
       llvm_size = codegen(Expr(0));
     } else {
         llvm_size = codegen(Expr(type.bytes()));
-        for (int i = 0; i < extents.size(); i++) {
+        for (size_t i = 0; i < extents.size(); i++) {
             Value *terms[2] = { llvm_size, codegen(extents[i]) };
             CallInst *multiply = builder->CreateCall(mul_overflow_fn, terms);
             llvm_size = builder->CreateExtractValue(multiply, vec(0U));

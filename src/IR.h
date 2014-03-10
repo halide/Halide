@@ -130,7 +130,7 @@ struct IntImm : public ExprNode<IntImm> {
     int value;
 
     static IntImm *make(int value) {
-        if (value >= -8 && value <= 8 && 
+        if (value >= -8 && value <= 8 &&
             !small_int_cache[value + 8].ref_count.is_zero()) {
             return &small_int_cache[value + 8];
         }
@@ -799,7 +799,7 @@ struct Allocate : public StmtNode<Allocate> {
     Stmt body;
 
     static Stmt make(std::string name, Type type, const std::vector<Expr> &extents, Stmt body) {
-        for (int i = 0; i < extents.size(); i++) {
+        for (size_t i = 0; i < extents.size(); i++) {
             assert(extents[i].defined() && "Allocate of undefined extent");
             assert(extents[i].type().is_scalar() == 1 && "Allocate of vector extent");
         }
@@ -952,7 +952,7 @@ struct Call : public ExprNode<Call> {
         abs,
         rewrite_buffer,
         profiling_timer,
-        random, 
+        random,
         lerp,
         create_buffer_t,
         extract_buffer_min,

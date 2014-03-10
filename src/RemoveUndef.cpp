@@ -345,7 +345,7 @@ class RemoveUndef : public IRMutator {
     void visit(const Allocate *op) {
       std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
-        for (int i = 0; i < op->extents.size(); i++) {
+        for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
             if (!expr.defined()) {
                 stmt = Stmt();
