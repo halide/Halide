@@ -64,6 +64,7 @@ protected:
     using CodeGen_CPU::buffer_dev_ptr;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::create_alloca_at_entry;
+    using CodeGen_CPU::codegen_allocation_size;
     using CodeGen_CPU::create_allocation;
     using CodeGen_CPU::destroy_allocation;
     using CodeGen_CPU::i8;

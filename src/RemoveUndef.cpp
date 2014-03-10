@@ -343,17 +343,22 @@ class RemoveUndef : public IRMutator {
     }
 
     void visit(const Allocate *op) {
-        Expr size = mutate(op->size);
-        if (!expr.defined()) {
-            stmt = Stmt();
-            return;
+      std::vector<Expr> new_extents;
+        bool all_extents_unmodified = true;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            new_extents.push_back(mutate(op->extents[i]));
+            if (!expr.defined()) {
+                stmt = Stmt();
+                return;
+            }
+            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
         if (!stmt.defined()) return;
-        if (size.same_as(op->size) && body.same_as(op->body)) {
+        if (all_extents_unmodified && body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, size, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, body);
         }
     }
 

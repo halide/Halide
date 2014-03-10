@@ -157,13 +157,23 @@ private:
         // We should only encounter each allocate once
         assert(table.find(allocate->name) == table.end());
 
+        Expr size;
+        if (allocate->extents.size() == 0) {
+            size = 0;
+        } else {
+            size = allocate->extents[0];
+            for (size_t i = 1; i < allocate->extents.size(); i++) {
+                size *= allocate->extents[i];
+            }
+            size = simplify(size);
+        }
+
         // What's the largest this allocation could be (in bytes)?
-        Expr elements = bounds_of_expr_in_scope(allocate->size, scope).max;
+        Expr elements = bounds_of_expr_in_scope(size, scope).max;
         int bytes_per_element = allocate->type.bits/8;
         table[allocate->name] = simplify(elements * bytes_per_element);
 
         allocate->body.accept(this);
-
     }
 };
 
@@ -683,7 +693,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
 
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
-        host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
+        host_allocation = create_allocation(alloc->name, alloc->type, alloc->extents);
         sym_push(alloc->name + ".host", host_allocation.ptr);
     } else {
         host_allocation.ptr = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
@@ -706,10 +716,24 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
         builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
         builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
 
+        Value *llvm_size;
+        int32_t constant_size;
+        if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
+            int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
+            if (size_in_bytes > ((int64_t)(1 << 31) - 1)) {
+                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant but exceeds 2^31 - 1.";
+                assert(false);
+            } else {
+                llvm_size = codegen(Expr(constant_size));
+            }
+        } else {
+            llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+        }
+
         // For now, we just track the allocation as a single 1D buffer of the
         // required size. If we break this into multiple dimensions, this will
         // fail to account for expansion for alignment.
-        builder->CreateStore(codegen(alloc->size),
+        builder->CreateStore(llvm_size,
                              buffer_extent_ptr(buf, 0));
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
