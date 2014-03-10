@@ -179,7 +179,9 @@ void IRVisitor::visit(const Provide *op) {
 }
 
 void IRVisitor::visit(const Allocate *op) {
-    op->size.accept(this);
+    for (size_t i = 0; i < op->extents.size(); i++) {
+      op->extents[i].accept(this);
+    }
     op->body.accept(this);
 }
 
@@ -394,7 +396,9 @@ void IRGraphVisitor::visit(const Provide *op) {
 }
 
 void IRGraphVisitor::visit(const Allocate *op) {
-    include(op->size);
+    for (size_t i = 0; i < op->extents.size(); i++) {
+        include(op->extents[i]);
+    }
     include(op->body);
 }
 
@@ -428,4 +432,3 @@ void IRGraphVisitor::visit(const Evaluate *op) {
 
 }
 }
-

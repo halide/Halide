@@ -1131,9 +1131,11 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
+    vector<pair<string, Expr> > lets_overflow;
     vector<pair<string, Expr> > lets_required;
     vector<pair<string, Expr> > lets_constrained;
     vector<pair<string, Expr> > lets_proposed;
+    vector<Stmt> dims_no_overflow_asserts;
     vector<Stmt> asserts_required;
     vector<Stmt> asserts_constrained;
     vector<Stmt> asserts_proposed;
@@ -1229,8 +1231,10 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
             string dim = int_to_string(j);
             string actual_min_name = name + ".min." + dim;
             string actual_extent_name = name + ".extent." + dim;
+            string actual_stride_name = name + ".stride." + dim;
             Expr actual_min = Variable::make(Int(32), actual_min_name);
             Expr actual_extent = Variable::make(Int(32), actual_extent_name);
+            Expr actual_stride = Variable::make(Int(32), actual_stride_name);
             if (!touched[j].min.defined() || !touched[j].max.defined()) {
                 std::cerr << "Error: buffer " << name
                           << " may be accessed in an unbounded way in dimension "
@@ -1275,6 +1279,31 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
                                    Variable::make(Int(32), name + ".extent." + last_dim + ".required"));
             }
             lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
+
+            // Insert checks to make sure the total size of all input and output buffers is <= 2^31-1.
+            // And that no product of extents overflows 2^31 -1. This second test is likely only needed
+            // if a fuse directive is used in the schedule to combine multiple extents, but it is here
+            // for extra safety. Ultimately we will want to make Halide handle larger single buffers,
+            // at least on 64-bit systems.
+
+            std::vector<Expr> no_args;
+            dims_no_overflow_asserts.push_back(AssertStmt::make((cast<int64_t>(actual_extent) *
+                                                                 actual_stride) <= ((cast<int64_t>(1) << 31) - 1),
+                                                                "Total allocation for buffer " + name +" exceeds 2^31 -1",
+                                                                no_args));
+            // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
+            if (!is_secondary_output_buffer) {
+                if (j == 0) {
+                  lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
+                } else {
+                  string last_dim = int_to_string(j-1);
+                  lets_overflow.push_back(make_pair(name + ".total_extent." + dim,
+                                                    actual_extent * Variable::make(Int(64), name + ".total_extent." + last_dim)));
+                  dims_no_overflow_asserts.push_back(AssertStmt::make(Variable::make(Int(64), name + ".total_extent." + dim) <=
+                                                                     ((cast<int64_t>(1) << 31) - 1),
+                                                                      "Product of extents for buffer " + name +" exceeds 2^31 -1", no_args));
+                }
+            }
         }
 
         // Create code that mutates the input buffers if we're in bounds inference mode.
@@ -1397,6 +1426,16 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
             // Check the var passed in equals the constrained version (when not in inference mode)
             asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error.str(), vector<Expr>()));
         }
+    }
+
+    // Inject the code that checks that no dimension math overflows
+    for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
+        s = Block::make(dims_no_overflow_asserts[i-1], s);
+    }
+
+    // Inject the code that defines the proposed sizes.
+    for (size_t i = lets_overflow.size(); i > 0; i--) {
+        s = LetStmt::make(lets_overflow[i-1].first, lets_overflow[i-1].second, s);
     }
 
     // Replace uses of the var with the constrained versions in the
