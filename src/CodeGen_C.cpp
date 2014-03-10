@@ -1178,7 +1178,7 @@ void CodeGen_C::test() {
         " int64_t V1 = V0 * beta;\n"
         " if ((V1 > ((int64_t(1) << 31) - 1)) || ((V1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
-        "  halide_printf(\"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "  halide_printf(__user_context, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
         " } // overflow test tmp.heap\n"
         " int32_t *tmp_heap = (int32_t *)halide_malloc(__user_context, sizeof(int32_t)*V1);\n"
         " {\n"
