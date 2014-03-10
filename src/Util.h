@@ -150,6 +150,26 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
 
+template<typename UnsignedType>
+bool checked_multiply(const UnsignedType &a, const UnsignedType &c, UnsignedType &result) {
+  if (a == 0) {
+    result = 0;
+  } else {
+    UnsignedType t = a * c;
+    if (t / a != c)
+      return false;
+    result = t;
+  }
+  return true;  
+}
+
+template<typename UnsignedType>
+bool checked_multiply_assert(const UnsignedType &a, const UnsignedType &b, UnsignedType &result) {
+  bool no_overflow = checked_multiply(a, b, result);
+  assert(no_overflow);
+  return no_overflow;
+}
+
 }
 }
 

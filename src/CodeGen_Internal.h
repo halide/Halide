@@ -100,6 +100,12 @@ public:
 /** Get the llvm type equivalent to a given halide type */
 llvm::Type *llvm_type_of(llvm::LLVMContext *context, Halide::Type t);
 
+/** A routine to check if a list of extents are all constants, and if so
+ * verify the total size is less than 2^31 - 1. If the result is constant,
+ * but overflows, this routine asserts. The name parameter is used in the
+ * assertion message. */
+bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size);
+
 }}
 
 #endif
