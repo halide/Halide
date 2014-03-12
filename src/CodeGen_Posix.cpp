@@ -126,7 +126,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     // Compute size from list of extents checking for 32-bit signed overflow.
     llvm::Function *mul_overflow_fn = module->getFunction("llvm.smul.with.overflow.i32");
 
-    // TODO: Make a method in code gen to handle getting or greating
+    // TODO: Make a method in code gen to handle getting or creating
     // a function through llvm. See also: CodeGen_ARM::call_intrin
     if (!mul_overflow_fn) {
         llvm::Type *result_type = llvm::StructType::get(i32, i1, NULL);
