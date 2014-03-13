@@ -124,45 +124,27 @@ void CodeGen_Posix::init_module() {
 
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
     // Compute size from list of extents checking for 32-bit signed overflow.
-    llvm::Function *mul_overflow_fn = module->getFunction("llvm.smul.with.overflow.i32");
-
-    // TODO: Make a method in code gen to handle getting or greating
-    // a function through llvm. See also: CodeGen_ARM::call_intrin
-    if (!mul_overflow_fn) {
-        llvm::Type *result_type = llvm::StructType::get(i32, i1, NULL);
-        vector<llvm::Type *> arg_types;
-        arg_types.push_back(i32);
-        arg_types.push_back(i32);
-        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
-        mul_overflow_fn = llvm::Function::Create(func_t,
-                                                 llvm::Function::ExternalLinkage,
-                                                 "llvm.smul.with.overflow.i32", module);
-        mul_overflow_fn->setCallingConv(CallingConv::C);
-        mul_overflow_fn->setDoesNotAccessMemory();
-        mul_overflow_fn->setDoesNotThrow();
-    }
-    assert(mul_overflow_fn != NULL);
-
+    // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
+    // does not work wtih NaCl at the moment.
     Value *llvm_size;
     Value *overflow = NULL;
     if (extents.size() == 0) {
       llvm_size = codegen(Expr(0));
     } else {
-        llvm_size = codegen(Expr(type.bytes()));
+      Value *llvm_size_wide = codegen(Cast::make(Int(64), Expr(type.bytes())));
         for (size_t i = 0; i < extents.size(); i++) {
-            Value *terms[2] = { llvm_size, codegen(extents[i]) };
-            CallInst *multiply = builder->CreateCall(mul_overflow_fn, terms);
-            llvm_size = builder->CreateExtractValue(multiply, vec(0U));
-            Value *new_overflow = builder->CreateExtractValue(multiply, vec(1U));
+            llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
             if (overflow == NULL) {
-                overflow = new_overflow;
+                overflow = llvm_size_wide;
             } else {
-                overflow = builder->CreateOr(overflow, new_overflow);
+                overflow = builder->CreateOr(overflow, llvm_size_wide);
             }
         }
+        llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
     }
     if (overflow != NULL) {
-        create_assertion(builder->CreateNot(overflow),
+        Constant *zero = ConstantInt::get(i64, 0);
+        create_assertion(builder->CreateICmpEQ(builder->CreateLShr(overflow, 31), zero),
                          std::string("32-bit signed overflow computing size of allocation ") + name);
     }
     return llvm_size;
