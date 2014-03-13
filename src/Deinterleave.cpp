@@ -38,9 +38,13 @@ private:
     }
 
     void visit(const Load *op) {
-        Type t = op->type;
-        t.width = new_width;
-        expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
+        if (op->type.is_scalar()) {
+            expr = op;
+        } else {
+            Type t = op->type;
+            t.width = new_width;
+            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
+        }
     }
 
     void visit(const Ramp *op) {
@@ -51,49 +55,64 @@ private:
     }
 
     void visit(const Variable *op) {
-        Type t = op->type;
-        t.width = new_width;
-        if (internal.contains(op->name)) {
-            expr = Variable::make(t, op->name, op->param, op->reduction_domain);
-        } else if (external_lets.contains(op->name) &&
-                   starting_lane == 0 &&
-                   lane_stride == 2) {
-            expr = Variable::make(t, op->name + ".even_lanes", op->param, op->reduction_domain);
-        } else if (external_lets.contains(op->name) &&
-                   starting_lane == 1 &&
-                   lane_stride == 2) {
-            expr = Variable::make(t, op->name + ".odd_lanes", op->param, op->reduction_domain);
+        if (op->type.is_scalar()) {
+            expr = op;
         } else {
-            // Uh-oh, we don't know how to deinterleave this vector expression
-            // Make llvm do it
-            std::vector<Expr> args;
-            args.push_back(op);
-            for (int i = 0; i < new_width; i++) {
-                args.push_back(starting_lane + lane_stride * i);
+
+            Type t = op->type;
+            t.width = new_width;
+            if (internal.contains(op->name)) {
+                expr = Variable::make(t, op->name, op->param, op->reduction_domain);
+            } else if (external_lets.contains(op->name) &&
+                       starting_lane == 0 &&
+                       lane_stride == 2) {
+                expr = Variable::make(t, op->name + ".even_lanes", op->param, op->reduction_domain);
+            } else if (external_lets.contains(op->name) &&
+                       starting_lane == 1 &&
+                       lane_stride == 2) {
+                expr = Variable::make(t, op->name + ".odd_lanes", op->param, op->reduction_domain);
+            } else {
+                // Uh-oh, we don't know how to deinterleave this vector expression
+                // Make llvm do it
+                std::vector<Expr> args;
+                args.push_back(op);
+                for (int i = 0; i < new_width; i++) {
+                    args.push_back(starting_lane + lane_stride * i);
+                }
+                expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
             }
-            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         }
     }
 
     void visit(const Cast *op) {
-        Type t = op->type;
-        t.width = new_width;
-        expr = Cast::make(t, mutate(op->value));
+        if (op->type.is_scalar()) {
+            expr = op;
+        } else {
+            Type t = op->type;
+            t.width = new_width;
+            expr = Cast::make(t, mutate(op->value));
+        }
     }
 
     void visit(const Call *op) {
-        Type t = op->type;
-        t.width = new_width;
+        // Don't mutate scalars
+        if (op->type.is_scalar()) {
+            expr = op;
+        } else {
 
-        // Vector calls are always parallel across the lanes, so we
-        // can just deinterleave the args.
-        std::vector<Expr> args(op->args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            args[i] = mutate(op->args[i]);
+            Type t = op->type;
+            t.width = new_width;
+
+            // Vector calls are always parallel across the lanes, so we
+            // can just deinterleave the args.
+            std::vector<Expr> args(op->args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(op->args[i]);
+            }
+
+            expr = Call::make(t, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
         }
-
-        expr = Call::make(t, op->name, args, op->call_type,
-                          op->func, op->value_index, op->image, op->param);
     }
 
     void visit(const Let *op) {
