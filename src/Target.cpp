@@ -143,9 +143,18 @@ Target get_jit_target_from_environment() {
 Target parse_target_string(const std::string &target) {
     //Internal::debug(0) << "Getting host target \n";
 
-    Target t = get_host_target();
+    Target host = get_host_target();
 
-    if (target.empty()) return t;
+    if (target.empty()) {
+        // If nothing is specified, use the host target.
+        return host;
+    }
+
+    // Default to the host OS and architecture.
+    Target t;
+    t.os = host.os;
+    t.arch = host.arch;
+    t.bits = host.bits;
 
     //Internal::debug(0) << "Got host target \n";
     if (!t.merge_string(target)) {
@@ -155,7 +164,7 @@ Target parse_target_string(const std::string &target) {
                   << "and os is linux, windows, osx, nacl, ios, or android. "
                   << "If arch or os are omitted, they default to the host. "
                   << "Features include sse41, avx, avx2, cuda, opencl, and gpu_debug.\n"
-                  << "HL_TARGET can also include \"host\", which sets the "
+                  << "HL_TARGET can also begin with \"host\", which sets the "
                   << "host's architecture, os, and feature set, with the "
                   << "exception of the GPU runtimes, which default to off\n";
 
