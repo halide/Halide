@@ -459,6 +459,10 @@ public:
     EXPORT void infer_input_bounds(Buffer dst);
     // @}
 
+    /** Unbind all ImageParams. Useful when iteratively re-running
+     * infer_input_bounds. */
+    EXPORT void unbind_image_params();
+
     /** Statically compile this function to llvm bitcode, with the
      * given filename (which should probably end in .bc), type
      * signature, and C function name (which defaults to the same name
