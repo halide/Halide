@@ -721,7 +721,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
         if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
             int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
             if (size_in_bytes > ((int64_t)(1 << 31) - 1)) {
-                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant but exceeds 2^31 - 1.";
+                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
                 assert(false);
             } else {
                 llvm_size = codegen(Expr(constant_size));
