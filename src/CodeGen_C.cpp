@@ -1009,14 +1009,18 @@ void CodeGen_C::visit(const Allocate *op) {
     int32_t constant_size;
     string size_id;
     if (constant_allocation_size(op->extents, op->name, constant_size)) {
-        int64_t stack_bytes = constant_size;
+        // If the allocation is scalar, just allocate one element.
+        if (op->extents.size() == 0)
+            constant_size = 1;
 
-        if ((stack_bytes * op->type.bytes()) > ((int64_t(1) << 31) - 1)) {
+        int64_t stack_size = constant_size * op->type.bytes();
+
+        if (stack_size > ((int64_t(1) << 31) - 1)) {
             std::cerr << "Total size for allocation " << op->name << " is constant but exceeds 2^31 - 1.";
             assert(false);
         } else {
-            size_id = print_expr(Expr(static_cast<int32_t>(stack_bytes)));
-            if (stack_bytes <= 1024 * 8) {
+            size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
+            if (stack_size <= 1024 * 8) {
                 on_stack = true;
             }
         }
