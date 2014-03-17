@@ -1,5 +1,4 @@
 #include <sstream>
-#include <map>
 
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
