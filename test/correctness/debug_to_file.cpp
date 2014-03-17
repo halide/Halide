@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
         g(x, y) = cast<float>(f(x, y) + f(x+1, y));
         h(x, y) = f(x, y) + g(x, y);
 
-        Target target = get_target_from_environment();
+        Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
             f.compute_root().gpu_tile(x, y, 1, 1, GPU_DEFAULT).debug_to_file("f.tmp");
             g.compute_root().gpu_tile(x, y, 1, 1, GPU_DEFAULT).debug_to_file("g.tmp");

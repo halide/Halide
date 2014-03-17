@@ -1074,6 +1074,12 @@ void check_neon_all() {
     check("vqadd.u8",  8,  u8(min(u16(u8_1)  + u16(u8_2),  max_u8)));
     check("vqadd.u16", 4, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
 
+    // Check the case where we add a constant that could be narrowed
+    check("vqadd.u8", 16,  u8(min(u16(u8_1)  + 17,  max_u8)));
+    check("vqadd.u16", 8, u16(min(u32(u16_1) + 17, max_u16)));
+    check("vqadd.u8",  8,  u8(min(u16(u8_1)  + 17,  max_u8)));
+    check("vqadd.u16", 4, u16(min(u32(u16_1) + 17, max_u16)));
+
     // Can't do larger ones because we only have i32 constants
 
     // VQDMLAL	I	-	Saturating Double Multiply Accumulate Long
@@ -1304,6 +1310,25 @@ void check_neon_all() {
                 tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
                 tmp1.compute_root();
                 tmp2(x, y) = select(x%2 == 0, tmp1(x/2), tmp1(x/2 + 16));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst2.%d", bits);
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 63));
+            }
+        }
+    }
+
+    // Also check when the two expressions interleaved have a common
+    // subexpression, which results in a vector var being lifted out.
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 128; width <= 256; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*2) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                Expr e = (tmp1(x/2)*2 + 7)/4;
+                tmp2(x, y) = select(x%2 == 0, e*3, e + 17);
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst2.%d", bits);

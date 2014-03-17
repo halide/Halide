@@ -657,7 +657,7 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, V
     return reorder_vars(*this, vars, 10);
 }
 
-  ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
     rename(tx, Var("threadidx"));
     return *this;

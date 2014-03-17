@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
 
     f(x) = u;
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         f.gpu_tile(x, 256, GPU_DEFAULT);
     } 

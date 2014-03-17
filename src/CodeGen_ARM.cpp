@@ -9,6 +9,7 @@
 #include "Util.h"
 #include "Simplify.h"
 #include "IntegerDivisionTable.h"
+#include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
 // Native client llvm relies on global flags to control sandboxing on
@@ -149,9 +150,9 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
     casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
     #endif
 
-    // Generate the cast patterns that can take vector or scalar
-    // types.  We need to iterate over all 64 and 128 bit integer
-    // types relevant for neon.
+    // Generate the cast patterns that can take vector types.  We need
+    // to iterate over all 64 and 128 bit integer types relevant for
+    // neon.
     Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
                     Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
                     Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
@@ -168,13 +169,8 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
 
         // Vector wildcard for this type
         Expr vector = Variable::make(t, "*");
-        Expr w_vector = cast(w, vector);
-        Expr ws_vector = cast(ws, vector);
-
-        // Scalar wildcard for this type
-        Expr scalar = Variable::make(t.element_of(), "*");
-        Expr w_scalar = cast(w, scalar);
-        Expr ws_scalar = cast(ws, scalar);
+        Expr w_vector = Variable::make(w, "*");
+        Expr ws_vector = Variable::make(ws, "*");
 
         // Bounds of the type stored in the wider vector type
         Expr tmin = simplify(cast(w, t.imin()));
@@ -189,45 +185,31 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(),
         }
 
         // Rounding-up averaging
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_scalar + 1))/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_scalar + 1) + w_vector)/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_scalar + w_vector) + 1)/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + w_scalar) + 1)/2)));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2), Pattern::NarrowArgs));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_vector + 1))/2), Pattern::NarrowArgs));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + 1) + w_vector)/2), Pattern::NarrowArgs));
 
         // Rounding down averaging
-        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2)));
-        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_scalar)/2)));
-        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_scalar + w_vector)/2)));
+        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2), Pattern::NarrowArgs));
 
         // Halving subtract
-        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2)));
-        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_scalar)/2)));
-        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_scalar - w_vector)/2)));
+        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2), Pattern::NarrowArgs));
 
         // Saturating add
-        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax))));
-        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_scalar, tmin, tmax))));
-        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_scalar + w_vector, tmin, tmax))));
+        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax)), Pattern::NarrowArgs));
 
         // In the unsigned case, the saturation below in unnecessary
         if (t.is_uint()) {
-            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax))));
-            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_scalar, tmax))));
-            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_scalar + w_vector, tmax))));
+            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax)), Pattern::NarrowArgs));
         }
 
         // Saturating subtract
         // N.B. Saturating subtracts always widen to a signed type
-        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax))));
-        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_scalar, tsmin, tsmax))));
-        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_scalar - ws_vector, tsmin, tsmax))));
+        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax)), Pattern::NarrowArgs));
 
         // In the unsigned case, we may detect that the top of the clamp is unnecessary
         if (t.is_uint()) {
-            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0))));
-            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_scalar - ws_vector, 0))));
-            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_scalar, 0))));
+            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0)), Pattern::NarrowArgs));
         }
     }
 
@@ -494,6 +476,46 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> a
     return builder->CreateCall(fn, arg_values);
 }
 
+
+namespace {
+
+// Try to losslessly narrow an integer expression to the target type
+Expr try_narrow(Expr a, Type target) {
+    assert(a.type().width == target.width);
+    if (const Cast *c = a.as<Cast>()) {
+        Type old_type = c->value.type();
+        if (old_type == target) {
+            return c->value;
+        } else if (target.can_represent(old_type)) {
+            return cast(target, c->value);
+        } else if (c->type.can_represent(target)) {
+            // We lose nothing by stripping off the cast and pressing onwards.
+            return try_narrow(c->value, target);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const Broadcast *b = a.as<Broadcast>()) {
+        Expr n = try_narrow(b->value, target.element_of());
+        if (n.defined()) {
+            return Broadcast::make(n, b->width);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const IntImm *i = a.as<IntImm>()) {
+        if (i->value <= target.imax() &&
+            i->value >= target.imin()) {
+            return cast(target, a);
+        }
+    }
+
+    return Expr();
+}
+}
+
 void CodeGen_ARM::visit(const Cast *op) {
     vector<Expr> matches;
 
@@ -501,17 +523,32 @@ void CodeGen_ARM::visit(const Cast *op) {
         const Pattern &pattern = casts[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
-            // Broadcast any scalar args
-            for (size_t i = 0; i < matches.size(); i++) {
-                if (op->type.is_vector() && matches[i].type().is_scalar()) {
-                    matches[i] = Broadcast::make(matches[i], op->type.width);
-                }
-            }
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
                 return;
+            } else if (pattern.type == Pattern::NarrowArgs) {
+                // Try to narrow all of the args.
+                bool all_narrow = true;
+                for (size_t i = 0; i < matches.size(); i++) {
+                    assert(matches[i].type().bits == op->type.bits * 2);
+                    assert(matches[i].type().width == op->type.width);
+                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << op->type << "\n";
+                    matches[i] = try_narrow(matches[i], op->type);
+                    if (!matches[i].defined()) {
+                        // debug(4) << "failed\n";
+                        all_narrow = false;
+                    } else {
+                        // debug(4) << "success: " << matches[i] << "\n";
+                        assert(matches[i].type() == op->type);
+                    }
+                }
+
+                if (all_narrow) {
+                    value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
+                    return;
+                }
             } else { // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;
@@ -1003,41 +1040,6 @@ void CodeGen_ARM::visit(const LE *op) {
 
 }
 
-namespace {
-
-// Try to losslessly narrow an integer expression to half the bit-width
-Expr try_narrow(Expr a) {
-    if (const Cast *c = a.as<Cast>()) {
-        Type old_type = c->value.type();
-        Type new_type = a.type();
-        old_type.bits *= 2;
-        if (old_type == new_type) {
-            return c->value;
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const Broadcast *b = a.as<Broadcast>()) {
-        Expr n = try_narrow(b->value);
-        if (n.defined()) {
-            return Broadcast::make(n, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = a.as<IntImm>()) {
-        if (i->value <= Int(16).imax() &&
-            i->value >= Int(16).imin()) {
-            return cast(Int(16), a);
-        }
-    }
-
-    return Expr();
-}
-}
-
 void CodeGen_ARM::visit(const Select *op) {
 
     // Absolute difference patterns:
@@ -1063,8 +1065,10 @@ void CodeGen_ARM::visit(const Select *op) {
         // If cmp->a and cmp->b are both widening casts of a narrower
         // int, we can use vadbl instead of vabd. llvm reaches vabdl
         // by expecting you to widen the result of a narrower vabd.
-        Expr na = try_narrow(cmp->a);
-        Expr nb = try_narrow(cmp->b);
+        Type narrow = cmp->a.type();
+        narrow.bits /= 2;
+        Expr na = try_narrow(cmp->a, narrow);
+        Expr nb = try_narrow(cmp->b, narrow);
         if (na.defined() && nb.defined() && vec_bits == 128) {
             ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits/2;
             value = call_intrin(na.type(), ss.str(), vec(na, nb));

@@ -14,11 +14,12 @@ int main(int argc, char **argv) {
     f(x, y) = cast<float>(x);
     g(x, y) = f(x+1, y) + f(x-1, y);
 
-    Target target = get_target_from_environment();
-    if (target.has_gpu_feature()) {
+    Target target = get_jit_target_from_environment();
+    // shared memory not currently working in OpenCL
+    if (target.features & Target::CUDA) {
         Var xi, yi;
-        g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
-        f.compute_at(g, Var("blockidx")).gpu_threads(x, y, GPU_DEFAULT);
+        g.gpu_tile(x, y, 8, 8, GPU_CUDA);
+        f.compute_at(g, Var("blockidx")).gpu_threads(x, y, GPU_CUDA);
     }
 
     printf("Realizing function...\n");

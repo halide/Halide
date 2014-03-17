@@ -36,7 +36,7 @@ int main(int argc, char **argv) {
 
     // No parallel reductions
     /*
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
 	hist.gpu_tile(x, 64, GPU_DEFAULT);
 	hist.update().gpu_tile(r.x, r.y, 16, 16, GPU_DEFAULT);

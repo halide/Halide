@@ -158,13 +158,23 @@ private:
         // We should only encounter each allocate once
         assert(table.find(allocate->name) == table.end());
 
+        Expr size;
+        if (allocate->extents.size() == 0) {
+            size = 0;
+        } else {
+            size = allocate->extents[0];
+            for (size_t i = 1; i < allocate->extents.size(); i++) {
+                size *= allocate->extents[i];
+            }
+            size = simplify(size);
+        }
+
         // What's the largest this allocation could be (in bytes)?
-        Expr elements = bounds_of_expr_in_scope(allocate->size, scope).max;
+        Expr elements = bounds_of_expr_in_scope(size, scope).max;
         int bytes_per_element = allocate->type.bits/8;
         table[allocate->name] = simplify(elements * bytes_per_element);
 
         allocate->body.accept(this);
-
     }
 };
 
@@ -569,8 +579,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin();
              iter != bounds.shared_allocations.end(); ++iter) {
 
+            // TODO: Might offsets into shared memory need to be
+            // aligned? What if it's OpenCL and the kernel does vector
+            // loads?
             debug(2) << "Internal shared allocation" << iter->first
-                   << " has max size " << iter->second << "\n";
+                     << " has max size " << iter->second << "\n";
 
             Value *size = codegen(iter->second);
 
@@ -694,7 +707,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             if (it->second.write) {
                 debug(4) << "setting dev_dirty " << it->first << " (write)\n";
                 Value *buf = sym_get(it->first + ".buffer");
-                builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
+                builder->CreateStore(ConstantInt::get(i8, 1),
+                                     buffer_dev_dirty_ptr(buf));
+
+                // If host was still dirty we must have clobbered it,
+                // so it's not dirty now.
+                builder->CreateStore(ConstantInt::get(i8, 0),
+                                     buffer_host_dirty_ptr(buf));
             }
         }
 
@@ -702,7 +721,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         for (size_t i = 0; i < shared_mem_allocations.size(); i++) {
             sym_pop(shared_mem_allocations[i]);
         }
-
     } else {
         CodeGen_CPU::visit(loop);
     }
@@ -717,7 +735,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
 
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
-        host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
+        host_allocation = create_allocation(alloc->name, alloc->type, alloc->extents);
         sym_push(alloc->name + ".host", host_allocation.ptr);
     } else {
         host_allocation.ptr = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
@@ -737,14 +755,31 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
         } else {
             buf = create_alloca_at_entry(buffer_t_type, 1);
 
+            Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
+            builder->CreateStore(host_ptr, buffer_host_ptr(buf));
             builder->CreateStore(null64,   buffer_dev_ptr(buf));
+
             builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
             builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+
+            Value *llvm_size;
+            int32_t constant_size;
+            if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
+              int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
+              if (size_in_bytes > ((int64_t)(1 << 31) - 1)) {
+                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant but exceeds 2^31 - 1.";
+                assert(false);
+              } else {
+                llvm_size = codegen(Expr(constant_size));
+              }
+            } else {
+              llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+            }
 
             // For now, we just track the allocation as a single 1D buffer of the
             // required size. If we break this into multiple dimensions, this will
             // fail to account for expansion for alignment.
-            builder->CreateStore(codegen(alloc->size),
+            builder->CreateStore(llvm_size,
                                  buffer_extent_ptr(buf, 0));
             builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
             builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
@@ -765,8 +800,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
                                  buffer_elem_size_ptr(buf));
         }
 
-        Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
-        builder->CreateStore(host_ptr, buffer_host_ptr(buf));
         Value *args[2] = { get_user_context(), buf };
         builder->CreateCall(dev_malloc_fn, args);
 
@@ -799,51 +832,144 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Pipeline *n) {
 
+    // Copying to the gpu and marking gpu_dirty is handled by the For
+    // handler above, because that marks a good test for when we enter
+    // kernels. Here we need to handle copying back to the CPU if
+    // needed.
+
+    // Are we tracking a buffer for this allocation?
     Value *buf = sym_get(n->name + ".buffer", false);
+
+    // Is it also used on the host?
     Value *host = sym_get(n->name + ".host", false);
 
-    if (!(buf && host)) {
+    // If we didn't find anything, maybe it's a tuple. Go looking for
+    // all the tuple elements.
+    vector<Value *> bufs;
+    if (!buf) {
+        for (int i = 0; ; i++) {
+            string name = n->name + "." + int_to_string(i);
+            buf = sym_get(name + ".buffer", false);
+            host = sym_get(name + ".host", false);
+            if (!buf) break;
+            if (host) {
+                // Skip the ones not used on the host
+                bufs.push_back(buf);
+            }
+        }
+    } else if (host) {
+        bufs.push_back(buf);
+    }
+
+    if (bufs.empty()) {
         CodeGen_CPU::visit(n);
         return;
     }
 
-    WhereIsBufferUsed produce_usage(n->name);
-    n->produce.accept(&produce_usage);
-
-    WhereIsBufferUsed consume_usage(n->name);
-    n->consume.accept(&consume_usage);
+    vector<WhereIsBufferUsed> produce_usage;
+    for (size_t i = 0; i < bufs.size(); i++) {
+        string name = n->name;
+        if (bufs.size() > 1) name += "." + int_to_string(i);
+        WhereIsBufferUsed u(name);
+        n->produce.accept(&u);
+        produce_usage.push_back(u);
+    }
 
     codegen(n->produce);
 
     // Track host writes
-    if (produce_usage.written_on_host) {
-        builder->CreateStore(ConstantInt::get(i8, 1),
-                             buffer_host_dirty_ptr(buf));
+    for (size_t i = 0; i < bufs.size(); i++) {
+        if (produce_usage[i].written_on_host) {
+            builder->CreateStore(ConstantInt::get(i8, 1),
+                                 buffer_host_dirty_ptr(bufs[i]));
+            // A produce node clobbers the entire buffer, so if this
+            // was somehow dirty on the GPU, it isn't anymore (which
+            // may happen if we're producing into a buffer_t passed in
+            // that's dirty on the GPU).
+            builder->CreateStore(ConstantInt::get(i8, 0),
+                                 buffer_dev_dirty_ptr(bufs[i]));
+        }
     }
 
     Value *user_context = get_user_context();
     if (n->update.defined()) {
-        WhereIsBufferUsed update_usage(n->name);
-        n->update.accept(&update_usage);
 
-        // Copy back host update reads
-        if (update_usage.read_on_host) {
-            builder->CreateCall2(copy_to_host_fn, user_context, buf);
+        // Extract all the update steps (TODO: Pipeline nodes should
+        // really just have a list of update steps instead of using
+        // blocks).
+        vector<Stmt> steps;
+        vector<Stmt> stack;
+        stack.push_back(n->update);
+        while (!stack.empty()) {
+            Stmt s = stack.back();
+            stack.pop_back();
+            if (const Block *b = s.as<Block>()) {
+                stack.push_back(b->rest);
+                stack.push_back(b->first);
+            } else {
+                steps.push_back(s);
+            }
         }
 
-        codegen(n->update);
+        // For each update step
+        for (size_t j = 0; j < steps.size(); j++) {
+            Stmt s = steps[j];
 
-        // Track host update writes
-        if (update_usage.written_on_host) {
-            builder->CreateStore(ConstantInt::get(i8, 1),
-                                 buffer_host_dirty_ptr(buf));
+            vector<WhereIsBufferUsed> update_usage;
+            for (size_t i = 0; i < bufs.size(); i++) {
+                string name = n->name;
+                if (bufs.size() > 1) name += "." + int_to_string(i);
+                WhereIsBufferUsed u(name);
+                s.accept(&u);
+                update_usage.push_back(u);
+            }
+
+            // Copy back host update accesses
+            for (size_t i = 0; i < bufs.size(); i++) {
+                // We need to copy back buffers that the host will
+                // write to as well, because the update step may not
+                // write to *all* of the buffer, and we don't want to
+                // get into a situation where different parts of the
+                // buffer are dirty on host and device. This could
+                // theoretically be skipped if this update definition
+                // is pure, but we've lost that metadata at this stage
+                // of codegen.
+                if (update_usage[i].used_on_host) {
+                    // debug(0) << "Before update step " << j << " copy tuple element " << i << " to host\n";
+                    builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+                }
+            }
+
+            codegen(s);
+
+            // Track host update writes
+            for (size_t i = 0; i < bufs.size(); i++) {
+                if (update_usage[i].written_on_host) {
+                    builder->CreateStore(ConstantInt::get(i8, 1),
+                                         buffer_host_dirty_ptr(bufs[i]));
+                }
+            }
         }
 
     }
 
-    // Copy back host reads
-    if (consume_usage.read_on_host) {
-        builder->CreateCall2(copy_to_host_fn, user_context, buf);
+
+    // Copy back host reads before consume
+
+    vector<WhereIsBufferUsed> consume_usage;
+    for (size_t i = 0; i < bufs.size(); i++) {
+        string name = n->name;
+        if (bufs.size() > 1) name += "." + int_to_string(i);
+        WhereIsBufferUsed u(name);
+        n->consume.accept(&u);
+        consume_usage.push_back(u);
+    }
+
+    for (size_t i = 0; i < bufs.size(); i++) {
+        if (consume_usage[i].read_on_host) {
+            // debug(0) << "Before consume step copy tuple element " << i << " to host\n";
+            builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+        }
     }
 
     codegen(n->consume);

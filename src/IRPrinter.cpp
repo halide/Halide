@@ -63,7 +63,7 @@ void IRPrinter::test() {
     Stmt assertion = AssertStmt::make(y > 3, "y is greater than %d", vec<Expr>(3));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, 1023, let_stmt);
+    Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), let_stmt);
 
     ostringstream source;
     source << allocate;
@@ -467,8 +467,11 @@ void IRPrinter::visit(const Provide *op) {
 
 void IRPrinter::visit(const Allocate *op) {
     do_indent();
-    stream << "allocate " << op->name << "[" << op->type << " * ";
-    print(op->size);
+    stream << "allocate " << op->name << "[" << op->type;
+    for (size_t i = 0; i < op->extents.size(); i++) {
+        stream  << " * ";
+        print(op->extents[i]);
+    }
     stream << "]\n";
     print(op->body);
 }
