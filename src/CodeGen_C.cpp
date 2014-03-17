@@ -4,6 +4,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen.h"
+#include "CodeGen_Internal.h"
 #include "Substitute.h"
 #include "IROperator.h"
 #include "Param.h"
@@ -463,7 +464,7 @@ void CodeGen_C::print_stmt(Stmt s) {
     s.accept(this);
 }
 
-void CodeGen_C::print_assignment(Type t, const std::string &rhs) {
+string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
 
     map<string, string>::iterator cached = cache.find(rhs);
 
@@ -477,6 +478,7 @@ void CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     } else {
         id = cached->second;
     }
+    return id;
 }
 
 void CodeGen_C::open_scope() {
@@ -807,12 +809,16 @@ void CodeGen_C::visit(const Call *op) {
             assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "];\n";
+            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "]";
         } else if (op->name == Call::extract_buffer_min) {
             assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "];\n";
+            rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+        } else if (op->name == Call::abs) {
+            assert(op->args.size() == 1);
+            string arg = print_expr(op->args[0]);
+            rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
         } else {
           // TODO: other intrinsics
           std::cerr << "Unhandled intrinsic: " << op->name << '\n';
@@ -998,18 +1004,54 @@ void CodeGen_C::visit(const Provide *op) {
 void CodeGen_C::visit(const Allocate *op) {
     open_scope();
 
-    string size_id = print_expr(op->size);
+    // For sizes less than 8k, do a stack allocation
+    bool on_stack = false;
+    int32_t constant_size;
+    string size_id;
+    if (constant_allocation_size(op->extents, op->name, constant_size)) {
+        int64_t stack_bytes = constant_size;
+
+        if ((stack_bytes * op->type.bytes()) > ((int64_t(1) << 31) - 1)) {
+            std::cerr << "Total size for allocation " << op->name << " is constant but exceeds 2^31 - 1.";
+            assert(false);
+        } else {
+            size_id = print_expr(Expr(static_cast<int32_t>(stack_bytes)));
+            if (stack_bytes <= 1024 * 8) {
+                on_stack = true;
+            }
+        }
+    } else {
+        assert(op->extents.size() > 0); // Otherwise allocation is constant and zero sized.
+
+        size_id = print_assignment(Int(64), print_expr(op->extents[0]));
+
+        for (size_t i = 1; i < op->extents.size(); i++) {
+            // Make the code a little less cluttered for two-dimensional case
+            string new_size_id_rhs;
+            string next_extent = print_expr(op->extents[i]);
+            if (i > 1) {
+                new_size_id_rhs =  "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+            } else {
+                new_size_id_rhs = size_id + " * " + next_extent;
+            }
+            size_id = print_assignment(Int(64), new_size_id_rhs);
+        }
+        do_indent();
+        stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
+          " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
+        open_scope();
+        do_indent();
+        stream << "halide_printf("
+               << (have_user_context ? "__user_context" : "NULL")
+               << ", \"32-bit signed overflow computing size of allocation "
+               << op->name << "\\n\");\n";
+        close_scope("overflow test " + op->name);
+    }
 
     allocations.push(op->name, op->type);
 
     do_indent();
     stream << print_type(op->type) << ' ';
-
-    // For sizes less than 8k, do a stack allocation
-    bool on_stack = false;
-    if (const IntImm *sz = op->size.as<IntImm>()) {
-        on_stack = sz->value <= 8*1024;
-    }
 
     if (on_stack) {
         stream << print_name(op->name)
@@ -1092,9 +1134,9 @@ void CodeGen_C::test() {
     Stmt s = Store::make("buf", e, x);
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), 127, s);
+    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), 43 * beta, s);
+    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), s);
 
     ostringstream source;
     CodeGen_C cg(source);
@@ -1132,28 +1174,33 @@ void CodeGen_C::test() {
         "(void)buf_stride_3;\n"
         "const int32_t buf_elem_size = _buf->elem_size;\n"
         "{\n"
-        " int32_t V0 = 43 * beta;\n"
-        " int32_t *tmp_heap = (int32_t *)halide_malloc(__user_context, sizeof(int32_t)*V0);\n"
+        " int64_t V0 = 43;\n"
+        " int64_t V1 = V0 * beta;\n"
+        " if ((V1 > ((int64_t(1) << 31) - 1)) || ((V1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
+        " {\n"
+        "  halide_printf(__user_context, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        " } // overflow test tmp.heap\n"
+        " int32_t *tmp_heap = (int32_t *)halide_malloc(__user_context, sizeof(int32_t)*V1);\n"
         " {\n"
         "  int32_t tmp_stack[127];\n"
-        "  int32_t V1 = beta + 1;\n"
-        "  int32_t V2;\n"
-        "  bool V3 = V1 < 1;\n"
-        "  if (V3)\n"
+        "  int32_t V2 = beta + 1;\n"
+        "  int32_t V3;\n"
+        "  bool V4 = V2 < 1;\n"
+        "  if (V4)\n"
         "  {\n"
-        "   int64_t V4 = (int64_t)(3);\n"
-        "   int32_t V5 = halide_printf(__user_context, \"%lld \\n\", V4);\n"
-        "   int32_t V6 = (V5, 3);\n"
-        "   V2 = V6;\n"
-        "  } // if V3\n"
+        "   int64_t V5 = (int64_t)(3);\n"
+        "   int32_t V6 = halide_printf(__user_context, \"%lld \\n\", V5);\n"
+        "   int32_t V7 = (V6, 3);\n"
+        "   V3 = V7;\n"
+        "  } // if V4\n"
         "  else\n"
         "  {\n"
-        "   V2 = 3;\n"
-        "  } // if V3 else\n"
-        "  int32_t V7 = V2;\n"
-        "  bool V8 = alpha > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t V9 = (int32_t)(V8 ? V7 : 2);\n"
-        "  buf[V1] = V9;\n"
+        "   V3 = 3;\n"
+        "  } // if V4 else\n"
+        "  int32_t V8 = V3;\n"
+        "  bool V9 = alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  int32_t V10 = (int32_t)(V9 ? V8 : 2);\n"
+        "  buf[V2] = V10;\n"
         " } // alloc tmp_stack\n"
         " halide_free(__user_context, tmp_heap);\n"
         "} // alloc tmp_heap\n"

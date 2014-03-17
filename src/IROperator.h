@@ -992,6 +992,8 @@ inline Expr count_trailing_zeros(Expr x) {
  * float in the half-open interval [0.0f, 1.0f). For random numbers of
  * other types, use lerp with a random float as the last parameter.
  *
+ * Optionally takes a seed.
+ *
  * Note that:
  \code
  Expr x = random_float();
@@ -1007,23 +1009,46 @@ inline Expr count_trailing_zeros(Expr x) {
  * The first doubles a random variable, and the second adds two
  * independent random variables.
  *
+ * A given random variable takes on a unique value that depends
+ * deterministically on the pure variables of the function they belong
+ * to, the identity of the function itself, and which definition of
+ * the function it is used in. They are, however, shared across tuple
+ * elements.
+ *
+ * This function vectorizes cleanly.
  */
-inline Expr random_float() {
-    // Generate a unique tag to pass as an argument so that this
-    // doesn't get coalesced with other calls to rand_f32 in the same
-    // expression.
-    static int counter = 0;
-    return Internal::Call::make(Float(32), "rand_f32",
-                                Internal::vec<Expr>(counter++),
-                                Internal::Call::Extern);
+inline Expr random_float(Expr seed = Expr()) {
+    // Random floats get even IDs
+    static int counter = -2;
+    counter += 2;
+
+    std::vector<Expr> args;
+    if (seed.defined()) {
+        assert(seed.type() == Int(32));
+        args.push_back(seed);
+    }
+    args.push_back(counter);
+
+    return Internal::Call::make(Float(32), Internal::Call::random, 
+                                args, Internal::Call::Intrinsic);
 }
 
-/** Return a random variable representing a 32-bit integer. */
-inline Expr random_int() {
-    static int counter = 0;
-    return Internal::Call::make(Int(32), "rand_i32",
-                                Internal::vec<Expr>(counter++),
-                                Internal::Call::Extern);
+/** Return a random variable representing a uniformly distributed
+ * 32-bit integer. See \ref random_float. Vectorizes cleanly. */
+inline Expr random_int(Expr seed = Expr()) {
+    // Random ints get odd IDs
+    static int counter = -1;
+    counter += 2;
+
+    std::vector<Expr> args;
+    if (seed.defined()) {
+        assert(seed.type() == Int(32));
+        args.push_back(seed);
+    }
+    args.push_back(counter);
+
+    return Internal::Call::make(Int(32), Internal::Call::random, 
+                                args, Internal::Call::Intrinsic);
 }
 
 // For the purposes of a call to print, const char * can convert

@@ -19,6 +19,11 @@ public:
     int starting_lane;
     int new_width;
     int lane_stride;
+
+    // lets for which we have even and odd lane specializations
+    const Scope<int> &external_lets;
+
+    Deinterleaver(const Scope<int> &lets) : external_lets(lets) {}
 private:
     Scope<int> internal;
 
@@ -33,9 +38,13 @@ private:
     }
 
     void visit(const Load *op) {
-        Type t = op->type;
-        t.width = new_width;
-        expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
+        if (op->type.is_scalar()) {
+            expr = op;
+        } else {
+            Type t = op->type;
+            t.width = new_width;
+            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
+        }
     }
 
     void visit(const Ramp *op) {
@@ -46,41 +55,64 @@ private:
     }
 
     void visit(const Variable *op) {
-        Type t = op->type;
-        t.width = new_width;
-        if (internal.contains(op->name)) {
-            expr = Variable::make(t, op->name, op->param, op->reduction_domain);
+        if (op->type.is_scalar()) {
+            expr = op;
         } else {
-            // Uh-oh, we don't know how to deinterleave this vector expression
-            // Make llvm do it
-            std::vector<Expr> args;
-            args.push_back(op);
-            for (int i = 0; i < new_width; i++) {
-                args.push_back(starting_lane + lane_stride * i);
+
+            Type t = op->type;
+            t.width = new_width;
+            if (internal.contains(op->name)) {
+                expr = Variable::make(t, op->name, op->param, op->reduction_domain);
+            } else if (external_lets.contains(op->name) &&
+                       starting_lane == 0 &&
+                       lane_stride == 2) {
+                expr = Variable::make(t, op->name + ".even_lanes", op->param, op->reduction_domain);
+            } else if (external_lets.contains(op->name) &&
+                       starting_lane == 1 &&
+                       lane_stride == 2) {
+                expr = Variable::make(t, op->name + ".odd_lanes", op->param, op->reduction_domain);
+            } else {
+                // Uh-oh, we don't know how to deinterleave this vector expression
+                // Make llvm do it
+                std::vector<Expr> args;
+                args.push_back(op);
+                for (int i = 0; i < new_width; i++) {
+                    args.push_back(starting_lane + lane_stride * i);
+                }
+                expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
             }
-            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         }
     }
 
     void visit(const Cast *op) {
-        Type t = op->type;
-        t.width = new_width;
-        expr = Cast::make(t, mutate(op->value));
+        if (op->type.is_scalar()) {
+            expr = op;
+        } else {
+            Type t = op->type;
+            t.width = new_width;
+            expr = Cast::make(t, mutate(op->value));
+        }
     }
 
     void visit(const Call *op) {
-        Type t = op->type;
-        t.width = new_width;
+        // Don't mutate scalars
+        if (op->type.is_scalar()) {
+            expr = op;
+        } else {
 
-        // Vector calls are always parallel across the lanes, so we
-        // can just deinterleave the args.
-        std::vector<Expr> args(op->args.size());
-        for (size_t i = 0; i < args.size(); i++) {
-            args[i] = mutate(op->args[i]);
+            Type t = op->type;
+            t.width = new_width;
+
+            // Vector calls are always parallel across the lanes, so we
+            // can just deinterleave the args.
+            std::vector<Expr> args(op->args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                args[i] = mutate(op->args[i]);
+            }
+
+            expr = Call::make(t, op->name, args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
         }
-
-        expr = Call::make(t, op->name, args, op->call_type,
-                          op->func, op->value_index, op->image, op->param);
     }
 
     void visit(const Let *op) {
@@ -92,8 +124,8 @@ private:
     }
 };
 
-Expr extract_odd_lanes(Expr e) {
-    Deinterleaver d;
+Expr extract_odd_lanes(Expr e, const Scope<int> &lets) {
+    Deinterleaver d(lets);
     d.starting_lane = 1;
     d.lane_stride = 2;
     d.new_width = e.type().width/2;
@@ -101,8 +133,8 @@ Expr extract_odd_lanes(Expr e) {
     return simplify(e);
 }
 
-Expr extract_even_lanes(Expr e) {
-    Deinterleaver d;
+Expr extract_even_lanes(Expr e, const Scope<int> &lets) {
+    Deinterleaver d(lets);
     d.starting_lane = 0;
     d.lane_stride = 2;
     d.new_width = (e.type().width+1)/2;
@@ -110,8 +142,19 @@ Expr extract_even_lanes(Expr e) {
     return simplify(e);
 }
 
+Expr extract_even_lanes(Expr e) {
+    Scope<int> lets;
+    return extract_even_lanes(e, lets);
+}
+
+Expr extract_odd_lanes(Expr e) {
+    Scope<int> lets;
+    return extract_odd_lanes(e, lets);
+}
+
 Expr extract_lane(Expr e, int lane) {
-    Deinterleaver d;
+    Scope<int> lets;
+    Deinterleaver d(lets);
     d.starting_lane = lane;
     d.lane_stride = 0;
     d.new_width = 1;
@@ -122,31 +165,50 @@ Expr extract_lane(Expr e, int lane) {
 class Interleaver : public IRMutator {
     Scope<ModulusRemainder> alignment_info;
 
+    Scope<int> vector_lets;
+
     using IRMutator::visit;
 
-    void visit(const Let *op) {
+    template<typename T, typename Body>
+    Body visit_let(const T *op) {
         Expr value = mutate(op->value);
-        if (value.type() == Int(32)) alignment_info.push(op->name, modulus_remainder(value));
-        Expr body = mutate(op->body);
-        if (value.type() == Int(32)) alignment_info.pop(op->name);
-        if (value.same_as(op->value) && body.same_as(op->body)) {
-            expr = op;
-        } else {
-            expr = Let::make(op->name, value, body);
+        if (value.type() == Int(32)) {
+            alignment_info.push(op->name, modulus_remainder(value, alignment_info));
         }
+
+        if (value.type().is_vector()) {
+            vector_lets.push(op->name, 0);
+        }
+        Body body = mutate(op->body);
+        if (value.type().is_vector()) {
+            vector_lets.pop(op->name);
+        }
+        if (value.type() == Int(32)) {
+            alignment_info.pop(op->name);
+        }
+
+        Body result;
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            result = op;
+        } else {
+            result = T::make(op->name, value, body);
+        }
+
+        // For vector lets, we may additionally need a let defining the even and odd lanes only
+        if (value.type().is_vector()) {
+            result = T::make(op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+            result = T::make(op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+        }
+
+        return result;
+    }
+
+    void visit(const Let *op) {
+        expr = visit_let<Let, Expr>(op);
     }
 
     void visit(const LetStmt *op) {
-        Expr value = mutate(op->value);
-        if (value.type() == Int(32)) alignment_info.push(op->name,
-                                                         modulus_remainder(value, alignment_info));
-        Stmt body = mutate(op->body);
-        if (value.type() == Int(32)) alignment_info.pop(op->name);
-        if (value.same_as(op->value) && body.same_as(op->body)) {
-            stmt = op;
-        } else {
-            stmt = LetStmt::make(op->name, value, body);
-        }
+        stmt = visit_let<LetStmt, Stmt>(op);
     }
 
     void visit(const Select *op) {
@@ -167,12 +229,12 @@ class Interleaver : public IRMutator {
             bool base_is_odd  = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 1);
             if ((is_zero(eq->b) && base_is_even) ||
                 (is_one(eq->b) && base_is_odd)) {
-                a = extract_even_lanes(true_value);
-                b = extract_odd_lanes(false_value);
+                a = extract_even_lanes(true_value, vector_lets);
+                b = extract_odd_lanes(false_value, vector_lets);
             } else if ((is_one(eq->b) && base_is_even) ||
                        (is_zero(eq->b) && base_is_odd)) {
-                a = extract_even_lanes(false_value);
-                b = extract_odd_lanes(true_value);
+                a = extract_even_lanes(false_value, vector_lets);
+                b = extract_odd_lanes(true_value, vector_lets);
             }
 
             if (a.defined() && b.defined()) {

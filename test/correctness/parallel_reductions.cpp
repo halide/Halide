@@ -69,6 +69,7 @@ int main(int argc, char **argv) {
         sum_rows.compute_root().vectorize(i, 4).parallel(j);
         sum_rows.update().parallel(j);
         sum_cols.compute_root().vectorize(j, 4);
+        sum_cols.update();
         out.output_buffer().set_bounds(0, 0, 256);
 
         Image<int> result = out.realize(256);

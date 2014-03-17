@@ -55,7 +55,11 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
         triple.setOS(llvm::Triple::Win32);
         if (target.features & Target::JIT) {
             // Use ELF for jitting
+            #if LLVM_VERSION < 35
             triple.setEnvironment(llvm::Triple::ELF);
+            #else
+            triple.setObjectFormat(llvm::Triple::ELF);
+            #endif
         }
     } else if (target.os == Target::Android) {
         triple.setOS(llvm::Triple::Linux);
@@ -574,8 +578,8 @@ void CodeGen_X86::test() {
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), 127, Block::make(loop, Free::make("tmp_stack")));
-    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, Block::make(loop, Free::make("tmp_heap")));
+    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), Block::make(loop, Free::make("tmp_stack")));
+    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), Block::make(loop, Free::make("tmp_heap")));
     loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);

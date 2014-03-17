@@ -28,9 +28,10 @@ public:
     }
 
     ~JITModuleHolder() {
+        debug(2) << "Destroying JIT compiled module at " << this << "\n";
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
             void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
-            debug(1) << "Calling target specific cleanup routine at " << ptr << "\n";
+            debug(2) << "  Calling target specific cleanup routine at " << ptr << "\n";
             (*cleanup_routines[i])();
         }
 
@@ -175,7 +176,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(ee, m, "halide_set_custom_do_par_for", true, &set_custom_do_par_for);
     hook_up_function_pointer(ee, m, "halide_set_custom_do_task", true, &set_custom_do_task);
     hook_up_function_pointer(ee, m, "halide_set_custom_trace", true, &set_custom_trace);
-    hook_up_function_pointer(ee, m, "halide_set_random_seed", true, &set_random_seed);
     hook_up_function_pointer(ee, m, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
 
     debug(2) << "Finalizing object\n";
@@ -199,7 +199,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // isn't right.
     debug(2) << "Flushing cache from " << (void *)start
              << " to " << (void *)end << "\n";
-    __clear_cache(start, end);
+    __builtin___clear_cache(start, end);
     #endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors

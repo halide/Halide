@@ -28,18 +28,23 @@ private:
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
+
         varies |= this_varies;
     }
 
     void visit(const For *op) {
         op->min.accept(this);
+        bool min_varies = varies;
         op->extent.accept(this);
-        if (!is_one(op->extent)) {
+        bool should_pop = false;
+        if (!is_one(op->extent) || min_varies) {
+            should_pop = true;
             varying.push(op->name, 0);
         }
         op->body.accept(this);
-        if (!is_one(op->extent)) {
+        if (should_pop) {
             varying.pop(op->name);
+            assert(!expr_uses_var(predicate, op->name));
         } else {
             predicate = substitute(op->name, op->min, predicate);
         }
@@ -220,7 +225,6 @@ private:
                 predicate = const_true();
             }
 
-            debug(3) << "Realization " << op->name << " only used when " << predicate << "\n";
             if (!is_one(predicate)) {
                 ProductionGuarder g(op->name, predicate);
                 Stmt body = g.mutate(op->body);
