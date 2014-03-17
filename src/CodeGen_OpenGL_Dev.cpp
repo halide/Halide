@@ -1,5 +1,6 @@
 #include "CodeGen_OpenGL_Dev.h"
 #include "IRMatch.h"
+#include "IRMutator.h"
 #include "Debug.h"
 #include "Simplify.h"
 
@@ -10,7 +11,65 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-static ostringstream nil;
+static float max_value(const Type &type) {
+    if (type == UInt(8)) {
+        return 255.0f;
+    } else if (type == UInt(16)) {
+        return 65535.0f;
+    } else {
+        assert(false && "Cannot determine max_value of this type");
+    }
+    return 1.0f;
+}
+
+
+class InjectTextureLoads : public IRMutator {
+public:
+    using IRMutator::visit;
+
+    void visit(const Cast *op) {
+        const Load *load = op->value.as<Load>();
+        if (load && op->type.is_float() && load->type.is_uint()) {
+            assert(load->index.size() == 3 && "Load from texture requires multi-index");
+
+            // Cast(float, Load(uint8,)) -> texture2D() * 255.f
+            // Cast(float, Load(uint16,)) -> texture2D() * 65535.f
+            vector<Expr> args(4);
+            args[0] = load->name;
+            args[1] = load->index[0];
+            args[2] = load->index[1];
+            args[3] = load->index[2];
+            Expr new_load = Mul::make(
+                Call::make(op->type, "glsl_texture_load",
+                           args, Call::Intrinsic,
+                           Function(), 0, load->image),
+                max_value(load->type));
+            new_load.accept(this);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
+    void visit(const Load *op) {
+        assert(op->index.size() == 3 && "Load from texture requires multi-index");
+
+        vector<Expr> args(4);
+        args[0] = op->name;
+        args[1] = op->index[0];
+        args[2] = op->index[1];
+        args[3] = op->index[2];
+        Expr new_load =
+            Cast::make(op->type,
+                       Add::make(
+                           Mul::make(
+                               Call::make(Float(32), "glsl_texture_load",
+                                          args, Call::Intrinsic,
+                                          Function(), 0, op->image),
+                               max_value(op->type)),
+                           0.5f));
+        new_load.accept(this);
+    }
+};
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
     debug(1) << "Creating GLSL codegen\n";
@@ -69,6 +128,8 @@ string CodeGen_GLSL::print_type(Type type) {
             } else {
                 assert("Can't represent an integer with this many bits in GLSL");
             }
+        } else if (type.is_uint()) {
+            oss << "int";
         } else {
             assert(false && "Can't represent this type in GLSL");
         }
@@ -98,16 +159,8 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {
-    const Load *load = op->value.as<Load>();
-    if (op->type.is_float() && load) {
-        // texture2D performs implicit conversion from the internal texture
-        // format to float, so drop the explicit cast.
-        Expr new_load = Load::make(Float(32, load->type.width), load->name, load->index, load->image, load->param);
-        new_load.accept(this);
-    } else {
-        print_assignment(op->type,
-                         print_type(op->type) + "(" + print_expr(op->value) + ")");
-    }
+    print_assignment(op->type,
+                     print_type(op->type) + "(" + print_expr(op->value) + ")");
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
@@ -184,53 +237,57 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
-    assert(op->index.size() == 3 && "Load from texture requires multi-index");
+    assert(false && "Load nodes should have been removed by now");
+}
 
-    ostringstream rhs;
-    rhs << "texture2D(" << op->name
-        << ", ivec2("
-        << print_expr(op->index[0]) << ", "
-        << print_expr(op->index[1]) << "))"
-        << get_vector_suffix(op->index[2]);
-
-    print_assignment(op->type, rhs.str());
+void CodeGen_GLSL::emit_store(Expr channel, Expr val) {
+    std::string sval = print_expr(val);
+    do_indent();
+    stream << "gl_FragColor" << get_vector_suffix(channel)
+           << " = " << sval << ";\n";
 }
 
 void CodeGen_GLSL::visit(const Store *op) {
     assert(op->index.size() == 3 && "Store to texture requires multi-index");
     std::vector<Expr> matches;
 
-    const Cast *cast = op->value.as<Cast>();
-    if (cast) {
-        // Writing to gl_FragColor performs implicit conversion from float to
-        // the internal texture format, so drop the explicit cast.
-        float max_value = 1.0f;
-        if (cast->type.element_of() == UInt(8)) {
-            max_value = 255.0f;
-        } else if (cast->type.element_of() == UInt(16)) {
-            max_value = 65535.0f;
-        } else {
-            assert(false && "Cannot store this type in a texture");
-        }
-
-        Stmt new_store =
-            Internal::simplify(
-                Store::make(op->name,
-                            Div::make(Cast::make(Float(32), cast->value),
-                                      max_value),
-                            op->index));
-        new_store.accept(this);
+    float maxval = max_value(op->value.type());
+    Expr x = Variable::make(Float(32), "*");
+    std::vector<Expr> match;
+    // TODO(dheck): comment this
+    if (expr_match(Cast::make(op->value.type(),
+                              Mul::make(x, maxval)),
+                   op->value, match) ||
+        expr_match(Cast::make(op->value.type(),
+                              Mul::make(maxval, x)),
+                   op->value, match)) {
+        emit_store(op->index[2], match[0]);
+    } else if (op->value.type().is_uint()){
+        // Store(..., uint8) -> gl_FragColor = ((float) val) / 255.f
+        emit_store(op->index[2],
+                   Div::make(Cast::make(Float(32), op->value),
+                             maxval));
     } else {
-        string val = print_expr(op->value);
-        do_indent();
-        stream << "gl_FragColor" << get_vector_suffix(op->index[2]) << " = "
-               << val
-               << ";\n";
+        assert(false && "Don't know how to handle this Store node");
     }
 }
 
+
 void CodeGen_GLSL::visit(const Call *op) {
-    CodeGen_C::visit(op);
+    if (op->call_type == Call::Intrinsic &&
+        op->name == "glsl_texture_load") {
+        ostringstream rhs;
+        rhs << "texture2D(" << op->image.name()
+            << ", vec2("
+            << print_expr(op->args[1]) << ", "
+            << print_expr(op->args[2]) << "))"
+            << get_vector_suffix(op->args[3]);
+
+        print_assignment(op->type, rhs.str());
+        return;
+    } else {
+        CodeGen_C::visit(op);
+    }
 }
 
 void CodeGen_GLSL::visit(const AssertStmt *) {
@@ -245,6 +302,7 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
 
 void CodeGen_GLSL::compile(Stmt stmt, string name,
                            const vector<Argument> &args) {
+    stmt = simplify(InjectTextureLoads().mutate(stmt));
 
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
@@ -275,12 +333,11 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     stream << "#version 120\n";
     stream << header.str();
 
+    // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer && args[i].read) {
-            // Declare input textures
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
         } else if (!args[i].is_buffer) {
-            // Declare input variables
             stream << "uniform "
                    << print_type(args[i].type) << " "
                    << print_name(args[i].name) << ";\n";
