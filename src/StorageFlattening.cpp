@@ -96,9 +96,10 @@ private:
         }
 
         // Compute the size
-        Expr size = 1;
+        std::vector<Expr> extents;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
-            size *= realize->bounds[i].extent;
+          extents.push_back(realize->bounds[i].extent);
+          extents[i] = mutate(extents[i]);
         }
 
         vector<int> storage_permutation;
@@ -118,8 +119,6 @@ private:
         }
 
         assert(storage_permutation.size() == realize->bounds.size());
-
-        size = mutate(size);
 
         stmt = body;
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
@@ -148,7 +147,7 @@ private:
             t.bits = t.bytes() * 8;
 
             // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, size, stmt);
+            stmt = Allocate::make(buffer_name, t, extents, stmt);
 
             // Create a buffer_t object if necessary
             if (make_buffer_t[idx]) {

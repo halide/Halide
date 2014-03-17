@@ -80,7 +80,6 @@ set(RUNTIME_CPP
   ssp
   osx_io
   posix_math
-  random
   posix_thread_pool
   windows_thread_pool
   android_host_cpu_count
@@ -240,6 +239,7 @@ set(HEADER_FILES
   Inline.h
   Qualify.h
   ExprUsesVar.h
+  Random.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -284,6 +284,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   Parameter.cpp
   Reduction.cpp
+  Random.cpp
   RDom.cpp
   Profiling.cpp
   Tracing.cpp

@@ -28,9 +28,10 @@ public:
     }
 
     ~JITModuleHolder() {
+        debug(2) << "Destroying JIT compiled module at " << this << "\n";
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
             void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
-            debug(1) << "Calling target specific cleanup routine at " << ptr << "\n";
+            debug(2) << "  Calling target specific cleanup routine at " << ptr << "\n";
             (*cleanup_routines[i])();
         }
 

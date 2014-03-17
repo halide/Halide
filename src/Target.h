@@ -52,6 +52,61 @@ struct Target {
     bool has_gpu_feature() {
         return (features & (CUDA|OpenCL|SPIR|SPIR64));
     }
+
+    bool operator==(const Target &other) const {
+      return os == other.os &&
+          arch == other.arch &&
+          bits == other.bits &&
+          features == other.features;
+    }
+
+    bool operator!=(const Target &other) const {
+      return !(*this == other);
+    }
+
+    /** Convert the Target into a string form that can be reconstituted
+     * by merge_string(), which will always be of the form
+     *
+     *   arch-bits-os-feature1-feature2...featureN.
+     *
+     * Note that is guaranteed that t2.from_string(t1.to_string()) == t1
+     * ,but not that from_string(s).to_string() == s (since there can be
+     * multiple strings that parse to the same Target)...
+     * *unless* t1 contains 'unknown' fields (in which case you'll get a string
+     * that can't be parsed, which is intentional).
+     */
+    std::string to_string() const;
+
+    /**
+     * Parse the contents of 'target' and merge into 'this',
+     * replacing only the parts that are specified. (e.g., if 'target' specifies
+     * only an arch, only the arch field of 'this' will be changed, leaving
+     * the other fields untouched). Any features specified in 'target'
+     * are added to 'this', whether or not originally present.
+     *
+     * If the string contains unknown tokens, or multiple tokens of the
+     * same category (e.g. multiple arch values), return false
+     * (possibly leaving 'this' munged). (Multiple feature specifications
+     * will not cause a failure.)
+     *
+     * If 'target' contains "host" as the first token, it replaces the entire
+     * contents of 'this' with get_host_target(), then proceeds to parse the
+     * remaining tokens (allowing for things like "host-opencl" to mean
+     * "host configuration, but with opencl added").
+     *
+     * Note that unlike parse_from_string(), this will never print to cerr or
+     * assert in the event of a parse failure. Note also that an empty target
+     * string is essentially a no-op, leaving 'this' unaffected.
+     */
+    bool merge_string(const std::string &target);
+
+    /**
+     * Like merge_string(), but reset the contents of 'this' first.
+     */
+    bool from_string(const std::string &target) {
+      *this = Target();
+      return merge_string(target);
+    }
 };
 
 /** Return the target corresponding to the host machine. */
@@ -69,7 +124,11 @@ EXPORT Target get_target_from_environment();
 EXPORT Target get_jit_target_from_environment();
 
 /** Given a string of the form used in HL_TARGET (e.g. "x86-64-avx"),
- * return the Target it specifies. */
+ * return the Target it specifies. Note that this always starts with
+ * the result of get_host_target(), replacing only the parts found in the
+ * target string, so if you omit (say) an OS specification, the host OS
+ * will be used instead. An empty string is exactly equivalent to get_host_target().
+ */
 EXPORT Target parse_target_string(const std::string &target);
 
 namespace Internal {

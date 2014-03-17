@@ -290,7 +290,7 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
-$(BIN_DIR)/test_%: test/correctness/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+$(BIN_DIR)/test_%: test/correctness/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
 $(BIN_DIR)/performance_%: test/performance/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/performance/clock.h
