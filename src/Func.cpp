@@ -1816,10 +1816,43 @@ void Func::realize(Realization dst, const Target &target) {
 }
 
 void Func::infer_input_bounds(Buffer dst) {
-    infer_input_bounds(Realization(vec<Buffer>(dst)));
+    Realization r = Realization(vec<Buffer>(dst));
+    infer_input_bounds(r, 1);
+    assert(r[0].raw_buffer() == dst.raw_buffer());
 }
 
-void Func::infer_input_bounds(Realization dst) {
+static Buffer allocate_dummy_buffer(buffer_t buf, Type ty) {
+    // Figure out how much memory to allocate for this buffer
+    size_t min_idx = 0, max_idx = 0;
+    for (int d = 0; d < 4; d++) {
+        if (buf.stride[d] > 0) {
+            min_idx += buf.min[d] * buf.stride[d];
+            max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
+        } else {
+            max_idx += buf.min[d] * buf.stride[d];
+            min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
+        }
+    }
+    size_t total_size = (max_idx - min_idx);
+    while (total_size & 0x1f) total_size++;
+
+    // Allocate enough memory with the right dimensionality.
+    Buffer buffer(ty, total_size,
+                  buf.extent[1] > 0 ? 1 : 0,
+                  buf.extent[2] > 0 ? 1 : 0,
+                  buf.extent[3] > 0 ? 1 : 0);
+
+    // Rewrite the buffer fields to match the ones returned
+    for (int d = 0; d < 4; d++) {
+        buffer.raw_buffer()->min[d] = buf.min[d];
+        buffer.raw_buffer()->stride[d] = buf.stride[d];
+        buffer.raw_buffer()->extent[d] = buf.extent[d];
+    }
+
+    return buffer;
+}
+
+void Func::infer_input_bounds(Realization &dst, int max_iterations) {
     if (!compiled_module.wrapped_function) compile_jit();
 
     assert(compiled_module.wrapped_function);
@@ -1843,37 +1876,66 @@ void Func::infer_input_bounds(Realization dst) {
         arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
     }
 
-    // Update the addresses of the image param args
-    Internal::debug(3) << image_param_args.size() << " image param args to set\n";
     vector<buffer_t> dummy_buffers;
-    for (size_t i = 0; i < image_param_args.size(); i++) {
-        Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
-        Buffer b = image_param_args[i].second.get_buffer();
-        if (b.defined()) {
-            arg_values[image_param_args[i].first] = b.raw_buffer();
-        } else {
-            Internal::debug(1) << "Going to infer input size for param " << image_param_args[i].second.name() << "\n";
-            buffer_t buf;
-            memset(&buf, 0, sizeof(buffer_t));
-            dummy_buffers.push_back(buf);
-            arg_values[image_param_args[i].first] = &dummy_buffers[dummy_buffers.size()-1];
+    for (int it = 0; it < max_iterations; it++) {
+        Internal::debug(1) << "infer_input_bounds, iteration " << it << "\n";
+
+        // Track the previous output mins/extents for potential changes
+        std::vector<std::vector<size_t> > prev_mins(dst.size()), prev_extents(dst.size());
+        for (int i = 0; i < dst.size(); i++) {
+            for (int d = 0; d < dst[i].dimensions(); d++) {
+                prev_mins[i].push_back(dst[i].min(d));
+                prev_extents[i].push_back(dst[i].extent(d));
+            }
         }
-    }
 
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] && "An argument to a jitted function is null\n");
-    }
+        // Update the addresses of the image param args
+        Internal::debug(3) << image_param_args.size() << " image param args to set\n";
 
-    Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
-    if (exit_status) {
-        std::cerr << "Calling " << name()
-                  << " in bounds inference mode returned non-success ("
-                  << exit_status << ")\n";
-        assert(false);
+        dummy_buffers.clear();
+        for (size_t i = 0; i < image_param_args.size(); i++) {
+            Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
+            Buffer b = image_param_args[i].second.get_buffer();
+            if (b.defined()) {
+                arg_values[image_param_args[i].first] = b.raw_buffer();
+            } else {
+                Internal::debug(1) << "Going to infer input size for param " << image_param_args[i].second.name() << "\n";
+                buffer_t buf;
+                memset(&buf, 0, sizeof(buffer_t));
+                dummy_buffers.push_back(buf);
+                arg_values[image_param_args[i].first] = &dummy_buffers[dummy_buffers.size()-1];
+            }
+        }
+
+        for (size_t i = 0; i < arg_values.size(); i++) {
+            Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+            assert(arg_values[i] && "An argument to a jitted function is null\n");
+        }
+
+        Internal::debug(2) << "Calling jitted function\n";
+        int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+        if (exit_status) {
+            std::cerr << "Calling " << name()
+                      << " in bounds inference mode returned non-success ("
+                      << exit_status << ")\n";
+            assert(false);
+        }
+        Internal::debug(2) << "Back from jitted function\n";
+
+        // if the current dst size changed, we have not converted
+        bool converged = true;
+        for (int i = 0; i < dst.size(); i++) {
+            for (int d = 0; d < dst[i].dimensions(); d++) {
+                if (dst[i].min(d) != prev_mins[i][d] ||
+                    dst[i].extent(d) != prev_extents[i][d])
+                {
+                    Internal::debug(3) << "infer_input_bounds not yet converged on dst size\n";
+                    converged = false;
+                }
+            }
+        }
+        if (converged) break;
     }
-    Internal::debug(2) << "Back from jitted function\n";
 
     // Now allocate the resulting buffers
     size_t j = 0;
@@ -1881,39 +1943,20 @@ void Func::infer_input_bounds(Realization dst) {
         Buffer b = image_param_args[i].second.get_buffer();
         if (!b.defined()) {
             buffer_t buf = dummy_buffers[j];
-
-            // Figure out how much memory to allocate for this buffer
-            size_t min_idx = 0, max_idx = 0;
-            for (int d = 0; d < 4; d++) {
-                if (buf.stride[d] > 0) {
-                    min_idx += buf.min[d] * buf.stride[d];
-                    max_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-                } else {
-                    max_idx += buf.min[d] * buf.stride[d];
-                    min_idx += (buf.min[d] + buf.extent[d] - 1) * buf.stride[d];
-                }
-            }
-            size_t total_size = (max_idx - min_idx);
-            while (total_size & 0x1f) total_size++;
-
-            // Allocate enough memory with the right dimensionality.
-            Buffer buffer(image_param_args[i].second.type(), total_size,
-                          buf.extent[1] > 0 ? 1 : 0,
-                          buf.extent[2] > 0 ? 1 : 0,
-                          buf.extent[3] > 0 ? 1 : 0);
-
-            // Rewrite the buffer fields to match the ones returned
-            for (int d = 0; d < 4; d++) {
-                buffer.raw_buffer()->min[d] = buf.min[d];
-                buffer.raw_buffer()->stride[d] = buf.stride[d];
-                buffer.raw_buffer()->extent[d] = buf.extent[d];
-            }
+            Buffer buffer = allocate_dummy_buffer(buf, image_param_args[i].second.type());
             j++;
             image_param_args[i].second.set_buffer(buffer);
         }
     }
 
     for (size_t i = 0; i < dst.size(); i++) {
+        // allocate dst buffer, if needed
+        if (!dst[i].host_ptr()) {
+            fprintf(stderr, "Allocating dst[%lu]\n", i);
+            buffer_t buf = *(dst[i].raw_buffer());
+            Buffer buffer = allocate_dummy_buffer(buf, dst[i].type());
+            dst[i] = buffer;
+        }
         dst[i].set_source_module(compiled_module);
     }
 }
