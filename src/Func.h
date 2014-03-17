@@ -16,6 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "Target.h"
 
 namespace Halide {
 
@@ -184,13 +185,20 @@ public:
     EXPORT size_t size() const;
 };
 
+enum GPUAPI {
+    GPU_DEFAULT,
+    GPU_CUDA,
+    GPU_OpenCL,
+    GPU_GLSL
+};
+
 /** A wrapper around a schedule used for common schedule manipulations */
 class ScheduleHandle {
     Internal::Schedule &schedule;
     void set_dim_type(Var var, Internal::For::ForType t);
     void dump_argument_list();
 public:
-    ScheduleHandle(Internal::Schedule &s) : schedule(s) {}
+    ScheduleHandle(Internal::Schedule &s) : schedule(s) {s.touched = true;}
 
     /** Scheduling calls that control how the domain of this update is
      * traversed. See the documentation for Func for the meanings. */
@@ -230,25 +238,70 @@ public:
                                    VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x);
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y);
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
+    EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpu_api = GPU_DEFAULT);
 
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x);
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y);
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z);
+    EXPORT ScheduleHandle &gpu_blocks(Var block_x, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpu_api = GPU_DEFAULT);
 
-    EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x);
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
-                                Var thread_x, Var thread_y);
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
-                                Var thread_x, Var thread_y, Var thread_z);
-    EXPORT ScheduleHandle &cuda_tile(Var x, int x_size);
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size);
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
-                                     int x_size, int y_size, int z_size);
+    EXPORT ScheduleHandle &gpu(Var block_x, Var thread_x, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu(Var block_x, Var block_y,
+                               Var thread_x, Var thread_y,
+			       GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu(Var block_x, Var block_y, Var block_z,
+                               Var thread_x, Var thread_y, Var thread_z,
+			       GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_tile(Var x, Expr x_size, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Expr x_size, Expr y_size,
+				    GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Var z,
+                                    Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_DEFAULT);
     // @}
 
+    // These calls are for legacy compatibility only.
+    EXPORT ScheduleHandle &cuda_threads(Var thread_x) {
+        return gpu_threads(thread_x);
+    }
+    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y) {
+        return gpu_threads(thread_x, thread_y);
+    }
+    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z) {
+        return gpu_threads(thread_x, thread_y, thread_z);
+    }
+
+    EXPORT ScheduleHandle &cuda_blocks(Var block_x) {
+        return gpu_blocks(block_x);
+    }
+    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y) {
+        return gpu_blocks(block_x, block_y);
+    }
+    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z) {
+        return gpu_blocks(block_x, block_y, block_z);
+    }
+
+    EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x) {
+        return gpu(block_x, thread_x);
+    }
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
+                                Var thread_x, Var thread_y) {
+        return gpu(block_x, thread_x, block_y, thread_y);
+    }
+    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
+                                Var thread_x, Var thread_y, Var thread_z) {
+        return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
+    }
+    EXPORT ScheduleHandle &cuda_tile(Var x, int x_size) {
+        return gpu_tile(x, x_size);
+    }
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size) {
+        return gpu_tile(x, y, x_size, y_size);
+    }
+    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
+                                     int x_size, int y_size, int z_size) {
+        return gpu_tile(x, y, z, x_size, y_size, z_size);
+    }
 };
 
 /** A halide function. This class represents one stage in a Halide
@@ -577,11 +630,6 @@ public:
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
 
-    /** Choose the random seed to use when this function is
-     * realized. Defaults to zero. Only relevant for jitting. For AOT
-     * compilation see \ref halide_set_random_seed */
-    EXPORT void set_random_seed(uint32_t seed);
-
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
      * debugging.
@@ -848,50 +896,105 @@ public:
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);
 
-    /** Tell Halide that the following dimensions correspond to cuda
+    /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
      * function within the block indices of a consumer function, and
-     * want to control how that function's dimensions map to cuda
-     * threads. If the selected target is not ptx, this just marks
-     * those dimensions as parallel. */
+     * want to control how that function's dimensions map to GPU
+     * threads. If the selected target is not an appropriate GPU, this
+     * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &cuda_threads(Var thread_x);
-    EXPORT Func &cuda_threads(Var thread_x, Var thread_y);
-    EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z);
+    EXPORT Func &gpu_threads(Var thread_x, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_DEFAULT);
     // @}
 
-    /** Tell Halide that the following dimensions correspond to cuda
+    /** \deprecated Old name for #gpu_threads. */
+    // @{
+    EXPORT Func &cuda_threads(Var thread_x) {
+        return gpu_threads(thread_x);
+    }
+    EXPORT Func &cuda_threads(Var thread_x, Var thread_y) {
+        return gpu_threads(thread_x, thread_y);
+    }
+    EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z) {
+        return gpu_threads(thread_x, thread_y, thread_z);
+    }
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to GPU
      * block indices. This is useful for scheduling stages that will
-     * run serially within each cuda block. If the selected target is
+     * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &cuda_blocks(Var block_x);
-    EXPORT Func &cuda_blocks(Var block_x, Var block_y);
-    EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z);
+    EXPORT Func &gpu_blocks(Var block_x, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_blocks(Var block_x, Var block_y, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpuapi = GPU_DEFAULT);
     // @}
 
-    /** Tell Halide that the following dimensions correspond to cuda
+    /** \deprecated Old name for #gpu_blocks. */
+    // @{
+    EXPORT Func &cuda_blocks(Var block_x) {
+        return gpu_blocks(block_x);
+    }
+    EXPORT Func &cuda_blocks(Var block_x, Var block_y) {
+        return gpu_blocks(block_x, block_y);
+    }
+    EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z) {
+        return gpu_blocks(block_x, block_y, block_z);
+    }
+    // @}
+
+    /** Tell Halide that the following dimensions correspond to GPU
      * block indices and thread indices. If the selected target is not
      * ptx, these just mark the given dimensions as parallel. The
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &cuda(Var block_x, Var thread_x);
+    EXPORT Func &gpu(Var block_x, Var thread_x, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu(Var block_x, Var block_y,
+		     Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu(Var block_x, Var block_y, Var block_z,
+                     Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_DEFAULT);
+    // @}
+
+    /** \deprecated Old name for #gpu. */
+    // @{
+    EXPORT Func &cuda(Var block_x, Var thread_x) {
+        return gpu(block_x, thread_x);
+    }
     EXPORT Func &cuda(Var block_x, Var block_y,
-                      Var thread_x, Var thread_y);
+                      Var thread_x, Var thread_y) {
+        return gpu(block_x, thread_x, block_y, thread_y);
+    }
     EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
-                      Var thread_x, Var thread_y, Var thread_z);
+                      Var thread_x, Var thread_y, Var thread_z) {
+        return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
+    }
     // @}
 
     /** Short-hand for tiling a domain and mapping the tile indices
-     * to cuda block indices and the coordinates within each tile to
-     * cuda thread indices. Consumes the variables given, so do all
+     * to GPU block indices and the coordinates within each tile to
+     * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &cuda_tile(Var x, int x_size);
-    EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size);
+    EXPORT Func &gpu_tile(Var x, int x_size, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_tile(Var x, Var y, Var z,
+                          int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_DEFAULT);
+    // @}
+
+    /** \deprecated Old name for #gpu_tile. */
+    // @{
+    EXPORT Func &cuda_tile(Var x, int x_size) {
+        return gpu_tile(x, x_size);
+    }
+    EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size) {
+        return gpu_tile(x, y, x_size, y_size);
+    }
     EXPORT Func &cuda_tile(Var x, Var y, Var z,
-                           int x_size, int y_size, int z_size);
+                           int x_size, int y_size, int z_size) {
+        return gpu_tile(x, y, z, x_size, y_size, z_size);
+    }
     // @}
 
     /** Specify how the storage for the function is laid out. These
@@ -1218,57 +1321,176 @@ public:
 
 };
 
-/** JIT-Compile and run enough code to evaluate a Halide
- * expression. This can be thought of as a scalar version of
- * \ref Func::realize */
+ /** JIT-Compile and run enough code to evaluate a Halide
+  * expression. This can be thought of as a scalar version of
+  * \ref Func::realize */
 template<typename T>
-T evaluate(Expr e) {
-    assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
-    Func f;
-    f(_) = e;
-    Image<T> im = f.realize();
-    return im(0);
-}
+  T evaluate(Expr e) {
+  assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
+  Func f;
+  f(_) = e;
+  Image<T> im = f.realize();
+  return im(0);
+ }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 // @{
+ template<typename A, typename B>
+   void evaluate(Tuple t, A *a, B *b) {
+   assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+   assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+   Func f;
+   f(_) = t;
+   Realization r = f.realize();
+   *a = Image<A>(r[0])(0);
+   *b = Image<B>(r[1])(0);
+ }
+
+ template<typename A, typename B, typename C>
+   void evaluate(Tuple t, A *a, B *b, C *c) {
+   assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+   assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+   assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
+   Func f;
+   f(_) = t;
+   Realization r = f.realize();
+   *a = Image<A>(r[0])(0);
+   *b = Image<B>(r[1])(0);
+   *c = Image<C>(r[2])(0);
+ }
+
+ template<typename A, typename B, typename C, typename D>
+   void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
+   assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
+   assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+   assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
+   assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
+   Func f;
+   f(_) = t;
+   Realization r = f.realize();
+   *a = Image<A>(r[0])(0);
+   *b = Image<B>(r[1])(0);
+   *c = Image<C>(r[2])(0);
+   *d = Image<D>(r[3])(0);
+ }
+ // @}
+
+
+/** JIT-Compile and run enough code to evaluate a Halide
+ * expression. This can be thought of as a scalar version of \ref
+ * Func::realize . Can use GPU if target from environment specifies
+ * one.*/
+template<typename T>
+T evaluate_may_gpu(Expr e) {
+    assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
+    Image<T> im;
+    Func f;
+    f(_) = e;
+
+    if (get_target_from_environment().has_gpu_feature()) {
+        Func g;
+	Var x;
+	g(x, _) = f(_);
+	g.gpu_tile(x, 1);
+	im = g.realize(1);
+	im.copy_to_host();
+    } else {
+	im = f.realize();
+    }
+    return im(0);
+}
+
+/** JIT-compile and run enough code to evaluate a Halide Tuple. Can
+ *  use GPU if target from environment specifies one. */
+// @{
 template<typename A, typename B>
-void evaluate(Tuple t, A *a, B *b) {
+void evaluate_may_gpu(Tuple t, A *a, B *b) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+
+    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
-    Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
+    Image<A> result_a(has_gpu_feature ? 1 : 0);
+    Image<B> result_b(has_gpu_feature ? 1 : 0);
+    Realization r(result_a, result_b);
+    if (has_gpu_feature) {
+        Func g;
+	Var x;
+	g(x, _) = f(_);
+	g.gpu_tile(x, 1);
+	g.realize(r);
+	result_a.copy_to_host();
+	result_b.copy_to_host();
+    } else {
+	f.realize(r);
+    }
+    *a = result_a(0);
+    *b = result_b(0);
 }
 
 template<typename A, typename B, typename C>
-void evaluate(Tuple t, A *a, B *b, C *c) {
+void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
+
+    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
-    Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
-    *c = Image<C>(r[2])(0);
+    Image<A> result_a(has_gpu_feature ? 1 : 0);
+    Image<B> result_b(has_gpu_feature ? 1 : 0);
+    Image<C> result_c(has_gpu_feature ? 1 : 0);
+    Realization r(result_a, result_b, result_c);
+    if (has_gpu_feature) {
+        Func g;
+	Var x;
+	g(x, _) = f(_);
+	g.gpu_tile(x, 1);
+	g.realize(r);
+	result_a.copy_to_host();
+	result_b.copy_to_host();
+	result_c.copy_to_host();
+    } else {
+	f.realize(r);
+    }
+    *a = result_a(0);
+    *b = result_b(0);
+    *c = result_c(0);
 }
 
 template<typename A, typename B, typename C, typename D>
-void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
+void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
+
+    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
-    Realization r = f.realize();
-    *a = Image<A>(r[0])(0);
-    *b = Image<B>(r[1])(0);
-    *c = Image<C>(r[2])(0);
-    *d = Image<D>(r[3])(0);
+    Image<A> result_a(has_gpu_feature ? 1 : 0);
+    Image<B> result_b(has_gpu_feature ? 1 : 0);
+    Image<C> result_c(has_gpu_feature ? 1 : 0);
+    Image<D> result_d(has_gpu_feature ? 1 : 0);
+    Realization r(result_a, result_b, result_c, result_d);
+    if (has_gpu_feature) {
+        Func g;
+	Var x;
+	g(x, _) = f(_);
+	g.gpu_tile(x, 1);
+	g.realize(r);
+	result_a.copy_to_host();
+	result_b.copy_to_host();
+	result_c.copy_to_host();
+	result_d.copy_to_host();
+    } else {
+	f.realize(r);
+    }
+    *a = result_a(0);
+    *b = result_b(0);
+    *c = result_c(0);
+    *d = result_d(0);
 }
 // @}
 

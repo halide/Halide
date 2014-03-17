@@ -1122,6 +1122,11 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), cast<uint8_t>(0), cast<uint8_t>(200));
     check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), cast<uint8_t>(5), cast<uint8_t>(25));
 
+    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer(), Parameter()));
+    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer(), Parameter()));
+    check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
+          cast<uint16_t>(0), cast<uint16_t>(255*2));
+
     vector<Expr> input_site_1 = vec(2*x);
     vector<Expr> input_site_2 = vec(2*x+1);
     vector<Expr> output_site = vec(x+1);

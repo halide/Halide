@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <cmath>
+#include <algorithm>
 
 using namespace Halide;
 
@@ -224,21 +225,20 @@ bool test(int vec_width) {
     if (verbose) printf("Scatter\n");
     Func f6;
     RDom i(0, H);
-    // Set one entry in each row high
-    xCoord = clamp(cast<int>(input(2*i, i)), 0, W-1);
+    // Set one entry in each column high
     f6(x, y) = 0;
-    f6(xCoord, i) = 1;
+    f6(x, clamp(x*x, 0, H-1)) = 1;
 
-    f6.vectorize(x, vec_width);
+    f6.update().vectorize(x, vec_width);
 
     Image<int> im6 = f6.realize(W, H);
 
-    for (int y = 0; y < H; y++) {
-        int xCoord = (int)(input(2*y, y));
-        if (xCoord >= W) xCoord = W-1;
-        if (xCoord < 0) xCoord = 0;
-        for (int x = 0; x < W; x++) {
-            int correct = x == xCoord ? 1 : 0;
+    for (int x = 0; x < W; x++) {
+        int yCoord = x*x;
+        if (yCoord >= H) yCoord = H-1;
+        if (yCoord < 0) yCoord = 0;
+        for (int y = 0; y < H; y++) {
+            int correct = y == yCoord ? 1 : 0;
             if (im6(x, y) != correct) {
                 printf("im6(%d, %d) = %d instead of %d\n", x, y, im6(x, y), correct);
                 return false;

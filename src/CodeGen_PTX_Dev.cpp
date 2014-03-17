@@ -1,4 +1,5 @@
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_Internal.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -224,19 +225,19 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // alloca. Note that by jumping back we're rendering any
         // expression we carry back meaningless, so we had better only
         // be dealing with constants here.
-        const IntImm *size = alloc->size.as<IntImm>();
-        assert(size && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
+        int32_t size = 0;
+        bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
+        assert(is_constant && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
 
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size->value));
+        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
         builder->SetInsertPoint(here);
     }
 
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
-
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
@@ -348,9 +349,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(module));
     }
     #else
+    // FIXME: This doesn't actually do the job. Now that
+    // DataLayoutPass is gone, I have no idea how to get this to work.
     if (const DataLayout *TD = Target.getDataLayout()) {
         module->setDataLayout(TD);
     }
+    PM.add(new DataLayoutPass(module));
     #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose

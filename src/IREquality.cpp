@@ -357,8 +357,16 @@ public:
 
         if (compare_names(s->name, op->name)) return;
 
-        expr = s->size;
-        op->size.accept(this);
+        if (s->extents.size() < op->extents.size()) {
+            result = -1;
+        } else if (s->extents.size() > op->extents.size()) {
+            result = 1;
+        } else {
+            for (size_t i = 0; i < s->extents.size(); i++) {
+                expr = s->extents[i];
+                op->extents[i].accept(this);
+            }
+        }
 
         stmt = s->body;
         op->body.accept(this);
