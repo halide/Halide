@@ -370,7 +370,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define acos_f32 acos \n"
                << "#define tan_f32 tan \n"
                << "#define atan_f32 atan \n"
-               << "#define atan2_f32 return atan2\n"
+               << "#define atan2_f32 atan2\n"
                << "#define sinh_f32 sinh \n"
                << "#define asinh_f32 asinh \n"
                << "#define cosh_f32 cosh \n"
