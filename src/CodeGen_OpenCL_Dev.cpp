@@ -146,8 +146,6 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
     
-    //ostringstream rhs;
-    //rhs << "__broadcast" << print_type(op->type) << "(" << id_value << ")";
     print_assignment(op->type.vector_of(op->width), id_value);
 }
 
