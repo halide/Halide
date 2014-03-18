@@ -301,7 +301,7 @@ std::string Target::to_string() const {
       + "-" + Internal::int_to_string(bits)
       + "-" + string(os_names[os]);
   for (int i = 0; i < 9; ++i) {
-    if (features & (1 << i)) {
+    if (features & (1ULL << i)) {
       result += "-" + string(feature_names[i]);
     }
   }
