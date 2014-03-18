@@ -1009,10 +1009,6 @@ void CodeGen_C::visit(const Allocate *op) {
     int32_t constant_size;
     string size_id;
     if (constant_allocation_size(op->extents, op->name, constant_size)) {
-        // If the allocation is scalar, just allocate one element.
-        if (op->extents.size() == 0)
-            constant_size = 1;
-
         int64_t stack_bytes = constant_size * op->type.bytes();
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
