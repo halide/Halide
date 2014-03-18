@@ -46,6 +46,11 @@ protected:
         std::string print_reinterpret(Type type, Expr e);
 
         void visit(const For *);
+        void visit(const Ramp *op);
+        void visit(const Broadcast *op);
+        void visit(const Load *op);
+        void visit(const Store *op);
+        void visit(const Cast *op);
     };
 
     CodeGen_OpenCL_C *clc;
