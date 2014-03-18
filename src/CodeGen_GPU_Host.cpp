@@ -725,10 +725,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
                 std::cerr << "Total size for GPU allocation " << alloc->name << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
                 assert(false);
             } else {
+                // Size in elements, not size in bytes.
                 llvm_size = ConstantInt::get(i32, constant_size);
             }
         } else {
-            llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+            // Note we compute this using a type of size 1, because we
+            // want the size in elements, not in bytes.
+            llvm_size = codegen_allocation_size(alloc->name, UInt(8), alloc->extents);
         }
 
         // For now, we just track the allocation as a single 1D buffer of the
