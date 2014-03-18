@@ -37,7 +37,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
         if (type.is_uint() && type.bits > 1) oss << 'u';
         switch (type.bits) {
         case 1:
-            assert(type.width == 1 && "vector of bool not valid");
+            assert(type.width == 1 && "Vector of bool not valid in OpenCL C (yet)");
             oss << "bool";
             break;
         case 8:
@@ -56,10 +56,8 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             assert(false && "Can't represent an integer with this many bits in OpenCL C");
         }
     }
-    if (type.width != 1)
-    {
-        switch (type.width)
-        {
+    if (type.width != 1) {
+        switch (type.width) {
         case 2:
         case 3:
         case 4:
@@ -139,9 +137,12 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
     string id_stride = print_expr(op->stride);
 
     ostringstream rhs;
-    rhs << id_base << " + " << id_stride << " * (" << print_type(op->type.vector_of(op->width)) << ")(0";
-    for (int i = 1; i < op->width; ++i)
+    rhs << id_base << " + " << id_stride << " * (" 
+        << print_type(op->type.vector_of(op->width)) << ")(0";
+    // Note 0 written above.
+    for (int i = 1; i < op->width; ++i) {
         rhs << ", " << i;
+    }
     rhs << ")";
     print_assignment(op->type.vector_of(op->width), rhs.str());
 }
@@ -152,34 +153,38 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
     print_assignment(op->type.vector_of(op->width), id_value);
 }
 
+namespace {
 // Mapping of integer vector indices to OpenCL ".s" syntax.
-static const char * vector_elements = "0123456789ABCDEF";
+const char * vector_elements = "0123456789ABCDEF";
 
-static const Expr *is_ramp1(Expr E) {
-    const Ramp *R = E.as<Ramp>();
-    if (R == NULL) {
-        return NULL;
+// If e is a ramp expression with stride 1, return the base, otherwise undefined.
+Expr is_ramp1(Expr e) {
+    const Ramp *r = e.as<Ramp>();
+    if (r == NULL) {
+        return Expr();
     }
     
-    const IntImm *i = R->stride.as<IntImm>();
+    const IntImm *i = r->stride.as<IntImm>();
     if (i != NULL && i->value == 1) {
-        return &R->base;
+        return r->base;
     }
 
-    return NULL;
+    return Expr();
+}
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
-    // If we're loading a contiguous ramp into a vector, use vload isntead.
-    const Expr *ramp_base = is_ramp1(op->index);
-    if (ramp_base != NULL)
-    {
-        string id_ramp_base = print_expr(*ramp_base);
+    // If we're loading a contiguous ramp into a vector, use vload instead.
+    Expr ramp_base = is_ramp1(op->index);
+    if (ramp_base.defined()) {
+        assert(op->type.is_vector());
+        string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
         rhs << "vload" << op->type.width
             << "(0, "
-            << "(__global " << print_type(op->type.element_of()) << "*)" << print_name(op->name) << " + " << id_ramp_base << ")";
+            << "(__global " << print_type(op->type.element_of()) << "*)" 
+            << print_name(op->name) << " + " << id_ramp_base << ")";
 
         print_assignment(op->type, rhs.str());
         return;
@@ -192,17 +197,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
                               allocations.get(op->name) == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
-        rhs << "(("
-            << print_type(op->type)
-            << " *)"
+        rhs << "((" << print_type(op->type) << " *)"
             << print_name(op->name)
             << ")";
     } else {
         rhs << print_name(op->name);
     }
-    rhs << "["
-        << id_index
-        << "]";
+    rhs << "[" << id_index << "]";
     
     std::map<string, string>::iterator cached = cache.find(rhs.str());
     if (cached != cache.end()) {
@@ -211,8 +212,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     }
 
     if (op->index.type().is_vector()) {
-        assert(op->type.is_vector());
         // If index is a vector, gather vector elements.
+        assert(op->type.is_vector());
 
         id = unique_name('V');
         cache[rhs.str()] = id;
@@ -226,10 +227,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
             stream
                 << id << ".s" << vector_elements[i]
                 << " = " 
-                << "((__global " << print_type(op->type.element_of()) << "*)" << print_name(op->name) << ")"
+                << "((__global " << print_type(op->type.element_of()) << "*)" 
+                << print_name(op->name) << ")"
                 << "[" << id_index << ".s" << vector_elements[i] << "];\n";
         }
-
     } else {
         CodeGen_C::visit(op);
     }
@@ -240,54 +241,49 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Type t = op->value.type();
 
     // If we're writing a contiguous ramp, use vstore instead.
-    const Expr *ramp_base = is_ramp1(op->index);
-    if (ramp_base != NULL)
-    {
-        string id_ramp_base = print_expr(*ramp_base);
+    Expr ramp_base = is_ramp1(op->index);
+    if (ramp_base.defined()) {
+        assert(op->value.type().is_vector());
+        string id_ramp_base = print_expr(ramp_base);
 
         do_indent();
-        stream << "vstore" << t.width
-            << "("
+        stream << "vstore" << t.width << "(" 
             << id_value << ","
             << 0 << ", "
-            << "(__global " << print_type(t.element_of()) << "*)" << print_name(op->name) << " + " << id_ramp_base
+            << "(__global " << print_type(t.element_of()) << "*)"
+            << print_name(op->name) << " + " << id_ramp_base
             << ");\n";
 
         return;
     }
 
     if (op->index.type().is_vector()) {
-        assert(t.is_vector());
         // If index is a vector, scatter vector elements.
+        assert(t.is_vector());
 
         string id_index = print_expr(op->index);
 
-        for (int i = 0; i < t.width; ++i)
-        {
+        for (int i = 0; i < t.width; ++i) {
             do_indent();
-            stream << "((__global "
-                    << print_type(t.element_of())
-                    << " *)"
+            stream << "((__global " << print_type(t.element_of()) << " *)"
                     << print_name(op->name)
                     << ")";
 
-            stream << "["
-                   << id_index << ".s" << vector_elements[i]
-                   << "] = "
+            stream << "[" << id_index << ".s" << vector_elements[i] << "] = "
                    << id_value << ".s" << vector_elements[i]
                    << ";\n";
         }
-
     } else {
         CodeGen_C::visit(op);
     }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
-    if (op->type.is_vector())
+    if (op->type.is_vector()) {
         print_assignment(op->type, "convert_" + print_type(op->type) + "(" + print_expr(op->value) + ")");
-    else
+    } else {
         CodeGen_C::visit(op);
+    }
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
