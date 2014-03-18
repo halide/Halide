@@ -1377,9 +1377,10 @@ template<typename T>
 
 
 /** JIT-Compile and run enough code to evaluate a Halide
- * expression. This can be thought of as a scalar version of \ref
- * Func::realize . Can use GPU if target from environment specifies
- * one.*/
+ * expression. This can be thought of as a scalar version of
+ * \ref Func::realize. Can use GPU if jit target from environment
+ * specifies one.
+ */
 template<typename T>
 T evaluate_may_gpu(Expr e) {
     assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
@@ -1387,7 +1388,7 @@ T evaluate_may_gpu(Expr e) {
     Func f;
     f(_) = e;
 
-    if (get_target_from_environment().has_gpu_feature()) {
+    if (get_jit_target_from_environment().has_gpu_feature()) {
         Func g;
 	Var x;
 	g(x, _) = f(_);
@@ -1401,14 +1402,14 @@ T evaluate_may_gpu(Expr e) {
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. Can
- *  use GPU if target from environment specifies one. */
+ *  use GPU if jit target from environment specifies one. */
 // @{
 template<typename A, typename B>
 void evaluate_may_gpu(Tuple t, A *a, B *b) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
     Image<A> result_a(has_gpu_feature ? 1 : 0);
@@ -1435,7 +1436,7 @@ void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
     Image<A> result_a(has_gpu_feature ? 1 : 0);
@@ -1466,7 +1467,7 @@ void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
     Image<A> result_a(has_gpu_feature ? 1 : 0);
