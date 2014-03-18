@@ -6,6 +6,7 @@
 #include "IR.h"
 #include "IROperator.h"
 #include "Debug.h"
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -125,28 +126,26 @@ void CodeGen_Posix::init_module() {
 Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
     // Compute size from list of extents checking for 32-bit signed overflow.
     // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
-    // does not work wtih NaCl at the moment.
-    Value *llvm_size;
+    // does not work with NaCl at the moment.
     Value *overflow = NULL;
-    if (extents.size() == 0) {
-      llvm_size = codegen(Expr(0));
-    } else {
-      Value *llvm_size_wide = codegen(Cast::make(Int(64), Expr(type.bytes())));
-        for (size_t i = 0; i < extents.size(); i++) {
-            llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
-            if (overflow == NULL) {
-                overflow = llvm_size_wide;
-            } else {
-                overflow = builder->CreateOr(overflow, llvm_size_wide);
-            }
+    int bytes_per_item = type.width * type.bytes();
+    Value *llvm_size_wide = ConstantInt::get(i64, bytes_per_item);
+    for (size_t i = 0; i < extents.size(); i++) {
+        llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
+        if (overflow == NULL) {
+            overflow = llvm_size_wide;
+        } else {
+            overflow = builder->CreateOr(overflow, llvm_size_wide);
         }
-        llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
     }
+    Value *llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
+
     if (overflow != NULL) {
         Constant *zero = ConstantInt::get(i64, 0);
         create_assertion(builder->CreateICmpEQ(builder->CreateLShr(overflow, 31), zero),
                          std::string("32-bit signed overflow computing size of allocation ") + name);
     }
+
     return llvm_size;
 }
 
@@ -158,10 +157,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     int32_t constant_size;
     if (constant_allocation_size(extents, name, constant_size)) {
         int64_t stack_bytes = constant_size * type.bytes();
-
-        // Special case for zero sized allocation.
-        if (stack_bytes == 0)
-            stack_bytes = 1;
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
             std::cerr << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";

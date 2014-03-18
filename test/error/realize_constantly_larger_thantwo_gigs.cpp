@@ -1,5 +1,4 @@
 #include <Halide.h>
-#include <HalideRuntime.h>
 #include <stdio.h>
 #include <memory>
 

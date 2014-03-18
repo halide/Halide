@@ -20,6 +20,11 @@ int main(int argc, char **argv) {
     arg_max_f() = select(f(r) > best_so_far, r, arg_max_f());
 
     int result_f = evaluate_may_gpu<int>(arg_max_f());
+    
+    if (result_f != 50) {
+        printf("Arg max of f is %d, but should have been 50\n", result_f);
+        return -1;
+    }
 
     // Now try a multi-dimensional argmax.
     Func g, arg_max_g;
@@ -36,8 +41,8 @@ int main(int argc, char **argv) {
     int best_x, best_y, best_val;
     evaluate_may_gpu(arg_max_g(), &best_x, &best_y, &best_val);
 
-    if (result_f != 50) {
-        printf("Arg max of f is %d, but should have been 50\n", result_f);
+    if (best_val != 4100) {
+        printf("Arg max of g is %d, but should have been 4100\n", best_val);
         return -1;
     }
 
