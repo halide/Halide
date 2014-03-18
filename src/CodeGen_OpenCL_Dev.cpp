@@ -220,7 +220,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 
         do_indent();
         stream << print_type(op->type)
-                << " " << id << ";\n";
+               << " " << id << ";\n";
 
         for (int i = 0; i < op->type.width; ++i) {
             do_indent();
@@ -248,11 +248,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
         do_indent();
         stream << "vstore" << t.width << "(" 
-            << id_value << ","
-            << 0 << ", "
-            << "(__global " << print_type(t.element_of()) << "*)"
-            << print_name(op->name) << " + " << id_ramp_base
-            << ");\n";
+               << id_value << ","
+               << 0 << ", "
+               << "(__global " << print_type(t.element_of()) << "*)"
+               << print_name(op->name) << " + " << id_ramp_base
+               << ");\n";
 
         return;
     }
@@ -266,8 +266,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         for (int i = 0; i < t.width; ++i) {
             do_indent();
             stream << "((__global " << print_type(t.element_of()) << " *)"
-                    << print_name(op->name)
-                    << ")";
+                   << print_name(op->name)
+                   << ")";
 
             stream << "[" << id_index << ".s" << vector_elements[i] << "] = "
                    << id_value << ".s" << vector_elements[i]
