@@ -6,10 +6,13 @@
 #pragma warning(push, 0)
 #endif
 
-// MCJIT doesn't seem to work right on os x yet
+// MCJIT doesn't seem to work right on os x or windows yet
 #ifdef __APPLE__
 #else
+#ifdef _WIN32
+#else
 #define USE_MCJIT
+#endif
 #endif
 
 #ifdef USE_MCJIT
