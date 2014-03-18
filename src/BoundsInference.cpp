@@ -51,14 +51,6 @@ struct FuncIsCalledByExpr : public IRVisitor {
     }
 };
 
-bool func_is_called_by_expr(Function f, Expr e) {
-    FuncIsCalledByExpr c;
-    c.f = f;
-    c.result = false;
-    e.accept(&c);
-    return c.result;
-}
-
 }
 
 class BoundsInference : public IRMutator {
