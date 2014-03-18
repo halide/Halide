@@ -139,7 +139,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
     string id_stride = print_expr(op->stride);
 
     ostringstream rhs;
-    rhs << id_base << " + " << id_stride << " * __ramp_" << print_type(op->type) << "()";
+    rhs << id_base << " + " << id_stride << " * (" << print_type(op->type.vector_of(op->width)) << ")(0";
+    for (int i = 1; i < op->width; ++i)
+        rhs << ", " << i;
+    rhs << ")";
     print_assignment(op->type.vector_of(op->width), rhs.str());
 }
 
@@ -350,52 +353,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
 #endif
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
-
-    src_stream << "#define __DEF_RAMP2(T) T##2 __ramp_##T##2() { return (T##2)("
-        << "0, "
-        << "1); }\n";
-    src_stream << "#define __DEF_RAMP3(T) T##3 __ramp_##T##3() { return (T##3)("
-        << "0, "
-        << "1, "
-        << "2); }\n";
-    src_stream << "#define __DEF_RAMP4(T) T##4 __ramp_##T##4() { return (T##4)("
-        << "0, "
-        << "1, "
-        << "2, "
-        << "3); }\n";
-    src_stream << "#define __DEF_RAMP8(T) T##8 __ramp_##T##8() { return (T##8)("
-        << "0, "
-        << "1, "
-        << "2, "
-        << "3, "
-        << "4, "
-        << "5, "
-        << "6, "
-        << "7); }\n";
-    src_stream << "#define __DEF_RAMP16(T) T##16 __ramp_##T##16() { return (T##16)("
-        << "0, "
-        << "1, "
-        << "2, "
-        << "3, "
-        << "4, "
-        << "5, "
-        << "6, "
-        << "7, "
-        << "8, "
-        << "9, "
-        << "10, "
-        << "11, "
-        << "12, "
-        << "13, "
-        << "14, "
-        << "15); }\n";
-    
-    src_stream << "__DEF_RAMP2(int)\n";
-    src_stream << "__DEF_RAMP3(int)\n";
-    src_stream << "__DEF_RAMP4(int)\n";
-    src_stream << "__DEF_RAMP8(int)\n";
-    src_stream << "__DEF_RAMP16(int)\n";
-    
+        
     // Write out the Halide math functions.
     src_stream << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
