@@ -64,6 +64,7 @@ Expr _u16(Expr e) {
     return cast(UInt(16, e.type().width), e);
 }
 
+#if LLVM_VERSION < 34
 Expr _i8(Expr e) {
     return cast(Int(8, e.type().width), e);
 }
@@ -71,6 +72,7 @@ Expr _i8(Expr e) {
 Expr _u8(Expr e) {
     return cast(UInt(8, e.type().width), e);
 }
+#endif
 
 /*
 Expr _f32(Expr e) {
