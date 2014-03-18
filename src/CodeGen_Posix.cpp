@@ -159,10 +159,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     if (constant_allocation_size(extents, name, constant_size)) {
         int64_t stack_bytes = constant_size * type.bytes();
 
-        // Special case for zero sized allocation.
-        if (stack_bytes == 0)
-            stack_bytes = 1;
-
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
             std::cerr << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
             assert(false);

@@ -186,10 +186,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
 }
 
 bool constant_allocation_size(const std::vector<Expr> &extents, const std::string &name, int32_t &size) {
-    int64_t result = 0;
-
-    if (extents.size() > 0)
-      result = 1;
+    int64_t result = 1;
 
     for (size_t i = 0; i < extents.size(); i++) {
         if (const IntImm *int_size = extents[i].as<IntImm>()) {
