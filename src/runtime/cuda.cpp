@@ -355,18 +355,19 @@ static CUfunction __get_kernel(void *user_context, CUmodule mod, const char* ent
     return f;
 }
 
-static size_t __buf_size(void *user_context, buffer_t* buf) {
+static size_t __buf_size(void *user_context, buffer_t *buf) {
     size_t size = 0;
     for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
         size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
-        if (total_dim_size > size)
+        if (total_dim_size > size) {
             size = total_dim_size;
+        }
     }
     halide_assert(user_context, size);
     return size;
 }
 
-WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
+WEAK void halide_dev_malloc(void *user_context, buffer_t *buf) {
     if (buf->dev) {
         // This buffer already has a device allocation
         return;
@@ -376,7 +377,7 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
 
     #ifdef DEBUG
     halide_printf(user_context, "dev_malloc allocating buffer of %zd bytes, "
-                  "extents: %zdx%zdx%zdx%zd strides: %zdx%zdx%zdx%zd (%d bytes per element)\n",
+                  "extents: %dx%dx%dx%d strides: %dx%dx%dx%d (%d bytes per element)\n",
                   size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
                   buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3],
                   buf->elem_size);
