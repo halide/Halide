@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         // Resolve why OpenCL used 32,1 tiling
-        f.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
-        g.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
-        h.gpu_tile(x, y, 8, 8, GPU_DEFAULT);
+        f.gpu_tile(x, y, 8, 8, GPU_Default);
+        g.gpu_tile(x, y, 8, 8, GPU_Default);
+        h.gpu_tile(x, y, 8, 8, GPU_Default);
     }
 
     printf("Realizing function...\n");
