@@ -60,13 +60,12 @@ public:
         args[3] = op->index[2];
         Expr new_load =
             Cast::make(op->type,
-                       Add::make(
-                           Mul::make(
-                               Call::make(Float(32), "glsl_texture_load",
-                                          args, Call::Intrinsic,
-                                          Function(), 0, op->image),
-                               max_value(op->type)),
-                           0.5f));
+                       Mul::make(
+                           Call::make(Float(32), "glsl_texture_load",
+                                      args, Call::Intrinsic,
+                                      Function(), 0, op->image),
+                           max_value(op->type))
+                );
         new_load.accept(this);
     }
 };
