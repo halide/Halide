@@ -197,7 +197,7 @@ static const GLuint square_indices[] = { 0, 1, 2, 3 };
 
 // ---------- Helper functions ----------
 
-extern "C" void* malloc(size_t);
+extern "C" void *malloc(size_t);
 extern "C" void free(void*);
 
 // Note: all function that directly or indirectly access the runtime state in
@@ -214,6 +214,22 @@ static char* strndup(const char* s, size_t n) {
 static GLuint get_texture_id(buffer_t* buf) {
     return buf->dev & 0xffffffff;
 }
+
+
+static void print_buffer(void *uctx, buffer_t *buf) {
+    halide_printf(uctx, "  dev: %ul\n", buf->dev);
+    halide_printf(uctx, "  host: %p\n", buf->host);
+    halide_printf(uctx, "  extent: %d %d %d %d\n",
+                  buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3]);
+    halide_printf(uctx, "  stride: %d %d %d %d\n",
+                  buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3]);
+    halide_printf(uctx, "  min: %d %d %d %d\n",
+                  buf->min[0], buf->min[1], buf->min[2], buf->min[3]);
+    halide_printf(uctx, "  elem_size: %d\n", buf->elem_size);
+    halide_printf(uctx, "  host_dirty: %d, dev_dirty: %d\n",
+                  buf->host_dirty, buf->dev_dirty);
+}
+
 
 WEAK GLuint halide_opengl_make_shader(void* uctx, GLenum type,
                                       const char* source, GLint* length) {
@@ -729,6 +745,9 @@ EXPORT void halide_opengl_copy_to_dev(void *uctx, buffer_t *buf) {
     if (!buf->host_dirty) return;
 
     if (!buf->host || !buf->dev) {
+#ifdef DEBUG
+        print_buffer(uctx, buf);
+#endif
         halide_error(uctx, "Invalid copy_to_dev operation");
         return;
     }
@@ -786,12 +805,15 @@ EXPORT void halide_opengl_copy_to_dev(void *uctx, buffer_t *buf) {
 }
 
 // Copy image data from texture back to host memory.
-EXPORT void halide_opengl_copy_to_host(void* uctx, buffer_t* buf) {
+EXPORT void halide_opengl_copy_to_host(void *uctx, buffer_t *buf) {
     CHECK_INITIALIZED();
     if (!buf->dev_dirty)
         return;
 
     if (!buf->host || !buf->dev) {
+#ifdef DEBUG
+        print_buffer(uctx, buf);
+#endif
         halide_error(uctx, "Invalid copy_to_host operation");
         return;
     }
