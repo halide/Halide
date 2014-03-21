@@ -1003,6 +1003,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
         builder->CreateStore(null64,   buffer_dev_ptr(buf));
         builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
         builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+        builder->CreateStore(codegen(call->args[1]), buffer_elem_size_ptr(buf));
 
         int dims = call->args.size()/3;
         for (int i = 0; i < 4; i++) {
