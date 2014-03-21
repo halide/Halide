@@ -4,21 +4,22 @@
 
 #include "../../src/buffer_t.h"
 
-extern "C" void halide_opengl_dev_malloc(void* uctx, buffer_t* buf);
-extern "C" void halide_opengl_dev_free(void* uctx, buffer_t* buf);
-extern "C" void halide_opengl_init_kernels(void* uctx, const char* src, int size);
-extern "C" void halide_opengl_dev_sync(void* uctx);
-extern "C" void halide_opengl_release(void* uctx);
-extern "C" void halide_opengl_copy_to_dev(void* uctx, buffer_t* buf);
-extern "C" void halide_opengl_copy_to_host(void* uctx, buffer_t* buf);
+extern "C" void halide_opengl_dev_malloc(void *uctx, buffer_t *buf);
+extern "C" void halide_opengl_dev_free(void *uctx, buffer_t *buf);
+extern "C" void *halide_opengl_init_kernels(void *uctx, void *state_ptr, const char *src, int size);
+extern "C" void halide_opengl_dev_sync(void *uctx);
+extern "C" void halide_opengl_release(void *uctx);
+extern "C" void halide_opengl_copy_to_dev(void *uctx, buffer_t *buf);
+extern "C" void halide_opengl_copy_to_host(void *uctx, buffer_t *buf);
 extern "C" void halide_opengl_dev_run(
-    void* user_context,
-    const char* entry_name,
+    void *user_context,
+    void *state_ptr,
+    const char *entry_name,
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
     size_t arg_sizes[],
-    void* args[]);
+    void *args[]);
 
 extern "C" int halide_opengl_create_context();
 
@@ -66,9 +67,13 @@ void test_compiled_filter() {
     Image input(W, H, C, sizeof(uint8_t), Image::Planar);
     Image output(W, H, C, sizeof(uint8_t), Image::Planar);
 
+    fprintf(stderr, "test_blur\n");
+    blur_filter(&input.buf, &output.buf);
+    fprintf(stderr, "test_blur complete\n");
+
+    fprintf(stderr, "test_ycc\n");
     ycc_filter(&input.buf, &output.buf);
     fprintf(stderr, "Ycc complete\n");
-    blur_filter(&input.buf, &output.buf);
 }
 
 void test_copy() {
@@ -107,10 +112,10 @@ void test_copy() {
 
 static const char *test_kernel_src =
     "/// KERNEL test_kernel\n"
-    "/// IN buffer input\n"
-    "/// IN int xpos\n"
-    "/// IN float parameter\n"
-    "/// OUT int buffer\n"
+    "/// IN_BUFFER uint8 input\n"
+    "/// VAR int xpos\n"
+    "/// VAR float parameter\n"
+    "/// OUT_BUFFER uint8 buffer\n"
     "uniform sampler2D input;\n"
     "uniform int xpos;\n"
     "uniform float parameter;\n"
@@ -118,12 +123,12 @@ static const char *test_kernel_src =
     "    gl_FragColor = parameter * texture2D(input, vec2(xpos, 0));\n"
     "}\n"
     "/// KERNEL fill_red\n"
-    "/// OUT buffer output\n"
+    "/// OUT_BUFFER uint8 output\n"
     "void main() {\n"
     "    gl_FragColor = vec4(1.0f, 0, 0, 0);\n"
     "}\n"
     "/// KERNEL kernel2\n"
-    "/// IN float parameter\n"
+    "/// VAR float parameter\n"
     "void main() {\n"
     "    gl_FragColor = vec4(0);\n"
     "}\n"
@@ -137,11 +142,11 @@ void test_set_red() {
     Image img(W, H, C, sizeof(uint8_t), Image::Interleaved);
     halide_opengl_dev_malloc(NULL, &img.buf);
 
-
     // Run GPU kernel
     void* args[] = { &img.buf.dev, 0 };
     size_t arg_sizes[] = { 64, 0 };
     halide_opengl_dev_run(
+        NULL,
         NULL,
         "fill_red",
         1, 1, 1,                        // blocks
@@ -172,7 +177,12 @@ void test_set_red() {
 
 void test_mockup() {
     // Create GLSL kernels
-    halide_opengl_init_kernels(NULL, test_kernel_src, sizeof(test_kernel_src)-1);
+    void *user_context = NULL;
+    void *state_ptr = NULL;
+
+    state_ptr = halide_opengl_init_kernels(
+        user_context, state_ptr,
+        test_kernel_src, sizeof(test_kernel_src)-1);
 
     test_set_red();
 
@@ -195,7 +205,7 @@ void test_mockup() {
         64, sizeof(arg_xpos)*4, sizeof(arg_parameter)*4, 64, 0
     };
     halide_opengl_dev_run(
-        NULL,
+        user_context, state_ptr,
         "test_kernel",
         1, 1, 1,                        // blocks
         output.buf.extent[0], output.buf.extent[1], output.buf.extent[2], // threads

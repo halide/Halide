@@ -9,7 +9,7 @@ void RgbToYcc() {
 
     // The algorithm
     Func input("input");
-    input(x, y, c) = cast(Float(32), input8(x, y, c));
+    input(x, y, c) = cast<float>(input8(x, y, c)) / 255.0f;
 
     Func Y("Y"), Cb("Cb"), Cr("Cr");
     Y(x,y) = 16.f/255.f + (0.257f * input(x, y, 0) +
@@ -21,14 +21,14 @@ void RgbToYcc() {
     Cr(x,y) = 128.f/255.f + (-0.148f * input(x, y, 0) +
                              -0.291f * input(x, y, 1) +
                              0.439f * input(x, y, 2));
-    out(x, y, c) = cast(UInt(8),
-                        select(c==0, Y(x,y),
-                               select(c==1, Cb(x,y),
-                                      select(c==2, Cr(x,y),
-                                             0.0f))));
+    out(x, y, c) = cast<uint8_t>(select(c==0, Y(x,y),
+                                        select(c==1, Cb(x,y),
+                                               select(c==2, Cr(x,y),
+                                                      0.0f))) * 255.f);
 
     // Schedule for GLSL
-    out.glsl(x, y, c, 4);
+    input8.set_bounds(2, 0, 3);
+    out.glsl(x, y, c, 3);
     out.compute_root();
 
     Func cpuout("ycc_filter");
