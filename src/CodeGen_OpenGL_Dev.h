@@ -58,7 +58,7 @@ protected:
     void visit(const AssertStmt *);
     void visit(const Broadcast *);
 
-    void emit_store(Expr channel, Expr val);
+    void emit_texture_store(Expr channel, Expr val);
 
 private:
     std::string get_vector_suffix(Expr e);

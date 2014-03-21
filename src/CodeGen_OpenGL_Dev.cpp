@@ -30,20 +30,11 @@ public:
     void visit(const Cast *op) {
         const Load *load = op->value.as<Load>();
         if (load && op->type.is_float() && load->type.is_uint()) {
-            assert(load->index.size() == 3 && "Load from texture requires multi-index");
-
             // Cast(float, Load(uint8,)) -> texture2D() * 255.f
             // Cast(float, Load(uint16,)) -> texture2D() * 65535.f
-            vector<Expr> args(4);
-            args[0] = load->name;
-            args[1] = load->index[0];
-            args[2] = load->index[1];
-            args[3] = load->index[2];
-            Expr new_load = Mul::make(
-                Call::make(op->type, "glsl_texture_load",
-                           args, Call::Intrinsic,
-                           Function(), 0, load->image),
-                max_value(load->type));
+            Expr new_load =
+                Mul::make(texture_load(load->name, load->index),
+                          max_value(load->type));
             new_load.accept(this);
         } else {
             IRMutator::visit(op);
@@ -51,22 +42,19 @@ public:
     }
 
     void visit(const Load *op) {
-        assert(op->index.size() == 3 && "Load from texture requires multi-index");
-
-        vector<Expr> args(4);
-        args[0] = op->name;
-        args[1] = op->index[0];
-        args[2] = op->index[1];
-        args[3] = op->index[2];
         Expr new_load =
-            Cast::make(op->type,
-                       Mul::make(
-                           Call::make(Float(32), "glsl_texture_load",
-                                      args, Call::Intrinsic,
-                                      Function(), 0, op->image),
-                           max_value(op->type))
-                );
+            Cast::make(op->type, Mul::make(texture_load(op->name, op->index),
+                                           max_value(op->type)));
         new_load.accept(this);
+    }
+
+private:
+    Expr texture_load(const std::string &buffer,
+                      const std::vector<Expr> &index) {
+        assert(index.size() == 3 && "Load from texture requires three indices");
+        return Call::make(Float(32), "glsl_texture_load",
+                          vec(Expr(buffer), index[0], index[1], index[2]),
+                          Call::Intrinsic);
     }
 };
 
@@ -239,7 +227,7 @@ void CodeGen_GLSL::visit(const Load *op) {
     assert(false && "Load nodes should have been removed by now");
 }
 
-void CodeGen_GLSL::emit_store(Expr channel, Expr val) {
+void CodeGen_GLSL::emit_texture_store(Expr channel, Expr val) {
     std::string sval = print_expr(val);
     do_indent();
     stream << "gl_FragColor" << get_vector_suffix(channel)
@@ -260,12 +248,12 @@ void CodeGen_GLSL::visit(const Store *op) {
         expr_match(Cast::make(op->value.type(),
                               Mul::make(maxval, x)),
                    op->value, match)) {
-        emit_store(op->index[2], match[0]);
+        emit_texture_store(op->index[2], match[0]);
     } else if (op->value.type().is_uint()){
         // Store(..., uint8) -> gl_FragColor = ((float) val) / 255.f
-        emit_store(op->index[2],
-                   Div::make(Cast::make(Float(32), op->value),
-                             maxval));
+        emit_texture_store(op->index[2],
+                           Div::make(Cast::make(Float(32), op->value),
+                                     maxval));
     } else {
         assert(false && "Don't know how to handle this Store node");
     }
@@ -273,15 +261,13 @@ void CodeGen_GLSL::visit(const Store *op) {
 
 
 void CodeGen_GLSL::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic &&
-        op->name == "glsl_texture_load") {
+    if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
+        string buffername = op->args[0].as<StringImm>()->value;
         ostringstream rhs;
-        rhs << "texture2D(" << op->image.name()
-            << ", vec2("
+        rhs << "texture2D(" << buffername << ", vec2("
             << print_expr(op->args[1]) << ", "
             << print_expr(op->args[2]) << "))"
             << get_vector_suffix(op->args[3]);
-
         print_assignment(op->type, rhs.str());
         return;
     } else {
