@@ -916,8 +916,6 @@ EXPORT void halide_opengl_dev_run(
                 return;
             }
             GLuint tex = *((GLuint *)args[i]);
-            halide_printf(uctx, "Buffer argument %d (%s): %u\n", i,
-                          kernel_arg->name, tex);
             ST.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             ST.BindTexture(GL_TEXTURE_2D, tex);
             ST.Uniform1iv(loc, 1, &num_active_textures);
