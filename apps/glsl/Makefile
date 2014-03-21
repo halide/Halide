@@ -19,16 +19,7 @@ endif
 
 HALIDE_LIBS = $(HALIDE_LIB) -ldl -lpthread
 
-all: opengl_test test_jit
-
-.PHONY: run_jit
-run_jit: test_jit
-	HL_JIT_TARGET=host-opengl-gpu_debug \
-	LD_LIBRARY_PATH=$(TOP)/bin \
-	./test_jit
-
-test_jit: test_jit.o $(HALIDE_LIB)
-	$(CXX) $(CXXFLAGS) $< -o $@ $(HALIDE_LIBS)
+all: opengl_test
 
 opengl_test: blur.o ycc.o opengl_test.o
 	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin -lHalideOpenGLRuntime

@@ -262,6 +262,7 @@ STATIC_TESTS = $(shell ls test/static/*_generate.cpp)
 PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
+OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
 TUTORIALS = $(shell ls tutorial/*.cpp)
 
 STATIC_TEST_CXX ?= $(CXX)
@@ -276,6 +277,7 @@ test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
 test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
+test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
 
 run_tests: test_correctness test_errors test_tutorials test_static
 	make test_performance
@@ -300,6 +302,9 @@ $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
 $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+
+$(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
 $(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so include/Halide.h
@@ -350,6 +355,11 @@ error_%: $(BIN_DIR)/error_%
 warning_%: $(BIN_DIR)/warning_%
 	@-mkdir -p tmp
 	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^Warning: "
+	@-echo
+
+opengl_%: $(BIN_DIR)/opengl_%
+	@-mkdir -p tmp
+	cd tmp ; HL_JIT_TARGET=host-opengl $(LD_PATH_SETUP) ../$< 2>&1 
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%
