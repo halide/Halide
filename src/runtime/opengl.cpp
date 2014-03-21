@@ -463,8 +463,8 @@ EXPORT void halide_opengl_release(void* uctx) {
 }
 
 // Determine OpenGL texture format and channel type for a given buffer_t.
-static bool get_texture_format(void* uctx,
-                               buffer_t* buf,
+static bool get_texture_format(void *uctx,
+                               buffer_t *buf,
                                GLint *format,
                                GLint *type) {
     if (buf->extent[2] <= 1) {
@@ -492,7 +492,7 @@ static bool get_texture_format(void* uctx,
 
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
-EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
+EXPORT void halide_opengl_dev_malloc(void *uctx, buffer_t *buf) {
     halide_opengl_init(uctx);
 
     if (!buf) {
@@ -508,11 +508,16 @@ EXPORT void halide_opengl_dev_malloc(void* uctx, buffer_t* buf) {
     GLint format = 0;
     GLint width, height;
     if (tex != 0) {
+        ST.BindTexture(GL_TEXTURE_2D, tex);
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
         CHECK_GLERROR();
         if (width < buf->extent[0] || height < buf->extent[1]) {
-            halide_error(uctx, "Preallocated texture is smaller than buffer");
+#ifdef DEBUG
+            halide_printf(uctx, "Texture size: %dx%d, buffer size: %dx%d\n",
+                          width, height, buf->extent[0], buf->extent[1]);
+#endif
+            halide_error(uctx, "Existing texture is smaller than buffer");
             return;
         }
     } else {
