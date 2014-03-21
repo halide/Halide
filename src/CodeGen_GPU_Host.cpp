@@ -749,13 +749,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
             *null64 = ConstantInt::get(i64, 0),
             *zero8  = ConstantInt::get( i8, 0);
 
+        Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
         if (target.features & Target::OpenGL) {
             Expr buffer_var = Variable::make(Handle(), alloc->name + ".buffer");
             buf = codegen(buffer_var);
+            builder->CreateStore(host_ptr, buffer_host_ptr(buf));
         } else {
             buf = create_alloca_at_entry(buffer_t_type, 1);
 
-            Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
             builder->CreateStore(host_ptr, buffer_host_ptr(buf));
             builder->CreateStore(null64,   buffer_dev_ptr(buf));
 
