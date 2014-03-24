@@ -75,7 +75,7 @@ struct Target {
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).
      */
-    std::string to_string() const;
+    EXPORT std::string to_string() const;
 
     /**
      * Parse the contents of 'target' and merge into 'this',
@@ -98,14 +98,14 @@ struct Target {
      * assert in the event of a parse failure. Note also that an empty target
      * string is essentially a no-op, leaving 'this' unaffected.
      */
-    bool merge_string(const std::string &target);
+    EXPORT bool merge_string(const std::string &target);
 
     /**
      * Like merge_string(), but reset the contents of 'this' first.
      */
-    bool from_string(const std::string &target) {
-      *this = Target();
-      return merge_string(target);
+    EXPORT bool from_string(const std::string &target) {
+	*this = Target();
+	return merge_string(target);
     }
 };
 

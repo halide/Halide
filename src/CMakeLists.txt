@@ -100,7 +100,8 @@ set (RUNTIME_LL
   spir_common_dev
   x86_avx
   x86
-  x86_sse41)
+  x86_sse41
+  pnacl_math)
 set (RUNTIME_BC
   compute_20
   compute_30

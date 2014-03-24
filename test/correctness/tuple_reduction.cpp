@@ -18,8 +18,8 @@ int main(int argc, char **argv) {
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16, GPU_DEFAULT);
-            f.update().gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+            f.gpu_tile(x, y, 16, 16, GPU_Default);
+            f.update().gpu_tile(x, y, 16, 16, GPU_Default);
         }
 
         Realization result = f.realize(1024, 1024);
@@ -52,10 +52,10 @@ int main(int argc, char **argv) {
         }
 
         // Schedule the pure step and the odd update steps on the gpu
-        f.gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+        f.gpu_tile(x, y, 16, 16, GPU_Default);
         for (int i = 0; i < 10; i ++) {
 	    if (i & 1) {
-		f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+		f.update(i).gpu_tile(x, y, 16, 16, GPU_Default);
 	    } else {
 		f.update(i);
 	    }
@@ -94,7 +94,7 @@ int main(int argc, char **argv) {
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i ++) {
             if (i & 1) {
-                f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+                f.update(i).gpu_tile(x, y, 16, 16, GPU_Default);
             } else {
                 f.update(i);
             }
@@ -136,7 +136,7 @@ int main(int argc, char **argv) {
             if (i & 1) {
                 f.update(i);
             } else {
-                f.update(i).gpu_tile(x, y, 16, 16, GPU_DEFAULT);
+                f.update(i).gpu_tile(x, y, 16, 16, GPU_Default);
             }
         }
 

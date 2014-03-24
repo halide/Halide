@@ -186,7 +186,7 @@ public:
 };
 
 enum GPUAPI {
-    GPU_DEFAULT,
+    GPU_Default,
     GPU_CUDA,
     GPU_OpenCL,
     GPU_GLSL
@@ -239,29 +239,28 @@ public:
                                    VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
 
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu_blocks(Var block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu(Var block_x, Var thread_x, GPUAPI gpu_api = GPU_DEFAULT);
+    EXPORT ScheduleHandle &gpu(Var block_x, Var thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu(Var block_x, Var block_y,
                                Var thread_x, Var thread_y,
-			       GPUAPI gpu_api = GPU_DEFAULT);
+			       GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu(Var block_x, Var block_y, Var block_z,
                                Var thread_x, Var thread_y, Var thread_z,
-			       GPUAPI gpu_api = GPU_DEFAULT);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Expr x_size, GPUAPI gpu_api = GPU_DEFAULT);
+			       GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_tile(Var x, Expr x_size, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Expr x_size, Expr y_size,
-				    GPUAPI gpu_api = GPU_DEFAULT);
+				    GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Var z,
-                                    Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_DEFAULT);
+                                    Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
 
     EXPORT ScheduleHandle &glsl(Var x, Var y, Var c);
-
     // @}
 
     // These calls are for legacy compatibility only.
@@ -907,9 +906,9 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(Var thread_x, GPUAPI gpuapi = GPU_DEFAULT);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_DEFAULT);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_threads(Var thread_x, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_threads. */
@@ -930,9 +929,9 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(Var block_x, GPUAPI gpuapi = GPU_DEFAULT);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, GPUAPI gpuapi = GPU_DEFAULT);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_blocks(Var block_x, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(Var block_x, Var block_y, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
@@ -954,11 +953,11 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(Var block_x, Var thread_x, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu(Var block_x, Var thread_x, GPUAPI gpuapi = GPU_Default);
     EXPORT Func &gpu(Var block_x, Var block_y,
-		     Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_DEFAULT);
+		     Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_Default);
     EXPORT Func &gpu(Var block_x, Var block_y, Var block_z,
-                     Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_DEFAULT);
+                     Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu. */
@@ -981,10 +980,10 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(Var x, int x_size, GPUAPI gpuapi = GPU_DEFAULT);
-    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi = GPU_DEFAULT);
+    EXPORT Func &gpu_tile(Var x, int x_size, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi = GPU_Default);
     EXPORT Func &gpu_tile(Var x, Var y, Var z,
-                          int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_DEFAULT);
+                          int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */
@@ -1384,9 +1383,10 @@ template<typename T>
 
 
 /** JIT-Compile and run enough code to evaluate a Halide
- * expression. This can be thought of as a scalar version of \ref
- * Func::realize . Can use GPU if target from environment specifies
- * one.*/
+ * expression. This can be thought of as a scalar version of
+ * \ref Func::realize. Can use GPU if jit target from environment
+ * specifies one.
+ */
 template<typename T>
 T evaluate_may_gpu(Expr e) {
     assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
@@ -1394,7 +1394,7 @@ T evaluate_may_gpu(Expr e) {
     Func f;
     f(_) = e;
 
-    if (get_target_from_environment().has_gpu_feature()) {
+    if (get_jit_target_from_environment().has_gpu_feature()) {
         Func g;
 	Var x;
 	g(x, _) = f(_);
@@ -1408,14 +1408,14 @@ T evaluate_may_gpu(Expr e) {
 }
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. Can
- *  use GPU if target from environment specifies one. */
+ *  use GPU if jit target from environment specifies one. */
 // @{
 template<typename A, typename B>
 void evaluate_may_gpu(Tuple t, A *a, B *b) {
     assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
     Image<A> result_a(has_gpu_feature ? 1 : 0);
@@ -1442,7 +1442,7 @@ void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
     Image<A> result_a(has_gpu_feature ? 1 : 0);
@@ -1473,7 +1473,7 @@ void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
     assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
 
-    bool has_gpu_feature = get_target_from_environment().has_gpu_feature();
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
     Image<A> result_a(has_gpu_feature ? 1 : 0);
