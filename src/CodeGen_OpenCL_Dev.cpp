@@ -175,7 +175,7 @@ Expr is_ramp1(Expr e) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     // If we're loading a contiguous ramp into a vector, use vload instead.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = is_ramp1(op->index[0]);
     if (ramp_base.defined()) {
         assert(op->type.is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -190,7 +190,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         return;
     }
 
-    string id_index = print_expr(op->index);
+    string id_index = print_expr(op->index[0]);
 
     // Get the rhs just for the cache.
     bool type_cast_needed = !(allocations.contains(op->name) &&
@@ -211,7 +211,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         return;
     }
 
-    if (op->index.type().is_vector()) {
+    if (op->index[0].type().is_vector()) {
         // If index is a vector, gather vector elements.
         assert(op->type.is_vector());
 
@@ -241,7 +241,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Type t = op->value.type();
 
     // If we're writing a contiguous ramp, use vstore instead.
-    Expr ramp_base = is_ramp1(op->index);
+    Expr ramp_base = is_ramp1(op->index[0]);
     if (ramp_base.defined()) {
         assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -257,11 +257,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         return;
     }
 
-    if (op->index.type().is_vector()) {
+    if (op->index[0].type().is_vector()) {
         // If index is a vector, scatter vector elements.
         assert(t.is_vector());
 
-        string id_index = print_expr(op->index);
+        string id_index = print_expr(op->index[0]);
 
         for (int i = 0; i < t.width; ++i) {
             do_indent();
