@@ -36,29 +36,6 @@ bool depends_on_bounds_inference(Expr e) {
     return d.result;
 }
 
-
-struct FuncIsCalledByExpr : public IRVisitor {
-    using IRVisitor::visit;
-
-    Function f;
-    bool result;
-    void visit(const Call *call) {
-        if (call->func.same_as(f)) {
-            result = true;
-        } else {
-            IRVisitor::visit(call);
-        }
-    }
-};
-
-bool func_is_called_by_expr(Function f, Expr e) {
-    FuncIsCalledByExpr c;
-    c.f = f;
-    c.result = false;
-    e.accept(&c);
-    return c.result;
-}
-
 }
 
 class BoundsInference : public IRMutator {

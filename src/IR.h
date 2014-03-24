@@ -196,7 +196,7 @@ struct Expr : public Internal::IRHandle {
 
     /** Get the type of this expression node */
     Type type() const {
-        return ((Internal::BaseExprNode *)ptr)->type;
+        return ((const Internal::BaseExprNode *)ptr)->type;
     }
 };
 

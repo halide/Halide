@@ -1851,7 +1851,7 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
     GlobalVariable *global = new GlobalVariable(*module, type,
                                                 true, GlobalValue::PrivateLinkage,
                                                 0, name);
-    ArrayRef<unsigned char> data_array((unsigned char *)&data[0], data.size());
+    ArrayRef<unsigned char> data_array((const unsigned char *)&data[0], data.size());
     global->setInitializer(ConstantDataArray::get(*context, data_array));
     global->setAlignment(32);
 

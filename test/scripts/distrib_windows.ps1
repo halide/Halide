@@ -1,5 +1,5 @@
 # Set the root dir of the Halide checkout
-$ROOT = "J:\Code\Halide"
+$ROOT = "C:\Code\Halide"
 
 $ErrorActionPreference = "Continue"
 

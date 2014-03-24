@@ -160,9 +160,10 @@ private:
 
         Expr size;
         if (allocate->extents.size() == 0) {
-            size = 0;
+            size = 1;
         } else {
             size = allocate->extents[0];
+            // TODO: worry about overflow
             for (size_t i = 1; i < allocate->extents.size(); i++) {
                 size *= allocate->extents[i];
             }
@@ -766,15 +767,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
             Value *llvm_size;
             int32_t constant_size;
             if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
-              int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
-              if (size_in_bytes > ((int64_t)(1 << 31) - 1)) {
-                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant but exceeds 2^31 - 1.";
-                assert(false);
-              } else {
-                llvm_size = codegen(Expr(constant_size));
-              }
+                int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
+                if (size_in_bytes > ((int64_t(1) << 31) - 1)) {
+                    std::cerr << "Total size for GPU allocation " << alloc->name << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
+                    assert(false);
+                } else {
+                    // Size in elements, not size in bytes.
+                    llvm_size = ConstantInt::get(i32, constant_size);
+                }
             } else {
-              llvm_size = codegen_allocation_size(alloc->name, alloc->type, alloc->extents);
+                // Note we compute this using a type of size 1, because we
+                // want the size in elements, not in bytes.
+                llvm_size = codegen_allocation_size(alloc->name, UInt(8), alloc->extents);
             }
 
             // For now, we just track the allocation as a single 1D buffer of the
