@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
 
-    Expr random_bit = cast<uint8_t>(random_int() % 2);
+    Expr random_bit = cast<uint8_t>(random_float() > 0.5f);
 
     // First define the function that gives the initial state of the
     // game board
@@ -57,7 +57,9 @@ int main(int argc, char **argv) {
         Expr dy = clobber.y - mouse_y;
         Expr r = dx*dx + dy*dy;
 
-        output(clobber.x, clobber.y, c) = select(r < 100, random_bit & random_bit, output(clobber.x, clobber.y, c));
+        output(clobber.x, clobber.y, c) = select(r < 100, 
+                                                 cast<uint8_t>(random_float() < 0.25f), 
+                                                 output(clobber.x, clobber.y, c));
 
         if (can_vectorize) {
             output.vectorize(x, 4);
