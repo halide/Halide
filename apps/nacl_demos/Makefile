@@ -1,5 +1,5 @@
 
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_32
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_33
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include
