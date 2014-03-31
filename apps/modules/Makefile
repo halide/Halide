@@ -1,4 +1,4 @@
-HALIDE_LD_FLAGS=-L../../bin -lHalide
+HALIDE_LD_FLAGS=-L../../bin -lHalide -lpthread -ldl -lz
 HALIDE_CXX_FLAGS=-I../../include
 
 all: out.png

@@ -100,7 +100,7 @@ halide_game_of_life_pnacl.bc: halide_game_of_life
 	$(PNACL_TC)/bin/pnacl-dis halide_game_of_life_pnacl.bc -o halide_game_of_life_pnacl.ll
 
 halide_game_of_life: halide_game_of_life.cpp
-	$(CXX) halide_game_of_life.cpp -o halide_game_of_life -I ../../include -L ../../bin -lHalide -lpthread -ldl
+	$(CXX) halide_game_of_life.cpp -o halide_game_of_life -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz
 
 clean:
 	rm -f halide_game_of_life *.o *.nexe *.bc *.ll *.pexe *.s
