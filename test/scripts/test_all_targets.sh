@@ -155,9 +155,13 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == pnacl ]]; then
         # Update this llvm and rebuild if it's pnacl
         cd llvm/${LLVM}
+        git checkout master &&
         git pull &&
+        git checkout 6adf51d12178215dbc3c87cd8b1caaad7a4571e6 &&
         cd tools/clang &&
+        git checkout master &&
         git pull &&
+        git checkout a963b803407c9d1cac644cc425004e0ccd28fa45 &&
         cd ../../ &&
         make -j8 -C build-32 &&
         make -j8 -C build-64
