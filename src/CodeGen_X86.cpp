@@ -1,16 +1,14 @@
+#include <iostream>
+
 #include "CodeGen_X86.h"
 #include "IROperator.h"
-#include <iostream>
 #include "buffer_t.h"
-#include "IRMutator.h"
 #include "IRMatch.h"
-#include "Simplify.h"
 #include "Debug.h"
 #include "Util.h"
 #include "Var.h"
 #include "Param.h"
-#include "integer_division_table.h"
-#include "IRPrinter.h"
+#include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
 namespace Halide {
@@ -34,14 +32,7 @@ CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
     #endif
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
+llvm::Triple CodeGen_X86::get_target_triple() const {
     llvm::Triple triple;
 
     if (target.bits == 32) {
@@ -64,14 +55,18 @@ void CodeGen_X86::compile(Stmt stmt, string name,
         triple.setOS(llvm::Triple::Win32);
         if (target.features & Target::JIT) {
             // Use ELF for jitting
+            #if LLVM_VERSION < 35
             triple.setEnvironment(llvm::Triple::ELF);
+            #else
+            triple.setObjectFormat(llvm::Triple::ELF);
+            #endif
         }
     } else if (target.os == Target::Android) {
         triple.setOS(llvm::Triple::Linux);
         triple.setEnvironment(llvm::Triple::Android);
 
         if (target.bits == 64) {
-            std::cerr << "WARNING: x86-64 android is untested\n";
+            std::cerr << "Warning: x86-64 android is untested\n";
         }
     } else if (target.os == Target::NaCl) {
         #if WITH_NATIVE_CLIENT
@@ -84,6 +79,19 @@ void CodeGen_X86::compile(Stmt stmt, string name,
         assert(false && "Not sure what llvm target triple to use when compiling to IOS on x86 (does this even exist?)");
     }
 
+    return triple;
+}
+
+void CodeGen_X86::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
+
+    init_module();
+
+    // Fix the target triple
+    module = get_initial_module_for_target(target, context);
+
+    llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -570,8 +578,8 @@ void CodeGen_X86::test() {
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), 127, Block::make(loop, Free::make("tmp_stack")));
-    loop = Allocate::make("tmp_heap", Int(32), 43 * beta, Block::make(loop, Free::make("tmp_heap")));
+    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), Block::make(loop, Free::make("tmp_stack")));
+    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), Block::make(loop, Free::make("tmp_heap")));
     loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);

@@ -109,7 +109,6 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             string prefix = func.name() + ".s" + int_to_string(func.reductions().size()) + ".";
             for (int i = 0; i < func.dimensions(); i++) {
-                debug(3) << "Hi? " << i << "\n";
                 // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
                 assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
@@ -248,8 +247,21 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
         }
     }
 
+    void visit(const For *op) {
+        // It's not safe to enter an inner loop whose bounds depend on
+        // the var we're sliding over.
+        Expr min = expand_expr(op->min, scope);
+        Expr extent = expand_expr(op->extent, scope);
+        if (is_monotonic(min, loop_var) != Constant ||
+            is_monotonic(extent, loop_var) != Constant) {
+            stmt = op;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+
     void visit(const LetStmt *op) {
-        scope.push(op->name, expand_expr(op->value, scope));
+        scope.push(op->name, simplify(expand_expr(op->value, scope)));
         Stmt new_body = mutate(op->body);
 
         Expr value = op->value;
@@ -279,9 +291,11 @@ class SlidingWindowOnFunction : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
-        Stmt new_body = mutate(op->body);
-
         debug(3) << " Doing sliding window analysis over loop: " << op->name << "\n";
+
+        Stmt new_body = op->body;
+
+        new_body = mutate(new_body);
 
         if (op->for_type == For::Serial || op->for_type == For::Unrolled) {
             new_body = SlidingWindowOnFunctionAndLoop(func, op->name, op->min).mutate(new_body);
@@ -318,6 +332,7 @@ class SlidingWindow : public IRMutator {
         Stmt new_body = op->body;
 
         debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
+
         new_body = SlidingWindowOnFunction(iter->second).mutate(new_body);
 
         new_body = mutate(new_body);

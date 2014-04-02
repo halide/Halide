@@ -5,7 +5,7 @@
  * Defines the code-generator interface for producing GPU device code
  */
 
-#include "Func.h"
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

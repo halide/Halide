@@ -3,7 +3,7 @@
 
 #include "IR.h"
 #include "Tuple.h"
-#include "Var.h"
+#include "RDom.h"
 
 /** \file
  * Defines some inline reductions: sum, product, minimum, maximum.
@@ -18,7 +18,7 @@ namespace Halide {
  * domain is captured - the result expression does not refer to a
  * reduction domain and can be used in a pure function definition.
  *
- * An example:
+ * An example using \ref sum :
  *
  \code
  Func f, g;
@@ -33,25 +33,38 @@ namespace Halide {
  * scheduled innermost within g.
  */
 //@{
-EXPORT Expr sum(Expr);
-EXPORT Expr product(Expr);
-EXPORT Expr maximum(Expr);
-EXPORT Expr minimum(Expr);
-EXPORT Expr sum(Expr, const std::string &);
-EXPORT Expr product(Expr, const std::string &);
-EXPORT Expr maximum(Expr, const std::string &);
-EXPORT Expr minimum(Expr, const std::string &);
+EXPORT Expr sum(Expr, const std::string &s = "sum");
+EXPORT Expr product(Expr, const std::string &s = "product");
+EXPORT Expr maximum(Expr, const std::string &s = "maximum");
+EXPORT Expr minimum(Expr, const std::string &s = "minimum");
 //@}
+
+/** Variants of the inline reduction in which the RDom is stated
+ * explicitly. The expression can refer to multiple RDoms, and only
+ * the inner one is captured by the reduction. This allows you to
+ * write expressions like:
+ \code
+ RDom r1(0, 10), r2(0, 10), r3(0, 10);
+ Expr e = minimum(r1, product(r2, sum(r3, r1 + r2 + r3)));
+ \endcode
+*/
+// @{
+EXPORT Expr sum(RDom, Expr, const std::string &s = "sum");
+EXPORT Expr product(RDom, Expr, const std::string &s = "product");
+EXPORT Expr maximum(RDom, Expr, const std::string &s = "maximum");
+EXPORT Expr minimum(RDom, Expr, const std::string &s = "minimum");
+// @}
+
 
 /** Returns an Expr or Tuple representing the coordinates of the point
  * in the RDom which minimizes or maximizes the expression. The
  * expression must refer to some RDom. Also returns the extreme value
  * of the expression as the last element of the tuple. */
 // @{
-EXPORT Tuple argmax(Expr);
-EXPORT Tuple argmin(Expr);
-EXPORT Tuple argmax(Expr, const std::string &);
-EXPORT Tuple argmin(Expr, const std::string &);
+EXPORT Tuple argmax(Expr, const std::string &s = "argmax");
+EXPORT Tuple argmin(Expr, const std::string &s = "argmin");
+EXPORT Tuple argmax(RDom, Expr, const std::string &s = "argmax");
+EXPORT Tuple argmin(RDom, Expr, const std::string &s = "argmin");
 // @}
 
 }

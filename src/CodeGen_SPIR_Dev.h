@@ -6,6 +6,7 @@
  */
 
 #include "CodeGen.h"
+#include "CodeGen_GPU_Host.h"
 #include "CodeGen_GPU_Dev.h"
 
 namespace llvm {
@@ -18,7 +19,8 @@ namespace Internal {
 /** A code generator that emits GPU code from a given Halide stmt. */
 class CodeGen_SPIR_Dev : public CodeGen, public CodeGen_GPU_Dev {
 public:
-    friend class CodeGen_GPU_Host;
+    friend class CodeGen_GPU_Host<CodeGen_X86>;
+    friend class CodeGen_GPU_Host<CodeGen_ARM>;
 
     /** Create a SPIR device code generator. */
     CodeGen_SPIR_Dev(Target host, int bits);
@@ -63,6 +65,9 @@ protected:
     /** Map from simt variable names (e.g. foo.blockidx) to the llvm
      * SPIR intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
+
+    /* The pointer to the beginning of shared memory */
+    llvm::Value *shared_mem;
 };
 
 }}

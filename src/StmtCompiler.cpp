@@ -3,7 +3,7 @@
 #include "CodeGen_X86.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_ARM.h"
-#include <iostream>
+#include "CodeGen_PNaCl.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,12 +18,21 @@ StmtCompiler::StmtCompiler(Target target) {
 
     // The awkward mapping from targets to code generators
     if ((target.features & Target::CUDA) || (target.features & Target::OpenCL)) {
-        assert(target.arch == Target::X86 && "Can only use gpu targets from x86 for now");
-        contents = new CodeGen_GPU_Host(target);
+        if (target.arch == Target::X86) {
+            contents = new CodeGen_GPU_Host<CodeGen_X86>(target);
+        }
+        else if (target.arch == Target::ARM) {
+            contents = new CodeGen_GPU_Host<CodeGen_ARM>(target);
+        }
+        else {
+            assert(false && "Invalid target architecture for GPU backend.");
+        }
     } else if (target.arch == Target::X86) {
         contents = new CodeGen_X86(target);
     } else if (target.arch == Target::ARM) {
         contents = new CodeGen_ARM(target);
+    } else if (target.arch == Target::PNaCl) {
+        contents = new CodeGen_PNaCl(target);
     }
 }
 

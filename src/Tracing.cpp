@@ -1,10 +1,6 @@
 #include "Tracing.h"
 #include "IRMutator.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
-#include "Substitute.h"
-#include "Debug.h"
-#include "Lower.h"
 #include "runtime/HalideRuntime.h"
 
 namespace Halide {
@@ -211,8 +207,8 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
     // Unless tracing was a no-op, add a call to shut down the trace
     // (which flushes the output stream)
     if (!s.same_as(original)) {
-        Expr flush = Call::make(Int(32), "halide_shutdown_trace", std::vector<Expr>(), Call::Extern);
-        s = Block::make(s, AssertStmt::make(flush == 0, "Failed to flush trace"));
+        Expr flush = Call::make(Int(32), "halide_shutdown_trace", vector<Expr>(), Call::Extern);
+        s = Block::make(s, AssertStmt::make(flush == 0, "Failed to flush trace", vector<Expr>()));
     }
     return s;
 }

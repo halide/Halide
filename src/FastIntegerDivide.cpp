@@ -1,5 +1,5 @@
 #include "FastIntegerDivide.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
 
 namespace Halide {
 

@@ -4,7 +4,7 @@ all: process
 
 local_laplacian: ../../ local_laplacian.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) local_laplacian.cpp -I ../../include ../../$(LIB_HALIDE) -o local_laplacian -lpthread -ldl -O3
+	$(CXX) local_laplacian.cpp -I ../../include $(LDFLAGS) ../../$(LIB_HALIDE) -o local_laplacian -lpthread -ldl -lz -O3
 
 local_laplacian.o: local_laplacian
 	./local_laplacian

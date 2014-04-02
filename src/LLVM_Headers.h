@@ -6,10 +6,13 @@
 #pragma warning(push, 0)
 #endif
 
-// MCJIT doesn't seem to work right on os x yet
+// MCJIT doesn't seem to work right on os x or windows yet
 #ifdef __APPLE__
 #else
+#ifdef _WIN32
+#else
 #define USE_MCJIT
+#endif
 #endif
 
 #ifdef USE_MCJIT
@@ -20,8 +23,10 @@
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
+#include <llvm/Linker.h>
 #else
 #include <llvm/IR/Verifier.h>
+#include <llvm/Linker/Linker.h>
 #endif
 
 #include <llvm/Bitcode/ReaderWriter.h>
@@ -36,7 +41,6 @@
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
-#include <llvm/Linker.h>
 #include <llvm/ADT/StringMap.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3+

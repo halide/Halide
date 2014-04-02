@@ -1,5 +1,5 @@
-add_executable(build_halide_h build_halide_h.cpp)
-add_executable(bitcode2cpp bitcode2cpp.cpp)
+add_executable(build_halide_h ../tools/build_halide_h.cpp)
+add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 
 if (MSVC)
@@ -72,9 +72,11 @@ set(RUNTIME_CPP
   posix_error_handler
   posix_io
   nacl_io
+  ssp
   osx_io
   posix_math
   posix_thread_pool
+  windows_thread_pool
   android_host_cpu_count
   linux_host_cpu_count
   osx_host_cpu_count
@@ -86,13 +88,15 @@ set(RUNTIME_CPP
 set (RUNTIME_LL
   arm
   posix_math
+  pnacl_math
   ptx_dev
   spir_dev
   spir64_dev
   spir_common_dev
   x86_avx
   x86
-  x86_sse41)
+  x86_sse41
+  pnacl_math)
 set (RUNTIME_BC
   compute_20
   compute_30
@@ -171,15 +175,17 @@ set(HEADER_FILES
   CodeGen_OpenCL_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_SPIR_Dev.h
+  CodeGen_PNaCl.h
   Deinterleave.h
   Derivative.h
   OneToOne.h
   Extern.h
+  FindCalls.h
   Func.h
   Function.h
   Image.h
   InlineReductions.h
-  integer_division_table.h
+  IntegerDivisionTable.h
   IntrusivePtr.h
   IREquality.h
   IR.h
@@ -225,9 +231,11 @@ set(HEADER_FILES
   RemoveUndef.h
   SpecializeClampedRamps.h
   FastIntegerDivide.h
-  AllocationBoundsInference.h 
+  AllocationBoundsInference.h
   Inline.h
-  Qualify.h 
+  Qualify.h
+  ExprUsesVar.h
+  Random.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -249,6 +257,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
+  CodeGen_PNaCl.cpp
   CodeGen_ARM.cpp
   IR.cpp
   IRMutator.cpp
@@ -260,6 +269,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Bounds.cpp
   Derivative.cpp
   OneToOne.cpp
+  FindCalls.cpp
   Func.cpp
   Simplify.cpp
   IREquality.cpp
@@ -270,6 +280,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   Parameter.cpp
   Reduction.cpp
+  Random.cpp
   RDom.cpp
   Profiling.cpp
   Tracing.cpp
@@ -279,7 +290,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BoundsInference.cpp
   IRMatch.cpp
   StmtCompiler.cpp
-  integer_division_table.cpp
+  IntegerDivisionTable.cpp
   SlidingWindow.cpp
   StorageFolding.cpp
   InlineReductions.cpp
@@ -298,10 +309,11 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   RemoveUndef.cpp
   SpecializeClampedRamps.cpp
   FastIntegerDivide.cpp
-  AllocationBoundsInference.cpp 
-  Inline.cpp 
-  Qualify.cpp 
+  AllocationBoundsInference.cpp
+  Inline.cpp
+  Qualify.cpp
   UnifyDuplicateLets.cpp
+  ExprUsesVar.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
 

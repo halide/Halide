@@ -72,6 +72,12 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
+    /** Generates code for computing the size of an allocation from a
+     * list of its extents and its size. Fires a runtime assert
+     * (halide_error) if the size overflows 2^31 -1, the maximum
+     * positive number an int32_t can hold. */
+    llvm::Value *codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents);
+
     /** Allocates some memory on either the stack or the heap, and
      * returns an Allocation object describing it. For heap
      * allocations this calls halide_malloc in the runtime, and for
@@ -85,7 +91,7 @@ protected:
      *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
-    Allocation create_allocation(const std::string &name, Type type, Expr size);
+    Allocation create_allocation(const std::string &name, Type type, const std::vector<Expr> &extents);
 
     /** Free the memory backing an allocation and pop it from the
      * symbol table and the allocations map. For heap allocations it

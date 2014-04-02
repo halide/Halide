@@ -1,8 +1,9 @@
 #include "InlineReductions.h"
 #include "Func.h"
 #include "Scope.h"
-#include "IRPrinter.h"
 #include "IROperator.h"
+#include "IRMutator.h"
+#include "Debug.h"
 
 namespace Halide {
 
@@ -12,32 +13,77 @@ using std::ostringstream;
 
 namespace Internal {
 
-class FindFreeVars : public IRVisitor {
+class FindFreeVars : public IRMutator {
 public:
     vector<Var> free_vars;
+    vector<Expr> call_args;
     RDom rdom;
 
+    FindFreeVars(RDom r, const string &n) :
+        rdom(r), explicit_rdom(r.defined()), name(n) {
+    }
+
 private:
+    bool explicit_rdom;
+    const string &name;
+
     Scope<int> internal;
 
-    using IRVisitor::visit;
+    using IRMutator::visit;
 
     void visit(const Let *op) {
-        op->value.accept(this);
+        Expr value = mutate(op->value);
         internal.push(op->name, 0);
-        op->body.accept(this);
+        Expr body = mutate(op->body);
         internal.pop(op->name);
+        if (value.same_as(op->value) &&
+            body.same_as(op->body)) {
+            expr = op;
+        } else {
+            expr = Let::make(op->name, value, body);
+        }
     }
 
     void visit(const Variable *v) {
-        if (internal.contains(v->name)) {
+
+        string var_name = v->name;
+        expr = v;
+
+        if (internal.contains(var_name)) {
             // Don't capture internally defined vars
             return;
         }
 
         if (v->reduction_domain.defined()) {
-            rdom = RDom(v->reduction_domain);
-            return;
+            if (explicit_rdom) {
+                if (v->reduction_domain.same_as(rdom.domain())) {
+                    // This variable belongs to the explicit reduction domain, so
+                    // skip it.
+                    return;
+                } else {
+                    // This should be converted to a pure variable and
+                    // added to the free vars list.
+                    var_name = unique_name('v');
+                    expr = Variable::make(v->type, var_name);
+                }
+            } else {
+                if (!rdom.defined()) {
+                    // We're looking for a reduction domain, and this variable
+                    // has one. Capture it.
+                    rdom = RDom(v->reduction_domain);
+                    return;
+                } else if (!rdom.domain().same_as(v->reduction_domain)) {
+                    // We were looking for a reduction domain, and already
+                    // found one. This one is different!
+                    std::cerr << "Inline reduction \"" << name
+                              << "\" refers to reduction variables from multiple reduction domains: "
+                              << v->name << ", " << rdom.x.name() << "\n";
+                    assert(false);
+                } else {
+                    // Recapturing an already-known reduction domain
+                    return;
+                }
+            }
         }
 
         if (v->param.defined()) {
@@ -46,79 +92,85 @@ private:
         }
 
         for (size_t i = 0; i < free_vars.size(); i++) {
-            if (v->name == free_vars[i].name()) return;
+            if (var_name == free_vars[i].name()) return;
         }
 
-        free_vars.push_back(Var(v->name));
+        free_vars.push_back(Var(var_name));
+        call_args.push_back(v);
     }
 };
 }
 
-Expr sum(Expr e) {
-    return sum(e, "sum");
-}
-
-Expr product(Expr e) {
-    return product(e, "product");
-}
-
-Expr maximum(Expr e) {
-    return maximum(e, "maximum");
-}
-
-Expr minimum(Expr e) {
-    return minimum(e, "minimum");
-}
-
 Expr sum(Expr e, const std::string &name) {
-    Internal::FindFreeVars v;
-    e.accept(&v);
+    return sum(RDom(), e, name);
+}
+
+Expr sum(RDom r, Expr e, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(e);
 
     assert(v.rdom.defined() && "Expression passed to sum must reference a reduction domain");
 
     Func f(name);
     f(v.free_vars) += e;
-    return f(v.free_vars);
+    return f(v.call_args);
 }
 
 Expr product(Expr e, const std::string &name) {
-    Internal::FindFreeVars v;
-    e.accept(&v);
+    return product(RDom(), e, name);
+}
+
+Expr product(RDom r, Expr e, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(e);
 
     assert(v.rdom.defined() && "Expression passed to product must reference a reduction domain");
 
     Func f(name);
     f(v.free_vars) *= e;
-    return f(v.free_vars);
+    return f(v.call_args);
 }
 
 Expr maximum(Expr e, const std::string &name) {
-    Internal::FindFreeVars v;
-    e.accept(&v);
+    return maximum(RDom(), e, name);
+}
+
+Expr maximum(RDom r, Expr e, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(e);
 
     assert(v.rdom.defined() && "Expression passed to maximum must reference a reduction domain");
 
     Func f(name);
     f(v.free_vars) = e.type().min();
     f(v.free_vars) = max(f(v.free_vars), e);
-    return f(v.free_vars);
+    return f(v.call_args);
 }
 
 Expr minimum(Expr e, const std::string &name) {
-    Internal::FindFreeVars v;
-    e.accept(&v);
+    return minimum(RDom(), e, name);
+}
+
+Expr minimum(RDom r, Expr e, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(e);
 
     assert(v.rdom.defined() && "Expression passed to minimum must reference a reduction domain");
 
     Func f(name);
     f(v.free_vars) = e.type().max();
     f(v.free_vars) = min(f(v.free_vars), e);
-    return f(v.free_vars);
+    return f(v.call_args);
 }
 
 Tuple argmax(Expr e, const std::string &name) {
-    Internal::FindFreeVars v;
-    e.accept(&v);
+    return argmax(RDom(), e, name);
+}
+
+Tuple argmax(RDom r, Expr e, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(e);
+
     Func f(name);
 
     assert(v.rdom.defined() && "Expression passed to argmax must reference a reduction domain");
@@ -137,12 +189,17 @@ Tuple argmax(Expr e, const std::string &name) {
     Expr better = e > f(v.free_vars)[value_index];
     Tuple update = tuple_select(better, update_tup, f(v.free_vars));
     f(v.free_vars) = update;
-    return f(v.free_vars);
+    return f(v.call_args);
 }
 
 Tuple argmin(Expr e, const std::string &name) {
-    Internal::FindFreeVars v;
-    e.accept(&v);
+    return argmin(RDom(), e, name);
+}
+
+Tuple argmin(RDom r, Expr e, const std::string &name) {
+    Internal::FindFreeVars v(r, name);
+    e = v.mutate(e);
+
     Func f(name);
 
     assert(v.rdom.defined() && "Expression passed to argmin must reference a reduction domain");
@@ -160,15 +217,7 @@ Tuple argmin(Expr e, const std::string &name) {
     f(v.free_vars) = initial_tup;
     Expr better = e < f(v.free_vars)[value_index];
     f(v.free_vars) = tuple_select(better, update_tup, f(v.free_vars));
-    return f(v.free_vars);
-}
-
-Tuple argmin(Expr e) {
-    return argmin(e, "argmin");
-}
-
-Tuple argmax(Expr e) {
-    return argmax(e, "argmax");
+    return f(v.call_args);
 }
 
 }

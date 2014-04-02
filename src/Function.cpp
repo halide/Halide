@@ -1,15 +1,10 @@
+#include <set>
+
 #include "IR.h"
-#include "IRMutator.h"
 #include "Function.h"
 #include "Scope.h"
-#include "IRPrinter.h"
-#include "IREquality.h"
-#include "Simplify.h"
-#include "ModulusRemainder.h"
-#include "Debug.h"
 #include "CSE.h"
-#include "IROperator.h"
-#include <set>
+#include "Random.h"
 
 namespace Halide {
 namespace Internal {
@@ -93,8 +88,7 @@ struct CheckVars : public IRGraphVisitor {
         }
 
         std::cerr << "Undefined variable in function definition: " << var->name
-            << " (Func: " << name << ")"
-            << std::endl;
+                  << " (Func: " << name << ")\n";
         assert(false);
     }
 };
@@ -111,6 +105,11 @@ struct CountSelfReferences : public IRGraphVisitor {
         }
     }
 };
+
+// A counter to use in tagging random variables
+namespace {
+static int rand_counter = 0;
+}
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
     assertf(!has_extern_definition(), "Function with extern definition cannot be given a pure definition", name());
@@ -145,6 +144,12 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 
     for (size_t i = 0; i < values.size(); i++) {
         values[i] = common_subexpression_elimination(values[i]);
+    }
+
+    // Tag calls to random() with the free vars
+    int tag = rand_counter++;    
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = lower_random(values[i], args, tag);
     }
 
     assertf(!check.reduction_domain.defined(), "Reduction domain referenced in pure function definition", name());
@@ -212,6 +217,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // The pure args are those naked vars in the args that are not in
     // a reduction domain and are not parameters and line up with the
     // pure args in the pure definition.
+    bool pure = true;
     vector<string> pure_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
@@ -221,7 +227,11 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
                 !var->reduction_domain.defined() &&
                 var->name == contents.ptr->args[i]) {
                 pure_args[i] = var->name;
+            } else {
+                pure = false;
             }
+        } else {
+            pure = false;
         }
     }
 
@@ -236,6 +246,27 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     }
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&check);
+    }
+
+    // Tag calls to random() with the free vars
+    vector<string> free_vars;
+    for (size_t i = 0; i < pure_args.size(); i++) {
+        if (!pure_args[i].empty()) {
+            free_vars.push_back(pure_args[i]);
+        }
+    }
+    if (check.reduction_domain.defined()) {
+        for (size_t i = 0; i < check.reduction_domain.domain().size(); i++) {
+            string rvar = check.reduction_domain.domain()[i].var;
+            free_vars.push_back(rvar);
+        }
+    }
+    int tag = rand_counter++;    
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i] = lower_random(args[i], free_vars, tag);
+    }
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i] = lower_random(values[i], free_vars, tag);
     }
 
     ReductionDefinition r;
@@ -276,6 +307,19 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
             Schedule::Dim d = {pure_args[i], For::Serial};
             r.schedule.dims.push_back(d);
         }
+    }
+
+    // If there's no recursive reference, no reduction domain, and all
+    // the args are pure, then this definition completely hides
+    // earlier ones!
+    if (!r.domain.defined() &&
+        counter.calls.empty() &&
+        pure) {
+        std::cerr << "Warning: update definition " << contents.ptr->reductions.size()
+                  << " of function " << name() << " completely hides earlier definitions, "
+                  << " because all the arguments are pure, it contains no self-references, "
+                  << " and no reduction domain. This may be an accidental re-definition of "
+                  << " an already-defined function.\n";
     }
 
     contents.ptr->reductions.push_back(r);

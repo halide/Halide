@@ -388,6 +388,79 @@ inline Expr select(Expr condition, Expr true_value, Expr false_value) {
     return Internal::Select::make(condition, true_value, false_value);
 }
 
+/** A multi-way variant of select similar to a switch statement in C,
+ * which can accept multiple conditions and values in pairs. Evaluates
+ * to the first value for which the condition is true. Returns the
+ * final value if all conditions are false. */
+// @{
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr default_val) {
+    return select(c1, v1,
+                  select(c2, v2, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  select(c3, v3, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  select(c4, v4, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  select(c5, v5, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr c6, Expr v6,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  c5, v5,
+                  select(c6, v6, default_val));
+}
+inline Expr select(Expr c1, Expr v1,
+                   Expr c2, Expr v2,
+                   Expr c3, Expr v3,
+                   Expr c4, Expr v4,
+                   Expr c5, Expr v5,
+                   Expr c6, Expr v6,
+                   Expr c7, Expr v7,
+                   Expr default_val) {
+    return select(c1, v1,
+                  c2, v2,
+                  c3, v3,
+                  c4, v4,
+                  c5, v5,
+                  c6, v6,
+                  select(c7, v7, default_val));
+}
+// @}
+
 /** Return the sine of a floating-point expression. If the argument is
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
@@ -882,7 +955,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
     // as this seems like an easy to catch gotcha.
     if (!zero_val.type().is_float()) {
         const float *const_weight = as_const_float(weight);
-        if (const_weight != NULL) {
+        if (const_weight) {
             assert(*const_weight >= 0.0f && *const_weight <= 1.0f &&
                    "floating-point weight for lerp with integer arguments must be between 0.0f and 1.0f.");
         }
@@ -914,6 +987,140 @@ inline Expr count_trailing_zeros(Expr x) {
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
                                 vec(x), Internal::Call::Intrinsic);
 }
+
+/** Return a random variable representing a uniformly distributed
+ * float in the half-open interval [0.0f, 1.0f). For random numbers of
+ * other types, use lerp with a random float as the last parameter.
+ *
+ * Optionally takes a seed.
+ *
+ * Note that:
+ \code
+ Expr x = random_float();
+ Expr y = x + x;
+ \endcode
+ *
+ * is very different to
+ *
+ \code
+ Expr y = random_float() + random_float();
+ \endcode
+ *
+ * The first doubles a random variable, and the second adds two
+ * independent random variables.
+ *
+ * A given random variable takes on a unique value that depends
+ * deterministically on the pure variables of the function they belong
+ * to, the identity of the function itself, and which definition of
+ * the function it is used in. They are, however, shared across tuple
+ * elements.
+ *
+ * This function vectorizes cleanly.
+ */
+inline Expr random_float(Expr seed = Expr()) {
+    // Random floats get even IDs
+    static int counter = -2;
+    counter += 2;
+
+    std::vector<Expr> args;
+    if (seed.defined()) {
+        assert(seed.type() == Int(32));
+        args.push_back(seed);
+    }
+    args.push_back(counter);
+
+    return Internal::Call::make(Float(32), Internal::Call::random, 
+                                args, Internal::Call::Intrinsic);
+}
+
+/** Return a random variable representing a uniformly distributed
+ * 32-bit integer. See \ref random_float. Vectorizes cleanly. */
+inline Expr random_int(Expr seed = Expr()) {
+    // Random ints get odd IDs
+    static int counter = -1;
+    counter += 2;
+
+    std::vector<Expr> args;
+    if (seed.defined()) {
+        assert(seed.type() == Int(32));
+        args.push_back(seed);
+    }
+    args.push_back(counter);
+
+    return Internal::Call::make(Int(32), Internal::Call::random, 
+                                args, Internal::Call::Intrinsic);
+}
+
+// For the purposes of a call to print, const char * can convert
+// silently to an Expr
+struct PrintArg {
+    Expr expr;
+    PrintArg(const char *str) : expr(std::string(str)) {}
+    template<typename T> PrintArg(T e) : expr(e) {}
+    operator Expr() {return expr;}
+};
+
+/** Create an Expr that prints out its value whenever it is
+ * evaluated. It also prints out everything else in the arguments
+ * list, separated by spaces. This can include string literals. */
+// @{
+EXPORT Expr print(const std::vector<Expr> &values);
+inline Expr print(PrintArg a) {
+    return print(Internal::vec<Expr>(a));
+}
+inline Expr print(PrintArg a, PrintArg b) {
+    return print(Internal::vec<Expr>(a, b));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c) {
+    return print(Internal::vec<Expr>(a, b, c));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d) {
+    return print(Internal::vec<Expr>(a, b, c, d));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e) {
+    return print(Internal::vec<Expr>(a, b, c, d, e));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f) {
+    return print(Internal::vec<Expr>(a, b, c, d, e, f));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g) {
+    return print(Internal::vec<Expr>(a, b, c, d, e, f, g));
+}
+inline Expr print(PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g, PrintArg h) {
+    return print(Internal::vec<Expr>(a, b, c, d, e, f, g, h));
+}
+// @}
+
+/** Create an Expr that prints whenever it is evaluated, provided that
+ * the condition is true. */
+// @{
+EXPORT Expr print_when(Expr condition, const std::vector<Expr> &values);
+inline Expr print_when(Expr condition, PrintArg a) {
+    return print_when(condition, Internal::vec<Expr>(a));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b) {
+    return print_when(condition, Internal::vec<Expr>(a, b));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e, f));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e, f, g));
+}
+inline Expr print_when(Expr condition, PrintArg a, PrintArg b, PrintArg c, PrintArg d, PrintArg e, PrintArg f, PrintArg g, PrintArg h) {
+    return print_when(condition, Internal::vec<Expr>(a, b, c, d, e, f, g, h));
+}
+// @}
+
 
 /** Return an undef value of the given type. Halide skips stores that
  * depend on undef values, so you can use this to mean "do not modify

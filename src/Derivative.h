@@ -6,8 +6,7 @@
  * Methods for taking derivatives of halide expressions. Not currently used anywhere
  */
 
-#include "IRVisitor.h"
-#include <string>
+#include "IR.h"
 
 namespace Halide {
 namespace Internal {

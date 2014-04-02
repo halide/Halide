@@ -1,3 +1,6 @@
+#include <iostream>
+#include <algorithm>
+
 #include "Simplify.h"
 #include "IROperator.h"
 #include "IREquality.h"
@@ -9,7 +12,6 @@
 #include "ModulusRemainder.h"
 #include "Substitute.h"
 #include "Bounds.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {
@@ -111,15 +113,16 @@ private:
             return true;
         } else if (cast && (cast->type.is_int() || cast->type.is_uint()) &&
                    cast->type.bits <= (int) (sizeof(int) * 8)) {
-            const IntImm *imm = cast->value.as<IntImm>();
-            if (imm) {
-                // When fetching a cast integer, ensure that the return
-                // value is in the correct range (i.e. the canonical value) for the cast type.
-                *i = int_cast_constant(cast->type, imm->value);
+            if (const_castint(cast->value, i)) {
+                // When fetching a cast integer, ensure that the
+                // return value is in the correct range (i.e. the
+                // canonical value) for the cast type.
+                *i = int_cast_constant(cast->type, *i);
                 return true;
             } else {
                 return false;
             }
+
         } else {
             return false;
         }
@@ -136,6 +139,18 @@ private:
             expr = IntImm::make((int)f);
         } else if (op->type == Float(32) && const_int(value, &i)) {
             expr = FloatImm::make((float)i);
+        } else if (cast && const_castint(cast->value, &i) && 
+                   (cast->type.is_int() || i >= 0)) {
+            // cast of cast of const int can just be cast of const
+            // int (with the int suitably munged to fit in the
+            // intermediate type).
+            // u16(u8(255)) -> u16(255)
+
+            // However, this only works if the returned bits fit into
+            // the intermediate type, which fails when casting
+            // negative 32-bit values to unsigned.
+
+            expr = mutate(Cast::make(op->type, i));
         } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
             // Cast to something then back to int
             expr = do_indirect_int_cast(cast->type, i);
@@ -227,6 +242,9 @@ private:
 
         add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
 
+        const Cast *cast_a = a.as<Cast>();
+        const Cast *cast_b = b.as<Cast>();
+
         if (const_int(a, &ia) &&
             const_int(b, &ib)) {
             expr = ia + ib;
@@ -278,6 +296,12 @@ private:
             // a + (b - a)
             expr = sub_b->a;
 
+        } else if (cast_a && cast_b &&
+                   cast_a->value.type() == cast_b->value.type() &&
+                   (op->type.is_int() || op->type.is_uint()) &&
+                   is_const(cast_a->value) && is_const(cast_b->value)) {
+            // u8(5) + u8(5) = u8(10)
+            expr = Cast::make(op->type, Add::make(cast_a->value, cast_b->value));
         } else if (min_a && sub_a_b && equal(sub_a_b->b, b)) {
             // min(a, b-c) + c -> min(a+c, b)
             expr = mutate(Min::make(Add::make(min_a->a, b), sub_a_b->a));
@@ -1595,16 +1619,13 @@ private:
     }
 
     void visit(const AssertStmt *op) {
-        Expr condition = mutate(op->condition);
+        IRMutator::visit(op);
 
-        if (is_const(condition, 0)) {
+        const AssertStmt *a = stmt.as<AssertStmt>();
+        if (a && is_zero(a->condition)) {
             std::cerr << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                      << Stmt(op) << "\n";
+                      << stmt << "\n";
             assert(false);
-        } else if (condition.same_as(op->condition)) {
-            stmt = op;
-        } else {
-            stmt = AssertStmt::make(condition, op->message);
         }
     }
 

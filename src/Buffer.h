@@ -49,13 +49,23 @@ struct BufferContents {
         assert(t.width == 1 && "Can't create of a buffer of a vector type");
         buf.elem_size = t.bytes();
         size_t size = 1;
-        if (x_size) size *= x_size;
-        if (y_size) size *= y_size;
-        if (z_size) size *= z_size;
-        if (w_size) size *= w_size;
+        if (x_size)
+            checked_multiply_assert<size_t>(size, x_size, size);
+        if (y_size)
+            checked_multiply_assert<size_t>(size, y_size, size);
+        if (z_size)
+            checked_multiply_assert<size_t>(size, z_size, size);
+        if (w_size)
+            checked_multiply_assert<size_t>(size, w_size, size);
         if (!data) {
-            size = buf.elem_size*size + 32;
+            checked_multiply_assert<size_t>(size, buf.elem_size, size);
+            assert(size < ((1UL << 31) - 1) && "Total size of Buffer exceeds 2^31 - 1");
+            size = size + 32;
             allocation = (uint8_t *)calloc(1, size);
+            if (!allocation) {
+                std::cerr << "Out of memory allocating buffer of size " << size << "\n";
+                assert(false);
+            }
             buf.host = allocation;
             while ((size_t)(buf.host) & 0x1f) buf.host++;
         } else {
@@ -110,11 +120,11 @@ public:
     }
 
     Buffer(Type t, const std::vector<int32_t> &sizes,
-	   uint8_t* data = NULL, const std::string &name = "") :
+           uint8_t* data = NULL, const std::string &name = "") :
         contents(new Internal::BufferContents(t,
              size_or_zero(sizes, 0), size_or_zero(sizes, 1), size_or_zero(sizes, 2), size_or_zero(sizes, 3),
-	     data, name)) {
-	assert(sizes.size() <= 4 && "Buffer dimensions greater than 4 are not supported.");
+             data, name)) {
+        assert(sizes.size() <= 4 && "Buffer dimensions greater than 4 are not supported.");
     }
 
     Buffer(Type t, const buffer_t *buf, const std::string &name = "") :

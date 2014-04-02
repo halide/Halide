@@ -1,7 +1,6 @@
 #include "RDom.h"
 #include "Util.h"
 #include "IROperator.h"
-#include "Scope.h"
 #include "IRPrinter.h"
 
 namespace Halide {
@@ -40,8 +39,8 @@ Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
     return dom;
 }
 
-RDom::RDom(Internal::ReductionDomain d) : domain(d) {
-    const std::vector<Internal::ReductionVariable> &vars = domain.domain();
+RDom::RDom(Internal::ReductionDomain d) : dom(d) {
+    const std::vector<Internal::ReductionVariable> &vars = dom.domain();
     if (vars.size() > 0) {
         x = RVar(vars[0].var, vars[0].min, vars[0].extent, d);
     }
@@ -61,11 +60,11 @@ RDom::RDom(Expr min, Expr extent, string name) {
     min = cast<int>(min);
     extent = cast<int>(extent);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min, extent,
-                          "", Expr(), Expr(),
-                          "", Expr(), Expr(),
-                          "", Expr(), Expr());
-    x = RVar(name + ".x$r", min, extent, domain);
+    dom = build_domain(name + ".x$r", min, extent,
+                       "", Expr(), Expr(),
+                       "", Expr(), Expr(),
+                       "", Expr(), Expr());
+    x = RVar(name + ".x$r", min, extent, dom);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
@@ -74,12 +73,12 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
     min1 = cast<int>(min1);
     extent1 = cast<int>(extent1);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min0, extent0,
-                          name + ".y$r", min1, extent1,
-                          "", Expr(), Expr(),
-                          "", Expr(), Expr());
-    x = RVar(name + ".x$r", min0, extent0, domain);
-    y = RVar(name + ".y$r", min1, extent1, domain);
+    dom = build_domain(name + ".x$r", min0, extent0,
+                       name + ".y$r", min1, extent1,
+                       "", Expr(), Expr(),
+                       "", Expr(), Expr());
+    x = RVar(name + ".x$r", min0, extent0, dom);
+    y = RVar(name + ".y$r", min1, extent1, dom);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
@@ -90,13 +89,13 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     min2 = cast<int>(min2);
     extent2 = cast<int>(extent2);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min0, extent0,
-                          name + ".y$r", min1, extent1,
-                          name + ".z$r", min2, extent2,
-                          "", Expr(), Expr());
-    x = RVar(name + ".x$r", min0, extent0, domain);
-    y = RVar(name + ".y$r", min1, extent1, domain);
-    z = RVar(name + ".z$r", min2, extent2, domain);
+    dom = build_domain(name + ".x$r", min0, extent0,
+                       name + ".y$r", min1, extent1,
+                       name + ".z$r", min2, extent2,
+                       "", Expr(), Expr());
+    x = RVar(name + ".x$r", min0, extent0, dom);
+    y = RVar(name + ".y$r", min1, extent1, dom);
+    z = RVar(name + ".z$r", min2, extent2, dom);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name) {
@@ -109,14 +108,14 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     min3 = cast<int>(min3);
     extent3 = cast<int>(extent3);
     if (name == "") name = Internal::unique_name('r');
-    domain = build_domain(name + ".x$r", min0, extent0,
-                          name + ".y$r", min1, extent1,
-                          name + ".z$r", min2, extent2,
-                          name + ".w$r", min3, extent3);
-    x = RVar(name + ".x$r", min0, extent0, domain);
-    y = RVar(name + ".y$r", min1, extent1, domain);
-    z = RVar(name + ".z$r", min2, extent2, domain);
-    w = RVar(name + ".w$r", min3, extent3, domain);
+    dom = build_domain(name + ".x$r", min0, extent0,
+                       name + ".y$r", min1, extent1,
+                       name + ".z$r", min2, extent2,
+                       name + ".w$r", min3, extent3);
+    x = RVar(name + ".x$r", min0, extent0, dom);
+    y = RVar(name + ".y$r", min1, extent1, dom);
+    z = RVar(name + ".z$r", min2, extent2, dom);
+    w = RVar(name + ".w$r", min3, extent3, dom);
 }
 
 RDom::RDom(Buffer b) {
@@ -128,14 +127,14 @@ RDom::RDom(Buffer b) {
         }
     }
     string names[] = {b.name() + ".x$r", b.name() + ".y$r", b.name() + ".z$r", b.name() + ".w$r"};
-    domain = build_domain(names[0], min[0], extent[0],
-                          names[1], min[1], extent[1],
-                          names[2], min[2], extent[2],
-                          names[3], min[3], extent[3]);
+    dom = build_domain(names[0], min[0], extent[0],
+                       names[1], min[1], extent[1],
+                       names[2], min[2], extent[2],
+                       names[3], min[3], extent[3]);
     RVar *vars[] = {&x, &y, &z, &w};
     for (int i = 0; i < 4; i++) {
         if (b.dimensions() > i) {
-            *(vars[i]) = RVar(names[i], min[i], extent[i], domain);
+            *(vars[i]) = RVar(names[i], min[i], extent[i], dom);
         }
     }
 }
@@ -149,21 +148,21 @@ RDom::RDom(ImageParam p) {
         }
     }
     string names[] = {p.name() + ".x$r", p.name() + ".y$r", p.name() + ".z$r", p.name() + ".w$r"};
-    domain = build_domain(names[0], min[0], extent[0],
-                          names[1], min[1], extent[1],
-                          names[2], min[2], extent[2],
-                          names[3], min[3], extent[3]);
+    dom = build_domain(names[0], min[0], extent[0],
+                       names[1], min[1], extent[1],
+                       names[2], min[2], extent[2],
+                       names[3], min[3], extent[3]);
     RVar *vars[] = {&x, &y, &z, &w};
     for (int i = 0; i < 4; i++) {
         if (p.dimensions() > i) {
-            *(vars[i]) = RVar(names[i], min[i], extent[i], domain);
+            *(vars[i]) = RVar(names[i], min[i], extent[i], dom);
         }
     }
 }
 
 
 int RDom::dimensions() const {
-    return (int)domain.domain().size();
+    return (int)dom.domain().size();
 }
 
 RVar RDom::operator[](int i) {

@@ -3,21 +3,16 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
-Expr rand_float(Expr x, Expr y, Expr c, Expr min, Expr max) {
-    Expr r = cast<float>(my_rand(x, y, c)) / RAND_MAX;
-    return lerp(min, max, r);
-}
-
 int main(int argc, char **argv) {
+
+    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
 
     // First define the function that gives the initial state.
     {
         Func initial;
 
         // The initial state is a quantity of two chemicals present at each pixel
-        initial(x, y, c) = rand_float(x, y, c, 0.0f, 1.0f);
+        initial(x, y, c) = random_float();
         initial.compile_to_file("reaction_diffusion_init");
     }
 
@@ -57,21 +52,26 @@ int main(int argc, char **argv) {
         new_state(x, y, c) = select(c == 0, new_a, new_b);
 
         // Finally add some noise at the edges to keep things moving
-        Expr r = rand_float(x, 0, c, -0.05f, 0.05f);
+        Expr r = lerp(-0.05f, 0.05f, random_float());
         new_state(x, 0, c) += r;
         new_state(x, 1023, c) += r;
-        r = rand_float(0, y, c, -0.05f, 0.05f);
         new_state(0, y, c) += r;
         new_state(1023, y, c) += r;
 
-        new_state.vectorize(x, 4);
+        if (can_vectorize) {
+            new_state.vectorize(x, 4);
+        }
         new_state.bound(c, 0, 2).unroll(c);
 
 
         Var yi;
         new_state.split(y, y, yi, 16).parallel(y);
 
-        blur_x.store_at(new_state, y).compute_at(new_state, yi).vectorize(x, 4);
+        blur_x.store_at(new_state, y).compute_at(new_state, yi);
+        if (can_vectorize) {
+            blur_x.vectorize(x, 4);
+        }
+
         clamped.store_at(new_state, y).compute_at(new_state, yi);
 
         new_state.compile_to_file("reaction_diffusion_update", state, mouse_x, mouse_y);
@@ -91,7 +91,9 @@ int main(int argc, char **argv) {
         Func render;
         render(x, y) = alpha + red + green + blue;
 
-        render.vectorize(x, 4);
+        if (can_vectorize) {
+            render.vectorize(x, 4);
+        }
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 

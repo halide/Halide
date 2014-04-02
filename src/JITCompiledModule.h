@@ -7,6 +7,16 @@
 
 #include "IntrusivePtr.h"
 
+#ifdef COMPILING_HALIDE
+#define _COMPILING_HALIDE
+#undef COMPILING_HALIDE
+#endif
+#include "runtime/HalideRuntime.h"
+#ifdef _COMPILING_HALIDE
+#define COMPILING_HALIDE
+#undef _COMPILING_HALIDE
+#endif
+
 namespace llvm {
 class Module;
 }
@@ -65,7 +75,7 @@ struct JITCompiledModule {
                                                      int, uint8_t *));
 
     /** Set a custom trace function. See \ref Func::set_custom_trace. */
-    typedef int (*TraceFn)(void *, const char *, int, int, int, int, int, int, const void *, int, const int *);
+    typedef int (*TraceFn)(void *, const halide_trace_event *);
     void (*set_custom_trace)(TraceFn);
 
     /** Shutdown the thread pool maintained by this JIT module. This

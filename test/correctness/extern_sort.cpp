@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
     std::sort(&reference(0), &reference(100));
 
     RDom r(reference);
-    float error = evaluate<float>(sum(abs(reference(r) - output(r))));
+    float error = evaluate_may_gpu<float>(sum(abs(reference(r) - output(r))));
 
     if (error != 0) {
         printf("Output incorrect\n");

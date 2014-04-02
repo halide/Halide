@@ -3,9 +3,9 @@ using namespace Halide;
 
 Var x("x"), y("y"), c("c");
 
-HalideExtern_3(int, my_rand, int, int, int);
-
 int main(int argc, char **argv) {
+
+    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
 
     // First define the function that gives the initial state.
     {
@@ -85,16 +85,18 @@ int main(int argc, char **argv) {
         Var yo;
         final.bound(x, 0, 1024).bound(y, 0, 1024);
         final.split(y, y, yi, 4).parallel(y);
-        final.vectorize(x, 4);
 
         render.compute_root();
         render.bound(x, 0, 1024).bound(y, 0, 512);
         render.split(y, y, yi, 4).parallel(y);
-        render.vectorize(x, 4);
 
         julia.compute_at(render, x);
-        julia.update().vectorize(x, 4);
 
+        if (can_vectorize) {
+            render.vectorize(x, 4);
+            julia.update().vectorize(x, 4);
+            final.vectorize(x, 4);
+        }
         final.compile_to_file("julia_render", state);
     }
 

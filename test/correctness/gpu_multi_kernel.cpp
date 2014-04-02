@@ -16,12 +16,10 @@ int main(int argc, char *argv[]) {
     kernel3(x) = cast<int32_t>(x + kernel2(x));
 
     Target target = get_jit_target_from_environment();
-    if (target.features & Target::CUDA ||
-	target.features & Target::OpenCL) {
-        kernel1.cuda_tile(x, 32).compute_root();
-        kernel2.cuda_tile(x, 32).compute_root();
-
-        kernel3.cuda_tile(x, 32);
+    if (target.has_gpu_feature()) {
+        kernel1.gpu_tile(x, 32, GPU_Default).compute_root();
+        kernel2.gpu_tile(x, 32, GPU_Default).compute_root();
+        kernel3.gpu_tile(x, 32, GPU_Default);
     }
 
     Image<int32_t> result = kernel3.realize(256, target);

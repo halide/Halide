@@ -7,6 +7,8 @@ else
 LIB_HALIDE = bin/libHalide.a
 endif
 
+LDFLAGS += $(shell llvm-config --ldflags)
+
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
