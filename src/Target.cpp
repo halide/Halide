@@ -2,8 +2,8 @@
 #include <string>
 
 #include "Target.h"
-#include "LLVM_Headers.h"
 #include "Debug.h"
+#include "LLVM_Headers.h"
 #include "Util.h"
 
 namespace Halide {
@@ -143,16 +143,38 @@ Target get_jit_target_from_environment() {
 Target parse_target_string(const std::string &target) {
     //Internal::debug(0) << "Getting host target \n";
 
-    Target t = get_host_target();
+    Target host = get_host_target();
+
+    if (target.empty()) {
+        // If nothing is specified, use the host target.
+        return host;
+    }
+
+    // Default to the host OS and architecture.
+    Target t;
+    t.os = host.os;
+    t.arch = host.arch;
+    t.bits = host.bits;
 
     //Internal::debug(0) << "Got host target \n";
+    if (!t.merge_string(target)) {
+        std::cerr << "Did not understand HL_TARGET=" << target << "\n"
+                  << "Expected format is arch-os-feature1-feature2-... "
+                  << "Where arch is x86-32, x86-64, arm-32, arm-64, "
+                  << "and os is linux, windows, osx, nacl, ios, or android. "
+                  << "If arch or os are omitted, they default to the host. "
+                  << "Features include sse41, avx, avx2, cuda, opencl, and gpu_debug.\n"
+                  << "HL_TARGET can also begin with \"host\", which sets the "
+                  << "host's architecture, os, and feature set, with the "
+                  << "exception of the GPU runtimes, which default to off\n";
 
-    if (target.empty()) return t;
+        assert(false);
+    }
 
-    uint64_t host_features = t.features;
-    t.features = 0;
+    return t;
+}
 
-    // HL_TARGET should be arch-os-feature1-feature2...
+bool Target::merge_string(const std::string &target) {
     string rest = target;
     vector<string> tokens;
     size_t first_dash;
@@ -169,104 +191,125 @@ Target parse_target_string(const std::string &target) {
         bool is_arch = false, is_os = false, is_bits = false;
         const string &tok = tokens[i];
         if (tok == "x86") {
-            t.arch = Target::X86;
+            arch = Target::X86;
             is_arch = true;
         } else if (tok == "arm") {
-            t.arch = Target::ARM;
+            arch = Target::ARM;
             is_arch = true;
+        } else if (tok == "pnacl") {
+            arch = Target::PNaCl;
+            os = Target::NaCl;
+            bits = 32;
+            is_os = true;
+            is_arch = true;
+            is_bits = true;
         } else if (tok == "32") {
-            t.bits = 32;
+            bits = 32;
             is_bits = true;
         } else if (tok == "64") {
-            t.bits = 64;
+            bits = 64;
             is_bits = true;
         } else if (tok == "linux") {
-            t.os = Target::Linux;
+            os = Target::Linux;
             is_os = true;
         } else if (tok == "windows") {
-            t.os = Target::Windows;
+            os = Target::Windows;
             is_os = true;
         } else if (tok == "nacl") {
-            t.os = Target::NaCl;
+            os = Target::NaCl;
             is_os = true;
         } else if (tok == "osx") {
-            t.os = Target::OSX;
+            os = Target::OSX;
             is_os = true;
         } else if (tok == "android") {
-            t.os = Target::Android;
+            os = Target::Android;
             is_os = true;
         } else if (tok == "ios") {
-            t.os = Target::IOS;
+            os = Target::IOS;
             is_os = true;
         } else if (tok == "host") {
-            t.features |= host_features;
+            if (i > 0) {
+                // "host" is now only allowed as the first token.
+                return false;
+            }
+            *this = get_host_target();
             is_os = true;
             is_arch = true;
             is_bits = true;
+        } else if (tok == "jit") {
+            features |= Target::JIT;
         } else if (tok == "sse41") {
-            t.features |= Target::SSE41;
+            features |= Target::SSE41;
         } else if (tok == "avx") {
-            t.features |= (Target::SSE41 | Target::AVX);
+            features |= (Target::SSE41 | Target::AVX);
         } else if (tok == "avx2") {
-            t.features |= (Target::SSE41 | Target::AVX | Target::AVX2);
+            features |= (Target::SSE41 | Target::AVX | Target::AVX2);
         } else if (tok == "cuda" || tok == "ptx") {
-            t.features |= Target::CUDA;
+            features |= Target::CUDA;
         } else if (tok == "opencl") {
-            t.features |= Target::OpenCL;
+            features |= Target::OpenCL;
         } else if (tok == "spir") {
-            t.features |= Target::OpenCL | Target::SPIR;
+            features |= Target::OpenCL | Target::SPIR;
         } else if (tok == "spir64") {
-            t.features |= Target::OpenCL | Target::SPIR64;
+            features |= Target::OpenCL | Target::SPIR64;
         } else if (tok == "gpu_debug") {
-            t.features |= Target::GPUDebug;
+            features |= Target::GPUDebug;
         } else if (tok == "no_asserts") {
-            t.features |= Target::NoAsserts;
+            features |= Target::NoAsserts;
         } else if (tok == "no_bounds_query") {
-            t.features |= Target::NoBoundsQuery;
+            features |= Target::NoBoundsQuery;
         } else {
-            std::cerr << "Did not understand HL_TARGET=" << target << "\n"
-                      << "Expected format is arch-os-feature1-feature2-... "
-                      << "Where arch is x86-32, x86-64, arm-32, arm-64, "
-                      << "and os is linux, windows, osx, nacl, ios, or android. "
-                      << "If arch or os are omitted, they default to the host. "
-                      << "Features include sse41, avx, avx2, cuda, opencl, spir, spir64, "
-                      << "no_asserts, no_bounds_query, and gpu_debug.\n"
-                      << "HL_TARGET can also include \"host\", which sets the "
-                      << "host's architecture, os, and feature set, with the "
-                      << "exception of the GPU runtimes, which default to off\n";
-
-            assert(false);
+            return false;
         }
 
         if (is_os) {
-            assert(!os_specified && "Target string specifies OS twice");
+            if (os_specified) {
+                return false;
+            }
             os_specified = true;
         }
 
         if (is_arch) {
-            assert(!arch_specified && "Target string specifies architecture twice");
+            if (arch_specified) {
+                return false;
+            }
             arch_specified = true;
         }
 
         if (is_bits) {
-            assert(!bits_specified && "Target string specifies bits twice");
+            if (bits_specified) {
+                return false;
+            }
             bits_specified = true;
         }
     }
 
     if (arch_specified && !bits_specified) {
-        std::cerr << "WARNING: If architecture is specified (e.g. \"arm\"), "
-                  << "then bit width should also be specified (e.g. \"arm-32\"). "
-                  << "In the future this will be an error. ";
-        if (t.arch == Target::X86) {
-            std::cerr << "For x86 we default to the bit width of the host: " << t.bits << "\n;";
-        } else {
-            std::cerr << "For this target we default to 32-bits\n";
-            t.bits = 32;
-        }
+        return false;
     }
 
-    return t;
+    return true;
+}
+
+std::string Target::to_string() const {
+  const char* const arch_names[] = {
+    "arch_unknown", "x86", "arm", "pnacl"
+  };
+  const char* const os_names[] = {
+    "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
+  };
+  const char* const feature_names[] = {
+    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64"
+  };
+  string result = string(arch_names[arch])
+      + "-" + Internal::int_to_string(bits)
+      + "-" + string(os_names[os]);
+  for (int i = 0; i < 9; ++i) {
+    if (features & (1ULL << i)) {
+      result += "-" + string(feature_names[i]);
+    }
+  }
+  return result;
 }
 
 namespace {
@@ -287,6 +330,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
                                              halide_internal_initmod_##mod##_length); \
         llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
         llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
+        module->setModuleIdentifier(#mod);                              \
         delete bitcode_buffer;                                          \
         return module;                                                  \
     }
@@ -330,14 +374,17 @@ DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
 DECLARE_CPP_INITMOD(nacl_io)
+DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
 DECLARE_CPP_INITMOD(posix_thread_pool)
+DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
 
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
+DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(ptx_dev)
 #if WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
@@ -358,6 +405,9 @@ namespace {
 void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
+        #if LLVM_VERSION >= 35
+        modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
+        #endif
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
@@ -390,6 +440,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",
+                       "__stack_chk_guard",
+                       "__stack_chk_fail",
                        ""};
 
     llvm::Module *module = modules[0];
@@ -455,7 +507,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     } else if (t.os == Target::Windows) {
         modules.push_back(get_initmod_windows_clock(c, bits_64));
         modules.push_back(get_initmod_windows_io(c, bits_64));
-        modules.push_back(get_initmod_fake_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_windows_thread_pool(c, bits_64));
     } else if (t.os == Target::IOS) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
         modules.push_back(get_initmod_ios_io(c, bits_64));
@@ -465,11 +517,17 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_nacl_io(c, bits_64));
         modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_ssp(c, bits_64));
     }
 
     // These modules are always used
     modules.push_back(get_initmod_posix_math(c, bits_64));
-    modules.push_back(get_initmod_posix_math_ll(c));
+
+    if (t.arch == Target::PNaCl) {
+        modules.push_back(get_initmod_pnacl_math_ll(c));
+    } else {
+        modules.push_back(get_initmod_posix_math_ll(c));
+    }
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));

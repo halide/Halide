@@ -1,16 +1,15 @@
+#include <iostream>
+#include <sstream>
+
 #include "CodeGen_ARM.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
-#include "IRPrinter.h"
 #include "IRMatch.h"
 #include "IREquality.h"
 #include "Debug.h"
 #include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Simplify.h"
-#include "integer_division_table.h"
+#include "IntegerDivisionTable.h"
+#include "IRPrinter.h"
 #include "LLVM_Headers.h"
 
 // Native client llvm relies on global flags to control sandboxing on
@@ -65,6 +64,7 @@ Expr _u16(Expr e) {
     return cast(UInt(16, e.type().width), e);
 }
 
+#if LLVM_VERSION < 35
 Expr _i8(Expr e) {
     return cast(Int(8, e.type().width), e);
 }
@@ -72,6 +72,7 @@ Expr _i8(Expr e) {
 Expr _u8(Expr e) {
     return cast(UInt(8, e.type().width), e);
 }
+#endif
 
 /*
 Expr _f32(Expr e) {
@@ -137,10 +138,8 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     #endif
 
     // These patterns went away in llvm commit r189481, which is
-    // unfortunate, because they don't always get generated
-    // automatically. It also means that vshiftn catches these
-    // patterns instead of letting them fall through to the natural
-    // bitcode that triggers llvm's recognition.
+    // unfortunate, because they don't get generated automatically in
+    // the signed case.
     #if LLVM_VERSION < 34
     casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
     casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
@@ -152,9 +151,9 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
     #endif
 
-    // Generate the cast patterns that can take vector or scalar
-    // types.  We need to iterate over all 64 and 128 bit integer
-    // types relevant for neon.
+    // Generate the cast patterns that can take vector types.  We need
+    // to iterate over all 64 and 128 bit integer types relevant for
+    // neon.
     Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
                     Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
                     Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
@@ -171,13 +170,8 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
 
         // Vector wildcard for this type
         Expr vector = Variable::make(t, "*");
-        Expr w_vector = cast(w, vector);
-        Expr ws_vector = cast(ws, vector);
-
-        // Scalar wildcard for this type
-        Expr scalar = Variable::make(t.element_of(), "*");
-        Expr w_scalar = cast(w, scalar);
-        Expr ws_scalar = cast(ws, scalar);
+        Expr w_vector = Variable::make(w, "*");
+        Expr ws_vector = Variable::make(ws, "*");
 
         // Bounds of the type stored in the wider vector type
         Expr tmin = simplify(cast(w, t.imin()));
@@ -192,54 +186,52 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
         }
 
         // Rounding-up averaging
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_scalar + 1))/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_scalar + 1) + w_vector)/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_scalar + w_vector) + 1)/2)));
-        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + w_scalar) + 1)/2)));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2), Pattern::NarrowArgs));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_vector + 1))/2), Pattern::NarrowArgs));
+        casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + 1) + w_vector)/2), Pattern::NarrowArgs));
 
         // Rounding down averaging
-        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2)));
-        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_scalar)/2)));
-        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_scalar + w_vector)/2)));
+        casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2), Pattern::NarrowArgs));
 
         // Halving subtract
-        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2)));
-        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_scalar)/2)));
-        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_scalar - w_vector)/2)));
+        casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2), Pattern::NarrowArgs));
 
         // Saturating add
-        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax))));
-        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_scalar, tmin, tmax))));
-        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_scalar + w_vector, tmin, tmax))));
+        casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax)), Pattern::NarrowArgs));
 
         // In the unsigned case, the saturation below in unnecessary
         if (t.is_uint()) {
-            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax))));
-            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_scalar, tmax))));
-            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_scalar + w_vector, tmax))));
+            casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax)), Pattern::NarrowArgs));
         }
 
         // Saturating subtract
         // N.B. Saturating subtracts always widen to a signed type
-        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax))));
-        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_scalar, tsmin, tsmax))));
-        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_scalar - ws_vector, tsmin, tsmax))));
+        casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax)), Pattern::NarrowArgs));
 
         // In the unsigned case, we may detect that the top of the clamp is unnecessary
         if (t.is_uint()) {
-            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0))));
-            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_scalar - ws_vector, 0))));
-            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_scalar, 0))));
+            casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0)), Pattern::NarrowArgs));
         }
     }
 
+    // At some point llvm started recognising narrowing shifts
+    // directly and these intrinsics went away.
+    #if LLVM_VERSION < 35
     casts.push_back(Pattern("vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), Pattern::RightShift));
     casts.push_back(Pattern("vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), Pattern::RightShift));
+
+    // Widening left shifts
+    left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
+    left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
+    #endif
 
     casts.push_back(Pattern("vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
     casts.push_back(Pattern("vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
@@ -279,14 +271,6 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     casts.push_back(Pattern("vqmovnsu.v8i8", _u8q(wild_i16x8)));
     casts.push_back(Pattern("vqmovnsu.v4i16", _u16q(wild_i32x4)));
     casts.push_back(Pattern("vqmovnsu.v2i32", _u32q(wild_i64x2)));
-
-    // Widening left shifts
-    left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
-    left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
 
     // Non-widening left shifts
     left_shifts.push_back(Pattern("vshifts.v16i8", wild_i8x16*wild_i8x16, Pattern::LeftShift));
@@ -338,22 +322,13 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
 
 }
 
+llvm::Triple CodeGen_ARM::get_target_triple() const {
+    llvm::Triple triple;
 
-void CodeGen_ARM::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // Fix the target triple.
     if (target.bits == 64) {
 
     }
 
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-    llvm::Triple triple;
     if (target.bits == 32) {
         triple.setArch(llvm::Triple::arm);
     } else {
@@ -363,7 +338,7 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
         #else
         assert(false && "AArch64 llvm target not enabled in this build of Halide");
         #endif
-        std::cerr << "WARNING: 64-bit arm builds are completely untested\n";
+        std::cerr << "Warning: 64-bit arm builds are completely untested\n";
     }
 
     if (target.os == Target::Android) {
@@ -397,7 +372,24 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
     } else {
         assert(false && "No arm support for this OS");
     }
+
+    return triple;
+}
+
+void CodeGen_ARM::compile(Stmt stmt, string name,
+                          const vector<Argument> &args,
+                          const vector<Buffer> &images_to_embed) {
+
+    init_module();
+
+    module = get_initial_module_for_target(target, context);
+
+    // Fix the target triple.
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
+    llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
+
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
@@ -485,6 +477,46 @@ Instruction *CodeGen_ARM::call_void_intrin(const string &name, vector<Value *> a
     return builder->CreateCall(fn, arg_values);
 }
 
+
+namespace {
+
+// Try to losslessly narrow an integer expression to the target type
+Expr try_narrow(Expr a, Type target) {
+    assert(a.type().width == target.width);
+    if (const Cast *c = a.as<Cast>()) {
+        Type old_type = c->value.type();
+        if (old_type == target) {
+            return c->value;
+        } else if (target.can_represent(old_type)) {
+            return cast(target, c->value);
+        } else if (c->type.can_represent(target)) {
+            // We lose nothing by stripping off the cast and pressing onwards.
+            return try_narrow(c->value, target);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const Broadcast *b = a.as<Broadcast>()) {
+        Expr n = try_narrow(b->value, target.element_of());
+        if (n.defined()) {
+            return Broadcast::make(n, b->width);
+        } else {
+            return Expr();
+        }
+    }
+
+    if (const IntImm *i = a.as<IntImm>()) {
+        if (i->value <= target.imax() &&
+            i->value >= target.imin()) {
+            return cast(target, a);
+        }
+    }
+
+    return Expr();
+}
+}
+
 void CodeGen_ARM::visit(const Cast *op) {
     vector<Expr> matches;
 
@@ -492,17 +524,32 @@ void CodeGen_ARM::visit(const Cast *op) {
         const Pattern &pattern = casts[i];
         //debug(4) << "Trying pattern: " << patterns[i].intrin << " " << patterns[i].pattern << "\n";
         if (expr_match(pattern.pattern, op, matches)) {
-            // Broadcast any scalar args
-            for (size_t i = 0; i < matches.size(); i++) {
-                if (op->type.is_vector() && matches[i].type().is_scalar()) {
-                    matches[i] = Broadcast::make(matches[i], op->type.width);
-                }
-            }
 
             //debug(4) << "Match!\n";
             if (pattern.type == Pattern::Simple) {
                 value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
                 return;
+            } else if (pattern.type == Pattern::NarrowArgs) {
+                // Try to narrow all of the args.
+                bool all_narrow = true;
+                for (size_t i = 0; i < matches.size(); i++) {
+                    assert(matches[i].type().bits == op->type.bits * 2);
+                    assert(matches[i].type().width == op->type.width);
+                    // debug(4) << "Attemping to narrow " << matches[i] << " to " << op->type << "\n";
+                    matches[i] = try_narrow(matches[i], op->type);
+                    if (!matches[i].defined()) {
+                        // debug(4) << "failed\n";
+                        all_narrow = false;
+                    } else {
+                        // debug(4) << "success: " << matches[i] << "\n";
+                        assert(matches[i].type() == op->type);
+                    }
+                }
+
+                if (all_narrow) {
+                    value = call_intrin(pattern.pattern.type(), pattern.intrin, matches);
+                    return;
+                }
             } else { // must be a shift
                 Expr constant = matches[1];
                 int shift_amount;
@@ -524,6 +571,25 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
+
+    // Catch extract-high-half-of-signed integer pattern and convert
+    // it to extract-high-half-of-unsigned-integer. llvm peephole
+    // optimization recognizes logical shift right but not arithemtic
+    // shift right for this pattern. This matters for vaddhn of signed
+    // integers.
+    if ((op->type.is_int() || op->type.is_uint()) &&
+        op->value.type().is_int() &&
+        op->type.bits == op->value.type().bits / 2) {
+        const Div *d = op->value.as<Div>();
+        if (d && is_const(d->b, 1 << op->type.bits)) {
+            Type unsigned_type = UInt(op->type.bits * 2, op->type.width);
+            Expr replacement = cast(op->type,
+                                    cast(unsigned_type, d->a) /
+                                    cast(unsigned_type, d->b));
+            replacement.accept(this);
+            return;
+        }
+    }
 
     CodeGen::visit(op);
 
@@ -902,12 +968,22 @@ void CodeGen_ARM::visit(const LT *op) {
         if (va.type() == Float(32, 4) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 4), "vacgtq", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacgtq";
+            #else
+            string name = "vacgt.v4i32";
+            #endif
+            value = call_intrin(Int(32, 4), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else if (va.type() == Float(32, 2) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 2), "vacgtd", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacgtd";
+            #else
+            string name = "vacgt.v2i32";
+            #endif
+            value = call_intrin(Int(32, 2), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -939,12 +1015,22 @@ void CodeGen_ARM::visit(const LE *op) {
         if (va.type() == Float(32, 4) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 4), "vacgeq", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacgeq";
+            #else
+            string name = "vacge.v4i32";
+            #endif
+            value = call_intrin(Int(32, 4), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else if (va.type() == Float(32, 2) &&
             a->name == Call::abs &&
             b->name == Call::abs) {
-            value = call_intrin(Int(32, 2), "vacged", vec(vb, va));
+            #if LLVM_VERSION < 35
+            string name = "vacged";
+            #else
+            string name = "vacge.v4i32";
+            #endif
+            value = call_intrin(Int(32, 2), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
             CodeGen::visit(op);
@@ -953,41 +1039,6 @@ void CodeGen_ARM::visit(const LE *op) {
         CodeGen::visit(op);
     }
 
-}
-
-namespace {
-
-// Try to losslessly narrow an integer expression to half the bit-width
-Expr try_narrow(Expr a) {
-    if (const Cast *c = a.as<Cast>()) {
-        Type old_type = c->value.type();
-        Type new_type = a.type();
-        old_type.bits *= 2;
-        if (old_type == new_type) {
-            return c->value;
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const Broadcast *b = a.as<Broadcast>()) {
-        Expr n = try_narrow(b->value);
-        if (n.defined()) {
-            return Broadcast::make(n, b->width);
-        } else {
-            return Expr();
-        }
-    }
-
-    if (const IntImm *i = a.as<IntImm>()) {
-        if (i->value <= Int(16).imax() &&
-            i->value >= Int(16).imin()) {
-            return cast(Int(16), a);
-        }
-    }
-
-    return Expr();
-}
 }
 
 void CodeGen_ARM::visit(const Select *op) {
@@ -1015,8 +1066,10 @@ void CodeGen_ARM::visit(const Select *op) {
         // If cmp->a and cmp->b are both widening casts of a narrower
         // int, we can use vadbl instead of vabd. llvm reaches vabdl
         // by expecting you to widen the result of a narrower vabd.
-        Expr na = try_narrow(cmp->a);
-        Expr nb = try_narrow(cmp->b);
+        Type narrow = cmp->a.type();
+        narrow.bits /= 2;
+        Expr na = try_narrow(cmp->a, narrow);
+        Expr nb = try_narrow(cmp->b, narrow);
         if (na.defined() && nb.defined() && vec_bits == 128) {
             ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits/2;
             value = call_intrin(na.type(), ss.str(), vec(na, nb));

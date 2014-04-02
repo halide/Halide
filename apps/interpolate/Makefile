@@ -1,10 +1,12 @@
 include ../support/Makefile.inc
 
-all: interpolate
+CXXFLAGS += -g -Wall
+
+.PHONY: clean
 
 interpolate: ../../ interpolate.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) $(CPPFLAGS) interpolate.cpp -I ../../include/ -I ../support ../../$(LIB_HALIDE) -o interpolate  -lpthread -ldl $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
+	$(CXX) $(CXXFLAGS) interpolate.cpp -I ../../include/ -I ../support $(LDFLAGS) ../../$(LIB_HALIDE) -o interpolate  -lpthread -ldl -lz $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 out.png: interpolate
 	./interpolate ../images/rgba.png out.png

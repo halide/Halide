@@ -1,11 +1,11 @@
+#include <string>
 #include <stdint.h>
+
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
 #include "CodeGen.h"
 #include "LLVM_Headers.h"
 #include "Debug.h"
-
-#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -28,9 +28,10 @@ public:
     }
 
     ~JITModuleHolder() {
+        debug(2) << "Destroying JIT compiled module at " << this << "\n";
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
             void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
-            debug(1) << "Calling target specific cleanup routine at " << ptr << "\n";
+            debug(2) << "  Calling target specific cleanup routine at " << ptr << "\n";
             (*cleanup_routines[i])();
         }
 
@@ -111,12 +112,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     string error_string;
-
-    // Make an ELF on windows, MCJIT doesn't support the default (COFF).
-    // TODO: This #ifdef might be better
-#ifdef _WIN32
-    m->setTargetTriple(m->getTargetTriple() + "-elf");
-#endif
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
@@ -204,7 +199,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     // isn't right.
     debug(2) << "Flushing cache from " << (void *)start
              << " to " << (void *)end << "\n";
-    __clear_cache(start, end);
+    __builtin___clear_cache(start, end);
     #endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors

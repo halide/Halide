@@ -118,8 +118,9 @@ struct IRHandle : public IntrusivePtr<const IRNode> {
      * }
      */
     template<typename T> const T *as() const {
-        if (ptr->type_info() == &T::_type_info)
+        if (ptr->type_info() == &T::_type_info) {
             return (const T *)ptr;
+        }
         return NULL;
     }
 };
@@ -129,7 +130,10 @@ struct IntImm : public ExprNode<IntImm> {
     int value;
 
     static IntImm *make(int value) {
-        if (value >= -8 && value <= 8) return small_int_cache + value + 8;
+        if (value >= -8 && value <= 8 &&
+            !small_int_cache[value + 8].ref_count.is_zero()) {
+            return &small_int_cache[value + 8];
+        }
         IntImm *node = new IntImm;
         node->type = Int(32);
         node->value = value;
@@ -192,7 +196,7 @@ struct Expr : public Internal::IRHandle {
 
     /** Get the type of this expression node */
     Type type() const {
-        return ((Internal::BaseExprNode *)ptr)->type;
+        return ((const Internal::BaseExprNode *)ptr)->type;
     }
 };
 
@@ -665,13 +669,15 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
     std::string message;
+    std::vector<Expr> args;
 
-    static Stmt make(Expr condition, std::string message) {
+    static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args) {
         assert(condition.defined() && "AssertStmt of undefined");
 
         AssertStmt *node = new AssertStmt;
         node->condition = condition;
         node->message = message;
+        node->args = args;
         return node;
     }
 };
@@ -789,18 +795,21 @@ struct Provide : public StmtNode<Provide> {
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
-    Expr size;
+    std::vector<Expr> extents;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, Expr size, Stmt body) {
-        assert(size.defined() && "Allocate of undefined");
+    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents, Stmt body) {
+        for (size_t i = 0; i < extents.size(); i++) {
+            assert(extents[i].defined() && "Allocate of undefined extent");
+            assert(extents[i].type().is_scalar() == 1 && "Allocate of vector extent");
+        }
         assert(body.defined() && "Allocate of undefined");
-        assert(size.type().is_scalar() == 1 && "Allocate of vector size");
 
         Allocate *node = new Allocate;
         node->name = name;
         node->type = type;
-        node->size = size;
+        node->extents = extents;
+
         node->body = body;
         return node;
     }
@@ -943,6 +952,7 @@ struct Call : public ExprNode<Call> {
         abs,
         rewrite_buffer,
         profiling_timer,
+        random,
         lerp,
         create_buffer_t,
         extract_buffer_min,
@@ -953,7 +963,10 @@ struct Call : public ExprNode<Call> {
         undef,
         null_handle,
         address_of,
-        trace, trace_expr;
+        return_second,
+        if_then_else,
+        trace,
+        trace_expr;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.

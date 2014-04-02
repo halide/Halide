@@ -115,18 +115,18 @@ int main(int argc, char **argv) {
     remap.compute_root();
 
     Target target = get_target_from_environment();
-    if (target.features & (Target::CUDA | Target::OpenCL)) {
+    if (target.has_gpu_feature()) {
         // gpu schedule
-        output.compute_root().cuda_tile(x, y, 32, 32);
+        output.compute_root().gpu_tile(x, y, 32, 32, GPU_Default);
         for (int j = 0; j < J; j++) {
             int blockw = 32, blockh = 16;
             if (j > 3) {
                 blockw = 2;
                 blockh = 2;
             }
-            if (j > 0) inGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
-            if (j > 0) gPyramid[j].compute_root().reorder(k, x, y).cuda_tile(x, y, blockw, blockh);
-            outGPyramid[j].compute_root().cuda_tile(x, y, blockw, blockh);
+            if (j > 0) inGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, GPU_Default);
+            if (j > 0) gPyramid[j].compute_root().reorder(k, x, y).gpu_tile(x, y, blockw, blockh, GPU_Default);
+            outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, GPU_Default);
         }
     } else {
         // cpu schedule

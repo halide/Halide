@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
 
     ImageParam input(Float(32), 3);
 
-    const unsigned int levels = 10;
+    const int levels = 10;
 
     Func downsampled[levels];
     Func downx[levels];
@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
     // downsampled[0](x, y, c) = select(c < 3, clamped(x, y, c) * clamped(x, y, 3), clamped(x, y, 3));
     downsampled[0](x, y, c) = clamped(x, y, c) * clamped(x, y, 3);
 
-    for (unsigned int l = 1; l < levels; ++l) {
+    for (int l = 1; l < levels; ++l) {
         Func prev = downsampled[l-1];
 
         if (l == 4) {
@@ -71,7 +71,7 @@ int main(int argc, char **argv) {
                                    downx[l](x, y*2+1, c)) * 0.25f;
     }
     interpolated[levels-1](x, y, c) = downsampled[levels-1](x, y, c);
-    for (unsigned int l = levels-2; l < levels; --l) {
+    for (int l = levels-2; l >= 0; --l) {
         upsampledx[l](x, y, c) = (interpolated[l+1](x/2, y, c) +
                                   interpolated[l+1]((x+1)/2, y, c)) / 2.0f;
         upsampled[l](x, y, c) =  (upsampledx[l](x, y/2, c) +
@@ -89,7 +89,7 @@ int main(int argc, char **argv) {
 
     int sched;
     Target target = get_target_from_environment();
-    if (target.features & (Target::CUDA | Target::OpenCL)) {
+    if (target.has_gpu_feature()) {
         sched = 4;
     } else {
         sched = 2;
@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     case 0:
     {
         std::cout << "Flat schedule." << std::endl;
-        for (unsigned int l = 0; l < levels; ++l) {
+        for (int l = 0; l < levels; ++l) {
             downsampled[l].compute_root();
             interpolated[l].compute_root();
         }
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
     case 1:
     {
         std::cout << "Flat schedule with vectorization." << std::endl;
-        for (unsigned int l = 0; l < levels; ++l) {
+        for (int l = 0; l < levels; ++l) {
             downsampled[l].compute_root().vectorize(x,4);
             interpolated[l].compute_root().vectorize(x,4);
         }
@@ -121,7 +121,7 @@ int main(int argc, char **argv) {
         Var xi, yi;
         std::cout << "Flat schedule with parallelization + vectorization." << std::endl;
         clamped.compute_root().parallel(y).bound(c, 0, 4).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
-        for (unsigned int l = 1; l < levels-1; ++l) {
+        for (int l = 1; l < levels-1; ++l) {
             if (l > 0) downsampled[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
             interpolated[l].compute_root().parallel(y).reorder(c, x, y).reorder_storage(c, x, y).vectorize(c, 4);
             interpolated[l].unroll(x, 2).unroll(y, 2);
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
     case 3:
     {
         std::cout << "Flat schedule with vectorization sometimes." << std::endl;
-        for (unsigned int l = 0; l < levels; ++l) {
+        for (int l = 0; l < levels; ++l) {
             if (l + 4 < levels) {
                 Var yo,yi;
                 downsampled[l].compute_root().vectorize(x,4);
@@ -157,15 +157,15 @@ int main(int argc, char **argv) {
         Var yo, yi, xo, xi;
         final.reorder(c, x, y).bound(c, 0, 3).vectorize(x, 4);
         final.tile(x, y, xo, yo, xi, yi, input.width()/4, input.height()/4);
-        normalize.compute_at(final, xo).reorder(c, x, y).cuda_tile(x, y, 16, 16).unroll(c);
+        normalize.compute_at(final, xo).reorder(c, x, y).gpu_tile(x, y, 16, 16, GPU_Default).unroll(c);
 
         // Start from level 1 to save memory - level zero will be computed on demand
-        for (unsigned int l = 1; l < levels; ++l) {
+        for (int l = 1; l < levels; ++l) {
             int tile_size = 32 >> l;
             if (tile_size < 1) tile_size = 1;
             if (tile_size > 16) tile_size = 16;
-            downsampled[l].compute_root().cuda_tile(x, y, c, tile_size, tile_size, 4);
-            interpolated[l].compute_at(final, xo).cuda_tile(x, y, c, tile_size, tile_size, 4);
+            downsampled[l].compute_root().gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default);
+            interpolated[l].compute_at(final, xo).gpu_tile(x, y, c, tile_size, tile_size, 4, GPU_Default);
         }
         break;
     }
@@ -183,9 +183,9 @@ int main(int argc, char **argv) {
 
     std::cout << "Running... " << std::endl;
     double min = std::numeric_limits<double>::infinity();
-    const unsigned int iters = 20;
+    const int iters = 20;
 
-    for (unsigned int x = 0; x < iters; ++x) {
+    for (int x = 0; x < iters; ++x) {
         double before = now();
         final.realize(out);
         double after = now();

@@ -1,15 +1,9 @@
 #include "CodeGen_PTX_Dev.h"
+#include "CodeGen_Internal.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Var.h"
-#include "Param.h"
 #include "Target.h"
-#include "integer_division_table.h"
 #include "LLVM_Headers.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
@@ -231,19 +225,19 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // alloca. Note that by jumping back we're rendering any
         // expression we carry back meaningless, so we had better only
         // be dealing with constants here.
-        const IntImm *size = alloc->size.as<IntImm>();
-        assert(size && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
+        int32_t size = 0;
+        bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
+        assert(is_constant && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
 
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size->value));
+        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
         builder->SetInsertPoint(here);
     }
 
     sym_push(allocation_name, ptr);
     codegen(alloc->body);
-
 }
 
 void CodeGen_PTX_Dev::visit(const Free *f) {
@@ -348,10 +342,20 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     }
 
     // Add the target data from the target machine, if it exists, or the module.
-    if (const DataLayout *TD = Target.getDataLayout())
+    #if LLVM_VERSION < 35
+    if (const DataLayout *TD = Target.getDataLayout()) {
         PM.add(new DataLayout(*TD));
-    else
+    } else {
         PM.add(new DataLayout(module));
+    }
+    #else
+    // FIXME: This doesn't actually do the job. Now that
+    // DataLayoutPass is gone, I have no idea how to get this to work.
+    if (const DataLayout *TD = Target.getDataLayout()) {
+        module->setDataLayout(TD);
+    }
+    PM.add(new DataLayoutPass(module));
+    #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
     // how to handle denormalized numbers. (The pass replaces calls

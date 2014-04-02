@@ -168,6 +168,7 @@ int main(int argc, char **argv) {
         f.update(0).split(x, x, xi, 11);
         f.update(1).split(x, x, xi, 13);
         f.update(2).split(x, x, xi, 17);
+        f.update(3);
 
         // So if we ask for an output of size 100x10, we'll need an
         // input of size 110 x 100. 110 is enough to cover rounding up

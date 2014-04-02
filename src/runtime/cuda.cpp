@@ -7,6 +7,7 @@ extern "C" {
 extern int atoi(const char *);
 extern char *getenv(const char *);
 extern int64_t halide_current_time_ns(void *user_context);
+extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
 
 #ifndef DEBUG
@@ -157,7 +158,16 @@ WEAK void halide_set_cuda_context(CUcontext *ctx_ptr) {
     cuda_ctx_ptr = ctx_ptr;
 }
 
-static CUmodule __mod;
+// Structure to hold the state of a module attached to the context.
+// Also used as a linked-list to keep track of all the different
+// modules that are attached to a context in order to release them all
+// when then context is released.
+struct _module_state_ WEAK *state_list = NULL;
+typedef struct _module_state_ {
+    CUmodule module;
+    _module_state_ *next;
+} module_state;
+
 static CUevent __start, __end;
 
 WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf) {
@@ -202,7 +212,7 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
 
 }
 
-WEAK void halide_init_kernels(void *user_context, const char* ptx_src, int size) {
+WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* ptx_src, int size) {
     // If the context pointer isn't hooked up yet, point it at this module's weak-linkage context.
     if (cuda_ctx_ptr == NULL) {
         cuda_ctx_ptr = &weak_cuda_ctx;
@@ -250,10 +260,19 @@ WEAK void halide_init_kernels(void *user_context, const char* ptx_src, int size)
         //CHECK_CALL( cuCtxPushCurrent(*cuda_ctx_ptr), "cuCtxPushCurrent" );
     }
 
+    // Create the module state if necessary
+    module_state *state = (module_state*)state_ptr;
+    if (!state) {
+        state = (module_state*)malloc(sizeof(module_state));
+        state->module = NULL;
+        state->next = state_list;
+        state_list = state;
+    }
+
     // Initialize a module for just this Halide module
-    if (!__mod) {
+    if ((!state->module)) {
         // Create module
-        CHECK_CALL( cuModuleLoadData(&__mod, ptx_src), "cuModuleLoadData" );
+        CHECK_CALL( cuModuleLoadData(&state->module, ptx_src), "cuModuleLoadData" );
 
         #ifdef DEBUG
         halide_printf(user_context, "-------\nCompiling PTX:\n%s\n--------\n",
@@ -266,6 +285,8 @@ WEAK void halide_init_kernels(void *user_context, const char* ptx_src, int size)
         cuEventCreate(&__start, 0);
         cuEventCreate(&__end, 0);
     }
+
+    return state;
 }
 
 #ifdef DEBUG
@@ -297,10 +318,14 @@ WEAK void halide_release(void *user_context) {
             __start = __end = 0;
         }
 
-        // Unload the module
-        if (__mod) {
-            CHECK_CALL_DEINIT_OK( cuModuleUnload(__mod), "cuModuleUnload" );
-            __mod = 0;
+        // Unload the modules attached to this context
+        module_state *state = state_list;
+        while (state) {
+            if (state->module) {
+                CHECK_CALL_DEINIT_OK( cuModuleUnload(state->module), "cuModuleUnload" );
+                state->module = 0;
+            }
+            state = state->next;
         }
 
         // Only destroy the context if we own it
@@ -315,7 +340,7 @@ WEAK void halide_release(void *user_context) {
     //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
 }
 
-static CUfunction __get_kernel(void *user_context, const char* entry_name)
+static CUfunction __get_kernel(void *user_context, CUmodule mod, const char* entry_name)
 {
     CUfunction f;
 
@@ -325,23 +350,24 @@ static CUfunction __get_kernel(void *user_context, const char* entry_name)
     #endif
 
     // Get kernel function ptr
-    TIME_CALL( cuModuleGetFunction(&f, __mod, entry_name), msg );
+    TIME_CALL( cuModuleGetFunction(&f, mod, entry_name), msg );
 
     return f;
 }
 
-static size_t __buf_size(void *user_context, buffer_t* buf) {
+static size_t __buf_size(void *user_context, buffer_t *buf) {
     size_t size = 0;
-    for (int i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
+    for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
         size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
-        if (total_dim_size > size)
+        if (total_dim_size > size) {
             size = total_dim_size;
+        }
     }
     halide_assert(user_context, size);
     return size;
 }
 
-WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
+WEAK void halide_dev_malloc(void *user_context, buffer_t *buf) {
     if (buf->dev) {
         // This buffer already has a device allocation
         return;
@@ -351,7 +377,7 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
 
     #ifdef DEBUG
     halide_printf(user_context, "dev_malloc allocating buffer of %zd bytes, "
-                  "extents: %zdx%zdx%zdx%zd strides: %zdx%zdx%zdx%zd (%d bytes per element)\n",
+                  "extents: %dx%dx%dx%d strides: %dx%dx%dx%d (%d bytes per element)\n",
                   size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
                   buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3],
                   buf->elem_size);
@@ -405,13 +431,18 @@ WEAK void halide_dev_sync(void *user_context) {
 
 WEAK void halide_dev_run(
     void *user_context,
+    void *state_ptr,
     const char* entry_name,
     int blocksX, int blocksY, int blocksZ,
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
     size_t arg_sizes[],
     void* args[]) {
-    CUfunction f = __get_kernel(user_context, entry_name);
+
+    halide_assert(user_context, state_ptr);
+    CUmodule mod = ((module_state*)state_ptr)->module;
+    halide_assert(user_context, mod);
+    CUfunction f = __get_kernel(user_context, mod, entry_name);
 
     #ifdef DEBUG
     char msg[256];

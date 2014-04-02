@@ -20,14 +20,14 @@ cd llvm3.2
 ./configure --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
 make -j8
 
+(Users of OSX 10.8+ may need to explicitly specify GCC vs Clang, prepending "CC=gcc CXX=g++" to the configure command.)
+
 Then finally tell Halide's Makefile about it like so:
 
 export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
 export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
-If you want a newer llvm, then trunk llvm should also work. For recent
-versions of trunk, you'll need to pass --disable-terminfo to
-configure.
+If you want a newer llvm, then trunk llvm should also work.
 
 ------------------------------------------------------------------
 Building Halide

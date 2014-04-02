@@ -6,13 +6,13 @@ all: filter
 
 wavelet: ../../ wavelet.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) wavelet.cpp -I ../../include ../../$(LIB_HALIDE) -o wavelet -lpthread -ldl
+	$(CXX) wavelet.cpp -I ../../include $(LDFLAGS) ../../$(LIB_HALIDE) -o wavelet -lpthread -ldl -lz
 
 $(HL_MODULES): wavelet
 	./wavelet
 
 filter.o: filter.cpp $(HL_MODULES)
-	$(CXX) $(PNGFLAGS) -I../support -O3 -c filter.cpp
+	$(CXX) $(LIBPNG_CXX_FLAGS) -I../support -O3 -c filter.cpp
 
 filter: filter.o
 	$(CXX) filter.o $(HL_MODULES) $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) -o filter -lpthread

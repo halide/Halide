@@ -1,21 +1,16 @@
+#include <sstream>
+
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_PTX_Dev.h"
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_SPIR_Dev.h"
 #include "IROperator.h"
-#include <iostream>
-#include "buffer_t.h"
 #include "IRPrinter.h"
-#include "IRMatch.h"
 #include "Debug.h"
-#include "Var.h"
-#include "Param.h"
-#include "integer_division_table.h"
 #include "CodeGen_Internal.h"
 #include "Util.h"
 #include "Bounds.h"
 #include "Simplify.h"
-#include "Tracing.h"
 
 #ifdef _MSC_VER
 // TODO: This is untested
@@ -65,27 +60,6 @@ using std::map;
 
 using namespace llvm;
 
-bool CodeGen_GPU_Host::lib_cuda_linked = false;
-
-class CodeGen_GPU_Host::Closure : public Halide::Internal::Closure {
-public:
-    static Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
-        Closure c;
-        c.skip_gpu_loops = skip_gpu_loops;
-        c.ignore.push(lv, 0);
-        s.accept(&c);
-        return c;
-    }
-
-    vector<Argument> arguments();
-
-protected:
-    using Internal::Closure::visit;
-
-    void visit(const For *op);
-
-    bool skip_gpu_loops;
-};
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the max
@@ -183,13 +157,24 @@ private:
         // We should only encounter each allocate once
         assert(table.find(allocate->name) == table.end());
 
+        Expr size;
+        if (allocate->extents.size() == 0) {
+            size = 1;
+        } else {
+            size = allocate->extents[0];
+            // TODO: worry about overflow
+            for (size_t i = 1; i < allocate->extents.size(); i++) {
+                size *= allocate->extents[i];
+            }
+            size = simplify(size);
+        }
+
         // What's the largest this allocation could be (in bytes)?
-        Expr elements = bounds_of_expr_in_scope(allocate->size, scope).max;
+        Expr elements = bounds_of_expr_in_scope(size, scope).max;
         int bytes_per_element = allocate->type.bits/8;
         table[allocate->name] = simplify(elements * bytes_per_element);
 
         allocate->body.accept(this);
-
     }
 };
 
@@ -256,7 +241,28 @@ private:
     }
 };
 
-vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
+
+class GPU_Host_Closure : public Halide::Internal::Closure {
+public:
+    static GPU_Host_Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
+        GPU_Host_Closure c;
+        c.skip_gpu_loops = skip_gpu_loops;
+        c.ignore.push(lv, 0);
+        s.accept(&c);
+        return c;
+    }
+
+    vector<Argument> arguments();
+
+protected:
+    using Internal::Closure::visit;
+
+    void visit(const For *op);
+
+    bool skip_gpu_loops;
+};
+
+vector<Argument> GPU_Host_Closure::arguments() {
     vector<Argument> res;
     for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "var: " << iter->first << "\n";
@@ -274,7 +280,7 @@ vector<Argument> CodeGen_GPU_Host::Closure::arguments() {
 }
 
 
-void CodeGen_GPU_Host::Closure::visit(const For *loop) {
+void GPU_Host_Closure::visit(const For *loop) {
     if (skip_gpu_loops &&
         CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         return;
@@ -283,8 +289,12 @@ void CodeGen_GPU_Host::Closure::visit(const For *loop) {
 }
 
 
-CodeGen_GPU_Host::CodeGen_GPU_Host(Target target) :
-    CodeGen_X86(target),
+template<typename CodeGen_CPU>
+bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
+
+template<typename CodeGen_CPU>
+CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
+    CodeGen_CPU(target),
     dev_malloc_fn(NULL),
     dev_free_fn(NULL),
     copy_to_dev_fn(NULL),
@@ -294,7 +304,8 @@ CodeGen_GPU_Host::CodeGen_GPU_Host(Target target) :
     cgdev(make_dev(target)) {
 }
 
-CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
+template<typename CodeGen_CPU>
+CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
 {
     if (t.features & Target::CUDA) {
         debug(1) << "Constructing CUDA device codegen\n";
@@ -314,13 +325,15 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host::make_dev(Target t)
     }
 }
 
-CodeGen_GPU_Host::~CodeGen_GPU_Host() {
+template<typename CodeGen_CPU>
+CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
     delete cgdev;
 }
 
-void CodeGen_GPU_Host::compile(Stmt stmt, string name,
-                               const vector<Argument> &args,
-                               const vector<Buffer> &images_to_embed) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
+                                            const vector<Argument> &args,
+                                            const vector<Buffer> &images_to_embed) {
 
     init_module();
 
@@ -353,17 +366,25 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     // Fix the target triple
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-    // For now we'll just leave it as whatever the module was
-    // compiled as. This assumes that we're not cross-compiling
-    // between different x86 operating systems
-    // module->setTargetTriple( ... );
+    llvm::Triple triple = CodeGen_CPU::get_target_triple();
+    module->setTargetTriple(triple.str());
+
+    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
+
 
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
 
+    // Unset constant flag for embedded image global variables
+    for (size_t i = 0; i < images_to_embed.size(); i++) {
+      string name = images_to_embed[i].name();
+      GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
+      global->setConstant(false);
+    }
+
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
-    Value *kernel_src_ptr = create_constant_binary_blob(kernel_src, "halide_kernel_src");
+    Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src");
 
     // Jump to the start of the function and insert a call to halide_init_kernels
     builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
@@ -371,13 +392,17 @@ void CodeGen_GPU_Host::compile(Stmt stmt, string name,
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     assert(init && "Could not find function halide_init_kernels in initial module");
-    builder->CreateCall3(init, user_context, kernel_src_ptr, kernel_size);
+    Value *state = builder->CreateCall4(init, user_context,
+                                        builder->CreateLoad(get_module_state()),
+                                        kernel_src_ptr, kernel_size);
+    builder->CreateStore(state, get_module_state());
 
     // Optimize the module
     CodeGen::optimize_module();
 }
 
-void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module) {
 
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
@@ -436,7 +461,8 @@ void CodeGen_GPU_Host::jit_init(ExecutionEngine *ee, Module *module) {
     }
 }
 
-void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module, vector<void (*)()> *cleanup_routines) {
     if (target.features & Target::CUDA) {
         // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
         // CUDA behaves much better when you don't initialize >2 contexts.
@@ -477,7 +503,8 @@ void CodeGen_GPU_Host::jit_finalize(ExecutionEngine *ee, Module *module, vector<
     }
 }
 
-void CodeGen_GPU_Host::visit(const For *loop) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         debug(2) << "Kernel launch: " << loop->name << "\n";
 
@@ -497,7 +524,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
                << n_blkid_x << ", " << n_blkid_y << ", " << n_blkid_z << ", " << n_blkid_w << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
-        Closure c = Closure::make(loop, loop->name);
+        GPU_Host_Closure c = GPU_Host_Closure::make(loop, loop->name);
 
         // Note that we currently do nothing with the thread-local
         // allocations found. Currently we only handle const-sized
@@ -511,8 +538,11 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin();
              iter != bounds.shared_allocations.end(); ++iter) {
 
+            // TODO: Might offsets into shared memory need to be
+            // aligned? What if it's OpenCL and the kernel does vector
+            // loads?
             debug(2) << "Internal shared allocation" << iter->first
-                   << " has max size " << iter->second << "\n";
+                     << " has max size " << iter->second << "\n";
 
             Value *size = codegen(iter->second);
 
@@ -568,13 +598,15 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
-        Value *gpu_args_arr = create_alloca_at_entry(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
-                                                     num_args+1,
-                                                     kernel_name + "_args");
+        Value *gpu_args_arr =
+            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
+                                   num_args+1,
+                                   kernel_name + "_args");
 
-        Value *gpu_arg_sizes_arr = create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
-                                                          num_args+1,
-                                                          kernel_name + "_arg_sizes");
+        Value *gpu_arg_sizes_arr =
+            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
+                                   num_args+1,
+                                   kernel_name + "_arg_sizes");
 
         for (int i = 0; i < num_args; i++) {
             // get the closure argument
@@ -619,6 +651,7 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         // cuLaunchKernel. How should we handle blkid_w?
         Value *launch_args[] = {
             get_user_context(),
+            builder->CreateLoad(get_module_state()),
             entry_name_str,
             codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
             codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
@@ -633,7 +666,13 @@ void CodeGen_GPU_Host::visit(const For *loop) {
             if (it->second.write) {
                 debug(4) << "setting dev_dirty " << it->first << " (write)\n";
                 Value *buf = sym_get(it->first + ".buffer");
-                builder->CreateStore(ConstantInt::get(i8, 1), buffer_dev_dirty_ptr(buf));
+                builder->CreateStore(ConstantInt::get(i8, 1),
+                                     buffer_dev_dirty_ptr(buf));
+
+                // If host was still dirty we must have clobbered it,
+                // so it's not dirty now.
+                builder->CreateStore(ConstantInt::get(i8, 0),
+                                     buffer_host_dirty_ptr(buf));
             }
         }
 
@@ -641,21 +680,21 @@ void CodeGen_GPU_Host::visit(const For *loop) {
         for (size_t i = 0; i < shared_mem_allocations.size(); i++) {
             sym_pop(shared_mem_allocations[i]);
         }
-
     } else {
-        CodeGen_X86::visit(loop);
+        CodeGen_CPU::visit(loop);
     }
 }
 
-void CodeGen_GPU_Host::visit(const Allocate *alloc) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     WhereIsBufferUsed usage(alloc->name);
     alloc->accept(&usage);
 
-    Allocation host_allocation = {NULL, 0};
+    typename CodeGen_CPU::Allocation host_allocation = {NULL, 0};
 
     if (usage.used_on_host) {
         debug(2) << alloc->name << " is used on the host\n";
-        host_allocation = create_allocation(alloc->name, alloc->type, alloc->size);
+        host_allocation = create_allocation(alloc->name, alloc->type, alloc->extents);
         sym_push(alloc->name + ".host", host_allocation.ptr);
     } else {
         host_allocation.ptr = ConstantPointerNull::get(llvm_type_of(alloc->type)->getPointerTo());
@@ -678,10 +717,27 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
         builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
         builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
 
+        Value *llvm_size;
+        int32_t constant_size;
+        if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
+            int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
+            if (size_in_bytes > ((int64_t(1) << 31) - 1)) {
+                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
+                assert(false);
+            } else {
+                // Size in elements, not size in bytes.
+                llvm_size = ConstantInt::get(i32, constant_size);
+            }
+        } else {
+            // Note we compute this using a type of size 1, because we
+            // want the size in elements, not in bytes.
+            llvm_size = codegen_allocation_size(alloc->name, UInt(8), alloc->extents);
+        }
+
         // For now, we just track the allocation as a single 1D buffer of the
         // required size. If we break this into multiple dimensions, this will
         // fail to account for expansion for alignment.
-        builder->CreateStore(codegen(alloc->size),
+        builder->CreateStore(llvm_size,
                              buffer_extent_ptr(buf, 0));
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
         builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
@@ -715,10 +771,11 @@ void CodeGen_GPU_Host::visit(const Allocate *alloc) {
 
 }
 
-void CodeGen_GPU_Host::visit(const Free *f) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
     // Free any host allocation
     if (sym_exists(f->name + ".host")) {
-        CodeGen_Posix::visit(f);
+        CodeGen_CPU::visit(f);
     }
 
     if (sym_exists(f->name + ".buffer")) {
@@ -729,59 +786,154 @@ void CodeGen_GPU_Host::visit(const Free *f) {
     }
 }
 
-void CodeGen_GPU_Host::visit(const Pipeline *n) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Pipeline *n) {
 
+    // Copying to the gpu and marking gpu_dirty is handled by the For
+    // handler above, because that marks a good test for when we enter
+    // kernels. Here we need to handle copying back to the CPU if
+    // needed.
+
+    // Are we tracking a buffer for this allocation?
     Value *buf = sym_get(n->name + ".buffer", false);
+
+    // Is it also used on the host?
     Value *host = sym_get(n->name + ".host", false);
 
-    if (!(buf && host)) {
-        CodeGen_X86::visit(n);
+    // If we didn't find anything, maybe it's a tuple. Go looking for
+    // all the tuple elements.
+    vector<Value *> bufs;
+    if (!buf) {
+        for (int i = 0; ; i++) {
+            string name = n->name + "." + int_to_string(i);
+            buf = sym_get(name + ".buffer", false);
+            host = sym_get(name + ".host", false);
+            if (!buf) break;
+            if (host) {
+                // Skip the ones not used on the host
+                bufs.push_back(buf);
+            }
+        }
+    } else if (host) {
+        bufs.push_back(buf);
+    }
+
+    if (bufs.empty()) {
+        CodeGen_CPU::visit(n);
         return;
     }
 
-    WhereIsBufferUsed produce_usage(n->name);
-    n->produce.accept(&produce_usage);
-
-    WhereIsBufferUsed consume_usage(n->name);
-    n->consume.accept(&consume_usage);
+    vector<WhereIsBufferUsed> produce_usage;
+    for (size_t i = 0; i < bufs.size(); i++) {
+        string name = n->name;
+        if (bufs.size() > 1) name += "." + int_to_string(i);
+        WhereIsBufferUsed u(name);
+        n->produce.accept(&u);
+        produce_usage.push_back(u);
+    }
 
     codegen(n->produce);
 
     // Track host writes
-    if (produce_usage.written_on_host) {
-        builder->CreateStore(ConstantInt::get(i8, 1),
-                             buffer_host_dirty_ptr(buf));
+    for (size_t i = 0; i < bufs.size(); i++) {
+        if (produce_usage[i].written_on_host) {
+            builder->CreateStore(ConstantInt::get(i8, 1),
+                                 buffer_host_dirty_ptr(bufs[i]));
+            // A produce node clobbers the entire buffer, so if this
+            // was somehow dirty on the GPU, it isn't anymore (which
+            // may happen if we're producing into a buffer_t passed in
+            // that's dirty on the GPU).
+            builder->CreateStore(ConstantInt::get(i8, 0),
+                                 buffer_dev_dirty_ptr(bufs[i]));
+        }
     }
 
     Value *user_context = get_user_context();
     if (n->update.defined()) {
-        WhereIsBufferUsed update_usage(n->name);
-        n->update.accept(&update_usage);
 
-        // Copy back host update reads
-        if (update_usage.read_on_host) {
-            builder->CreateCall2(copy_to_host_fn, user_context, buf);
+        // Extract all the update steps (TODO: Pipeline nodes should
+        // really just have a list of update steps instead of using
+        // blocks).
+        vector<Stmt> steps;
+        vector<Stmt> stack;
+        stack.push_back(n->update);
+        while (!stack.empty()) {
+            Stmt s = stack.back();
+            stack.pop_back();
+            if (const Block *b = s.as<Block>()) {
+                stack.push_back(b->rest);
+                stack.push_back(b->first);
+            } else {
+                steps.push_back(s);
+            }
         }
 
-        codegen(n->update);
+        // For each update step
+        for (size_t j = 0; j < steps.size(); j++) {
+            Stmt s = steps[j];
 
-        // Track host update writes
-        if (update_usage.written_on_host) {
-            builder->CreateStore(ConstantInt::get(i8, 1),
-                                 buffer_host_dirty_ptr(buf));
+            vector<WhereIsBufferUsed> update_usage;
+            for (size_t i = 0; i < bufs.size(); i++) {
+                string name = n->name;
+                if (bufs.size() > 1) name += "." + int_to_string(i);
+                WhereIsBufferUsed u(name);
+                s.accept(&u);
+                update_usage.push_back(u);
+            }
+
+            // Copy back host update accesses
+            for (size_t i = 0; i < bufs.size(); i++) {
+                // We need to copy back buffers that the host will
+                // write to as well, because the update step may not
+                // write to *all* of the buffer, and we don't want to
+                // get into a situation where different parts of the
+                // buffer are dirty on host and device. This could
+                // theoretically be skipped if this update definition
+                // is pure, but we've lost that metadata at this stage
+                // of codegen.
+                if (update_usage[i].used_on_host) {
+                    // debug(0) << "Before update step " << j << " copy tuple element " << i << " to host\n";
+                    builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+                }
+            }
+
+            codegen(s);
+
+            // Track host update writes
+            for (size_t i = 0; i < bufs.size(); i++) {
+                if (update_usage[i].written_on_host) {
+                    builder->CreateStore(ConstantInt::get(i8, 1),
+                                         buffer_host_dirty_ptr(bufs[i]));
+                }
+            }
         }
 
     }
 
-    // Copy back host reads
-    if (consume_usage.read_on_host) {
-        builder->CreateCall2(copy_to_host_fn, user_context, buf);
+
+    // Copy back host reads before consume
+
+    vector<WhereIsBufferUsed> consume_usage;
+    for (size_t i = 0; i < bufs.size(); i++) {
+        string name = n->name;
+        if (bufs.size() > 1) name += "." + int_to_string(i);
+        WhereIsBufferUsed u(name);
+        n->consume.accept(&u);
+        consume_usage.push_back(u);
+    }
+
+    for (size_t i = 0; i < bufs.size(); i++) {
+        if (consume_usage[i].read_on_host) {
+            // debug(0) << "Before consume step copy tuple element " << i << " to host\n";
+            builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+        }
     }
 
     codegen(n->consume);
 }
 
-void CodeGen_GPU_Host::visit(const Call *call) {
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
     // The other way in which buffers might be read by the host is in
     // calls to whole-buffer builtins like debug_to_file.
     if (call->call_type == Call::Intrinsic &&
@@ -800,4 +952,32 @@ void CodeGen_GPU_Host::visit(const Call *call) {
 
     CodeGen::visit(call);
 }
+
+template<typename CodeGen_CPU>
+Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
+    GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
+    if (!module_state)
+    {
+        // Create a global variable to hold the module state
+        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
+        module_state = new GlobalVariable(*module, void_ptr_type,
+                                          false, GlobalVariable::PrivateLinkage,
+                                          ConstantPointerNull::get(void_ptr_type),
+                                          "module_state");
+        debug(4) << "Created device module state global variable\n";
+    }
+    return module_state;
+}
+
+
+// Force template instantiation for x86 and arm.
+#ifdef WITH_X86
+template class CodeGen_GPU_Host<CodeGen_X86>;
+#endif
+
+#ifdef WITH_ARM
+template class CodeGen_GPU_Host<CodeGen_ARM>;
+#endif
+
+
 }}

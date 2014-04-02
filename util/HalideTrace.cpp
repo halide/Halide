@@ -6,9 +6,8 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <unistd.h>
 
-
-using std::string;
 using std::map;
 using std::vector;
 
@@ -319,7 +318,7 @@ struct FuncStats {
 int main(int argc, char **argv) {
     assert(sizeof(Packet) == 4096);
 
-    map<string, FuncStats> funcs;
+    map<std::string, FuncStats> funcs;
 
     Count clock;
 
@@ -365,7 +364,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    for (map<string, FuncStats>::iterator iter = funcs.begin();
+    for (map<std::string, FuncStats>::iterator iter = funcs.begin();
          iter != funcs.end(); ++iter) {
         std::cout << "Function " << iter->first << ":\n";
         iter->second.report();

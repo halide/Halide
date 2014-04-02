@@ -1,3 +1,5 @@
+#include <iostream>
+
 #include "Bounds.h"
 #include "IRVisitor.h"
 #include "IR.h"
@@ -8,9 +10,6 @@
 #include "Util.h"
 #include "Var.h"
 #include "Debug.h"
-#include "CSE.h"
-#include "Derivative.h"
-#include <iostream>
 
 namespace Halide {
 namespace Internal {
@@ -19,15 +18,38 @@ using std::make_pair;
 using std::map;
 using std::vector;
 using std::string;
+using std::pair;
 
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
     const Scope<Interval> &scope;
     Scope<Interval> inner_scope;
+    const FuncValueBounds &func_bounds;
 
-    Bounds(const Scope<Interval> &s) : scope(s) {}
+    Bounds(const Scope<Interval> &s, const FuncValueBounds &fb) :
+        scope(s), func_bounds(fb) {}
 private:
+
+    // Compute the intrinsic bounds of a function.
+    void bounds_of_func(Function f, int value_index) {
+        // if we can't get a good bound from the function, fall back to the bounds of the type.
+        bounds_of_type(f.output_types()[value_index]);
+
+        pair<string, int> key = make_pair(f.name(), value_index);
+
+        FuncValueBounds::const_iterator iter = func_bounds.find(key);
+
+        if (iter != func_bounds.end()) {
+            if (iter->second.min.defined()) {
+                min = iter->second.min;
+            }
+            if (iter->second.max.defined()) {
+                max = iter->second.max;
+            }
+        }
+    }
+
     void bounds_of_type(Type t) {
         if (t.is_uint() && t.bits <= 16) {
             max = cast(t, (1 << t.bits) - 1);
@@ -633,6 +655,22 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
+        } else if (op->args.size() == 1 && min.defined() && max.defined() &&
+                   (op->name == "ceil_f32" || op->name == "ceil_f64" ||
+                    op->name == "floor_f32" || op->name == "floor_f64" ||
+                    op->name == "round_f32" || op->name == "round_f64" ||
+                    op->name == "exp_f32" || op->name == "exp_f64" ||
+                    op->name == "log_f32" || op->name == "log_f64")) {
+            // For monotonic, pure, single-argument functions, we can
+            // make two calls for the min and the max.
+            Expr min_a = min, max_a = max;
+            min = Call::make(op->type, op->name, vec<Expr>(min_a), op->call_type,
+                             op->func, op->value_index, op->image, op->param);
+            max = Call::make(op->type, op->name, vec<Expr>(max_a), op->call_type,
+                             op->func, op->value_index, op->image, op->param);
+
+        } else if (op->func.has_pure_definition()) {
+            bounds_of_func(op->func, op->value_index);
         } else {
             // Just use the bounds of the type
             bounds_of_type(op->type);
@@ -683,9 +721,9 @@ private:
     }
 };
 
-Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope) {
+Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
-    Bounds b(scope);
+    Bounds b(scope, fb);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
     return Interval(b.min, b.max);
@@ -737,7 +775,7 @@ void merge_boxes(Box &a, const Box &b) {
             }
         }
         if (!a[i].max.same_as(b[i].max)) {
-            if (a[i].min.defined() && b[i].min.defined()) {
+            if (a[i].max.defined() && b[i].max.defined()) {
                 a[i].max = max(a[i].max, b[i].max);
             } else {
                 a[i].max = Expr();
@@ -750,8 +788,8 @@ void merge_boxes(Box &a, const Box &b) {
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> &s) :
-        func(fn), consider_calls(calls), consider_provides(provides), scope(s) {}
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> &s, const FuncValueBounds &fb) :
+        func(fn), consider_calls(calls), consider_provides(provides), scope(s), func_bounds(fb) {}
 
     map<string, Box> boxes;
 
@@ -760,6 +798,7 @@ private:
     string func;
     bool consider_calls, consider_provides;
     Scope<Interval> scope;
+    const FuncValueBounds &func_bounds;
 
     using IRGraphVisitor::visit;
 
@@ -767,7 +806,7 @@ private:
         if (!consider_calls) return;
 
         op->value.accept(this);
-        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
+        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
         scope.push(op->name, value_bounds);
         op->body.accept(this);
         scope.pop(op->name);
@@ -801,7 +840,7 @@ private:
         Box b(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
-            b[i] = bounds_of_expr_in_scope(op->args[i], scope);
+            b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
         }
         merge_boxes(boxes[op->name], b);
     }
@@ -835,7 +874,7 @@ private:
         if (consider_calls) {
             op->value.accept(this);
         }
-        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope);
+        Interval value_bounds = bounds_of_expr_in_scope(op->value, scope, func_bounds);
         value_bounds.min = simplify(value_bounds.min);
         value_bounds.max = simplify(value_bounds.max);
 
@@ -857,10 +896,14 @@ private:
                  iter != boxes.end(); ++iter) {
                 Box &box = iter->second;
                 for (size_t i = 0; i < box.size(); i++) {
-                    box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
-                    box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
-                    box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
-                    box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                    if (box[i].min.defined()) {
+                        box[i].min = Let::make(max_name, value_bounds.max, box[i].min);
+                        box[i].min = Let::make(min_name, value_bounds.min, box[i].min);
+                    }
+                    if (box[i].max.defined()) {
+                        box[i].max = Let::make(max_name, value_bounds.max, box[i].max);
+                        box[i].max = Let::make(min_name, value_bounds.min, box[i].max);
+                    }
                 }
             }
         }
@@ -876,14 +919,14 @@ private:
         if (scope.contains(op->name + ".loop_min")) {
             min_val = scope.get(op->name + ".loop_min").min;
         } else {
-            min_val = bounds_of_expr_in_scope(op->min, scope).min;
+            min_val = bounds_of_expr_in_scope(op->min, scope, func_bounds).min;
         }
 
         if (scope.contains(op->name + ".loop_max")) {
             max_val = scope.get(op->name + ".loop_max").max;
         } else {
-            max_val = bounds_of_expr_in_scope(op->extent, scope).max;
-            max_val += bounds_of_expr_in_scope(op->min, scope).max;
+            max_val = bounds_of_expr_in_scope(op->extent, scope, func_bounds).max;
+            max_val += bounds_of_expr_in_scope(op->min, scope, func_bounds).max;
             max_val -= 1;
         }
 
@@ -897,7 +940,7 @@ private:
             if (op->name == func || func.empty()) {
                 Box b(op->args.size());
                 for (size_t i = 0; i < op->args.size(); i++) {
-                    b[i] = bounds_of_expr_in_scope(op->args[i], scope);
+                    b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
                 }
                 merge_boxes(boxes[op->name], b);
             }
@@ -915,8 +958,8 @@ private:
 };
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
-                               string fn, const Scope<Interval> &scope) {
-    BoxesTouched b(consider_calls, consider_provides, fn, scope);
+                               string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    BoxesTouched b(consider_calls, consider_provides, fn, scope, fb);
     if (e.defined()) {
         e.accept(&b);
     }
@@ -927,122 +970,61 @@ map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool conside
 }
 
 Box box_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
-                string fn, const Scope<Interval> &scope) {
-    return boxes_touched(e, s, consider_calls, consider_provides, fn, scope)[fn];
+                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(e, s, consider_calls, consider_provides, fn, scope, fb)[fn];
 }
 
-map<string, Box> boxes_required(Expr e, const Scope<Interval> &scope) {
-    return boxes_touched(e, Stmt(), true, false, "", scope);
+map<string, Box> boxes_required(Expr e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(e, Stmt(), true, false, "", scope, fb);
 }
 
-Box box_required(Expr e, string fn, const Scope<Interval> &scope) {
-    return box_touched(e, Stmt(), true, false, fn, scope);
+Box box_required(Expr e, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return box_touched(e, Stmt(), true, false, fn, scope, fb);
 }
 
-map<string, Box> boxes_required(Stmt s, const Scope<Interval> &scope) {
-    return boxes_touched(Expr(), s, true, false, "", scope);
+map<string, Box> boxes_required(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(Expr(), s, true, false, "", scope, fb);
 }
 
-Box box_required(Stmt s, string fn, const Scope<Interval> &scope) {
-    return box_touched(Expr(), s, true, false, fn, scope);
+Box box_required(Stmt s, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return box_touched(Expr(), s, true, false, fn, scope, fb);
 }
 
-map<string, Box> boxes_required(Expr e) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), true, false, "", scope);
+map<string, Box> boxes_provided(Expr e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(e, Stmt(), false, true, "", scope, fb);
 }
 
-Box box_required(Expr e, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), true, false, fn, scope);
+Box box_provided(Expr e, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return box_touched(e, Stmt(), false, true, fn, scope, fb);
 }
 
-map<string, Box> boxes_required(Stmt s) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, true, false, "", scope);
+map<string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(Expr(), s, false, true, "", scope, fb);
 }
 
-Box box_required(Stmt s, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, true, false, fn, scope);
+Box box_provided(Stmt s, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return box_touched(Expr(), s, false, true, fn, scope, fb);
 }
 
-
-map<string, Box> boxes_provided(Expr e, const Scope<Interval> &scope) {
-    return boxes_touched(e, Stmt(), false, true, "", scope);
+map<string, Box> boxes_touched(Expr e, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(e, Stmt(), true, true, "", scope, fb);
 }
 
-Box box_provided(Expr e, string fn, const Scope<Interval> &scope) {
-    return box_touched(e, Stmt(), false, true, fn, scope);
+Box box_touched(Expr e, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return box_touched(e, Stmt(), true, true, fn, scope, fb);
 }
 
-map<string, Box> boxes_provided(Stmt s, const Scope<Interval> &scope) {
-    return boxes_touched(Expr(), s, false, true, "", scope);
+map<string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return boxes_touched(Expr(), s, true, true, "", scope, fb);
 }
 
-Box box_provided(Stmt s, string fn, const Scope<Interval> &scope) {
-    return box_touched(Expr(), s, false, true, fn, scope);
-}
-
-map<string, Box> boxes_provided(Expr e) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), false, true, "", scope);
-}
-
-Box box_provided(Expr e, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), false, true, fn, scope);
-}
-
-map<string, Box> boxes_provided(Stmt s) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, false, true, "", scope);
-}
-
-Box box_provided(Stmt s, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, false, true, fn, scope);
-}
-
-
-map<string, Box> boxes_touched(Expr e, const Scope<Interval> &scope) {
-    return boxes_touched(e, Stmt(), true, true, "", scope);
-}
-
-Box box_touched(Expr e, string fn, const Scope<Interval> &scope) {
-    return box_touched(e, Stmt(), true, true, fn, scope);
-}
-
-map<string, Box> boxes_touched(Stmt s, const Scope<Interval> &scope) {
-    return boxes_touched(Expr(), s, true, true, "", scope);
-}
-
-Box box_touched(Stmt s, string fn, const Scope<Interval> &scope) {
-    return box_touched(Expr(), s, true, true, fn, scope);
-}
-
-map<string, Box> boxes_touched(Expr e) {
-    const Scope<Interval> scope;
-    return boxes_touched(e, Stmt(), true, true, "", scope);
-}
-
-Box box_touched(Expr e, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(e, Stmt(), true, true, fn, scope);
-}
-
-map<string, Box> boxes_touched(Stmt s) {
-    const Scope<Interval> scope;
-    return boxes_touched(Expr(), s, true, true, "", scope);
-}
-
-Box box_touched(Stmt s, string fn) {
-    const Scope<Interval> scope;
-    return box_touched(Expr(), s, true, true, fn, scope);
+Box box_touched(Stmt s, string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
+    return box_touched(Expr(), s, true, true, fn, scope, fb);
 }
 
 void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_max) {
-    Interval result = bounds_of_expr_in_scope(e, scope);
+    FuncValueBounds fb;
+    Interval result = bounds_of_expr_in_scope(e, scope, fb);
     if (result.min.defined()) result.min = simplify(result.min);
     if (result.max.defined()) result.max = simplify(result.max);
     bool success = true;
@@ -1062,6 +1044,50 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
         std::cout << "Bounds test failed\n";
         assert(false);
     }
+}
+
+FuncValueBounds compute_function_value_bounds(const vector<string> &order,
+                                              const map<string, Function> &env) {
+    FuncValueBounds fb;
+
+    for (size_t i = 0; i < order.size(); i++) {
+        Function f = env.find(order[i])->second;
+        for (int j = 0; j < f.outputs(); j++) {
+            pair<string, int> key = make_pair(f.name(), j);
+
+            Interval result;
+
+            if (f.has_pure_definition() &&
+                !f.has_reduction_definition() &&
+                !f.has_extern_definition()) {
+
+                // Make a scope that says the args could be anything.
+                Scope<Interval> arg_scope;
+                for (size_t k = 0; k < f.args().size(); k++) {
+                    arg_scope.push(f.args()[k], Interval(Expr(), Expr()));
+                }
+
+                result = bounds_of_expr_in_scope(f.values()[j], arg_scope, fb);
+
+                if (result.min.defined()) {
+                    result.min = simplify(result.min);
+                }
+
+                if (result.max.defined()) {
+                    result.max = simplify(result.max);
+                }
+
+                fb[key] = result;
+
+            }
+
+            debug(2) << "Bounds on value " << j
+                     << " for func " << order[i]
+                     << " are: " << result.min << ", " << result.max << "\n";
+        }
+    }
+
+    return fb;
 }
 
 void bounds_test() {
@@ -1095,6 +1121,11 @@ void bounds_test() {
     check(scope, (cast<uint8_t>(x)+10)*10, cast<uint8_t>(100), cast<uint8_t>(200));
     check(scope, (cast<uint8_t>(x)+10)*(cast<uint8_t>(x)), cast<uint8_t>(0), cast<uint8_t>(200));
     check(scope, (cast<uint8_t>(x)+20)-(cast<uint8_t>(x)+5), cast<uint8_t>(5), cast<uint8_t>(25));
+
+    Expr u8_1 = cast<uint8_t>(Load::make(Int(8), "buf", x, Buffer(), Parameter()));
+    Expr u8_2 = cast<uint8_t>(Load::make(Int(8), "buf", x + 17, Buffer(), Parameter()));
+    check(scope, cast<uint16_t>(u8_1) + cast<uint16_t>(u8_2),
+          cast<uint16_t>(0), cast<uint16_t>(255*2));
 
     vector<Expr> input_site_1 = vec(2*x);
     vector<Expr> input_site_2 = vec(2*x+1);

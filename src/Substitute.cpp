@@ -1,5 +1,6 @@
 #include "Substitute.h"
 #include "Scope.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {

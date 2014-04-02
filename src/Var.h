@@ -30,7 +30,7 @@ public:
     const std::string &name() const {return _name;}
 
     /** Test if two Vars are the same. This simply compares the names. */
-    bool same_as(const Var &other) {return _name == other._name;}
+    bool same_as(const Var &other) const {return _name == other._name;}
 
     /** Implicit var constructor. Implicit variables are injected
      * automatically into a function call if the number of arguments
@@ -144,15 +144,6 @@ public:
         return Internal::Variable::make(Int(32), name());
     }
 };
-
-/** This is used to provide a grace period during which old style
- * implicits code will continue to compile with a warning. This makes
- * it easier to convert to the new required placeholder ('_') style.
- * Both variants will work during the transition period. The code under
- * these ifdef blocks can be completely removed after we finalize the
- * language change.
- */
-#define HALIDE_WARNINGS_FOR_OLD_IMPLICITS 1
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
 EXPORT extern Var _;

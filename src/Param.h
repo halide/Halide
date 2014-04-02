@@ -126,7 +126,7 @@ protected:
                                           int total_args,
                                           bool *placeholder_seen) const {
         const Internal::Variable *var = last_arg.as<Internal::Variable>();
-        bool is_placeholder = var != NULL && Var::is_placeholder(var->name);
+        bool is_placeholder = var && Var::is_placeholder(var->name);
         if (is_placeholder) {
             assert(!(*placeholder_seen) && "Only one implicit placeholder ('_') allowed in argument list for ImageParam.");
             *placeholder_seen = true;
@@ -139,20 +139,6 @@ protected:
             args.push_back(last_arg);
         }
 
-#if HALIDE_WARNINGS_FOR_OLD_IMPLICITS
-        if (!is_placeholder && !(*placeholder_seen) &&
-            (int)args.size() == total_args &&
-            (int)args.size() < dims) {
-            std::cout << "Implicit arguments without placeholders ('_') are deprecated."
-                      << " Adding " << dims - args.size()
-                      << " arguments to ImageParam " << name() << '\n';
-            int i = 0;
-            while ((int)args.size() < dims) {
-                args.push_back(Var::implicit(i++));
-
-            }
-        }
-#endif
 
     }
 

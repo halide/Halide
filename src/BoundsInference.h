@@ -5,9 +5,10 @@
  * Defines the bounds_inference lowering pass.
  */
 
-#include "IR.h"
 #include <map>
-#include <set>
+
+#include "IR.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,7 +19,8 @@ namespace Internal {
  */
 Stmt bounds_inference(Stmt,
                       const std::vector<std::string> &realization_order,
-                      const std::map<std::string, Function> &environment);
+                      const std::map<std::string, Function> &environment,
+                      const std::map<std::pair<std::string, int>, Interval> &func_bounds);
 
 }
 }

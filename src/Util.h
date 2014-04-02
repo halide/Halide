@@ -91,6 +91,33 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f) {
     v[5] = f;
     return v;
 }
+
+template<typename T>
+std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g) {
+    std::vector<T> v(7);
+    v[0] = a;
+    v[1] = b;
+    v[2] = c;
+    v[3] = d;
+    v[4] = e;
+    v[5] = f;
+    v[6] = g;
+    return v;
+}
+
+template<typename T>
+std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g, T h) {
+    std::vector<T> v(8);
+    v[0] = a;
+    v[1] = b;
+    v[2] = c;
+    v[3] = d;
+    v[4] = e;
+    v[5] = f;
+    v[6] = g;
+    v[7] = h;
+    return v;
+}
 // @}
 
 /** Convert an integer to a string. */
@@ -122,6 +149,26 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
+
+template<typename UnsignedType>
+bool checked_multiply(const UnsignedType &a, const UnsignedType &c, UnsignedType &result) {
+  if (a == 0) {
+    result = 0;
+  } else {
+    UnsignedType t = a * c;
+    if (t / a != c)
+      return false;
+    result = t;
+  }
+  return true;  
+}
+
+template<typename UnsignedType>
+bool checked_multiply_assert(const UnsignedType &a, const UnsignedType &b, UnsignedType &result) {
+  bool no_overflow = checked_multiply(a, b, result);
+  assert(no_overflow);
+  return no_overflow;
+}
 
 }
 }

@@ -1,10 +1,10 @@
-#include "Profiling.h"
-#include "IRMutator.h"
-#include "IROperator.h"
-#include "Debug.h"
 #include <algorithm>
 #include <map>
 #include <string>
+
+#include "Profiling.h"
+#include "IRMutator.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -48,8 +48,8 @@ public:
 
             // Note that this is tacked on to the front of the block, since it must come
             // before the calls to halide_current_time_ns.
-            Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", std::vector<Expr>(), Call::Extern);
-            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
+            Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", vector<Expr>(), Call::Extern);
+            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock", vector<Expr>());
             s = Block::make(begin_clock, s);
 
             // Do a little calibration: make a loop that does a large number of calls to add_ticks
@@ -78,7 +78,7 @@ public:
             do_timings = add_delta("count", kOverhead, kOverhead, Cast::make(UInt(64), 0),
                 Cast::make(UInt(64), kIters * kUnroll), do_timings);
             s = Block::make(s, do_timings);
-            s = Allocate::make(kIgnoreBuf, UInt(32), 1, s);
+            s = Allocate::make(kIgnoreBuf, UInt(32), vec(Expr(1)), s);
 
             // Tack on code to print the counters.
             for (map<string, int>::const_iterator it = indices.begin(); it != indices.end(); ++it) {
@@ -86,7 +86,7 @@ public:
                 Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
                 Expr print_val = Call::make(Int(32), "halide_printf",
                                             vec<Expr>(it->first + " %llu\n", val), Call::Extern);
-                Stmt print_stmt = AssertStmt::make(print_val > 0, "halide_printf failed");
+                Stmt print_stmt = AssertStmt::make(print_val > 0, "halide_printf failed", vector<Expr>());
                 s = Block::make(s, print_stmt);
             }
 
@@ -96,7 +96,7 @@ public:
                 Store::make(kBufName, Cast::make(UInt(64), 0), i));
             s = Block::make(init, s);
 
-            s = Allocate::make(kBufName, UInt(64), (int)indices.size(), s);
+            s = Allocate::make(kBufName, UInt(64), vec(Expr((int)indices.size())), s);
         } else {
             s = mutate(s);
         }

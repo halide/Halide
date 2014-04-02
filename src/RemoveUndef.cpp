@@ -2,7 +2,6 @@
 #include "IRMutator.h"
 #include "Scope.h"
 #include "IROperator.h"
-#include "IRPrinter.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -219,17 +218,33 @@ class RemoveUndef : public IRMutator {
             stmt = Stmt();
             return;
         }
-        if (condition.same_as(op->condition)) {
+
+        vector<Expr > new_args(op->args.size());
+        bool changed = false;
+
+        // Mutate the args
+        for (size_t i = 0; i < op->args.size(); i++) {
+            Expr old_arg = op->args[i];
+            Expr new_arg = mutate(old_arg);
+            if (!new_arg.defined()) {
+                stmt = Stmt();
+                return;
+            }
+            if (!new_arg.same_as(old_arg)) changed = true;
+            new_args[i] = new_arg;
+        }
+
+        if (condition.same_as(op->condition) && !changed) {
             stmt = op;
         } else {
-            stmt = AssertStmt::make(condition, op->message);
+            stmt = AssertStmt::make(condition, op->message, new_args);
         }
     }
 
     void visit(const Pipeline *op) {
         Stmt produce = mutate(op->produce);
         if (!produce.defined()) {
-            produce = AssertStmt::make(const_true(), "Produce step elided due to use of Halide::undef");
+            produce = AssertStmt::make(const_true(), "Produce step elided due to use of Halide::undef", vector<Expr>());
         }
         Stmt update = mutate(op->update);
         Stmt consume = mutate(op->consume);
@@ -328,17 +343,22 @@ class RemoveUndef : public IRMutator {
     }
 
     void visit(const Allocate *op) {
-        Expr size = mutate(op->size);
-        if (!expr.defined()) {
-            stmt = Stmt();
-            return;
+      std::vector<Expr> new_extents;
+        bool all_extents_unmodified = true;
+        for (size_t i = 0; i < op->extents.size(); i++) {
+            new_extents.push_back(mutate(op->extents[i]));
+            if (!expr.defined()) {
+                stmt = Stmt();
+                return;
+            }
+            all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
         if (!stmt.defined()) return;
-        if (size.same_as(op->size) && body.same_as(op->body)) {
+        if (all_extents_unmodified && body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, size, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, body);
         }
     }
 

@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
     Func error;
     error() = maximum(abs(f(r.x, r.y) - g(r.x, r.y)));
 
-    int err = evaluate<uint32_t>(error());
+    int err = evaluate_may_gpu<uint32_t>(error());
     if (err != 0) {
         printf("Fusion caused a difference in the output\n");
         return -1;

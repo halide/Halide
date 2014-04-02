@@ -1,8 +1,11 @@
+#include <iostream>
+#include <sstream>
+#include <math.h>
+#include <algorithm>
+
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
-#include <iostream>
-#include <math.h>
 
 namespace Halide {
 namespace Internal {
@@ -450,6 +453,46 @@ Expr fast_exp(Expr x_full) {
     result *= two_to_the_n;
 
     return result;
+}
+
+Expr print(const std::vector<Expr> &args) {
+    std::vector<Expr> printf_args;
+    // Generate a format string.
+    std::ostringstream sstr;
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].type().is_float()) {
+            sstr << "%f ";
+            printf_args.push_back(cast(Float(64), args[i]));
+        } else if (const Internal::StringImm *s =
+                   args[i].as<Internal::StringImm>()) {
+            sstr << s->value << " ";
+        } else if (args[i].type().is_handle()) {
+            sstr << "%p ";
+            printf_args.push_back(args[i]);
+        } else if (args[i].type().is_int()) {
+            sstr << "%lld ";
+            printf_args.push_back(cast(Int(64), args[i]));
+        } else if (args[i].type().is_uint()) {
+            sstr << "%llu ";
+            printf_args.push_back(cast(UInt(64), args[i]));
+        }
+    }
+    sstr << '\n';
+
+    printf_args.insert(printf_args.begin(), sstr.str());
+
+    Expr call = Internal::Call::make(Int(32), "halide_printf", printf_args, Internal::Call::Extern);
+    call = Internal::Call::make(args[0].type(), Internal::Call::return_second,
+                                Internal::vec<Expr>(call, args[0]), Internal::Call::Intrinsic);
+    return call;
+}
+
+Expr print_when(Expr condition, const std::vector<Expr> &args) {
+    Expr p = print(args);
+    return Internal::Call::make(p.type(),
+                                Internal::Call::if_then_else,
+                                Internal::vec<Expr>(condition, p, args[0]),
+                                Internal::Call::Intrinsic);
 }
 
 }

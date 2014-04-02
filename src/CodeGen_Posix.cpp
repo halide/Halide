@@ -1,17 +1,12 @@
-#include "LLVM_Headers.h"
-#include "CodeGen_X86.h"
-#include "IROperator.h"
 #include <iostream>
-#include "buffer_t.h"
-#include "IRPrinter.h"
-#include "IRMatch.h"
+
+#include "CodeGen_Posix.h"
+#include "CodeGen_Internal.h"
+#include "LLVM_Headers.h"
+#include "IR.h"
+#include "IROperator.h"
 #include "Debug.h"
-#include "Util.h"
-#include "Var.h"
-#include "Param.h"
-#include "integer_division_table.h"
-
-
+#include "IRPrinter.h"
 
 namespace Halide {
 namespace Internal {
@@ -20,7 +15,6 @@ using std::vector;
 using std::string;
 using std::map;
 using std::pair;
-using std::stack;
 using std::make_pair;
 
 using namespace llvm;
@@ -129,24 +123,54 @@ void CodeGen_Posix::init_module() {
     f64x4 = VectorType::get(f64, 4);
 }
 
-CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, Expr size) {
+Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type, const std::vector<Expr> &extents) {
+    // Compute size from list of extents checking for 32-bit signed overflow.
+    // Math is done using 64-bit intergers as overflow checked 32-bit mutliply
+    // does not work with NaCl at the moment.
+    Value *overflow = NULL;
+    int bytes_per_item = type.width * type.bytes();
+    Value *llvm_size_wide = ConstantInt::get(i64, bytes_per_item);
+    for (size_t i = 0; i < extents.size(); i++) {
+        llvm_size_wide = builder->CreateMul(llvm_size_wide, codegen(Cast::make(Int(64), extents[i])));
+        if (overflow == NULL) {
+            overflow = llvm_size_wide;
+        } else {
+            overflow = builder->CreateOr(overflow, llvm_size_wide);
+        }
+    }
+    Value *llvm_size = builder->CreateTrunc(llvm_size_wide, i32);
+
+    if (overflow != NULL) {
+        Constant *zero = ConstantInt::get(i64, 0);
+        create_assertion(builder->CreateICmpEQ(builder->CreateLShr(overflow, 31), zero),
+                         std::string("32-bit signed overflow computing size of allocation ") + name);
+    }
+
+    return llvm_size;
+}
+
+CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, const std::vector<Expr> &extents) {
 
     Allocation allocation;
+    Value *llvm_size = NULL;
 
-    if (const IntImm *int_size = size.as<IntImm>()) {
-        int stack_elems = int_size->value;
+    int32_t constant_size;
+    if (constant_allocation_size(extents, name, constant_size)) {
+        int64_t stack_bytes = constant_size * type.bytes();
 
-        allocation.stack_size = stack_elems * type.bytes();
-
-        // Round up to nearest multiple of 32.
-        allocation.stack_size = ((allocation.stack_size + 31)/32)*32;
-
-        // If it's more than 8k, put it on the heap.
-        if (allocation.stack_size > 8*1024) {
+        if (stack_bytes > ((int64_t(1) << 31) - 1)) {
+            std::cerr << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
+            assert(false);
+        } else if (stack_bytes <= 1024 * 8) {
+            // Round up to nearest multiple of 32.
+            allocation.stack_size = static_cast<int32_t>(((stack_bytes + 31)/32)*32);
+        } else {
             allocation.stack_size = 0;
+            llvm_size = codegen(Expr(static_cast<int32_t>(stack_bytes)));
         }
     } else {
         allocation.stack_size = 0;
+        llvm_size = codegen_allocation_size(name, type, extents);
     }
 
     llvm::Type *llvm_type = llvm_type_of(type);
@@ -160,8 +184,6 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
 
     } else {
-        Value *llvm_size = codegen(size * type.bytes());
-
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
         malloc_fn->setDoesNotAlias(0);
@@ -225,7 +247,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
         assert(false);
     }
 
-    Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->size);
+    Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->extents);
     sym_push(alloc->name + ".host", allocation.ptr);
 
     codegen(alloc->body);

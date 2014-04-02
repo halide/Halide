@@ -8,7 +8,7 @@
  */
 
 #include "IR.h"
-#include "Func.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {

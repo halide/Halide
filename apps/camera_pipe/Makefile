@@ -10,7 +10,7 @@ all: process
 
 camera_pipe: ../../ camera_pipe.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) camera_pipe.cpp -I ../../include/ ../../$(LIB_HALIDE) -o camera_pipe -ldl -lpthread
+	$(CXX) camera_pipe.cpp -I ../../include/ $(LDFLAGS) ../../$(LIB_HALIDE) -o camera_pipe -ldl -lpthread -lz
 
 curved.o: camera_pipe
 	./camera_pipe 8 0 # 8-bit output,

@@ -6,15 +6,18 @@
  * Defines an IRPrinter that emits C++ code equivalent to a halide stmt
  */
 
-#include "IRPrinter.h"
-#include "Argument.h"
-#include "Scope.h"
 #include <string>
 #include <vector>
 #include <ostream>
 #include <map>
 
+#include "IRPrinter.h"
+#include "Scope.h"
+
 namespace Halide {
+
+struct Argument;
+
 namespace Internal {
 
 /** This class emits C++ code equivalent to a halide Stmt. It's
@@ -57,11 +60,14 @@ protected:
     /** Emit the C name for a halide type */
     virtual std::string print_type(Type);
 
+    /** Emit a statement to reinterpret an expression as another type */
+    virtual std::string print_reinterpret(Type, Expr);
+
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
     std::string print_name(const std::string &);
 
-    /** Emit an SSA-style assignment, and set id to the freshly generated name */
-    void print_assignment(Type t, const std::string &rhs);
+    /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
+    std::string print_assignment(Type t, const std::string &rhs);
 
     /** Open a new C scope (i.e. throw in a brace, increase the indent) */
     void open_scope();
@@ -85,6 +91,7 @@ protected:
 
     void visit(const Variable *);
     void visit(const IntImm *);
+    void visit(const StringImm *);
     void visit(const FloatImm *);
     void visit(const Cast *);
     void visit(const Add *);

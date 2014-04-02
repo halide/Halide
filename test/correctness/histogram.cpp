@@ -36,10 +36,10 @@ int main(int argc, char **argv) {
 
     // No parallel reductions
     /*
-    std::string target = get_target();
-    if (target == "ptx" || target == "ptx-debug") {
-	hist.cuda_tile(x, 64);
-	hist.update().cuda_tile(r.x, r.y, 16, 16);
+    Target target = get_jit_target_from_environment();
+    if (target.has_gpu_feature()) {
+	hist.gpu_tile(x, 64, GPU_Default);
+	hist.update().gpu_tile(r.x, r.y, 16, 16, GPU_Default);
     }
     */
 
