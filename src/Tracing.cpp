@@ -29,11 +29,41 @@ private:
     using IRMutator::visit;
 
     void visit(const Call *op) {
+
+        // Calls inside of an address_of don't count, but we want to
+        // visit the args of the inner call.
+        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+            assert(op->args.size() == 1);
+            const Call *c = op->args[0].as<Call>();
+
+            bool unchanged = true;
+            vector<Expr> new_args(c->args.size());
+            for (size_t i = 0; i < c->args.size(); i++) {
+                new_args[i] = mutate(c->args[i]);
+                unchanged = unchanged && (new_args[i].same_as(c->args[i]));
+            }
+
+            if (unchanged) {
+                expr = op;
+                return;
+            } else {
+                Expr inner = Call::make(c->type, c->name, new_args, c->call_type,
+                                        c->func, c->value_index, c->image, c->param);
+                expr = Call::make(Handle(), Call::address_of, vec(inner), Call::Intrinsic);
+                return;
+            }
+
+        }
+
+
+
         IRMutator::visit(op);
         op = expr.as<Call>();
         assert(op);
 
-        if (op->call_type != Call::Halide) return;
+        if (op->call_type != Call::Halide) {
+            return;
+        }
 
         Function f = op->func;
         bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
@@ -51,6 +81,7 @@ private:
 
             expr = Call::make(op->type, Call::trace_expr, args, Call::Intrinsic);
         }
+
     }
 
     void visit(const Provide *op) {
