@@ -342,6 +342,19 @@ void IRPrinter::visit(const Broadcast *op) {
 }
 
 void IRPrinter::visit(const Call *op) {
+    // Special-case some intrinsics for readability
+    if (op->call_type == Call::Intrinsic) {
+        if (op->name == Call::extract_buffer_min) {
+            print(op->args[0]);
+            stream << ".min[" << op->args[1] << "]";
+            return;
+        } else if (op->name == Call::extract_buffer_extent) {
+            print(op->args[0]);
+            stream << ".extent[" << op->args[1] << "]";
+            return;
+        }
+    }
+
     stream << op->name << "(";
     for (size_t i = 0; i < op->args.size(); i++) {
         print(op->args[i]);
