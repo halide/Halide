@@ -452,11 +452,15 @@ public:
      * determine the bounds required of all unbound ImageParams
      * referenced. Communicates the result by allocating new buffers
      * of the appropriate size and binding them to the unbound
-     * ImageParams. */
+     * ImageParams. infer_input_bounds(Realization&, int) optionally 
+     * also iteratively computes the size of realizations required as
+     * a function of the schedule (e.g., splits require the the
+     * output to be rounded up to a multiple of the split factor,
+     * which transitively increases the required bounds of the inputs). */
     // @{
     EXPORT void infer_input_bounds(int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0);
-    EXPORT void infer_input_bounds(Realization dst);
     EXPORT void infer_input_bounds(Buffer dst);
+    EXPORT void infer_input_bounds(Realization &dst, int max_iterations=1);
     // @}
 
     /** Statically compile this function to llvm bitcode, with the
