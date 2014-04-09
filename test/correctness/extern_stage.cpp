@@ -8,10 +8,6 @@
 #endif
 
 extern "C" DLLEXPORT int flip_x(buffer_t *in1, buffer_t *in2, buffer_t *out) {
-    assert(in1->elem_size == 1);
-    assert(in2->elem_size == 4);
-    assert(out->elem_size == 1);
-
     int min = out->min[0];
     int max = out->min[0] + out->extent[0] - 1;
 
@@ -25,14 +21,21 @@ extern "C" DLLEXPORT int flip_x(buffer_t *in1, buffer_t *in2, buffer_t *out) {
         // buffers that have a null host pointer.
         printf("Doing flip_x bounds inference over [%d %d]\n", min, max);
         if (in1->host == NULL) {
-            in1->min[0] = min;
+            in1->min[0] = flipped_min;
             in1->extent[0] = extent;
         }
         if (in2->host == NULL) {
             in2->min[0] = flipped_min;
             in2->extent[0] = extent;
         }
+        // We don't mutate the output buffer, because we can handle
+        // any size output.
+
+        //printf("Bounds inference flip_x over [%d %d] requires [%d %d]\n", min, extent, flipped_min, extent);
     } else {
+        assert(in1->elem_size == 1);
+        assert(in2->elem_size == 4);
+        assert(out->elem_size == 1);
 
         printf("Computing flip_x over [%d %d]\n", min, max);
 
@@ -86,6 +89,7 @@ int main(int argc, char **argv) {
     f.compute_at(h, x);
     g.compute_at(h, x);
     Var xi;
+    //h.split(x, x, xi, 64);
     h.vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
     Image<uint8_t> result = h.realize(100);
