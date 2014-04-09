@@ -186,7 +186,8 @@ public:
     string buf;
     bool used_on_host, used_on_device,
         written_on_host, read_on_host,
-        written_on_device, read_on_device;
+        written_on_device, read_on_device,
+        has_buffer_defined;
     WhereIsBufferUsed(string b) : buf(b),
                                   used_on_host(false),
                                   used_on_device(false),
@@ -194,7 +195,9 @@ public:
                                   read_on_host(false),
                                   written_on_device(false),
                                   read_on_device(false),
+                                  has_buffer_defined(false),
                                   in_device_code(false) {}
+
 
 private:
     bool in_device_code;
@@ -238,6 +241,13 @@ private:
             }
         }
         IRVisitor::visit(op);
+    }
+
+    void visit(const LetStmt *op) {
+        IRVisitor::visit(op);
+        if (op->name == buf + ".buffer") {
+            has_buffer_defined = true;
+        }
     }
 };
 
@@ -377,9 +387,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     // Unset constant flag for embedded image global variables
     for (size_t i = 0; i < images_to_embed.size(); i++) {
-      string name = images_to_embed[i].name();
-      GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
-      global->setConstant(false);
+        string name = images_to_embed[i].name();
+        GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
+        global->setConstant(false);
     }
 
     std::vector<char> kernel_src = cgdev->compile_to_src();
@@ -701,8 +711,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     }
 
     Value *buf = NULL;
-    if (usage.used_on_device) {
-        debug(2) << alloc->name << " is used on the device\n";
+    if (usage.used_on_device && !usage.has_buffer_defined) {
+        debug(2) << alloc->name << " is used on the device and has no buffer defined\n";
 
         buf = create_alloca_at_entry(buffer_t_type, 1);
         Value *zero32 = ConstantInt::get(i32, 0),

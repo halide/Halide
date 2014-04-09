@@ -58,6 +58,11 @@ struct Schedule {
                      ends_with(other.var, "." + var)));
         }
 
+        /** Check if two loop levels are exactly the same. */
+        bool operator==(const LoopLevel &other) const {
+            return func == other.func && var == other.var;
+        }
+
     };
 
     /** At what sites should we inject the allocation and the
