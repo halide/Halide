@@ -808,7 +808,7 @@ vector<string> realization_order(string output, const map<string, Function> &env
 
 }
 
-Stmt create_initial_loop_nest(Function f, Target t) {
+Stmt create_initial_loop_nest(Function f, const Target &t) {
     // Generate initial loop nest
     pair<Stmt, Stmt> r = build_production(f);
     Stmt s = r.first;
@@ -1026,7 +1026,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
 Stmt schedule_functions(Stmt s, const vector<string> &order,
                         const map<string, Function> &env,
-                        const map<string, set<string> > &graph, Target t) {
+                        const map<string, set<string> > &graph, const Target &t) {
 
     // Inject a loop over root to give us a scheduling point
     string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
@@ -1063,7 +1063,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
 // Insert checks to make sure that parameters are within their
 // declared range.
-Stmt add_parameter_checks(Stmt s, Target t) {
+Stmt add_parameter_checks(Stmt s, const Target &t) {
     // First, find all the parameters
     FindParameters finder;
     s.accept(&finder);
@@ -1132,7 +1132,7 @@ Stmt add_parameter_checks(Stmt s, Target t) {
 // inserted. The second is a piece of code which will rewrite the
 // buffer_t sizes, mins, and strides in order to satisfy the
 // requirements.
-Stmt add_image_checks(Stmt s, Function f, Target t, const FuncValueBounds &fb) {
+Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds &fb) {
 
     bool no_asserts = t.features & Target::NoAsserts;
     bool no_bounds_query = t.features & Target::NoBoundsQuery;
@@ -1308,28 +1308,33 @@ Stmt add_image_checks(Stmt s, Function f, Target t, const FuncValueBounds &fb) {
             }
             lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
 
-            // Insert checks to make sure the total size of all input and output buffers is <= 2^31-1.
-            // And that no product of extents overflows 2^31 -1. This second test is likely only needed
-            // if a fuse directive is used in the schedule to combine multiple extents, but it is here
-            // for extra safety. Ultimately we will want to make Halide handle larger single buffers,
-            // at least on 64-bit systems.
+            // Insert checks to make sure the total size of all input
+            // and output buffers is <= 2^31 - 1.  And that no product
+            // of extents overflows 2^31 - 1. This second test is
+            // likely only needed if a fuse directive is used in the
+            // schedule to combine multiple extents, but it is here
+            // for extra safety. Ultimately we will want to make
+            // Halide handle larger single buffers, at least on 64-bit
+            // systems.
+            Expr max_size = cast<int64_t>(1) << 31 - 1;
+            Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
+                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1",
+                                          std::vector<Expr>());
+            dims_no_overflow_asserts.push_back(check);
 
-            std::vector<Expr> no_args;
-            dims_no_overflow_asserts.push_back(AssertStmt::make((cast<int64_t>(actual_extent) *
-                                                                 actual_stride) <= ((cast<int64_t>(1) << 31) - 1),
-                                                                "Total allocation for buffer " + name +" exceeds 2^31 -1",
-                                                                no_args));
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
             if (!is_secondary_output_buffer) {
                 if (j == 0) {
-                  lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
+                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
                 } else {
-                  string last_dim = int_to_string(j-1);
-                  lets_overflow.push_back(make_pair(name + ".total_extent." + dim,
-                                                    actual_extent * Variable::make(Int(64), name + ".total_extent." + last_dim)));
-                  dims_no_overflow_asserts.push_back(AssertStmt::make(Variable::make(Int(64), name + ".total_extent." + dim) <=
-                                                                     ((cast<int64_t>(1) << 31) - 1),
-                                                                      "Product of extents for buffer " + name +" exceeds 2^31 -1", no_args));
+                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + int_to_string(j-1));
+                    Expr this_dim = actual_extent * last_dim;
+                    Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
+                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
+                    Stmt check = AssertStmt::make(this_dim_var <= max_size,
+                                                  "Product of extents for buffer " + name +
+                                                  " exceeds 2^31 - 1", std::vector<Expr>());
+                    dims_no_overflow_asserts.push_back(check);
                 }
             }
         }
@@ -1457,13 +1462,15 @@ Stmt add_image_checks(Stmt s, Function f, Target t, const FuncValueBounds &fb) {
     }
 
     // Inject the code that checks that no dimension math overflows
-    for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
-        s = Block::make(dims_no_overflow_asserts[i-1], s);
-    }
+    if (!no_asserts) {
+        for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
+            s = Block::make(dims_no_overflow_asserts[i-1], s);
+        }
 
-    // Inject the code that defines the proposed sizes.
-    for (size_t i = lets_overflow.size(); i > 0; i--) {
-        s = LetStmt::make(lets_overflow[i-1].first, lets_overflow[i-1].second, s);
+        // Inject the code that defines the proposed sizes.
+        for (size_t i = lets_overflow.size(); i > 0; i--) {
+            s = LetStmt::make(lets_overflow[i-1].first, lets_overflow[i-1].second, s);
+        }
     }
 
     // Replace uses of the var with the constrained versions in the
@@ -1528,7 +1535,7 @@ Stmt add_image_checks(Stmt s, Function f, Target t, const FuncValueBounds &fb) {
     return s;
 }
 
-Stmt lower(Function f, Target t) {
+Stmt lower(Function f, const Target &t) {
 
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
