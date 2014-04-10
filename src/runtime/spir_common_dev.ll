@@ -24,15 +24,16 @@ declare spir_func float @_Z11native_sqrtf(float) nounwind readnone
 declare spir_func float @_Z10native_sinf(float) nounwind readnone
 declare spir_func float @_Z10native_cosf(float) nounwind readnone
 
-;define weak_odr spir_func float @nan_f32() nounwind uwtable readnone alwaysinline {
-;    ret float %y
-;}
-;define weak_odr spir_func float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
-;    ret float %y
-;}
-;define weak_odr spir_func float @inf_f32() nounwind uwtable readnone alwaysinline {
-;    ret float %y
-;}
+define weak_odr spir_func float @nan_f32() nounwind uwtable readnone alwaysinline {
+    ; llvm uses 64-bit hex constants to represent floats and doubles alike.
+    ret float 0x7FF8000000000000
+}
+define weak_odr spir_func float @neg_inf_f32() nounwind uwtable readnone alwaysinline {
+    ret float 0xFFF0000000000000
+}
+define weak_odr spir_func float @inf_f32() nounwind uwtable readnone alwaysinline {
+    ret float 0x7FF0000000000000
+}
 
 define weak_odr spir_func float @floor_f32(float %x) nounwind uwtable readnone alwaysinline {
     %y = tail call float @_Z5floorf(float %x) nounwind readnone
@@ -119,7 +120,7 @@ define weak_odr spir_func float @atanh_f32(float %x) nounwind uwtable readnone a
     ret float %y
 }
 
-; Dummy kernel to avoid errors on implementations that assert at least one kernel 
+; Dummy kernel to avoid errors on implementations that assert at least one kernel
 ; is in the program.
 define spir_kernel void @_at_least_one_kernel(i32 %x) {
 entry:

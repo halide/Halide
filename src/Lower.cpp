@@ -332,35 +332,13 @@ Stmt build_produce(Function f) {
             } else if (args[j].is_func()) {
                 Function input(args[j].func);
                 for (int k = 0; k < input.outputs(); k++) {
-                    string name = input.name();
+                    string buf_name = input.name();
                     if (input.outputs() > 1) {
-                        name += "." + int_to_string(k);
+                        buf_name += "." + int_to_string(k);
                     }
-
-                    vector<Expr> top_left;
-                    for (int i = 0; i < input.dimensions(); i++) {
-                        string d = int_to_string(i);
-                        top_left.push_back(Variable::make(Int(32), input.name() + ".min." + d));
-                    }
-                    Expr host_ptr = Call::make(input, top_left, k);
-                    host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
-
-                    vector<Expr> buffer_args(2);
-                    buffer_args[0] = host_ptr;
-                    buffer_args[1] = input.output_types()[k].bytes();
-                    for (int i = 0; i < input.dimensions(); i++) {
-                        string d = int_to_string(i);
-                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".min." + d));
-                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".extent." + d));
-                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".stride." + d));
-                    }
-
-                    Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                          buffer_args, Call::Intrinsic);
-
-                    name += ".tmp_buffer";
-                    lets.push_back(make_pair(name, buf));
-                    extern_call_args.push_back(Variable::make(Handle(), name));
+                    buf_name += ".buffer";
+                    Expr buffer = Variable::make(Handle(), buf_name);
+                    extern_call_args.push_back(buffer);
                 }
             } else if (args[j].is_buffer()) {
                 Buffer b = args[j].buffer;
@@ -377,44 +355,60 @@ Stmt build_produce(Function f) {
             }
         }
 
-        // Make the buffer_ts representing the output. They
-        // all use the same size, but have differing types.
-        string stride_name = f.name();
-        if (f.outputs() > 1) {
-            stride_name += ".0";
-        }
-        string stage_name = f.name() + ".s0.";
-
-        for (int j = 0; j < f.outputs(); j++) {
-
-            vector<Expr> buffer_args(2);
-
-            vector<Expr> top_left;
-            for (int k = 0; k < f.dimensions(); k++) {
-                string var = stage_name + f.args()[k];
-                top_left.push_back(Variable::make(Int(32), var + ".min"));
+        // Grab the buffer_ts representing the output. If the store
+        // level matches the compute level, then we can use the ones
+        // already injected by allocation bounds inference. If it's
+        // the output to the pipeline then it will similarly be in the
+        // symbol table.
+        if (f.schedule().store_level == f.schedule().compute_level) {
+            for (int j = 0; j < f.outputs(); j++) {
+                string buf_name = f.name();
+                if (f.outputs() > 1) {
+                    buf_name += "." + int_to_string(j);
+                }
+                buf_name += ".buffer";
+                Expr buffer = Variable::make(Handle(), buf_name);
+                extern_call_args.push_back(buffer);
             }
-            Expr host_ptr = Call::make(f, top_left, j);
-            host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
-
-            buffer_args[0] = host_ptr;
-            buffer_args[1] = f.output_types()[j].bytes();
-            for (int k = 0; k < f.dimensions(); k++) {
-                string var = stage_name + f.args()[k];
-                Expr min = Variable::make(Int(32), var + ".min");
-                Expr max = Variable::make(Int(32), var + ".max");
-                Expr stride = Variable::make(Int(32), stride_name + ".stride." + int_to_string(k));
-                buffer_args.push_back(min);
-                buffer_args.push_back(max - min + 1);
-                buffer_args.push_back(stride);
+        } else {
+            // Store level doesn't match compute level. Make an output
+            // buffer just for this subregion.
+            string stride_name = f.name();
+            if (f.outputs() > 1) {
+                stride_name += ".0";
             }
+            string stage_name = f.name() + ".s0.";
+            for (int j = 0; j < f.outputs(); j++) {
 
-            Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
-                                              buffer_args, Call::Intrinsic);
+                vector<Expr> buffer_args(2);
 
-            string buf_name = f.name() + "." + int_to_string(j) + ".tmp_buffer";
-            extern_call_args.push_back(Variable::make(Handle(), buf_name));
-            lets.push_back(make_pair(buf_name, output_buffer_t));
+                vector<Expr> top_left;
+                for (int k = 0; k < f.dimensions(); k++) {
+                    string var = stage_name + f.args()[k];
+                    top_left.push_back(Variable::make(Int(32), var + ".min"));
+                }
+                Expr host_ptr = Call::make(f, top_left, j);
+                host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
+
+                buffer_args[0] = host_ptr;
+                buffer_args[1] = f.output_types()[j].bytes();
+                for (int k = 0; k < f.dimensions(); k++) {
+                    string var = stage_name + f.args()[k];
+                    Expr min = Variable::make(Int(32), var + ".min");
+                    Expr max = Variable::make(Int(32), var + ".max");
+                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + int_to_string(k));
+                    buffer_args.push_back(min);
+                    buffer_args.push_back(max - min + 1);
+                    buffer_args.push_back(stride);
+                }
+
+                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                                                  buffer_args, Call::Intrinsic);
+
+                string buf_name = f.name() + "." + int_to_string(j) + ".tmp_buffer";
+                extern_call_args.push_back(Variable::make(Handle(), buf_name));
+                lets.push_back(make_pair(buf_name, output_buffer_t));
+            }
         }
 
         // Make the extern call
@@ -542,7 +536,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     return body;
 }
 
-class IsCalledInStmt : public IRVisitor {
+class IsUsedInStmt : public IRVisitor {
     string func;
 
     using IRVisitor::visit;
@@ -552,15 +546,24 @@ class IsCalledInStmt : public IRVisitor {
         if (op->name == func) result = true;
     }
 
+    // A reference to the function's buffers counts as a use
+    void visit(const Variable *op) {
+        if (op->type == Handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
+            result = true;
+        }
+    }
+
 public:
     bool result;
-    IsCalledInStmt(Function f) : func(f.name()), result(false) {
+    IsUsedInStmt(Function f) : func(f.name()), result(false) {
     }
 
 };
 
-bool function_is_called_in_stmt(Function f, Stmt s) {
-    IsCalledInStmt is_called(f);
+bool function_is_used_in_stmt(Function f, Stmt s) {
+    IsUsedInStmt is_called(f);
     s.accept(&is_called);
     return is_called.result;
 }
@@ -645,7 +648,7 @@ private:
         if (func.has_extern_definition() &&
             func.schedule().compute_level.is_inline() &&
             for_loop->for_type == For::Vectorized &&
-            function_is_called_in_stmt(func, for_loop)) {
+            function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
@@ -658,7 +661,7 @@ private:
 
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
-            if (function_is_called_in_stmt(func, body)) {
+            if (function_is_used_in_stmt(func, body)) {
                 body = build_pipeline(body);
             }
             found_compute_level = true;
@@ -669,7 +672,7 @@ private:
             assert(found_compute_level &&
                    "The compute loop level was not found within the store loop level!");
 
-            if (function_is_called_in_stmt(func, body)) {
+            if (function_is_used_in_stmt(func, body)) {
                 body = build_realize(body);
             }
 
@@ -697,7 +700,7 @@ private:
         if (op->name != func.name() &&
             !func.is_pure() &&
             func.schedule().compute_level.is_inline() &&
-            function_is_called_in_stmt(func, op)) {
+            function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
             stmt = build_realize(build_pipeline(op));
@@ -844,23 +847,34 @@ private:
         loops.pop_back();
     }
 
+    void register_use() {
+        if (!found) {
+            found = true;
+            loops_allowed = loops;
+        } else {
+            // Take the common prefix between loops and loops allowed
+            for (size_t i = 0; i < loops_allowed.size(); i++) {
+                if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
+                    loops_allowed.resize(i);
+                    break;
+                }
+            }
+        }
+    }
+
     void visit(const Call *c) {
         IRVisitor::visit(c);
 
         if (c->name == func.name()) {
+            register_use();
+        }
+    }
 
-            if (!found) {
-                found = true;
-                loops_allowed = loops;
-            } else {
-                // Take the common prefix between loops and loops allowed
-                for (size_t i = 0; i < loops_allowed.size(); i++) {
-                    if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
-                        loops_allowed.resize(i);
-                        break;
-                    }
-                }
-            }
+    void visit(const Variable *v) {
+        if (v->type == Handle() &&
+            starts_with(v->name, func.name() + ".") &&
+            ends_with(v->name, ".buffer")) {
+            register_use();
         }
     }
 };

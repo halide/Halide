@@ -73,7 +73,7 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -std=c++98 -stdlib=libc++"
     export GXX="clang++ -std=c++98 -stdlib=libc++"
     export CC="clang"
-    export LLVMS="pnacl trunk release-3.3 release-3.4" 
+    export LLVMS="pnacl trunk release-3.3 release-3.4"
 else
     export CXX="g++"
     export GXX="g++"
@@ -159,12 +159,10 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == pnacl ]]; then
         # Update this llvm and rebuild if it's pnacl
         cd llvm/${LLVM}
-        git checkout master &&
-        git pull &&
+        git fetch &&
         git checkout 6adf51d12178215dbc3c87cd8b1caaad7a4571e6 &&
         cd tools/clang &&
-        git checkout master &&
-        git pull &&
+        git fetch &&
         git checkout a963b803407c9d1cac644cc425004e0ccd28fa45 &&
         cd ../../ &&
         make -j8 -C build-32 &&

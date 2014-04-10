@@ -186,7 +186,8 @@ public:
     string buf;
     bool used_on_host, used_on_device,
         written_on_host, read_on_host,
-        written_on_device, read_on_device;
+        written_on_device, read_on_device,
+        has_buffer_defined;
     WhereIsBufferUsed(string b) : buf(b),
                                   used_on_host(false),
                                   used_on_device(false),
@@ -194,7 +195,9 @@ public:
                                   read_on_host(false),
                                   written_on_device(false),
                                   read_on_device(false),
+                                  has_buffer_defined(false),
                                   in_device_code(false) {}
+
 
 private:
     bool in_device_code;
@@ -238,6 +241,13 @@ private:
             }
         }
         IRVisitor::visit(op);
+    }
+
+    void visit(const LetStmt *op) {
+        IRVisitor::visit(op);
+        if (op->name == buf + ".buffer") {
+            has_buffer_defined = true;
+        }
     }
 };
 
@@ -377,9 +387,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     // Unset constant flag for embedded image global variables
     for (size_t i = 0; i < images_to_embed.size(); i++) {
-      string name = images_to_embed[i].name();
-      GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
-      global->setConstant(false);
+        string name = images_to_embed[i].name();
+        GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
+        global->setConstant(false);
     }
 
     std::vector<char> kernel_src = cgdev->compile_to_src();
@@ -701,66 +711,75 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     }
 
     Value *buf = NULL;
+    bool should_pop = false;
     if (usage.used_on_device) {
         debug(2) << alloc->name << " is used on the device\n";
 
-        buf = create_alloca_at_entry(buffer_t_type, 1);
-        Value *zero32 = ConstantInt::get(i32, 0),
-            *one32  = ConstantInt::get(i32, 1),
-            *null64 = ConstantInt::get(i64, 0),
-            *zero8  = ConstantInt::get( i8, 0);
+        if (!usage.has_buffer_defined) {
+            buf = create_alloca_at_entry(buffer_t_type, 1);
+            Value *zero32 = ConstantInt::get(i32, 0),
+                *one32  = ConstantInt::get(i32, 1),
+                *null64 = ConstantInt::get(i64, 0),
+                *zero8  = ConstantInt::get( i8, 0);
 
-        Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
-        builder->CreateStore(host_ptr, buffer_host_ptr(buf));
-        builder->CreateStore(null64,   buffer_dev_ptr(buf));
+            Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
+            builder->CreateStore(host_ptr, buffer_host_ptr(buf));
+            builder->CreateStore(null64,   buffer_dev_ptr(buf));
 
-        builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
-        builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
+            builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
+            builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
 
-        Value *llvm_size;
-        int32_t constant_size;
-        if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
-            int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
-            if (size_in_bytes > ((int64_t(1) << 31) - 1)) {
-                std::cerr << "Total size for GPU allocation " << alloc->name << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
-                assert(false);
+            Value *llvm_size;
+            int32_t constant_size;
+            if (constant_allocation_size(alloc->extents, alloc->name, constant_size)) {
+                int64_t size_in_bytes = (int64_t)constant_size * alloc->type.bytes();
+                if (size_in_bytes > ((int64_t(1) << 31) - 1)) {
+                    std::cerr << "Total size for GPU allocation " << alloc->name << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
+                    assert(false);
+                } else {
+                    // Size in elements, not size in bytes.
+                    llvm_size = ConstantInt::get(i32, constant_size);
+                }
             } else {
-                // Size in elements, not size in bytes.
-                llvm_size = ConstantInt::get(i32, constant_size);
+                // Note we compute this using a type of size 1, because we
+                // want the size in elements, not in bytes.
+                llvm_size = codegen_allocation_size(alloc->name, UInt(8), alloc->extents);
             }
+
+            // For now, we just track the allocation as a single 1D buffer of the
+            // required size. If we break this into multiple dimensions, this will
+            // fail to account for expansion for alignment.
+            builder->CreateStore(llvm_size,
+                                 buffer_extent_ptr(buf, 0));
+            builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
+            builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
+            builder->CreateStore(zero32,  buffer_extent_ptr(buf, 3));
+
+            builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
+            builder->CreateStore(zero32,  buffer_stride_ptr(buf, 1));
+            builder->CreateStore(zero32,  buffer_stride_ptr(buf, 2));
+            builder->CreateStore(zero32,  buffer_stride_ptr(buf, 3));
+
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
+            builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
+
+            int bytes = alloc->type.width * alloc->type.bytes();
+            builder->CreateStore(ConstantInt::get(i32, bytes),
+                                 buffer_elem_size_ptr(buf));
+            sym_push(alloc->name + ".buffer", buf);
+            should_pop = true;
         } else {
-            // Note we compute this using a type of size 1, because we
-            // want the size in elements, not in bytes.
-            llvm_size = codegen_allocation_size(alloc->name, UInt(8), alloc->extents);
+            buf = sym_get(alloc->name + ".buffer");
         }
-
-        // For now, we just track the allocation as a single 1D buffer of the
-        // required size. If we break this into multiple dimensions, this will
-        // fail to account for expansion for alignment.
-        builder->CreateStore(llvm_size,
-                             buffer_extent_ptr(buf, 0));
-        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 1));
-        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 2));
-        builder->CreateStore(zero32,  buffer_extent_ptr(buf, 3));
-
-        builder->CreateStore(one32,   buffer_stride_ptr(buf, 0));
-        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 1));
-        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 2));
-        builder->CreateStore(zero32,  buffer_stride_ptr(buf, 3));
-
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 0));
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 1));
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 2));
-        builder->CreateStore(zero32,  buffer_min_ptr(buf, 3));
-
-        int bytes = alloc->type.width * alloc->type.bytes();
-        builder->CreateStore(ConstantInt::get(i32, bytes),
-                             buffer_elem_size_ptr(buf));
 
         Value *args[2] = { get_user_context(), buf };
         builder->CreateCall(dev_malloc_fn, args);
 
-        sym_push(alloc->name + ".buffer", buf);
+        // Put the dev pointer in the symbol table. Mostly so we
+        // remember to dev_free it.
+        sym_push(alloc->name + ".dev", buffer_dev(buf));
     }
 
     codegen(alloc->body);
@@ -769,6 +788,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
         destroy_allocation(host_allocation);
     }
 
+    if (should_pop) {
+        sym_pop(alloc->name + ".buffer");
+    }
 }
 
 template<typename CodeGen_CPU>
@@ -778,11 +800,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
         CodeGen_CPU::visit(f);
     }
 
-    if (sym_exists(f->name + ".buffer")) {
+    if (sym_exists(f->name + ".dev")) {
         Value *args[2] = { get_user_context(),
                            sym_get(f->name + ".buffer") };
         builder->CreateCall(dev_free_fn, args);
-        sym_pop(f->name + ".buffer");
     }
 }
 

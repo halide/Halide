@@ -170,7 +170,7 @@ private:
 
 class StageSkipper : public IRMutator {
 public:
-    StageSkipper(const string &f) : func(f) {}
+    StageSkipper(const string &f) : func(f), in_vector_loop(false) {}
 private:
     string func;
     using IRMutator::visit;
