@@ -4,6 +4,7 @@
 #include <android/native_window_jni.h>
 #include <time.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "halide.h"
 
@@ -15,17 +16,28 @@
 extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
 extern "C" int halide_host_cpu_count();
 extern "C" int64_t halide_current_time_ns();
+extern "C" void halide_copy_to_host(void *, buffer_t *);
+extern "C" void halide_copy_to_dev(void *, buffer_t *);
+extern "C" void halide_dev_malloc(void *, buffer_t *);
+extern "C" void halide_dev_free(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
     LOGE(msg);
 }
 
 extern "C" {
-JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(JNIEnv * env, jobject obj, jbyteArray jSrc, jobject surf) {
+JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(JNIEnv * env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jobject surf) {
+
+    const int w = j_w, h = j_h;
 
     halide_set_error_handler(handler);
 
     unsigned char *src = (unsigned char *)env->GetByteArrayElements(jSrc, NULL);
+
+    if (!src) {
+        LOGD("src is null\n");
+        return;
+    }
 
     ANativeWindow *win = ANativeWindow_fromSurface(env, surf);
     ANativeWindow_acquire(win);
@@ -36,55 +48,73 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     if (first_call) {
         LOGD("According to Halide, host system has %d cpus\n", halide_host_cpu_count());
         LOGD("Resetting buffer format");
-        ANativeWindow_setBuffersGeometry(win, 640, 360, 0);
+        ANativeWindow_setBuffersGeometry(win, w, h, 0);
         first_call = false;
         for (int t = 0; t < 16; t++) times[t] = 0;
     }
 
     ANativeWindow_Buffer buf;
-    ARect rect = {0, 0, 640, 360};
-    ANativeWindow_lock(win, &buf, &rect);
+    ARect rect = {0, 0, w, h};
+
+    if (ANativeWindow_lock(win, &buf, &rect)) {
+        return;
+    }
 
     uint8_t *dst = (uint8_t *)buf.bits;
-    buffer_t srcBuf = {0}, dstBuf = {0};
-    srcBuf.host = (uint8_t *)src;
-    srcBuf.extent[0] = 642;
-    srcBuf.extent[1] = 362;
-    srcBuf.extent[2] = 1;
-    srcBuf.extent[3] = 1;
-    srcBuf.stride[0] = 1;
-    srcBuf.stride[1] = 640;
-    srcBuf.min[0] = -1;
-    srcBuf.min[1] = -1;
-    srcBuf.elem_size = 1;
 
-    dstBuf.host = dst;
-    dstBuf.extent[0] = 640;
-    dstBuf.extent[1] = 360;
-    dstBuf.extent[2] = 1;
-    dstBuf.extent[3] = 1;
-    dstBuf.stride[0] = 1;
-    dstBuf.stride[1] = 640;
-    dstBuf.min[0] = 0;
-    dstBuf.min[1] = 0;
-    dstBuf.elem_size = 1;
+    // If we're using opencl, use the gpu backend for it.
+    setenv("HL_OCL_DEVICE", "gpu", 1);
 
-    int64_t t1 = halide_current_time_ns();
-    halide(&srcBuf, &dstBuf);
-    int64_t t2 = halide_current_time_ns();
-    unsigned elapsed_us = (t2 - t1)/1000;
+    // Make these static so that we can reuse device allocations across frames.
+    static buffer_t srcBuf = {0};
+    static buffer_t dstBuf = {0};
 
-    times[counter & 15] = elapsed_us;
-    counter++;
-    unsigned min = times[0];
-    for (int i = 1; i < 16; i++) {
-        if (times[i] < min) min = times[i];
+    if (dst) {
+        srcBuf.host = (uint8_t *)src;
+        srcBuf.host_dirty = true;
+        srcBuf.extent[0] = w;
+        srcBuf.extent[1] = h;
+        srcBuf.extent[2] = 0;
+        srcBuf.extent[3] = 0;
+        srcBuf.stride[0] = 1;
+        srcBuf.stride[1] = w;
+        srcBuf.min[0] = 0;
+        srcBuf.min[1] = 0;
+        srcBuf.elem_size = 1;
+
+        dstBuf.host = dst;
+        dstBuf.extent[0] = w;
+        dstBuf.extent[1] = h;
+        dstBuf.extent[2] = 0;
+        dstBuf.extent[3] = 0;
+        dstBuf.stride[0] = 1;
+        dstBuf.stride[1] = w;
+        dstBuf.min[0] = 0;
+        dstBuf.min[1] = 0;
+        dstBuf.elem_size = 1;
+
+        // Just copy over chrominance untouched
+        memcpy(dst + w*h, src + w*h, (w*h)/2);
+
+        int64_t t1 = halide_current_time_ns();
+        halide(&srcBuf, &dstBuf);
+
+        if (dstBuf.dev) {
+            halide_copy_to_host(NULL, &dstBuf);
+        }
+
+        int64_t t2 = halide_current_time_ns();
+        unsigned elapsed_us = (t2 - t1)/1000;
+
+
+        times[counter & 15] = elapsed_us;
+        counter++;
+        unsigned min = times[0];
+        for (int i = 1; i < 16; i++) {
+            if (times[i] < min) min = times[i];
+        }
+        LOGD("Time taken: %d (%d)", elapsed_us, min);
     }
-    LOGD("Time taken: %d (%d)", elapsed_us, min);
-
-    // Just copy over chrominance untouched
-    memcpy(dst + 640*360, src + 640*480, 320*180);
-    memcpy(dst + 640*360 + 320*180, src + 640*480 + 320*240, 320*180);
 
     ANativeWindow_unlockAndPost(win);
     ANativeWindow_release(win);

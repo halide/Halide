@@ -25,21 +25,37 @@ public class CameraActivity extends Activity {
     }
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.main);
+    public void onCreate(Bundle b) {
+        super.onCreate(b);
 
-        // Create an instance of Camera
-        camera = getCameraInstance();               
+        setContentView(R.layout.main);
 
         // Create a canvas for drawing stuff on
         filtered = new SurfaceView(this);
 
         // Create our Preview view and set it as the content of our activity.
-        preview = new CameraPreview(this, camera, filtered);
+        preview = new CameraPreview(this, filtered);
+
         FrameLayout layout = (FrameLayout) findViewById(R.id.camera_preview);
         layout.addView(preview);
         layout.addView(filtered);
         filtered.setZOrderOnTop(true);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        camera = getCameraInstance();
+        preview.setCamera(camera);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        if (camera != null) {
+            preview.setCamera(null);
+            camera.release();
+            camera = null;
+        }
     }
 }
