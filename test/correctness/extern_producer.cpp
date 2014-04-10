@@ -10,8 +10,36 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
+// Some helper functions for rounding
+int round_down(int, int);
+int round_up(int x, int m) {
+    if (x < 0) return -round_down(-x, m);
+    else return ((x + m - 1) / m) * m;
+}
+
+int round_down(int x, int m) {
+    if (x < 0) return -round_up(-x, m);
+    else return (x / m) * m;
+}
+
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data(buffer_t *out) {
+    if (!out->host) {
+        // Bounds query mode. To make life interesting, let's add some
+        // arbitrary constraints on what we can produce.
+
+        // The start and end of the x coord must be a multiple of 10.
+        int max_plus_one = out->min[0] + out->extent[0];
+        max_plus_one = round_up(max_plus_one, 10);
+        out->min[0] = round_down(out->min[0], 10);
+        out->extent[0] = max_plus_one - out->min[0];
+
+        // There must be at least 40 scanlines.
+        if (out->extent[1] < 40) {
+            out->extent[1] = 40;
+        }
+        return 0;
+    }
     assert(out->host && out->elem_size == 4 && out->stride[0] == 1);
     printf("Generating data over [%d %d] x [%d %d]\n",
            out->min[0], out->min[0] + out->extent[0],
@@ -29,6 +57,10 @@ extern "C" DLLEXPORT int make_data(buffer_t *out) {
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int make_data_multi(buffer_t *out1, buffer_t *out2) {
+    if (!out1->host || !out2->host) {
+        // Bounds query mode. We're ok with any requested output size (Halide guarantees they match).
+        return 0;
+    }
     assert(out1->host && out1->elem_size == 4 && out1->stride[0] == 1);
     assert(out2->host && out2->elem_size == 4 && out2->stride[0] == 1);
     assert(out1->min[0] == out2->min[0] &&

@@ -85,10 +85,66 @@ public:
             assert(b.empty() || b.size() == func.args().size());
 
             if (func.has_extern_definition()) {
-                // After we define our bounds we need to run the
-                // bounds query to define bounds for my
-                // consumers.
+                // After we define our bounds required, we need to
+                // figure out what we're actually going to compute,
+                // and what inputs we need. To do this we:
+
+                // 1) Grab a handle on the bounds query results from one level up
+
+                // 2) Run the bounds query to let it round up the output size.
+
+                // 3) Shift the requested output box back inside of the
+                // bounds query result from one loop level up (in case
+                // it was rounded up)
+
+                // 4) then run the bounds query again to get the input
+                // sizes.
+
+                // Because we're wrapping a stmt, this happens in reverse order.
+
+                // 4)
                 s = do_bounds_query(s, in_pipeline);
+
+                // If we're at the outermost loop, we haven't made any
+                // outer promises about what the bounds will be, so we
+                // can bail out here.
+
+                if (!in_pipeline.empty()) {
+                    // 3)
+                    string outer_query_name = func.name() + ".outer_bounds_query";
+                    Expr outer_query = Variable::make(Handle(), outer_query_name);
+                    string inner_query_name = func.name() + ".o0.bounds_query";
+                    Expr inner_query = Variable::make(Handle(), inner_query_name);
+                    for (int i = 0; i < func.dimensions(); i++) {
+                        Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
+                                                    vec<Expr>(outer_query, i), Call::Intrinsic);
+                        Expr outer_extent = Call::make(Int(32), Call::extract_buffer_extent,
+                                                       vec<Expr>(outer_query, i), Call::Intrinsic);
+                        Expr outer_max_plus_one = outer_min + outer_extent;
+
+                        Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
+                                                    vec<Expr>(inner_query, i), Call::Intrinsic);
+                        Expr inner_extent = Call::make(Int(32), Call::extract_buffer_extent,
+                                                       vec<Expr>(inner_query, i), Call::Intrinsic);
+                        Expr inner_max_plus_one = inner_min + inner_extent;
+
+                        // Push 'inner' inside of 'outer'
+                        Expr new_min = Min::make(inner_min, outer_max_plus_one - inner_extent);
+                        Expr new_extent = inner_extent;
+                        Expr new_max = new_min + new_extent - 1;
+
+                        // Modify the region to be computed accordingly
+                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
+                        s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".min", new_min, s);
+                    }
+
+                    // 2)
+                    s = do_bounds_query(s, in_pipeline);
+
+                    // 1)
+                    s = LetStmt::make(func.name() + ".outer_bounds_query",
+                                      Variable::make(Handle(), func.name() + ".o0.bounds_query"), s);
+                }
             }
 
             if (in_pipeline.count(name) == 0) {
@@ -137,24 +193,9 @@ public:
         }
 
         Stmt do_bounds_query(Stmt s, const set<string> &in_pipeline) {
+
             const string &extern_name = func.extern_function_name();
             const vector<ExternFuncArgument> &args = func.extern_arguments();
-
-            // If we're already inside a pipeline for all of the
-            // inputs, this is pointless, because we know their
-            // bounds.
-            bool need_query = false;
-            for (size_t i = 0; i < args.size(); i++) {
-                if (args[i].is_func()) {
-                    Function input(args[i].func);
-                    if (in_pipeline.count(input.name()) == 0) {
-                        need_query = true;
-                    }
-                }
-            }
-            if (!need_query) {
-                return s;
-            }
 
             vector<Expr> bounds_inference_args;
 
@@ -522,11 +563,11 @@ public:
         // Recurse.
         body = mutate(body);
 
-        // We only care about the bounds of things that have a
-        // production inside this loop somewhere, and their
-        // consumers that we're not already in a pipeline of.
+        // We only care about the bounds of a func if:
+        // A) We're not already in a pipeline over that func AND
+        // B.1) There's a production of this func somewhere inside this loop OR
+        // B.2) We're downstream (a consumer) of a func for which we care about the bounds.
         vector<bool> bounds_needed(stages.size(), false);
-
         for (size_t i = 0; i < stages.size(); i++) {
             if (inner_productions.count(stages[i].name)) {
                 bounds_needed[i] = true;

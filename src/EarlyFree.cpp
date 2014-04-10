@@ -54,6 +54,13 @@ private:
         IRVisitor::visit(store);
     }
 
+    void visit(const Variable *var) {
+        if (starts_with(var->name, func + ".") &&
+            ends_with(var->name, ".buffer")) {
+            last_use = containing_stmt;
+        }
+    }
+
     void visit(const Pipeline *pipe) {
         if (in_loop) {
             IRVisitor::visit(pipe);

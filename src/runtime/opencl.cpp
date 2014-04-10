@@ -236,6 +236,7 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
         cl_device_id devices[] = { dev };
         size_t lengths[] = { size };
+        const char *build_options = NULL;
 
         if (strstr(src, "/*OpenCL C*/")) {
             // Program is OpenCL C.
@@ -257,9 +258,11 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             const unsigned char * binaries[] = { (unsigned char *)src };
             state->program = clCreateProgramWithBinary(*cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithBinary" );
+
+            build_options = "-x spir";
         }
 
-        err = clBuildProgram(state->program, 1, &dev, NULL, NULL, NULL );
+        err = clBuildProgram(state->program, 1, &dev, build_options, NULL, NULL );
         if (err != CL_SUCCESS) {
             size_t len = 0;
             char *buffer = NULL;
