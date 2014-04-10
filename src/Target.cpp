@@ -163,7 +163,8 @@ Target parse_target_string(const std::string &target) {
                   << "Where arch is x86-32, x86-64, arm-32, arm-64, "
                   << "and os is linux, windows, osx, nacl, ios, or android. "
                   << "If arch or os are omitted, they default to the host. "
-                  << "Features include sse41, avx, avx2, cuda, opencl, and gpu_debug.\n"
+                  << "Features include sse41, avx, avx2, cuda, opencl, spir, "
+                  << "spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
                   << "HL_TARGET can also begin with \"host\", which sets the "
                   << "host's architecture, os, and feature set, with the "
                   << "exception of the GPU runtimes, which default to off\n";
