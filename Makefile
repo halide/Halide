@@ -351,6 +351,8 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/wavelet test
 	make -C apps/c_backend clean
 	make -C apps/c_backend test
+	make -C apps/modules clean
+	make -C apps/modules out.png
 
 ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
 ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))
