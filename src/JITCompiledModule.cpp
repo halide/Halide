@@ -130,7 +130,6 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
-    options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
 
     EngineBuilder engine_builder(m);

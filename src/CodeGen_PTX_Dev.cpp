@@ -312,7 +312,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     Options.StackAlignmentOverride = 0;
     // Options.DisableJumpTables = false;
     Options.TrapFuncName = "";
-    Options.EnableSegmentedStacks = false;
 
     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
