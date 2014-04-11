@@ -84,7 +84,12 @@ LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 
 OPENGL_LDFLAGS =
 ifneq ($(WITH_OPENGL), )
+ifeq ($(UNAME), Linux)
 OPENGL_LDFLAGS = -lX11 -lGL
+endif
+ifeq ($(UNAME), Darwin)
+OPENGL_LDFLAGS = -framework OpenGL -framework AGL
+endif
 endif
 
 # Remove some non-llvm libs that llvm-config has helpfully included

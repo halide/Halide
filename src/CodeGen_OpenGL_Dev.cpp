@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "Debug.h"
 #include "Simplify.h"
+#include <iomanip>
 
 namespace Halide {
 namespace Internal {
@@ -141,7 +142,7 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     // TODO(dheck): use something like dtoa to avoid precision loss in
     // float->decimal conversion
     ostringstream oss;
-    oss << op->value;
+    oss << std::showpoint << std::setprecision(8) << op->value;
     id = oss.str();
 }
 
@@ -157,9 +158,9 @@ void CodeGen_GLSL::visit(const For *loop) {
 
         string idx;
         if (ends_with(loop->name, ".blockidx")) {
-            idx = "pixcoord.x";
+            idx = "int(pixcoord.x)";
         } else if (ends_with(loop->name, ".blockidy")) {
-            idx = "pixcoord.y";
+            idx = "int(pixcoord.y)";
         }
         do_indent();
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";

@@ -55,6 +55,9 @@ extern "C" int halide_opengl_create_context() {
 #include <AGL/agl.h>
 #include <dlfcn.h>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
 extern "C" void *halide_opengl_get_proc_address(const char *name) {
     static void *dylib = NULL;
     if (!dylib) {
@@ -98,6 +101,7 @@ extern "C" int halide_opengl_create_context() {
     }
     return 0;
 }
+#pragma clang diagnostic pop
 
 #else
 #error "Unsupported platform"
