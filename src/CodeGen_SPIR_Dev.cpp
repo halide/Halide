@@ -14,7 +14,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_SPIR_Dev::CodeGen_SPIR_Dev(int bits) : CodeGen(), bits(bits) {
+CodeGen_SPIR_Dev::CodeGen_SPIR_Dev(Target host, int bits) : CodeGen(host), bits(bits) {
     #if !(WITH_SPIR)
     assert(false && "spir not enabled for this build of Halide.");
     #endif

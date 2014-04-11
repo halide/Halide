@@ -73,13 +73,13 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -std=c++98 -stdlib=libc++"
     export GXX="clang++ -std=c++98 -stdlib=libc++"
     export CC="clang"
-    export LLVMS="pnacl trunk release-3.3" 
+    export LLVMS="pnacl trunk release-3.3 release-3.4"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
-    export LLVMS="trunk release-3.2 release-3.3 pnacl"
+    export LLVMS="trunk release-3.2 release-3.3 release-3.4 pnacl"
 fi
 
 
@@ -110,6 +110,10 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+    elif [[ "$LLVM" == release-3.4 ]]; then
+        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
+        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
     fi
 
@@ -155,9 +159,11 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == pnacl ]]; then
         # Update this llvm and rebuild if it's pnacl
         cd llvm/${LLVM}
-        # git pull &&
+        git fetch &&
+        git checkout 6adf51d12178215dbc3c87cd8b1caaad7a4571e6 &&
         cd tools/clang &&
-        # git pull &&
+        git fetch &&
+        git checkout a963b803407c9d1cac644cc425004e0ccd28fa45 &&
         cd ../../ &&
         make -j8 -C build-32 &&
         make -j8 -C build-64

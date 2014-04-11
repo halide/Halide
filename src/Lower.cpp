@@ -65,7 +65,7 @@ void lower_test() {
     g.store_at(f, y).compute_at(f, x);
     h.store_at(f, y).compute_at(f, y);
 
-    Stmt result = lower(f.function());
+    Stmt result = lower(f.function(), get_host_target());
 
     assert(result.defined() && "Lowering returned trivial function");
 
@@ -332,35 +332,13 @@ Stmt build_produce(Function f) {
             } else if (args[j].is_func()) {
                 Function input(args[j].func);
                 for (int k = 0; k < input.outputs(); k++) {
-                    string name = input.name();
+                    string buf_name = input.name();
                     if (input.outputs() > 1) {
-                        name += "." + int_to_string(k);
+                        buf_name += "." + int_to_string(k);
                     }
-
-                    vector<Expr> top_left;
-                    for (int i = 0; i < input.dimensions(); i++) {
-                        string d = int_to_string(i);
-                        top_left.push_back(Variable::make(Int(32), input.name() + ".min." + d));
-                    }
-                    Expr host_ptr = Call::make(input, top_left, k);
-                    host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
-
-                    vector<Expr> buffer_args(2);
-                    buffer_args[0] = host_ptr;
-                    buffer_args[1] = input.output_types()[k].bytes();
-                    for (int i = 0; i < input.dimensions(); i++) {
-                        string d = int_to_string(i);
-                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".min." + d));
-                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".extent." + d));
-                        buffer_args.push_back(Variable::make(Int(32), input.name() + ".stride." + d));
-                    }
-
-                    Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                          buffer_args, Call::Intrinsic);
-
-                    name += ".tmp_buffer";
-                    lets.push_back(make_pair(name, buf));
-                    extern_call_args.push_back(Variable::make(Handle(), name));
+                    buf_name += ".buffer";
+                    Expr buffer = Variable::make(Handle(), buf_name);
+                    extern_call_args.push_back(buffer);
                 }
             } else if (args[j].is_buffer()) {
                 Buffer b = args[j].buffer;
@@ -377,44 +355,60 @@ Stmt build_produce(Function f) {
             }
         }
 
-        // Make the buffer_ts representing the output. They
-        // all use the same size, but have differing types.
-        string stride_name = f.name();
-        if (f.outputs() > 1) {
-            stride_name += ".0";
-        }
-        string stage_name = f.name() + ".s0.";
-
-        for (int j = 0; j < f.outputs(); j++) {
-
-            vector<Expr> buffer_args(2);
-
-            vector<Expr> top_left;
-            for (int k = 0; k < f.dimensions(); k++) {
-                string var = stage_name + f.args()[k];
-                top_left.push_back(Variable::make(Int(32), var + ".min"));
+        // Grab the buffer_ts representing the output. If the store
+        // level matches the compute level, then we can use the ones
+        // already injected by allocation bounds inference. If it's
+        // the output to the pipeline then it will similarly be in the
+        // symbol table.
+        if (f.schedule().store_level == f.schedule().compute_level) {
+            for (int j = 0; j < f.outputs(); j++) {
+                string buf_name = f.name();
+                if (f.outputs() > 1) {
+                    buf_name += "." + int_to_string(j);
+                }
+                buf_name += ".buffer";
+                Expr buffer = Variable::make(Handle(), buf_name);
+                extern_call_args.push_back(buffer);
             }
-            Expr host_ptr = Call::make(f, top_left, j);
-            host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
-
-            buffer_args[0] = host_ptr;
-            buffer_args[1] = f.output_types()[j].bytes();
-            for (int k = 0; k < f.dimensions(); k++) {
-                string var = stage_name + f.args()[k];
-                Expr min = Variable::make(Int(32), var + ".min");
-                Expr max = Variable::make(Int(32), var + ".max");
-                Expr stride = Variable::make(Int(32), stride_name + ".stride." + int_to_string(k));
-                buffer_args.push_back(min);
-                buffer_args.push_back(max - min + 1);
-                buffer_args.push_back(stride);
+        } else {
+            // Store level doesn't match compute level. Make an output
+            // buffer just for this subregion.
+            string stride_name = f.name();
+            if (f.outputs() > 1) {
+                stride_name += ".0";
             }
+            string stage_name = f.name() + ".s0.";
+            for (int j = 0; j < f.outputs(); j++) {
 
-            Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
-                                              buffer_args, Call::Intrinsic);
+                vector<Expr> buffer_args(2);
 
-            string buf_name = f.name() + "." + int_to_string(j) + ".tmp_buffer";
-            extern_call_args.push_back(Variable::make(Handle(), buf_name));
-            lets.push_back(make_pair(buf_name, output_buffer_t));
+                vector<Expr> top_left;
+                for (int k = 0; k < f.dimensions(); k++) {
+                    string var = stage_name + f.args()[k];
+                    top_left.push_back(Variable::make(Int(32), var + ".min"));
+                }
+                Expr host_ptr = Call::make(f, top_left, j);
+                host_ptr = Call::make(Handle(), Call::address_of, vec(host_ptr), Call::Intrinsic);
+
+                buffer_args[0] = host_ptr;
+                buffer_args[1] = f.output_types()[j].bytes();
+                for (int k = 0; k < f.dimensions(); k++) {
+                    string var = stage_name + f.args()[k];
+                    Expr min = Variable::make(Int(32), var + ".min");
+                    Expr max = Variable::make(Int(32), var + ".max");
+                    Expr stride = Variable::make(Int(32), stride_name + ".stride." + int_to_string(k));
+                    buffer_args.push_back(min);
+                    buffer_args.push_back(max - min + 1);
+                    buffer_args.push_back(stride);
+                }
+
+                Expr output_buffer_t = Call::make(Handle(), Call::create_buffer_t,
+                                                  buffer_args, Call::Intrinsic);
+
+                string buf_name = f.name() + "." + int_to_string(j) + ".tmp_buffer";
+                extern_call_args.push_back(Variable::make(Handle(), buf_name));
+                lets.push_back(make_pair(buf_name, output_buffer_t));
+            }
         }
 
         // Make the extern call
@@ -512,11 +506,9 @@ pair<Stmt, Stmt> build_production(Function func) {
 }
 
 // A schedule may include explicit bounds on some dimension. This
-// injects let statements that set those bounds, and assertions that
-// check that those bounds are sufficiently large to cover the
-// inferred bounds required.
+// injects assertions that check that those bounds are sufficiently
+// large to cover the inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {
-    // Inject any explicit bounds
     const Schedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.reductions().size(); stage++) {
         for (size_t i = 0; i < s.bounds.size(); i++) {
@@ -544,7 +536,7 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
     return body;
 }
 
-class IsCalledInStmt : public IRVisitor {
+class IsUsedInStmt : public IRVisitor {
     string func;
 
     using IRVisitor::visit;
@@ -554,15 +546,24 @@ class IsCalledInStmt : public IRVisitor {
         if (op->name == func) result = true;
     }
 
+    // A reference to the function's buffers counts as a use
+    void visit(const Variable *op) {
+        if (op->type == Handle() &&
+            starts_with(op->name, func + ".") &&
+            ends_with(op->name, ".buffer")) {
+            result = true;
+        }
+    }
+
 public:
     bool result;
-    IsCalledInStmt(Function f) : func(f.name()), result(false) {
+    IsUsedInStmt(Function f) : func(f.name()), result(false) {
     }
 
 };
 
-bool function_is_called_in_stmt(Function f, Stmt s) {
-    IsCalledInStmt is_called(f);
+bool function_is_used_in_stmt(Function f, Stmt s) {
+    IsUsedInStmt is_called(f);
     s.accept(&is_called);
     return is_called.result;
 }
@@ -573,9 +574,10 @@ class InjectRealization : public IRMutator {
 public:
     const Function &func;
     bool found_store_level, found_compute_level;
+    const Target &target;
 
-    InjectRealization(const Function &f) :
-        func(f), found_store_level(false), found_compute_level(false) {}
+    InjectRealization(const Function &f, const Target &t) :
+        func(f), found_store_level(false), found_compute_level(false), target(t) {}
 private:
 
     string producing;
@@ -599,7 +601,11 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        return inject_explicit_bounds(s, func);
+        if (target.features & Target::NoAsserts) {
+            return s;
+        } else {
+            return inject_explicit_bounds(s, func);
+        }
     }
 
     using IRMutator::visit;
@@ -642,7 +648,7 @@ private:
         if (func.has_extern_definition() &&
             func.schedule().compute_level.is_inline() &&
             for_loop->for_type == For::Vectorized &&
-            function_is_called_in_stmt(func, for_loop)) {
+            function_is_used_in_stmt(func, for_loop)) {
 
             // If we're trying to inline an extern function, schedule it here and bail out
             debug(2) << "Injecting realization of " << func.name() << " around node " << Stmt(for_loop) << "\n";
@@ -655,7 +661,7 @@ private:
 
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
-            if (function_is_called_in_stmt(func, body)) {
+            if (function_is_used_in_stmt(func, body)) {
                 body = build_pipeline(body);
             }
             found_compute_level = true;
@@ -666,7 +672,7 @@ private:
             assert(found_compute_level &&
                    "The compute loop level was not found within the store loop level!");
 
-            if (function_is_called_in_stmt(func, body)) {
+            if (function_is_used_in_stmt(func, body)) {
                 body = build_realize(body);
             }
 
@@ -694,7 +700,7 @@ private:
         if (op->name != func.name() &&
             !func.is_pure() &&
             func.schedule().compute_level.is_inline() &&
-            function_is_called_in_stmt(func, op)) {
+            function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
             stmt = build_realize(build_pipeline(op));
@@ -802,13 +808,17 @@ vector<string> realization_order(string output, const map<string, Function> &env
 
 }
 
-Stmt create_initial_loop_nest(Function f) {
+Stmt create_initial_loop_nest(Function f, const Target &t) {
     // Generate initial loop nest
     pair<Stmt, Stmt> r = build_production(f);
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
-    s = Pipeline::make(f.name(), r.first, r.second, AssertStmt::make(const_true(), "Dummy consume step", vector<Expr>()));
-    return inject_explicit_bounds(s, f);
+    s = Pipeline::make(f.name(), r.first, r.second, Evaluate::make(0));
+    if (t.features & Target::NoAsserts) {
+        return s;
+    } else {
+        return inject_explicit_bounds(s, f);
+    }
 }
 
 class ComputeLegalSchedules : public IRVisitor {
@@ -837,23 +847,34 @@ private:
         loops.pop_back();
     }
 
+    void register_use() {
+        if (!found) {
+            found = true;
+            loops_allowed = loops;
+        } else {
+            // Take the common prefix between loops and loops allowed
+            for (size_t i = 0; i < loops_allowed.size(); i++) {
+                if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
+                    loops_allowed.resize(i);
+                    break;
+                }
+            }
+        }
+    }
+
     void visit(const Call *c) {
         IRVisitor::visit(c);
 
         if (c->name == func.name()) {
+            register_use();
+        }
+    }
 
-            if (!found) {
-                found = true;
-                loops_allowed = loops;
-            } else {
-                // Take the common prefix between loops and loops allowed
-                for (size_t i = 0; i < loops_allowed.size(); i++) {
-                    if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
-                        loops_allowed.resize(i);
-                        break;
-                    }
-                }
-            }
+    void visit(const Variable *v) {
+        if (v->type == Handle() &&
+            starts_with(v->name, func.name() + ".") &&
+            ends_with(v->name, ".buffer")) {
+            register_use();
         }
     }
 };
@@ -1005,7 +1026,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
 Stmt schedule_functions(Stmt s, const vector<string> &order,
                         const map<string, Function> &env,
-                        const map<string, set<string> > &graph) {
+                        const map<string, set<string> > &graph, const Target &t) {
 
     // Inject a loop over root to give us a scheduling point
     string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
@@ -1026,7 +1047,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
             s = inline_function(s, f);
         } else {
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
-            InjectRealization injector(f);
+            InjectRealization injector(f, t);
             s = injector.mutate(s);
             assert(injector.found_store_level && injector.found_compute_level);
         }
@@ -1042,7 +1063,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
 // Insert checks to make sure that parameters are within their
 // declared range.
-Stmt add_parameter_checks(Stmt s) {
+Stmt add_parameter_checks(Stmt s, const Target &t) {
     // First, find all the parameters
     FindParameters finder;
     s.accept(&finder);
@@ -1089,6 +1110,10 @@ Stmt add_parameter_checks(Stmt s) {
         s = LetStmt::make(lets[i].first, lets[i].second, s);
     }
 
+    if (t.features & Target::NoAsserts) {
+        asserts.clear();
+    }
+
     // Inject the assert statements
     for (size_t i = 0; i < asserts.size(); i++) {
         std::ostringstream oss;
@@ -1107,7 +1132,10 @@ Stmt add_parameter_checks(Stmt s) {
 // inserted. The second is a piece of code which will rewrite the
 // buffer_t sizes, mins, and strides in order to satisfy the
 // requirements.
-Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
+Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds &fb) {
+
+    bool no_asserts = t.features & Target::NoAsserts;
+    bool no_bounds_query = t.features & Target::NoBoundsQuery;
 
     // First hunt for all the referenced buffers
     FindBuffers finder;
@@ -1280,28 +1308,33 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
             }
             lets_required.push_back(make_pair(name + ".stride." + dim + ".required", stride_required));
 
-            // Insert checks to make sure the total size of all input and output buffers is <= 2^31-1.
-            // And that no product of extents overflows 2^31 -1. This second test is likely only needed
-            // if a fuse directive is used in the schedule to combine multiple extents, but it is here
-            // for extra safety. Ultimately we will want to make Halide handle larger single buffers,
-            // at least on 64-bit systems.
+            // Insert checks to make sure the total size of all input
+            // and output buffers is <= 2^31 - 1.  And that no product
+            // of extents overflows 2^31 - 1. This second test is
+            // likely only needed if a fuse directive is used in the
+            // schedule to combine multiple extents, but it is here
+            // for extra safety. Ultimately we will want to make
+            // Halide handle larger single buffers, at least on 64-bit
+            // systems.
+            Expr max_size = cast<int64_t>(1) << 31 - 1;
+            Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
+                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1",
+                                          std::vector<Expr>());
+            dims_no_overflow_asserts.push_back(check);
 
-            std::vector<Expr> no_args;
-            dims_no_overflow_asserts.push_back(AssertStmt::make((cast<int64_t>(actual_extent) *
-                                                                 actual_stride) <= ((cast<int64_t>(1) << 31) - 1),
-                                                                "Total allocation for buffer " + name +" exceeds 2^31 -1",
-                                                                no_args));
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
             if (!is_secondary_output_buffer) {
                 if (j == 0) {
-                  lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
+                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, cast<int64_t>(actual_extent)));
                 } else {
-                  string last_dim = int_to_string(j-1);
-                  lets_overflow.push_back(make_pair(name + ".total_extent." + dim,
-                                                    actual_extent * Variable::make(Int(64), name + ".total_extent." + last_dim)));
-                  dims_no_overflow_asserts.push_back(AssertStmt::make(Variable::make(Int(64), name + ".total_extent." + dim) <=
-                                                                     ((cast<int64_t>(1) << 31) - 1),
-                                                                      "Product of extents for buffer " + name +" exceeds 2^31 -1", no_args));
+                    Expr last_dim = Variable::make(Int(64), name + ".total_extent." + int_to_string(j-1));
+                    Expr this_dim = actual_extent * last_dim;
+                    Expr this_dim_var = Variable::make(Int(64), name + ".total_extent." + dim);
+                    lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
+                    Stmt check = AssertStmt::make(this_dim_var <= max_size,
+                                                  "Product of extents for buffer " + name +
+                                                  " exceeds 2^31 - 1", std::vector<Expr>());
+                    dims_no_overflow_asserts.push_back(check);
                 }
             }
         }
@@ -1429,13 +1462,15 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
     }
 
     // Inject the code that checks that no dimension math overflows
-    for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
-        s = Block::make(dims_no_overflow_asserts[i-1], s);
-    }
+    if (!no_asserts) {
+        for (size_t i = dims_no_overflow_asserts.size(); i > 0; i--) {
+            s = Block::make(dims_no_overflow_asserts[i-1], s);
+        }
 
-    // Inject the code that defines the proposed sizes.
-    for (size_t i = lets_overflow.size(); i > 0; i--) {
-        s = LetStmt::make(lets_overflow[i-1].first, lets_overflow[i-1].second, s);
+        // Inject the code that defines the proposed sizes.
+        for (size_t i = lets_overflow.size(); i > 0; i--) {
+            s = LetStmt::make(lets_overflow[i-1].first, lets_overflow[i-1].second, s);
+        }
     }
 
     // Replace uses of the var with the constrained versions in the
@@ -1448,32 +1483,38 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
     // all in reverse order compared to execution, as we incrementally
     // prepending code.
 
-    // Inject the code that checks the constraints are correct.
-    for (size_t i = asserts_constrained.size(); i > 0; i--) {
-        s = Block::make(asserts_constrained[i-1], s);
-    }
+    if (!no_asserts) {
+        // Inject the code that checks the constraints are correct.
+        for (size_t i = asserts_constrained.size(); i > 0; i--) {
+            s = Block::make(asserts_constrained[i-1], s);
+        }
 
-    // Inject the code that checks for out-of-bounds access to the buffers.
-    for (size_t i = asserts_required.size(); i > 0; i--) {
-        s = Block::make(asserts_required[i-1], s);
-    }
+        // Inject the code that checks for out-of-bounds access to the buffers.
+        for (size_t i = asserts_required.size(); i > 0; i--) {
+            s = Block::make(asserts_required[i-1], s);
+        }
 
-    // Inject the code that checks that elem_sizes are ok.
-    for (size_t i = asserts_elem_size.size(); i > 0; i--) {
-        s = Block::make(asserts_elem_size[i-1], s);
+        // Inject the code that checks that elem_sizes are ok.
+        for (size_t i = asserts_elem_size.size(); i > 0; i--) {
+            s = Block::make(asserts_elem_size[i-1], s);
+        }
     }
 
     // Inject the code that returns early for inference mode.
-    s = IfThenElse::make(!maybe_return_condition, s);
+    if (!no_bounds_query) {
+        s = IfThenElse::make(!maybe_return_condition, s);
 
-    // Inject the code that does the buffer rewrites for inference mode.
-    for (size_t i = buffer_rewrites.size(); i > 0; i--) {
-        s = Block::make(buffer_rewrites[i-1], s);
+        // Inject the code that does the buffer rewrites for inference mode.
+        for (size_t i = buffer_rewrites.size(); i > 0; i--) {
+            s = Block::make(buffer_rewrites[i-1], s);
+        }
     }
 
-    // Inject the code that checks the proposed sizes still pass the bounds checks
-    for (size_t i = asserts_proposed.size(); i > 0; i--) {
-        s = Block::make(asserts_proposed[i-1], s);
+    if (!no_asserts) {
+        // Inject the code that checks the proposed sizes still pass the bounds checks
+        for (size_t i = asserts_proposed.size(); i > 0; i--) {
+            s = Block::make(asserts_proposed[i-1], s);
+        }
     }
 
     // Inject the code that defines the proposed sizes.
@@ -1494,7 +1535,7 @@ Stmt add_image_checks(Stmt s, Function f, const FuncValueBounds &fb) {
     return s;
 }
 
-Stmt lower(Function f) {
+Stmt lower(Function f, const Target &t) {
 
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
@@ -1502,10 +1543,10 @@ Stmt lower(Function f) {
     // Compute a realization order
     map<string, set<string> > graph;
     vector<string> order = realization_order(f.name(), env, graph);
-    Stmt s = create_initial_loop_nest(f);
+    Stmt s = create_initial_loop_nest(f, t);
 
     debug(2) << "Initial statement: " << '\n' << s << '\n';
-    s = schedule_functions(s, order, env, graph);
+    s = schedule_functions(s, order, env, graph, t);
     debug(2) << "All realizations injected:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
@@ -1517,7 +1558,7 @@ Stmt lower(Function f) {
     debug(2) << "Profiling injected:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
-    s = add_parameter_checks(s);
+    s = add_parameter_checks(s, t);
     debug(2) << "Parameter checks injected:\n" << s << '\n';
 
     // Compute the maximum and minimum possible value of each
@@ -1528,7 +1569,7 @@ Stmt lower(Function f) {
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, f, func_bounds);
+    s = add_image_checks(s, f, t, func_bounds);
     debug(2) << "Image checks injected:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we

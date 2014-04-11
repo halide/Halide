@@ -10,8 +10,8 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_PNaCl::CodeGen_PNaCl(Target t) : CodeGen_Posix(),
-                                         target(t) {
+CodeGen_PNaCl::CodeGen_PNaCl(Target t) : CodeGen_Posix(t) {
+
     #if !(WITH_NATIVE_CLIENT)
     assert(false && "llvm build not configured with native client enabled.");
     #endif

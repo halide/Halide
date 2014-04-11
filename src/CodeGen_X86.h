@@ -31,7 +31,6 @@ public:
     static void test();
 
 protected:
-    Target target;
 
     llvm::Triple get_target_triple() const;
 

@@ -31,9 +31,6 @@ public:
 
 protected:
 
-    /** Which arm target are we compiling for */
-    Target target;
-
     llvm::Triple get_target_triple() const;
 
     /** Generate a call to a neon intrinsic */

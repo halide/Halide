@@ -24,8 +24,12 @@ int main(int argc, char **argv) {
     Func tone_curve;
     tone_curve(x) = i16(pow(f32(x)/256.0f, 1.8f) * 256.0f);
 
+    Func clamped;
+    clamped(x, y) = input(clamp(x, 0, input.width()-1),
+                          clamp(y, 0, input.height()-1));
+
     Func curved;
-    curved(x, y) = tone_curve(input(x, y));
+    curved(x, y) = tone_curve(clamped(x, y));
 
     Func sharper;
     sharper(x, y) = 9*curved(x, y) - 2*(curved(x-1, y) + curved(x+1, y) + curved(x, y-1) + curved(x, y+1));
@@ -35,13 +39,18 @@ int main(int argc, char **argv) {
 
     tone_curve.compute_root();
     Var yi;
+
     result.split(y, y, yi, 60).vectorize(x, 8).parallel(y);
     curved.store_at(result, y).compute_at(result, yi);
 
+    /*
+      curved.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, GPU_OpenCL);
+      result.compute_root().vectorize(x, 8).gpu_tile(x, y, 2, 16, GPU_OpenCL);
+    */
+
     std::vector<Argument> args;
     args.push_back(input);
-    result.compile_to_assembly("halide.s", args, "halide");
-    result.compile_to_header("halide.h", args, "halide");
+    result.compile_to_file("halide", args);
 
     return 0;
 }

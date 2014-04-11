@@ -23,7 +23,7 @@ public:
     friend class CodeGen_GPU_Host<CodeGen_ARM>;
 
     /** Create a PTX device code generator. */
-    CodeGen_PTX_Dev();
+    CodeGen_PTX_Dev(Target host);
 
     void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
 

@@ -40,7 +40,6 @@ public:
     }
 
 protected:
-    Target target;
 
     using CodeGen_Posix::visit;
 

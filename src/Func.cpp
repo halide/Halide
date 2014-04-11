@@ -1613,7 +1613,7 @@ void validate_arguments(const string &output,
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, target);
     }
 
     vector<Buffer> images_to_embed;
@@ -1637,7 +1637,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, target);
     }
 
     vector<Buffer> images_to_embed;
@@ -1668,7 +1668,7 @@ void Func::compile_to_header(const string &filename, vector<Argument> args, cons
 
 void Func::compile_to_c(const string &filename, vector<Argument> args, const string &fn_name) {
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, get_host_target());
     }
 
     vector<Buffer> images_to_embed;
@@ -1685,7 +1685,7 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
 
 void Func::compile_to_lowered_stmt(const string &filename) {
     if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func);
+        lowered = Halide::Internal::lower(func, get_host_target());
     }
 
     ofstream stmt_output(filename.c_str());
@@ -1731,7 +1731,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
                                const Target &target) {
     assert(defined() && "Can't compile undefined function");
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
 
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
@@ -1843,7 +1843,9 @@ void Func::infer_input_bounds(Buffer dst) {
 }
 
 void Func::infer_input_bounds(Realization dst) {
-    if (!compiled_module.wrapped_function) compile_jit();
+    if (!compiled_module.wrapped_function) {
+        compile_jit();
+    }
 
     assert(compiled_module.wrapped_function);
 
@@ -1888,15 +1890,52 @@ void Func::infer_input_bounds(Realization dst) {
         assert(arg_values[i] && "An argument to a jitted function is null\n");
     }
 
-    Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
-    if (exit_status) {
-        std::cerr << "Calling " << name()
-                  << " in bounds inference mode returned non-success ("
-                  << exit_status << ")\n";
+    // Figure out which buffers to watch for changes
+    vector<const buffer_t *> tracked_buffers;
+    for (size_t i = 0; i < dummy_buffers.size(); i++) {
+        tracked_buffers.push_back(&dummy_buffers[i]);
+    }
+    for (size_t i = 0; i < dst.size(); i++) {
+        if (dst[i].host_ptr() == NULL) {
+            tracked_buffers.push_back(dst[i].raw_buffer());
+        }
+    }
+    vector<buffer_t> old_buffer(tracked_buffers.size());
+
+    const int max_iters = 16;
+    int iter = 0;
+    for (iter = 0; iter < max_iters; iter++) {
+        // Make a copy of the buffers we expect to be mutated
+        for (size_t j = 0; j < tracked_buffers.size(); j++) {
+            old_buffer[j] = *tracked_buffers[j];
+        }
+        Internal::debug(2) << "Calling jitted function\n";
+        int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+        if (exit_status) {
+            std::cerr << "Calling " << name()
+                      << " in bounds inference mode returned non-success ("
+                      << exit_status << ")\n";
+            assert(false);
+        }
+        Internal::debug(2) << "Back from jitted function\n";
+        bool changed = false;
+
+        // Check if there were any changed
+        for (size_t j = 0; j < tracked_buffers.size(); j++) {
+            if (memcmp(&old_buffer[j], tracked_buffers[j], sizeof(buffer_t))) {
+                changed = true;
+            }
+        }
+        if (!changed) {
+            break;
+        }
+    }
+    if (iter == max_iters) {
+        std::cerr << "Inferring input bounds on " << name()
+                  << " didn't converge after " << max_iters
+                  << " iterations. There may be unsatisfiable constraints\n";
         assert(false);
     }
-    Internal::debug(2) << "Back from jitted function\n";
 
     // Now allocate the resulting buffers
     size_t j = 0;
@@ -1944,7 +1983,7 @@ void Func::infer_input_bounds(Realization dst) {
 void *Func::compile_jit(const Target &target) {
     assert(defined() && "Can't realize undefined function");
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func);
+    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
 
     // Infer arguments
     InferArguments infer_args(name());

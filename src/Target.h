@@ -40,7 +40,9 @@ struct Target {
                    GPUDebug = 64, /// Increase the level of checking and the verbosity of the gpu runtimes.
                    SPIR = 128,    /// Enable the OpenCL SPIR runtime in 32-bit mode
                    SPIR64 = 256,  /// Enable the OpenCL SPIR runtime in 64-bit mode
-                   OpenGL = 512
+                   NoAsserts = 512, /// Disable all runtime checks, for slightly tighter code.
+                   NoBoundsQuery = 1024, /// Disable the bounds querying functionality.
+                   OpenGL = 2048,        /// Enable the OpenGL runtime
     };
 
     /** A bitmask that stores the active features. */

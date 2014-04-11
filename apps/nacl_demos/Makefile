@@ -1,5 +1,5 @@
 
-NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_32
+NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_33
 
 WARNINGS := -Wall -Wswitch-enum
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include
@@ -95,7 +95,7 @@ nacl_demos_pnacl.bc: nacl_demos.cpp $(DEMOS:%=%_pnacl.bc)
 	mv $*_render.o $*_render_pnacl.bc
 
 %.generate: %.cpp
-	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl
+	$(CXX) $< -o $@ -I ../../include -L ../../bin -lHalide -lpthread -ldl -lz
 
 clean:
 	rm -f *.generate *.o *.nexe *.pexe *.bc *.ll *.s $(DEMOS:%=%.h)

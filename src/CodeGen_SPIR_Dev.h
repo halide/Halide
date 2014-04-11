@@ -23,7 +23,7 @@ public:
     friend class CodeGen_GPU_Host<CodeGen_ARM>;
 
     /** Create a SPIR device code generator. */
-    CodeGen_SPIR_Dev(int bits);
+    CodeGen_SPIR_Dev(Target host, int bits);
 
     void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
 

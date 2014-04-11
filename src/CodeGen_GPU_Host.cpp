@@ -187,7 +187,8 @@ public:
     string buf;
     bool used_on_host, used_on_device,
         written_on_host, read_on_host,
-        written_on_device, read_on_device;
+        written_on_device, read_on_device,
+        has_buffer_defined;
     WhereIsBufferUsed(string b) : buf(b),
                                   used_on_host(false),
                                   used_on_device(false),
@@ -195,7 +196,9 @@ public:
                                   read_on_host(false),
                                   written_on_device(false),
                                   read_on_device(false),
+                                  has_buffer_defined(false),
                                   in_device_code(false) {}
+
 
 private:
     bool in_device_code;
@@ -239,6 +242,13 @@ private:
             }
         }
         IRVisitor::visit(op);
+    }
+
+    void visit(const LetStmt *op) {
+        IRVisitor::visit(op);
+        if (op->name == buf + ".buffer") {
+            has_buffer_defined = true;
+        }
     }
 };
 
@@ -313,13 +323,13 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
 {
     if (t.features & Target::CUDA) {
         debug(1) << "Constructing CUDA device codegen\n";
-        return new CodeGen_PTX_Dev();
+        return new CodeGen_PTX_Dev(t);
     } else if (t.features & Target::SPIR64) {
         debug(1) << "Constructing SPIR64 device codegen\n";
-        return new CodeGen_SPIR_Dev(64);
+        return new CodeGen_SPIR_Dev(t, 64);
     } else if (t.features & Target::SPIR) {
         debug(1) << "Constructing SPIR device codegen\n";
-        return new CodeGen_SPIR_Dev(32);
+        return new CodeGen_SPIR_Dev(t, 32);
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev();
@@ -389,9 +399,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     // Unset constant flag for embedded image global variables
     for (size_t i = 0; i < images_to_embed.size(); i++) {
-      string name = images_to_embed[i].name();
-      GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
-      global->setConstant(false);
+        string name = images_to_embed[i].name();
+        GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
+        global->setConstant(false);
     }
 
     std::vector<char> kernel_src = cgdev->compile_to_src();
@@ -743,21 +753,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     }
 
     Value *buf = NULL;
+    bool should_pop = false;
     if (usage.used_on_device) {
         debug(2) << alloc->name << " is used on the device\n";
-        Value *zero32 = ConstantInt::get(i32, 0),
-            *one32  = ConstantInt::get(i32, 1),
-            *null64 = ConstantInt::get(i64, 0),
-            *zero8  = ConstantInt::get( i8, 0);
 
-        Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
-        if (target.features & Target::OpenGL) {
-            Expr buffer_var = Variable::make(Handle(), alloc->name + ".buffer");
-            buf = codegen(buffer_var);
-            builder->CreateStore(host_ptr, buffer_host_ptr(buf));
-        } else {
+        if (!usage.has_buffer_defined) {
             buf = create_alloca_at_entry(buffer_t_type, 1);
+            Value *zero32 = ConstantInt::get(i32, 0),
+                *one32  = ConstantInt::get(i32, 1),
+                *null64 = ConstantInt::get(i64, 0),
+                *zero8  = ConstantInt::get( i8, 0);
 
+            Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
             builder->CreateStore(host_ptr, buffer_host_ptr(buf));
             builder->CreateStore(null64,   buffer_dev_ptr(buf));
 
@@ -803,12 +810,18 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
             int bytes = alloc->type.width * alloc->type.bytes();
             builder->CreateStore(ConstantInt::get(i32, bytes),
                                  buffer_elem_size_ptr(buf));
+            sym_push(alloc->name + ".buffer", buf);
+            should_pop = true;
+        } else {
+            buf = sym_get(alloc->name + ".buffer");
         }
 
         Value *args[2] = { get_user_context(), buf };
         builder->CreateCall(dev_malloc_fn, args);
 
-        sym_push(alloc->name + ".buffer", buf);
+        // Put the dev pointer in the symbol table. Mostly so we
+        // remember to dev_free it.
+        sym_push(alloc->name + ".dev", buffer_dev(buf));
     }
 
     codegen(alloc->body);
@@ -817,6 +830,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
         destroy_allocation(host_allocation);
     }
 
+    if (should_pop) {
+        sym_pop(alloc->name + ".buffer");
+    }
 }
 
 template<typename CodeGen_CPU>
@@ -826,11 +842,10 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
         CodeGen_CPU::visit(f);
     }
 
-    if (sym_exists(f->name + ".buffer")) {
+    if (sym_exists(f->name + ".dev")) {
         Value *args[2] = { get_user_context(),
                            sym_get(f->name + ".buffer") };
         builder->CreateCall(dev_free_fn, args);
-        sym_pop(f->name + ".buffer");
     }
 }
 
