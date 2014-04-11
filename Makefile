@@ -187,7 +187,7 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) -ldl -lpthread -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
 
 $(BIN_DIR)/libHalideOpenGLRuntime.so: $(BUILD_DIR)/OpenGLSupport.o
 	$(CXX) $(BUILD_BIT_SIZE) -shared $< -o $@ $(OPENGL_LDFLAGS)
@@ -290,25 +290,25 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
-	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/test_%: test/correctness/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/performance_%: test/performance/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h test/performance/clock.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/error_%: test/error/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
 
 $(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	@-mkdir -p tmp/static
@@ -316,10 +316,10 @@ tmp/static/%.o: $(BIN_DIR)/static_%_generate
 	@-echo
 
 $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
-	$(STATIC_TEST_CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support tmp/static/$*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
+	$(STATIC_TEST_CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support -I src/runtime tmp/static/$**.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl $(LIBPNG_LIBS) -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@
 
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
@@ -382,6 +382,8 @@ test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
 	make -C apps/wavelet test
 	make -C apps/c_backend clean
 	make -C apps/c_backend test
+	make -C apps/modules clean
+	make -C apps/modules out.png
 
 ifneq (,$(findstring version 3.,$(CLANG_VERSION)))
 ifeq (,$(findstring version 3.0,$(CLANG_VERSION)))
@@ -456,4 +458,7 @@ $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so includ
 distrib: $(DISTRIB_DIR)/halide.tgz
 
 $(BIN_DIR)/HalideProf: util/HalideProf.cpp
+	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@
+
+$(BIN_DIR)/HalideTrace: util/HalideTrace.cpp
 	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@

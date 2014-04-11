@@ -20,7 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev() : CodeGen() {
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen(host) {
     #if !(WITH_PTX)
     assert(false && "ptx not enabled for this build of Halide.");
     #endif

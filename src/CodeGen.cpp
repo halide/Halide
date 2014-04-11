@@ -78,11 +78,12 @@ using std::stack;
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
 #endif
 
-CodeGen::CodeGen() :
+CodeGen::CodeGen(Target t) :
     module(NULL), owns_module(false),
     function(NULL), context(NULL),
     builder(NULL),
     value(NULL),
+    target(t),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
     buffer_t_type(NULL) {
@@ -392,7 +393,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     debug(1) << "Compiling to native code...\n";
     debug(2) << "Target triple: " << module->getTargetTriple() << "\n";
 
-    const Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
+    const llvm::Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
     if (!target) {
         cout << error_string << endl;
         TargetRegistry::printRegisteredTargetsForVersion();
@@ -1861,6 +1862,8 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
 }
 
 void CodeGen::create_assertion(Value *cond, const string &message, const vector<Value *> &args) {
+
+    if (target.features & Halide::Target::NoAsserts) return;
 
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
