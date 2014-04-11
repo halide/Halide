@@ -223,6 +223,10 @@ public:
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
 
+        if (!source_lines.size()) {
+            return "";
+        }
+
         const int max_stack_frames = 16;
 
         // Get the backtrace
@@ -260,8 +264,12 @@ public:
                 }
             }
 
+            debug(0) << lo << ", " << hi << "\n";
+
             // If we're still in the Halide namespace, continue searching
-            if (functions[lo].name.substr(0, 8) == "Halide::") {
+            if (functions.size() &&
+                functions[lo].name.size() > 8 &&
+                functions[lo].name.substr(0, 8) == "Halide::") {
                 continue;
             }
 
