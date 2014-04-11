@@ -285,14 +285,12 @@ private:
 
 class CreateKernelLoads : public IRMutator {
 public:
-    CreateKernelLoads(const map<string, Function> &e) : env(e) {
+    CreateKernelLoads() {
         inside_kernel_loop = false;
     }
     Scope<int> scope;
     bool inside_kernel_loop;
 private:
-    const map<string, Function> &env;
-
     using IRMutator::visit;
 
     void visit(const Provide *provide) {
@@ -408,7 +406,7 @@ private:
 
 
 Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    s = CreateKernelLoads(env).mutate(s);
+    s = CreateKernelLoads().mutate(s);
 
     return FlattenDimensions(env).mutate(s);
 }
