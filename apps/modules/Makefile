@@ -1,5 +1,7 @@
-HALIDE_LD_FLAGS=-L../../bin -lHalide -lpthread -ldl -lz
-HALIDE_CXX_FLAGS=-I../../include
+include ../support/Makefile.inc
+
+HALIDE_LD_FLAGS=../../$(LIB_HALIDE) -lpthread -ldl -lz $(LDFLAGS)
+HALIDE_CXX_FLAGS=-I../../include 
 
 all: out.png
 
@@ -43,7 +45,7 @@ pipeline.a: pipeline.o my_library_impl.a
 
 # A binary that runs the output pipeline on an image
 run_pipeline: run_pipeline.cpp pipeline.a
-	$(CXX) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpng -lpthread
+	$(CXX) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpthread $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 out.png: run_pipeline
 	./run_pipeline ../images/gray.png out.png
