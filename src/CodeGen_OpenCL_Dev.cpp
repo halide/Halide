@@ -299,6 +299,8 @@ const string kernel_preamble = "";
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
+    cache.clear();
+
     debug(0) << "hi! " << name << "\n";
 
     stream << kernel_preamble;
