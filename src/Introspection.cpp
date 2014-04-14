@@ -194,6 +194,10 @@ public:
                         elem_type = type->members[0].type;
                     }
 
+                    if (offset == var.stack_offset && var.type) {
+                        debug(4) << "Considering match: " << var.type->name << ", " << var.name << "\n";
+                    }
+
                     if (offset == var.stack_offset &&
                         (type_name.empty() ||
                          (type && // Check the type matches
@@ -263,8 +267,6 @@ public:
                     break;
                 }
             }
-
-            debug(0) << lo << ", " << hi << "\n";
 
             // If we're still in the Halide namespace, continue searching
             if (functions.size() &&
@@ -452,6 +454,10 @@ private:
 
         llvm::StringRef debug_info = e.getData();
 
+        // A constant to use indicating that we don't know the stack
+        // offset of a variable.
+        const int no_location = 0x80000000;
+
         while (1) {
             // Parse compilation unit header
             bool dwarf_64;
@@ -514,6 +520,7 @@ private:
             const unsigned attr_byte_size = 0x0b;
             const unsigned attr_type = 0x49;
             const unsigned attr_upper_bound = 0x2f;
+            const unsigned attr_abstract_origin = 0x31;
 
             while (off - start_of_unit < unit_length) {
                 uint64_t location = off;
@@ -552,6 +559,7 @@ private:
                 TypeInfo type_info;
                 type_info.def_loc = location;
                 func.def_loc = location;
+                var.def_loc = location;
                 std::string namespace_name;
 
                 std::string containing_namespace;
@@ -563,7 +571,6 @@ private:
                     }
                 }
 
-                const int no_location = 0x80000000;
                 var.stack_offset = no_location;
 
                 if (fmt.has_children) {
@@ -876,7 +883,11 @@ private:
                             }
                         } else if (attr == attr_type) {
                             var.type_def_loc = val;
+                        } else if (attr == attr_abstract_origin) {
+                            // This is a stack variable imported from a function that was inlined.
+                            var.origin_loc = val;
                         }
+
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
@@ -905,8 +916,7 @@ private:
                 }
 
                 if (fmt.tag == tag_variable &&
-                    func_stack.size() &&
-                    var.stack_offset != no_location) {
+                    func_stack.size()) {
                     func_stack.back().first.variables.push_back(var);
                 } else if (fmt.tag == tag_member &&
                            type_stack.size() &&
@@ -934,43 +944,79 @@ private:
                            type_info.members.size() == 1) {
                     types.push_back(type_info);
                 } else if (fmt.tag == tag_namespace && fmt.has_children) {
+                    if (namespace_name.empty()) {
+                        namespace_name = "{anonymous}";
+                    }
                     namespace_stack.push_back(std::make_pair(namespace_name, stack_depth));
                 }
             }
         }
 
-        // Connect function instances to their declarations
-        std::map<uint64_t, FunctionInfo *> func_map;
-        for (size_t i = 0; i < functions.size(); i++) {
-            func_map[functions[i].def_loc] = &functions[i];
-        }
+        // Connect function definitions to their declarations
+        {
+            std::map<uint64_t, FunctionInfo *> func_map;
+            for (size_t i = 0; i < functions.size(); i++) {
+                func_map[functions[i].def_loc] = &functions[i];
+            }
 
-        for (size_t i = 0; i < functions.size(); i++) {
-            if (functions[i].spec_loc) {
-                FunctionInfo *spec = func_map[functions[i].spec_loc];
-                if (spec) {
-                    functions[i].name = spec->name;
+            for (size_t i = 0; i < functions.size(); i++) {
+                if (functions[i].spec_loc) {
+                    FunctionInfo *spec = func_map[functions[i].spec_loc];
+                    if (spec) {
+                        functions[i].name = spec->name;
+                    }
                 }
             }
         }
 
-        std::map<uint64_t, TypeInfo *> type_map;
-        for (size_t i = 0; i < types.size(); i++) {
-            type_map[types[i].def_loc] = &types[i];
-        }
+        // Connect inlined variable instances to their origins
+        {
+            std::map<uint64_t, LocalVariable *> var_map;
+            for (size_t i = 0; i < functions.size(); i++) {
+                for (size_t j = 0; j < functions[i].variables.size(); j++) {
+                    debug(4) << functions[i].variables[j].name << " is at " << functions[i].variables[j].def_loc << "\n";
+                    var_map[functions[i].variables[j].def_loc] = &(functions[i].variables[j]);
+                }
+            }
 
-        // Hook up the type pointers
-        for (size_t i = 0; i < functions.size(); i++) {
-            for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                functions[i].variables[j].type =
-                    type_map[functions[i].variables[j].type_def_loc];
+            for (size_t i = 0; i < functions.size(); i++) {
+                for (size_t j = 0; j < functions[i].variables.size(); j++) {
+                    LocalVariable &v = functions[i].variables[j];
+                    uint64_t loc = v.origin_loc;
+                    if (loc) {
+                        debug(4) << "Origin is at " << loc << "\n";
+                        LocalVariable *origin = var_map[loc];
+                        if (origin) {
+                            v.name = origin->name;
+                            v.type = origin->type;
+                            v.type_def_loc = origin->type_def_loc;
+                        } else {
+                            debug(4) << "Could not find origin!\n";
+                        }
+                    }
+                }
             }
         }
 
-        for (size_t i = 0; i < types.size(); i++) {
-            for (size_t j = 0; j < types[i].members.size(); j++) {
-                types[i].members[j].type =
-                    type_map[types[i].members[j].type_def_loc];
+        // Hook up the type pointers
+        {
+            std::map<uint64_t, TypeInfo *> type_map;
+            for (size_t i = 0; i < types.size(); i++) {
+                type_map[types[i].def_loc] = &types[i];
+            }
+
+            for (size_t i = 0; i < functions.size(); i++) {
+                for (size_t j = 0; j < functions[i].variables.size(); j++) {
+                    functions[i].variables[j].type =
+                        type_map[functions[i].variables[j].type_def_loc];
+                }
+            }
+
+            for (size_t i = 0; i < types.size(); i++) {
+                for (size_t j = 0; j < types[i].members.size(); j++) {
+                    types[i].members[j].type =
+                        type_map[types[i].members[j].type_def_loc];
+                }
             }
         }
 
@@ -1046,6 +1092,37 @@ private:
             }
             functions[i].variables.swap(new_vars);
         }
+
+        // Drop functions for which we don't know the program counter,
+        // and variables for which we don't know the stack offset,
+        // name, or type.
+        std::vector<FunctionInfo> trimmed;
+        for (size_t i = 0; i < functions.size(); i++) {
+            FunctionInfo &f = functions[i];
+            if (!f.pc_begin ||
+                !f.pc_end ||
+                f.name.empty()) {
+                debug(4) << "Dropping " << f.name << "\n";
+                continue;
+            }
+
+            std::vector<LocalVariable> vars;
+            for (size_t j = 0; j < f.variables.size(); j++) {
+                LocalVariable &v = f.variables[j];
+                if (!v.name.empty() && v.type && v.stack_offset != no_location) {
+                    vars.push_back(v);
+                } else {
+                    debug(4) << "Dropping " << v.name << "\n";
+                }
+            }
+            f.variables.clear();
+            trimmed.push_back(f);
+            trimmed.back().variables = vars;
+        }
+        std::swap(functions, trimmed);
+
+        // Sort the functions list by program counter
+        std::sort(functions.begin(), functions.end());
 
     }
 
@@ -1283,8 +1360,6 @@ private:
 
         // Sort the sequences and functions by low PC to make searching into it faster.
         std::sort(source_lines.begin(), source_lines.end());
-        std::sort(functions.begin(), functions.end());
-
 
     }
 
@@ -1309,7 +1384,8 @@ private:
         TypeInfo *type;
         int stack_offset;
         uint64_t type_def_loc;
-        LocalVariable() : name(""), type(NULL), stack_offset(0), type_def_loc(0) {}
+        uint64_t def_loc, origin_loc;
+        LocalVariable() : name(""), type(NULL), stack_offset(0), type_def_loc(0), def_loc(0), origin_loc(0) {}
     };
 
     struct FunctionInfo {
