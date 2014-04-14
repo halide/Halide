@@ -1400,7 +1400,7 @@ private:
         enum {Unknown = 0, GCC, ClangFP, ClangNoFP} frame_base;
         FunctionInfo() : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {}
 
-        bool operator<(const FunctionInfo &other) {
+        bool operator<(const FunctionInfo &other) const {
             return pc_begin < other.pc_begin;
         }
     };
