@@ -104,7 +104,7 @@ TEST_OPENCL = 1
 endif
 endif
 
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
+TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
