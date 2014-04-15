@@ -5,6 +5,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <stdio.h>
 
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>
@@ -139,7 +140,8 @@ public:
         // Walk up the stack until we pass the pointer.
         debug(4) << "Walking up the stack\n";
         while (fp < stack_pointer) {
-            debug(4) << "frame pointer: " << fp->frame_pointer << " return address: " << fp->return_address << "\n";
+            debug(4) << "frame pointer: " << (void *)(fp->frame_pointer) 
+                     << " return address: " << fp->return_address << "\n";
             next_fp = fp;
             if (fp->frame_pointer < fp) {
                 // If we ever jump downwards, something is
@@ -187,6 +189,9 @@ public:
             offset = offset_above;
         } else if (func->frame_base == FunctionInfo::ClangNoFP) {
             offset = offset_below - 2*addr_size;
+        } else {
+            debug(4) << "Bailing out because containing function used an unknown mechanism for specifying stack offsets\n";
+            return "";
         }
 
         for (size_t j = 0; j < func->variables.size(); j++) {
@@ -344,6 +349,7 @@ private:
 
     llvm::object::ObjectFile *load_object_file(const std::string &binary) {
         // Open the object file in question
+        #if LLVM_VERSION > 34
         llvm::ErrorOr<llvm::object::ObjectFile *> maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
@@ -353,6 +359,9 @@ private:
         }
 
         return maybe_obj.get();
+        #else
+        return llvm::object::ObjectFile::createObjectFile(binary);
+        #endif
     }
 
     void parse_object_file(llvm::object::ObjectFile *obj) {
@@ -365,8 +374,14 @@ private:
         std::string prefix = ".";
 #endif
 
-        for (llvm::object::section_iterator iter = obj->section_begin();
+#if LLVM_VERSION > 34
+        for (llvm::object::section_iterator iter = obj->section_begin(); 
              iter != obj->section_end(); ++iter) {
+#else
+        llvm::error_code err;
+        for (llvm::object::section_iterator iter = obj->begin_sections(); 
+             iter != obj->end_sections(); iter.increment(err)) {
+#endif
             llvm::StringRef name;
             iter->getName(name);
             debug(2) << "Section: " << name.str() << "\n";
@@ -392,18 +407,18 @@ private:
 
         {
             // Parse the debug abbrev section to populate the entry formats
-            llvm::DataExtractor e(debug_abbrev, obj->isLittleEndian(), obj->getBytesInAddress());
+            llvm::DataExtractor e(debug_abbrev, true, obj->getBytesInAddress());
             parse_debug_abbrev(e);
         }
 
         {
             // Parse the debug_info section to populate the functions and local variables
-            llvm::DataExtractor e(debug_info, obj->isLittleEndian(), obj->getBytesInAddress());
+            llvm::DataExtractor e(debug_info, true, obj->getBytesInAddress());
             parse_debug_info(e, debug_str);
         }
 
         {
-            llvm::DataExtractor e(debug_line, obj->isLittleEndian(), obj->getBytesInAddress());
+            llvm::DataExtractor e(debug_line, true, obj->getBytesInAddress());
             parse_debug_line(e);
         }
     }
