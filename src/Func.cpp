@@ -17,6 +17,7 @@
 #include "Param.h"
 #include "Debug.h"
 #include "Target.h"
+#include "Introspection.h"
 
 namespace Halide {
 
@@ -30,6 +31,26 @@ using std::ofstream;
 
 using namespace Internal;
 
+namespace {
+std::string make_func_name(const Func *f) {
+    // Maybe f is a stack pointer to a named variable
+    std::string name = get_variable_name(f, "Halide::Func");
+    if (name.empty()) {
+        // Either introspection is off, or it's not a stack variable.
+        name = unique_name('f');
+    } else {
+        // Halide Func names may not contain '.'
+        for (size_t i = 0; i < name.size(); i++) {
+            if (name[i] == '.') {
+                name[i] = ':';
+            }
+        }
+        name = unique_name(name);
+    }
+    return name;
+}
+}
+
 Func::Func(const string &name) : func(unique_name(name)),
                                  error_handler(NULL),
                                  custom_malloc(NULL),
@@ -40,7 +61,7 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  random_seed(0) {
 }
 
-Func::Func() : func(unique_name('f')),
+Func::Func() : func(make_func_name(this)),
                error_handler(NULL),
                custom_malloc(NULL),
                custom_free(NULL),
@@ -50,7 +71,7 @@ Func::Func() : func(unique_name('f')),
                random_seed(0) {
 }
 
-Func::Func(Expr e) : func(unique_name('f')),
+Func::Func(Expr e) : func(make_func_name(this)),
                      error_handler(NULL),
                      custom_malloc(NULL),
                      custom_free(NULL),
@@ -72,7 +93,7 @@ Func::Func(Function f) : func(f),
 }
 
 /*
-Func::Func(Buffer b) : func(unique_name('f')),
+Func::Func(Buffer b) : func(make_func_name(this)),
                        error_handler(NULL),
                        custom_malloc(NULL),
                        custom_free(NULL),
