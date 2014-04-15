@@ -100,14 +100,14 @@ static bool test() {
     return test_a(a1, "a1") && test_a(a2, "a2");
 }
 
-
-
 // Run the tests, and calibrate for the PC offset at static initialization time.
+namespace {
 struct TestCompilationUnit {
     TestCompilationUnit() {
         Halide::Internal::test_compilation_unit(&test, &offset_marker);
     }
 };
+}
 
 static TestCompilationUnit test_object;
 

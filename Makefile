@@ -16,7 +16,7 @@ LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
 LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
 LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
-LLVM_CXX_FLAGS = $(filter-out -O% -g, $(shell $(LLVM_CONFIG) --cxxflags))
+LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
@@ -66,7 +66,7 @@ SPIR_LLVM_CONFIG_LIB=$(if $(WITH_SPIR), , )
 ARM64_CXX_FLAGS=$(if $(WITH_ARM64), -DWITH_ARM64=1, )
 ARM64_LLVM_CONFIG_LIB=$(if $(WITH_ARM64), aarch64, )
 
-CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE) -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
+CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
@@ -104,7 +104,7 @@ TEST_OPENCL = 1
 endif
 endif
 
-TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g
+TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer
 UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
