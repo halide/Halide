@@ -228,6 +228,7 @@ public:
             }
         }
 
+        debug(4) << "Failed to find variable at the matching offset with the given type\n";
         return "";
     }
 
