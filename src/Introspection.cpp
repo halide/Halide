@@ -128,126 +128,104 @@ public:
             return "";
         }
 
-        // Get the backtrace
-        std::vector<void *> trace(1024);
-        int trace_size = backtrace(&trace[0], 1024);
-        trace.resize(trace_size);
+        struct frame_info {
+            frame_info *frame_pointer;
+            void *return_address;
+        };
 
-        // OS X with no frame pointer will return a backtrace of size 1 always.
-        if (trace.size() <= 2) {
-            debug(1) << "backtrace doesn't seem to have many frames\n";
+        frame_info *fp = (frame_info *)__builtin_frame_address(0);
+        frame_info *next_fp = NULL;
+
+        // Walk up the stack until we pass the pointer.
+        debug(4) << "Walking up the stack\n";
+        while (fp < stack_pointer) {
+            debug(4) << "frame pointer: " << fp->frame_pointer << " return address: " << fp->return_address << "\n";
+            next_fp = fp;
+            if (fp->frame_pointer < fp) {
+                // If we ever jump downwards, something is
+                // wrong. Maybe this was a heap pointer.
+                debug(4) << "Bailing out because fp decreased\n";
+                return "";
+            }
+            fp = fp->frame_pointer;
+            if (fp < (void *)&marker) {
+                // If we're still below the marker after one hop,
+                // something is wrong. Maybe this was a heap pointer.
+                debug(4) << "Bailing out because we're below the marker\n";
+                return "";
+            }
+        }
+
+        if (!next_fp) {
+            // If we didn't manage to walk up one frame, something is
+            // wrong. Maybe this was a heap pointer.
+            debug(4) << "Bailing out because we didn't even walk up one frame\n";
             return "";
         }
 
-        // OS X seems to sometimes dump a sentinel on the end of the
-        // backtrace.
-        if (trace.back() == (void *)1) {
-            trace.pop_back();
-        }
+        // It's a stack variable in the function containing address
+        // next_fp->return_address
 
+        FunctionInfo *func = find_containing_function(next_fp->return_address);
 
-        const int addr_size = (int)(sizeof(void *));
-
-        // Begin the search by rounding down the stack pointer to an aligned address
-        uint64_t aligned_stack_pointer = (uint64_t)(stack_pointer) & (~(addr_size - 1));
-
-        const void **stack_ptr = (const void **)aligned_stack_pointer;
-        // This stack pointer doesn't belong to this function, so there
-        // must have been a function call to get here, which means there
-        // must be a return address on the stack somewhere down-stack from
-        // the pointer.
-
-        // Walk up and down the stack looking for a return address in our backtrace
-        const void **stack_frame_top = NULL, **stack_frame_bottom = NULL;
-        int frame = 0;
-        for (int i = 0; i < 10240 && stack_frame_top == NULL; i++) {
-
-            if ((uint64_t)stack_ptr + i >= top_of_stack ||
-                stack_ptr[i] == trace.back()) {
-                // Don't walk off the end of the stack.
-                break;
-            }
-
-            for (int j = 1; j < (int)trace.size() && frame == 0; j++) {
-                if (stack_ptr[i] == trace[j]) {
-                    stack_frame_top = stack_ptr + i;
-                    frame = j;
-                }
-            }
-        }
-
-        if (!frame) {
-            debug(1) << "Couldn't find which stack frame "
-                     << stack_pointer
-                     << " belongs to\n";
+        if (!func) {
+            debug(4) << "Bailing out because we couldn't find the containing function\n";
             return "";
-        }
-
-        for (int i = 0; i < 10240 && stack_frame_bottom == NULL; i++) {
-            if (stack_ptr[-i] == trace[frame-1]) {
-                stack_frame_bottom = stack_ptr - i;
-                break;
-            }
         }
 
         // Now what is its offset in that function's frame? The return
         // address is always at the top of the frame.
-        int offset_above = (int)((int64_t)(stack_pointer) - (int64_t)(stack_frame_top));
-        int offset_below = (int)((int64_t)(stack_pointer) - (int64_t)(stack_frame_bottom));
+        int offset_above = (int)((int64_t)(stack_pointer) - (int64_t)(fp));
+        int offset_below = (int)((int64_t)(stack_pointer) - (int64_t)(next_fp));
 
-        uint64_t pc = (uint64_t)trace[frame-1];
+        const int addr_size = sizeof(void *);
 
-        for (size_t i = 0; i < functions.size(); i++) {
-            const FunctionInfo &func = functions[i];
+        int offset;
+        if (func->frame_base == FunctionInfo::GCC) {
+            offset = offset_above - 2*addr_size;
+        } else if (func->frame_base == FunctionInfo::ClangFP) {
+            offset = offset_above;
+        } else if (func->frame_base == FunctionInfo::ClangNoFP) {
+            offset = offset_below - 2*addr_size;
+        }
 
-            int offset;
-            if (func.frame_base == FunctionInfo::GCC) {
-                offset = offset_above - addr_size;
-            } else if (func.frame_base == FunctionInfo::ClangFP) {
-                offset = offset_above + addr_size;
-            } else if (func.frame_base == FunctionInfo::ClangNoFP) {
-                offset = offset_below - addr_size;
+        for (size_t j = 0; j < func->variables.size(); j++) {
+            const LocalVariable &var = func->variables[j];
+            debug(4) << " Var " << var.name << " is at offset " << var.stack_offset << "\n";
+            TypeInfo *type = var.type;
+            TypeInfo *elem_type = NULL;
+            if (type && type->type == TypeInfo::Array && type->size) {
+                elem_type = type->members[0].type;
             }
 
-            if (func.pc_begin <= pc &&
-                func.pc_end >= pc) {
-                for (size_t j = 0; j < func.variables.size(); j++) {
-                    const LocalVariable &var = func.variables[j];
-                    TypeInfo *type = var.type;
-                    TypeInfo *elem_type = NULL;
-                    if (type && type->type == TypeInfo::Array && type->size) {
-                        elem_type = type->members[0].type;
-                    }
+            if (offset == var.stack_offset && var.type) {
+                debug(4) << "Considering match: " << var.type->name << ", " << var.name << "\n";
+            }
 
-                    if (offset == var.stack_offset && var.type) {
-                        debug(4) << "Considering match: " << var.type->name << ", " << var.name << "\n";
-                    }
-
-                    if (offset == var.stack_offset &&
-                        (type_name.empty() ||
-                         (type && // Check the type matches
-                          type->name == type_name))) {
-                        return var.name;
-                    } else if (elem_type && // Check if it's an array element
-                               (type_name.empty() ||
-                                (elem_type && // Check the type matches
-                                 elem_type->name == type_name))) {
-                        int64_t array_size_bytes = type->size * elem_type->size;
-                        int64_t pos_bytes = offset - var.stack_offset;
-                        if (pos_bytes >= 0 &&
-                            pos_bytes < array_size_bytes &&
-                            pos_bytes % elem_type->size == 0) {
-                            std::ostringstream oss;
-                            oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
-                            return oss.str();
-                        }
-                    }
+            if (offset == var.stack_offset &&
+                (type_name.empty() ||
+                 (type && // Check the type matches
+                  type->name == type_name))) {
+                return var.name;
+            } else if (elem_type && // Check if it's an array element
+                       (type_name.empty() ||
+                        (elem_type && // Check the type matches
+                         elem_type->name == type_name))) {
+                int64_t array_size_bytes = type->size * elem_type->size;
+                int64_t pos_bytes = offset - var.stack_offset;
+                if (pos_bytes >= 0 &&
+                    pos_bytes < array_size_bytes &&
+                    pos_bytes % elem_type->size == 0) {
+                    std::ostringstream oss;
+                    oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    return oss.str();
                 }
             }
         }
 
         return "";
     }
+
 
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
@@ -277,32 +255,19 @@ public:
             }
 
             // Binary search into functions
-            size_t hi = functions.size();
-            size_t lo = 0;
-            while (hi > lo + 1) {
-                size_t mid = (hi + lo)/2;
-                uint64_t pc_mid_begin = functions[mid].pc_begin;
-                uint64_t pc_mid_end = functions[mid].pc_end;
-                if (address < pc_mid_begin) {
-                    hi = mid;
-                } else if (address > pc_mid_end) {
-                    lo = mid + 1;
-                } else {
-                    hi = lo = mid;
-                    break;
-                }
-            }
+            FunctionInfo *f = find_containing_function((void *)address);
+
+            if (!f) return "";
 
             // If we're still in the Halide namespace, continue searching
-            if (functions.size() &&
-                functions[lo].name.size() > 8 &&
-                functions[lo].name.substr(0, 8) == "Halide::") {
+            if (f->name.size() > 8 &&
+                f->name.substr(0, 8) == "Halide::") {
                 continue;
             }
 
             // Binary search into source_lines
-            hi = source_lines.size();
-            lo = 0;
+            size_t hi = source_lines.size();
+            size_t lo = 0;
             while (hi > lo + 1) {
                 size_t mid = (hi + lo)/2;
                 uint64_t pc_mid = source_lines[mid].pc;
@@ -1456,6 +1421,30 @@ private:
     };
     std::vector<TypeInfo> types;
 
+    FunctionInfo *find_containing_function(void *addr) {
+        uint64_t address = (uint64_t)addr;
+        debug(4) << "Searching for function containing address " << addr << "\n";
+        size_t hi = functions.size();
+        size_t lo = 0;
+        while (hi > lo) {
+            size_t mid = (hi + lo)/2;
+            uint64_t pc_mid_begin = functions[mid].pc_begin;
+            uint64_t pc_mid_end = functions[mid].pc_end;
+            if (address < pc_mid_begin) {
+                hi = mid;
+            } else if (address > pc_mid_end) {
+                lo = mid + 1;
+            } else {
+                debug(4) << "At function " << functions[mid].name
+                         << " spanning: " << (void *)pc_mid_begin
+                         << ", " << (void *)pc_mid_end << "\n";
+                return &functions[mid];
+            }
+        }
+
+        return NULL;
+    }
+
     int64_t get_sleb128(const uint8_t *ptr) {
         int64_t result = 0;
         unsigned shift = 0;
@@ -1502,16 +1491,31 @@ DebugSections *debug_sections = NULL;
 }
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
-    assert(debug_sections);
+    if (!debug_sections) return "";
     return debug_sections->get_variable_name(var, expected_type);
 }
 
 std::string get_source_location() {
-    assert(debug_sections);
+    if (!debug_sections) return "";
     return debug_sections->get_source_location();
 }
 
+bool saves_frame_pointer(void *fn) {
+    // On x86-64, if we save the frame pointer, the first two instructions should be pushing the stack pointer and the frame pointer:
+    const uint8_t *ptr = (const uint8_t *)(fn);
+    return ptr[0] == 0x55; // push %rbp
+}
+
 void test_compilation_unit(bool (*test)(), void (*calib)()) {
+    // Make sure libHalide and the test compilation unit both save the frame pointer
+    if (!saves_frame_pointer((void *)&test_compilation_unit) ||
+        !saves_frame_pointer((void *)test)) {
+        if (debug_sections) {
+            delete debug_sections;
+            debug_sections = NULL;
+        }
+        return;
+    }
     if (!debug_sections) {
         char path[2048];
         get_program_name(path, sizeof(path));

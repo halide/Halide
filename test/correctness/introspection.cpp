@@ -78,6 +78,19 @@ int main(int argc, char **argv) {
 
     Foo::f(17);
 
+    // Make sure it works all the way up to main
+    int secret_int = 5;
+    check(&secret_int, "int", "secret_int", __FILE__, __LINE__);
+
+    // Make sure it rejects heap variables
+    int *on_the_heap = new int;
+    check(on_the_heap, "int", "", __FILE__, __LINE__);
+    delete on_the_heap;
+
+    // Make sure it works for arrays.
+    float an_array[17];
+    check(&an_array[5], "float", "an_array[5]", __FILE__, __LINE__);
+
     printf("Success!\n");
 
     return 0;
