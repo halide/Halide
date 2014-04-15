@@ -162,7 +162,8 @@ public:
         int frame = 0;
         for (int i = 0; i < 10240 && stack_frame_top == NULL; i++) {
 
-            if (stack_ptr[i] == trace.back()) {
+            if ((uint64_t)stack_ptr + i >= top_of_stack ||
+                stack_ptr[i] == trace.back()) {
                 // Don't walk off the end of the stack.
                 break;
             }
