@@ -13,11 +13,16 @@ namespace Halide {
 namespace Internal {
 
 #ifdef __APPLE__
-extern "C" char *__progname;
-#define program_invocation_name __progname
+extern "C" void _NSGetExecutablePath(char *, int32_t *);
+void get_program_name(char *name, int32_t size) {
+    _NSGetExecutablePath(name, &size);
+}
 #else
 // glibc defines the binary name for us
 extern "C" char *program_invocation_name;
+void get_program_name(char *name, int32_t size) {
+    strncpy(name, program_invocation_name, size);
+}
 #endif
 
 class DebugSections {
@@ -28,7 +33,15 @@ public:
 
     DebugSections(std::string binary) : working(false) {
         #ifdef __APPLE__
-        binary += ".dSYM/Contents/Resources/DWARF/" + binary;
+        size_t last_slash = binary.rfind('/');
+        if (last_slash == std::string::npos ||
+            last_slash >= binary.size() - 1) {
+            last_slash = 0;
+        } else {
+            last_slash++;
+        }
+        std::string file_only = binary.substr(last_slash, binary.size() - last_slash);
+        binary += ".dSYM/Contents/Resources/DWARF/" + file_only;
         #endif
 
         debug(2) << "Loading " << binary << "\n";
@@ -82,6 +95,8 @@ public:
             return;
         }
 
+        debug(4) << "Program counter adjustment between debug info and actual code: " << pc_adjust << "\n";
+
         for (size_t i = 0; i < functions.size(); i++) {
             functions[i].pc_begin += pc_adjust;
             functions[i].pc_end += pc_adjust;
@@ -119,10 +134,17 @@ public:
         trace.resize(trace_size);
 
         // OS X with no frame pointer will return a backtrace of size 1 always.
-        if (trace.size() == 1) {
-            debug(1) << "backtrace has only one frame\n";
+        if (trace.size() <= 2) {
+            debug(1) << "backtrace doesn't seem to have many frames\n";
             return "";
         }
+
+        // OS X seems to sometimes dump a sentinel on the end of the
+        // backtrace.
+        if (trace.back() == (void *)1) {
+            trace.pop_back();
+        }
+
 
         const int addr_size = (int)(sizeof(void *));
 
@@ -139,10 +161,12 @@ public:
         const void **stack_frame_top = NULL, **stack_frame_bottom = NULL;
         int frame = 0;
         for (int i = 0; i < 10240 && stack_frame_top == NULL; i++) {
+
             if (stack_ptr[i] == trace.back()) {
-                // Don't walk off the end of the stack
+                // Don't walk off the end of the stack.
                 break;
             }
+
             for (int j = 1; j < (int)trace.size() && frame == 0; j++) {
                 if (stack_ptr[i] == trace[j]) {
                     stack_frame_top = stack_ptr + i;
@@ -974,7 +998,6 @@ private:
             std::map<uint64_t, LocalVariable *> var_map;
             for (size_t i = 0; i < functions.size(); i++) {
                 for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                    debug(4) << functions[i].variables[j].name << " is at " << functions[i].variables[j].def_loc << "\n";
                     var_map[functions[i].variables[j].def_loc] = &(functions[i].variables[j]);
                 }
             }
@@ -984,14 +1007,13 @@ private:
                     LocalVariable &v = functions[i].variables[j];
                     uint64_t loc = v.origin_loc;
                     if (loc) {
-                        debug(4) << "Origin is at " << loc << "\n";
                         LocalVariable *origin = var_map[loc];
                         if (origin) {
                             v.name = origin->name;
                             v.type = origin->type;
                             v.type_def_loc = origin->type_def_loc;
                         } else {
-                            debug(4) << "Could not find origin!\n";
+                            debug(4) << "Variable with bad abstract origin!\n";
                         }
                     }
                 }
@@ -1102,7 +1124,7 @@ private:
             if (!f.pc_begin ||
                 !f.pc_end ||
                 f.name.empty()) {
-                debug(4) << "Dropping " << f.name << "\n";
+                //debug(4) << "Dropping " << f.name << "\n";
                 continue;
             }
 
@@ -1112,7 +1134,7 @@ private:
                 if (!v.name.empty() && v.type && v.stack_offset != no_location) {
                     vars.push_back(v);
                 } else {
-                    debug(4) << "Dropping " << v.name << "\n";
+                    //debug(4) << "Dropping " << v.name << "\n";
                 }
             }
             f.variables.clear();
@@ -1490,7 +1512,9 @@ std::string get_source_location() {
 
 void test_compilation_unit(bool (*test)(), void (*calib)()) {
     if (!debug_sections) {
-        debug_sections = new DebugSections(program_invocation_name);
+        char path[2048];
+        get_program_name(path, sizeof(path));
+        debug_sections = new DebugSections(path);
     }
     debug_sections->calibrate_pc_offset(calib);
     if (debug_sections->working) {
