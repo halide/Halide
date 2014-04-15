@@ -1506,7 +1506,17 @@ bool saves_frame_pointer(void *fn) {
     return ptr[0] == 0x55; // push %rbp
 }
 
+
 void test_compilation_unit(bool (*test)(), void (*calib)()) {
+    #ifdef __ARM__
+    return;
+    #else
+
+    // Skip entirely on arm or 32-bit
+    if (sizeof(void *) == 4) {
+        return;
+    }
+
     // Make sure libHalide and the test compilation unit both save the frame pointer
     if (!saves_frame_pointer((void *)&test_compilation_unit) ||
         !saves_frame_pointer((void *)test)) {
@@ -1525,6 +1535,8 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
     if (debug_sections->working) {
         debug_sections->working = (*test)();
     }
+
+    #endif
 }
 
 }
