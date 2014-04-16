@@ -1,4 +1,5 @@
 #include "Util.h"
+#include "Introspection.h"
 #include <sstream>
 #include <map>
 
@@ -86,6 +87,20 @@ string base_name(const string &name, char delim) {
     return name.substr(off+1);
 }
 
+string make_entity_name(void *stack_ptr, const string &type, char prefix) {
+    string name = get_variable_name(stack_ptr, type);
+    if (name.empty()) {
+        return unique_name(prefix);
+    } else {
+        // Halide names may not contain '.'
+        for (size_t i = 0; i < name.size(); i++) {
+            if (name[i] == '.') {
+                name[i] = ':';
+            }
+        }
+        return unique_name(name);
+    }
+}
 
 }
 }

@@ -132,6 +132,11 @@ DstType reinterpret_bits(const SrcType &src) {
     return dst;
 }
 
+/** Make a unique name for an object based on the name of the stack
+ * variable passed in. If introspection isn't working or there are no
+ * debug symbols, just uses unique_name with the given prefix. */
+EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
+
 /** Generate a unique name starting with the given character. It's
  * unique relative to all other calls to unique_name done by this
  * process. Not thread-safe. */
