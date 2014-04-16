@@ -28,11 +28,83 @@ void get_program_name(char *name, int32_t size) {
 
 class DebugSections {
 
+    bool calibrated;
+
+    struct FieldFormat {
+        uint64_t name, form;
+        FieldFormat() : name(0), form(0) {}
+        FieldFormat(uint64_t n, uint64_t f) : name(n), form(f) {}
+    };
+
+    struct EntryFormat {
+        uint64_t code, tag;
+        bool has_children;
+        EntryFormat() : code(0), tag(0), has_children(false) {}
+        std::vector<FieldFormat> fields;
+    };
+    std::vector<EntryFormat> entry_formats;
+
+    struct TypeInfo;
+
+    struct LocalVariable {
+        std::string name;
+        TypeInfo *type;
+        int stack_offset;
+        uint64_t type_def_loc;
+        uint64_t def_loc, origin_loc;
+        LocalVariable() : name(""), type(NULL), stack_offset(0), type_def_loc(0), def_loc(0), origin_loc(0) {}
+    };
+
+    struct FunctionInfo {
+        std::string name;
+        uint64_t pc_begin, pc_end;
+        std::vector<LocalVariable> variables;
+        uint64_t def_loc, spec_loc;
+        // The stack variable offsets are w.r.t either:
+        // gcc: the top of the stack frame (one below the return address to the caller)
+        // clang with frame pointers: the bottom of the stack frame (one above the return address to this function)
+        // clang without frame pointers: the top of the stack frame (...TODO...)
+        enum {Unknown = 0, GCC, ClangFP, ClangNoFP} frame_base;
+        FunctionInfo() : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {}
+
+        bool operator<(const FunctionInfo &other) const {
+            return pc_begin < other.pc_begin;
+        }
+    };
+    std::vector<FunctionInfo> functions;
+
+    std::vector<std::string> source_files;
+    struct LineInfo {
+        uint64_t pc;
+        uint32_t line;
+        uint32_t file; // Index into source_files
+        bool operator<(const LineInfo &other) const {
+            return pc < other.pc;
+        }
+    };
+    std::vector<LineInfo> source_lines;
+
+    struct TypeInfo {
+        std::string name;
+        uint64_t size;
+        uint64_t def_loc;
+        std::vector<LocalVariable> members;
+
+        // TypeInfo can also be used to represent a pointer to
+        // another type, in which case there's a single member, which
+        // represents the value pointed to (its name is empty and its
+        // stack_offset is meaningless).
+        enum {Primitive, Class, Struct, Pointer, Typedef, Const, Reference, Array} type;
+
+        TypeInfo() : size(0), def_loc(0), type(Primitive) {}
+    };
+    std::vector<TypeInfo> types;
+
 public:
 
     bool working;
 
-    DebugSections(std::string binary) : working(false) {
+    DebugSections(std::string binary) : calibrated(false), working(false) {
         #ifdef __APPLE__
         size_t last_slash = binary.rfind('/');
         if (last_slash == std::string::npos ||
@@ -58,39 +130,59 @@ public:
         }
     }
 
+    int count_trailing_zeros(int64_t x) {
+        for (int i = 0; i < 64; i++) {
+            if (x & (1 << i)) {
+                return i;
+            }
+        }
+        return 64;
+    }
+
     void calibrate_pc_offset(void (*fn)()) {
-        // Calibrate for the offset between the
-        // instruction pointers in the debug info and the instruction
-        // pointers in the actual file.
+        // Calibrate for the offset between the instruction pointers
+        // in the debug info and the instruction pointers in the
+        // actual file.
         bool found = false;
+        uint64_t pc_real = (uint64_t)fn;
         int64_t pc_adjust = 0;
         for (size_t i = 0; i < functions.size(); i++) {
             if (functions[i].name == "HalideIntrospectionCanary::offset_marker" &&
                 functions[i].pc_begin) {
-                uint64_t pc_lo = functions[i].pc_begin;
-                uint64_t pc_hi = functions[i].pc_end;
-                uint64_t pc = (uint64_t)fn;
-                // Find a multiple of 4096 that places pc between pc_lo and pc_hi
-                int64_t off = pc - pc_lo;
-                off -= off & 0xfff;
-                uint64_t pc_adj = pc - off;
-                if (pc_lo <= pc_adj &&
-                    pc_adj <= pc_hi &&
-                    pc_adj + 4096 > pc_hi &&
-                    pc_adj - 4096 < pc_lo) {
-                    found = true;
-                    pc_adjust = off;
+
+                uint64_t pc_debug = functions[i].pc_begin;
+
+                if (calibrated) {
+                    // If we're already calibrated, we should find a function with a matching pc
+                    if (pc_debug == pc_real) {
+                        return;
+                    }
                 } else {
-                    debug(1) << "Found HalideIntrospectionCanary::offset_marker "
-                             << "but could not compute a unique offset\n";
-                    working = false;
-                    return;
+                    int64_t pc_adj = pc_real - pc_debug;
+
+                    // Offset must be a multiple of 4096
+                    /*
+                    if (pc_adj & (4095)) {
+                        continue;
+                    }
+                    */
+
+                    // If we find multiple matches, pick the one with more trailing zeros
+                    if (!found ||
+                        count_trailing_zeros(pc_adj) > count_trailing_zeros(pc_adjust)) {
+                        pc_adjust = pc_adj;
+                        found = true;
+                    }
                 }
             }
         }
 
         if (!found) {
-            debug(1) << "Failed to find HalideIntrospectionCanary::offset_marker\n";
+            if (!calibrated) {
+                debug(1) << "Failed to find HalideIntrospectionCanary::offset_marker\n";
+            } else {
+                debug(1) << "Failed to find HalideIntrospectionCanary::offset_marker at the expected location\n";
+            }
             working = false;
             return;
         }
@@ -105,6 +197,8 @@ public:
         for (size_t i = 0; i < source_lines.size(); i++) {
             source_lines[i].pc += pc_adjust;
         }
+
+        calibrated = true;
     }
 
     // Get the debug name of a stack variable from a pointer to it
@@ -139,7 +233,7 @@ public:
         // Walk up the stack until we pass the pointer.
         debug(4) << "Walking up the stack\n";
         while (fp < stack_pointer) {
-            debug(4) << "frame pointer: " << (void *)(fp->frame_pointer) 
+            debug(4) << "frame pointer: " << (void *)(fp->frame_pointer)
                      << " return address: " << fp->return_address << "\n";
             next_fp = fp;
             if (fp->frame_pointer < fp) {
@@ -375,11 +469,11 @@ private:
 #endif
 
 #if LLVM_VERSION > 34
-        for (llvm::object::section_iterator iter = obj->section_begin(); 
+        for (llvm::object::section_iterator iter = obj->section_begin();
              iter != obj->section_end(); ++iter) {
 #else
         llvm::error_code err;
-        for (llvm::object::section_iterator iter = obj->begin_sections(); 
+        for (llvm::object::section_iterator iter = obj->begin_sections();
              iter != obj->end_sections(); iter.increment(err)) {
 #endif
             llvm::StringRef name;
@@ -406,15 +500,10 @@ private:
         }
 
         {
-            // Parse the debug abbrev section to populate the entry formats
-            llvm::DataExtractor e(debug_abbrev, true, obj->getBytesInAddress());
-            parse_debug_abbrev(e);
-        }
-
-        {
             // Parse the debug_info section to populate the functions and local variables
-            llvm::DataExtractor e(debug_info, true, obj->getBytesInAddress());
-            parse_debug_info(e, debug_str);
+            llvm::DataExtractor extractor(debug_info, true, obj->getBytesInAddress());
+            llvm::DataExtractor debug_abbrev_extractor(debug_abbrev, true, obj->getBytesInAddress());
+            parse_debug_info(extractor, debug_abbrev_extractor, debug_str);
         }
 
         {
@@ -424,10 +513,8 @@ private:
     }
 
 
-    void parse_debug_abbrev(const llvm::DataExtractor &e) {
-        // Offset into the section
-        uint32_t off = 0;
-
+    void parse_debug_abbrev(const llvm::DataExtractor &e, uint32_t off = 0) {
+        entry_formats.clear();
         while (1) {
             EntryFormat fmt;
             fmt.code = e.getULEB128(&off);
@@ -453,7 +540,9 @@ private:
         }
     }
 
-    void parse_debug_info(const llvm::DataExtractor &e, llvm::StringRef debug_str) {
+    void parse_debug_info(const llvm::DataExtractor &e,
+                          const llvm::DataExtractor &debug_abbrev,
+                          llvm::StringRef debug_str) {
         // Offset into the section
         uint32_t off = 0;
 
@@ -464,6 +553,8 @@ private:
         const int no_location = 0x80000000;
 
         while (1) {
+            uint64_t start_of_unit_header = off;
+
             // Parse compilation unit header
             bool dwarf_64;
             uint64_t unit_length = e.getU32(&off);
@@ -480,12 +571,6 @@ private:
                 break;
             }
 
-            // We don't handle debug_abbrev_offset properly, so for
-            // now we stop after the first compilation unit.
-            if (off <= 8) {
-                break;
-            }
-
             uint64_t start_of_unit = off;
 
             uint16_t version = e.getU16(&off);
@@ -497,7 +582,7 @@ private:
             } else {
                 debug_abbrev_offset = e.getU32(&off);
             }
-            (void)debug_abbrev_offset;
+            parse_debug_abbrev(debug_abbrev, debug_abbrev_offset);
 
             uint8_t address_size = e.getU8(&off);
 
@@ -710,27 +795,27 @@ private:
                     }
                     case 17: // ref1 (1 byte offset from the first byte of the compilation unit header)
                     {
-                        val = e.getU8(&off);
+                        val = e.getU8(&off) + start_of_unit_header;
                         break;
                     }
                     case 18: // ref2 (2 byte version of the same)
                     {
-                        val = e.getU16(&off);
+                        val = e.getU16(&off) + start_of_unit_header;
                         break;
                     }
                     case 19: // ref4 (4 byte version of the same)
                     {
-                        val = e.getU32(&off);
+                        val = e.getU32(&off) + start_of_unit_header;
                         break;
                     }
                     case 20: // ref8 (8 byte version of the same)
                     {
-                        val = e.getU64(&off);
+                        val = e.getU64(&off) + start_of_unit_header;
                         break;
                     }
                     case 21: // ref_udata (uleb128 version of the same)
                     {
-                        val = e.getULEB128(&off);
+                        val = e.getULEB128(&off) + start_of_unit_header;
                         break;
                     }
                     case 22: // indirect
@@ -1138,102 +1223,114 @@ private:
     void parse_debug_line(const llvm::DataExtractor &e) {
         uint32_t off = 0;
 
-        // Parse the header
-        uint32_t unit_length = e.getU32(&off);
-        uint16_t version = e.getU16(&off);
-        assert(version >= 2);
+        // For every compilation unit
+        while (1) {
+            // Parse the header
+            uint32_t unit_length = e.getU32(&off);
 
-        uint32_t header_length = e.getU32(&off);
-        uint32_t end_header_off = off + header_length;
-        uint8_t min_instruction_length = e.getU8(&off);
-        uint8_t max_ops_per_instruction = 1;
-        if (version >= 4) {
-            // This is for VLIW architectures
-            max_ops_per_instruction = e.getU8(&off);
-        }
-        uint8_t default_is_stmt = e.getU8(&off);
-        int8_t line_base    = (int8_t)e.getU8(&off);
-        uint8_t line_range  = e.getU8(&off);
-        uint8_t opcode_base = e.getU8(&off);
-
-        std::vector<uint8_t> standard_opcode_length(opcode_base);
-        for (int i = 1; i < opcode_base; i++) {
-            // Note we don't use entry 0
-            standard_opcode_length[i] = e.getU8(&off);
-        }
-
-        std::vector<std::string> include_dirs;
-        // The current directory is implicitly the first dir.
-        include_dirs.push_back(".");
-        while (off < end_header_off) {
-            const char *s = e.getCStr(&off);
-            if (s && s[0]) {
-                include_dirs.push_back(s);
-            } else {
+            if (unit_length == 0) {
+                // No more units
                 break;
             }
-        }
 
-        while (off < end_header_off) {
-            const char *name = e.getCStr(&off);
-            if (name && name[0]) {
-                uint64_t dir = e.getULEB128(&off);
-                uint64_t mod_time = e.getULEB128(&off);
-                uint64_t length = e.getULEB128(&off);
-                (void)mod_time;
-                (void)length;
-                assert(dir <= include_dirs.size());
-                source_files.push_back(include_dirs[dir] + "/" + name);
-            } else {
-                break;
+            uint32_t unit_end = off + unit_length;
+
+            debug(4) << "Parsing compilation unit from " << off << " to " << unit_end << "\n";
+
+            uint16_t version = e.getU16(&off);
+            assert(version >= 2);
+
+            uint32_t header_length = e.getU32(&off);
+            uint32_t end_header_off = off + header_length;
+            uint8_t min_instruction_length = e.getU8(&off);
+            uint8_t max_ops_per_instruction = 1;
+            if (version >= 4) {
+                // This is for VLIW architectures
+                max_ops_per_instruction = e.getU8(&off);
             }
-        }
+            uint8_t default_is_stmt = e.getU8(&off);
+            int8_t line_base    = (int8_t)e.getU8(&off);
+            uint8_t line_range  = e.getU8(&off);
+            uint8_t opcode_base = e.getU8(&off);
 
-        assert(off == end_header_off && "Failed parsing section .debug_line");
-
-        // Now parse the table. It uses a state machine with the following fields:
-        struct {
-            // Current program counter
-            uint64_t address;
-            // Which op within that instruction (for VLIW archs)
-            uint32_t op_index;
-            // File and line index;
-            uint32_t file, line, column;
-            bool is_stmt, basic_block, end_sequence, prologue_end, epilogue_begin;
-            // The ISA of the architecture (e.g. x86-64 vs armv7 vs thumb)
-            uint32_t isa;
-            // The id of the block to which this line belongs
-            uint32_t discriminator;
-
-            void append_row(std::vector<LineInfo> &lines) {
-                LineInfo l = {address, line, file};
-                lines.push_back(l);
+            std::vector<uint8_t> standard_opcode_length(opcode_base);
+            for (int i = 1; i < opcode_base; i++) {
+                // Note we don't use entry 0
+                standard_opcode_length[i] = e.getU8(&off);
             }
-        } state, initial_state;
 
-        // Initialize the state table.
-        initial_state.address = 0;
-        initial_state.op_index = 0;
-        initial_state.file = 0;
-        initial_state.line = 1;
-        initial_state.column = 0;
-        initial_state.is_stmt = default_is_stmt;
-        initial_state.basic_block = false;
-        initial_state.end_sequence = false;
-        initial_state.prologue_end = false;
-        initial_state.epilogue_begin = false;
-        initial_state.isa = 0;
-        initial_state.discriminator = 0;
-        state = initial_state;
+            std::vector<std::string> include_dirs;
+            // The current directory is implicitly the first dir.
+            include_dirs.push_back(".");
+            while (off < end_header_off) {
+                const char *s = e.getCStr(&off);
+                if (s && s[0]) {
+                    include_dirs.push_back(s);
+                } else {
+                    break;
+                }
+            }
 
-        // For every sequence.
-        while (off < unit_length) {
-            uint8_t opcode = e.getU8(&off);
+            while (off < end_header_off) {
+                const char *name = e.getCStr(&off);
+                if (name && name[0]) {
+                    uint64_t dir = e.getULEB128(&off);
+                    uint64_t mod_time = e.getULEB128(&off);
+                    uint64_t length = e.getULEB128(&off);
+                    (void)mod_time;
+                    (void)length;
+                    assert(dir <= include_dirs.size());
+                    source_files.push_back(include_dirs[dir] + "/" + name);
+                } else {
+                    break;
+                }
+            }
 
-            if (opcode == 0) {
-                // Extended opcodes
-                uint32_t ext_offset = off;
-                uint64_t len = e.getULEB128(&off);
+            assert(off == end_header_off && "Failed parsing section .debug_line");
+
+            // Now parse the table. It uses a state machine with the following fields:
+            struct {
+                // Current program counter
+                uint64_t address;
+                // Which op within that instruction (for VLIW archs)
+                uint32_t op_index;
+                // File and line index;
+                uint32_t file, line, column;
+                bool is_stmt, basic_block, end_sequence, prologue_end, epilogue_begin;
+                // The ISA of the architecture (e.g. x86-64 vs armv7 vs thumb)
+                uint32_t isa;
+                // The id of the block to which this line belongs
+                uint32_t discriminator;
+
+                void append_row(std::vector<LineInfo> &lines) {
+                    LineInfo l = {address, line, file};
+                    lines.push_back(l);
+                }
+            } state, initial_state;
+
+            // Initialize the state table.
+            initial_state.address = 0;
+            initial_state.op_index = 0;
+            initial_state.file = 0;
+            initial_state.line = 1;
+            initial_state.column = 0;
+            initial_state.is_stmt = default_is_stmt;
+            initial_state.basic_block = false;
+            initial_state.end_sequence = false;
+            initial_state.prologue_end = false;
+            initial_state.epilogue_begin = false;
+            initial_state.isa = 0;
+            initial_state.discriminator = 0;
+            state = initial_state;
+
+            // For every sequence.
+            while (off < unit_end) {
+                uint8_t opcode = e.getU8(&off);
+
+                if (opcode == 0) {
+                    // Extended opcodes
+                    uint32_t ext_offset = off;
+                    uint64_t len = e.getULEB128(&off);
                 uint32_t arg_size = len - (off - ext_offset);
                 uint8_t sub_opcode = e.getU8(&off);
                 switch (sub_opcode) {
@@ -1269,101 +1366,102 @@ private:
                 default: // Some unknown thing. Skip it.
                     off += arg_size;
                 }
-            } else if (opcode < opcode_base) {
-                // A standard opcode
-                switch (opcode) {
-                case 1: // copy
-                {
+                } else if (opcode < opcode_base) {
+                    // A standard opcode
+                    switch (opcode) {
+                    case 1: // copy
+                    {
+                        state.append_row(source_lines);
+                        state.basic_block = false;
+                        state.prologue_end = false;
+                        state.epilogue_begin = false;
+                        state.discriminator = 0;
+                        break;
+                    }
+                    case 2: // advance_pc
+                    {
+                        uint64_t advance = e.getULEB128(&off);
+                        state.address += min_instruction_length * ((state.op_index + advance) / max_ops_per_instruction);
+                        state.op_index = (state.op_index + advance) % max_ops_per_instruction;
+                        break;
+                    }
+                    case 3: // advance_line
+                    {
+                        state.line += e.getSLEB128(&off);
+                        break;
+                    }
+                    case 4: // set_file
+                    {
+                        state.file = e.getULEB128(&off) - 1;
+                        break;
+                    }
+                    case 5: // set_column
+                    {
+                        state.column = e.getULEB128(&off);
+                        break;
+                    }
+                    case 6: // negate_stmt
+                    {
+                        state.is_stmt = !state.is_stmt;
+                        break;
+                    }
+                    case 7: // set_basic_block
+                    {
+                        state.basic_block = true;
+                        break;
+                    }
+                    case 8: // const_add_pc
+                    {
+                        // Same as special opcode 255 (but doesn't emit a row or reset state)
+                        uint8_t adjust_opcode = 255 - opcode_base;
+                        uint64_t advance = adjust_opcode / line_range;
+                        state.address += min_instruction_length * ((state.op_index + advance) / max_ops_per_instruction);
+                        state.op_index = (state.op_index + advance) % max_ops_per_instruction;
+                        break;
+                    }
+                    case 9: // fixed_advance_pc
+                    {
+                        uint16_t advance = e.getU16(&off);
+                        state.address += advance;
+                        break;
+                    }
+                    case 10: // set_prologue_end
+                    {
+                        state.prologue_end = true;
+                        break;
+                    }
+                    case 11: // set_epilogue_begin
+                    {
+                        state.epilogue_begin = true;
+                        break;
+                    }
+                    case 12: // set_isa
+                    {
+                        state.isa = e.getULEB128(&off);
+                        break;
+                    }
+                    default:
+                    {
+                        // Unknown standard opcode. Skip over the args.
+                        uint8_t args = standard_opcode_length[opcode];
+                        for (int i = 0; i < args; i++) {
+                            e.getULEB128(&off);
+                        }
+                    }}
+                } else {
+                    // Special opcode
+                    uint8_t adjust_opcode = opcode - opcode_base;
+                    uint64_t advance_op = adjust_opcode / line_range;
+                    uint64_t advance_line = line_base + adjust_opcode % line_range;
+                    state.address += min_instruction_length * ((state.op_index + advance_op) / max_ops_per_instruction);
+                    state.op_index = (state.op_index + advance_op) % max_ops_per_instruction;
+                    state.line += advance_line;
                     state.append_row(source_lines);
                     state.basic_block = false;
                     state.prologue_end = false;
                     state.epilogue_begin = false;
                     state.discriminator = 0;
-                    break;
                 }
-                case 2: // advance_pc
-                {
-                    uint64_t advance = e.getULEB128(&off);
-                    state.address += min_instruction_length * ((state.op_index + advance) / max_ops_per_instruction);
-                    state.op_index = (state.op_index + advance) % max_ops_per_instruction;
-                    break;
-                }
-                case 3: // advance_line
-                {
-                    state.line += e.getSLEB128(&off);
-                    break;
-                }
-                case 4: // set_file
-                {
-                    state.file = e.getULEB128(&off) - 1;
-                    break;
-                }
-                case 5: // set_column
-                {
-                    state.column = e.getULEB128(&off);
-                    break;
-                }
-                case 6: // negate_stmt
-                {
-                    state.is_stmt = !state.is_stmt;
-                    break;
-                }
-                case 7: // set_basic_block
-                {
-                    state.basic_block = true;
-                    break;
-                }
-                case 8: // const_add_pc
-                {
-                    // Same as special opcode 255 (but doesn't emit a row or reset state)
-                    uint8_t adjust_opcode = 255 - opcode_base;
-                    uint64_t advance = adjust_opcode / line_range;
-                    state.address += min_instruction_length * ((state.op_index + advance) / max_ops_per_instruction);
-                    state.op_index = (state.op_index + advance) % max_ops_per_instruction;
-                    break;
-                }
-                case 9: // fixed_advance_pc
-                {
-                    uint16_t advance = e.getU16(&off);
-                    state.address += advance;
-                    break;
-                }
-                case 10: // set_prologue_end
-                {
-                    state.prologue_end = true;
-                    break;
-                }
-                case 11: // set_epilogue_begin
-                {
-                    state.epilogue_begin = true;
-                    break;
-                }
-                case 12: // set_isa
-                {
-                    state.isa = e.getULEB128(&off);
-                    break;
-                }
-                default:
-                {
-                    // Unknown standard opcode. Skip over the args.
-                    uint8_t args = standard_opcode_length[opcode];
-                    for (int i = 0; i < args; i++) {
-                        e.getULEB128(&off);
-                    }
-                }}
-            } else {
-                // Special opcode
-                uint8_t adjust_opcode = opcode - opcode_base;
-                uint64_t advance_op = adjust_opcode / line_range;
-                uint64_t advance_line = line_base + adjust_opcode % line_range;
-                state.address += min_instruction_length * ((state.op_index + advance_op) / max_ops_per_instruction);
-                state.op_index = (state.op_index + advance_op) % max_ops_per_instruction;
-                state.line += advance_line;
-                state.append_row(source_lines);
-                state.basic_block = false;
-                state.prologue_end = false;
-                state.epilogue_begin = false;
-                state.discriminator = 0;
             }
         }
 
@@ -1372,75 +1470,7 @@ private:
 
     }
 
-    struct FieldFormat {
-        uint64_t name, form;
-        FieldFormat() : name(0), form(0) {}
-        FieldFormat(uint64_t n, uint64_t f) : name(n), form(f) {}
-    };
 
-    struct EntryFormat {
-        uint64_t code, tag;
-        bool has_children;
-        EntryFormat() : code(0), tag(0), has_children(false) {}
-        std::vector<FieldFormat> fields;
-    };
-    std::vector<EntryFormat> entry_formats;
-
-    struct TypeInfo;
-
-    struct LocalVariable {
-        std::string name;
-        TypeInfo *type;
-        int stack_offset;
-        uint64_t type_def_loc;
-        uint64_t def_loc, origin_loc;
-        LocalVariable() : name(""), type(NULL), stack_offset(0), type_def_loc(0), def_loc(0), origin_loc(0) {}
-    };
-
-    struct FunctionInfo {
-        std::string name;
-        uint64_t pc_begin, pc_end;
-        std::vector<LocalVariable> variables;
-        uint64_t def_loc, spec_loc;
-        // The stack variable offsets are w.r.t either:
-        // gcc: the top of the stack frame (one below the return address to the caller)
-        // clang with frame pointers: the bottom of the stack frame (one above the return address to this function)
-        // clang without frame pointers: the top of the stack frame (...TODO...)
-        enum {Unknown = 0, GCC, ClangFP, ClangNoFP} frame_base;
-        FunctionInfo() : name(""), pc_begin(0), pc_end(0), def_loc(0), spec_loc(0) {}
-
-        bool operator<(const FunctionInfo &other) const {
-            return pc_begin < other.pc_begin;
-        }
-    };
-    std::vector<FunctionInfo> functions;
-
-    std::vector<std::string> source_files;
-    struct LineInfo {
-        uint64_t pc;
-        uint32_t line;
-        uint32_t file; // Index into source_files
-        bool operator<(const LineInfo &other) const {
-            return pc < other.pc;
-        }
-    };
-    std::vector<LineInfo> source_lines;
-
-    struct TypeInfo {
-        std::string name;
-        uint64_t size;
-        uint64_t def_loc;
-        std::vector<LocalVariable> members;
-
-        // TypeInfo can also be used to represent a pointer to
-        // another type, in which case there's a single member, which
-        // represents the value pointed to (its name is empty and its
-        // stack_offset is meaningless).
-        enum {Primitive, Class, Struct, Pointer, Typedef, Const, Reference, Array} type;
-
-        TypeInfo() : size(0), def_loc(0), type(Primitive) {}
-    };
-    std::vector<TypeInfo> types;
 
     FunctionInfo *find_containing_function(void *addr) {
         uint64_t address = (uint64_t)addr;
@@ -1513,11 +1543,13 @@ DebugSections *debug_sections = NULL;
 
 std::string get_variable_name(const void *var, const std::string &expected_type) {
     if (!debug_sections) return "";
+    if (!debug_sections->working) return "";
     return debug_sections->get_variable_name(var, expected_type);
 }
 
 std::string get_source_location() {
     if (!debug_sections) return "";
+    if (!debug_sections->working) return "";
     return debug_sections->get_source_location();
 }
 
@@ -1538,23 +1570,33 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
         return;
     }
 
-    // Make sure libHalide and the test compilation unit both save the frame pointer
-    if (!saves_frame_pointer((void *)&test_compilation_unit) ||
-        !saves_frame_pointer((void *)test)) {
-        if (debug_sections) {
-            delete debug_sections;
-            debug_sections = NULL;
-        }
-        return;
-    }
+    debug(4) << "Testing compilation unit with offset_marker at " << (void *)calib << "\n";
+
     if (!debug_sections) {
         char path[2048];
         get_program_name(path, sizeof(path));
         debug_sections = new DebugSections(path);
     }
-    debug_sections->calibrate_pc_offset(calib);
-    if (debug_sections->working) {
+
+    if (!saves_frame_pointer((void *)&test_compilation_unit) ||
+        !saves_frame_pointer((void *)test)) {
+        // Make sure libHalide and the test compilation unit both save the frame pointer
+        debug_sections->working = false;
+        debug(4) << "Failed because frame pointer not saved\n";
+    } else if (debug_sections->working) {
+        debug_sections->calibrate_pc_offset(calib);
+        if (!debug_sections->working) {
+            debug(4) << "Failed because offset calibration failed\n";
+            return;
+        }
+
         debug_sections->working = (*test)();
+        if (!debug_sections->working) {
+            debug(4) << "Failed because test routine failed\n";
+            return;
+        }
+
+        debug(4) << "Test passed\n";
     }
 
     #endif
