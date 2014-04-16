@@ -4,6 +4,21 @@
 %module(naturalvar=1) cHalide
 %include "stdint.i"
 
+%ignore halide_debug_to_file;
+%ignore halide_malloc;
+%ignore halide_free;
+%ignore halide_start_clock;
+%ignore halide_current_time_ns;
+%ignore halide_profiling_timer;
+%ignore halide_printf;
+%ignore halide_error;
+%ignore halide_do_par_for;
+%ignore halide_shutdown_thread_pool;
+%ignore halide_trace;
+%ignore halide_shutdown_trace;
+%ignore halide_set_random_seed;
+%ignore halide_printf;
+
 %{
 #include "Halide.h"
 #include "py_util.h"
@@ -23,6 +38,7 @@ namespace Halide {
 
 %include "Halide.h"
 %include "py_util.h"
+
 
 %template(Image_uint8) Image<uint8_t>;
 %template(Image_uint16) Image<uint16_t>;
