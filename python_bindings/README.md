@@ -12,6 +12,7 @@ Installation
 ### Prerequisites
 
 Install SWIG 2.0.4+, and Python libraries Numpy, and Python Image Library (PIL).
+Note that SWIG < 3.* should be used.
 
 On Mac:
 
