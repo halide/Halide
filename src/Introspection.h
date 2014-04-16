@@ -73,6 +73,9 @@ struct A {
     public:
         float a_float;
         A *parent;
+        B() : private_member(17) {
+            a_float = private_member * 2.0f;
+        }
     };
 
     B a_b;
