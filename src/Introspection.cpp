@@ -161,11 +161,9 @@ public:
                     int64_t pc_adj = pc_real - pc_debug;
 
                     // Offset must be a multiple of 4096
-                    /*
                     if (pc_adj & (4095)) {
                         continue;
                     }
-                    */
 
                     // If we find multiple matches, pick the one with more trailing zeros
                     if (!found ||
