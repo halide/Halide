@@ -9,6 +9,7 @@
 #include "IR.h"
 #include "Var.h"
 #include "IRPrinter.h"
+#include "Util.h"
 #include <sstream>
 #include <vector>
 
@@ -26,7 +27,7 @@ class Param {
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
-    Param() : param(type_of<T>(), false) {}
+    Param() : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param", 'p')) {}
 
     /** Construct a scalar parameter of type T with the given name */
     Param(const std::string &n) : param(type_of<T>(), false, n) {}
@@ -323,7 +324,7 @@ public:
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
     ImageParam(Type t, int d) :
-        OutputImageParam(Internal::Parameter(t, true), d) {}
+        OutputImageParam(Internal::Parameter(t, true, Internal::make_entity_name(this, "Halide::ImageParam", 'p')), d) {}
 
     /** Construct an image parameter of the given type and
      * dimensionality, with the given name */
