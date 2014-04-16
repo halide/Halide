@@ -56,7 +56,6 @@ public:
             debug(1) << "Could not load object file: " << binary << "\n";
             working = false;
         }
-
     }
 
     void calibrate_pc_offset(void (*fn)()) {
@@ -481,18 +480,24 @@ private:
                 break;
             }
 
+            // We don't handle debug_abbrev_offset properly, so for
+            // now we stop after the first compilation unit.
+            if (off <= 8) {
+                break;
+            }
+
             uint64_t start_of_unit = off;
 
             uint16_t version = e.getU16(&off);
             (void)version;
 
+            uint64_t debug_abbrev_offset = 0;
             if (dwarf_64) {
-                uint64_t debug_abbrev_offset = e.getU64(&off);
-                (void)debug_abbrev_offset;
+                debug_abbrev_offset = e.getU64(&off);
             } else {
-                uint32_t debug_abbrev_offset = e.getU32(&off);
-                (void)debug_abbrev_offset;
+                debug_abbrev_offset = e.getU32(&off);
             }
+            (void)debug_abbrev_offset;
 
             uint8_t address_size = e.getU8(&off);
 
