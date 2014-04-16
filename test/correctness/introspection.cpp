@@ -91,6 +91,25 @@ int main(int argc, char **argv) {
     float an_array[17];
     check(&an_array[5], "float", "an_array[5]", __FILE__, __LINE__);
 
+    // Check what happens with lexical blocks which may reuse stack positions
+    {
+        int block_a = 3;
+        (void)block_a;
+        check(&block_a, "int", "block_a", __FILE__, __LINE__);
+    }
+
+    {
+        int block_b = 3;
+        (void)block_b;
+        check(&block_b, "int", "block_b", __FILE__, __LINE__);
+    }
+
+    {
+        int block_c = 3;
+        (void)block_c;
+        check(&block_c, "int", "block_c", __FILE__, __LINE__);
+    }
+
     printf("Success!\n");
 
     return 0;

@@ -10,6 +10,11 @@
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>
 
+
+using std::vector;
+using std::pair;
+using std::map;
+
 namespace Halide {
 namespace Internal {
 
@@ -40,9 +45,13 @@ class DebugSections {
         uint64_t code, tag;
         bool has_children;
         EntryFormat() : code(0), tag(0), has_children(false) {}
-        std::vector<FieldFormat> fields;
+        vector<FieldFormat> fields;
     };
-    std::vector<EntryFormat> entry_formats;
+    vector<EntryFormat> entry_formats;
+
+    struct LiveRange {
+        uint64_t pc_begin, pc_end;
+    };
 
     struct TypeInfo;
 
@@ -52,13 +61,18 @@ class DebugSections {
         int stack_offset;
         uint64_t type_def_loc;
         uint64_t def_loc, origin_loc;
+        // Some local vars are only alive for certain address ranges
+        // (e.g. those inside a lexical block). If the ranges vector
+        // is empty, the variables are alive for the entire containing
+        // function.
+        vector<LiveRange> live_ranges;
         LocalVariable() : name(""), type(NULL), stack_offset(0), type_def_loc(0), def_loc(0), origin_loc(0) {}
     };
 
     struct FunctionInfo {
         std::string name;
         uint64_t pc_begin, pc_end;
-        std::vector<LocalVariable> variables;
+        vector<LocalVariable> variables;
         uint64_t def_loc, spec_loc;
         // The stack variable offsets are w.r.t either:
         // gcc: the top of the stack frame (one below the return address to the caller)
@@ -71,9 +85,9 @@ class DebugSections {
             return pc_begin < other.pc_begin;
         }
     };
-    std::vector<FunctionInfo> functions;
+    vector<FunctionInfo> functions;
 
-    std::vector<std::string> source_files;
+    vector<std::string> source_files;
     struct LineInfo {
         uint64_t pc;
         uint32_t line;
@@ -82,13 +96,13 @@ class DebugSections {
             return pc < other.pc;
         }
     };
-    std::vector<LineInfo> source_lines;
+    vector<LineInfo> source_lines;
 
     struct TypeInfo {
         std::string name;
         uint64_t size;
         uint64_t def_loc;
-        std::vector<LocalVariable> members;
+        vector<LocalVariable> members;
 
         // TypeInfo can also be used to represent a pointer to
         // another type, in which case there's a single member, which
@@ -98,7 +112,7 @@ class DebugSections {
 
         TypeInfo() : size(0), def_loc(0), type(Primitive) {}
     };
-    std::vector<TypeInfo> types;
+    vector<TypeInfo> types;
 
 public:
 
@@ -259,6 +273,9 @@ public:
         // It's a stack variable in the function containing address
         // next_fp->return_address
 
+        // Get the program counter at the position of the call
+        uint64_t pc = (uint64_t)(next_fp->return_address) - 5; // -5 for the callq instruction
+
         FunctionInfo *func = find_containing_function(next_fp->return_address);
 
         if (!func) {
@@ -287,7 +304,24 @@ public:
 
         for (size_t j = 0; j < func->variables.size(); j++) {
             const LocalVariable &var = func->variables[j];
-            debug(4) << " Var " << var.name << " is at offset " << var.stack_offset << "\n";
+            debug(4) << "Var " << var.name << " is at offset " << var.stack_offset << "\n";
+
+            // Reject it if we're not in its live ranges
+            if (var.live_ranges.size()) {
+                bool in_live_range = false;
+                for (size_t i = 0; i < var.live_ranges.size(); i++) {
+                    if (pc >= var.live_ranges[i].pc_begin &&
+                        pc < var.live_ranges[i].pc_end) {
+                        in_live_range = true;
+                        break;
+                    }
+                }
+                if (!in_live_range) {
+                    debug(4) << "Skipping var because we're not in any of its live ranges\n";
+                    continue;
+                }
+            }
+
             TypeInfo *type = var.type;
             TypeInfo *elem_type = NULL;
             if (type && type->type == TypeInfo::Array && type->size) {
@@ -302,6 +336,7 @@ public:
                 (type_name.empty() ||
                  (type && // Check the type matches
                   type->name == type_name))) {
+                debug(4) << "Successful match to scalar var\n";
                 return var.name;
             } else if (elem_type && // Check if it's an array element
                        (type_name.empty() ||
@@ -314,6 +349,7 @@ public:
                     pos_bytes % elem_type->size == 0) {
                     std::ostringstream oss;
                     oss << var.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    debug(4) << "Successful match to array element\n";
                     return oss.str();
                 }
             }
@@ -334,7 +370,7 @@ public:
         const int max_stack_frames = 16;
 
         // Get the backtrace
-        std::vector<void *> trace(max_stack_frames);
+        vector<void *> trace(max_stack_frames);
         int trace_size = backtrace(&trace[0], (int)(trace.size()));
 
         for (int frame = 2; frame < trace_size; frame++) {
@@ -409,22 +445,29 @@ public:
 
         // Dump all the functions and their local variables
         for (size_t i = 0; i < functions.size(); i++) {
+            const FunctionInfo &f = functions[i];
             printf("Function %s at %llx - %llx (frame_base %d): \n",
-                   functions[i].name.c_str(),
-                   (unsigned long long)(functions[i].pc_begin),
-                   (unsigned long long)(functions[i].pc_end),
-                   (int)functions[i].frame_base);
-            for (size_t j = 0; j < functions[i].variables.size(); j++) {
-                TypeInfo *c = functions[i].variables[j].type;
+                   f.name.c_str(),
+                   (unsigned long long)(f.pc_begin),
+                   (unsigned long long)(f.pc_end),
+                   (int)f.frame_base);
+            for (size_t j = 0; j < f.variables.size(); j++) {
+                const LocalVariable &v = f.variables[j];
+                TypeInfo *c = v.type;
                 const char *type_name = "(unknown)";
                 if (c) {
                     type_name = c->name.c_str();
                 }
                 printf("  Variable %s at %d of type %s @ %llx\n",
-                       functions[i].variables[j].name.c_str(),
-                       functions[i].variables[j].stack_offset,
+                       v.name.c_str(),
+                       v.stack_offset,
                        type_name,
-                       (long long unsigned)functions[i].variables[j].type_def_loc);
+                       (long long unsigned)v.type_def_loc);
+                for (size_t k = 0; k < v.live_ranges.size(); k++) {
+                    printf("    Live range: %llx - %llx\n",
+                           (unsigned long long)v.live_ranges[k].pc_begin,
+                           (unsigned long long)v.live_ranges[k].pc_end);
+                }
             }
         }
 
@@ -458,7 +501,7 @@ private:
 
     void parse_object_file(llvm::object::ObjectFile *obj) {
         // Look for the debug_info, debug_abbrev, debug_line, and debug_str sections
-        llvm::StringRef debug_info, debug_abbrev, debug_str, debug_line;
+        llvm::StringRef debug_info, debug_abbrev, debug_str, debug_line, debug_ranges;
 
 #ifdef __APPLE__
         std::string prefix = "__";
@@ -485,13 +528,16 @@ private:
                 iter->getContents(debug_str);
             } else if (name == prefix + "debug_line") {
                 iter->getContents(debug_line);
+            } else if (name == prefix + "debug_ranges") {
+                iter->getContents(debug_ranges);
             }
         }
 
         if (debug_info.empty() ||
             debug_abbrev.empty() ||
             debug_str.empty() ||
-            debug_line.empty()) {
+            debug_line.empty() ||
+            debug_ranges.empty()) {
             debug(2) << "Debugging sections not found\n";
             working = false;
             return;
@@ -501,7 +547,7 @@ private:
             // Parse the debug_info section to populate the functions and local variables
             llvm::DataExtractor extractor(debug_info, true, obj->getBytesInAddress());
             llvm::DataExtractor debug_abbrev_extractor(debug_abbrev, true, obj->getBytesInAddress());
-            parse_debug_info(extractor, debug_abbrev_extractor, debug_str);
+            parse_debug_info(extractor, debug_abbrev_extractor, debug_str, debug_ranges);
         }
 
         {
@@ -510,6 +556,9 @@ private:
         }
     }
 
+    void parse_debug_ranges(const llvm::DataExtractor &e) {
+
+    }
 
     void parse_debug_abbrev(const llvm::DataExtractor &e, uint32_t off = 0) {
         entry_formats.clear();
@@ -540,7 +589,8 @@ private:
 
     void parse_debug_info(const llvm::DataExtractor &e,
                           const llvm::DataExtractor &debug_abbrev,
-                          llvm::StringRef debug_str) {
+                          llvm::StringRef debug_str,
+                          llvm::StringRef debug_ranges) {
         // Offset into the section
         uint32_t off = 0;
 
@@ -584,9 +634,10 @@ private:
 
             uint8_t address_size = e.getU8(&off);
 
-            std::vector<std::pair<FunctionInfo, int> > func_stack;
-            std::vector<std::pair<TypeInfo, int> > type_stack;
-            std::vector<std::pair<std::string, int> > namespace_stack;
+            vector<pair<FunctionInfo, int> > func_stack;
+            vector<pair<TypeInfo, int> > type_stack;
+            vector<pair<std::string, int> > namespace_stack;
+            vector<pair<vector<LiveRange>, int> > live_range_stack;
 
             int stack_depth = 0;
 
@@ -604,6 +655,9 @@ private:
             const unsigned tag_reference_type = 0x10;
             const unsigned tag_array_type = 0x01;
             const unsigned tag_subrange_type = 0x21;
+            const unsigned tag_lexical_block = 0x0b;
+            const unsigned tag_inlined_subroutine = 0x1d;
+
             const unsigned attr_name = 0x03;
             const unsigned attr_specification = 0x47;
             const unsigned attr_low_pc = 0x11;
@@ -615,6 +669,7 @@ private:
             const unsigned attr_type = 0x49;
             const unsigned attr_upper_bound = 0x2f;
             const unsigned attr_abstract_origin = 0x31;
+            const unsigned attr_ranges = 0x55;
 
             while (off - start_of_unit < unit_length) {
                 uint64_t location = off;
@@ -640,6 +695,10 @@ private:
                         stack_depth == namespace_stack.back().second) {
                         namespace_stack.pop_back();
                     }
+                    if (live_range_stack.size() &&
+                        stack_depth == live_range_stack.back().second) {
+                        live_range_stack.pop_back();
+                    }
                     stack_depth--;
                     continue;
                 }
@@ -651,6 +710,7 @@ private:
                 LocalVariable var;
                 FunctionInfo func;
                 TypeInfo type_info;
+                vector<LiveRange> live_ranges;
                 type_info.def_loc = location;
                 func.def_loc = location;
                 var.def_loc = location;
@@ -1005,12 +1065,40 @@ private:
                             type_stack.back().first.type == TypeInfo::Array) {
                             type_stack.back().first.size = val+1;
                         }
+                    } else if (fmt.tag == tag_inlined_subroutine ||
+                               fmt.tag == tag_lexical_block) {
+                        if (attr == attr_low_pc) {
+                            LiveRange r = {val, val};
+                            live_ranges.push_back(r);
+                        } else if (attr == attr_high_pc && live_ranges.size()) {
+                            if (fmt.fields[i].form == 0x1) {
+                                // Literal address
+                                live_ranges.back().pc_end = val;
+                            } else {
+                                // Size
+                                live_ranges.back().pc_end = live_ranges.back().pc_begin + val;
+                            }
+                        } else if (attr == attr_ranges) {
+                            if (val < debug_ranges.size()) {
+                                // It's an array of addresses
+                                const void **ptr = (const void **)(debug_ranges.data() + val);
+                                const void **end = (const void **)(debug_ranges.data() + debug_ranges.size());
+                                while (ptr[0] && ptr < end-1) {
+                                    LiveRange r = {(uint64_t)ptr[0], (uint64_t)ptr[1]};
+                                    live_ranges.push_back(r);
+                                    ptr += 2;
+                                }
+                            }
+                        }
                     }
 
                 }
 
                 if (fmt.tag == tag_variable &&
                     func_stack.size()) {
+                    if (live_range_stack.size()) {
+                        var.live_ranges = live_range_stack.back().first;
+                    }
                     func_stack.back().first.variables.push_back(var);
                 } else if (fmt.tag == tag_member &&
                            type_stack.size() &&
@@ -1042,6 +1130,10 @@ private:
                         namespace_name = "{anonymous}";
                     }
                     namespace_stack.push_back(std::make_pair(namespace_name, stack_depth));
+                } else if ((fmt.tag == tag_inlined_subroutine ||
+                            fmt.tag == tag_lexical_block) &&
+                           live_ranges.size() && fmt.has_children) {
+                    live_range_stack.push_back(std::make_pair(live_ranges, stack_depth));
                 }
             }
         }
@@ -1114,7 +1206,7 @@ private:
 
         for (size_t i = 0; i < types.size(); i++) {
             // Set the names of the pointer types
-            std::vector<std::string> suffix;
+            vector<std::string> suffix;
             TypeInfo *t = &types[i];
             while (t) {
                 if (t->type == TypeInfo::Pointer) {
@@ -1158,7 +1250,7 @@ private:
 
         // Unpack class members into the local variables list.
         for (size_t i = 0; i < functions.size(); i++) {
-            std::vector<LocalVariable> new_vars = functions[i].variables;
+            vector<LocalVariable> new_vars = functions[i].variables;
             for (size_t j = 0; j < new_vars.size(); j++) {
                 // If new_vars[j] is a class type, unpack its members
                 // immediately after this point.
@@ -1188,7 +1280,7 @@ private:
         // Drop functions for which we don't know the program counter,
         // and variables for which we don't know the stack offset,
         // name, or type.
-        std::vector<FunctionInfo> trimmed;
+        vector<FunctionInfo> trimmed;
         for (size_t i = 0; i < functions.size(); i++) {
             FunctionInfo &f = functions[i];
             if (!f.pc_begin ||
@@ -1198,7 +1290,7 @@ private:
                 continue;
             }
 
-            std::vector<LocalVariable> vars;
+            vector<LocalVariable> vars;
             for (size_t j = 0; j < f.variables.size(); j++) {
                 LocalVariable &v = f.variables[j];
                 if (!v.name.empty() && v.type && v.stack_offset != no_location) {
@@ -1251,13 +1343,13 @@ private:
             uint8_t line_range  = e.getU8(&off);
             uint8_t opcode_base = e.getU8(&off);
 
-            std::vector<uint8_t> standard_opcode_length(opcode_base);
+            vector<uint8_t> standard_opcode_length(opcode_base);
             for (int i = 1; i < opcode_base; i++) {
                 // Note we don't use entry 0
                 standard_opcode_length[i] = e.getU8(&off);
             }
 
-            std::vector<std::string> include_dirs;
+            vector<std::string> include_dirs;
             // The current directory is implicitly the first dir.
             include_dirs.push_back(".");
             while (off < end_header_off) {
@@ -1300,7 +1392,7 @@ private:
                 // The id of the block to which this line belongs
                 uint32_t discriminator;
 
-                void append_row(std::vector<LineInfo> &lines) {
+                void append_row(vector<LineInfo> &lines) {
                     LineInfo l = {address, line, file};
                     lines.push_back(l);
                 }
