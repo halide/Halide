@@ -1015,6 +1015,13 @@ Func &Func::compute_root() {
     return *this;
 }
 
+Func &Func::compute_cached() {
+    func.schedule().compute_level = Schedule::LoopLevel::root();
+    func.schedule().store_level = Schedule::LoopLevel::root();
+    func.schedule().cached = true;
+    return *this;
+}
+
 Func &Func::store_at(Func f, RVar var) {
     return store_at(f, Var(var.name()));
 }
@@ -1609,8 +1616,8 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
     compile_to_bitcode(filename, args, "", target);
 }
 
-  void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
-                               const Target &target) {
+void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
+                             const Target &target) {
     assert(defined() && "Can't compile undefined function");
 
     if (!lowered.defined()) {
