@@ -36,6 +36,7 @@
 #include "Func.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "Caching.h"
 
 namespace Halide {
 namespace Internal {
@@ -584,6 +585,7 @@ private:
 
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
+  
         return Pipeline::make(func.name(), realization.first, realization.second, s);
     }
 
@@ -662,7 +664,7 @@ private:
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
             if (function_is_used_in_stmt(func, body)) {
-                body = build_pipeline(body);
+	      body = build_pipeline(body);
             }
             found_compute_level = true;
         }
@@ -1548,6 +1550,10 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Initial statement: " << '\n' << s << '\n';
     s = schedule_functions(s, order, env, graph, t);
     debug(2) << "All realizations injected:\n" << s << '\n';
+
+    debug(2) << "Injecting caching...\n";
+    s = inject_caching(s, env);
+    debug(2) << "Caching injected:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, f);

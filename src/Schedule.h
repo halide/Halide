@@ -133,8 +133,10 @@ struct Schedule {
      * function. See \ref Func::bound */
     std::vector<Bound> bounds;
 
+    /** Records that this function is evaluated as compute_cached. */
+    bool cached;
 
-    Schedule() : touched(false) {};
+    Schedule() : touched(false), cached(false) {};
 };
 
 }
