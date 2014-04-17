@@ -1,24 +1,36 @@
 #include <set>
+#include <stdlib.h>
 
 #include "IR.h"
 #include "Function.h"
 #include "Scope.h"
 #include "CSE.h"
 #include "Random.h"
+#include "Introspection.h"
+#include "IRPrinter.h"
+
 
 namespace Halide {
 namespace Internal {
 
-static void assertf(bool cond, const char* msg, const std::string& name) {
-  if (!cond) {
-    std::cerr << msg << " (Func: " << name << ")" << std::endl;
-    assert(false);
-  }
-}
-
 using std::vector;
 using std::string;
 using std::set;
+
+namespace {
+void assertf(bool cond, const string &msg,
+             const string &name, const string &loc) {
+    if (!cond) {
+        if (loc.empty()) {
+            std::cerr << "Error in definition of function \"" << name << "\":\n  ";
+        } else {
+            std::cerr << "Error in definition of function \"" << name << "\" at " << loc << ":\n  ";
+        }
+        std::cerr << msg << "\n";
+        abort();
+    }
+}
+}
 
 template<>
 EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
@@ -34,9 +46,10 @@ struct CheckVars : public IRGraphVisitor {
     vector<string> pure_args;
     ReductionDomain reduction_domain;
     Scope<int> defined_internally;
-    const std::string name;
+    const std::string name, source_location;
 
-    CheckVars(const std::string& n) : name(n) {}
+    CheckVars(const std::string &n, const std::string &src_loc) :
+        name(n), source_location(src_loc) {}
 
     using IRVisitor::visit;
 
@@ -56,7 +69,7 @@ struct CheckVars : public IRGraphVisitor {
                     assertf(var && var->name == pure_args[i],
                             "All of a functions recursive references to itself"
                             " must contain the same pure variables in the same"
-                            " places as on the left-hand-side.", name);
+                            " places as on the left-hand-side.", name, source_location);
                 }
             }
         }
@@ -83,13 +96,11 @@ struct CheckVars : public IRGraphVisitor {
                 // It's in a reduction domain we already know about
                 return;
             } else {
-                assertf(false, "Multiple reduction domains found in function definition", name);
+                assertf(false, "Multiple reduction domains found in function definition", name, source_location);
             }
         }
 
-        std::cerr << "Undefined variable in function definition: " << var->name
-                  << " (Func: " << name << ")\n";
-        assert(false);
+        assertf(false, "Undefined variable in function definition: " + var->name, name, source_location);
     }
 };
 
@@ -112,15 +123,21 @@ static int rand_counter = 0;
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
-    assertf(!has_extern_definition(), "Function with extern definition cannot be given a pure definition", name());
-    assertf(!name().empty(), "A function needs a name", name());
+    std::string source_loc = get_source_location();
+    assertf(!has_extern_definition(),
+            "Function with extern definition cannot be given a pure definition",
+            name(), source_loc);
+    assertf(!name().empty(), "A function may not have an empty name",
+            name(), source_loc);
     for (size_t i = 0; i < values.size(); i++) {
-        assertf(values[i].defined(), "Undefined expression in right-hand-side of function definition", name());
+        assertf(values[i].defined(),
+                "Undefined expression in right-hand-side of function definition",
+                name(), source_loc);
     }
 
     // Make sure all the vars in the value are either args or are
     // attached to some parameter
-    CheckVars check(name());
+    CheckVars check(name(), source_loc);
     check.pure_args = args;
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&check);
@@ -129,15 +146,15 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     // Make sure all the vars in the args have unique non-empty names
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].empty()) {
-            std::cerr << "In the left-hand-side of the definition of " << name()
-                      << ", argument " << i << " has an empty name\n";
-            assert(false);
+            assertf(false, "In left-hand-side of definition, argument " + int_to_string(i) + " has an empty name",
+                    name(), source_loc);
         }
         for (size_t j = 0; j < i; j++) {
             if (args[i] == args[j]) {
-                std::cerr << "In the left-hand-side of the definition of " << name()
-                          << ", arguments " << j << " and " << i << " have the same name: " << args[i] << "\n";
-                assert(false);
+                assertf(false, "In left-hand-side of definition, arguments " +
+                        int_to_string(i) + " and " + int_to_string(j) +
+                        " both have the name \"" + args[i] + "\"",
+                        name(), source_loc);
             }
         }
     }
@@ -147,19 +164,21 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     // Tag calls to random() with the free vars
-    int tag = rand_counter++;    
+    int tag = rand_counter++;
     for (size_t i = 0; i < values.size(); i++) {
         values[i] = lower_random(values[i], args, tag);
     }
 
-    assertf(!check.reduction_domain.defined(), "Reduction domain referenced in pure function definition", name());
+    assertf(!check.reduction_domain.defined(),
+            "Reduction domain referenced in pure function definition",
+            name(), source_loc);
 
     if (!contents.defined()) {
         contents = new FunctionContents;
         contents.ptr->name = unique_name('f');
     }
 
-    assertf(contents.ptr->values.empty(), "Function is already defined", name());
+    assertf(contents.ptr->values.empty(), "Function is already defined", name(), source_loc);
     contents.ptr->values = values;
     contents.ptr->args = args;
 
@@ -184,28 +203,46 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
 }
 
 void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) {
-    assertf(!name().empty(), "A function needs a name", name());
-    assertf(has_pure_definition(), "Can't add a reduction definition without a regular definition first", name());
+    string source_loc = get_source_location();
+    assertf(!name().empty(),
+            "Function has an empty name",
+            name(), source_loc);
+    assertf(has_pure_definition(),
+            "Can't add a reduction definition without a regular definition first",
+            name(), source_loc);
 
     for (size_t i = 0; i < values.size(); i++) {
-        assertf(values[i].defined(), "Undefined expression in right-hand-side of reduction", name());
+        assertf(values[i].defined(),
+                "Undefined expression in right-hand-side of reduction",
+                name(), source_loc);
     }
 
     // Check the dimensionality matches
     assertf((int)_args.size() == dimensions(),
-           "Dimensionality of reduction definition must match dimensionality of pure definition", name());
+           "Dimensionality of reduction definition must match dimensionality of pure definition",
+            name(), source_loc);
 
     assertf(values.size() == contents.ptr->values.size(),
             "Number of tuple elements for reduction definition must "
-            "match number of tuple elements for pure definition", name());
+            "match number of tuple elements for pure definition",
+            name(), source_loc);
 
     for (size_t i = 0; i < values.size(); i++) {
         // Check that pure value and the reduction value have the same
         // type.  Without this check, allocations may be the wrong size
         // relative to what update code expects.
-        assertf(contents.ptr->values[i].type() == values[i].type(),
-                "Reduction definition does not match type of pure function definition.",
-                name());
+        Type pure_type = contents.ptr->values[i].type();
+        if (pure_type != values[i].type()) {
+            std::ostringstream err;
+            if (values.size()) {
+                err << "Tuple element " << i << " of reduction definition has type ";
+            } else {
+                err << "Reduction definition has type ";
+            }
+            err << values[i].type() << ", but pure definition has type " << pure_type;
+            assertf(false, err.str(),
+                    name(), source_loc);
+        }
         values[i] = common_subexpression_elimination(values[i]);
     }
 
@@ -221,7 +258,10 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     vector<string> pure_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         pure_args[i] = ""; // Will never match a var name
-        assertf(args[i].defined(), "Undefined expression in left-hand-side of reduction", name());
+        assertf(args[i].defined(),
+                "Argument " + int_to_string(i) +
+                " in left-hand-side of reduction definition is undefined",
+                name(), source_loc);
         if (const Variable *var = args[i].as<Variable>()) {
             if (!var->param.defined() &&
                 !var->reduction_domain.defined() &&
@@ -239,7 +279,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // pure args, in the reduction domain, or a parameter. Also checks
     // that recursive references to the function contain all the pure
     // vars in the LHS in the correct places.
-    CheckVars check(name());
+    CheckVars check(name(), source_loc);
     check.pure_args = pure_args;
     for (size_t i = 0; i < args.size(); i++) {
         args[i].accept(&check);
@@ -261,7 +301,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
             free_vars.push_back(rvar);
         }
     }
-    int tag = rand_counter++;    
+    int tag = rand_counter++;
     for (size_t i = 0; i < args.size(); i++) {
         args[i] = lower_random(args[i], free_vars, tag);
     }
@@ -290,7 +330,8 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     for (size_t i = 0; i < counter.calls.size(); i++) {
         contents.ptr->ref_count.decrement();
         assertf(!contents.ptr->ref_count.is_zero(),
-                "Bug: removed too many circular references when defining reduction", name());
+                "Internal Halide Bug: removed too many circular references when defining reduction",
+                name(), source_loc);
     }
 
     // First add any reduction domain
@@ -316,7 +357,11 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
         counter.calls.empty() &&
         pure) {
         std::cerr << "Warning: update definition " << contents.ptr->reductions.size()
-                  << " of function " << name() << " completely hides earlier definitions, "
+                  << " of function " << name();
+        if (!source_loc.empty()) {
+            std::cerr << " at " << source_loc;
+        }
+        std::cerr << " completely hides earlier definitions, "
                   << " because all the arguments are pure, it contains no self-references, "
                   << " and no reduction domain. This may be an accidental re-definition of "
                   << " an already-defined function.\n";
@@ -331,13 +376,14 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality) {
 
+    string source_loc = get_source_location();
     assertf(!has_pure_definition() && !has_reduction_definition(),
             "Function with a pure definition cannot have an extern definition",
-            name());
+            name(), source_loc);
 
     assertf(!has_extern_definition(),
             "Function already has an extern definition",
-            name());
+            name(), source_loc);
 
     contents.ptr->extern_function_name = function_name;
     contents.ptr->extern_arguments = args;
