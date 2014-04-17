@@ -82,6 +82,8 @@ CXX_FLAGS += $(SPIR_CXX_FLAGS)
 LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 
+UNAME = $(shell uname)
+
 OPENGL_LDFLAGS =
 ifneq ($(WITH_OPENGL), )
 ifeq ($(UNAME), Linux)
@@ -119,7 +121,6 @@ endif
 endif
 
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE)
-UNAME = $(shell uname)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
 ifneq ($(TEST_PTX), )
