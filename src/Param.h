@@ -129,7 +129,8 @@ protected:
         const Internal::Variable *var = last_arg.as<Internal::Variable>();
         bool is_placeholder = var && Var::is_placeholder(var->name);
         if (is_placeholder) {
-            assert(!(*placeholder_seen) && "Only one implicit placeholder ('_') allowed in argument list for ImageParam.");
+            user_assert(!(*placeholder_seen))
+                << "Only one implicit placeholder ('_') allowed in argument list for ImageParam " << name() << "\n";
             *placeholder_seen = true;
 
             // The + 1 in the conditional is because one provided argument is an placeholder
@@ -248,49 +249,49 @@ public:
     /** Get an expression giving the minimum coordinate in dimension 0, which
      * by convention is the coordinate of the left edge of the image */
     Expr left() const {
-        assert(dims >= 0);
+        user_assert(dims > 0) << "Can't ask for the left of a zero-dimensional image\n";
         return min(0);
     }
 
     /** Get an expression giving the maximum coordinate in dimension 0, which
      * by convention is the coordinate of the right edge of the image */
     Expr right() const {
-        assert(dims >= 0);
+        user_assert(dims > 0) << "Can't ask for the right of a zero-dimensional image\n";
         return Internal::Add::make(min(0), Internal::Sub::make(extent(0), 1));
     }
 
     /** Get an expression giving the minimum coordinate in dimension 1, which
      * by convention is the top of the image */
     Expr top() const {
-        assert(dims >= 1);
+        user_assert(dims > 1) << "Can't ask for the top of a zero- or one-dimensional image\n";
         return min(1);
     }
 
     /** Get an expression giving the maximum coordinate in dimension 1, which
      * by convention is the bottom of the image */
     Expr bottom() const {
-        assert(dims >= 1);
+        user_assert(dims > 1) << "Can't ask for the bottom of a zero- or one-dimensional image\n";
         return Internal::Add::make(min(1), Internal::Sub::make(extent(1), 1));
     }
 
     /** Get an expression giving the extent in dimension 0, which by
      * convention is the width of the image */
     Expr width() const {
-        assert(dims >= 0);
+        user_assert(dims > 0) << "Can't ask for the width of a zero-dimensional image\n";
         return extent(0);
     }
 
     /** Get an expression giving the extent in dimension 1, which by
      * convention is the height of the image */
     Expr height() const {
-        assert(dims >= 1);
+        user_assert(dims > 1) << "Can't ask for the height of a zero or one-dimensional image\n";
         return extent(1);
     }
 
     /** Get an expression giving the extent in dimension 2, which by
      * convention is the channel-count of the image */
     Expr channels() const {
-        assert(dims >= 2);
+        user_assert(dims > 2) << "Can't ask for the channels of an image with fewer than three dimensions\n";
         return extent(2);
     }
 
@@ -336,7 +337,13 @@ public:
 
     /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
     void set(Buffer b) {
-        if (b.defined()) assert(b.type() == type() && "Setting buffer of incorrect type");
+        if (b.defined()) {
+            user_assert(b.type() == type())
+                << "Can't bind ImageParam " << name()
+                << " of type " << type()
+                << " to Buffer " << b.name()
+                << " of type " << b.type() << "\n";
+        }
         param.set_buffer(b);
     }
 
@@ -352,19 +359,24 @@ public:
      */
     // @{
     Expr operator()() const {
-        assert(dimensions() == 0);
+        user_assert(dims == 0)
+            << "Zero-argument access to Buffer " << name()
+            << ", which has " << dims << "dimensions.\n";
         std::vector<Expr> args;
         return Internal::Call::make(param, args);
     }
 
     /** Force the args to a call to an image to be int32. */
-    static void check_arg_types(const std::string &name, std::vector<Expr> *args) {
+    static void check_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
+        user_assert(args->size() == (size_t)dims)
+            << args->size() << "-argument access to Buffer "
+            << name << ", which has " << dims << " dimensions.\n";
+
         for (size_t i = 0; i < args->size(); i++) {
             Type t = (*args)[i].type();
             if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
-                std::cerr << "Error: implicit cast from " << t << " to int in argument " << (i+1)
-                          << " in call to " << name << " is not allowed. Use an explicit cast.\n";
-                assert(false);
+                user_error << "Error: implicit cast from " << t << " to int in argument " << (i+1)
+                           << " in call to " << name << " is not allowed. Use an explicit cast.\n";
             }
             // We're allowed to implicitly cast from other varieties of int
             if (t != Int(32)) {
@@ -378,9 +390,7 @@ public:
         bool placeholder_seen = false;
         add_implicit_args_if_placeholder(args, x, 1, &placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
+        check_arg_types(name(), &args, dims);
         return Internal::Call::make(param, args);
     }
 
@@ -390,9 +400,7 @@ public:
         add_implicit_args_if_placeholder(args, x, 2, &placeholder_seen);
         add_implicit_args_if_placeholder(args, y, 2, &placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
+        check_arg_types(name(), &args, dims);
         return Internal::Call::make(param, args);
     }
 
@@ -403,9 +411,7 @@ public:
         add_implicit_args_if_placeholder(args, y, 3, &placeholder_seen);
         add_implicit_args_if_placeholder(args, z, 3, &placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
+        check_arg_types(name(), &args, dims);
         return Internal::Call::make(param, args);
     }
 
@@ -417,9 +423,7 @@ public:
         add_implicit_args_if_placeholder(args, z, 4, &placeholder_seen);
         add_implicit_args_if_placeholder(args, w, 4, &placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
+        check_arg_types(name(), &args, dims);
         return Internal::Call::make(param, args);
     }
     // @}

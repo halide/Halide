@@ -345,9 +345,7 @@ public:
         bool placeholder_seen = false;
         placeholder_seen |= add_implicit_args_if_placeholder(args, x, 1, placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        ImageParam::check_arg_types(buffer.name(), &args);
+        ImageParam::check_arg_types(buffer.name(), &args, dims);
 
         return Internal::Call::make(buffer, args);
     }
@@ -358,9 +356,7 @@ public:
         placeholder_seen |= add_implicit_args_if_placeholder(args, x, 2, placeholder_seen);
         placeholder_seen |= add_implicit_args_if_placeholder(args, y, 2, placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        ImageParam::check_arg_types(buffer.name(), &args);
+        ImageParam::check_arg_types(buffer.name(), &args, dims);
 
         return Internal::Call::make(buffer, args);
     }
@@ -372,9 +368,7 @@ public:
         placeholder_seen |= add_implicit_args_if_placeholder(args, y, 3, placeholder_seen);
         placeholder_seen |= add_implicit_args_if_placeholder(args, z, 3, placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        ImageParam::check_arg_types(buffer.name(), &args);
+        ImageParam::check_arg_types(buffer.name(), &args, dims);
 
         return Internal::Call::make(buffer, args);
     }
@@ -387,9 +381,7 @@ public:
         placeholder_seen |= add_implicit_args_if_placeholder(args, z, 4, placeholder_seen);
         placeholder_seen |= add_implicit_args_if_placeholder(args, w, 4, placeholder_seen);
 
-        assert(args.size() == (size_t)dims);
-
-        ImageParam::check_arg_types(buffer.name(), &args);
+        ImageParam::check_arg_types(buffer.name(), &args, dims);
 
         return Internal::Call::make(buffer, args);
     }

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "Debug.h"
 #include "IRVisitor.h"
 #include "Buffer.h"
 #include "Type.h"

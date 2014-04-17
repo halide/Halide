@@ -30,7 +30,6 @@ public:
     SmallStack() : _empty(true) {}
 
     void pop() {
-        assert(!_empty);
         if (_rest.empty()) {
             _empty = true;
             _top = T();
@@ -50,12 +49,10 @@ public:
     }
 
     T top() const {
-        assert(!_empty);
         return _top;
     }
 
     T &top_ref() {
-        assert(!_empty);
         return _top;
     }
 
@@ -79,8 +76,7 @@ public:
     T get(const std::string &name) const {
         typename std::map<std::string, SmallStack<T> >::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            std::cerr << "Symbol '" << name << "' not found" << std::endl;
-            assert(false);
+            internal_error << "Symbol '" << name << "' not found\n";
         }
         return iter->second.top();
     }
@@ -89,8 +85,7 @@ public:
     T &ref(const std::string &name) {
         typename std::map<std::string, SmallStack<T> >::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            std::cerr << "Symbol '" << name << "' not found" << std::endl;
-            assert(false);
+            internal_error << "Symbol '" << name << "' not found\n";
         }
         return iter->second.top_ref();
     }
@@ -113,7 +108,7 @@ public:
      * same name in an outer scope) */
     void pop(const std::string &name) {
         typename std::map<std::string, SmallStack<T> >::iterator iter = table.find(name);
-        assert(iter != table.end() && "Name not in symbol table");
+        internal_assert(iter != table.end()) << "Name not in symbol table";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
