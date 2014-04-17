@@ -398,7 +398,11 @@ public:
             // Binary search into functions
             FunctionInfo *f = find_containing_function((void *)address);
 
-            if (!f) return "";
+            // If no debug info for this function, we must still be
+            // inside libHalide. Continue searching upwards.
+            if (!f) {
+                continue;
+            }
 
             // If we're still in the Halide namespace, continue searching
             if (f->name.size() > 8 &&
