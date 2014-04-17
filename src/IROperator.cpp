@@ -6,6 +6,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
+#include "Debug.h"
 
 namespace Halide {
 namespace Internal {
@@ -136,7 +137,7 @@ int int_cast_constant(Type t, int val) {
         }
     }
     else {
-        assert(0 && "Cast of integer to non-integer not available here");
+        internal_error << "Cast of integer to non-integer not available here";
     }
     return val;
 }
@@ -181,17 +182,15 @@ Expr const_false(int w) {
 
 void check_representable(Type t, int x) {
     int result = int_cast_constant(t, x);
-    if (result != x) {
-        std::cerr << "Integer constant " << x
-                  << " would be converted to " << result
-                  << " because it will be implicitly coerced to type " << t << "\n";
-        assert(false);
-    }
+    user_assert(result == x)
+        << "Integer constant " << x
+        << " would be converted to " << result
+        << " because it will be implicitly coerced to type " << t << "\n";
 }
 
 void match_types(Expr &a, Expr &b) {
-    assert(!a.type().is_handle() && !b.type().is_handle() &&
-           "Can't do arithmetic on opaque pointer types\n");
+    user_assert(!a.type().is_handle() && !b.type().is_handle())
+        << "Can't do arithmetic on opaque pointer types\n";
 
     if (a.type() == b.type()) return;
 
@@ -204,7 +203,7 @@ void match_types(Expr &a, Expr &b) {
     } else if (a.type().is_vector() && b.type().is_scalar()) {
         b = Broadcast::make(b, a.type().width);
     } else {
-        assert(a.type().width == b.type().width && "Can't match types of differing widths");
+        internal_assert(a.type().width == b.type().width) << "Can't match types of differing widths";
     }
 
     Type ta = a.type(), tb = b.type();
@@ -236,8 +235,7 @@ void match_types(Expr &a, Expr &b) {
         a = cast(Int(bits), a);
         b = cast(Int(bits), b);
     } else {
-        std::cerr << "Could not match types: " << ta << ", " << tb << std::endl;
-        assert(false && "Failed type coercion");
+        internal_error << "Could not match types: " << ta << ", " << tb << "\n";
     }
 }
 
@@ -294,7 +292,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 }
 
 Expr halide_log(Expr x_full) {
-    assert(x_full.type() == Float(32));
+    internal_assert(x_full.type() == Float(32));
 
     if (is_const(x_full)) {
         x_full = simplify(x_full);
@@ -338,7 +336,7 @@ Expr halide_log(Expr x_full) {
 }
 
 Expr halide_exp(Expr x_full) {
-    assert(x_full.type() == Float(32));
+    internal_assert(x_full.type() == Float(32));
 
     if (is_const(x_full)) {
         x_full = simplify(x_full);
@@ -407,7 +405,7 @@ Expr raise_to_integer_power(Expr e, int p) {
 }
 
 Expr fast_log(Expr x) {
-    assert(x.type() == Float(32) && "fast_log only works for Float(32)");
+    user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
 
     Expr reduced, exponent;
     range_reduce_log(x, &reduced, &exponent);
@@ -428,7 +426,7 @@ Expr fast_log(Expr x) {
 }
 
 Expr fast_exp(Expr x_full) {
-    assert(x_full.type() == Float(32) && "fast_exp only works for Float(32)");
+    user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
     Expr scaled = x_full / logf(2.0);
     Expr k_real = floor(scaled);

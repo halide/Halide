@@ -12,7 +12,7 @@ using std::vector;
 using std::string;
 using std::ostringstream;
 
-ostream &operator<<(ostream &out, Type type) {
+ostream &operator<<(ostream &out, const Type &type) {
     switch (type.code) {
     case Type::Int:
         out << "int";
@@ -32,7 +32,7 @@ ostream &operator<<(ostream &out, Type type) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, Expr ir) {
+ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
     } else {
@@ -106,7 +106,7 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, Stmt ir) {
+ostream &operator<<(ostream &stream, const Stmt &ir) {
     if (!ir.defined()) {
         stream << "(undefined)\n";
     } else {

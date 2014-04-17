@@ -30,7 +30,7 @@ struct ParameterContents {
 
     template<typename T>
     T &as() {
-        assert(type == type_of<T>());
+        internal_assert(type == type_of<T>());
         return *((T *)(&data));
     }
 };
@@ -39,6 +39,25 @@ struct ParameterContents {
  * pipeline. May be a scalar parameter or a buffer */
 class Parameter {
     IntrusivePtr<ParameterContents> contents;
+
+    void check_defined() const {
+        user_assert(defined()) << "Parameter is undefined\n";
+    }
+
+    void check_is_buffer() const {
+        check_defined();
+        user_assert(contents.ptr->is_buffer) << "Parameter " << name() << " is not a Buffer\n";
+    }
+
+    void check_is_scalar() const {
+        check_defined();
+        user_assert(!contents.ptr->is_buffer) << "Parameter " << name() << " is a Buffer\n";
+    }
+
+    void check_dim_ok(int dim) const {
+        user_assert(dim >= 0 && dim < 4) << "Dimension " << dim << " is not in the range [0, 3]\n";
+    }
+
 public:
     /** Construct a new undefined handle */
     Parameter() : contents(NULL) {}
@@ -61,19 +80,19 @@ public:
 
     /** Get the type of this parameter */
     Type type() const {
-        assert(contents.defined());
+        check_defined();
         return contents.ptr->type;
     }
 
     /** Get the name of this parameter */
     const std::string &name() const {
-        assert(contents.defined());
+        check_defined();
         return contents.ptr->name;
     }
 
     /** Does this parameter refer to a buffer/image? */
     bool is_buffer() const {
-        assert(contents.defined());
+        check_defined();
         return contents.ptr->is_buffer;
     }
 
@@ -81,14 +100,14 @@ public:
      * bound value. Only relevant when jitting */
     template<typename T>
     T get_scalar() const {
-        assert(contents.defined() && !contents.ptr->is_buffer);
+        check_is_scalar();
         return contents.ptr->as<T>();
     }
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
     Buffer get_buffer() const {
-        assert(contents.defined() && contents.ptr->is_buffer);
+        check_is_buffer();
         return contents.ptr->buffer;
     }
 
@@ -96,15 +115,21 @@ public:
      * value. Only relevant when jitting */
     template<typename T>
     void set_scalar(T val) {
-        assert(contents.defined() && !contents.ptr->is_buffer);
+        check_is_scalar();
         contents.ptr->as<T>() = val;
     }
 
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
     void set_buffer(Buffer b) {
-        assert(contents.defined() && contents.ptr->is_buffer);
-        if (b.defined()) assert(contents.ptr->type == b.type());
+        check_is_buffer();
+        if (b.defined()) {
+            user_assert(contents.ptr->type == b.type())
+                << "Can't bind Parameter " << name()
+                << " of type " << contents.ptr->type
+                << " to Buffer " << b.name()
+                << " of type " << b.type() << "\n";
+        }
         contents.ptr->buffer = b;
     }
 
@@ -112,7 +137,7 @@ public:
      * parameter. For a given parameter, this address will never
      * change. Only relevant when jitting. */
     const void *get_scalar_address() const {
-        assert(contents.defined());
+        check_is_scalar();
         return &contents.ptr->data;
     }
 
@@ -130,27 +155,33 @@ public:
      * ImageParam::set_extent) */
     //@{
     void set_min_constraint(int dim, Expr e) {
-        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        check_is_buffer();
+        check_dim_ok(dim);
         contents.ptr->min_constraint[dim] = e;
     }
     void set_extent_constraint(int dim, Expr e) {
-        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        check_is_buffer();
+        check_dim_ok(dim);
         contents.ptr->extent_constraint[dim] = e;
     }
     void set_stride_constraint(int dim, Expr e) {
-        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        check_is_buffer();
+        check_dim_ok(dim);
         contents.ptr->stride_constraint[dim] = e;
     }
     Expr min_constraint(int dim) const {
-        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        check_is_buffer();
+        check_dim_ok(dim);
         return contents.ptr->min_constraint[dim];
     }
     Expr extent_constraint(int dim) const {
-        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        check_is_buffer();
+        check_dim_ok(dim);
         return contents.ptr->extent_constraint[dim];
     }
     Expr stride_constraint(int dim) const {
-        assert(contents.defined() && is_buffer() && dim >= 0 && dim < 4);
+        check_is_buffer();
+        check_dim_ok(dim);
         return contents.ptr->stride_constraint[dim];
     }
     //@}
@@ -158,22 +189,32 @@ public:
     /** Get and set constraints for scalar parameters */
     // @{
     void set_min_value(Expr e) {
-        assert(contents.defined() && !is_buffer());
+        check_is_scalar();
+        user_assert(e.type() == contents.ptr->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents.ptr->type
+            << " to have min value " << e
+            << " of type " << e.type() << "\n";
         contents.ptr->min_value = e;
     }
 
     Expr get_min_value() {
-        assert(contents.defined() && !is_buffer());
+        check_is_scalar();
         return contents.ptr->min_value;
     }
 
     void set_max_value(Expr e) {
-        assert(contents.defined() && !is_buffer());
+        check_is_scalar();
+        user_assert(e.type() == contents.ptr->type)
+            << "Can't set parameter " << name()
+            << " of type " << contents.ptr->type
+            << " to have max value " << e
+            << " of type " << e.type() << "\n";
         contents.ptr->max_value = e;
     }
 
     Expr get_max_value() {
-        assert(contents.defined() && !is_buffer());
+        check_is_scalar();
         return contents.ptr->max_value;
     }
     // @}

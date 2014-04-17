@@ -8,6 +8,7 @@
 #include "Type.h"
 #include "Argument.h"
 #include "Util.h"
+#include "Debug.h"
 
 /** \file
  * Defines Buffer - A c++ wrapper around a buffer_t.
@@ -15,6 +16,26 @@
 
 namespace Halide {
 namespace Internal {
+
+template<typename UnsignedType>
+bool checked_multiply(const UnsignedType &a, const UnsignedType &c, UnsignedType &result) {
+    if (a == 0) {
+        result = 0;
+    } else {
+        UnsignedType t = a * c;
+        if (t / a != c)
+            return false;
+        result = t;
+    }
+    return true;
+}
+
+template<typename UnsignedType>
+bool checked_multiply_assert(const UnsignedType &a, const UnsignedType &b, UnsignedType &result) {
+    bool no_overflow = checked_multiply(a, b, result);
+    internal_assert(no_overflow) << "Overflow in checked multiply\n";
+    return no_overflow;
+}
 
 struct BufferContents {
     /** The buffer_t object we're wrapping. */
@@ -46,7 +67,7 @@ struct BufferContents {
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
                    uint8_t* data, const std::string &n) :
         type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
-        assert(t.width == 1 && "Can't create of a buffer of a vector type");
+        user_assert(t.width == 1) << "Can't create of a buffer of a vector type";
         buf.elem_size = t.bytes();
         size_t size = 1;
         if (x_size)
@@ -59,13 +80,10 @@ struct BufferContents {
             checked_multiply_assert<size_t>(size, w_size, size);
         if (!data) {
             checked_multiply_assert<size_t>(size, buf.elem_size, size);
-            assert(size < ((1UL << 31) - 1) && "Total size of Buffer exceeds 2^31 - 1");
+            user_assert(size < ((1UL << 31) - 1)) << "Total size of buffer " << name << " exceeds 2^31 - 1";
             size = size + 32;
             allocation = (uint8_t *)calloc(1, size);
-            if (!allocation) {
-                std::cerr << "Out of memory allocating buffer of size " << size << "\n";
-                assert(false);
-            }
+            user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";
             buf.host = allocation;
             while ((size_t)(buf.host) & 0x1f) buf.host++;
         } else {
@@ -91,7 +109,7 @@ struct BufferContents {
     BufferContents(Type t, const buffer_t *b, const std::string &n) :
         type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
         buf = *b;
-        assert(t.width == 1 && "Can't create of a buffer of a vector type");
+        user_assert(t.width == 1) << "Can't create of a buffer of a vector type";
     }
 };
 }
@@ -124,7 +142,7 @@ public:
         contents(new Internal::BufferContents(t,
              size_or_zero(sizes, 0), size_or_zero(sizes, 1), size_or_zero(sizes, 2), size_or_zero(sizes, 3),
              data, name)) {
-        assert(sizes.size() <= 4 && "Buffer dimensions greater than 4 are not supported.");
+        user_assert(sizes.size() <= 4) << "Buffer dimensions greater than 4 are not supported.";
     }
 
     Buffer(Type t, const buffer_t *buf, const std::string &name = "") :
@@ -133,13 +151,13 @@ public:
 
     /** Get a pointer to the host-side memory. */
     void *host_ptr() const {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return (void *)contents.ptr->buf.host;
     }
 
     /** Get a pointer to the raw buffer_t struct that this class wraps. */
     buffer_t *raw_buffer() const {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return &(contents.ptr->buf);
     }
 
@@ -147,14 +165,14 @@ public:
      * zero if no device was involved in the creation of this
      * buffer. */
     uint64_t device_handle() const {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return contents.ptr->buf.dev;
     }
 
     /** Has this buffer been modified on the cpu since last copied to a
      * device. Not meaningful unless there's a device involved. */
     bool host_dirty() const {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return contents.ptr->buf.host_dirty;
     }
 
@@ -163,14 +181,14 @@ public:
      * call this, because it is done for you when you cast a Buffer to
      * an Image in order to modify it. */
     void set_host_dirty(bool dirty = true) {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         contents.ptr->buf.host_dirty = dirty;
     }
 
     /** Has this buffer been modified on device since last copied to
      * the cpu. Not meaninful unless there's a device involved. */
     bool device_dirty() const {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return contents.ptr->buf.dev_dirty;
     }
 
@@ -180,7 +198,7 @@ public:
      * Buffer to an Image, or the next time this buffer is accessed on
      * the host in a halide pipeline. */
     void set_device_dirty(bool dirty = true) {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         contents.ptr->buf.host_dirty = dirty;
     }
 
@@ -196,30 +214,30 @@ public:
 
     /** Get the extent of this buffer in the given dimension. */
     int extent(int dim) const {
-        assert(defined());
-        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        user_assert(defined()) << "Buffer is undefined\n";
+        user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
         return contents.ptr->buf.extent[dim];
     }
 
     /** Get the number of bytes between adjacent elements of this buffer along the given dimension. */
     int stride(int dim) const {
-        assert(defined());
-        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        user_assert(defined());
+        user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
         return contents.ptr->buf.stride[dim];
     }
 
     /** Get the coordinate in the function that this buffer represents
      * that corresponds to the base address of the buffer. */
     int min(int dim) const {
-        assert(defined());
-        assert(dim >= 0 && dim < 4 && "We only support 4-dimensional buffers for now");
+        user_assert(defined()) << "Buffer is undefined\n";
+        user_assert(dim >= 0 && dim < 4) << "We only support 4-dimensional buffers for now";
         return contents.ptr->buf.min[dim];
     }
 
     /** Set the coordinate in the function that this buffer represents
      * that corresponds to the base address of the buffer. */
     void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0) {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         contents.ptr->buf.min[0] = m0;
         contents.ptr->buf.min[1] = m1;
         contents.ptr->buf.min[2] = m2;
@@ -228,7 +246,7 @@ public:
 
     /** Get the Halide type of the contents of this buffer. */
     Type type() const {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return contents.ptr->type;
     }
 
@@ -255,7 +273,7 @@ public:
     /** Declare that this buffer was created by the given jit-compiled
      * module. Used internally for reference counting the module. */
     void set_source_module(const Internal::JITCompiledModule &module) {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         contents.ptr->source_module = module;
     }
 
@@ -263,7 +281,7 @@ public:
      * retrieve the module it came from. Otherwise returns a module
      * struct full of null pointers. */
     const Internal::JITCompiledModule &source_module() {
-        assert(defined());
+        user_assert(defined()) << "Buffer is undefined\n";
         return contents.ptr->source_module;
     }
 
