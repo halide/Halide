@@ -202,8 +202,16 @@ public:
         debug(4) << "Program counter adjustment between debug info and actual code: " << pc_adjust << "\n";
 
         for (size_t i = 0; i < functions.size(); i++) {
-            functions[i].pc_begin += pc_adjust;
-            functions[i].pc_end += pc_adjust;
+            FunctionInfo &f = functions[i];
+            f.pc_begin += pc_adjust;
+            f.pc_end += pc_adjust;
+            for (size_t j = 0; j < f.variables.size(); j++) {
+                LocalVariable &v = f.variables[j];
+                for (size_t k = 0; k < v.live_ranges.size(); k++) {
+                    v.live_ranges[k].pc_begin += pc_adjust;
+                    v.live_ranges[k].pc_end += pc_adjust;
+                }
+            }
         }
 
         for (size_t i = 0; i < source_lines.size(); i++) {
@@ -641,34 +649,37 @@ private:
 
             int stack_depth = 0;
 
+            uint64_t compile_unit_base_pc = 0;
+
             // From the dwarf 4 spec
+            const unsigned tag_array_type = 0x01;
+            const unsigned tag_class_type = 0x02;
+            const unsigned tag_lexical_block = 0x0b;
+            const unsigned tag_member = 0x0d;
+            const unsigned tag_pointer_type = 0x0f;
+            const unsigned tag_reference_type = 0x10;
+            const unsigned tag_compile_unit = 0x11;
+            const unsigned tag_structure_type = 0x13;
+            const unsigned tag_typedef = 0x16;
+            const unsigned tag_inlined_subroutine = 0x1d;
+            const unsigned tag_subrange_type = 0x21;
+            const unsigned tag_base_type = 0x24;
+            const unsigned tag_const_type = 0x26;
             const unsigned tag_function = 0x2e;
             const unsigned tag_variable = 0x34;
-            const unsigned tag_class_type = 0x02;
-            const unsigned tag_structure_type = 0x13;
-            const unsigned tag_member = 0x0d;
-            const unsigned tag_base_type = 0x24;
-            const unsigned tag_typedef = 0x16;
             const unsigned tag_namespace = 0x39;
-            const unsigned tag_pointer_type = 0x0f;
-            const unsigned tag_const_type = 0x26;
-            const unsigned tag_reference_type = 0x10;
-            const unsigned tag_array_type = 0x01;
-            const unsigned tag_subrange_type = 0x21;
-            const unsigned tag_lexical_block = 0x0b;
-            const unsigned tag_inlined_subroutine = 0x1d;
 
+            const unsigned attr_location = 0x02;
             const unsigned attr_name = 0x03;
-            const unsigned attr_specification = 0x47;
+            const unsigned attr_byte_size = 0x0b;
             const unsigned attr_low_pc = 0x11;
             const unsigned attr_high_pc = 0x12;
-            const unsigned attr_location = 0x02;
-            const unsigned attr_frame_base = 0x40;
-            const unsigned attr_data_member_location = 0x38;
-            const unsigned attr_byte_size = 0x0b;
-            const unsigned attr_type = 0x49;
             const unsigned attr_upper_bound = 0x2f;
             const unsigned attr_abstract_origin = 0x31;
+            const unsigned attr_data_member_location = 0x38;
+            const unsigned attr_frame_base = 0x40;
+            const unsigned attr_specification = 0x47;
+            const unsigned attr_type = 0x49;
             const unsigned attr_ranges = 0x55;
 
             while (off - start_of_unit < unit_length) {
@@ -1041,7 +1052,6 @@ private:
                             // This is a stack variable imported from a function that was inlined.
                             var.origin_loc = val;
                         }
-
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
@@ -1085,10 +1095,16 @@ private:
                                 const void **end = (const void **)(debug_ranges.data() + debug_ranges.size());
                                 while (ptr[0] && ptr < end-1) {
                                     LiveRange r = {(uint64_t)ptr[0], (uint64_t)ptr[1]};
+                                    r.pc_begin += compile_unit_base_pc;
+                                    r.pc_end += compile_unit_base_pc;
                                     live_ranges.push_back(r);
                                     ptr += 2;
                                 }
                             }
+                        }
+                    } else if (fmt.tag == tag_compile_unit) {
+                        if (attr == attr_low_pc) {
+                            compile_unit_base_pc = val;
                         }
                     }
 
