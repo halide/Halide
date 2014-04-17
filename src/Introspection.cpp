@@ -371,11 +371,14 @@ public:
     // Look up n stack frames and get the source location as filename:line
     std::string get_source_location() {
 
+        debug(4) << "Finding source location\n";
+
         if (!source_lines.size()) {
+            debug(4) << "Bailing out because we have no source lines\n";
             return "";
         }
 
-        const int max_stack_frames = 16;
+        const int max_stack_frames = 256;
 
         // Get the backtrace
         vector<void *> trace(max_stack_frames);
@@ -384,15 +387,20 @@ public:
         for (int frame = 2; frame < trace_size; frame++) {
             uint64_t address = (uint64_t)trace[frame];
 
-            // The actual address of the call is probably 5 bytes earlier (using callq)
+            debug(4) << "Considering address " << ((void *)address) << "\n";
+
             const uint8_t *inst_ptr = (const uint8_t *)address;
-            inst_ptr -= 5;
-            if (inst_ptr[0] == 0xe8) {
-                // TODO: Check x86-32, arm
-                // Found the callq
+            if (inst_ptr[-5] == 0xe8) {
+                // The actual address of the call is probably 5 bytes
+                // earlier (using callq with an immediate address)
                 address -= 5;
+            } else if (inst_ptr[-2] == 0xff) {
+                // Or maybe it's 2 bytes earlier (using callq with a
+                // register address)
+                address -= 2;
             } else {
-                return "";
+                debug(4) << "Skipping function because there's no callq before " << (void *)(inst_ptr) << "\n";
+                continue;
             }
 
             // Binary search into functions
@@ -401,12 +409,16 @@ public:
             // If no debug info for this function, we must still be
             // inside libHalide. Continue searching upwards.
             if (!f) {
+                debug(4) << "Skipping function because we have no debug info for it\n";
                 continue;
             }
+
+            debug(4) << "Containing function is " << f->name << "\n";
 
             // If we're still in the Halide namespace, continue searching
             if (f->name.size() > 8 &&
                 f->name.substr(0, 8) == "Halide::") {
+                debug(4) << "Skipping function because it's in the Halide namespace\n";
                 continue;
             }
 
@@ -428,9 +440,13 @@ public:
 
             std::ostringstream oss;
             oss << file << ":" << line;
+
+            debug(4) << "Source location is " << oss.str() << "\n";
+
             return oss.str();
         }
 
+        debug(4) << "Bailing out because we reached the end of the backtrace\n";
         return "";
     }
 
