@@ -27,7 +27,7 @@ class AllocationInference : public IRMutator {
 
     void visit(const Realize *op) {
         map<string, Function>::const_iterator iter = env.find(op->name);
-        assert (iter != env.end());
+        internal_assert(iter != env.end());
         Function f = iter->second;
 
         Box b = box_touched(op->body, op->name, Scope<Interval>(), func_bounds);
@@ -96,7 +96,7 @@ class AllocationInference : public IRMutator {
 
         stmt = Realize::make(op->name, op->types, op->bounds, new_body);
 
-        assert(b.size() == op->bounds.size());
+        internal_assert(b.size() == op->bounds.size());
         for (size_t i = 0; i < b.size(); i++) {
             string prefix = op->name + "." + f.args()[i];
             string min_name = prefix + ".min_realized";

@@ -182,14 +182,14 @@ CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
 namespace {
 string type_to_c_type(Type type) {
     ostringstream oss;
-    assert(type.width == 1 && "Can't codegen vector types to C (yet)");
+    user_assert(type.width == 1) << "Can't use vector types when compiling to C (yet)\n";
     if (type.is_float()) {
         if (type.bits == 32) {
             oss << "float";
         } else if (type.bits == 64) {
             oss << "double";
         } else {
-            assert(false && "Can't represent a float with this many bits in C");
+            user_error << "Can't represent a float with this many bits in C: " << type << "\n";
         }
 
     } else if (type.is_handle()) {
@@ -204,7 +204,7 @@ string type_to_c_type(Type type) {
             oss << "int" << type.bits << "_t";
             break;
         default:
-            assert(false && "Can't represent an integer with this many bits in C");
+            user_error << "Can't represent an integer with this many bits in C: " << type << "\n";
         }
     }
     return oss.str();
@@ -337,8 +337,8 @@ void CodeGen_C::compile(Stmt s, string name,
         stream << "};\n";
 
         // Emit the buffer_t
-        assert(b.host && "Can't embed an image with a null host pointer\n");
-        assert(!b.dev_dirty && "Can't embed an image with a dirty device pointer\n");
+        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
+        user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
         stream << "static buffer_t " << name << "_buffer = {"
                << "0, " // dev
                << "&" << name << "_data[0], " // host
@@ -650,20 +650,20 @@ void CodeGen_C::visit(const FloatImm *op) {
 
 void CodeGen_C::visit(const Call *op) {
 
-    assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) &&
-           "Can only codegen extern calls and intrinsics");
+    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+        << "Can only codegen extern calls and intrinsics\n";
 
     ostringstream rhs;
 
     // Handle intrinsics first
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::debug_to_file) {
-            assert(op->args.size() == 9);
+            internal_assert(op->args.size() == 9);
             const StringImm *string_imm = op->args[0].as<StringImm>();
-            assert(string_imm);
+            internal_assert(string_imm);
             string filename = string_imm->value;
             const Load *load = op->args[1].as<Load>();
-            assert(load);
+            internal_assert(load);
             string func = load->name;
 
             vector<string> args(6);
@@ -679,43 +679,43 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << ")";
         } else if (op->name == Call::bitwise_and) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << " & " << a1;
         } else if (op->name == Call::bitwise_xor) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << " ^ " << a1;
         } else if (op->name == Call::bitwise_or) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << " | " << a1;
         } else if (op->name == Call::bitwise_not) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             rhs << "~" << print_expr(op->args[0]);
         } else if (op->name == Call::reinterpret) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             rhs << print_reinterpret(op->type, op->args[0]);
         } else if (op->name == Call::shift_left) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << " << " << a1;
         } else if (op->name == Call::shift_right) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << " >> " << a1;
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
-            assert((int)(op->args.size()) == dims*3 + 2);
-            assert(dims <= 4);
+            internal_assert((int)(op->args.size()) == dims*3 + 2);
+            internal_assert(dims <= 4);
             vector<string> args(op->args.size());
             const Variable *v = op->args[0].as<Variable>();
-            assert(v && ends_with(v->name, ".buffer"));
+            internal_assert(v && ends_with(v->name, ".buffer"));
             args[0] = "_" + v->name.substr(0, v->name.size() - 7);
             for (size_t i = 1; i < op->args.size(); i++) {
                 args[i] = print_expr(op->args[i]);
@@ -731,7 +731,7 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << ")";
         } else if (op->name == Call::profiling_timer) {
-            assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 0);
             rhs << "halide_profiling_timer(";
             rhs << (have_user_context ? "__user_context" : "NULL");
             rhs << ")";
@@ -742,7 +742,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "NULL";
         } else if (op->name == Call::address_of) {
             const Load *l = op->args[0].as<Load>();
-            assert(op->args.size() == 1 && l);
+            internal_assert(op->args.size() == 1 && l);
             rhs << "(("
                 << print_type(l->type)
                 << " *)"
@@ -751,12 +751,12 @@ void CodeGen_C::visit(const Call *op) {
                 << print_expr(l->index)
                 << ")";
         } else if (op->name == Call::return_second) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string arg0 = print_expr(op->args[0]);
             string arg1 = print_expr(op->args[1]);
             rhs << "(" << arg0 << ", " << arg1 << ")";
         } else if (op->name == Call::if_then_else) {
-            assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 3);
 
             string result_id = unique_name('V');
 
@@ -783,7 +783,7 @@ void CodeGen_C::visit(const Call *op) {
 
             rhs << result_id;
         } else if (op->name == Call::create_buffer_t) {
-            assert(op->args.size() >= 2);
+            internal_assert(op->args.size() >= 2);
             vector<string> args;
             for (size_t i = 0; i < op->args.size(); i++) {
                 args.push_back(print_expr(op->args[i]));
@@ -806,23 +806,22 @@ void CodeGen_C::visit(const Call *op) {
             }
             rhs << "(&" + buf_id + ")";
         } else if (op->name == Call::extract_buffer_extent) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "]";
         } else if (op->name == Call::extract_buffer_min) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
         } else if (op->name == Call::abs) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
             rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
         } else {
-          // TODO: other intrinsics
-          std::cerr << "Unhandled intrinsic: " << op->name << '\n';
-          assert(false);
+            // TODO: other intrinsics
+            internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
         }
 
     } else {
@@ -973,7 +972,8 @@ void CodeGen_C::visit(const For *op) {
         do_indent();
         stream << "#pragma omp parallel for\n";
     } else {
-        assert(op->for_type == For::Serial && "Can only emit serial or parallel for loops to C");
+        internal_assert(op->for_type == For::Serial)
+            << "Can only emit serial or parallel for loops to C\n";
     }
 
     string id_min = print_expr(op->min);
@@ -998,7 +998,7 @@ void CodeGen_C::visit(const For *op) {
 }
 
 void CodeGen_C::visit(const Provide *op) {
-    assert(false && "Cannot emit Provide statements as C");
+    internal_error << "Cannot emit Provide statements as C\n";
 }
 
 void CodeGen_C::visit(const Allocate *op) {
@@ -1012,8 +1012,8 @@ void CodeGen_C::visit(const Allocate *op) {
         int64_t stack_bytes = constant_size * op->type.bytes();
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            std::cerr << "Total size for allocation " << op->name << " is constant but exceeds 2^31 - 1.";
-            assert(false);
+            user_error << "Total size for allocation "
+                       << op->name << " is constant but exceeds 2^31 - 1.\n";
         } else {
             size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
             if (stack_bytes <= 1024 * 8) {
@@ -1021,7 +1021,7 @@ void CodeGen_C::visit(const Allocate *op) {
             }
         }
     } else {
-        assert(op->extents.size() > 0); // Otherwise allocation is constant and zero sized.
+        internal_assert(op->extents.size() > 0); // Otherwise allocation is constant and zero sized.
 
         size_id = print_assignment(Int(64), print_expr(op->extents[0]));
 
@@ -1072,7 +1072,7 @@ void CodeGen_C::visit(const Allocate *op) {
     op->body.accept(this);
 
     // Should have been freed internally
-    assert(!allocations.contains(op->name));
+    internal_assert(!allocations.contains(op->name));
 
     close_scope("alloc " + print_name(op->name));
 }
@@ -1090,7 +1090,7 @@ void CodeGen_C::visit(const Free *op) {
 }
 
 void CodeGen_C::visit(const Realize *op) {
-    assert(false && "Cannot emit realize statements to C");
+    internal_error << "Cannot emit realize statements to C\n";
 }
 
 void CodeGen_C::visit(const IfThenElse *op) {
@@ -1206,11 +1206,10 @@ void CodeGen_C::test() {
         "} // alloc tmp_heap\n"
         "return 0;\n"
         "}\n";
-    if (source.str() != correct_source) {
-        std::cout << "Correct source code:\n" << correct_source;
-        std::cout << "Actual source code:\n" << source.str();
-        assert(false);
-    }
+    internal_assert(source.str() == correct_source)
+        << "Correct source code:\n" << correct_source
+        << "Actual source code:\n" << source.str();
+
     std::cout << "CodeGen_C test passed\n";
 }
 

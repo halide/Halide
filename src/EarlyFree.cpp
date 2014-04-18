@@ -159,7 +159,7 @@ class InjectEarlyFrees : public IRMutator {
     void visit(const Allocate *alloc) {
         IRMutator::visit(alloc);
         alloc = stmt.as<Allocate>();
-        assert(alloc);
+        internal_assert(alloc);
 
         FindLastUse last_use(alloc->name);
         stmt.accept(&last_use);

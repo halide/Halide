@@ -77,14 +77,18 @@ struct error_report {
     bool warning;
     const char *file;
     int line;
-    error_report(bool c, bool u, bool w, const char *f, int l) :
-        condition(c), user(u), warning(w), file(f), line(l) {
+    const char *condition_string;
+    error_report(bool c, bool u, bool w, const char *f, int l, const char *cs) :
+        condition(c), user(u), warning(w), file(f), line(l), condition_string(cs) {
         if (condition) return;
         const std::string &source_loc = get_source_location();
 
         if (user) {
             // Only mention where inside of libHalide the error tripped if we have debug level > 0
             debug(1) << "User error triggered at " << f << ":" << l << "\n";
+            if (condition_string) {
+                debug(1) << "Condition failed: " << condition_string << "\n";
+            }
             if (warning) {
                 std::cerr << "Warning";
             } else {
@@ -109,6 +113,9 @@ struct error_report {
             } else {
                 std::cerr << "\n";
             }
+            if (condition_string) {
+                std::cerr << "Condition failed: " << condition_string << "\n";
+            }
         }
     }
 
@@ -128,11 +135,11 @@ struct error_report {
     }
 };
 
-#define internal_error     Halide::Internal::error_report(false, false, false, __FILE__, __LINE__)
-#define internal_assert(c) Halide::Internal::error_report(c,     false, false, __FILE__, __LINE__)
-#define user_error         Halide::Internal::error_report(false, true,  false, __FILE__, __LINE__)
-#define user_assert(c)     Halide::Internal::error_report(c,     true,  false, __FILE__, __LINE__)
-#define user_warning       Halide::Internal::error_report(false, true,   true, __FILE__, __LINE__)
+#define internal_error     Halide::Internal::error_report(false, false, false, __FILE__, __LINE__, NULL)
+#define internal_assert(c) Halide::Internal::error_report(c,     false, false, __FILE__, __LINE__, #c)
+#define user_error         Halide::Internal::error_report(false, true,  false, __FILE__, __LINE__, NULL)
+#define user_assert(c)     Halide::Internal::error_report(c,     true,  false, __FILE__, __LINE__, #c)
+#define user_warning       Halide::Internal::error_report(false, true,   true, __FILE__, __LINE__, NULL)
 
 }
 }

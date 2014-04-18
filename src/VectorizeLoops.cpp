@@ -30,7 +30,7 @@ class VectorizeLoops : public IRMutator {
             } else if (e.type().width == 1) {
                 return Broadcast::make(e, width);
             } else {
-                assert(false && "Mismatched vector widths in VectorSubs");
+                internal_error << "Mismatched vector widths in VectorSubs\n";
             }
             return Expr();
         }
@@ -63,7 +63,7 @@ class VectorizeLoops : public IRMutator {
             if (scalarized) {
                 // When we're scalarized, we were supposed to hide all
                 // the vector vars in scope.
-                assert(expr.type().is_scalar());
+                internal_assert(expr.type().is_scalar());
             }
         }
 
@@ -125,7 +125,7 @@ class VectorizeLoops : public IRMutator {
                         index = Ramp::make(Mul::make(index, width), 1, width);
                     }
                 } else {
-                    assert(!scalarized);
+                    internal_assert(!scalarized);
                     index = Mul::make(index, Broadcast::make(width, width));
                     index = Add::make(index, Ramp::make(0, 1, width));
                 }
@@ -256,7 +256,7 @@ class VectorizeLoops : public IRMutator {
                         index = Ramp::make(Mul::make(index, width), 1, width);
                     }
                 } else {
-                    assert(!scalarized);
+                    internal_assert(!scalarized);
                     index = Mul::make(index, Broadcast::make(width, width));
                     index = Add::make(index, Ramp::make(0, 1, width));
                 }
@@ -312,10 +312,10 @@ class VectorizeLoops : public IRMutator {
 
             Expr min = mutate(op->min);
             Expr extent = mutate(op->extent);
-            assert(extent.type().is_scalar() &&
-                   "Vectorizing a for loop with an extent that varies per vector "
-                   "lane. You're probably scheduling something inside a vectorized "
-                   "dimension.");
+            user_assert(extent.type().is_scalar())
+                << "Can't vectorize a for loop with an extent that varies per vector "
+                << "lane. This is probably caused by scheduling something inside a "
+                << "vectorized dimension.";
 
             if (min.type().is_vector()) {
                 // for (x from vector_min to scalar_extent)
@@ -357,7 +357,8 @@ class VectorizeLoops : public IRMutator {
                 // Only support scalar sizes for now. For vector sizes, we
                 // would need to take the horizontal max to convert to a
                 // scalar size.
-                assert(new_extents[i].type().is_scalar() && "Cannot vectorize an allocation with a varying size per vector lane");
+                user_assert(new_extents[i].type().is_scalar())
+                    << "Cannot vectorize an allocation with a varying size per vector lane.\n";
             }
 
             // Rewrite loads and stores to this allocation like so (this works for scalars and vectors):
@@ -372,7 +373,7 @@ class VectorizeLoops : public IRMutator {
             Stmt result;
             int width = replacement.type().width;
             Expr old_replacement = replacement;
-            assert(!scalarized);
+            internal_assert(!scalarized);
             scalarized = true;
 
             for (int i = 0; i < width; i++) {
@@ -420,11 +421,10 @@ class VectorizeLoops : public IRMutator {
         if (for_loop->for_type == For::Vectorized) {
             const IntImm *extent = for_loop->extent.as<IntImm>();
             if (!extent || extent->value <= 1) {
-                std::cerr << "Loop over " << for_loop->name
-                          << " has extent " << for_loop->extent
-                          << ". Can only vectorize loops over a "
-                          << "constant extent > 1\n";
-                assert(false);
+                user_error << "Loop over " << for_loop->name
+                           << " has extent " << for_loop->extent
+                           << ". Can only vectorize loops over a "
+                           << "constant extent > 1\n";
             }
 
             // Replace the var with a ramp within the body

@@ -67,7 +67,7 @@ void lower_test() {
 
     Stmt result = lower(f.function(), get_host_target());
 
-    internal_assert(result.defined()) << "Lowering returned trivial function";
+    internal_assert(result.defined()) << "Lowering returned undefined Stmt";
 
     std::cout << "Lowering test passed" << std::endl;
 }
@@ -351,7 +351,7 @@ Stmt build_produce(Function f) {
                 Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
-                internal_error << "Bad ExternFuncArgument type";
+                internal_error << "Bad ExternFuncArgument type\n";
             }
         }
 
@@ -670,7 +670,7 @@ private:
         if (store_level.match(for_loop->name)) {
             debug(3) << "Found store level\n";
             internal_assert(found_compute_level)
-                << "The compute loop level was not found within the store loop level!";
+                << "The compute loop level was not found within the store loop level!\n";
 
             if (function_is_used_in_stmt(func, body)) {
                 body = build_realize(body);
@@ -804,7 +804,7 @@ vector<string> realization_order(string output, const map<string, Function> &env
         }
 
         internal_assert(scheduled_something)
-            << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?";
+            << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
     }
 
 }
@@ -1266,7 +1266,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr actual_extent = Variable::make(Int(32), actual_extent_name);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name);
             if (!touched[j].min.defined() || !touched[j].max.defined()) {
-                user_error << "Error: buffer " << name
+                user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
                            << j << "\n";
             }
@@ -1387,7 +1387,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                                 !param.min_constraint(i).defined())
                         << "Can't constrain the min or extent of an output buffer beyond the "
                         << "first. They are implicitly constrained to have the same min and extent "
-                        << "as the first output buffer.";
+                        << "as the first output buffer.\n";
 
                     stride_constrained = param.stride_constraint(i);
                 } else if (image.defined() && (int)i < image.dimensions()) {

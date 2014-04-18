@@ -263,12 +263,10 @@ void check(Expr a, Expr even, Expr odd) {
     Expr correct_even = extract_even_lanes(a);
     Expr correct_odd = extract_odd_lanes(a);
     if (!equal(correct_even, even)) {
-        std::cerr << correct_even << " != " << even << "\n";
-        assert(false);
+        internal_error << correct_even << " != " << even << "\n";
     }
     if (!equal(correct_odd, odd)) {
-        std::cerr << correct_odd << " != " << odd << "\n";
-        assert(false);
+        internal_error << correct_odd << " != " << odd << "\n";
     }
 }
 }
