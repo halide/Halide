@@ -82,7 +82,7 @@ public:
                 }
             }
 
-            assert(b.empty() || b.size() == func.args().size());
+            internal_assert(b.empty() || b.size() == func.args().size());
 
             if (func.has_extern_definition()) {
                 // After we define our bounds required, we need to
@@ -232,7 +232,7 @@ public:
                     Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
                     bounds_inference_args.push_back(buf);
                 } else {
-                    assert(false && "Bad ExternFuncArgument type");
+                    internal_error << "Bad ExternFuncArgument type";
                 }
             }
 
@@ -320,7 +320,7 @@ public:
     BoundsInference(const vector<Function> &f,
                     const FuncValueBounds &fb) :
         funcs(f), func_bounds(fb) {
-        assert(!f.empty());
+        internal_assert(!f.empty());
         Function output_function = f[f.size()-1];
 
         // Compute the intrinsic relationships between the stages of
@@ -451,15 +451,16 @@ public:
                     // Check for unboundedness
                     for (size_t k = 0; k < b.size(); k++) {
                         if (!b[k].min.defined() || !b[k].max.defined()) {
+                            std::ostringstream err;
                             if (consumer.stage == 0) {
-                                std::cerr << "The pure definition ";
+                                err << "The pure definition ";
                             } else {
-                                std::cerr << "Update definition number " << (consumer.stage-1);
+                                err << "Update definition number " << (consumer.stage-1);
                             }
-                            std::cerr << " of Function " << consumer.name
-                                      << " calls function " << producer.name
-                                      << " in an unbounded way in dimension " << k << "\n";
-                            assert(false);
+                            err << " of Function " << consumer.name
+                                << " calls function " << producer.name
+                                << " in an unbounded way in dimension " << k << "\n";
+                            user_error << err.str();
                         }
                     }
 
@@ -557,7 +558,7 @@ public:
         Box box;
         if (producing >= 0) {
             box = box_provided(body, stages[producing].name, Scope<Interval>(), func_bounds);
-            assert((int)box.size() == f.dimensions());
+            internal_assert((int)box.size() == f.dimensions());
         }
 
         // Recurse.
@@ -589,7 +590,7 @@ public:
         // we're producing.
         if (producing >= 0 && !inner_productions.empty()) {
             for (size_t i = 0; i < box.size(); i++) {
-                assert(box[i].min.defined() && box[i].max.defined());
+                internal_assert(box[i].min.defined() && box[i].max.defined());
                 string var = stage_name + "." + f.args()[i];
 
                 if (box[i].max.same_as(box[i].min)) {

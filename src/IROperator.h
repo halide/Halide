@@ -956,7 +956,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     user_assert(zero_val.type() == one_val.type())
         << "Can't lerp between " << zero_val << " of type " << zero_val.type()
-        << "and " << one_val << " of different type " << one_val.type() << "\n";
+        << " and " << one_val << " of different type " << one_val.type() << "\n";
     user_assert((weight.type().is_uint() || weight.type().is_float()))
         << "A lerp weight must be an unsigned integer or a float, but "
         << "lerp weight " << weight << " has type " << weight.type() << ".\n";
@@ -968,9 +968,8 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
         const float *const_weight = as_const_float(weight);
         if (const_weight) {
             user_assert(*const_weight >= 0.0f && *const_weight <= 1.0f)
-                << "Floating-point weight for lerp with integer arguments "
-                << "must be between 0.0f and 1.0f, but is instead "
-                << *const_weight << "\n";
+                << "Floating-point weight for lerp with integer arguments is "
+                << *const_weight << " which is not in the range [0.0f, 1.0f]\n";
         }
     }
     return Internal::Call::make(zero_val.type(), Internal::Call::lerp,

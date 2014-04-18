@@ -16,7 +16,7 @@ using namespace llvm;
 
 CodeGen_SPIR_Dev::CodeGen_SPIR_Dev(Target host, int bits) : CodeGen(host), bits(bits) {
     #if !(WITH_SPIR)
-    assert(false && "spir not enabled for this build of Halide.");
+    user_error << "spir not enabled for this build of Halide.\n";
     #endif
 }
 
@@ -185,14 +185,14 @@ string CodeGen_SPIR_Dev::simt_intrinsic(const string &name) {
     //else if (ends_with(name, ".blockidw")) {
     //    return "halide.spir.gid.w";
     //}
-    assert(false && "simt_intrinsic called on bad variable name");
+    internal_error << "simt_intrinsic called on bad variable name\n";
     return "";
 }
 
 void CodeGen_SPIR_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         debug(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
+        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
 
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         Expr loop_var = loop->min + simt_idx;
@@ -263,7 +263,9 @@ void CodeGen_SPIR_Dev::visit(const Allocate *alloc) {
         // be dealing with constants here.
         int32_t size = 0;
         bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
-        assert(is_constant && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
+        user_assert(is_constant)
+            << "Allocation " << alloc->name << " has a dynamic size. "
+            << "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.\n";
 
         BasicBlock *here = builder->GetInsertBlock();
 

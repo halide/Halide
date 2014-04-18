@@ -25,7 +25,8 @@ class DebugToFile : public IRMutator {
             Function f = iter->second;
             vector<Expr> args;
 
-            assert(op->types.size() == 1 && "debug_to_file doesn't handle functions with multiple values yet");
+            user_assert(op->types.size() == 1)
+                << "debug_to_file doesn't handle functions with multiple values yet\n";
 
             // The name of the file
             args.push_back(f.debug_file());
@@ -75,7 +76,7 @@ class DebugToFile : public IRMutator {
             } else if (t == Int(64)) {
                 type_code = 9;
             } else {
-                assert(false && "Type not supported for debug_to_file");
+                user_error << "Type " << t << " not supported for debug_to_file\n";
             }
             args.push_back(type_code);
             args.push_back(t.bytes());
@@ -116,10 +117,10 @@ Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
         s = r->body;
     } else if (const Block *b = s.as<Block>()) {
         const Realize *r = b->rest.as<Realize>();
-        assert(r);
+        internal_assert(r);
         s = Block::make(b->first, r->body);
     } else {
-        assert(false);
+        internal_error << "Could not unwrap stmt after debug_to_file\n";
     }
 
     return s;

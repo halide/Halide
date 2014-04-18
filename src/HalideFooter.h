@@ -4,5 +4,6 @@
 // Clean up macros used inside Halide headers
 #undef user_assert
 #undef user_error
+#undef user_warning
 #undef internal_error
 #undef internal_assert

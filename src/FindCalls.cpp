@@ -19,8 +19,9 @@ public:
         if (iter == calls.end()) {
             calls[f.name()] = f;
         } else {
-            assert(iter->second.same_as(f) &&
-                   "Can't compile a pipeline using multiple functions with same name");
+            user_assert(iter->second.same_as(f))
+                << "Can't compile a pipeline using multiple functions with same name: "
+                << f.name() << "\n";
         }
     }
 
@@ -38,8 +39,9 @@ public:
 void populate_environment(Function f, map<string, Function> &env, bool recursive = true) {
     map<string, Function>::const_iterator iter = env.find(f.name());
     if (iter != env.end()) {
-        assert(iter->second.same_as(f) &&
-               "Can't compile a pipeline using multiple functions with same name");
+        user_assert(iter->second.same_as(f))
+            << "Can't compile a pipeline using multiple functions with same name: "
+            << f.name() << "\n";
         return;
     }
 

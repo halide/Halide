@@ -159,8 +159,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         int64_t stack_bytes = constant_size * type.bytes();
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            std::cerr << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-            assert(false);
+            user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
         } else if (stack_bytes <= 1024 * 8) {
             // Round up to nearest multiple of 32.
             allocation.stack_size = static_cast<int32_t>(((stack_bytes + 31)/32)*32);
@@ -187,7 +186,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
         malloc_fn->setDoesNotAlias(0);
-        assert(malloc_fn && "Could not find halide_malloc in module");
+        internal_assert(malloc_fn) << "Could not find halide_malloc in module\n";
 
         llvm::Function::arg_iterator arg_iter = malloc_fn->arg_begin();
         ++arg_iter;  // skip the user context *
@@ -215,7 +214,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
 void CodeGen_Posix::free_allocation(const std::string &name) {
     Allocation alloc = allocations.get(name);
 
-    assert(alloc.ptr);
+    internal_assert(alloc.ptr);
 
     CallInst *call_inst = dyn_cast<CallInst>(alloc.ptr);
     llvm::Function *allocated_in = call_inst ? call_inst->getParent()->getParent() : NULL;
@@ -226,7 +225,7 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     } else if (allocated_in == current_func) { // Skip over allocations from outside this function.
         // Call free
         llvm::Function *free_fn = module->getFunction("halide_free");
-        assert(free_fn && "Could not find halide_free in module");
+        internal_assert(free_fn) << "Could not find halide_free in module.\n";
         debug(4) << "Creating call to halide_free\n";
         Value *args[2] = { get_user_context(), alloc.ptr };
         builder->CreateCall(free_fn, args);
@@ -242,9 +241,8 @@ void CodeGen_Posix::destroy_allocation(Allocation alloc) {
 void CodeGen_Posix::visit(const Allocate *alloc) {
 
     if (sym_exists(alloc->name + ".host")) {
-        std::cerr << "Can't have two different buffers with the same name: "
-                  << alloc->name << "\n";
-        assert(false);
+        user_error << "Can't have two different buffers with the same name: "
+                   << alloc->name << "\n";
     }
 
     Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->extents);
@@ -253,8 +251,8 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     codegen(alloc->body);
 
     // Should have been freed
-    assert(!sym_exists(alloc->name + ".host"));
-    assert(!allocations.contains(alloc->name));
+    internal_assert(!sym_exists(alloc->name + ".host"));
+    internal_assert(!allocations.contains(alloc->name));
 
     debug(2) << "Destroying allocation " << alloc->name << "\n";
     destroy_allocation(allocation);

@@ -80,7 +80,7 @@ struct BufferContents {
             checked_multiply_assert<size_t>(size, w_size, size);
         if (!data) {
             checked_multiply_assert<size_t>(size, buf.elem_size, size);
-            user_assert(size < ((1UL << 31) - 1)) << "Total size of buffer " << name << " exceeds 2^31 - 1";
+            user_assert(size < ((1UL << 31) - 1)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
             size = size + 32;
             allocation = (uint8_t *)calloc(1, size);
             user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";

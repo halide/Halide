@@ -10,6 +10,7 @@
 #include "JITCompiledModule.h"
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
+#include "Util.h"
 
 namespace Halide {
 namespace Internal {
@@ -139,10 +140,6 @@ void CodeGen::init_module() {
     f64 = llvm::Type::getDoubleTy(*context);
 }
 
-// llvm includes above disable assert.  Include Util.h here
-// to reenable assert.
-#include "Util.h"
-
 CodeGen::~CodeGen() {
     if (module && owns_module) {
         delete module;
@@ -164,8 +161,8 @@ bool CodeGen::llvm_NVPTX_enabled = false;
 void CodeGen::compile(Stmt stmt, string name,
                       const vector<Argument> &args,
                       const vector<Buffer> &images_to_embed) {
-    assert(module && context && builder &&
-           "The CodeGen subclass should have made an initial module before calling CodeGen::compile");
+    internal_assert(module && context && builder)
+        << "The CodeGen subclass should have made an initial module before calling CodeGen::compile\n";
     owns_module = true;
 
     // Start the module off with a definition of a buffer_t
@@ -218,9 +215,10 @@ void CodeGen::compile(Stmt stmt, string name,
     // Embed the constant images as globals.
     for (size_t i = 0; i < images_to_embed.size(); i++) {
         Buffer buffer = images_to_embed[i];
-        assert(buffer.defined());
+        internal_assert(buffer.defined());
         buffer_t b = *(buffer.raw_buffer());
-        assert(b.host && "Can only embed buffers that exist on the host at compile time\n");
+        user_assert(b.host)
+            << "Can't embed buffer " << buffer.name() << " because it has a null host pointer.\n";
 
         // Figure out the offset of the last pixel.
         size_t num_elems = 1;
@@ -329,7 +327,7 @@ llvm::Type *CodeGen::llvm_type_of(Type t) {
 }
 
 JITCompiledModule CodeGen::compile_to_function_pointers() {
-    assert(module && "No module defined. Must call compile before calling compile_to_function_pointer");
+    internal_assert(module) << "No module defined. Must call compile before calling compile_to_function_pointer.\n";
 
     JITCompiledModule m;
 
@@ -361,7 +359,7 @@ void CodeGen::optimize_module() {
     module_pass_manager.run(*module);
     if (!function_name.empty()) {
         llvm::Function *fn = module->getFunction(function_name);
-        assert(fn && "Could not find function inside llvm module");
+        internal_assert(fn) << "Could not find function " << function_name << " inside llvm module\n";
 
         function_pass_manager.doInitialization();
         function_pass_manager.run(*fn);
@@ -374,7 +372,7 @@ void CodeGen::optimize_module() {
 }
 
 void CodeGen::compile_to_bitcode(const string &filename) {
-    assert(module && "No module defined. Must call compile before calling compile_to_bitcode");
+    internal_assert(module) << "No module defined. Must call compile before calling compile_to_bitcode.\n";
 
     string error_string;
 #if LLVM_VERSION < 35
@@ -386,7 +384,7 @@ void CodeGen::compile_to_bitcode(const string &filename) {
 }
 
 void CodeGen::compile_to_native(const string &filename, bool assembly) {
-    assert(module && "No module defined. Must call compile before calling compile_to_native");
+    internal_assert(module) << "No module defined. Must call compile before calling compile_to_native\n";
 
     // Get the target specific parser.
     string error_string;
@@ -398,7 +396,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
         cout << error_string << endl;
         TargetRegistry::printRegisteredTargetsForVersion();
     }
-    assert(target && "Could not create target");
+    internal_assert(target) << "Could not create target\n";
 
     debug(2) << "Selected target: " << target->getName() << "\n";
 
@@ -429,7 +427,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
                                     CodeModel::Default,
                                     CodeGenOpt::Aggressive);
 
-    assert(target_machine && "Could not allocate target machine!");
+    internal_assert(target_machine) << "Could not allocate target machine!\n";
 
     // Figure out where we are going to send the output.
 #if LLVM_VERSION < 35
@@ -437,10 +435,9 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
 #else
     raw_fd_ostream raw_out(filename.c_str(), error_string, llvm::sys::fs::F_None);
 #endif
-    if (!error_string.empty()) {
-        std::cerr << "Error opening output " << filename << ": " << error_string << std::endl;
-        assert(false);
-    }
+    internal_assert(error_string.empty())
+        << "Error opening output " << filename << ": " << error_string << "\n";
+
     formatted_raw_ostream out(raw_out);
 
     // Build up all of the passes that we want to do to the module.
@@ -492,14 +489,15 @@ llvm::Value *CodeGen::sym_get(const string &name, bool must_succeed) const {
     // look in the symbol table
     if (!symbol_table.contains(name)) {
         if (must_succeed) {
-            std::cerr << "Symbol not found: " << name << "\n";
+            std::ostringstream err;
+            err << "Symbol not found: " << name << "\n";
 
             if (debug::debug_level > 0) {
-                std::cerr << "The following names are in scope:\n";
-                std::cerr << symbol_table << "\n";
+                err << "The following names are in scope:\n"
+                    << symbol_table << "\n";
             }
 
-            assert(false);
+            internal_error << err.str();
         } else {
             return NULL;
         }
@@ -566,7 +564,7 @@ void CodeGen::unpack_buffer(string name, llvm::Value *buffer) {
 // Add a definition of buffer_t to the module if it isn't already there
 void CodeGen::define_buffer_t() {
     buffer_t_type = module->getTypeByName("struct.buffer_t");
-    assert(buffer_t_type && "Did not find buffer_t in initial module");
+    internal_assert(buffer_t_type) << "Did not find buffer_t in initial module";
 }
 
 // Given an llvm value representing a pointer to a buffer_t, extract various subfields
@@ -647,16 +645,16 @@ Value *CodeGen::buffer_elem_size_ptr(Value *buffer) {
 }
 
 Value *CodeGen::codegen(Expr e) {
-    assert(e.defined());
+    internal_assert(e.defined());
     debug(4) << "Codegen: " << e.type() << ", " << e << "\n";
     value = NULL;
     e.accept(this);
-    assert(value && "Codegen of an expr did not produce an llvm value");
+    internal_assert(value) << "Codegen of an expr did not produce an llvm value\n";
     return value;
 }
 
 void CodeGen::codegen(Stmt s) {
-    assert(s.defined());
+    internal_assert(s.defined());
     debug(3) << "Codegen: " << s << "\n";
     value = NULL;
     s.accept(this);
@@ -695,7 +693,7 @@ void CodeGen::visit(const Cast *op) {
     } else if (src.is_uint() && dst.is_float()) {
         value = builder->CreateUIToFP(value, llvm_dst);
     } else {
-        assert(src.is_float() && dst.is_float());
+        internal_assert(src.is_float() && dst.is_float());
         // Float widening or narrowing
         value = builder->CreateFPCast(value, llvm_dst);
     }
@@ -1256,7 +1254,7 @@ void CodeGen::visit(const Broadcast *op) {
 Expr unbroadcast(Expr e) {
     if (e.type().is_vector()) {
         const Broadcast *broadcast = e.as<Broadcast>();
-        assert(broadcast);
+        internal_assert(broadcast);
         return broadcast->value;
     } else {
         return e;
@@ -1299,8 +1297,8 @@ bool CodeGen::function_takes_user_context(const string &name) {
 }
 
 void CodeGen::visit(const Call *op) {
-    assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic) &&
-           "Can only codegen extern calls and intrinsics");
+    internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
+        << "Can only codegen extern calls and intrinsics\n";
 
     if (op->call_type == Call::Intrinsic) {
         // Some call nodes are actually injected at various stages as a
@@ -1308,11 +1306,11 @@ void CodeGen::visit(const Call *op) {
         // handled in the standard library, but ones with e.g. varying
         // types are handled here.
         if (op->name == Call::shuffle_vector) {
-            assert((int) op->args.size() == 1 + op->type.width);
+            internal_assert((int) op->args.size() == 1 + op->type.width);
             vector<Constant *> indices(op->type.width);
             for (size_t i = 0; i < indices.size(); i++) {
                 const IntImm *idx = op->args[i+1].as<IntImm>();
-                assert(idx);
+                internal_assert(idx);
                 indices[i] = ConstantInt::get(i32, idx->value);
             }
             Value *arg = codegen(op->args[0]);
@@ -1323,7 +1321,7 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::interleave_vectors) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             Expr a = op->args[0], b = op->args[1];
             debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
 
@@ -1337,13 +1335,13 @@ void CodeGen::visit(const Call *op) {
             value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
 
         } else if (op->name == Call::debug_to_file) {
-            assert(op->args.size() == 9);
+            internal_assert(op->args.size() == 9);
             const StringImm *filename = op->args[0].as<StringImm>();
             const Load *func = op->args[1].as<Load>();
-            assert(func && filename && "Malformed debug_to_file node");
+            internal_assert(func && filename) << "Malformed debug_to_file node\n";
             // Grab the function from the initial module
             llvm::Function *debug_to_file = module->getFunction("halide_debug_to_file");
-            assert(debug_to_file && "Could not find halide_debug_to_file function in initial module");
+            internal_assert(debug_to_file) << "Could not find halide_debug_to_file function in initial module\n";
 
             // Make the filename a global string constant
             Value *user_context = get_user_context();
@@ -1360,32 +1358,32 @@ void CodeGen::visit(const Call *op) {
 
             value = builder->CreateCall(debug_to_file, args);
         } else if (op->name == Call::bitwise_and) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             value = builder->CreateAnd(codegen(op->args[0]), codegen(op->args[1]));
         } else if (op->name == Call::bitwise_xor) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             value = builder->CreateXor(codegen(op->args[0]), codegen(op->args[1]));
         } else if (op->name == Call::bitwise_or) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             value = builder->CreateOr(codegen(op->args[0]), codegen(op->args[1]));
         } else if (op->name == Call::bitwise_not) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             value = builder->CreateNot(codegen(op->args[0]));
         } else if (op->name == Call::reinterpret) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             value = builder->CreateBitCast(codegen(op->args[0]), llvm_type_of(op->type));
         } else if (op->name == Call::shift_left) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
         } else if (op->name == Call::shift_right) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             if (op->type.is_int()) {
                 value = builder->CreateAShr(codegen(op->args[0]), codegen(op->args[1]));
             } else {
                 value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
             }
         } else if (op->name == Call::abs) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             // Check if an abs for this type exists in the initial module
             Type t = op->args[0].type();
             ostringstream type_name;
@@ -1405,7 +1403,7 @@ void CodeGen::visit(const Call *op) {
                     cmp = builder->CreateFCmpOGE(arg, zero);
                     neg = builder->CreateFSub(zero, arg);
                 } else {
-                    assert(t.is_int());
+                    internal_assert(t.is_int());
                     cmp = builder->CreateICmpSGE(arg, zero);
                     neg = builder->CreateSub(zero, arg);
                 }
@@ -1416,15 +1414,16 @@ void CodeGen::visit(const Call *op) {
             Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
 
             // Populate the fields
-            assert(op->args[0].type().is_handle() && "The first argument to create_buffer_t must be a Handle");
+            internal_assert(op->args[0].type().is_handle())
+                << "The first argument to create_buffer_t must be a Handle\n";
             Value *host_ptr = codegen(op->args[0]);
             host_ptr = builder->CreatePointerCast(host_ptr, i8->getPointerTo());
             builder->CreateStore(host_ptr, buffer_host_ptr(buffer));
 
             // Type check integer arguments
             for (size_t i = 1; i < op->args.size(); i++) {
-                assert(op->args[i].type() == Int(32) &&
-                       "All arguments to create_buffer_t beyond the first must have type Int32");
+                internal_assert(op->args[i].type() == Int(32))
+                    << "All arguments to create_buffer_t beyond the first must have type Int(32)\n";
             }
 
             Value *elem_size = codegen(op->args[1]);
@@ -1454,23 +1453,23 @@ void CodeGen::visit(const Call *op) {
 
             value = buffer;
         } else if (op->name == Call::extract_buffer_min) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
-            assert(idx);
+            internal_assert(idx);
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
             value = buffer_min(buffer, idx->value);
         } else if (op->name == Call::extract_buffer_extent) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
-            assert(idx);
+            internal_assert(idx);
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
             value = buffer_extent(buffer, idx->value);
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
-            assert((int)(op->args.size()) == dims*3 + 2);
-            assert(dims <= 4);
+            internal_assert((int)(op->args.size()) == dims*3 + 2);
+            internal_assert(dims <= 4);
 
             Value *buffer = codegen(op->args[0]);
 
@@ -1490,22 +1489,22 @@ void CodeGen::visit(const Call *op) {
             // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
         } else if (op->name == Call::null_handle) {
-            assert(op->args.size() == 0 && "null_handle takes no arguments");
-            assert(op->type == Handle() && "null_handle must return a Handle type");
+            internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
+            internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
             value = ConstantPointerNull::get(i8->getPointerTo());
         } else if (op->name == Call::address_of) {
-            assert(op->args.size() == 1 && "address_of takes one argument");
-            assert(op->type == Handle() && "address_of must return a Handle type");
+            internal_assert(op->args.size() == 1) << "address_of takes one argument\n";
+            internal_assert(op->type == Handle()) << "address_of must return a Handle type\n";
             const Load *load = op->args[0].as<Load>();
-            assert(load && "The sole argument to address_of must be a Load node");
-            assert(load->index.type().is_scalar() && "Can't take the address of a vector load");
+            internal_assert(load) << "The sole argument to address_of must be a Load node\n";
+            internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
 
             value = codegen_buffer_pointer(load->name, load->type, load->index);
 
         } else if (op->name == Call::trace || op->name == Call::trace_expr) {
 
             int int_args = (int)(op->args.size()) - 5;
-            assert(int_args >= 0);
+            internal_assert(int_args >= 0);
 
             // Make a global string for the func name. Should be the same for all lanes.
             Value *name = codegen(unbroadcast(op->args[0]));
@@ -1546,7 +1545,7 @@ void CodeGen::visit(const Call *op) {
             }
 
             StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
-            assert(trace_event_type);
+            internal_assert(trace_event_type);
             Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
 
             Value *members[10] = {
@@ -1572,7 +1571,7 @@ void CodeGen::visit(const Call *op) {
             args[1] = trace_event;
 
             llvm::Function *trace_fn = module->getFunction("halide_trace");
-            assert(trace_fn);
+            internal_assert(trace_fn);
 
             value = builder->CreateCall(trace_fn, args);
 
@@ -1581,16 +1580,16 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::profiling_timer) {
-            assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 0);
             llvm::Function *fn = Intrinsic::getDeclaration(module,
                 Intrinsic::readcyclecounter, std::vector<llvm::Type*>());
             CallInst *call = builder->CreateCall(fn);
             value = call;
         } else if (op->name == Call::lerp) {
-            assert(op->args.size() == 3);
+            internal_assert(op->args.size() == 3);
             value = codegen(lower_lerp(op->args[0], op->args[1], op->args[2]));
         } else if (op->name == Call::popcount) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             std::vector<llvm::Type*> arg_type(1);
             arg_type[0] = llvm_type_of(op->args[0].type());
             llvm::Function *fn = Intrinsic::getDeclaration(module, Intrinsic::ctpop, arg_type);
@@ -1598,7 +1597,7 @@ void CodeGen::visit(const Call *op) {
             value = call;
         } else if (op->name == Call::count_leading_zeros ||
                    op->name == Call::count_trailing_zeros) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             std::vector<llvm::Type*> arg_type(1);
             arg_type[0] = llvm_type_of(op->args[0].type());
             llvm::Function *fn = Intrinsic::getDeclaration(module,
@@ -1610,7 +1609,7 @@ void CodeGen::visit(const Call *op) {
             CallInst *call = builder->CreateCall(fn, args);
             value = call;
         } else if (op->name == Call::return_second) {
-            assert(op->args.size() == 2);
+            internal_assert(op->args.size() == 2);
             codegen(op->args[0]);
             value = codegen(op->args[1]);
         } else if (op->name == Call::if_then_else) {
@@ -1628,7 +1627,7 @@ void CodeGen::visit(const Call *op) {
 
             } else {
 
-                assert(op->args.size() == 3);
+                internal_assert(op->args.size() == 3);
 
                 BasicBlock *true_bb = BasicBlock::Create(*context, "true_bb", function);
                 BasicBlock *false_bb = BasicBlock::Create(*context, "false_bb", function);
@@ -1651,8 +1650,7 @@ void CodeGen::visit(const Call *op) {
                 value = phi;
             }
         } else {
-            std::cerr << "Unknown intrinsic: " << op->name << "\n";
-            assert(false);
+            internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
 
 
@@ -1736,12 +1734,12 @@ void CodeGen::visit(const Call *op) {
 
         // TODO: Need a general solution here to side-effecty functions
         if (op->name == "halide_current_time_ns") {
-            assert(op->args.size() == 0);
+            internal_assert(op->args.size() == 0);
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, get_user_context());
             value = call;
         } else if (op->name == "rand_i32" || op->name == "rand_f32") {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             debug(4) << "Creating scalar call to " << op->name << "\n";
             Value *arg = codegen(op->args[0]);
             CallInst *call = builder->CreateCall2(fn, get_user_context(), arg);
@@ -1891,7 +1889,8 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
 
     // Call the error handler
     llvm::Function *error_handler = module->getFunction("halide_error_varargs");
-    assert(error_handler && "Could not find halide_error_varargs in initial module");
+    internal_assert(error_handler)
+        << "Could not find halide_error_varargs in initial module\n";
     debug(4) << "Creating call to error handlers\n";
     builder->CreateCall(error_handler, call_args);
 
@@ -2032,7 +2031,7 @@ void CodeGen::visit(const For *op) {
         // Move the builder back to the main function and call do_par_for
         builder->SetInsertPoint(call_site);
         llvm::Function *do_par_for = module->getFunction("halide_do_par_for");
-        assert(do_par_for && "Could not find halide_do_par_for in initial module");
+        internal_assert(do_par_for) << "Could not find halide_do_par_for in initial module\n";
         do_par_for->setDoesNotAlias(5);
         //do_par_for->setDoesNotCapture(5);
         ptr = builder->CreatePointerCast(ptr, i8->getPointerTo());
@@ -2051,7 +2050,7 @@ void CodeGen::visit(const For *op) {
         create_assertion(did_succeed, "Failure inside parallel for loop");
 
     } else {
-        assert(false && "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen");
+        internal_error << "Unknown type of For node. Only Serial and Parallel For nodes should survive down to codegen.\n";
     }
 }
 
@@ -2129,11 +2128,11 @@ void CodeGen::visit(const Block *op) {
 }
 
 void CodeGen::visit(const Realize *op) {
-    assert(false && "Realize encountered during codegen");
+    internal_error << "Realize encountered during codegen\n";
 }
 
 void CodeGen::visit(const Provide *op) {
-    assert(false && "Provide encountered during codegen");
+    internal_error << "Provide encountered during codegen\n";
 }
 
 void CodeGen::visit(const IfThenElse *op) {
