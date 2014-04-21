@@ -170,26 +170,24 @@ RVar RDom::operator[](int i) {
     if (i == 1) return y;
     if (i == 2) return z;
     if (i == 3) return w;
-    assert(false && "Reduction domain index out of bounds");
+    user_error << "Reduction domain index out of bounds: " << i << "\n";
     return x; // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
     if (dimensions() != 1) {
-        std::cerr << "Error: Can't treat this multidimensional RDom as an Expr:\n"
-                  << (*this) << "\n"
-                  << "Only single-dimensional RDoms can be cast to Expr.\n";
-        assert(false);
+        user_error << "Error: Can't treat this multidimensional RDom as an Expr:\n"
+                   << (*this) << "\n"
+                   << "Only single-dimensional RDoms can be cast to Expr.\n";
     }
     return Expr(x);
 }
 
 RDom::operator RVar() const {
     if (dimensions() != 1) {
-        std::cerr << "Error: Can't treat this multidimensional RDom as an RVar:\n"
-                  << (*this) << "\n"
-                  << "Only single-dimensional RDoms can be cast to RVar.\n";
-        assert(false);
+        user_error << "Error: Can't treat this multidimensional RDom as an RVar:\n"
+                   << (*this) << "\n"
+                   << "Only single-dimensional RDoms can be cast to RVar.\n";
     }
     return x;
 }

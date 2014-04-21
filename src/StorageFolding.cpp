@@ -25,10 +25,10 @@ class FoldStorageOfFunction : public IRMutator {
     void visit(const Call *op) {
         IRMutator::visit(op);
         op = expr.as<Call>();
-        assert(op);
+        internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
-            assert(dim < (int)args.size());
+            internal_assert(dim < (int)args.size());
             args[dim] = args[dim] % factor;
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
@@ -38,7 +38,7 @@ class FoldStorageOfFunction : public IRMutator {
     void visit(const Provide *op) {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
-        assert(op);
+        internal_assert(op);
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
@@ -190,8 +190,8 @@ class StorageFolding : public IRMutator {
             } else {
                 Region bounds = op->bounds;
 
-                assert(folder.dim_folded >= 0 &&
-                       folder.dim_folded < (int)bounds.size());
+                internal_assert(folder.dim_folded >= 0 &&
+                                folder.dim_folded < (int)bounds.size());
 
                 bounds[folder.dim_folded] = Range(0, folder.fold_factor);
 

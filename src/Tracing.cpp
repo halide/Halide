@@ -33,7 +33,7 @@ private:
         // Calls inside of an address_of don't count, but we want to
         // visit the args of the inner call.
         if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
 
             bool unchanged = true;
@@ -59,7 +59,7 @@ private:
 
         IRMutator::visit(op);
         op = expr.as<Call>();
-        assert(op);
+        internal_assert(op);
 
         if (op->call_type != Call::Halide) {
             return;
@@ -87,7 +87,7 @@ private:
     void visit(const Provide *op) {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
-        assert(op);
+        internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
@@ -118,7 +118,7 @@ private:
     void visit(const Realize *op) {
         IRMutator::visit(op);
         op = stmt.as<Realize>();
-        assert(op);
+        internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
@@ -162,7 +162,7 @@ private:
     void visit(const Pipeline *op) {
         IRMutator::visit(op);
         op = stmt.as<Pipeline>();
-        assert(op);
+        internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
@@ -218,7 +218,7 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
     // Add a dummy realize block for the output buffers
     Region output_region;
     Parameter output_buf = output.output_buffers()[0];
-    assert(output_buf.is_buffer());
+    internal_assert(output_buf.is_buffer());
     for (int i = 0; i < output.dimensions(); i++) {
         string d = int_to_string(i);
         Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
@@ -232,7 +232,7 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
 
     // Strip off the dummy realize block
     const Realize *r = s.as<Realize>();
-    assert(r);
+    internal_assert(r);
     s = r->body;
 
     // Unless tracing was a no-op, add a call to shut down the trace

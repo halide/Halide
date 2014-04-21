@@ -141,6 +141,12 @@ struct error_report {
 #define user_assert(c)     Halide::Internal::error_report(c,     true,  false, __FILE__, __LINE__, #c)
 #define user_warning       Halide::Internal::error_report(false, true,   true, __FILE__, __LINE__, NULL)
 
+// The nicely named versions get cleaned up at the end of Halide.h,
+// but user code might want to do halide-style user_asserts (e.g. the
+// Extern macros introduce calls to user_assert), so for that purpose
+// we define an equivalent macro that can be used outside of Halide.h
+#define _halide_user_assert(c)     Halide::Internal::error_report(c,     true,  false, __FILE__, __LINE__, #c)
+
 }
 }
 

@@ -1,5 +1,6 @@
 #include "Util.h"
 #include "Introspection.h"
+#include "Debug.h"
 #include <sstream>
 #include <map>
 
@@ -62,7 +63,9 @@ string unique_name(const string &name, bool user) {
     // having to track all names generated so far.
     if (user) {
         for (size_t i = 0; i < name.length(); i++) {
-            assert(name[i] != '$' && "names passed to unique_name may not contain the character '$'");
+            user_assert(name[i] != '$')
+                << "Name \"" << name << "\" is invalid. "
+                << "Halide names may not contain the character '$'\n";
         }
     }
 

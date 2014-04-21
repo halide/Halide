@@ -74,7 +74,7 @@ private:
         vector<bool> make_buffer_t(realize->types.size());
         while (need_buffer_t.contains(realize->name)) {
             int idx = need_buffer_t.get(realize->name);
-            assert(idx < (int)make_buffer_t.size());
+            internal_assert(idx < (int)make_buffer_t.size());
             make_buffer_t[idx] = true;
             need_buffer_t.pop(realize->name);
         }
@@ -89,7 +89,7 @@ private:
         vector<int> storage_permutation;
         {
             map<string, Function>::const_iterator iter = env.find(realize->name);
-            assert(iter != env.end() && "Realize node refers to function not in environment");
+            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
             const vector<string> &storage_dims = iter->second.schedule().storage_dims;
             const vector<string> &args = iter->second.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
@@ -98,11 +98,11 @@ private:
                         storage_permutation.push_back((int)j);
                     }
                 }
-                assert(storage_permutation.size() == i+1);
+                internal_assert(storage_permutation.size() == i+1);
             }
         }
 
-        assert(storage_permutation.size() == realize->bounds.size());
+        internal_assert(storage_permutation.size() == realize->bounds.size());
 
         stmt = body;
         for (size_t idx = 0; idx < realize->types.size(); idx++) {

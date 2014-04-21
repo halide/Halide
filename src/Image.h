@@ -74,7 +74,8 @@ private:
         const Internal::Variable *var = last_arg.as<Internal::Variable>();
         bool is_placeholder = var != NULL && Var::is_placeholder(var->name);
         if (is_placeholder) {
-            assert(!placeholder_seen && "Only one placeholder ('_') allowed in argument list for Image.");
+            user_assert(!placeholder_seen)
+                << "Only one placeholder ('_') allowed in argument list for Image.\n";
             placeholder_seen = true;
 
             // The + 1 in the conditional is because one provided argument is an placeholder
@@ -88,12 +89,9 @@ private:
         if (!is_placeholder && !placeholder_seen &&
             (int)args.size() == total_args &&
             (int)args.size() < dims) {
-            std::cerr << "Can't construct a " << args.size()
-                      << "-argument reference to an image with " << dims
-                      << " dimensions. This used to result in implicit"
-                      << " arguments being automatically appended, but"
-                      << " that behavior has been deprecated. ";
-            assert(false);
+            user_error << "Can't construct a " << args.size()
+                       << "-argument reference to Image \"" << buffer.name()
+                       << "\" with " << dims << " dimensions.\n";
         }
         return is_placeholder;
     }
@@ -129,9 +127,9 @@ public:
      * access its pixels in a type-safe way. */
     Image(const Buffer &buf) : buffer(buf) {
         if (type_of<T>() != buffer.type()) {
-            std::cerr << "Can't construct Image of type " << type_of<T>()
-                      << " from buffer of type " << buffer.type() << '\n';
-            assert(false);
+            user_error << "Can't construct Image of type " << type_of<T>()
+                       << " from buffer \"" << buf.name()
+                       << "\" of type " << buffer.type() << '\n';
         }
         prepare_for_direct_pixel_access();
     }
@@ -139,9 +137,9 @@ public:
     /** Wrap a single-element realization in an Image object. */
     Image(const Realization &r) : buffer(r) {
         if (type_of<T>() != buffer.type()) {
-            std::cerr << "Can't construct Image of type " << type_of<T>()
-                      << " from buffer of type " << buffer.type() << '\n';
-            assert(false);
+            user_error << "Can't construct Image of type " << type_of<T>()
+                       << " from buffer \"" << buffer.name()
+                       << "\" of type " << buffer.type() << '\n';
         }
         prepare_for_direct_pixel_access();
     }
@@ -180,8 +178,11 @@ public:
 
     /** Get the size of a dimension */
     int extent(int dim) const {
-        assert(defined());
-        assert(dim >= 0 && dim < dims && "dimension out of bounds in call to Image::extent");
+        user_assert(defined()) << "extent of undefined Image\n";
+        user_assert(dim >= 0 && dim < dims)
+            << "Requested extent of dimension " << dim
+            << " in " << dims << "-dimensional Image \""
+            << buffer.name() << "\".\n";
         return buffer.extent(dim);
     }
 
@@ -189,14 +190,17 @@ public:
      * image represents this point in a function that was realized
      * into this image. */
     int min(int dim) const {
-        assert(defined());
-        assert(dim >= 0 && dim < dims && "dimension out of bounds in call to Image::min");
+        user_assert(defined()) << "min of undefined Image\n";
+        user_assert(dim >= 0 && dim < dims)
+            << "Requested min of dimension " << dim
+            << " in " << dims << "-dimensional Image \""
+            << buffer.name() << "\".\n";
         return buffer.min(dim);
     }
 
     /** Set the min coordinates of a dimension. */
     void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0) {
-        assert(defined());
+        user_assert(defined()) << "set_min of undefined Image\n";
         buffer.set_min(m0, m1, m2, m3);
         // Move the origin
         prepare_for_direct_pixel_access();
@@ -208,8 +212,11 @@ public:
      * usually the extent of dimension 0. This is not necessarily true
      * though. */
     int stride(int dim) const {
-        assert(defined());
-        assert(dim >= 0 && dim < dims && "dimension out of bounds in call to Image::stride");
+        user_assert(defined()) << "stride of undefined Image\n";
+        user_assert(dim >= 0 && dim < dims)
+            << "Requested stride of dimension " << dim
+            << " in " << dims << "-dimensional Image \""
+            << buffer.name() << "\".\n";
         return buffer.stride(dim);
     }
 
@@ -271,7 +278,7 @@ public:
 
     /** Get a pointer to the element at the min location. */
     T *data() const {
-        assert(defined());
+        user_assert(defined()) << "data of undefined Image\n";
         T *ptr = origin;
         for (int i = 0; i < dims; i++) {
             ptr += min(i) * stride(i);
@@ -331,7 +338,8 @@ public:
      * location is composed of enough implicit variables to match the
      * dimensionality of the image (see \ref Var::implicit) */
     Expr operator()() const {
-        assert(dims == 0);
+        user_error << "Can't construct a zero-argument reference to Image \"" << buffer.name()
+                   << "\" with " << dims << " dimensions.\n";
         std::vector<Expr> args;
         return Internal::Call::make(buffer, args);
     }

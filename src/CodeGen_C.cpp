@@ -711,6 +711,7 @@ void CodeGen_C::visit(const Call *op) {
             rhs << a0 << " >> " << a1;
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
+            (void)dims; // In case internal_assert is ifdef'd to do nothing
             internal_assert((int)(op->args.size()) == dims*3 + 2);
             internal_assert(dims <= 4);
             vector<string> args(op->args.size());

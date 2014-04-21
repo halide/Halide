@@ -524,7 +524,6 @@ private:
     }
 
     void visit(const EQ *) {
-        //assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
