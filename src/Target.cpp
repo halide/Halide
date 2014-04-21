@@ -160,11 +160,11 @@ Target parse_target_string(const std::string &target) {
     if (!t.merge_string(target)) {
         std::cerr << "Did not understand HL_TARGET=" << target << "\n"
                   << "Expected format is arch-os-feature1-feature2-... "
-                  << "Where arch is x86-32, x86-64, arm-32, arm-64, "
+                  << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
                   << "and os is linux, windows, osx, nacl, ios, or android. "
                   << "If arch or os are omitted, they default to the host. "
-                  << "Features include sse41, avx, avx2, cuda, opencl, spir, "
-                  << "spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
+                  << "Features include sse41, avx, avx2, armv7s, aarch64, cuda, "
+                  << "opencl, spir, spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
                   << "HL_TARGET can also begin with \"host\", which sets the "
                   << "host's architecture, os, and feature set, with the "
                   << "exception of the GPU runtimes, which default to off\n";
@@ -245,6 +245,10 @@ bool Target::merge_string(const std::string &target) {
             features |= (Target::SSE41 | Target::AVX);
         } else if (tok == "avx2") {
             features |= (Target::SSE41 | Target::AVX | Target::AVX2);
+        } else if (tok == "armv7s") {
+            features |= Target::ARMv7s;
+        } else if (tok == "aarch64") {
+            features |= Target::AArch64Backend;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
         } else if (tok == "opencl") {
@@ -300,12 +304,13 @@ std::string Target::to_string() const {
     "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
   const char* const feature_names[] = {
-    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64"
+    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64",
+    "no_asserts", "no_bounds_query", "armv7s", "aarch64"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
       + "-" + string(os_names[os]);
-  for (int i = 0; i < 9; ++i) {
+  for (size_t i = 0; i < sizeof(feature_names); ++i) {
     if (features & (1ULL << i)) {
       result += "-" + string(feature_names[i]);
     }
