@@ -36,7 +36,8 @@ struct ExternFuncArgument {
     ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
 
     ExternFuncArgument(Internal::Parameter p) : arg_type(ImageParamArg), image_param(p) {
-        assert(p.is_buffer());
+        // Scalar params come in via the Expr constructor.
+        internal_assert(p.is_buffer());
     }
     ExternFuncArgument() : arg_type(UndefinedArg) {}
 
@@ -112,7 +113,10 @@ public:
     /** Construct a new function with the given name */
     Function(const std::string &n) : contents(new FunctionContents) {
         for (size_t i = 0; i < n.size(); i++) {
-            assert(n[i] != '.' && "Func names may not contain the character '.', as it is used internally by Halide as a separator");
+            user_assert(n[i] != '.')
+                << "Func name \"" << n << "\" is invalid. "
+                << "Func names may not contain the character '.', "
+                << "as it is used internally by Halide as a separator\n";
         }
         contents.ptr->name = n;
     }

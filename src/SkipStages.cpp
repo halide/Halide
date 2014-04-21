@@ -44,7 +44,7 @@ private:
         op->body.accept(this);
         if (should_pop) {
             varying.pop(op->name);
-            assert(!expr_uses_var(predicate, op->name));
+            //internal_assert(!expr_uses_var(predicate, op->name));
         } else {
             predicate = substitute(op->name, op->min, predicate);
         }

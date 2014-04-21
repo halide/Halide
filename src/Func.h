@@ -108,6 +108,9 @@ public:
 
     /** How many outputs does the function this refers to produce. */
     EXPORT size_t size() const;
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func;}
 };
 
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
@@ -183,6 +186,9 @@ public:
 
     /** How many outputs does the function this refers to produce. */
     EXPORT size_t size() const;
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func;}
 };
 
 enum GPUAPI {
@@ -1325,54 +1331,87 @@ public:
   * expression. This can be thought of as a scalar version of
   * \ref Func::realize */
 template<typename T>
-  T evaluate(Expr e) {
-  assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
-  Func f;
-  f(_) = e;
-  Image<T> im = f.realize();
-  return im(0);
- }
+T evaluate(Expr e) {
+    user_assert(e.type() == type_of<T>())
+        << "Can't evaluate expression "
+        << e << " of type " << e.type()
+        << " as a scalar of type " << type_of<T>() << "\n";
+    Func f;
+    f(_) = e;
+    Image<T> im = f.realize();
+    return im(0);
+}
 
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 // @{
- template<typename A, typename B>
-   void evaluate(Tuple t, A *a, B *b) {
-   assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
-   assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
-   Func f;
-   f(_) = t;
-   Realization r = f.realize();
-   *a = Image<A>(r[0])(0);
-   *b = Image<B>(r[1])(0);
- }
+template<typename A, typename B>
+void evaluate(Tuple t, A *a, B *b) {
+    user_assert(t[0].type() == type_of<A>())
+        << "Can't evaluate expression "
+        << t[0] << " of type " << t[0].type()
+        << " as a scalar of type " << type_of<A>() << "\n";
+    user_assert(t[1].type() == type_of<B>())
+        << "Can't evaluate expression "
+        << t[1] << " of type " << t[1].type()
+        << " as a scalar of type " << type_of<B>() << "\n";
 
- template<typename A, typename B, typename C>
-   void evaluate(Tuple t, A *a, B *b, C *c) {
-   assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
-   assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
-   assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
-   Func f;
-   f(_) = t;
-   Realization r = f.realize();
-   *a = Image<A>(r[0])(0);
-   *b = Image<B>(r[1])(0);
-   *c = Image<C>(r[2])(0);
- }
+    Func f;
+    f(_) = t;
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+}
 
- template<typename A, typename B, typename C, typename D>
-   void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
-   assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
-   assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
-   assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
-   assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
-   Func f;
-   f(_) = t;
-   Realization r = f.realize();
-   *a = Image<A>(r[0])(0);
-   *b = Image<B>(r[1])(0);
-   *c = Image<C>(r[2])(0);
-   *d = Image<D>(r[3])(0);
- }
+template<typename A, typename B, typename C>
+void evaluate(Tuple t, A *a, B *b, C *c) {
+    user_assert(t[0].type() == type_of<A>())
+        << "Can't evaluate expression "
+        << t[0] << " of type " << t[0].type()
+        << " as a scalar of type " << type_of<A>() << "\n";
+    user_assert(t[1].type() == type_of<B>())
+        << "Can't evaluate expression "
+        << t[1] << " of type " << t[1].type()
+        << " as a scalar of type " << type_of<B>() << "\n";
+    user_assert(t[2].type() == type_of<C>())
+        << "Can't evaluate expression "
+        << t[2] << " of type " << t[2].type()
+        << " as a scalar of type " << type_of<C>() << "\n";
+
+    Func f;
+    f(_) = t;
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
+}
+
+template<typename A, typename B, typename C, typename D>
+void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
+    user_assert(t[0].type() == type_of<A>())
+        << "Can't evaluate expression "
+        << t[0] << " of type " << t[0].type()
+        << " as a scalar of type " << type_of<A>() << "\n";
+    user_assert(t[1].type() == type_of<B>())
+        << "Can't evaluate expression "
+        << t[1] << " of type " << t[1].type()
+        << " as a scalar of type " << type_of<B>() << "\n";
+    user_assert(t[2].type() == type_of<C>())
+        << "Can't evaluate expression "
+        << t[2] << " of type " << t[2].type()
+        << " as a scalar of type " << type_of<C>() << "\n";
+    user_assert(t[3].type() == type_of<D>())
+        << "Can't evaluate expression "
+        << t[3] << " of type " << t[3].type()
+        << " as a scalar of type " << type_of<D>() << "\n";
+
+    Func f;
+    f(_) = t;
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
+    *d = Image<D>(r[3])(0);
+}
  // @}
 
 
@@ -1383,7 +1422,10 @@ template<typename T>
  */
 template<typename T>
 T evaluate_may_gpu(Expr e) {
-    assert(e.type() == type_of<T>() && "Type of argument to evaluate does not match templated type\n");
+    user_assert(e.type() == type_of<T>())
+        << "Can't evaluate expression "
+        << e << " of type " << e.type()
+        << " as a scalar of type " << type_of<T>() << "\n";
     Image<T> im;
     Func f;
     f(_) = e;
@@ -1406,8 +1448,14 @@ T evaluate_may_gpu(Expr e) {
 // @{
 template<typename A, typename B>
 void evaluate_may_gpu(Tuple t, A *a, B *b) {
-    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
-    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
+    user_assert(t[0].type() == type_of<A>())
+        << "Can't evaluate expression "
+        << t[0] << " of type " << t[0].type()
+        << " as a scalar of type " << type_of<A>() << "\n";
+    user_assert(t[1].type() == type_of<B>())
+        << "Can't evaluate expression "
+        << t[1] << " of type " << t[1].type()
+        << " as a scalar of type " << type_of<B>() << "\n";
 
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
@@ -1432,10 +1480,18 @@ void evaluate_may_gpu(Tuple t, A *a, B *b) {
 
 template<typename A, typename B, typename C>
 void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
-    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
-    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
-    assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
-
+    user_assert(t[0].type() == type_of<A>())
+        << "Can't evaluate expression "
+        << t[0] << " of type " << t[0].type()
+        << " as a scalar of type " << type_of<A>() << "\n";
+    user_assert(t[1].type() == type_of<B>())
+        << "Can't evaluate expression "
+        << t[1] << " of type " << t[1].type()
+        << " as a scalar of type " << type_of<B>() << "\n";
+    user_assert(t[2].type() == type_of<C>())
+        << "Can't evaluate expression "
+        << t[2] << " of type " << t[2].type()
+        << " as a scalar of type " << type_of<C>() << "\n";
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
     f(_) = t;
@@ -1462,10 +1518,22 @@ void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
 
 template<typename A, typename B, typename C, typename D>
 void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
-    assert(t[0].type() == type_of<A>() && "Type of argument to evaluate does not match templated type\n");
-    assert(t[1].type() == type_of<B>() && "Type of argument to evaluate does not match templated type\n");
-    assert(t[2].type() == type_of<C>() && "Type of argument to evaluate does not match templated type\n");
-    assert(t[3].type() == type_of<D>() && "Type of argument to evaluate does not match templated type\n");
+    user_assert(t[0].type() == type_of<A>())
+        << "Can't evaluate expression "
+        << t[0] << " of type " << t[0].type()
+        << " as a scalar of type " << type_of<A>() << "\n";
+    user_assert(t[1].type() == type_of<B>())
+        << "Can't evaluate expression "
+        << t[1] << " of type " << t[1].type()
+        << " as a scalar of type " << type_of<B>() << "\n";
+    user_assert(t[2].type() == type_of<C>())
+        << "Can't evaluate expression "
+        << t[2] << " of type " << t[2].type()
+        << " as a scalar of type " << type_of<C>() << "\n";
+    user_assert(t[3].type() == type_of<D>())
+        << "Can't evaluate expression "
+        << t[3] << " of type " << t[3].type()
+        << " as a scalar of type " << type_of<D>() << "\n";
 
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;

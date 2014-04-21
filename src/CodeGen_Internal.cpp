@@ -197,9 +197,9 @@ bool constant_allocation_size(const std::vector<Expr> &extents, const std::strin
             // should re-enable this.
             /*
             if ((int64_t)int_size->value > (((int64_t)(1)<<31) - 1)) {
-                std::cerr << "Dimension " << i << " for allocation " << name << " has size " <<
+                user_error
+                    << "Dimension " << i << " for allocation " << name << " has size " <<
                     int_size->value << " which is greater than 2^31 - 1.";
-                assert(false);
             }
             */
             result *= int_size->value;
