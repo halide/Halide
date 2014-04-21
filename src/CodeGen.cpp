@@ -73,6 +73,12 @@ using std::stack;
 #endif
 
 #if WITH_ARM64
+#define InitializeARM64Target()       InitializeTarget(ARM64)
+#define InitializeARM64AsmParser()    InitializeAsmParser(ARM64)
+#define InitializeARM64AsmPrinter()   InitializeAsmPrinter(ARM64)
+#endif
+
+#if WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
@@ -158,6 +164,7 @@ CodeGen::~CodeGen() {
 bool CodeGen::llvm_initialized = false;
 bool CodeGen::llvm_X86_enabled = false;
 bool CodeGen::llvm_ARM_enabled = false;
+bool CodeGen::llvm_ARM64_enabled = false;
 bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
 
