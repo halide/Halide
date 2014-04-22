@@ -221,6 +221,21 @@ public:
         calibrated = true;
     }
 
+    bool type_name_match(const std::string &actual_type, const std::string &query_type) {
+        if (query_type.empty()) {
+            return true;
+        }
+        if (query_type == actual_type) {
+            return true;
+        }
+        if (query_type.back() == '?' &&
+            starts_with(actual_type, query_type.substr(0, query_type.size()-1))) {
+            return true;
+        }
+
+        return false;
+    }
+
     // Get the debug name of a stack variable from a pointer to it
     std::string get_variable_name(const void *stack_pointer, const std::string &type_name = "") {
 
@@ -342,14 +357,13 @@ public:
 
             if (offset == var.stack_offset &&
                 (type_name.empty() ||
-                 (type && // Check the type matches
-                  type->name == type_name))) {
+                 (type && type_name_match(type->name, type_name)))) {
                 debug(4) << "Successful match to scalar var\n";
                 return var.name;
             } else if (elem_type && // Check if it's an array element
                        (type_name.empty() ||
                         (elem_type && // Check the type matches
-                         elem_type->name == type_name))) {
+                         type_name_match(elem_type->name, type_name)))) {
                 int64_t array_size_bytes = type->size * elem_type->size;
                 int64_t pos_bytes = offset - var.stack_offset;
                 if (pos_bytes >= 0 &&

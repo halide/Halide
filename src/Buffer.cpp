@@ -128,11 +128,20 @@ namespace {
 int32_t size_or_zero(const std::vector<int32_t> &sizes, size_t index) {
     return (index < sizes.size()) ? sizes[index] : 0;
 }
+
+std::string make_buffer_name(const std::string &n, Buffer *b) {
+    if (n.empty()) {
+        return Internal::make_entity_name(b, "Halide::Buffer", 'b');
+    } else {
+        return n;
+    }
+}
 }
 
 Buffer::Buffer(Type t, int x_size, int y_size, int z_size, int w_size,
                uint8_t* data, const std::string &name) :
-    contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data, name)) {
+    contents(new Internal::BufferContents(t, x_size, y_size, z_size, w_size, data,
+                                          make_buffer_name(name, this))) {
 }
 
 Buffer::Buffer(Type t, const std::vector<int32_t> &sizes,
@@ -142,12 +151,14 @@ Buffer::Buffer(Type t, const std::vector<int32_t> &sizes,
                                           size_or_zero(sizes, 1),
                                           size_or_zero(sizes, 2),
                                           size_or_zero(sizes, 3),
-                                          data, name)) {
+                                          data,
+                                          make_buffer_name(name, this))) {
     user_assert(sizes.size() <= 4) << "Buffer dimensions greater than 4 are not supported.";
 }
 
 Buffer::Buffer(Type t, const buffer_t *buf, const std::string &name) :
-    contents(new Internal::BufferContents(t, buf, name)) {
+    contents(new Internal::BufferContents(t, buf,
+                                          make_buffer_name(name, this))) {
 }
 
 void *Buffer::host_ptr() const {
