@@ -107,7 +107,7 @@ Expr Func::value() const {
     user_assert(defined())
         << "Can't call Func::value() on an undefined Func. To check if a Func is defined, call Func::defined()\n";
     user_assert(func.outputs() == 1)
-        << "Can't call Func::value() on Func " << name() << ", because it has multiple values.\n";
+        << "Can't call Func::value() on Func \"" << name() << "\", because it has multiple values.\n";
     return func.values()[0];
 }
 
@@ -122,8 +122,8 @@ Tuple Func::values() const {
  * vector if there's no reduction definition. */
 const std::vector<Expr> &Func::reduction_args(int idx) const {
     user_assert(is_reduction())
-        << "Can't call Func::reduction_args() on Func " << name()
-        << " as it has no reduction definition. "
+        << "Can't call Func::reduction_args() on Func \"" << name()
+        << "\" as it has no reduction definition. "
         << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
     user_assert(idx < (int)func.reductions().size())
         << "Reduction definition index out of bounds.\n";
@@ -134,19 +134,19 @@ const std::vector<Expr> &Func::reduction_args(int idx) const {
  * there is no reduction definition. */
 Expr Func::reduction_value(int idx) const {
     user_assert(is_reduction())
-        << "Can't call Func::reduction_args() on Func " << name() << " as it has no reduction definition. "
+        << "Can't call Func::reduction_args() on Func \"" << name() << "\" as it has no reduction definition. "
         << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
     user_assert(idx < (int)func.reductions().size())
         << "Reduction definition index out of bounds.\n";
     user_assert(func.reductions()[idx].values.size() == 1)
-        << "Can't call Func::reduction_value() on Func " << name() << ", because it has multiple values.\n";
+        << "Can't call Func::reduction_value() on Func \"" << name() << "\", because it has multiple values.\n";
     return func.reductions()[idx].values[0];
 }
 
 /** The reduction values returned by a Func, in Tuple form. */
 Tuple Func::reduction_values(int idx) const {
     user_assert(is_reduction())
-        << "Can't call Func::reduction_args() on Func " << name() << " as it has no reduction definition. "
+        << "Can't call Func::reduction_args() on Func \"" << name() << "\" as it has no reduction definition. "
         << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
     user_assert(idx < (int)func.reductions().size())
         << "Reduction definition index out of bounds.\n";
@@ -158,7 +158,7 @@ Tuple Func::reduction_values(int idx) const {
  * reduction definition has no domain. */
 RDom Func::reduction_domain(int idx) const {
     user_assert(is_reduction())
-        << "Can't call Func::reduction_args() on Func " << name() << " as it has no reduction definition. "
+        << "Can't call Func::reduction_args() on Func \"" << name() << "\" as it has no reduction definition. "
         << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
     user_assert(idx < (int)func.reductions().size())
         << "Reduction definition index out of bounds.\n";
@@ -322,7 +322,7 @@ int Func::add_implicit_vars(vector<Var> &args) const {
     }
 
     if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
-        user_error << "Func " << name() << " was called with "
+        user_error << "Func \"" << name() << "\" was called with "
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
@@ -350,7 +350,7 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     }
 
     if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
-        user_error << "Func " << name() << " was called with "
+        user_error << "Func \"" << name() << "\" was called with "
                    << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
@@ -1100,6 +1100,11 @@ public:
 vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<string> a = args;
 
+    for (size_t i = 0; i < e.size(); i++) {
+        user_assert(e[i].defined())
+            << "Argument " << i << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
+
     CountImplicitVars count(e);
 
     if (count.count > 0) {
@@ -1187,26 +1192,26 @@ void FuncRefVar::operator/=(Expr e) {
 
 FuncRefVar::operator Expr() const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func " << func.name() << " because it has not yet been defined.\n";
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
         expr_args[i] = Var(args[i]);
     }
     user_assert(func.outputs() == 1)
-        << "Can't convert a reference Func " << func.name()
-        << " to an Expr, because " << func.name() << " returns a Tuple.\n";
+        << "Can't convert a reference Func \"" << func.name()
+        << "\" to an Expr, because \"" << func.name() << "\" returns a Tuple.\n";
     return Call::make(func, expr_args);
 }
 
 Expr FuncRefVar::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func " << func.name() << " because it has not yet been defined.\n";
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
     user_assert(func.outputs() != 1)
-        << "Can't index into a reference to Func " << func.name()
-        << ", because it does not return a Tuple.\n";
+        << "Can't index into a reference to Func \"" << func.name()
+        << "\", because it does not return a Tuple.\n";
     user_assert(i >= 0 && i < func.outputs())
-        << "Tuple index out of range in reference to Func " << func.name() << ".\n";
+        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
     vector<Expr> expr_args(args.size());
     for (size_t j = 0; j < expr_args.size(); j++) {
         expr_args[j] = Var(args[j]);
@@ -1234,6 +1239,11 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
 
 vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
+
+    for (size_t i = 0; i < e.size(); i++) {
+        user_assert(e[i].defined())
+            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
 
     CountImplicitVars count(e);
     // TODO: Check if there is a test case for this and add one if not.
@@ -1284,8 +1294,8 @@ void FuncRefExpr::operator=(Expr e) {
 
 void FuncRefExpr::operator=(const Tuple &e) {
     user_assert(func.has_pure_definition())
-        << "Can't add a reduction definition to Func " << func.name()
-        << " because it does not have a pure definition.\n";
+        << "Can't add a reduction definition to Func \"" << func.name()
+        << "\" because it does not have a pure definition.\n";
 
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_reduction(args, e.as_vector());
@@ -1353,25 +1363,25 @@ void FuncRefExpr::operator/=(Expr e) {
 
 FuncRefExpr::operator Expr() const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func " << func.name() << " because it has not yet been defined.\n";
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
     user_assert(func.outputs() == 1)
-        << "Can't convert a reference Func " << func.name()
-        << " to an Expr, because " << func.name() << " returns a Tuple.\n";
+        << "Can't convert a reference Func \"" << func.name()
+        << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
 
     return Call::make(func, args);
 }
 
 Expr FuncRefExpr::operator[](int i) const {
     user_assert(func.has_pure_definition() || func.has_extern_definition())
-        << "Can't call Func " << func.name() << " because it has not yet been defined.\n";
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
     user_assert(func.outputs() != 1)
-        << "Can't index into a reference to Func " << func.name()
-        << ", because it does not return a Tuple.\n";
+        << "Can't index into a reference to Func \"" << func.name()
+        << "\", because it does not return a Tuple.\n";
 
     user_assert(i >= 0 && i < func.outputs())
-        << "Tuple index out of range in reference to Func " << func.name() << ".\n";
+        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
 
     return Call::make(func, args, i);
 }
@@ -1428,8 +1438,8 @@ OutputImageParam Func::output_buffer() const {
     user_assert(defined())
         << "Can't access output buffer of undefined Func.\n";
     user_assert(func.output_buffers().size() == 1)
-        << "Can't call Func::output_buffer on Func " << name()
-        << " because it returns a Tuple.\n";
+        << "Can't call Func::output_buffer on Func \"" << name()
+        << "\" because it returns a Tuple.\n";
     return OutputImageParam(func.output_buffers()[0], dimensions());
 }
 
@@ -1453,7 +1463,8 @@ public:
     vector<pair<int, Internal::Parameter> > image_param_args;
     vector<pair<int, Buffer> > image_args;
 
-    InferArguments(const string &o) : output(o) {}
+    InferArguments(const string &o) : output(o) {
+    }
 
 private:
     const string &output;
@@ -1768,19 +1779,19 @@ void Func::realize(Realization dst, const Target &target) {
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
         user_assert(dst[i].dimensions() == dimensions())
-            << "Can't realize Func " << name()
-            << " into Buffer " << dst[i].name()
-            << " because Buffer " << dst[i].name()
-            << " is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func " << name()
-            << " is " << dimensions() << "-dimensional.\n";
+            << "Can't realize Func \"" << name()
+            << "\" into Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" is " << dst[i].dimensions() << "-dimensional"
+            << ", but Func \"" << name()
+            << "\" is " << dimensions() << "-dimensional.\n";
         user_assert(dst[i].type() == func.output_types()[i])
-            << "Can't realize Func " << name()
-            << " into Buffer " << dst[i].name()
-            << " because Buffer " << dst[i].name()
-            << " has type " << dst[i].type()
-            << ", but Func " << name()
-            << " has type " << func.output_types()[i] << ".\n";
+            << "Can't realize Func \"" << name()
+            << "\" into Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" has type " << dst[i].type()
+            << ", but Func \"" << name()
+            << "\" has type " << func.output_types()[i] << ".\n";
     }
 
     // In case these have changed since the last realization
@@ -1801,13 +1812,13 @@ void Func::realize(Realization dst, const Target &target) {
         Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
         user_assert(b.defined())
-            << "ImageParam " << image_param_args[i].second.name()
-            << " is not bound to a buffer.\n";
+            << "ImageParam \"" << image_param_args[i].second.name()
+            << "\" is not bound to a buffer.\n";
         buffer_t *buf = b.raw_buffer();
         arg_values[image_param_args[i].first] = buf;
         user_assert(buf->host || buf->dev)
-            << "ImageParam " << image_param_args[i].second.name()
-            << " is bound to Buffer " << b.name()
+            << "ImageParam \"" << image_param_args[i].second.name()
+            << "\" is bound to Buffer " << b.name()
             << " which has NULL host and dev pointers\n";
     }
 
@@ -1824,6 +1835,7 @@ void Func::realize(Realization dst, const Target &target) {
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
     }
+
 }
 
 void Func::infer_input_bounds(Buffer dst) {
@@ -1841,19 +1853,19 @@ void Func::infer_input_bounds(Realization dst) {
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
         user_assert(dst[i].dimensions() == dimensions())
-            << "Can't infer input bounds for Func " << name()
-            << " using output Buffer " << dst[i].name()
-            << " because Buffer " << dst[i].name()
-            << " is " << dst[i].dimensions() << "-dimensional"
-            << ", but Func " << name()
-            << " is " << dimensions() << "-dimensional.\n";
+            << "Can't infer input bounds for Func \"" << name()
+            << "\" using output Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" is " << dst[i].dimensions() << "-dimensional"
+            << ", but Func \"" << name()
+            << "\" is " << dimensions() << "-dimensional.\n";
         user_assert(dst[i].type() == func.output_types()[i])
-            << "Can't infer input bounds for Func " << name()
-            << " using output Buffer " << dst[i].name()
-            << " because Buffer " << dst[i].name()
-            << " has type " << dst[i].type()
-            << ", but Func " << name()
-            << " has type " << func.output_types()[i] << ".\n";
+            << "Can't infer input bounds for Func \"" << name()
+            << "\" using output Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" has type " << dst[i].type()
+            << ", but Func \"" << name()
+            << "\" has type " << func.output_types()[i] << ".\n";
     }
 
     // In case these have changed since the last realization

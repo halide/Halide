@@ -173,10 +173,12 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
         << name << "\", which has " << dims << " dimensions.\n";
 
     for (size_t i = 0; i < args->size(); i++) {
+        user_assert((*args)[i].defined())
+            << "Argument " << i << " to call to \"" << name << "\" is an undefined Expr\n";
         Type t = (*args)[i].type();
         if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
-            user_error << "Error: implicit cast from " << t << " to int in argument " << (i+1)
-                       << " in call to " << name << " is not allowed. Use an explicit cast.\n";
+            user_error << "Implicit cast from " << t << " to int in argument " << (i+1)
+                       << " in call to \"" << name << "\" is not allowed. Use an explicit cast.\n";
         }
         // We're allowed to implicitly cast from other varieties of int
         if (t != Int(32)) {
