@@ -65,8 +65,18 @@ bool ImageBase::add_implicit_args_if_placeholder(std::vector<Expr> &args,
     return is_placeholder;
 }
 
+namespace {
+std::string make_image_name(const std::string &name, ImageBase *im) {
+    if (name.empty()) {
+        return Internal::make_entity_name(im, "Halide::Image<?", 'i');
+    } else {
+        return name;
+    }
+}
+}
+
 ImageBase::ImageBase(Type t, int x, int y, int z, int w, const std::string &name) :
-    buffer(Buffer(t, x, y, z, w, NULL, name)) {
+    buffer(Buffer(t, x, y, z, w, NULL, make_image_name(name, this))) {
     prepare_for_direct_pixel_access();
 }
 
@@ -88,8 +98,13 @@ ImageBase::ImageBase(Type t, const Realization &r) : buffer(r) {
     prepare_for_direct_pixel_access();
 }
 
-ImageBase::ImageBase(Type t, const buffer_t *b, const std::string &name) : buffer(t, b, name) {
+ImageBase::ImageBase(Type t, const buffer_t *b, const std::string &name) :
+    buffer(t, b, make_image_name(name, this)) {
     prepare_for_direct_pixel_access();
+}
+
+const std::string &ImageBase::name() {
+    return buffer.name();
 }
 
 void ImageBase::copy_to_host() {

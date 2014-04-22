@@ -27,7 +27,7 @@ class Param {
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
-    Param() : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param", 'p')) {}
+    Param() : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {}
 
     /** Construct a scalar parameter of type T with the given name */
     Param(const std::string &n) : param(type_of<T>(), false, n) {}
@@ -45,6 +45,12 @@ public:
     /** Set the current value of this parameter. Only meaningful when jitting */
     NO_INLINE void set(T val) {
         param.set_scalar<T>(val);
+    }
+
+    /** Get a pointer to the location that stores the current value of
+     * this parameter. Only meaningful for jitting. */
+    NO_INLINE T *get_address() const {
+        return (T *)(param.get_scalar_address());
     }
 
     /** Get the halide type of T */
