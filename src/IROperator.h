@@ -969,7 +969,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
         if (const_weight) {
             user_assert(*const_weight >= 0.0f && *const_weight <= 1.0f)
                 << "Floating-point weight for lerp with integer arguments is "
-                << *const_weight << " which is not in the range [0.0f, 1.0f]\n";
+                << *const_weight << ", which is not in the range [0.0f, 1.0f].\n";
         }
     }
     return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
