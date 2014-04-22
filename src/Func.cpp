@@ -1220,7 +1220,7 @@ size_t FuncRefVar::size() const {
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
     implicit_placeholder_pos = placeholder_pos;
-    ImageParam::check_arg_types(f.name(), &args, args.size());
+    Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,

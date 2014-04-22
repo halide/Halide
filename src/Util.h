@@ -28,6 +28,17 @@
 #define EXPORT
 #endif
 
+// If we're in user code, we don't want certain functions to be inlined.
+#ifdef COMPILING_HALIDE
+#define NO_INLINE
+#else
+#ifdef _WIN32
+#define NO_INLINE __declspec(noinline)
+#else
+#define NO_INLINE __attribute__((noinline))
+#endif
+#endif
+
 namespace Halide {
 namespace Internal {
 
