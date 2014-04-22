@@ -1,5 +1,6 @@
 #include "Buffer.h"
 #include "Debug.h"
+#include "Error.h"
 #include "JITCompiledModule.h"
 
 namespace Halide {

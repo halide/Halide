@@ -7,3 +7,4 @@
 #undef user_warning
 #undef internal_error
 #undef internal_assert
+#undef halide_runtime_error

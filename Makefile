@@ -33,6 +33,7 @@ WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_ARM64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= 1
 WITH_SPIR ?= 1
+# WITH_EXCEPTIONS ?= 1
 
 # turn off PTX for llvm 3.2
 ifneq ($(LLVM_VERSION), 3.2)
@@ -66,6 +67,8 @@ SPIR_LLVM_CONFIG_LIB=$(if $(WITH_SPIR), , )
 ARM64_CXX_FLAGS=$(if $(WITH_ARM64), -DWITH_ARM64=1, )
 ARM64_LLVM_CONFIG_LIB=$(if $(WITH_ARM64), aarch64, )
 
+EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
+
 CXX_FLAGS = -Wall -Werror -fno-rtti -Woverloaded-virtual -Wno-unused-function -fPIC $(OPTIMIZE) -fno-omit-frame-pointer -DCOMPILING_HALIDE $(BUILD_BIT_SIZE)
 CXX_FLAGS += $(LLVM_CXX_FLAGS)
 CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
@@ -75,6 +78,7 @@ CXX_FLAGS += $(ARM64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(SPIR_CXX_FLAGS)
+CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(SPIR_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB))
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 
@@ -147,10 +151,10 @@ BIN_DIR = bin
 DISTRIB_DIR=distrib
 endif
 
-SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_GPU_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_OpenCL_Dev.cpp CodeGen_SPIR_Dev.cpp CodeGen_GPU_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp FindCalls.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp OneToOne.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Debug.cpp Parameter.cpp Reduction.cpp RDom.cpp Profiling.cpp Tracing.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp IntegerDivisionTable.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp UniquifyVariableNames.cpp CSE.cpp Tuple.cpp Lerp.cpp Target.cpp SkipStages.cpp SpecializeClampedRamps.cpp RemoveUndef.cpp FastIntegerDivide.cpp AllocationBoundsInference.cpp Inline.cpp Qualify.cpp UnifyDuplicateLets.cpp CodeGen_PNaCl.cpp ExprUsesVar.cpp Random.cpp Introspection.cpp Buffer.cpp Param.cpp Image.cpp
+SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_GPU_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_OpenCL_Dev.cpp CodeGen_SPIR_Dev.cpp CodeGen_GPU_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp FindCalls.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp OneToOne.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Debug.cpp Parameter.cpp Reduction.cpp RDom.cpp Profiling.cpp Tracing.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp IntegerDivisionTable.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp UniquifyVariableNames.cpp CSE.cpp Tuple.cpp Lerp.cpp Target.cpp SkipStages.cpp SpecializeClampedRamps.cpp RemoveUndef.cpp FastIntegerDivide.cpp AllocationBoundsInference.cpp Inline.cpp Qualify.cpp UnifyDuplicateLets.cpp CodeGen_PNaCl.cpp ExprUsesVar.cpp Random.cpp Introspection.cpp Buffer.cpp Param.cpp Image.cpp Error.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
-HEADER_FILES = Introspection.h Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_SPIR_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h IntegerDivisionTable.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h FindCalls.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h SkipStages.h SpecializeClampedRamps.h RemoveUndef.h FastIntegerDivide.h AllocationBoundsInference.h Inline.h Qualify.h UnifyDuplicateLets.h CodeGen_PNaCl.h ExprUsesVar.h Random.h
+HEADER_FILES = Introspection.h Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_SPIR_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h IntegerDivisionTable.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h FindCalls.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h SkipStages.h SpecializeClampedRamps.h RemoveUndef.h FastIntegerDivide.h AllocationBoundsInference.h Inline.h Qualify.h UnifyDuplicateLets.h CodeGen_PNaCl.h ExprUsesVar.h Random.h Error.h
 
 SOURCES = $(SOURCE_FILES:%.cpp=src/%.cpp)
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
@@ -256,7 +260,7 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 
-run_tests: test_correctness test_errors test_tutorials test_static
+run_tests: test_correctness test_errors test_tutorials test_static test_warnings
 	make test_performance
 
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
@@ -323,12 +327,12 @@ performance_%: $(BIN_DIR)/performance_%
 
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "Assertion.*failed|^Error"
+	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^terminate called|^Error"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%
 	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^Warning: "
+	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^Warning"
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%

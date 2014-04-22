@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Debug.h"
+#include "Error.h"
 #include "IRVisitor.h"
 #include "Buffer.h"
 #include "Type.h"
