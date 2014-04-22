@@ -1,4 +1,7 @@
 #include "Introspection.h"
+
+#ifdef WITH_INTROSPECTION
+
 #include "Debug.h"
 #include "LLVM_Headers.h"
 
@@ -9,7 +12,6 @@
 
 // defines backtrace, which gets the call stack as instruction pointers
 #include <execinfo.h>
-
 
 using std::vector;
 using std::pair;
@@ -1745,4 +1747,22 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
 }
 }
 
+#else // WITH_INTROSPECTION
 
+namespace Halide {
+namespace Internal {
+std::string get_variable_name(const void *var, const std::string &expected_type) {
+    return "";
+}
+
+std::string get_source_location() {
+    return "";
+}
+
+void test_compilation_unit(bool (*test)(), void (*calib)()) {
+}
+
+}
+}
+
+#endif
