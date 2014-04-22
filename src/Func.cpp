@@ -37,7 +37,8 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_do_par_for(NULL),
                                  custom_do_task(NULL),
                                  custom_trace(NULL),
-                                 random_seed(0) {
+                                 random_seed(0),
+                                 user_context(user_context_param()) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -47,7 +48,8 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_do_par_for(NULL),
                custom_do_task(NULL),
                custom_trace(NULL),
-               random_seed(0) {
+               random_seed(0),
+               user_context(user_context_param()) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -57,34 +59,21 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
                      custom_trace(NULL),
-                     random_seed(0) {
+                     random_seed(0),
+                     user_context(user_context_param()) {
     (*this)(_) = e;
 }
 
 Func::Func(Function f) : func(f),
-                     error_handler(NULL),
-                     custom_malloc(NULL),
-                     custom_free(NULL),
-                     custom_do_par_for(NULL),
-                     custom_do_task(NULL),
-                     custom_trace(NULL),
-                     random_seed(0) {
+                         error_handler(NULL),
+                         custom_malloc(NULL),
+                         custom_free(NULL),
+                         custom_do_par_for(NULL),
+                         custom_do_task(NULL),
+                         custom_trace(NULL),
+                         random_seed(0),
+                         user_context(user_context_param()) {
 }
-
-/*
-Func::Func(Buffer b) : func(make_entity_name(this, "Halide::Func", 'f')),
-                       error_handler(NULL),
-                       custom_malloc(NULL),
-                       custom_free(NULL),
-                       custom_do_par_for(NULL),
-                       custom_do_task(NULL) {
-    vector<Expr> args;
-    for (int i = 0; i < b.dimensions(); i++) {
-        args.push_back(Var::implicit(i));
-    }
-    (*this)(_) = Internal::Call::make(b, args);
-}
-*/
 
 const string &Func::name() const {
     return func.name();
@@ -1771,6 +1760,57 @@ void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
 
+namespace {
+
+const int max_error_buffer_size = 4096;
+struct error_buffer {
+    char buf[max_error_buffer_size];
+    int end;
+};
+
+extern "C" void buffered_error_handler(void *ctx, const char *message) {
+    if (ctx) {
+        error_buffer *buf = (error_buffer *)ctx;
+        size_t len = strlen(message);
+        // Atomically claim some space in the buffer
+        int old_end = __sync_fetch_and_add(&buf->end, len + 1);
+
+        if (old_end + len >= max_error_buffer_size - 2) {
+            // Out of space
+            return;
+        }
+
+        for (size_t i = 0; i < len; i++) {
+            buf->buf[old_end + i] = message[i];
+        }
+        buf->buf[old_end + len] = '\n';
+    }
+}
+
+}
+
+bool Func::prepare_to_catch_runtime_errors(void *b) {
+    error_buffer *buf = (error_buffer *)b;
+    buf->end = 0;
+    // If the user isn't using a custom error handler or custom user
+    // context, we can trap errors and convert them to exceptions.
+    bool my_user_context_active = false;
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        if (arg_values[i] == user_context.get_address()) {
+            my_user_context_active = true;
+        }
+    }
+    if ((error_handler == &buffered_error_handler ||
+         error_handler == NULL) &&
+        my_user_context_active) {
+        compiled_module.set_error_handler(buffered_error_handler);
+        memset(buf->buf, 0, max_error_buffer_size);
+        user_context.set(buf);
+        return true;
+    }
+    return false;
+}
+
 void Func::realize(Realization dst, const Target &target) {
     if (!compiled_module.wrapped_function) compile_jit(target);
 
@@ -1828,6 +1868,9 @@ void Func::realize(Realization dst, const Target &target) {
             << "An argument to a jitted function is null\n";
     }
 
+    error_buffer buf;
+    bool buffer_runtime_errors = prepare_to_catch_runtime_errors(&buf);
+
     Internal::debug(2) << "Calling jitted function\n";
     int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
@@ -1836,6 +1879,9 @@ void Func::realize(Realization dst, const Target &target) {
         dst[i].set_source_module(compiled_module);
     }
 
+    if (buffer_runtime_errors && exit_status) {
+        halide_runtime_error << buf.buf;
+    }
 }
 
 void Func::infer_input_bounds(Buffer dst) {
@@ -1916,6 +1962,10 @@ void Func::infer_input_bounds(Realization dst) {
 
     const int max_iters = 16;
     int iter = 0;
+
+    error_buffer buf;
+    bool buffer_runtime_errors = prepare_to_catch_runtime_errors(&buf);
+
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers we expect to be mutated
         for (size_t j = 0; j < tracked_buffers.size(); j++) {
@@ -1923,10 +1973,10 @@ void Func::infer_input_bounds(Realization dst) {
         }
         Internal::debug(2) << "Calling jitted function\n";
         int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
-        user_assert(exit_status == 0)
-            << "Calling " << name()
-            << " in bounds inference mode returned non-success ("
-            << exit_status << ")\n";
+
+        if (buffer_runtime_errors && exit_status) {
+            halide_runtime_error << buf.buf;
+        }
 
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
@@ -1992,11 +2042,17 @@ void Func::infer_input_bounds(Realization dst) {
 void *Func::compile_jit(const Target &target) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func, target);
+    }
 
     // Infer arguments
     InferArguments infer_args(name());
     lowered.accept(&infer_args);
+
+    // Add the user context arg if it isn't there already
+    Expr(user_context).accept(&infer_args);
+
     arg_values = infer_args.arg_values;
 
     for (int i = 0; i < func.outputs(); i++) {

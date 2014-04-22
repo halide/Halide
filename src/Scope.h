@@ -9,6 +9,7 @@
 
 #include "Util.h"
 #include "Debug.h"
+#include "Error.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR

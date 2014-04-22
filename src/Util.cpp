@@ -1,6 +1,7 @@
 #include "Util.h"
 #include "Introspection.h"
 #include "Debug.h"
+#include "Error.h"
 #include <sstream>
 #include <map>
 

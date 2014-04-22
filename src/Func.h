@@ -381,7 +381,14 @@ class Func {
      * still be valid though. */
     std::vector<std::pair<int, Internal::Parameter> > image_param_args;
 
+    /** A context to use for JIT-realizations of this Func. */
+    Param<void *> user_context;
+
+    // Some infrastructure that helps Funcs catch and handle runtime errors in JIT-compiled code.
+    bool prepare_to_catch_runtime_errors(void *buf);
+
 public:
+
     EXPORT static void test();
 
     /** Declare a new undefined function with the given name */
