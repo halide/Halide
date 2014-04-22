@@ -130,7 +130,7 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     if (t.bits == 32) {
         assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
     } else {
-      if (t.features & Target::AArch64Backend) {
+        if (t.features & Target::AArch64Backend) {
             assert(llvm_AArch64_enabled && "llvm build not configured with AArch64 target enabled.");
         } else {
             assert(llvm_ARM64_enabled && "llvm build not configured with ARM64 target enabled.");
