@@ -1331,7 +1331,7 @@ public:
   * expression. This can be thought of as a scalar version of
   * \ref Func::realize */
 template<typename T>
-T evaluate(Expr e) {
+NO_INLINE T evaluate(Expr e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
@@ -1345,7 +1345,7 @@ T evaluate(Expr e) {
 /** JIT-compile and run enough code to evaluate a Halide Tuple. */
 // @{
 template<typename A, typename B>
-void evaluate(Tuple t, A *a, B *b) {
+NO_INLINE void evaluate(Tuple t, A *a, B *b) {
     user_assert(t[0].type() == type_of<A>())
         << "Can't evaluate expression "
         << t[0] << " of type " << t[0].type()
@@ -1363,7 +1363,7 @@ void evaluate(Tuple t, A *a, B *b) {
 }
 
 template<typename A, typename B, typename C>
-void evaluate(Tuple t, A *a, B *b, C *c) {
+NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c) {
     user_assert(t[0].type() == type_of<A>())
         << "Can't evaluate expression "
         << t[0] << " of type " << t[0].type()
@@ -1386,7 +1386,7 @@ void evaluate(Tuple t, A *a, B *b, C *c) {
 }
 
 template<typename A, typename B, typename C, typename D>
-void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
+NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
     user_assert(t[0].type() == type_of<A>())
         << "Can't evaluate expression "
         << t[0] << " of type " << t[0].type()
@@ -1421,7 +1421,7 @@ void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
  * specifies one.
  */
 template<typename T>
-T evaluate_may_gpu(Expr e) {
+NO_INLINE T evaluate_may_gpu(Expr e) {
     user_assert(e.type() == type_of<T>())
         << "Can't evaluate expression "
         << e << " of type " << e.type()
@@ -1447,7 +1447,7 @@ T evaluate_may_gpu(Expr e) {
  *  use GPU if jit target from environment specifies one. */
 // @{
 template<typename A, typename B>
-void evaluate_may_gpu(Tuple t, A *a, B *b) {
+NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
     user_assert(t[0].type() == type_of<A>())
         << "Can't evaluate expression "
         << t[0] << " of type " << t[0].type()
@@ -1479,7 +1479,7 @@ void evaluate_may_gpu(Tuple t, A *a, B *b) {
 }
 
 template<typename A, typename B, typename C>
-void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
+NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
     user_assert(t[0].type() == type_of<A>())
         << "Can't evaluate expression "
         << t[0] << " of type " << t[0].type()
@@ -1517,7 +1517,7 @@ void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
 }
 
 template<typename A, typename B, typename C, typename D>
-void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
+NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
     user_assert(t[0].type() == type_of<A>())
         << "Can't evaluate expression "
         << t[0] << " of type " << t[0].type()

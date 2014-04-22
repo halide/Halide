@@ -147,6 +147,11 @@ struct error_report {
 // we define an equivalent macro that can be used outside of Halide.h
 #define _halide_user_assert(c)     Halide::Internal::error_report(c,     true,  false, __FILE__, __LINE__, #c)
 
+// N.B. Any function that might throw a user_assert or user_error may
+// not be inlined into the user's code, or the line number will be
+// misattributed to Halide.h. Either make such functions internal to
+// libHalide, or mark them as NO_INLINE.
+
 }
 }
 
