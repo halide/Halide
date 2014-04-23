@@ -26,9 +26,27 @@ void check(const void *var, const std::string &type,
 
 using Halide::check;
 
+int global_int = 7;
+
+struct SomeStruct {
+    int global_struct_a;
+    int global_struct_b;
+    static float static_float;
+    static double static_member_double_array[17];
+    static struct SubStruct {
+        int a;
+    } substruct;
+} global_struct;
+
+float SomeStruct::static_float = 3.0f;
+double SomeStruct::static_member_double_array[17] = {0};
+SomeStruct::SubStruct SomeStruct::substruct = {0};
+
+float global_array[7];
+
 namespace Foo {
 
-
+int global_int_in_foo = 8;
 
 namespace {
 struct Bar {
@@ -57,8 +75,10 @@ int g(int x) {
 
 
 int f(int x) {
+    static float static_float = 0.3f;
     int y = g(x) + g(x-1);
     check(&y, "int", "y", __FILE__, __LINE__);
+    check(&static_float, "float", "static_float", __FILE__, __LINE__);
     return y - 1;
 }
 
@@ -109,6 +129,22 @@ int main(int argc, char **argv) {
         (void)block_c;
         check(&block_c, "int", "block_c", __FILE__, __LINE__);
     }
+
+    // Check we can name globals
+    check(&global_int, "int", "global_int", __FILE__, __LINE__);
+    check(&Foo::global_int_in_foo, "int", "Foo::global_int_in_foo", __FILE__, __LINE__);
+
+    // Check we can name members of globals
+    check(&global_struct.global_struct_a, "int", "global_struct.global_struct_a", __FILE__, __LINE__);
+    check(&global_struct.global_struct_b, "int", "global_struct.global_struct_b", __FILE__, __LINE__);
+
+    check(&global_array[4], "float", "global_array[4]", __FILE__, __LINE__);
+
+    check(&SomeStruct::static_float, "float", "SomeStruct::static_float", __FILE__, __LINE__);
+
+    check(&SomeStruct::static_member_double_array[5], "double", "SomeStruct::static_member_double_array[5]", __FILE__, __LINE__);
+
+    check(&SomeStruct::substruct.a, "int", "SomeStruct::substruct.a", __FILE__, __LINE__);
 
     printf("Success!\n");
 
