@@ -2077,7 +2077,16 @@ void *Func::compile_jit(const Target &target) {
     Target t = target;
     t.features |= Target::JIT;
     StmtCompiler cg(t);
-    cg.compile(lowered, name(), infer_args.arg_types, vector<Buffer>());
+
+    // Sanitise the name of the generated function
+    string n = name();
+    for (size_t i = 0; i < n.size(); i++) {
+        if (!isalnum(n[i])) {
+            n[i] = '_';
+        }
+    }
+
+    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
 
     if (debug::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);
