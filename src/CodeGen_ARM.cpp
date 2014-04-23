@@ -130,7 +130,11 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     if (t.bits == 32) {
         user_assert(llvm_ARM_enabled) << "llvm build not configured with ARM target enabled\n.";
     } else {
-        user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled\n.";
+        if (t.features & Target::AArch64Backend) {
+            user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
+        } else {
+            user_assert(llvm_ARM64_enabled) << "llvm build not configured with ARM64 target enabled.\n";
+        }
     }
 
     #if !(WITH_NATIVE_CLIENT)
@@ -330,15 +334,26 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
     }
 
     if (target.bits == 32) {
-        triple.setArch(llvm::Triple::arm);
+        if (target.features & Target::ARMv7s) {
+            triple.setArchName("armv7s");
+        } else {
+            triple.setArch(llvm::Triple::arm);
+        }
     } else {
         user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
-        #if (WITH_ARM64)
-        triple.setArch(llvm::Triple::aarch64);
-        #else
-        user_error << "AArch64 llvm target not enabled in this build of Halide\n";
-        #endif
-        user_warning << "Warning: 64-bit arm builds are completely untested\n";
+        if (target.features & Target::AArch64Backend) {
+            #if (WITH_AARCH64)
+            triple.setArch(llvm::Triple::aarch64);
+            #else
+            user_error << "AArch64 llvm target not enabled in this build of Halide\n";
+            #endif
+        } else {
+            #if (WITH_ARM64)
+            triple.setArch(llvm::Triple::arm64);
+            #else
+            user_error << "ARM64 llvm target not enabled in this build of Halide\n";
+            #endif
+        }
     }
 
     if (target.os == Target::Android) {
@@ -1315,18 +1330,34 @@ void CodeGen_ARM::visit(const Call *op) {
 
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
-        return "cortex-a9";
+        if (target.features & Target::ARMv7s) {
+            return "swift";
+        } else {
+            return "cortex-a9";
+        }
     } else {
-        return "generic";
+        if (target.os == Target::IOS) {
+            return "cyclone";
+        } else {
+            return "generic";
+        }
     }
 }
 
 string CodeGen_ARM::mattrs() const {
-    return "+neon";
+    if (target.bits == 32) {
+        return "+neon";
+    } else {
+        return "";
+    }
 }
 
 bool CodeGen_ARM::use_soft_float_abi() const {
-    return (target.os == Target::Android) || (target.os == Target::IOS);
+    // One expects the flag is irrelevant on 64-bit, but we'll make the logic
+    // exhaustive anyway. It is not clear the armv7s case is necessary either.
+    return target.bits == 32 &&
+        ((target.os == Target::Android) ||
+         (target.os == Target::IOS && ((target.features & Target::ARMv7s) == 0)));
 }
 
 }}
