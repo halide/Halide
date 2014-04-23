@@ -245,7 +245,10 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "#endif\n";
 
     // Now the function prototype
-    stream << "extern \"C\" int " << name << "(";
+    stream << "#ifdef __cplusplus\n";
+    stream << "extern \"C\"\n";
+    stream << "#endif\n";
+    stream << "int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (i > 0) stream << ", ";
         if (args[i].is_buffer) {

@@ -7,7 +7,6 @@ HL_TARGET=arm-32-android DYLD_LIBRARY_PATH=../../../bin LD_LIBRARY_PATH=../../..
 cd ..
 pwd
 ndk-build
-cp jni/*.so libs/armeabi-v7a/
 ant debug
 adb install -r bin/HelloAndroid-debug.apk
 adb logcat
