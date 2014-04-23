@@ -336,7 +336,7 @@ performance_%: $(BIN_DIR)/performance_%
 
 error_%: $(BIN_DIR)/error_%
 	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^terminate called|^Error"
+	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "terminating with uncaught exception|^terminate called|^Error"
 	@-echo
 
 warning_%: $(BIN_DIR)/warning_%

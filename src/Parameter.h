@@ -10,7 +10,7 @@
 namespace Halide {
 namespace Internal {
 
-class ParameterContents;
+struct ParameterContents;
 
 /** A reference-counted handle to a parameter to a halide
  * pipeline. May be a scalar parameter or a buffer */

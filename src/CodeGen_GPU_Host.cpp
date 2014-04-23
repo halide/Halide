@@ -737,6 +737,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
                     user_error
                         << "Total size for GPU allocation " << alloc->name
                         << " is constant (" << size_in_bytes << ") but exceeds 2^31 - 1.";
+                    llvm_size = NULL;
                 } else {
                     // Size in elements, not size in bytes.
                     llvm_size = ConstantInt::get(i32, constant_size);
