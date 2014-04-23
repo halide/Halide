@@ -230,7 +230,7 @@ public:
         if (query_type == actual_type) {
             return true;
         }
-        if (query_type.back() == '?' &&
+        if (query_type[query_type.size()-1] == '?' &&
             starts_with(actual_type, query_type.substr(0, query_type.size()-1))) {
             return true;
         }
