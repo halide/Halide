@@ -7,28 +7,10 @@ namespace Halide {
 namespace Internal {
 
 namespace {
-template<typename UnsignedType>
-bool checked_multiply(const UnsignedType &a, const UnsignedType &c, UnsignedType &result) {
-    if (a == 0) {
-        result = 0;
-    } else {
-        UnsignedType t = a * c;
-        if (t / a != c)
-            return false;
-        result = t;
-    }
-    return true;
-}
-
-template<typename UnsignedType>
-bool checked_multiply_assert(const UnsignedType &a, const UnsignedType &b, UnsignedType &result) {
-    bool no_overflow = checked_multiply(a, b, result);
-    internal_assert(no_overflow) << "Overflow in checked multiply\n";
-    return no_overflow;
+void check_buffer_size(uint64_t bytes, const std::string &name) {
+    user_assert(bytes < (1UL << 31)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
 }
 }
-
-
 
 
 struct BufferContents {
@@ -63,20 +45,30 @@ struct BufferContents {
         type(t), allocation(NULL), name(n.empty() ? unique_name('b') : n) {
         user_assert(t.width == 1) << "Can't create of a buffer of a vector type";
         buf.elem_size = t.bytes();
-        size_t size = 1;
-        if (x_size)
-            checked_multiply_assert<size_t>(size, x_size, size);
-        if (y_size)
-            checked_multiply_assert<size_t>(size, y_size, size);
-        if (z_size)
-            checked_multiply_assert<size_t>(size, z_size, size);
-        if (w_size)
-            checked_multiply_assert<size_t>(size, w_size, size);
+        uint64_t size = 1;
+        if (x_size) {
+            size *= x_size;
+            check_buffer_size(size, name);
+        }
+        if (y_size) {
+            size *= y_size;
+            check_buffer_size(size, name);
+        }
+        if (z_size) {
+            size *= z_size;
+            check_buffer_size(size, name);
+        }
+        if (w_size) {
+            size *= w_size;
+            check_buffer_size(size, name);
+        }
+        size *= buf.elem_size;
+        check_buffer_size(size, name);
+
         if (!data) {
-            checked_multiply_assert<size_t>(size, buf.elem_size, size);
-            user_assert(size < ((1UL << 31) - 1)) << "Total size of buffer " << name << " exceeds 2^31 - 1\n";
             size = size + 32;
-            allocation = (uint8_t *)calloc(1, size);
+            check_buffer_size(size, name);
+            allocation = (uint8_t *)calloc(1, (size_t)size);
             user_assert(allocation) << "Out of memory allocating buffer " << name << " of size " << size << "\n";
             buf.host = allocation;
             while ((size_t)(buf.host) & 0x1f) buf.host++;
