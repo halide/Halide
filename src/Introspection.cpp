@@ -57,6 +57,24 @@ class DebugSections {
 
     struct TypeInfo;
 
+    struct GlobalVariable {
+        std::string name;
+        TypeInfo *type;
+        uint64_t type_def_loc;
+        uint64_t def_loc, spec_loc;
+        uint64_t addr;
+        GlobalVariable() : name(""),
+                           type(NULL),
+                           type_def_loc(0),
+                           def_loc(0),
+                           spec_loc(0),
+                           addr(0) {}
+        bool operator<(const GlobalVariable &other) const {
+            return addr < other.addr;
+        }
+    };
+    vector<GlobalVariable> global_variables;
+
     struct LocalVariable {
         std::string name;
         TypeInfo *type;
@@ -68,7 +86,12 @@ class DebugSections {
         // is empty, the variables are alive for the entire containing
         // function.
         vector<LiveRange> live_ranges;
-        LocalVariable() : name(""), type(NULL), stack_offset(0), type_def_loc(0), def_loc(0), origin_loc(0) {}
+        LocalVariable() : name(""),
+                          type(NULL),
+                          stack_offset(0),
+                          type_def_loc(0),
+                          def_loc(0),
+                          origin_loc(0) {}
     };
 
     struct FunctionInfo {
@@ -238,8 +261,55 @@ public:
         return false;
     }
 
+    // Get the debug name of a global var from a pointer to it
+    std::string get_global_variable_name(const void *global_pointer, const std::string &type_name = "") {
+        uint64_t address = (uint64_t)(global_pointer);
+        size_t hi = global_variables.size();
+        size_t lo = 0;
+        while (hi > lo + 1) {
+            size_t mid = (hi + lo)/2;
+            uint64_t addr_mid = global_variables[mid].addr;
+            if (address < addr_mid) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+
+        if (lo >= global_variables.size()) {
+            return "";
+        }
+
+        GlobalVariable &v = global_variables[lo];
+        TypeInfo *elem_type = NULL;
+        if (v.type && v.type->type == TypeInfo::Array && v.type->size) {
+            elem_type = v.type->members[0].type;
+        }
+
+        if (v.addr == address &&
+            (type_name.empty() ||
+             (v.type && type_name_match(v.type->name, type_name)))) {
+            return v.name;
+        } else if (elem_type && // Check if it's an array element
+                   (type_name.empty() ||
+                    (elem_type && type_name_match(elem_type->name, type_name)))) {
+            int64_t array_size_bytes = v.type->size * elem_type->size;
+            int64_t pos_bytes = address - v.addr;
+            if (pos_bytes >= 0 &&
+                pos_bytes < array_size_bytes &&
+                pos_bytes % elem_type->size == 0) {
+                std::ostringstream oss;
+                oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
+                debug(4) << "Successful match to array element\n";
+                return oss.str();
+            }
+        }
+
+        return "";
+    }
+
     // Get the debug name of a stack variable from a pointer to it
-    std::string get_variable_name(const void *stack_pointer, const std::string &type_name = "") {
+    std::string get_stack_variable_name(const void *stack_pointer, const std::string &type_name = "") {
 
         // Check it's a plausible stack pointer
         int marker = 0;
@@ -755,12 +825,14 @@ private:
                 assert(fmt.code == abbrev_code);
 
                 LocalVariable var;
+                GlobalVariable gvar;
                 FunctionInfo func;
                 TypeInfo type_info;
                 vector<LiveRange> live_ranges;
                 type_info.def_loc = location;
                 func.def_loc = location;
                 var.def_loc = location;
+                gvar.def_loc = location;
                 std::string namespace_name;
 
                 std::string containing_namespace;
@@ -1073,24 +1145,37 @@ private:
                     } else if (fmt.tag == tag_variable) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
+                            gvar.name = containing_namespace + std::string((const char *)payload);
                         } else if (attr == attr_location) {
                             // We only understand locations which are
                             // offsets from the function's frame
-                            if (!payload || payload[0] != 0x91) {
-                                var.stack_offset = no_location;
-                            } else {
+                            if (payload && payload[0] == 0x91) {
+                                // It's a local
                                 // payload + 1 is a sleb128
                                 var.stack_offset = (int)(get_sleb128(payload+1));
+                            } else if (payload && payload[0] == 0x03 && val == (sizeof(void *) + 1)) {
+                                // It's a global
+                                // payload + 1 is an address
+                                void *addr = *((void **)(payload + 1));
+                                gvar.addr = (uint64_t)(addr);
+                            } else {
+                                // Some other format that we don't understand
+                                var.stack_offset = no_location;
                             }
                         } else if (attr == attr_type) {
                             var.type_def_loc = val;
+                            gvar.type_def_loc = val;
                         } else if (attr == attr_abstract_origin) {
                             // This is a stack variable imported from a function that was inlined.
                             var.origin_loc = val;
+                        } else if (attr == attr_specification) {
+                            // This is an instance of a global var with a prototype elsewhere
+                            gvar.spec_loc = val;
                         }
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
+                            gvar.name = std::string((const char *)payload);
                         } else if (attr == attr_data_member_location) {
                             if (!payload) {
                                 var.stack_offset = val;
@@ -1099,6 +1184,7 @@ private:
                             }
                         } else if (attr == attr_type) {
                             var.type_def_loc = val;
+                            gvar.type_def_loc = val;
                         }
                     } else if (fmt.tag == tag_namespace) {
                         if (attr == attr_name) {
@@ -1146,16 +1232,27 @@ private:
 
                 }
 
-                if (fmt.tag == tag_variable &&
-                    func_stack.size()) {
-                    if (live_range_stack.size()) {
-                        var.live_ranges = live_range_stack.back().first;
+                if (fmt.tag == tag_variable) {
+                    if (func_stack.size() && !gvar.addr) {
+                        if (live_range_stack.size()) {
+                            var.live_ranges = live_range_stack.back().first;
+                        }
+                        func_stack.back().first.variables.push_back(var);
+                    } else {
+                        global_variables.push_back(gvar);
                     }
-                    func_stack.back().first.variables.push_back(var);
                 } else if (fmt.tag == tag_member &&
-                           type_stack.size() &&
-                           var.stack_offset != no_location) {
-                    type_stack.back().first.members.push_back(var);
+                           type_stack.size()) {
+                    if (var.stack_offset == no_location) {
+                        // A member with no stack offset location is probably the prototype for a static member
+                        if (!type_stack.back().first.name.empty()) {
+                            gvar.name = type_stack.back().first.name + "::" + gvar.name;
+                        }
+                        global_variables.push_back(gvar);
+                    } else {
+                        type_stack.back().first.members.push_back(var);
+                    }
+
                 } else if (fmt.tag == tag_function) {
                     if (fmt.has_children) {
                         func_stack.push_back(std::make_pair(func, stack_depth));
@@ -1227,8 +1324,36 @@ private:
                             v.type = origin->type;
                             v.type_def_loc = origin->type_def_loc;
                         } else {
-                            debug(4) << "Variable with bad abstract origin!\n";
+                            debug(4) << "Variable with bad abstract origin: " << loc << "\n";
                         }
+                    }
+                }
+            }
+        }
+
+        // Connect global variable instances to their prototypes
+        {
+            std::map<uint64_t, GlobalVariable *> var_map;
+            for (size_t i = 0; i < global_variables.size(); i++) {
+                GlobalVariable &var = global_variables[i];
+                debug(4) << "var " << var.name << " is at " << var.def_loc << "\n";
+                if (var.spec_loc || var.name.empty()) {
+                    // Not a prototype
+                    continue;
+                }
+                var_map[var.def_loc] = &var;
+            }
+
+            for (size_t i = 0; i < global_variables.size(); i++) {
+                GlobalVariable &var = global_variables[i];
+                if (var.name.empty() && var.spec_loc) {
+                    GlobalVariable *spec = var_map[var.spec_loc];
+                    if (spec) {
+                        var.name = spec->name;
+                        var.type = spec->type;
+                        var.type_def_loc = spec->type_def_loc;
+                    } else {
+                        debug(4) << "Global variable with bad spec loc: " << var.spec_loc << "\n";
                     }
                 }
             }
@@ -1246,6 +1371,11 @@ private:
                     functions[i].variables[j].type =
                         type_map[functions[i].variables[j].type_def_loc];
                 }
+            }
+
+            for (size_t i = 0; i < global_variables.size(); i++) {
+                global_variables[i].type =
+                    type_map[global_variables[i].type_def_loc];
             }
 
             for (size_t i = 0; i < types.size(); i++) {
@@ -1329,37 +1459,78 @@ private:
             functions[i].variables.swap(new_vars);
         }
 
+        // Unpack class members of global variables
+        for (size_t i = 0; i < global_variables.size(); i++) {
+            const GlobalVariable &v = global_variables[i];
+            if (v.type &&
+                (v.type->type == TypeInfo::Struct ||
+                 v.type->type == TypeInfo::Class ||
+                 v.type->type == TypeInfo::Typedef)) {
+                vector<LocalVariable> &members = v.type->members;
+                for (size_t j = 0; j < members.size(); j++) {
+                    GlobalVariable mem;
+                    if (!v.name.empty() && !members[j].name.empty()) {
+                        mem.name = v.name + "." + members[j].name;
+                    } else {
+                        // Might be a member of an anonymous struct?
+                        mem.name = members[j].name;
+                    }
+                    mem.type = members[j].type;
+                    mem.type_def_loc = members[j].type_def_loc;
+                    mem.addr = v.addr + members[j].stack_offset;
+                    global_variables.push_back(mem);
+                }
+            }
+        }
+
         // Drop functions for which we don't know the program counter,
         // and variables for which we don't know the stack offset,
         // name, or type.
-        vector<FunctionInfo> trimmed;
-        for (size_t i = 0; i < functions.size(); i++) {
-            FunctionInfo &f = functions[i];
-            if (!f.pc_begin ||
-                !f.pc_end ||
-                f.name.empty()) {
-                //debug(4) << "Dropping " << f.name << "\n";
-                continue;
-            }
+        {
+            vector<FunctionInfo> trimmed;
+            for (size_t i = 0; i < functions.size(); i++) {
+                FunctionInfo &f = functions[i];
+                if (!f.pc_begin ||
+                    !f.pc_end ||
+                    f.name.empty()) {
+                    //debug(4) << "Dropping " << f.name << "\n";
+                    continue;
+                }
 
-            vector<LocalVariable> vars;
-            for (size_t j = 0; j < f.variables.size(); j++) {
-                LocalVariable &v = f.variables[j];
-                if (!v.name.empty() && v.type && v.stack_offset != no_location) {
-                    vars.push_back(v);
-                } else {
-                    //debug(4) << "Dropping " << v.name << "\n";
+                vector<LocalVariable> vars;
+                for (size_t j = 0; j < f.variables.size(); j++) {
+                    LocalVariable &v = f.variables[j];
+                    if (!v.name.empty() && v.type && v.stack_offset != no_location) {
+                        vars.push_back(v);
+                    } else {
+                        //debug(4) << "Dropping " << v.name << "\n";
+                    }
+                }
+                f.variables.clear();
+                trimmed.push_back(f);
+                trimmed.back().variables = vars;
+            }
+            std::swap(functions, trimmed);
+        }
+
+        // Drop globals for which we don't know the address or name
+        {
+            vector<GlobalVariable> trimmed;
+            for (size_t i = 0; i < global_variables.size(); i++) {
+                GlobalVariable &v = global_variables[i];
+                if (!v.name.empty() && v.addr) {
+                    trimmed.push_back(v);
                 }
             }
-            f.variables.clear();
-            trimmed.push_back(f);
-            trimmed.back().variables = vars;
+
+            std::swap(global_variables, trimmed);
         }
-        std::swap(functions, trimmed);
 
         // Sort the functions list by program counter
         std::sort(functions.begin(), functions.end());
 
+        // Sort the global variables by address
+        std::sort(global_variables.begin(), global_variables.end());
     }
 
     void parse_debug_line(const llvm::DataExtractor &e) {
@@ -1686,7 +1857,12 @@ DebugSections *debug_sections = NULL;
 std::string get_variable_name(const void *var, const std::string &expected_type) {
     if (!debug_sections) return "";
     if (!debug_sections->working) return "";
-    return debug_sections->get_variable_name(var, expected_type);
+    std::string name = debug_sections->get_stack_variable_name(var, expected_type);
+    if (name.empty()) {
+        // Maybe it's a global
+        name = debug_sections->get_global_variable_name(var, expected_type);
+    }
+    return name;
 }
 
 std::string get_source_location() {
