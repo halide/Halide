@@ -13,15 +13,15 @@
 
 namespace Halide {
 
-class Expr;
-class Type;
+struct Expr;
+struct Type;
 // Forward declare some things from IRPrinter, which we can't include yet.
 EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
 EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
 
 namespace Internal {
 
-class Stmt;
+struct Stmt;
 std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** For optional debugging during codegen, use the debug class as

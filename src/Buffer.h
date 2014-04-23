@@ -13,8 +13,8 @@
 
 namespace Halide {
 namespace Internal {
-class BufferContents;
-class JITCompiledModule;
+struct BufferContents;
+struct JITCompiledModule;
 }
 
 /** The internal representation of an image, or other dense array
