@@ -1,32 +1,40 @@
 Halide OpenGL/GLSL backend
 ==========================
 
+Halide's OpenGL backend offloads image processing operations to the GPU by
+generating GLSL-based fragment shaders.
+
 Compared to other GPU-based processing options such as CUDA and OpenCL, OpenGL
 has two main advantages: it is available on basically every desktop computer
-and mobile device, and it is generally well supported by hardware vendors
+and mobile device, and it is generally well supported across different
+hardware vendors.
 
 The main disadvantage of OpenGL as an image processing framework is that the
-computational capabilities of fragment shaders are quite restricted. Some
-common image processing operations such as histograms or recursive filters are
-hard to express in GLSL.
+computational capabilities of fragment shaders are quite restricted. In
+general, the processing model provided by OpenGL is most suitable for filters
+where each output pixel can be expressed as a simple function of the input
+pixels. This covers a wide range of interesting operations like point-wise
+filters and convolutions; but a few common image processing operations such as
+histograms or recursive filters are notoriously hard to express in GLSL.
 
 
-Enabling OpenGL
----------------
+Writing OpenGL-Based Filters
+----------------------------
 
 To enable code generation for OpenGL, include "opengl" in the target specifier
-passed to Halide. Since OpenGL shaders are somewhat limited in their
-computational power, you must also specify a CPU target for those parts of the
-filter that cannot or should not be computed on the GPU. Examples of valid
-target specifiers are
+passed to Halide. Since OpenGL shaders are limited in their computational
+power, you must also specify a CPU target for those parts of the filter that
+cannot or should not be computed on the GPU. Examples of valid target
+specifiers are
 
   host-opengl         
   x86-opengl-gpu_debug
 
-Adding "gpu_debug", as in the second example, adss additional logging output.
+Adding "gpu_debug", as in the second example, adds additional logging output
+and is highly recommended during development.
 
-By default, filters compiled for OpenGL targets run completely on the CPU --
-execution on the GPU must be enabled for individual Funcs by appropriate
+By default, filters compiled for OpenGL targets run completely on the CPU.
+Execution on the GPU must be enabled for individual Funcs by appropriate
 scheduling calls.
 
 GLSL fragment shaders implicitly loop over two spatial dimensions x,y and the
@@ -35,13 +43,33 @@ color channel
   Func f;
   Var x, y, c;
   f(x, y, c) = ...;
+  f.bound(c, 0, 3);
   f.glsl(x, y, c);
 
+You have to specify explicit bounds for the color channel before calling
+glsl() since OpenGL does not support loops over a variable number of color
+channels.
 
-Deployment
-----------
 
-Using OpenGL-based filters from a host application is fairly straightforward.
+JIT Compilation
+---------------
+
+To execute JIT-compiled filters, Halide tries to load a dynamic library called
+'HalideOpenGLRuntime', which contains platform-specific code for interacting
+with the system's OpenGL implementation. A simple default implementation of
+this library can be found in 'bin/HalideOpenGLRuntime.{so,dylib,dll}'.
+
+Examples for JIT execution of OpenGL-based filters can be found in test/opengl.
+
+
+AOT Compilation
+---------------
+
+When AOT (ahead-of-time) compilation is used, Halide generates OpenGL-enabled
+object files that can be linked to and called from a host application. In
+general, this is fairly straightforward, but a few things must be taken care
+of.
+
 Halide doesn't create its own OpenGL context but expects that the context is
 created and managed by the application. This has two advantages:
 
@@ -53,17 +81,18 @@ created and managed by the application. This has two advantages:
      Halide and the host application, for example, to display computed results
      directly on the screen without unnecessary memory transfers.
 
-To access OpenGL functions, Halide's runtime code calls
-'halide_opengl_get_proc_addr' to retrieve function pointers by name.
+The object files created by Halide are independent of the particular OpenGL
+implementation, so some glue code must be provided by the host application to
+look up OpenGL API functions by name. For simple applications, it is
+sufficient to link to 'bin/HalideOpenGLRuntime.{so,dylib,dll}'. More advanced
+applications can instead implement the following function directly:
 
   typedef void (*GL_FUNC_PTR)();
   extern "C" GL_FUNC_PTR halide_opengl_get_proc_addr(const char *name) {
     ...
   }
 
-This allows us to keep the runtime code portable.  As a side benefit, this
-mechanism allows host applications to reroute OpenGL functions, for example to
-add logging or keep track of texture memory allocated.
+This gives you direct control over the way Halide interacts with OpenGL.
 
 Halide allocates and deletes textures as necessary.  Applications may manage
 the textures by hand by setting the 'dev' field in buffer_t; this is most
@@ -88,10 +117,9 @@ devices and traditional computers. Some limitations include:
 
   * Textures are either read-only or write-only, never read-write;
 
-  *Reductions cannot be implemented in GLSL and must be run on the CPU.
+  * Reductions cannot be implemented in GLSL and must be run on the CPU.
 
 The maximum texture size in OpenGL is GL_MAX_TEXTURE_SIZE, which is often
 smaller than the image of interest; on mobile devices, for example,
 GL_MAX_TEXTURE_SIZE is commonly 2048. Tiling must be used to process larger
 images.
-
