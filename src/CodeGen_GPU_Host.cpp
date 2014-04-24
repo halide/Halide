@@ -196,7 +196,6 @@ public:
                                   read_on_host(false),
                                   written_on_device(false),
                                   read_on_device(false),
-                                  has_buffer_defined(false),
                                   in_device_code(false) {}
 
 
@@ -242,13 +241,6 @@ private:
             }
         }
         IRVisitor::visit(op);
-    }
-
-    void visit(const LetStmt *op) {
-        IRVisitor::visit(op);
-        if (op->name == buf + ".buffer") {
-            has_buffer_defined = true;
-        }
     }
 };
 
@@ -757,7 +749,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     if (usage.used_on_device) {
         debug(2) << alloc->name << " is used on the device\n";
 
-        if (!usage.has_buffer_defined) {
+        buf = sym_get(alloc->name + ".buffer");
+        if (!buf) {
             buf = create_alloca_at_entry(buffer_t_type, 1);
             Value *zero32 = ConstantInt::get(i32, 0),
                 *one32  = ConstantInt::get(i32, 1),
@@ -813,7 +806,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
             sym_push(alloc->name + ".buffer", buf);
             should_pop = true;
         } else {
-            buf = sym_get(alloc->name + ".buffer");
+            Value *host_ptr = builder->CreatePointerCast(host_allocation.ptr, i8->getPointerTo());
+            builder->CreateStore(host_ptr, buffer_host_ptr(buf));
         }
 
         Value *args[2] = { get_user_context(), buf };
@@ -1020,6 +1014,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
         Value *buf = create_alloca_at_entry(buffer_t_type, 1);
 
         builder->CreateStore(null64,   buffer_dev_ptr(buf));
+        builder->CreateStore(ConstantPointerNull::get(i8->getPointerTo()),
+                             buffer_host_ptr(buf));
         builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
         builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
         builder->CreateStore(codegen(call->args[1]), buffer_elem_size_ptr(buf));
