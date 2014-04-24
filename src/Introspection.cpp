@@ -243,6 +243,10 @@ public:
             source_lines[i].pc += pc_adjust;
         }
 
+        for (size_t i = 0; i < global_variables.size(); i++) {
+            global_variables[i].addr += pc_adjust;
+        }
+
         calibrated = true;
     }
 
@@ -263,6 +267,9 @@ public:
 
     // Get the debug name of a global var from a pointer to it
     std::string get_global_variable_name(const void *global_pointer, const std::string &type_name = "") {
+        debug(4) << "Considering possible global at " << global_pointer << "\n";
+
+        debug(4) << "Known globals range from " << std::hex << global_variables.front().addr << " to " << global_variables.back().addr << std::dec << "\n";
         uint64_t address = (uint64_t)(global_pointer);
         size_t hi = global_variables.size();
         size_t lo = 0;
@@ -280,31 +287,49 @@ public:
             return "";
         }
 
-        GlobalVariable &v = global_variables[lo];
-        TypeInfo *elem_type = NULL;
-        if (v.type && v.type->type == TypeInfo::Array && v.type->size) {
-            elem_type = v.type->members[0].type;
+        // There may be multiple matching addresses. Walk backwards to find the first one.
+        size_t idx = lo;
+        while (idx > 0 && global_variables[idx-1].addr == global_variables[lo].addr) {
+            idx--;
         }
 
-        if (v.addr == address &&
-            (type_name.empty() ||
-             (v.type && type_name_match(v.type->name, type_name)))) {
-            return v.name;
-        } else if (elem_type && // Check if it's an array element
-                   (type_name.empty() ||
-                    (elem_type && type_name_match(elem_type->name, type_name)))) {
-            int64_t array_size_bytes = v.type->size * elem_type->size;
-            int64_t pos_bytes = address - v.addr;
-            if (pos_bytes >= 0 &&
-                pos_bytes < array_size_bytes &&
-                pos_bytes % elem_type->size == 0) {
-                std::ostringstream oss;
-                oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
-                debug(4) << "Successful match to array element\n";
-                return oss.str();
+        // Now test all of them
+        for (; global_variables[idx].addr <= address; idx++) {
+
+            GlobalVariable &v = global_variables[idx];
+            TypeInfo *elem_type = NULL;
+            if (v.type && v.type->type == TypeInfo::Array && v.type->size) {
+                elem_type = v.type->members[0].type;
+            }
+
+            debug(4) << "Closest global is " << v.name << " at " << std::hex << v.addr << std::dec;
+            if (v.type) {
+                debug(4) << " with type " << v.type->name << "\n";
+            } else {
+                debug(4) << "\n";
+            }
+
+            if (v.addr == address &&
+                (type_name.empty() ||
+                 (v.type && type_name_match(v.type->name, type_name)))) {
+                return v.name;
+            } else if (elem_type && // Check if it's an array element
+                       (type_name.empty() ||
+                        (elem_type && type_name_match(elem_type->name, type_name)))) {
+                int64_t array_size_bytes = v.type->size * elem_type->size;
+                int64_t pos_bytes = address - v.addr;
+                if (pos_bytes >= 0 &&
+                    pos_bytes < array_size_bytes &&
+                    pos_bytes % elem_type->size == 0) {
+                    std::ostringstream oss;
+                    oss << v.name << '[' << (pos_bytes / elem_type->size) << ']';
+                    debug(4) << "Successful match to array element\n";
+                    return oss.str();
+                }
             }
         }
 
+        // No match
         return "";
     }
 
@@ -1144,8 +1169,13 @@ private:
                         }
                     } else if (fmt.tag == tag_variable) {
                         if (attr == attr_name) {
-                            var.name = std::string((const char *)payload);
-                            gvar.name = containing_namespace + std::string((const char *)payload);
+                            if (func_stack.empty()) {
+                                // Global var
+                                gvar.name = containing_namespace + std::string((const char *)payload);
+                            } else {
+                                // Either a local var, or a static var inside a function
+                                gvar.name = var.name = std::string((const char *)payload);
+                            }
                         } else if (attr == attr_location) {
                             // We only understand locations which are
                             // offsets from the function's frame
@@ -1175,7 +1205,11 @@ private:
                     } else if (fmt.tag == tag_member) {
                         if (attr == attr_name) {
                             var.name = std::string((const char *)payload);
-                            gvar.name = std::string((const char *)payload);
+                            if (type_stack.size()) {
+                                gvar.name = type_stack.back().first.name + "::" + var.name;
+                            } else {
+                                gvar.name = var.name;
+                            }
                         } else if (attr == attr_data_member_location) {
                             if (!payload) {
                                 var.stack_offset = val;
@@ -1245,9 +1279,6 @@ private:
                            type_stack.size()) {
                     if (var.stack_offset == no_location) {
                         // A member with no stack offset location is probably the prototype for a static member
-                        if (!type_stack.back().first.name.empty()) {
-                            gvar.name = type_stack.back().first.name + "::" + gvar.name;
-                        }
                         global_variables.push_back(gvar);
                     } else {
                         type_stack.back().first.members.push_back(var);
@@ -1462,10 +1493,11 @@ private:
         // Unpack class members of global variables
         for (size_t i = 0; i < global_variables.size(); i++) {
             const GlobalVariable &v = global_variables[i];
-            if (v.type &&
+            if (v.type && v.addr &&
                 (v.type->type == TypeInfo::Struct ||
                  v.type->type == TypeInfo::Class ||
                  v.type->type == TypeInfo::Typedef)) {
+                debug(4) << "Unpacking members of " << v.name << " at " << std::hex << v.addr << "\n";
                 vector<LocalVariable> &members = v.type->members;
                 for (size_t j = 0; j < members.size(); j++) {
                     GlobalVariable mem;
@@ -1478,8 +1510,10 @@ private:
                     mem.type = members[j].type;
                     mem.type_def_loc = members[j].type_def_loc;
                     mem.addr = v.addr + members[j].stack_offset;
+                    debug(4) << " Member " << mem.name << " goes at " << mem.addr << "\n";
                     global_variables.push_back(mem);
                 }
+                debug(4) << std::dec;
             }
         }
 

@@ -75,10 +75,10 @@ int g(int x) {
 
 
 int f(int x) {
-    static float static_float = 0.3f;
+    static float static_float_in_f = 0.3f;
     int y = g(x) + g(x-1);
     check(&y, "int", "y", __FILE__, __LINE__);
-    check(&static_float, "float", "static_float", __FILE__, __LINE__);
+    check(&static_float_in_f, "float", "static_float_in_f", __FILE__, __LINE__);
     return y - 1;
 }
 
