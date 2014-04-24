@@ -1922,7 +1922,7 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
         return;
     }
 
-    debug(4) << "Testing compilation unit with offset_marker at " << (void *)calib << "\n";
+    debug(4) << "Testing compilation unit with offset_marker at " << reinterpret_bits<void *>(calib) << "\n";
 
     if (!debug_sections) {
         char path[2048];
@@ -1930,8 +1930,8 @@ void test_compilation_unit(bool (*test)(), void (*calib)()) {
         debug_sections = new DebugSections(path);
     }
 
-    if (!saves_frame_pointer((void *)&test_compilation_unit) ||
-        !saves_frame_pointer((void *)test)) {
+    if (!saves_frame_pointer(reinterpret_bits<void *>(&test_compilation_unit)) ||
+        !saves_frame_pointer(reinterpret_bits<void *>(&test))) {
         // Make sure libHalide and the test compilation unit both save the frame pointer
         debug_sections->working = false;
         debug(4) << "Failed because frame pointer not saved\n";
