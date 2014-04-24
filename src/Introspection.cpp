@@ -294,7 +294,7 @@ public:
         }
 
         // Now test all of them
-        for (; global_variables[idx].addr <= address; idx++) {
+        for (; idx < global_variables.size() && global_variables[idx].addr <= address; idx++) {
 
             GlobalVariable &v = global_variables[idx];
             TypeInfo *elem_type = NULL;
