@@ -39,8 +39,8 @@ std::ostream &operator<<(std::ostream &stream, const Stmt &);
  */
 
 struct debug {
-    static int debug_level;
-    static bool initialized;
+    EXPORT static int debug_level;
+    EXPORT static bool initialized;
     int verbosity;
 
     debug(int v) : verbosity(v) {

@@ -33,93 +33,93 @@ private:
 public:
     Buffer() : contents(NULL) {}
 
-    Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
-           uint8_t* data = NULL, const std::string &name = "");
+    EXPORT Buffer(Type t, int x_size = 0, int y_size = 0, int z_size = 0, int w_size = 0,
+                  uint8_t* data = NULL, const std::string &name = "");
 
-    Buffer(Type t, const std::vector<int32_t> &sizes,
-           uint8_t* data = NULL, const std::string &name = "");
+    EXPORT Buffer(Type t, const std::vector<int32_t> &sizes,
+                  uint8_t* data = NULL, const std::string &name = "");
 
-    Buffer(Type t, const buffer_t *buf, const std::string &name = "");
+    EXPORT Buffer(Type t, const buffer_t *buf, const std::string &name = "");
 
     /** Get a pointer to the host-side memory. */
-    void *host_ptr() const;
+    EXPORT void *host_ptr() const;
 
     /** Get a pointer to the raw buffer_t struct that this class wraps. */
-    buffer_t *raw_buffer() const;
+    EXPORT buffer_t *raw_buffer() const;
 
     /** Get the device-side pointer/handle for this buffer. Will be
      * zero if no device was involved in the creation of this
      * buffer. */
-    uint64_t device_handle() const;
+    EXPORT uint64_t device_handle() const;
 
     /** Has this buffer been modified on the cpu since last copied to a
      * device. Not meaningful unless there's a device involved. */
-    bool host_dirty() const;
+    EXPORT bool host_dirty() const;
 
     /** Let Halide know that the host-side memory backing this buffer
      * has been externally modified. You shouldn't normally need to
      * call this, because it is done for you when you cast a Buffer to
      * an Image in order to modify it. */
-    void set_host_dirty(bool dirty = true);
+    EXPORT void set_host_dirty(bool dirty = true);
 
     /** Has this buffer been modified on device since last copied to
      * the cpu. Not meaninful unless there's a device involved. */
-    bool device_dirty() const;
+    EXPORT bool device_dirty() const;
 
     /** Let Halide know that the device-side memory backing this
      * buffer has been externally modified, and so the cpu-side memory
      * is invalid. A copy-back will occur the next time you cast this
      * Buffer to an Image, or the next time this buffer is accessed on
      * the host in a halide pipeline. */
-    void set_device_dirty(bool dirty = true);
+    EXPORT void set_device_dirty(bool dirty = true);
 
     /** Get the dimensionality of this buffer. Uses the convention
      * that the extent field of a buffer_t should contain zero when
      * the dimensions end. */
-    int dimensions() const;
+    EXPORT int dimensions() const;
 
     /** Get the extent of this buffer in the given dimension. */
-    int extent(int dim) const;
+    EXPORT int extent(int dim) const;
 
     /** Get the number of bytes between adjacent elements of this buffer along the given dimension. */
-    int stride(int dim) const;
+    EXPORT int stride(int dim) const;
 
     /** Get the coordinate in the function that this buffer represents
      * that corresponds to the base address of the buffer. */
-    int min(int dim) const;
+    EXPORT int min(int dim) const;
 
     /** Set the coordinate in the function that this buffer represents
      * that corresponds to the base address of the buffer. */
-    void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0);
+    EXPORT void set_min(int m0, int m1 = 0, int m2 = 0, int m3 = 0);
 
     /** Get the Halide type of the contents of this buffer. */
-    Type type() const;
+    EXPORT Type type() const;
 
     /** Compare two buffers for identity (not equality of data). */
-    bool same_as(const Buffer &other) const;
+    EXPORT bool same_as(const Buffer &other) const;
 
     /** Check if this buffer handle actually points to data. */
-    bool defined() const;
+    EXPORT bool defined() const;
 
     /** Get the runtime name of this buffer used for debugging. */
-    const std::string &name() const;
+    EXPORT const std::string &name() const;
 
     /** Convert this buffer to an argument to a halide pipeline. */
-    operator Argument() const;
+    EXPORT operator Argument() const;
 
     /** Declare that this buffer was created by the given jit-compiled
      * module. Used internally for reference counting the module. */
-    void set_source_module(const Internal::JITCompiledModule &module);
+    EXPORT void set_source_module(const Internal::JITCompiledModule &module);
 
     /** If this buffer was the output of a jit-compiled realization,
      * retrieve the module it came from. Otherwise returns a module
      * struct full of null pointers. */
-    const Internal::JITCompiledModule &source_module();
+    EXPORT const Internal::JITCompiledModule &source_module();
 
     /** If this buffer was created *on-device* by a jit-compiled
      * realization, then copy it back to the cpu-side memory. This is
      * usually achieved by casting the Buffer to an Image. */
-    void copy_to_host();
+    EXPORT void copy_to_host();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then copy the cpu-side data to
@@ -131,13 +131,13 @@ public:
      * host_dirty bit so that Halide can manage the copy lazily for
      * you. Casting the Buffer to an Image sets the dirty bit for
      * you. */
-    void copy_to_dev();
+    EXPORT void copy_to_dev();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then free the device-side
      * allocation, if there is one. Done automatically when the last
      * reference to this buffer dies. */
-    void free_dev_buffer();
+    EXPORT void free_dev_buffer();
 
 };
 

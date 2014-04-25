@@ -29,7 +29,7 @@ struct ModulusRemainder {
  * aligned load. If all else fails, we can just say that an integer is
  * congruent to zero modulo one.
  */
-ModulusRemainder modulus_remainder(Expr e);
+EXPORT ModulusRemainder modulus_remainder(Expr e);
 
 /** If we have alignment information about external variables, we can
  * let the analysis know about that using this version of

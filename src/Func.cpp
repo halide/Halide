@@ -3,6 +3,10 @@
 #include <string.h>
 #include <fstream>
 
+#ifdef WIN32
+#include <intrin.h>
+#endif
+
 #include "IR.h"
 #include "Func.h"
 #include "Util.h"
@@ -1773,7 +1777,11 @@ extern "C" void buffered_error_handler(void *ctx, const char *message) {
         error_buffer *buf = (error_buffer *)ctx;
         size_t len = strlen(message);
         // Atomically claim some space in the buffer
+        #ifdef WIN32
+        int old_end = _InterlockedExchangeAdd((volatile long *)(&buf->end), len + 1);
+        #else
         int old_end = __sync_fetch_and_add(&buf->end, len + 1);
+        #endif
 
         if (old_end + len >= max_error_buffer_size - 2) {
             // Out of space

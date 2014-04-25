@@ -11,31 +11,31 @@
 namespace Halide {
 
 /** Query whether Halide was compiled with exceptions. */
-bool exceptions_enabled();
+EXPORT bool exceptions_enabled();
 
 /** A base class for Halide errors. */
 struct Error : public std::runtime_error {
     // Give each class a non-inlined constructor so that the type
     // doesn't get separately instantiated in each compilation unit.
-    Error(const std::string &msg);
+    EXPORT Error(const std::string &msg);
 };
 
 /** An error that occurs while running a JIT-compiled Halide pipeline. */
 struct RuntimeError : public Error {
-    RuntimeError(const std::string &msg);
+    EXPORT RuntimeError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to a user error. */
 struct CompileError : public Error {
-    CompileError(const std::string &msg);
+    EXPORT CompileError(const std::string &msg);
 };
 
 /** An error that occurs while compiling a Halide pipeline that Halide
  * attributes to an internal compiler bug, or to an invalid use of
  * Halide's internals. */
 struct InternalError : public Error {
-    InternalError(const std::string &msg);
+    EXPORT InternalError(const std::string &msg);
 };
 
 
@@ -119,7 +119,7 @@ struct ErrorReport {
         explode();
     }
 
-    void explode();
+    EXPORT void explode();
 };
 
 #define internal_error            Halide::Internal::ErrorReport(__FILE__, __LINE__, NULL, false, false, false, false)
