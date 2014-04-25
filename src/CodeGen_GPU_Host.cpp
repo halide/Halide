@@ -1006,39 +1006,16 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
             builder->CreateCall2(copy_to_host_fn, user_context, buf);
         }
         // don't return
-    } else if (call->call_type == Call::Intrinsic &&
-               call->name == Call::create_buffer_t) {
-        Value *null64 = ConstantInt::get(i64, 0);
-        Value *zero8  = ConstantInt::get( i8, 0);
-
-        Value *buf = create_alloca_at_entry(buffer_t_type, 1);
-
-        builder->CreateStore(null64,   buffer_dev_ptr(buf));
-        builder->CreateStore(ConstantPointerNull::get(i8->getPointerTo()),
-                             buffer_host_ptr(buf));
-        builder->CreateStore(zero8,  buffer_host_dirty_ptr(buf));
-        builder->CreateStore(zero8,  buffer_dev_dirty_ptr(buf));
-        builder->CreateStore(codegen(call->args[1]), buffer_elem_size_ptr(buf));
-
-        int dims = call->args.size()/3;
-        for (int i = 0; i < 4; i++) {
-            Value *min, *extent, *stride;
-            if (i < dims) {
-                min    = codegen(call->args[i*3+2]);
-                extent = codegen(call->args[i*3+3]);
-                stride = codegen(call->args[i*3+4]);
-            } else {
-                min = extent = stride = ConstantInt::get(i32, 0);
-            }
-            builder->CreateStore(min, buffer_min_ptr(buf, i));
-            builder->CreateStore(extent, buffer_extent_ptr(buf, i));
-            builder->CreateStore(stride, buffer_stride_ptr(buf, i));
-        }
-
-        CodeGen_CPU::value = buf;
+    }
+    else if (call->call_type == Call::Intrinsic &&
+             call->name == Call::create_buffer_t) {
+        CodeGen::visit(call);
+        // TODO(dheck): check if these are set to proper values later
+        // builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
+        // builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
+        // builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
         return;
     }
-
     CodeGen::visit(call);
 }
 
