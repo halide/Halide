@@ -18,6 +18,7 @@ public:
     FlattenDimensions(const map<string, Function> &e) : env(e) {
     }
     Scope<int> scope;
+    Scope<int> need_buffer_t;
 private:
     const map<string, Function> &env;
 
@@ -70,27 +71,13 @@ private:
     void visit(const Realize *realize) {
         Stmt body = mutate(realize->body);
 
-        // Since Allocate only handles one-dimensional arrays, we need another
-        // means to populate buffer_t for intermediate realizations with
-        // correct min/extent/stride values. These values are required when
-        // dealing with kernel loops wich require information about the
-        // dimensionality of a buffer.  We generate a create_buffer_t
-        // intrinsic to populate the buffer in this case.
+        // Check if we need to create a buffer_t for this realization
         vector<bool> make_buffer_t(realize->types.size());
-        map<string, Function>::const_iterator it = env.find(realize->name);
-        if (it != env.end()) {
-	    const Schedule &sched = it->second.schedule();
-            bool is_kernel_loop = false;
-            for (size_t i = 0; i < sched.dims.size(); i++) {
-                if (sched.dims[i].for_type == For::Kernel) {
-                    is_kernel_loop = true;
-                    break;
-                }
-            }
-            if (is_kernel_loop) {
-                for (size_t i = 0; i < realize->types.size(); i++)
-                    make_buffer_t[i] = true;
-            }
+        while (need_buffer_t.contains(realize->name)) {
+            int idx = need_buffer_t.get(realize->name);
+            assert(idx < (int)make_buffer_t.size());
+            make_buffer_t[idx] = true;
+            need_buffer_t.pop(realize->name);
         }
 
         // Compute the size
@@ -289,6 +276,7 @@ public:
         inside_kernel_loop = false;
     }
     Scope<int> scope;
+    Scope<int> need_buffer_t;
     bool inside_kernel_loop;
 private:
     using IRMutator::visit;
@@ -309,12 +297,14 @@ private:
             if (t.bits != values[i].type().bits) {
                 values[i] = Cast::make(t, values[i]);
             }
+
+            // Record that this buffer is accessed from a GPU kernel
+            need_buffer_t.push(provide->name, i);
         }
 
         if (values.size() == 1) {
             stmt = Store::make(provide->name, values[0], provide->args);
         } else {
-
             vector<string> names(provide->values.size());
             Stmt result;
 
@@ -347,8 +337,7 @@ private:
         }
 
         string name = call->name;
-        if (call->call_type == Call::Halide &&
-            call->func.outputs() > 1) {
+        if (call->call_type == Call::Halide && call->func.outputs() > 1) {
             name = name + '.' + int_to_string(call->value_index);
         }
 
@@ -375,6 +364,9 @@ private:
                 idx[i] = (Cast::make(Float(32), idx[i]) + 0.5f) / extent;
             }
         }
+
+        // Record that this buffer is accessed from a GPU kernel
+        need_buffer_t.push(call->name, 0);
 
         expr = Load::make(call->type, name, idx, call->image, call->param);
     }
@@ -406,9 +398,12 @@ private:
 
 
 Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    s = CreateKernelLoads().mutate(s);
+    CreateKernelLoads kernel_loads;
+    s = kernel_loads.mutate(s);
 
-    return FlattenDimensions(env).mutate(s);
+    FlattenDimensions flatten(env);
+    flatten.need_buffer_t = kernel_loads.need_buffer_t;
+    return flatten.mutate(s);
 }
 
 }
