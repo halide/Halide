@@ -749,7 +749,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
     if (usage.used_on_device) {
         debug(2) << alloc->name << " is used on the device\n";
 
-        buf = sym_get(alloc->name + ".buffer");
+        buf = sym_get(alloc->name + ".buffer", false);
         if (!buf) {
             buf = create_alloca_at_entry(buffer_t_type, 1);
             Value *zero32 = ConstantInt::get(i32, 0),
