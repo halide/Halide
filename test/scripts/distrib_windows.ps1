@@ -75,7 +75,11 @@ cd $ROOT
 $COMMIT = git show HEAD | head -n1 | cut -b8-
 $DATE = date +%Y_%m_%d
 
-cp build\include\Halide.h .
-cp build\lib\Release\Halide.lib .
-cp build\bin\Release\Halide.dll .
+if (! (Test-Path distrib)) {
+  mkdir distrib
+}
+cd distrib
+cp ..\build\include\Halide.h .
+cp ..\build\lib\Release\Halide.lib .
+cp ..\build\bin\Release\Halide.dll .
 &7z a Halide_Windows_64_trunk_${COMMIT}_${DATE}.zip Halide.h Halide.lib Halide.dll
