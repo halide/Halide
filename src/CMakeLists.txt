@@ -186,6 +186,7 @@ set(HEADER_FILES
   Image.h
   InlineReductions.h
   IntegerDivisionTable.h
+  Introspection.h
   IntrusivePtr.h
   IREquality.h
   IR.h
@@ -232,6 +233,7 @@ set(HEADER_FILES
   SpecializeClampedRamps.h
   FastIntegerDivide.h
   AllocationBoundsInference.h
+  Error.h
   Inline.h
   Qualify.h
   ExprUsesVar.h
@@ -314,6 +316,12 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Qualify.cpp
   UnifyDuplicateLets.cpp
   ExprUsesVar.cpp
+  Introspection.cpp
+  Buffer.cpp
+  Param.cpp
+  Error.cpp
+  Image.cpp
+  Debug.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
 

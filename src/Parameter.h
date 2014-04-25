@@ -30,13 +30,13 @@ public:
      * argument is true, this is a buffer parameter, otherwise, it is
      * a scalar parameter. The parameter will be given a unique
      * auto-generated name. */
-    Parameter(Type t, bool is_buffer);
+    EXPORT Parameter(Type t, bool is_buffer);
 
     /** Construct a new parameter of the given type with name given by
      * the third argument. If the second argument is true, this is a
      * buffer parameter, otherwise, it is a scalar parameter. The
      * parameter will be given a unique auto-generated name. */
-    Parameter(Type t, bool is_buffer, const std::string &name);
+    EXPORT Parameter(Type t, bool is_buffer, const std::string &name);
 
     /** Get the type of this parameter */
     EXPORT Type type() const;
@@ -69,11 +69,11 @@ public:
 
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
-    Buffer get_buffer() const;
+    EXPORT Buffer get_buffer() const;
 
     /** If the parameter is a buffer parameter, set its current
      * value. Only relevant when jitting */
-    void set_buffer(Buffer b);
+    EXPORT void set_buffer(Buffer b);
 
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
@@ -81,7 +81,7 @@ public:
     EXPORT const void *get_scalar_address() const;
 
     /** Tests if this handle is the same as another handle */
-    bool same_as(const Parameter &other) const;
+    EXPORT bool same_as(const Parameter &other) const;
 
     /** Tests if this handle is non-NULL */
     EXPORT bool defined() const;
@@ -89,12 +89,12 @@ public:
     /** Get and set constraints for the min, extent, and stride (see
      * ImageParam::set_extent) */
     //@{
-    void set_min_constraint(int dim, Expr e);
-    void set_extent_constraint(int dim, Expr e);
-    void set_stride_constraint(int dim, Expr e);
-    Expr min_constraint(int dim) const;
-    Expr extent_constraint(int dim) const;
-    Expr stride_constraint(int dim) const;
+    EXPORT void set_min_constraint(int dim, Expr e);
+    EXPORT void set_extent_constraint(int dim, Expr e);
+    EXPORT void set_stride_constraint(int dim, Expr e);
+    EXPORT Expr min_constraint(int dim) const;
+    EXPORT Expr extent_constraint(int dim) const;
+    EXPORT Expr stride_constraint(int dim) const;
     //@}
 
     /** Get and set constraints for scalar parameters. These are used

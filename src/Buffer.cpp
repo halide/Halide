@@ -100,12 +100,12 @@ struct BufferContents {
 };
 
 template<>
-RefCount &ref_count<BufferContents>(const BufferContents *p) {
+EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
     return p->ref_count;
 }
 
 template<>
-void destroy<BufferContents>(const BufferContents *p) {
+EXPORT void destroy<BufferContents>(const BufferContents *p) {
     // Free any device-side allocation
     if (p->source_module.free_dev_buffer) {
         p->source_module.free_dev_buffer(NULL, const_cast<buffer_t *>(&p->buf));
