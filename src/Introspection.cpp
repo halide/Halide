@@ -1049,7 +1049,7 @@ private:
                         // Just the existence of this field is information apparently? There's no data.
                         break;
                     }
-                    case 26: // ref_sig8
+                    case 32: // ref_sig8
                     {
                         // 64-bit type signature for a reference in its own type unit
                         val = e.getU64(&off);
