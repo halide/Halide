@@ -386,8 +386,10 @@ private:
 
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
-        if (loop->for_type == For::Kernel)
+        if (loop->for_type == For::Parallel &&
+            (ends_with(loop->name, ".blockidx") || ends_with(loop->name, ".blockidy"))) {
             inside_kernel_loop = true;
+        }
         IRMutator::visit(loop);
         inside_kernel_loop = old_kernel_loop;
     }

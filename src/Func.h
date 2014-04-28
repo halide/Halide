@@ -213,7 +213,6 @@ public:
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
     EXPORT ScheduleHandle &parallel(Var var);
-    EXPORT ScheduleHandle &kernel_loop(Var x);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
     EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
@@ -265,8 +264,6 @@ public:
 				    GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Var z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
-
-    EXPORT ScheduleHandle &glsl(Var x, Var y, Var c);
     // @}
 
     // These calls are for legacy compatibility only.

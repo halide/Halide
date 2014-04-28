@@ -529,12 +529,6 @@ ScheduleHandle &ScheduleHandle::parallel(Var var) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::kernel_loop(Var var) {
-    set_dim_type(var, For::Kernel);
-    return *this;
-}
-
-
 ScheduleHandle &ScheduleHandle::vectorize(Var var) {
     set_dim_type(var, For::Vectorized);
     return *this;
@@ -769,14 +763,6 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::glsl(Var x, Var y, Var c) {
-    kernel_loop(x);
-    rename(x, Var("blockidx"));
-    kernel_loop(y);
-    rename(y, Var("blockidy"));
-    return *this;
-}
-
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
     ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
     return *this;
@@ -970,7 +956,7 @@ Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GP
 
 Func &Func::glsl(Var x, Var y, Var c, int num_channels) {
     reorder(c, x, y);
-    ScheduleHandle(func.schedule()).glsl(x, y, c);
+    ScheduleHandle(func.schedule()).gpu_blocks(x, y);
     bound(c, 0, num_channels);
     unroll(c);
     return *this;

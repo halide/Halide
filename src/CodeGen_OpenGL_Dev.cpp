@@ -154,7 +154,6 @@ void CodeGen_GLSL::visit(const Cast *op) {
 void CodeGen_GLSL::visit(const For *loop) {
     if (ends_with(loop->name, ".blockidx") || ends_with(loop->name, ".blockidy")) {
         debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        internal_assert(loop->for_type == For::Kernel) << "Kernel loop expected\n";
 
         string idx;
         if (ends_with(loop->name, ".blockidx")) {

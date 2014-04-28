@@ -102,9 +102,6 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     case For::Vectorized:
         out << "vectorized";
         break;
-    case For::Kernel:
-        out << "kernel";
-        break;
     }
     return out;
 }
