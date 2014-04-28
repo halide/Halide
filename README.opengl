@@ -27,7 +27,7 @@ power, you must also specify a CPU target for those parts of the filter that
 cannot or should not be computed on the GPU. Examples of valid target
 specifiers are
 
-  host-opengl         
+  host-opengl
   x86-opengl-gpu_debug
 
 Adding "gpu_debug", as in the second example, adds additional logging output

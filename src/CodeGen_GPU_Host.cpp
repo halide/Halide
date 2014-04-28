@@ -997,17 +997,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
             Value *user_context = get_user_context();
             builder->CreateCall2(copy_to_host_fn, user_context, buf);
         }
-        // don't return
+        // fall through
     }
-    else if (call->call_type == Call::Intrinsic &&
-             call->name == Call::create_buffer_t) {
-        CodeGen::visit(call);
-        // TODO(dheck): check if these are set to proper values later
-        // builder->CreateStore(ConstantInt::get(i8, 0), buffer_host_dirty_ptr(buffer));
-        // builder->CreateStore(ConstantInt::get(i8, 0), buffer_dev_dirty_ptr(buffer));
-        // builder->CreateStore(ConstantInt::get(i64, 0), buffer_dev_ptr(buffer));
-        return;
-    }
+
     CodeGen::visit(call);
 }
 

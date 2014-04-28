@@ -1612,7 +1612,7 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env);
+    s = storage_flattening(s, env, t);
     debug(2) << "Storage flattening: \n" << s << "\n\n";
 
     debug(1) << "Removing code that depends on undef values...\n";

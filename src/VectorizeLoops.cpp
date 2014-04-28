@@ -113,32 +113,7 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const Load *op) {
-            if (op->index.size() == 1) {
-                Expr index = mutate(op->index[0]);
-
-                // Internal allocations always get vectorized.
-                if (internal_allocations.contains(op->name)) {
-                    int width = replacement.type().width;
-                    if (index.type().is_scalar()) {
-                        if (scalarized) {
-                            index = Add::make(Mul::make(index, width), scalar_lane);
-                        } else {
-                            index = Ramp::make(Mul::make(index, width), 1, width);
-                        }
-                    } else {
-                        internal_assert(!scalarized);
-                        index = Mul::make(index, Broadcast::make(width, width));
-                        index = Add::make(index, Ramp::make(0, 1, width));
-                    }
-
-                    if (index.same_as(op->index[0])) {
-                        expr = op;
-                    } else {
-                        int w = index.type().width;
-                        expr = Load::make(op->type.vector_of(w), op->name, index, op->image, op->param);
-                    }
-                }
-            } else {
+            if (op->index.size() > 1) {
                 vector<Expr> index(op->index.size());
                 bool changed = false;
                 int max_width = 0;
@@ -162,6 +137,32 @@ class VectorizeLoops : public IRMutator {
                     expr = Load::make(op->type.vector_of(max_width), op->name, index,
                                       op->image, op->param);
                 }
+                return;
+            }
+
+            Expr index = mutate(op->index[0]);
+
+            // Internal allocations always get vectorized.
+            if (internal_allocations.contains(op->name)) {
+                int width = replacement.type().width;
+                if (index.type().is_scalar()) {
+                    if (scalarized) {
+                        index = Add::make(Mul::make(index, width), scalar_lane);
+                    } else {
+                        index = Ramp::make(Mul::make(index, width), 1, width);
+                    }
+                } else {
+                    internal_assert(!scalarized);
+                    index = Mul::make(index, Broadcast::make(width, width));
+                    index = Add::make(index, Ramp::make(0, 1, width));
+                }
+            }
+
+            if (index.same_as(op->index[0])) {
+                expr = op;
+            } else {
+                int w = index.type().width;
+                expr = Load::make(op->type.vector_of(w), op->name, index, op->image, op->param);
             }
         }
 
@@ -268,31 +269,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Store *op) {
             Expr value = mutate(op->value);
-            if (op->index.size() == 1) {
-                Expr index = mutate(op->index[0]);
-                // Internal allocations always get vectorized.
-                if (internal_allocations.contains(op->name)) {
-                    int width = replacement.type().width;
-                    if (index.type().is_scalar()) {
-                        if (scalarized) {
-                            index = Add::make(Mul::make(index, width), scalar_lane);
-                        } else {
-                            index = Ramp::make(Mul::make(index, width), 1, width);
-                        }
-                    } else {
-                        internal_assert(!scalarized);
-                        index = Mul::make(index, Broadcast::make(width, width));
-                        index = Add::make(index, Ramp::make(0, 1, width));
-                    }
-                }
-
-                if (value.same_as(op->value) && index.same_as(op->index[0])) {
-                    stmt = op;
-                } else {
-                    int width = std::max(value.type().width, index.type().width);
-                    stmt = Store::make(op->name, widen(value, width), widen(index, width));
-                }
-            } else {
+            if (op->index.size() > 1) {
                 vector<Expr> index(op->index.size());
                 bool changed = false;
                 int max_width = 0;
@@ -309,6 +286,31 @@ class VectorizeLoops : public IRMutator {
                     int width = std::max(value.type().width, max_width);
                     stmt = Store::make(op->name, widen(value, width), index);
                 }
+                return;
+            }
+
+            Expr index = mutate(op->index[0]);
+            // Internal allocations always get vectorized.
+            if (internal_allocations.contains(op->name)) {
+                int width = replacement.type().width;
+                if (index.type().is_scalar()) {
+                    if (scalarized) {
+                        index = Add::make(Mul::make(index, width), scalar_lane);
+                    } else {
+                        index = Ramp::make(Mul::make(index, width), 1, width);
+                    }
+                } else {
+                    internal_assert(!scalarized);
+                    index = Mul::make(index, Broadcast::make(width, width));
+                    index = Add::make(index, Ramp::make(0, 1, width));
+                }
+            }
+
+            if (value.same_as(op->value) && index.same_as(op->index[0])) {
+                stmt = op;
+            } else {
+                int width = std::max(value.type().width, index.type().width);
+                stmt = Store::make(op->name, widen(value, width), widen(index, width));
             }
         }
 

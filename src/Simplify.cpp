@@ -1423,18 +1423,7 @@ private:
     }
 
     void visit(const Load *op) {
-        if (op->index.size() == 1) {
-            Expr index = mutate(op->index[0]);
-            // Load of a broadcast should be broadcast of the load
-            if (const Broadcast *b = index.as<Broadcast>()) {
-                Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
-                expr = Broadcast::make(load, b->width);
-            } else if (index.same_as(op->index[0])) {
-                expr = op;
-            } else {
-                expr = Load::make(op->type, op->name, index, op->image, op->param);
-            }
-        } else {
+        if (op->index.size() > 1) {
             std::vector<Expr> index(op->index.size());
             bool changed = false;
             for (size_t i = 0; i < op->index.size(); i++) {
@@ -1447,6 +1436,18 @@ private:
             } else {
                 expr = Load::make(op->type, op->name, index, op->image, op->param);
             }
+            return;
+        }
+
+        // Load of a broadcast should be broadcast of the load
+        Expr index = mutate(op->index[0]);
+        if (const Broadcast *b = index.as<Broadcast>()) {
+            Expr load = Load::make(op->type.element_of(), op->name, b->value, op->image, op->param);
+            expr = Broadcast::make(load, b->width);
+        } else if (index.same_as(op->index[0])) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param);
         }
     }
 
@@ -1704,7 +1705,7 @@ private:
     }
 
     void visit(const Allocate *op) {
-        // Allocate nodes depend implicitly on pre-allocated buffer_t's, if present
+        // Allocate nodes depend implicitly on pre-allocated buffer_t's
         string buffer_name = op->name + ".buffer";
         if (var_info.contains(buffer_name)) {
             var_info.ref(buffer_name).old_uses++;

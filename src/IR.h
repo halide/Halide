@@ -586,10 +586,10 @@ struct Load : public ExprNode<Load> {
     static Expr make(Type type, std::string name, const std::vector<Expr> &index, Buffer image, Parameter param) {
         int max_width = 0;
         for (size_t i = 0; i < index.size(); i++) {
-            assert(index[i].defined() && "Load of undefined");
+            internal_assert(index[i].defined()) << "Load of undefined\n";
             max_width = std::max(max_width, index[i].type().width);
         }
-        assert(type.width == max_width && "Vector width of Load must match vector width of index");
+        internal_assert(type.width == max_width) << "Vector width of Load must match vector width of index";
 
         Load *node = new Load;
         node->type = type;
@@ -786,9 +786,9 @@ struct Store : public StmtNode<Store> {
     }
 
     static Stmt make(std::string name, Expr value, const std::vector<Expr> &index) {
-        assert(value.defined() && "Store of undefined");
+        internal_assert(value.defined()) << "Store of undefined\n";
         for (size_t i = 0; i < index.size(); i++) {
-            assert(index[i].defined() && "Store of undefined");
+            internal_assert(index[i].defined()) << "Store of undefined\n";
         }
 
         Store *node = new Store;

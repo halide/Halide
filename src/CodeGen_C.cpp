@@ -863,7 +863,7 @@ void CodeGen_C::visit(const Load *op) {
     } else {
         rhs << print_name(op->name);
     }
-    internal_assert(op->index.size() == 1) << "Unexpected Multi-index load.\n";
+    internal_assert(op->index.size() == 1) << "Unexpected multi-index load.\n";
     rhs << "["
         << print_expr(op->index[0])
         << "]";

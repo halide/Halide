@@ -18,7 +18,7 @@ static float max_value(const Type &type) {
     } else if (type == UInt(16)) {
         return 65535.0f;
     } else {
-        assert(false && "Cannot determine max_value of this type");
+        internal_error << "Cannot determine max_value of type '" << type << "'\n";
     }
     return 1.0f;
 }
@@ -52,7 +52,7 @@ public:
 private:
     Expr texture_load(const std::string &buffer,
                       const std::vector<Expr> &index) {
-        assert(index.size() == 3 && "Load from texture requires three indices");
+        internal_assert(index.size() == 3) << "Load from texture requires three indices\n";
         return Call::make(Float(32), "glsl_texture_load",
                           vec(Expr(buffer), index[0], index[1], index[2]),
                           Call::Intrinsic);
@@ -106,7 +106,7 @@ string CodeGen_GLSL::print_type(Type type) {
             if (type.bits == 32) {
                 oss << "float";
             } else {
-                assert(false && "Can't represent a float with this many bits in GLSL");
+                user_error << "Can't represent a float with " << type.bits << " bits in GLSL\n";
             }
         } else if (type.bits == 1) {
             oss << "bool";
@@ -114,12 +114,12 @@ string CodeGen_GLSL::print_type(Type type) {
             if (type.bits == 32) {
                 oss << "int";
             } else {
-                assert("Can't represent an integer with this many bits in GLSL");
+                user_error << "Can't represent an integer with " << type.bits << " bits in GLSL\n";
             }
         } else if (type.is_uint()) {
             oss << "int";
         } else {
-            assert(false && "Can't represent this type in GLSL");
+            user_error << "Can't represent type '"<< type << "' in GLSL\n";
         }
     } else if (type.width <= 4) {
         if (type.is_bool()) {
@@ -129,11 +129,11 @@ string CodeGen_GLSL::print_type(Type type) {
         } else if (type.is_float()) {
             // no prefix for float vectors
         } else {
-            assert(false && "Can't represent this type in GLSL");
+            user_error << "Can't represent type '"<< type << "' in GLSL\n";
         }
         oss << "vec" << type.width;
     } else {
-        assert(false && "Vector types wider than 4 aren't supported in GLSL");
+        user_error << "Vector types wider than 4 aren't supported in GLSL\n";
     }
     return oss.str();
 }
@@ -154,7 +154,7 @@ void CodeGen_GLSL::visit(const Cast *op) {
 void CodeGen_GLSL::visit(const For *loop) {
     if (ends_with(loop->name, ".blockidx") || ends_with(loop->name, ".blockidy")) {
         debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        assert(loop->for_type == For::Kernel && "Expecting kernel loop");
+        internal_assert(loop->for_type == For::Kernel) << "Kernel loop expected\n";
 
         string idx;
         if (ends_with(loop->name, ".blockidx")) {
@@ -166,8 +166,8 @@ void CodeGen_GLSL::visit(const For *loop) {
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
         loop->body.accept(this);
     } else {
-    	assert(loop->for_type != For::Parallel && "Cannot emit parallel loops in OpenGL C");
-    	CodeGen_C::visit(loop);
+        user_assert(loop->for_type != For::Parallel) << "Parallel loops aren't allowed inside GLSL\n";
+        CodeGen_C::visit(loop);
     }
 }
 
@@ -214,18 +214,17 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         // No suffix is needed when accessing a full RGBA vector.
     } else if (const IntImm *idx = e.as<IntImm>()) {
         int i = idx->value;
-        assert(0 <= i && i <= 3 && "Color channel must be between 0 and 3.");
+        internal_assert(0 <= i && i <= 3) <<  "Color channel must be between 0 and 3.\n";
         char suffix[] = "rgba";
         return std::string(".") + suffix[i];
     } else {
-        debug(0) << "Color index: " << e << "\n";
-        assert(false && "Color index not supported");
+        internal_error << "Color index '" << e << "' not supported\n";
     }
     return "";
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
-    assert(false && "Load nodes should have been removed by now");
+    internal_error << "Load nodes should have been removed by now\n";
 }
 
 void CodeGen_GLSL::emit_texture_store(Expr channel, Expr val) {
@@ -236,7 +235,7 @@ void CodeGen_GLSL::emit_texture_store(Expr channel, Expr val) {
 }
 
 void CodeGen_GLSL::visit(const Store *op) {
-    assert(op->index.size() == 3 && "Store to texture requires multi-index");
+    internal_assert(op->index.size() == 3) << "Store to texture requires multi-index\n";
     std::vector<Expr> matches;
 
     float maxval = max_value(op->value.type());
@@ -256,7 +255,7 @@ void CodeGen_GLSL::visit(const Store *op) {
                            Div::make(Cast::make(Float(32), op->value),
                                      maxval));
     } else {
-        assert(false && "Don't know how to handle this Store node");
+        internal_error << "Invalid Store node encountered.\n";
     }
 }
 
@@ -277,7 +276,7 @@ void CodeGen_GLSL::visit(const Call *op) {
 }
 
 void CodeGen_GLSL::visit(const AssertStmt *) {
-    debug(1) << "GLSL doesn't support assertions... dropped\n";
+    internal_error << "Assertions should not be present in GLSL\n";
 }
 
 void CodeGen_GLSL::visit(const Broadcast *op) {
@@ -302,10 +301,10 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         if (args[i].is_buffer) {
             Type t = args[i].type.element_of();
 
-            assert(args[i].read != args[i].write &&
-                   "Buffers may only be read OR written inside a kernel loop");
-            assert((t == UInt(8) || t == UInt(16)) &&
-                   "Only uint8 and uint16 buffers are supported by OpenGL");
+            user_assert(args[i].read != args[i].write) <<
+                "Buffers may only be read OR written inside a kernel loop";
+            user_assert(t == UInt(8) || t == UInt(16)) <<
+                "Only uint8 and uint16 buffers are supported by OpenGL backend";
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << (t == UInt(8) ? "uint8 " : "uint16 ")
                    << print_name(args[i].name) << "\n";

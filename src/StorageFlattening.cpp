@@ -15,8 +15,7 @@ using std::map;
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e) : env(e) {
-    }
+    FlattenDimensions(const map<string, Function> &e) : env(e) {}
     Scope<int> scope;
     Scope<int> need_buffer_t;
 private:
@@ -127,6 +126,7 @@ private:
                 extent_var[i] = Variable::make(Int(32), extent_name[i]);
                 stride_var[i] = Variable::make(Int(32), stride_name[i]);
             }
+
             // Promote the type to be a multiple of 8 bits
             Type t = realize->types[idx];
             t.bits = t.bytes() * 8;
@@ -134,7 +134,9 @@ private:
             // Make the allocation node
             stmt = Allocate::make(buffer_name, t, extents, stmt);
 
-            // Create a buffer_t object if necessary
+            // Create a buffer_t object if necessary. The corresponding let is
+            // placed before the allocation node so that the buffer_t is
+            // already on the symbol table when doing the allocation.
             if (make_buffer_t[idx]) {
                 vector<Expr> args(dims*3 + 2);
                 args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
@@ -197,13 +199,10 @@ private:
             // Store the values by name
             for (size_t i = 0; i < provide->values.size(); i++) {
                 string name = provide->name + "." + int_to_string(i);
+                Expr idx = mutate(flatten_args(name, provide->args));
                 names[i] = name + ".value";
                 Expr var = Variable::make(values[i].type(), names[i]);
-
-                Stmt store;
-
-                Expr idx = mutate(flatten_args(name, provide->args));
-                store = Store::make(name, var, idx);
+                Stmt store = Store::make(name, var, idx);
 
                 if (result.defined()) {
                     result = Block::make(result, store);
@@ -270,9 +269,9 @@ private:
     }
 };
 
-class CreateKernelLoads : public IRMutator {
+class CreateOpenGLLoads : public IRMutator {
 public:
-    CreateKernelLoads() {
+    CreateOpenGLLoads() {
         inside_kernel_loop = false;
     }
     Scope<int> scope;
@@ -395,15 +394,15 @@ private:
 };
 
 
-
-
-Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    CreateKernelLoads kernel_loads;
-    s = kernel_loads.mutate(s);
-
-    FlattenDimensions flatten(env);
-    flatten.need_buffer_t = kernel_loads.need_buffer_t;
-    return flatten.mutate(s);
+Stmt storage_flattening(Stmt s, const map<string, Function> &env, const Target &target) {
+    if (target.features & Target::OpenGL) {
+        CreateOpenGLLoads opengl_loads;
+        s = opengl_loads.mutate(s);
+        FlattenDimensions flatten(env);
+        flatten.need_buffer_t = opengl_loads.need_buffer_t;
+        return flatten.mutate(s);
+    }
+    return FlattenDimensions(env).mutate(s);
 }
 
 }
