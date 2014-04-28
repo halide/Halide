@@ -28,7 +28,8 @@ void RgbToYcc() {
 
     // Schedule for GLSL
     input8.set_bounds(2, 0, 3);
-    out.glsl(x, y, c, 3);
+    out.bound(c, 0, 3);
+    out.glsl(x, y, c);
     out.compute_root();
 
     Func cpuout("ycc_filter");

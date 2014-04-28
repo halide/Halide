@@ -9,8 +9,10 @@ int main() {
 
     // Fill buffer using GLSL
     gpu(x, y, c) = cast<uint8_t>(select(c == 0, 10*x + y,
-                                        select(c == 1, 127, 12)));
-    gpu.glsl(x, y, c, 3);
+                                        select(c == 1, 127,
+                                               12)));
+    gpu.bound(c, 0, 3);
+    gpu.glsl(x, y, c);
     gpu.compute_root();
 
     // This should trigger a copy_to_host operation
