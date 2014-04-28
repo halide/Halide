@@ -147,13 +147,13 @@ inline Expr cast(Expr a) {
 
 /** Cast an expression to a new type. */
 inline Expr cast(Type t, Expr a) {
-    assert(a.defined() && "cast of undefined");
+    user_assert(a.defined()) << "cast of undefined Expr\n";
     if (a.type() == t) return a;
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
             return Internal::Broadcast::make(cast(t.element_of(), a), t.width);
         } else if (const Internal::Broadcast *b = a.as<Internal::Broadcast>()) {
-            assert(b->width == t.width);
+            internal_assert(b->width == t.width);
             return Internal::Broadcast::make(cast(t.element_of(), b->value), t.width);
         }
     }
@@ -163,7 +163,7 @@ inline Expr cast(Type t, Expr a) {
 /** Return the sum of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator+(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator+ of undefined");
+    user_assert(a.defined() && b.defined()) << "operator+ of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::Add::make(a, b);
 }
@@ -172,7 +172,7 @@ inline Expr operator+(Expr a, Expr b) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator+=(Expr &a, Expr b) {
-    assert(a.defined() && b.defined() && "operator+= of undefined");
+    user_assert(a.defined() && b.defined()) << "operator+= of undefined Expr\n";
     a = Internal::Add::make(a, cast(a.type(), b));
     return a;
 }
@@ -180,7 +180,7 @@ inline Expr &operator+=(Expr &a, Expr b) {
 /** Return the difference of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator-(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator- of undefined");
+    user_assert(a.defined() && b.defined()) << "operator- of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::Sub::make(a, b);
 }
@@ -191,7 +191,7 @@ inline Expr operator-(Expr a, Expr b) {
  * still an unsigned integer. E.g. in UInt(8), the negative of 56 is
  * 200, because 56 + 200 == 0 */
 inline Expr operator-(Expr a) {
-    assert(a.defined() && "operator- of undefined");
+    user_assert(a.defined()) << "operator- of undefined Expr\n";
     return Internal::Sub::make(Internal::make_zero(a.type()), a);
 }
 
@@ -199,7 +199,7 @@ inline Expr operator-(Expr a) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator-=(Expr &a, Expr b) {
-    assert(a.defined() && b.defined() && "operator-= of undefined");
+    user_assert(a.defined() && b.defined()) << "operator-= of undefined Expr\n";
     a = Internal::Sub::make(a, cast(a.type(), b));
     return a;
 }
@@ -207,7 +207,7 @@ inline Expr &operator-=(Expr &a, Expr b) {
 /** Return the product of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator*(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator* of undefined");
+    user_assert(a.defined() && b.defined()) << "operator* of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::Mul::make(a, b);
 }
@@ -216,7 +216,7 @@ inline Expr operator*(Expr a, Expr b) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator*=(Expr &a, Expr b) {
-    assert(a.defined() && b.defined() && "operator*= of undefined");
+    user_assert(a.defined() && b.defined()) << "operator*= of undefined Expr\n";
     a = Internal::Mul::make(a, cast(a.type(), b));
     return a;
 }
@@ -224,8 +224,8 @@ inline Expr &operator*=(Expr &a, Expr b) {
 /** Return the ratio of two expressions, doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator/(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator/ of undefined");
-    assert(!Internal::is_const(b, 0) && "operator/ with constant 0 divisor.");
+    user_assert(a.defined() && b.defined()) << "operator/ of undefined Expr\n";
+    user_assert(!Internal::is_const(b, 0)) << "operator/ with constant 0 divisor\n";
     Internal::match_types(a, b);
     return Internal::Div::make(a, b);
 }
@@ -234,8 +234,8 @@ inline Expr operator/(Expr a, Expr b) {
  * without changing its type. This casts the second argument to match
  * the type of the first. */
 inline Expr &operator/=(Expr &a, Expr b) {
-    assert(a.defined() && b.defined() && "operator/= of undefined");
-    assert(!Internal::is_const(b, 0) && "operator/= with constant 0 divisor.");
+    user_assert(a.defined() && b.defined()) << "operator/= of undefined Expr\n";
+    user_assert(!Internal::is_const(b, 0)) << "operator/= with constant 0 divisor\n";
     a = Internal::Div::make(a, cast(a.type(), b));
     return a;
 }
@@ -243,8 +243,8 @@ inline Expr &operator/=(Expr &a, Expr b) {
 /** Return the first argument reduced modulo the second, doing any
  * necessary type coercion using \ref Internal::match_types */
 inline Expr operator%(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator% of undefined");
-    assert(!Internal::is_const(b, 0) && "operator% with constant 0 divisor.");
+    user_assert(a.defined() && b.defined()) << "operator% of undefined Expr\n";
+    user_assert(!Internal::is_const(b, 0)) << "operator% with constant 0 modulus\n";
     Internal::match_types(a, b);
     return Internal::Mod::make(a, b);
 }
@@ -253,7 +253,7 @@ inline Expr operator%(Expr a, Expr b) {
  * is greater than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator>(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator> of undefined");
+    user_assert(a.defined() && b.defined()) << "operator> of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::GT::make(a, b);
 }
@@ -262,7 +262,7 @@ inline Expr operator>(Expr a, Expr b) {
  * is less than the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator<(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator< of undefined");
+    user_assert(a.defined() && b.defined()) << "operator< of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::LT::make(a, b);
 }
@@ -271,7 +271,7 @@ inline Expr operator<(Expr a, Expr b) {
  * is less than or equal to the second, after doing any necessary type
  * coercion using \ref Internal::match_types */
 inline Expr operator<=(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator<= of undefined");
+    user_assert(a.defined() && b.defined()) << "operator<= of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::LE::make(a, b);
 }
@@ -281,7 +281,7 @@ inline Expr operator<=(Expr a, Expr b) {
  * type coercion using \ref Internal::match_types */
 
 inline Expr operator>=(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator>= of undefined");
+    user_assert(a.defined() && b.defined()) << "operator>= of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::GE::make(a, b);
 }
@@ -290,7 +290,7 @@ inline Expr operator>=(Expr a, Expr b) {
  * is equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator==(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator== of undefined");
+    user_assert(a.defined() && b.defined()) << "operator== of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::EQ::make(a, b);
 }
@@ -299,7 +299,7 @@ inline Expr operator==(Expr a, Expr b) {
  * is not equal to the second, after doing any necessary type coercion
  * using \ref Internal::match_types */
 inline Expr operator!=(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "operator!= of undefined");
+    user_assert(a.defined() && b.defined()) << "operator!= of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::NE::make(a, b);
 }
@@ -324,7 +324,8 @@ inline Expr operator!(Expr a) {
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4). */
 inline Expr max(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "max of undefined");
+    user_assert(a.defined() && b.defined())
+        << "max of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::Max::make(a, b);
 }
@@ -334,7 +335,8 @@ inline Expr max(Expr a, Expr b) {
  * \ref Internal::match_types. Vectorizes cleanly on most platforms
  * (with the exception of integer types on x86 without SSE4). */
 inline Expr min(Expr a, Expr b) {
-    assert(a.defined() && b.defined() && "min of undefined");
+    user_assert(a.defined() && b.defined())
+        << "min of undefined Expr\n";
     Internal::match_types(a, b);
     return Internal::Min::make(a, b);
 }
@@ -342,8 +344,8 @@ inline Expr min(Expr a, Expr b) {
 /** Clamps an expression to lie within the given bounds. The bounds
  * are type-cast to match the expression. Vectorizes as well as min/max. */
 inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
-    assert(a.defined() && min_val.defined() && max_val.defined() &&
-           "clamp of undefined");
+    user_assert(a.defined() && min_val.defined() && max_val.defined())
+        << "clamp of undefined Expr\n";
     min_val = cast(a.type(), min_val);
     max_val = cast(a.type(), max_val);
     return Internal::Max::make(Internal::Min::make(a, max_val), min_val);
@@ -354,12 +356,13 @@ inline Expr clamp(Expr a, Expr min_val, Expr max_val) {
  * integer returns an unsigned integer of the same bit width. This
  * means that abs of the most negative integer doesn't overflow. */
 inline Expr abs(Expr a) {
-    assert(a.defined() && "abs of undefined");
+    user_assert(a.defined())
+        << "abs of undefined Expr\n";
     Type t = a.type();
     if (t.is_int()) {
         t.code = Type::UInt;
     } else if (t.is_uint()) {
-        std::cerr << "Warning: abs of an unsigned type is a no-op\n";
+        user_warning << "Warning: abs of an unsigned type is a no-op\n";
         return a;
     }
     return Internal::Call::make(t, Internal::Call::abs,
@@ -465,7 +468,7 @@ inline Expr select(Expr c1, Expr v1,
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr sin(Expr x) {
-    assert(x.defined() && "sin of undefined");
+    user_assert(x.defined()) << "sin of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "sin_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -477,7 +480,7 @@ inline Expr sin(Expr x) {
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr asin(Expr x) {
-    assert(x.defined() && "asin of undefined");
+    user_assert(x.defined()) << "asin of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "asin_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -489,7 +492,7 @@ inline Expr asin(Expr x) {
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr cos(Expr x) {
-    assert(x.defined() && "cos of undefined");
+    user_assert(x.defined()) << "cos of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "cos_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -501,7 +504,7 @@ inline Expr cos(Expr x) {
  * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
 inline Expr acos(Expr x) {
-    assert(x.defined() && "acos of undefined");
+    user_assert(x.defined()) << "acos of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "acos_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -513,7 +516,7 @@ inline Expr acos(Expr x) {
  * is not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr tan(Expr x) {
-    assert(x.defined() && "tan of undefined");
+    user_assert(x.defined()) << "tan of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "tan_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -525,7 +528,7 @@ inline Expr tan(Expr x) {
  * argument is not floating-point, it is cast to Float(32). Does not
  * vectorize well. */
 inline Expr atan(Expr x) {
-    assert(x.defined() && "atan of undefined");
+    user_assert(x.defined()) << "atan of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "atan_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -537,7 +540,7 @@ inline Expr atan(Expr x) {
  * not floating-point, it is cast to Float(32). Does not vectorize
  * well. */
 inline Expr atan2(Expr y, Expr x) {
-    assert(x.defined() && y.defined() && "atan2 of undefined");
+    user_assert(x.defined() && y.defined()) << "atan2 of undefined Expr\n";
 
     if (y.type() == Float(64)) {
         x = cast<double>(x);
@@ -553,7 +556,7 @@ inline Expr atan2(Expr y, Expr x) {
  *  argument is not floating-point, it is cast to Float(32). Does not
  *  vectorize well. */
 inline Expr sinh(Expr x) {
-    assert(x.defined() && "sinh of undefined");
+    user_assert(x.defined()) << "sinh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "sinh_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -565,7 +568,7 @@ inline Expr sinh(Expr x) {
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
 inline Expr asinh(Expr x) {
-    assert(x.defined() && "asinh of undefined");
+    user_assert(x.defined()) << "asinh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "asinh_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -577,7 +580,7 @@ inline Expr asinh(Expr x) {
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
 inline Expr cosh(Expr x) {
-    assert(x.defined() && "cosh of undefined");
+    user_assert(x.defined()) << "cosh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "cosh_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -589,7 +592,7 @@ inline Expr cosh(Expr x) {
  * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
 inline Expr acosh(Expr x) {
-    assert(x.defined() && "acosh of undefined");
+    user_assert(x.defined()) << "acosh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "acosh_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -601,7 +604,7 @@ inline Expr acosh(Expr x) {
  * the argument is not floating-point, it is cast to Float(32). Does
  * not vectorize well. */
 inline Expr tanh(Expr x) {
-    assert(x.defined() && "tanh of undefined");
+    user_assert(x.defined()) << "tanh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "tanh_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -613,7 +616,7 @@ inline Expr tanh(Expr x) {
  * If the argument is not floating-point, it is cast to
  * Float(32). Does not vectorize well. */
 inline Expr atanh(Expr x) {
-    assert(x.defined() && "atanh of undefined");
+    user_assert(x.defined()) << "atanh of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "atanh_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -625,7 +628,7 @@ inline Expr atanh(Expr x) {
  * argument is not floating-point, it is cast to Float(32). Typically
  * vectorizes cleanly. */
 inline Expr sqrt(Expr x) {
-    assert(x.defined() && "sqrt of undefined");
+    user_assert(x.defined()) << "sqrt of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "sqrt_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -648,7 +651,7 @@ inline Expr hypot(Expr x, Expr y) {
  * large inputs, and is accurate up to the last bit of the
  * mantissa. Vectorizes cleanly. */
 inline Expr exp(Expr x) {
-    assert(x.defined() && "exp of undefined");
+    user_assert(x.defined()) << "exp of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "exp_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -665,7 +668,7 @@ inline Expr exp(Expr x) {
  * nan), and is accurate up to the last bit of the
  * mantissa. Vectorizes cleanly. */
 inline Expr log(Expr x) {
-    assert(x.defined() && "log of undefined");
+    user_assert(x.defined()) << "log of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "log_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -681,7 +684,7 @@ inline Expr log(Expr x) {
  * accurate up to the last few bits of the mantissa. Gets worse when
  * approaching overflow. Vectorizes cleanly. */
 inline Expr pow(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "pow of undefined");
+    user_assert(x.defined() && y.defined()) << "pow of undefined Expr\n";
 
     if (const int *i = as_const_int(y)) {
         return raise_to_integer_power(x, *i);
@@ -727,7 +730,7 @@ inline Expr fast_pow(Expr x, Expr y) {
  * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr floor(Expr x) {
-    assert(x.defined() && "floor of undefined");
+    user_assert(x.defined()) << "floor of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "floor_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -740,7 +743,7 @@ inline Expr floor(Expr x) {
  * it is cast to Float(32). The return value is still in floating
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr ceil(Expr x) {
-    assert(x.defined() && "ceil of undefined");
+    user_assert(x.defined()) << "ceil of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "ceil_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -753,7 +756,7 @@ inline Expr ceil(Expr x) {
  * return value is still in floating point, despite being a whole
  * number. On ties, we round up. Vectorizes cleanly. */
 inline Expr round(Expr x) {
-    assert(x.defined() && "round of undefined");
+    user_assert(x.defined()) << "round of undefined Expr\n";
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "round_f64", vec(x), Internal::Call::Extern);
     } else {
@@ -763,8 +766,14 @@ inline Expr round(Expr x) {
 
 /** Reinterpret the bits of one value as another type. */
 inline Expr reinterpret(Type t, Expr e) {
-    assert(e.defined() && "reinterpret of undefined");
-    assert((t.bits * t.width) == (e.type().bits * e.type().width));
+    user_assert(e.defined()) << "reinterpret of undefined Expr\n";
+    int from_bits = e.type().bits * e.type().width;
+    int to_bits = t.bits * t.width;
+    user_assert(from_bits == to_bits)
+        << "Reinterpret cast from type " << e.type()
+        << " which has " << from_bits
+        << " bits, to type " << t
+        << " which has " << to_bits << " bits\n";
     return Internal::Call::make(t, Internal::Call::reinterpret, vec(e), Internal::Call::Intrinsic);
 }
 
@@ -777,7 +786,7 @@ inline Expr reinterpret(Expr e) {
  * same type). The type of the result is the type of the first
  * argument. */
 inline Expr operator&(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "bitwise and of undefined");
+    user_assert(x.defined() && y.defined()) << "bitwise and of undefined Expr\n";
     // First widen or narrow, then bitcast.
     if (y.type().bits != x.type().bits) {
         Type t = y.type();
@@ -794,7 +803,7 @@ inline Expr operator&(Expr x, Expr y) {
  * same type). The type of the result is the type of the first
  * argument. */
 inline Expr operator|(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "bitwise or of undefined");
+    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
     // First widen or narrow, then bitcast.
     if (y.type().bits != x.type().bits) {
         Type t = y.type();
@@ -811,7 +820,7 @@ inline Expr operator|(Expr x, Expr y) {
  * have the same type). The type of the result is the type of the
  * first argument. */
 inline Expr operator^(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "bitwise or of undefined");
+    user_assert(x.defined() && y.defined()) << "bitwise or of undefined Expr\n";
     // First widen or narrow, then bitcast.
     if (y.type().bits != x.type().bits) {
         Type t = y.type();
@@ -826,7 +835,7 @@ inline Expr operator^(Expr x, Expr y) {
 
 /** Return the bitwise not of an expression. */
 inline Expr operator~(Expr x) {
-    assert(x.defined() && "bitwise or of undefined");
+    user_assert(x.defined()) << "bitwise or of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::bitwise_not, vec(x), Internal::Call::Intrinsic);
 }
 
@@ -838,9 +847,9 @@ inline Expr operator~(Expr x) {
  * type of the result is equal to the type of the first argument. Both
  * arguments must have integer type. */
 inline Expr operator<<(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "shift left of undefined");
-    assert(!x.type().is_float() && "First argument to shift left is a float.");
-    assert(!y.type().is_float() && "Second argument to shift left is a float.");
+    user_assert(x.defined() && y.defined()) << "shift left of undefined Expr\n";
+    user_assert(!x.type().is_float()) << "First argument to shift left is a float: " << x << "\n";
+    user_assert(!y.type().is_float()) << "Second argument to shift left is a float: " << y << "\n";
     Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_left, vec(x, y), Internal::Call::Intrinsic);
 }
@@ -854,9 +863,9 @@ inline Expr operator<<(Expr x, Expr y) {
  * the type of the first argument. Both arguments must have integer
  * type. */
 inline Expr operator>>(Expr x, Expr y) {
-    assert(x.defined() && y.defined() && "shift right of undefined");
-    assert(!x.type().is_float() && "First argument to shift right is a float.");
-    assert(!y.type().is_float() && "Second argument to shift right is a float.");
+    user_assert(x.defined() && y.defined()) << "shift right of undefined Expr\n";
+    user_assert(!x.type().is_float()) << "First argument to shift right is a float: " << x << "\n";
+    user_assert(!y.type().is_float()) << "Second argument to shift right is a float: " << y << "\n";
     Internal::match_types(x, y);
     return Internal::Call::make(x.type(), Internal::Call::shift_right, vec(x, y), Internal::Call::Intrinsic);
 }
@@ -928,9 +937,9 @@ inline Expr operator>>(Expr x, Expr y) {
  * \endcode
  * */
 inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
-    assert(zero_val.defined() && "lerp with undefined zero value");
-    assert(one_val.defined()  && "lerp with undefined one value");
-    assert(weight.defined()   && "lerp with undefined weight");
+    user_assert(zero_val.defined()) << "lerp with undefined zero value";
+    user_assert(one_val.defined()) << "lerp with undefined one value";
+    user_assert(weight.defined()) << "lerp with undefined weight";
 
     // We allow integer constants through, so that you can say things
     // like lerp(0, cast<uint8_t>(x), alpha) and produce an 8-bit
@@ -945,19 +954,22 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
         one_val = cast(zero_val.type(), one_val);
     }
 
-    assert(zero_val.type() == one_val.type() &&
-           "lerp zero and one values must be the same type.");
-    assert((weight.type().is_uint() || weight.type().is_float()) &&
-           "lerp weight must be unsigned or float.");
-    assert((zero_val.type().is_float() || zero_val.type().width <= 32) &&
-           "lerp with 64-bit integers is not supported.");
+    user_assert(zero_val.type() == one_val.type())
+        << "Can't lerp between " << zero_val << " of type " << zero_val.type()
+        << " and " << one_val << " of different type " << one_val.type() << "\n";
+    user_assert((weight.type().is_uint() || weight.type().is_float()))
+        << "A lerp weight must be an unsigned integer or a float, but "
+        << "lerp weight " << weight << " has type " << weight.type() << ".\n";
+    user_assert((zero_val.type().is_float() || zero_val.type().width <= 32))
+        << "Lerping between 64-bit integers is not supported\n";
     // Compilation error for constant weight that is out of range for integer use
     // as this seems like an easy to catch gotcha.
     if (!zero_val.type().is_float()) {
         const float *const_weight = as_const_float(weight);
         if (const_weight) {
-            assert(*const_weight >= 0.0f && *const_weight <= 1.0f &&
-                   "floating-point weight for lerp with integer arguments must be between 0.0f and 1.0f.");
+            user_assert(*const_weight >= 0.0f && *const_weight <= 1.0f)
+                << "Floating-point weight for lerp with integer arguments is "
+                << *const_weight << ", which is not in the range [0.0f, 1.0f].\n";
         }
     }
     return Internal::Call::make(zero_val.type(), Internal::Call::lerp,
@@ -967,7 +979,7 @@ inline Expr lerp(Expr zero_val, Expr one_val, Expr weight) {
 
 /** Count the number of set bits in an expression. */
 inline Expr popcount(Expr x) {
-    assert(x.defined() && "popcount of undefined");
+    user_assert(x.defined()) << "popcount of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::popcount,
                                 vec(x), Internal::Call::Intrinsic);
 }
@@ -975,7 +987,7 @@ inline Expr popcount(Expr x) {
 /** Count the number of leading zero bits in an expression. The result is
  *  undefined if the value of the expression is zero. */
 inline Expr count_leading_zeros(Expr x) {
-    assert(x.defined() && "count leading zeros of undefined");
+    user_assert(x.defined()) << "count leading zeros of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::count_leading_zeros,
                                 vec(x), Internal::Call::Intrinsic);
 }
@@ -983,7 +995,7 @@ inline Expr count_leading_zeros(Expr x) {
 /** Count the number of trailing zero bits in an expression. The result is
  *  undefined if the value of the expression is zero. */
 inline Expr count_trailing_zeros(Expr x) {
-    assert(x.defined() && "count trailing zeros of undefined");
+    user_assert(x.defined()) << "count trailing zeros of undefined Expr\n";
     return Internal::Call::make(x.type(), Internal::Call::count_trailing_zeros,
                                 vec(x), Internal::Call::Intrinsic);
 }
@@ -1024,12 +1036,14 @@ inline Expr random_float(Expr seed = Expr()) {
 
     std::vector<Expr> args;
     if (seed.defined()) {
-        assert(seed.type() == Int(32));
+        user_assert(seed.type() == Int(32))
+            << "The seed passed to random_float must have type Int(32), but instead is "
+            << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
     args.push_back(counter);
 
-    return Internal::Call::make(Float(32), Internal::Call::random, 
+    return Internal::Call::make(Float(32), Internal::Call::random,
                                 args, Internal::Call::Intrinsic);
 }
 
@@ -1042,12 +1056,14 @@ inline Expr random_int(Expr seed = Expr()) {
 
     std::vector<Expr> args;
     if (seed.defined()) {
-        assert(seed.type() == Int(32));
+        user_assert(seed.type() == Int(32))
+            << "The seed passed to random_int must have type Int(32), but instead is "
+            << seed << " of type " << seed.type() << "\n";
         args.push_back(seed);
     }
     args.push_back(counter);
 
-    return Internal::Call::make(Int(32), Internal::Call::random, 
+    return Internal::Call::make(Int(32), Internal::Call::random,
                                 args, Internal::Call::Intrinsic);
 }
 

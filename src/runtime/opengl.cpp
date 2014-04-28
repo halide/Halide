@@ -1060,12 +1060,47 @@ EXPORT void halide_opengl_dev_run(
 
 //  Create wrappers that satisfy old naming conventions
 
-EXPORT void halide_copy_to_dev(void *uctx, buffer_t *buf) {
-    halide_opengl_copy_to_dev(uctx, buf);
+EXPORT void halide_release(void *uctx) { halide_opengl_release(uctx); }
+
+EXPORT void halide_dev_malloc(void *uctx, buffer_t *buf) {
+    halide_opengl_dev_malloc(uctx, buf);
+}
+
+EXPORT void halide_dev_free(void *uctx, buffer_t *buf) {
+    halide_opengl_dev_free(uctx, buf);
 }
 
 EXPORT void halide_copy_to_host(void *uctx, buffer_t *buf) {
     halide_opengl_copy_to_host(uctx, buf);
 }
 
-EXPORT void halide_release(void *uctx) { halide_opengl_release(uctx); }
+EXPORT void halide_copy_to_dev(void *uctx, buffer_t *buf) {
+    halide_opengl_copy_to_dev(uctx, buf);
+}
+
+EXPORT void halide_dev_run(
+    void *user_context,
+    void *state_ptr,
+    const char* entry_name,
+    int blocksX, int blocksY, int blocksZ,
+    int threadsX, int threadsY, int threadsZ,
+    int shared_mem_bytes,
+    size_t arg_sizes[],
+    void* args[]) {
+    halide_opengl_dev_run(user_context, state_ptr,
+                          entry_name,
+                          blocksX, blocksY, blocksZ,
+                          threadsX, threadsY, threadsY,
+                          shared_mem_bytes,
+                          arg_sizes,
+                          args);
+}
+
+EXPORT void halide_dev_sync(void *user_context) {
+    halide_opengl_dev_sync(user_context);
+}
+
+EXPORT void *halide_init_kernels(void *user_context, void *state_ptr,
+                                 const char *src, int size) {
+    return halide_opengl_init_kernels(user_context, state_ptr, src, size);
+}

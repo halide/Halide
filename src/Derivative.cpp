@@ -109,7 +109,7 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const StringImm *) {
-        assert(false && "Monotonic on String");
+        internal_error << "Monotonic on String\n";
     }
 
     void visit(const Cast *op) {
@@ -297,11 +297,11 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const Ramp *op) {
-        assert(false && "Monotonic of vector");
+        internal_error << "Monotonic of vector\n";
     }
 
     void visit(const Broadcast *op) {
-        assert(false && "Monotonic of vector");
+        internal_error << "Monotonic of vector\n";
     }
 
     void visit(const Call *op) {
@@ -330,51 +330,51 @@ class Monotonic : public IRVisitor {
     }
 
     void visit(const LetStmt *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const AssertStmt *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Pipeline *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const For *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Store *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Provide *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Allocate *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Free *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Realize *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Block *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const IfThenElse *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 
     void visit(const Evaluate *op) {
-        assert(false && "Monotonic of statement");
+        internal_error << "Monotonic of statement\n";
     }
 public:
     MonotonicResult result;

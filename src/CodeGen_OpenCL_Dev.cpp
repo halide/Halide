@@ -30,14 +30,14 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
         } else if (type.bits == 64) {
             oss << "double";
         } else {
-            assert(false && "Can't represent a float with this many bits in OpenCL C");
+            user_error << "Can't represent a float with this many bits in OpenCL C: " << type << "\n";
         }
 
     } else {
         if (type.is_uint() && type.bits > 1) oss << 'u';
         switch (type.bits) {
         case 1:
-            assert(type.width == 1 && "Vector of bool not valid in OpenCL C (yet)");
+            user_assert(type.width == 1) << "Vector of bool not valid in OpenCL C (yet)\n";
             oss << "bool";
             break;
         case 8:
@@ -53,7 +53,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             oss << "long";
             break;
         default:
-            assert(false && "Can't represent an integer with this many bits in OpenCL C");
+            user_error << "Can't represent an integer with this many bits in OpenCL C: " << type << "\n";
         }
     }
     if (type.width != 1) {
@@ -66,7 +66,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             oss << type.width;
             break;
         default:
-            assert(false && "Unsupported vector width in OpenCL C");
+            user_error <<  "Unsupported vector width in OpenCL C: " << type << "\n";
         }
     }
     return oss.str();
@@ -99,20 +99,20 @@ Expr simt_intrinsic(const string &name) {
     } else if (ends_with(name, ".blockidw")) {
         return Call::make(Int(32), "get_group_id", vec(Expr(3)), Call::Extern);
     }
-    assert(false && "simt_intrinsic called on bad variable name");
+    internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
     return Expr();
 }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        debug(0) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
+        debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
+        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
 
         Expr simt_idx = simt_intrinsic(loop->name);
         Expr loop_var = Add::make(loop->min, simt_idx);
         Expr cond = LT::make(simt_idx, loop->extent);
-        debug(0) << "for -> if (" << cond << ")\n";
+        debug(1) << "for -> if (" << cond << ")\n";
 
         string id_idx = print_expr(simt_idx);
         string id_cond = print_expr(cond);
@@ -127,7 +127,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         close_scope("for " + id_cond);
 
     } else {
-    	assert(loop->for_type != For::Parallel && "Cannot emit parallel loops in OpenCL C");
+    	user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
     	CodeGen_C::visit(loop);
     }
 }
@@ -137,7 +137,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
     string id_stride = print_expr(op->stride);
 
     ostringstream rhs;
-    rhs << id_base << " + " << id_stride << " * (" 
+    rhs << id_base << " + " << id_stride << " * ("
         << print_type(op->type.vector_of(op->width)) << ")(0";
     // Note 0 written above.
     for (int i = 1; i < op->width; ++i) {
@@ -149,7 +149,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Ramp *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Broadcast *op) {
     string id_value = print_expr(op->value);
-    
+
     print_assignment(op->type.vector_of(op->width), id_value);
 }
 
@@ -163,7 +163,7 @@ Expr is_ramp1(Expr e) {
     if (r == NULL) {
         return Expr();
     }
-    
+
     const IntImm *i = r->stride.as<IntImm>();
     if (i != NULL && i->value == 1) {
         return r->base;
@@ -177,13 +177,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = is_ramp1(op->index[0]);
     if (ramp_base.defined()) {
-        assert(op->type.is_vector());
+        internal_assert(op->type.is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
         ostringstream rhs;
         rhs << "vload" << op->type.width
             << "(0, "
-            << "(__global " << print_type(op->type.element_of()) << "*)" 
+            << "(__global " << print_type(op->type.element_of()) << "*)"
             << print_name(op->name) << " + " << id_ramp_base << ")";
 
         print_assignment(op->type, rhs.str());
@@ -204,7 +204,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
         rhs << print_name(op->name);
     }
     rhs << "[" << id_index << "]";
-    
+
     std::map<string, string>::iterator cached = cache.find(rhs.str());
     if (cached != cache.end()) {
         id = cached->second;
@@ -213,7 +213,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 
     if (op->index[0].type().is_vector()) {
         // If index is a vector, gather vector elements.
-        assert(op->type.is_vector());
+        internal_assert(op->type.is_vector());
 
         id = unique_name('V');
         cache[rhs.str()] = id;
@@ -226,8 +226,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
             do_indent();
             stream
                 << id << ".s" << vector_elements[i]
-                << " = " 
-                << "((__global " << print_type(op->type.element_of()) << "*)" 
+                << " = "
+                << "((__global " << print_type(op->type.element_of()) << "*)"
                 << print_name(op->name) << ")"
                 << "[" << id_index << ".s" << vector_elements[i] << "];\n";
         }
@@ -243,11 +243,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     // If we're writing a contiguous ramp, use vstore instead.
     Expr ramp_base = is_ramp1(op->index[0]);
     if (ramp_base.defined()) {
-        assert(op->value.type().is_vector());
+        internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
 
         do_indent();
-        stream << "vstore" << t.width << "(" 
+        stream << "vstore" << t.width << "("
                << id_value << ","
                << 0 << ", "
                << "(__global " << print_type(t.element_of()) << "*)"
@@ -259,7 +259,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
     if (op->index[0].type().is_vector()) {
         // If index is a vector, scatter vector elements.
-        assert(t.is_vector());
+        internal_assert(t.is_vector());
 
         string id_index = print_expr(op->index[0]);
 
@@ -351,7 +351,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
 #endif
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
-        
+
     // Write out the Halide math functions.
     src_stream << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"

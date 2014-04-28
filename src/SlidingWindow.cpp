@@ -111,7 +111,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
-                assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
+                internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
                 Expr min_req = scope.get(var + ".min");
                 Expr max_req = scope.get(var + ".max");
                 min_req = expand_expr(min_req, scope);

@@ -90,10 +90,13 @@ Expr fast_integer_divide(Expr numerator, Expr denominator) {
         // There's code elsewhere for this case.
         return numerator / denominator;
     }
-    assert(denominator.type() == UInt(8));
+    user_assert(denominator.type() == UInt(8))
+        << "Fast integer divide requires a UInt(8) denominator\n";
     Type t = numerator.type();
-    assert((t.is_uint() || t.is_int()) && "Argument to fast_integer divide must be an integer");
-    assert((t.bits == 8 || t.bits == 16 || t.bits == 32) && "Argument to integer divide must be 8, 16, or 32-bit");
+    user_assert(t.is_uint() || t.is_int())
+        << "Fast integer divide requires an integer numerator\n";
+    user_assert(t.bits == 8 || t.bits == 16 || t.bits == 32)
+        << "Fast integer divide requires a numerator with 8, 16, or 32 bits\n";
 
     Type wide = t;
     wide.bits *= 2;

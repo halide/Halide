@@ -27,7 +27,7 @@ WEAK int halide_printf(void *user_context, const char * fmt, ...) {
 extern int _vsnprintf(char *str, size_t size, const char *, __builtin_va_list ap);
 
 // MSVC doesn't have much of c99
-WEAK int snprintf(void *user_context, char *str, size_t size, const char *fmt, ...) {
+WEAK int snprintf(char *str, size_t size, const char *fmt, ...) {
     __builtin_va_list args;
     __builtin_va_start(args,fmt);
     int ret = _vsnprintf(str, size, fmt, args);
