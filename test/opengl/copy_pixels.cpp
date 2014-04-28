@@ -18,7 +18,8 @@ int main() {
     g(x, y, c) = input(x, y, c);
 
     Image<uint8_t> out(255, 10, 3);
-    g.glsl(x, y, c, 3);
+    g.bound(c, 0, 3);
+    g.glsl(x, y, c);
     g.realize(out);
     out.copy_to_host();
 

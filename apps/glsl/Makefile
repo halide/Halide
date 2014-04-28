@@ -21,6 +21,9 @@ HALIDE_LIBS = $(HALIDE_LIB) -ldl -lpthread
 
 all: opengl_test
 
+run: opengl_test
+	LD_LIBRARY_PATH=../../bin ./opengl_test
+
 opengl_test: blur.o ycc.o opengl_test.o
 	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin -lHalideOpenGLRuntime
 

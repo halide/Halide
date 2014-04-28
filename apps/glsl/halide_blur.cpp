@@ -17,7 +17,8 @@ void Blur() {
 
     // Schedule for GLSL
     input8.set_bounds(2, 0, 3);
-    out.glsl(x, y, c, 3);
+    out.bound(c, 0, 3);
+    out.glsl(x, y, c);
 
     std::vector<Argument> args;
     args.push_back(input8);
