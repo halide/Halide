@@ -745,7 +745,7 @@ struct Pipeline : public StmtNode<Pipeline> {
 struct For : public StmtNode<For> {
     std::string name;
     Expr min, extent;
-    typedef enum {Serial, Parallel, Kernel, Vectorized, Unrolled} ForType;
+    typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
     ForType for_type;
     Stmt body;
 

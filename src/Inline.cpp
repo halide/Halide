@@ -46,10 +46,6 @@ class Inliner : public IRMutator {
                 user_error << "Cannot vectorize dimension "
                            << d.var << " of function "
                            << f.name() << " because the function is scheduled inline.\n";
-            } else if (d.for_type == For::Kernel) {
-                user_error << "Cannot compute dimension "
-                          << d.var << " of function "
-                          << f.name() << " as a kernel loop because the function is scheduled inline.\n";
             }
         }
 
