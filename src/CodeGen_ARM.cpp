@@ -124,21 +124,21 @@ Expr _u32q(Expr e) {
 
 CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     #if !(WITH_ARM)
-    assert(false && "arm not enabled for this build of Halide.");
+    user_error << "arm not enabled for this build of Halide.";
     #endif
 
     if (t.bits == 32) {
-        assert(llvm_ARM_enabled && "llvm build not configured with ARM target enabled.");
+        user_assert(llvm_ARM_enabled) << "llvm build not configured with ARM target enabled\n.";
     } else {
         if (t.features & Target::AArch64Backend) {
-            assert(llvm_AArch64_enabled && "llvm build not configured with AArch64 target enabled.");
+            user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
         } else {
-            assert(llvm_ARM64_enabled && "llvm build not configured with ARM64 target enabled.");
+            user_assert(llvm_ARM64_enabled) << "llvm build not configured with ARM64 target enabled.\n";
         }
     }
 
     #if !(WITH_NATIVE_CLIENT)
-    assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
+    user_assert(t.os != Target::NaCl) << "llvm build not configured with native client enabled\n.";
     #endif
 
     // These patterns went away in llvm commit r189481, which is
@@ -340,33 +340,31 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
             triple.setArch(llvm::Triple::arm);
         }
     } else {
-        assert(target.bits == 64);
+        user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
         if (target.features & Target::AArch64Backend) {
             #if (WITH_AARCH64)
             triple.setArch(llvm::Triple::aarch64);
             #else
-            assert(false && "AArch64 llvm target not enabled in this build of Halide");
+            user_error << "AArch64 llvm target not enabled in this build of Halide\n";
             #endif
         } else {
             #if (WITH_ARM64)
             triple.setArch(llvm::Triple::arm64);
             #else
-            assert(false && "AARM64 llvm target not enabled in this build of Halide");
+            user_error << "ARM64 llvm target not enabled in this build of Halide\n";
             #endif
         }
-
-        std::cerr << "Warning: 64-bit arm builds are completely untested\n";
     }
 
     if (target.os == Target::Android) {
-        assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm android");
+        user_assert(target.bits == 32) << "ARM android must be 32-bit\n";
         triple.setOS(llvm::Triple::Linux);
         triple.setEnvironment(llvm::Triple::EABI);
     } else if (target.os == Target::IOS) {
         triple.setOS(llvm::Triple::IOS);
         triple.setVendor(llvm::Triple::Apple);
     } else if (target.os == Target::NaCl) {
-        assert(target.bits == 32 && "Not sure what llvm target triple to use for 64-bit arm nacl");
+        user_assert(target.bits == 32) << "ARM NaCl must be 32-bit\n";
         #if WITH_NATIVE_CLIENT
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::EABI);
@@ -381,13 +379,13 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         llvm::FlagSfiZeroMask = false;
         ReserveR9 = true;
         #else
-        assert(false && "This version of Halide was compiled without nacl support");
+        user_error << "This version of Halide was compiled without nacl support\b";
         #endif
     } else if (target.os == Target::Linux) {
         triple.setOS(llvm::Triple::Linux);
         triple.setEnvironment(llvm::Triple::GNUEABIHF);
     } else {
-        assert(false && "No arm support for this OS");
+        user_error << "No arm support for this OS\n";
     }
 
     return triple;
@@ -499,7 +497,7 @@ namespace {
 
 // Try to losslessly narrow an integer expression to the target type
 Expr try_narrow(Expr a, Type target) {
-    assert(a.type().width == target.width);
+    internal_assert(a.type().width == target.width);
     if (const Cast *c = a.as<Cast>()) {
         Type old_type = c->value.type();
         if (old_type == target) {
@@ -550,8 +548,8 @@ void CodeGen_ARM::visit(const Cast *op) {
                 // Try to narrow all of the args.
                 bool all_narrow = true;
                 for (size_t i = 0; i < matches.size(); i++) {
-                    assert(matches[i].type().bits == op->type.bits * 2);
-                    assert(matches[i].type().width == op->type.width);
+                    internal_assert(matches[i].type().bits == op->type.bits * 2);
+                    internal_assert(matches[i].type().width == op->type.width);
                     // debug(4) << "Attemping to narrow " << matches[i] << " to " << op->type << "\n";
                     matches[i] = try_narrow(matches[i], op->type);
                     if (!matches[i].defined()) {
@@ -559,7 +557,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                         all_narrow = false;
                     } else {
                         // debug(4) << "success: " << matches[i] << "\n";
-                        assert(matches[i].type() == op->type);
+                        internal_assert(matches[i].type() == op->type);
                     }
                 }
 
@@ -575,7 +573,7 @@ void CodeGen_ARM::visit(const Cast *op) {
                     if (pattern.type == Pattern::RightShift) {
                         shift_amount = -shift_amount;
                     } else {
-                        assert(pattern.type == Pattern::LeftShift);
+                        internal_assert(pattern.type == Pattern::LeftShift);
                     }
                     Value *shift = ConstantInt::get(llvm_type_of(matches[0].type()),
                                                     shift_amount);
@@ -643,7 +641,7 @@ void CodeGen_ARM::visit(const Mul *op) {
     if (power_of_two) {
         for (size_t i = 0; i < left_shifts.size(); i++) {
             const Pattern &pattern = left_shifts[i];
-            assert(pattern.type == Pattern::LeftShift);
+            internal_assert(pattern.type == Pattern::LeftShift);
             if (expr_match(pattern.pattern, op, matches)) {
                 llvm::Type *t_arg = llvm_type_of(matches[0].type());
                 llvm::Type *t_result = llvm_type_of(pattern.pattern.type());
@@ -774,8 +772,8 @@ void CodeGen_ARM::visit(const Div *op) {
             shift      = IntegerDivision::table_u8[const_divisor][3];
         }
 
-        assert(method != 0 &&
-               "method 0 division is for powers of two and should have been handled elsewhere");
+        internal_assert(method != 0) <<
+            "method 0 division is for powers of two and should have been handled elsewhere\n";
 
         Value *num = codegen(op->a);
 
@@ -863,7 +861,7 @@ void CodeGen_ARM::visit(const Sub *op) {
             a = ConstantFP::getNegativeZero(f64);
         } else {
             a = NULL;
-            assert(false && "Unknown bit width for floating point type");
+            internal_error << "Unknown bit width for floating point type: " << op->type << "\n";
         }
 
         Value *b = codegen(op->b);
@@ -1127,7 +1125,8 @@ void CodeGen_ARM::visit(const Store *op) {
     if (is_one(ramp->stride) &&
         call && call->call_type == Call::Intrinsic &&
         call->name == Call::interleave_vectors) {
-        assert(call->args.size() == 2 && "Wrong number of args to interleave vectors");
+        internal_assert(call->args.size() == 2)
+            << "Wrong number of args to interleave vectors: " << call->args.size() << "\n";
         vector<Value *> args(call->args.size() + 2);
 
         Type t = call->args[0].type();

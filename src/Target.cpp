@@ -3,6 +3,7 @@
 
 #include "Target.h"
 #include "Debug.h"
+#include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
 
@@ -75,7 +76,14 @@ Target get_host_target() {
     bool have_f16 = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
 
-    assert(have_sse2 && "The x86 backend assumes at least sse2 support");
+    user_assert(have_sse2)
+        << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
+        << "cpuid returned: "
+        << std::hex << info[0]
+        << ", " << info[1]
+        << ", " << info[2]
+        << ", " << info[3]
+        << std::dec << "\n";
 
     uint64_t features = 0;
     if (have_sse41) features |= Target::SSE41;
@@ -134,15 +142,15 @@ Target get_jit_target_from_environment() {
         return host;
     } else {
         Target t = parse_target_string(target);
-        assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits &&
-               "HL_JIT_TARGET must match the host OS, architecture, and bit width");
+        user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
+            << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
+            << "HL_JIT_TARGET was " << target << ". "
+            << "Host is " << host.to_string() << ".\n";
         return t;
     }
 }
 
 Target parse_target_string(const std::string &target) {
-    //Internal::debug(0) << "Getting host target \n";
-
     Target host = get_host_target();
 
     if (target.empty()) {
@@ -156,20 +164,18 @@ Target parse_target_string(const std::string &target) {
     t.arch = host.arch;
     t.bits = host.bits;
 
-    //Internal::debug(0) << "Got host target \n";
     if (!t.merge_string(target)) {
-        std::cerr << "Did not understand HL_TARGET=" << target << "\n"
-                  << "Expected format is arch-os-feature1-feature2-... "
-                  << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
-                  << "and os is linux, windows, osx, nacl, ios, or android. "
-                  << "If arch or os are omitted, they default to the host. "
-                  << "Features include sse41, avx, avx2, armv7s, aarch64, cuda, "
-                  << "opencl, spir, spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
-                  << "HL_TARGET can also begin with \"host\", which sets the "
-                  << "host's architecture, os, and feature set, with the "
-                  << "exception of the GPU runtimes, which default to off\n";
-
-        assert(false);
+        user_error << "Did not understand HL_TARGET=" << target << "\n"
+                   << "Expected format is arch-os-feature1-feature2-... "
+                   << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
+                   << "and os is linux, windows, osx, nacl, ios, or android. "
+                   << "If arch or os are omitted, they default to the host. "
+                   << "Features include sse41, avx, avx2, armv7s, aarch64, cuda, "
+                   << "opencl, spir, spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
+                   << "HL_TARGET can also begin with \"host\", which sets the "
+                   << "host's architecture, os, and feature set, with the "
+                   << "exception of the GPU runtimes, which default to off.\n"
+                   << "On this platform, the host target is: " << host.to_string() << "\n";
     }
 
     return t;
@@ -345,7 +351,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
 
 #define DECLARE_NO_INITMOD(mod)                                         \
     llvm::Module *get_initmod_##mod(LLVMContext *context) {             \
-        assert(false && "Halide was compiled without support for this target\n"); \
+        user_error << "Halide was compiled without support for this target\n"; \
         return NULL;                                                    \
     }
 
@@ -422,8 +428,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
         if (failed) {
-            std::cerr << "Failure linking initial modules: " << err_msg << "\n";
-            assert(false);
+            internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
     }
 
@@ -491,7 +496,7 @@ namespace Internal {
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
-    assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.bits == 32 || t.bits == 64);
     // NaCl always uses the 32-bit runtime modules, because pointers
     // and size_t are 32-bit in 64-bit NaCl, and that's the only way
     // in which the 32- and 64-bit runtimes differ.
@@ -621,7 +626,7 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
 #endif
 
 llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c, int bits) {
-    assert(bits == 32 || bits == 64);
+    internal_assert(bits == 32 || bits == 64);
 
     vector<llvm::Module *> modules;
     if (bits == 32)

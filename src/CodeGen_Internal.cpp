@@ -175,7 +175,7 @@ llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
             case 64:
                 return llvm::Type::getDoubleTy(*c);
             default:
-                assert(false && "There is no llvm type matching this floating-point bit width");
+                internal_error << "There is no llvm type matching this floating-point bit width: " << t << "\n";
                 return NULL;
             }
         } else if (t.is_handle()) {
@@ -201,15 +201,16 @@ bool constant_allocation_size(const std::vector<Expr> &extents, const std::strin
             // should re-enable this.
             /*
             if ((int64_t)int_size->value > (((int64_t)(1)<<31) - 1)) {
-                std::cerr << "Dimension " << i << " for allocation " << name << " has size " <<
+                user_error
+                    << "Dimension " << i << " for allocation " << name << " has size " <<
                     int_size->value << " which is greater than 2^31 - 1.";
-                assert(false);
             }
             */
             result *= int_size->value;
             if (result > (static_cast<int64_t>(1)<<31) - 1) {
-                std::cerr << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-                assert(false);
+                user_error
+                    << "Total size for allocation " << name
+                    << " is constant but exceeds 2^31 - 1.\n";
             }
         } else {
             return false;

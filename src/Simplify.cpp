@@ -38,7 +38,7 @@ int do_indirect_int_cast(Type t, int x) {
     } else if (t == Float(64)) {
         return (int)((double)x);
     } else {
-        assert(false && "Can't do an indirect int cast via this type");
+        internal_error << "Can't do an indirect int cast via this type: " << t << "\n";
         return 0;
     }
 }
@@ -139,7 +139,7 @@ private:
             expr = IntImm::make((int)f);
         } else if (op->type == Float(32) && const_int(value, &i)) {
             expr = FloatImm::make((float)i);
-        } else if (cast && const_castint(cast->value, &i) && 
+        } else if (cast && const_castint(cast->value, &i) &&
                    (cast->type.is_int() || i >= 0)) {
             // cast of cast of const int can just be cast of const
             // int (with the int suitably munged to fit in the
@@ -176,7 +176,7 @@ private:
             // if replacement is defined, we should substitute it in (unless
             // it's a var that has been hidden by a nested scope).
             if (info.replacement.defined()) {
-                assert(info.replacement.type() == op->type);
+                internal_assert(info.replacement.type() == op->type);
                 expr = info.replacement;
                 info.new_uses++;
             } else {
@@ -1195,7 +1195,7 @@ private:
             expr = mutate(make_zero(sub_b->b.type()) == sub_b->b);
         } else if (mul_a && mul_b && is_simple_const(mul_a->b) && is_simple_const(mul_b->b) && equal(mul_a->b, mul_b->b)) {
             // Divide both sides by a constant
-            assert(!is_zero(mul_a->b) && "Multiplication by zero survived constant folding");
+            internal_assert(!is_zero(mul_a->b)) << "Multiplication by zero survived constant folding\n";
             expr = mutate(mul_a->a == mul_b->a);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -1487,7 +1487,8 @@ private:
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
-        assert(!var_info.contains(op->name) && "Simplify only works on code where every name is unique\n");
+        internal_assert(!var_info.contains(op->name))
+            << "Simplify only works on code where every name is unique\n";
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
@@ -1638,9 +1639,8 @@ private:
 
         const AssertStmt *a = stmt.as<AssertStmt>();
         if (a && is_zero(a->condition)) {
-            std::cerr << "This pipeline is guaranteed to fail an assertion at runtime: \n"
-                      << stmt << "\n";
-            assert(false);
+            user_error << "This pipeline is guaranteed to fail an assertion at runtime: \n"
+                       << stmt << "\n";
         }
     }
 
@@ -1770,11 +1770,11 @@ void check(Expr a, Expr b) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a);
     if (!equal(simpler, b)) {
-        std::cout << std::endl << "Simplification failure: " << std::endl;
-        std::cout << "Input: " << a << std::endl;
-        std::cout << "Output: " << simpler << std::endl;
-        std::cout << "Expected output: " << b << std::endl;
-        assert(false);
+        internal_error
+            << "\nSimplification failure:\n"
+            << "Input: " << a << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: " << b << '\n';
     }
 }
 
@@ -1784,13 +1784,20 @@ void simplify_test() {
     Expr yf = cast<float>(y);
 
     // Check the type casting operations.
-    assert((int_cast_constant(Int(8), 128) == (int8_t) 128) && "Simplify test failed: int_cast_constant");
-    assert((int_cast_constant(UInt(8), -1) == (uint8_t) -1) && "Simplify test failed: int_cast_constant");
-    assert((int_cast_constant(Int(16), 65000) == (int16_t) 65000) && "Simplify test failed: int_cast_constant");
-    assert((int_cast_constant(UInt(16), 128000) == (uint16_t) 128000) && "Simplify test failed: int_cast_constant");
-    assert((int_cast_constant(UInt(16), -53) == (uint16_t) -53) && "Simplify test failed: int_cast_constant");
-    assert((int_cast_constant(UInt(32), -53) == (int)((uint32_t) -53)) && "Simplify test failed: int_cast_constant");
-    assert((int_cast_constant(Int(32), -53) == -53) && "Simplify test failed: int_cast_constant");
+    internal_assert(int_cast_constant(Int(8), 128) == (int8_t) 128)
+        << "Simplify test failed: int_cast_constant\n";
+    internal_assert(int_cast_constant(UInt(8), -1) == (uint8_t) -1)
+        << "Simplify test failed: int_cast_constant\n";
+    internal_assert(int_cast_constant(Int(16), 65000) == (int16_t) 65000)
+        << "Simplify test failed: int_cast_constant\n";
+    internal_assert(int_cast_constant(UInt(16), 128000) == (uint16_t) 128000)
+        << "Simplify test failed: int_cast_constant\n";
+    internal_assert(int_cast_constant(UInt(16), -53) == (uint16_t) -53)
+        << "Simplify test failed: int_cast_constant\n";
+    internal_assert(int_cast_constant(UInt(32), -53) == (int)((uint32_t) -53))
+        << "Simplify test failed: int_cast_constant\n";
+    internal_assert(int_cast_constant(Int(32), -53) == -53)
+        << "Simplify test failed: int_cast_constant\n";
 
     check(Cast::make(Int(32), Cast::make(Int(32), x)), x);
     check(Cast::make(Float(32), 3), 3.0f);

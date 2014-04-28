@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
     Var x, y, i;
 
     // Compute the histogram
-    hist(in(r.x, r.y))+=1;
+    hist(in(r.x, r.y)) += 1;
 
     // Integrate it to produce a cdf
     cdf(i) = 0;

@@ -15,11 +15,13 @@ class UnrollLoops : public IRMutator {
             // Give it one last chance to simplify to an int
             Expr extent = simplify(for_loop->extent);
             const IntImm *e = extent.as<IntImm>();
-            assert(e && "Can only unroll for loops over a constant extent");
+            user_assert(e)
+                << "Can only unroll for loops over a constant extent.\n"
+                << "Loop over " << for_loop->name << " has extent " << extent << ".\n";
             Stmt body = mutate(for_loop->body);
 
             if (e->value == 1) {
-                std::cerr << "Warning: Unrolling a for loop of extent 1: " << for_loop->name << "\n";
+                user_warning << "Warning: Unrolling a for loop of extent 1: " << for_loop->name << "\n";
             }
 
             Stmt block;

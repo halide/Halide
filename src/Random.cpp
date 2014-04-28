@@ -17,13 +17,13 @@ namespace {
 
 // Permute a 32-bit integer using a fixed psuedorandom permutation.
 Expr rng32(Expr x) {
-    assert(x.type() == Int(32));
+    internal_assert(x.type() == Int(32));
 
     // A polynomial P with coefficients C0 .. CN induces a permutation
     // modulo 2^d iff:
     // 1) P(0) != P(1) modulo 2
     // 2) sum(i * Ci) is odd
-    
+
     // (See http://en.wikipedia.org/wiki/Permutation_polynomial#Rings_Z.2FpkZ)
 
     // For a quadratic, this is only satisfied by:
@@ -58,17 +58,17 @@ Expr rng32(Expr x) {
     }
 
     return (((C2 * x) + C1) * x) + C0;
-}    
+}
 
 }
 
 Expr random_int(const vector<Expr> &e) {
-    assert(e.size());
-    assert(e[0].type() == Int(32));
+    internal_assert(e.size());
+    internal_assert(e[0].type() == Int(32));
     // Permute the first term
     Expr result = rng32(e[0]);
     for (size_t i = 1; i < e.size(); i++) {
-        assert(e[i].type() == Int(32));
+        internal_assert(e[i].type() == Int(32));
         // Add in the next term and permute again
         string name = unique_name('R');
         // If it's a const, save the simplifier some work
@@ -105,7 +105,7 @@ class LowerRandom : public IRMutator {
             } else if (op->type == Int(32)) {
                 expr = cast<int>(random_int(args));
             } else {
-                assert(false && "The intrinsic random() returns an int32 or a float");
+                internal_error << "The intrinsic random() returns an Int(32) or a Float(32).\n";
             }
         } else {
             IRMutator::visit(op);
@@ -117,8 +117,8 @@ public:
     LowerRandom(const vector<string> &free_vars, int tag) {
         extra_args.push_back(tag);
         for (size_t i = 0; i < free_vars.size(); i++) {
-            assert(!free_vars[i].empty());
-            extra_args.push_back(Variable::make(Int(32), free_vars[i]));            
+            internal_assert(!free_vars[i].empty());
+            extra_args.push_back(Variable::make(Int(32), free_vars[i]));
         }
     }
 };

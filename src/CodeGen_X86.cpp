@@ -22,13 +22,13 @@ using namespace llvm;
 CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
-    assert(false && "x86 not enabled for this build of Halide.");
+    user_error << "x86 not enabled for this build of Halide.\n";
     #endif
 
-    assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
+    user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 
     #if !(WITH_NATIVE_CLIENT)
-    assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
+    user_assert(t.os != Target::NaCl) << "llvm build not configured with native client enabled.\n";
     #endif
 }
 
@@ -38,7 +38,7 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     if (target.bits == 32) {
         triple.setArch(llvm::Triple::x86);
     } else {
-        assert(target.bits == 64);
+        user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
         triple.setArch(llvm::Triple::x86_64);
     }
 
@@ -73,10 +73,10 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::GNU);
         #else
-        assert(false && "This version of Halide was compiled without nacl support");
+        user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
     } else if (target.os == Target::IOS) {
-        assert(false && "Not sure what llvm target triple to use when compiling to IOS on x86 (does this even exist?)");
+        user_error << "Can't use IOS on x86.\n";
     }
 
     return triple;
@@ -321,7 +321,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
 void CodeGen_X86::visit(const Div *op) {
 
-    assert(!is_zero(op->b) && "Division by constant zero");
+    user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
@@ -427,8 +427,8 @@ void CodeGen_X86::visit(const Div *op) {
             shift      = IntegerDivision::table_u8[const_divisor][3];
         }
 
-        assert(method != 0 &&
-               "method 0 division is for powers of two and should have been handled elsewhere");
+        internal_assert(method != 0)
+            << "method 0 division is for powers of two and should have been handled elsewhere\n";
 
         Value *num = codegen(op->a);
 
@@ -620,32 +620,32 @@ void CodeGen_X86::test() {
     buf.host = (uint8_t *)scratch;
 
     fn(&buf, -32, 0);
-    assert(scratch[0] == 5);
-    assert(scratch[1] == 5);
-    assert(scratch[2] == 5);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
+    internal_assert(scratch[0] == 5);
+    internal_assert(scratch[1] == 5);
+    internal_assert(scratch[2] == 5);
+    internal_assert(scratch[3] == 3);
+    internal_assert(scratch[4] == 4*17);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
 
     fn(&buf, 37.32f, 2);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 1);
-    assert(scratch[2] == 4);
-    assert(scratch[3] == 4);
-    assert(scratch[4] == 4);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
+    internal_assert(scratch[0] == 0);
+    internal_assert(scratch[1] == 1);
+    internal_assert(scratch[2] == 4);
+    internal_assert(scratch[3] == 4);
+    internal_assert(scratch[4] == 4);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
 
     fn(&buf, 4.0f, 1);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 3);
-    assert(scratch[2] == 3);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-    assert(extern_function_1_was_called);
+    internal_assert(scratch[0] == 0);
+    internal_assert(scratch[1] == 3);
+    internal_assert(scratch[2] == 3);
+    internal_assert(scratch[3] == 3);
+    internal_assert(scratch[4] == 4*17);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
+    internal_assert(extern_function_1_was_called);
 
     // Check the wrapped version does the same thing
     extern_function_1_was_called = false;
@@ -655,14 +655,14 @@ void CodeGen_X86::test() {
     int int_arg_val = 1;
     const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
     m.wrapped_function(arg_array);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 3);
-    assert(scratch[2] == 3);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-    assert(extern_function_1_was_called);
+    internal_assert(scratch[0] == 0);
+    internal_assert(scratch[1] == 3);
+    internal_assert(scratch[2] == 3);
+    internal_assert(scratch[3] == 3);
+    internal_assert(scratch[4] == 4*17);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
+    internal_assert(extern_function_1_was_called);
 
     std::cout << "CodeGen_X86 test passed" << std::endl;
 }

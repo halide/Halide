@@ -41,8 +41,8 @@ private:
 };
 
 bool is_one_to_one(Expr e) {
-    assert(e.type() == Int(32) && 
-           "is_one_to_one only works on expressions of type Int(32)");
+    internal_assert(e.type() == Int(32))
+        << "is_one_to_one only works on expressions of type Int(32)\n";
 
     // First find the variable
     FindVariable finder;
@@ -55,7 +55,7 @@ bool is_one_to_one(Expr e) {
         // No variables present.
         return false;
     }
-    
+
     Expr d = finite_difference(e, finder.var->name);
     if (!d.defined()) {
         // Taking the finite difference failed.
@@ -72,10 +72,9 @@ bool is_one_to_one(Expr e) {
 namespace {
 void check(Expr e, bool result) {
     if (is_one_to_one(e) != result) {
-        std::cerr << "Failure testing is_one_to_one:\n" 
-                  << e << " should have returned " 
-                  << result << "\n";
-        assert(false);
+        internal_error << "Failure testing is_one_to_one:\n"
+                       << e << " should have returned "
+                       << result << "\n";
     }
 }
 }

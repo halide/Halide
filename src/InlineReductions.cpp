@@ -75,10 +75,9 @@ private:
                 } else if (!rdom.domain().same_as(v->reduction_domain)) {
                     // We were looking for a reduction domain, and already
                     // found one. This one is different!
-                    std::cerr << "Inline reduction \"" << name
-                              << "\" refers to reduction variables from multiple reduction domains: "
-                              << v->name << ", " << rdom.x.name() << "\n";
-                    assert(false);
+                    user_error << "Inline reduction \"" << name
+                               << "\" refers to reduction variables from multiple reduction domains: "
+                               << v->name << ", " << rdom.x.name() << "\n";
                 } else {
                     // Recapturing an already-known reduction domain
                     return;
@@ -109,7 +108,7 @@ Expr sum(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(e);
 
-    assert(v.rdom.defined() && "Expression passed to sum must reference a reduction domain");
+    user_assert(v.rdom.defined()) << "Expression passed to sum must reference a reduction domain";
 
     Func f(name);
     f(v.free_vars) += e;
@@ -124,7 +123,7 @@ Expr product(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(e);
 
-    assert(v.rdom.defined() && "Expression passed to product must reference a reduction domain");
+    user_assert(v.rdom.defined()) << "Expression passed to product must reference a reduction domain";
 
     Func f(name);
     f(v.free_vars) *= e;
@@ -139,7 +138,7 @@ Expr maximum(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(e);
 
-    assert(v.rdom.defined() && "Expression passed to maximum must reference a reduction domain");
+    user_assert(v.rdom.defined()) << "Expression passed to maximum must reference a reduction domain";
 
     Func f(name);
     f(v.free_vars) = e.type().min();
@@ -155,7 +154,7 @@ Expr minimum(RDom r, Expr e, const std::string &name) {
     Internal::FindFreeVars v(r, name);
     e = v.mutate(e);
 
-    assert(v.rdom.defined() && "Expression passed to minimum must reference a reduction domain");
+    user_assert(v.rdom.defined()) << "Expression passed to minimum must reference a reduction domain";
 
     Func f(name);
     f(v.free_vars) = e.type().max();
@@ -173,7 +172,7 @@ Tuple argmax(RDom r, Expr e, const std::string &name) {
 
     Func f(name);
 
-    assert(v.rdom.defined() && "Expression passed to argmax must reference a reduction domain");
+    user_assert(v.rdom.defined()) << "Expression passed to argmax must reference a reduction domain";
 
     Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
     Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
@@ -202,7 +201,7 @@ Tuple argmin(RDom r, Expr e, const std::string &name) {
 
     Func f(name);
 
-    assert(v.rdom.defined() && "Expression passed to argmin must reference a reduction domain");
+    user_assert(v.rdom.defined()) << "Expression passed to argmin must reference a reduction domain";
 
     Tuple initial_tup(vector<Expr>(v.rdom.dimensions()+1));
     Tuple update_tup(vector<Expr>(v.rdom.dimensions()+1));
