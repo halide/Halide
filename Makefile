@@ -378,7 +378,7 @@ warning_%: $(BIN_DIR)/warning_%
 
 opengl_%: $(BIN_DIR)/opengl_%
 	@-mkdir -p tmp
-	cd tmp ; HL_JIT_TARGET=host-opengl $(LD_PATH_SETUP) ../$< 2>&1 
+	cd tmp ; HL_JIT_TARGET=host-opengl $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%
