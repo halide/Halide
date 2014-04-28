@@ -252,6 +252,7 @@ STATIC_TEST_CXX ?= $(CXX)
 
 LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../$(BIN_DIR)
 LD_PATH_SETUP2 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../$(BIN_DIR)
+LD_PATH_SETUP3 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../../$(BIN_DIR)
 
 test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
 test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
@@ -289,13 +290,13 @@ $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.
 $(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
-tmp/static/%.o: $(BIN_DIR)/static_%_generate
-	@-mkdir -p tmp/static
-	cd tmp/static; $(LD_PATH_SETUP2) ../../$<
+tmp/static/%/%.o: $(BIN_DIR)/static_%_generate
+	@-mkdir -p tmp/static/$*
+	cd tmp/static/$*; $(LD_PATH_SETUP3) ../../../$<
 	@-echo
 
-$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%.o include/HalideRuntime.h
-	$(STATIC_TEST_CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static -I apps/support -I src/runtime tmp/static/$**.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
+$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%/%.o include/HalideRuntime.h
+	$(STATIC_TEST_CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static/$* -I apps/support -I src/runtime tmp/static/$*/*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@
