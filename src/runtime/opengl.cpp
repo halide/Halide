@@ -925,7 +925,7 @@ EXPORT void halide_opengl_dev_run(
             GLint loc =
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
             if (loc == -1) {
-// Argument was probably optimized away by GLSL compiler.
+                // Argument was probably optimized away by GLSL compiler.
 #ifdef DEBUG
                 halide_printf(uctx, "Ignoring argument '%s'\n",
                               kernel_arg->name);
@@ -935,13 +935,17 @@ EXPORT void halide_opengl_dev_run(
 
             switch (kernel_arg->type) {
             case ARGTYPE_INT:
+#ifdef DEBUG
                 halide_printf(uctx, "Int argument %d (%s): %d\n", i,
                               kernel_arg->name, *((int *)args[i]));
+#endif
                 ST.Uniform1iv(loc, 1, (GLint *)args[i]);
                 break;
             case ARGTYPE_FLOAT: {
+#ifdef DEBUG
                 halide_printf(uctx, "Float argument %d (%s): %g\n", i,
                               kernel_arg->name, *((float *)args[i]));
+#endif
                 ST.Uniform1fv(loc, 1, (GLfloat *)args[i]);
                 break;
             }
@@ -1060,7 +1064,9 @@ EXPORT void halide_opengl_dev_run(
 
 //  Create wrappers that satisfy old naming conventions
 
-EXPORT void halide_release(void *uctx) { halide_opengl_release(uctx); }
+EXPORT void halide_release(void *uctx) {
+    halide_opengl_release(uctx);
+}
 
 EXPORT void halide_dev_malloc(void *uctx, buffer_t *buf) {
     halide_opengl_dev_malloc(uctx, buf);
