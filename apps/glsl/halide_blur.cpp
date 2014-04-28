@@ -2,7 +2,7 @@
 
 using namespace Halide;
 
-void Blur() {
+int main(int argc, char **argv) {
     ImageParam input8(UInt(8), 3);
     Func blur_x("blur_x"), blur_y("blur_y"), out("blur_filter");
     Var x("x"), y("y"), c("c");
@@ -24,10 +24,5 @@ void Blur() {
     args.push_back(input8);
     out.compile_to_object("blur.o", args);
     out.compile_to_header("blur.h", args);
-}
-
-
-int main(int argc, char **argv) {
-    Blur();
     return 0;
 }

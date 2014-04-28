@@ -39,7 +39,6 @@ void RgbToYcc() {
     args.push_back(input8);
     cpuout.compile_to_object("ycc.o", args);
     cpuout.compile_to_header("ycc.h", args);
-//    cpuout.compile_to_c("ycc.c", args);
 }
 
 int main() {
