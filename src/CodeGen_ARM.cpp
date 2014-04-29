@@ -1103,9 +1103,9 @@ void CodeGen_ARM::visit(const Select *op) {
 }
 
 void CodeGen_ARM::visit(const Store *op) {
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index store.\n";
+
     // A dense store of an interleaving can be done using a vst2 intrinsic
-    const Ramp *ramp = op->index[0].as<Ramp>();
+    const Ramp *ramp = op->index.as<Ramp>();
 
     // We only deal with ramps here
     if (!ramp) {

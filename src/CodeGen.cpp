@@ -1071,6 +1071,7 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
 }
 
 void CodeGen::visit(const Load *op) {
+
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
     // There are several cases. Different architectures may wish to override some.
@@ -2063,18 +2064,17 @@ void CodeGen::visit(const For *op) {
 }
 
 void CodeGen::visit(const Store *op) {
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index store.\n";
     Value *val = codegen(op->value);
     Halide::Type value_type = op->value.type();
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
     // Scalar
     if (value_type.is_scalar()) {
-        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index[0]);
+        Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bytes());
         add_tbaa_metadata(store, op->name);
     } else {
         int alignment = op->value.type().bytes();
-        const Ramp *ramp = op->index[0].as<Ramp>();
+        const Ramp *ramp = op->index.as<Ramp>();
         if (ramp && is_one(ramp->stride)) {
 
             // Boost the alignment if possible
@@ -2116,7 +2116,7 @@ void CodeGen::visit(const Store *op) {
             }
         } else {
             // Scatter
-            Value *index = codegen(op->index[0]);
+            Value *index = codegen(op->index);
             for (int i = 0; i < value_type.width; i++) {
                 Value *lane = ConstantInt::get(i32, i);
                 Value *idx = builder->CreateExtractElement(index, lane);

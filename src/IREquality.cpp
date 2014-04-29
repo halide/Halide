@@ -320,16 +320,8 @@ public:
         op->value.accept(this);
         if (result) return;
 
-        if (s->index.size() < op->index.size()) {
-            result = -1;
-        } else if (s->index.size() > op->index.size()) {
-            result = 1;
-        } else {
-            for (size_t i = 0; (result == 0) && (i < s->index.size()); i++) {
-                expr = s->index[i];
-                op->index[i].accept(this);
-            }
-        }
+        expr = s->index;
+        op->index.accept(this);
     }
 
     void visit(const Provide *op) {

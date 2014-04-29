@@ -558,8 +558,6 @@ struct Select : public ExprNode<Select> {
 struct Load : public ExprNode<Load> {
     std::string name;
 
-    // For most targets, buffers are indexed using a one-dimensional offset
-    // and 'index' is a scalar expression.
     Expr index;
 
     // If it's a load from an image argument or compiled-in constant
@@ -753,25 +751,11 @@ struct For : public StmtNode<For> {
  * 'value'. */
 struct Store : public StmtNode<Store> {
     std::string name;
-    Expr value;
-    std::vector<Expr> index;
+    Expr value, index;
 
     static Stmt make(std::string name, Expr value, Expr index) {
         internal_assert(value.defined()) << "Store of undefined\n";
         internal_assert(index.defined()) << "Store of undefined\n";
-
-        Store *node = new Store;
-        node->name = name;
-        node->value = value;
-        node->index.push_back(index);
-        return node;
-    }
-
-    static Stmt make(std::string name, Expr value, const std::vector<Expr> &index) {
-        internal_assert(value.defined()) << "Store of undefined\n";
-        for (size_t i = 0; i < index.size(); i++) {
-            internal_assert(index[i].defined()) << "Store of undefined\n";
-        }
 
         Store *node = new Store;
         node->name = name;

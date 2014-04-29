@@ -280,55 +280,6 @@ public:
 private:
     using IRMutator::visit;
 
-    void visit(const Provide *provide) {
-        if (!inside_kernel_loop) {
-            IRMutator::visit(provide);
-            return;
-        }
-
-        vector<Expr> values(provide->values.size());
-        for (size_t i = 0; i < values.size(); i++) {
-            values[i] = mutate(provide->values[i]);
-
-            // Promote the type to be a multiple of 8 bits
-            Type t = values[i].type();
-            t.bits = t.bytes() * 8;
-            if (t.bits != values[i].type().bits) {
-                values[i] = Cast::make(t, values[i]);
-            }
-
-            // Record that this buffer is accessed from a GPU kernel
-            need_buffer_t.push(provide->name, i);
-        }
-
-        if (values.size() == 1) {
-            stmt = Store::make(provide->name, values[0], provide->args);
-        } else {
-            vector<string> names(provide->values.size());
-            Stmt result;
-
-            // Store the values by name
-            for (size_t i = 0; i < provide->values.size(); i++) {
-                string name = provide->name + "." + int_to_string(i);
-                names[i] = name + ".value";
-                Expr var = Variable::make(values[i].type(), names[i]);
-                Stmt store = Store::make(name, var, provide->args);
-                if (result.defined()) {
-                    result = Block::make(result, store);
-                } else {
-                    result = store;
-                }
-            }
-
-            // Add the let statements that define the values
-            for (size_t i = provide->values.size(); i > 0; i--) {
-                result = LetStmt::make(names[i-1], values[i-1], result);
-            }
-
-            stmt = result;
-        }
-    }
-
     static float max_value(const Type &type) {
         if (type == UInt(8)) {
             return 255.0f;
@@ -340,8 +291,36 @@ private:
         return 1.0f;
     }
 
-    void visit(const Call *call) {
+    void visit(const Provide *provide) {
         if (!inside_kernel_loop) {
+            IRMutator::visit(provide);
+            return;
+        }
+
+        internal_assert(provide->values.size() == 1) << "GLSL currently only supports scalar stores.\n";
+        user_assert(provide->args.size() == 3) << "GLSL stores requires three coordinates.\n";
+
+        // Record that this buffer is accessed from a GPU kernel
+        need_buffer_t.push(provide->name, 0);
+
+        // Create glsl_texture_store(name, x, y, c, value, name.buffer)
+        // intrinsic.  Since the intrinsic only stores Float(32) values, the
+        // original value type is encoded in first argument.
+        vector<Expr> args(6);
+        Expr value = mutate(provide->values[0]);
+        args[0] = Variable::make(value.type(), provide->name);
+        for (size_t i = 0; i < provide->args.size(); i++) {
+            args[i + 1] = provide->args[i];
+        }
+        args[4] = Div::make(Cast::make(Float(32), value),
+                            max_value(value.type()));
+        args[5] = Variable::make(Handle(), provide->name + ".buffer");
+        stmt = Evaluate::make(
+            Call::make(Float(32), "glsl_texture_store", args, Call::Intrinsic));
+    }
+
+    void visit(const Call *call) {
+        if (!inside_kernel_loop || call->call_type == Call::Intrinsic) {
             IRMutator::visit(call);
             return;
         }
@@ -351,8 +330,16 @@ private:
             name = name + '.' + int_to_string(call->value_index);
         }
 
-        vector<Expr> args;
-        args.push_back(Variable::make(Handle(), call->name));
+        user_assert(call->args.size() == 3) << "GLSL loads requires three coordinates.\n";
+
+        // Record that this buffer is accessed from a GPU kernel
+        need_buffer_t.push(call->name, 0);
+
+        // Create glsl_texture_load(name, x, y, c, name.buffer) intrinsic.
+        // Since the intrinsic always returns Float(32), the original type is
+        // encoded in first argument.
+        vector<Expr> args(5);
+        args[0] = Variable::make(call->type, call->name);
         for (size_t i = 0; i < call->args.size(); i++) {
             string d = int_to_string(i);
             string min_name = name + ".min." + d;
@@ -369,26 +356,18 @@ private:
             Expr min = Variable::make(Int(32), min_name);
             Expr extent = Variable::make(Int(32), extent_name);
 
-            Expr idx;
-            if (i < 2) {
-                // Normalize the two spatial coordinates x,y
-                idx = (Cast::make(Float(32), call->args[i] - min) + 0.5f) / extent;
-            } else {
-                idx = call->args[i] - min;
-            }
-            args.push_back(idx);
+            // Normalize the two spatial coordinates x,y
+            args[i + 1] = (i < 2)
+                ? (Cast::make(Float(32), call->args[i] - min) + 0.5f) / extent
+                : call->args[i] - min;
         }
-        args.push_back(Load::make(call->type, call->name, 0, call->image, call->param));
-        args.push_back(Variable::make(Handle(), call->name + ".buffer"));
+        args[4] = Variable::make(Handle(), call->name + ".buffer");
 
-        // Record that this buffer is accessed from a GPU kernel
-        need_buffer_t.push(call->name, 0);
-
-        expr =
-            Cast::make(call->type,
-                       Mul::make(Call::make(Float(32), "glsl_texture_load",
-                                            args, Call::Intrinsic),
-                                 max_value(call->type)));
+        Expr load = Call::make(Float(32), "glsl_texture_load",
+                               args, Call::Intrinsic,
+                               Function(), 0, call->image, call->param);
+        expr = Cast::make(call->type,
+                          Mul::make(load, max_value(call->type)));
     }
 
     void visit(const LetStmt *let) {

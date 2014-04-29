@@ -218,7 +218,17 @@ private:
     }
 
     void visit(const Load *op) {
-        if (op->name == buf) {
+        read_access(op->name);
+        IRVisitor::visit(op);
+    }
+
+    void visit(const Store *op) {
+        write_access(op->name);
+        IRVisitor::visit(op);
+    }
+
+    void read_access(const string &name) {
+        if (name == buf) {
             if (in_device_code) {
                 used_on_device = true;
                 read_on_device = true;
@@ -227,11 +237,10 @@ private:
                 read_on_host = true;
             }
         }
-        IRVisitor::visit(op);
     }
 
-    void visit(const Store *op) {
-        if (op->name == buf) {
+    void write_access(const string &name) {
+        if (name == buf) {
             if (in_device_code) {
                 used_on_device = true;
                 written_on_device = true;
@@ -239,6 +248,14 @@ private:
                 used_on_host = true;
                 written_on_host = true;
             }
+        }
+    }
+
+    void visit(const Call *op) {
+        if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
+            read_access(op->args[0].as<Variable>()->name);
+        } else if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_store") {
+            write_access(op->args[0].as<Variable>()->name);
         }
         IRVisitor::visit(op);
     }
@@ -263,11 +280,27 @@ protected:
     void visit(const For *op);
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
+        if (op->call_type == Call::Intrinsic &&
+            (op->name == "glsl_texture_load" || op->name == "glsl_texture_store")) {
             string bufname = op->args[0].as<Variable>()->name;
-            BufferRef & ref = buffers[bufname];
-            ref.type = op->args[4].type();
-            ref.read = true;
+            BufferRef &ref = buffers[bufname];
+            ref.type = op->args[0].type();
+
+            if (op->name == "glsl_texture_load") {
+                ref.read = true;
+            } else if (op->name == "glsl_texture_store") {
+                ref.write = true;
+            }
+
+            // The Func's name and the associated .buffer are mentioned in the
+            // argument lists to, but don't treat them as free variables.
+            ignore.push(bufname, 0);
+            ignore.push(bufname + ".buffer", 0);
+            Internal::Closure::visit(op);
+            ignore.pop(bufname);
+            ignore.pop(bufname + ".buffer");
+        } else {
+            Internal::Closure::visit(op);
         }
     }
 

@@ -190,36 +190,12 @@ void CodeGen_GLSL::visit(const Load *op) {
     internal_error << "Load nodes should have been removed by now\n";
 }
 
-void CodeGen_GLSL::emit_texture_store(Expr channel, Expr val) {
-    std::string sval = print_expr(val);
-    do_indent();
-    stream << "gl_FragColor" << get_vector_suffix(channel)
-           << " = " << sval << ";\n";
+void CodeGen_GLSL::visit(const Store *op) {
+    internal_error << "Store nodes should have been removed by now\n";
 }
 
-void CodeGen_GLSL::visit(const Store *op) {
-    internal_assert(op->index.size() == 3) << "Store to texture requires multi-index\n";
-    std::vector<Expr> matches;
-
-    float maxval = max_value(op->value.type());
-    Expr x = Variable::make(Float(32), "*");
-    std::vector<Expr> match;
-    // TODO(dheck): comment this
-    if (expr_match(Cast::make(op->value.type(),
-                              Mul::make(x, maxval)),
-                   op->value, match) ||
-        expr_match(Cast::make(op->value.type(),
-                              Mul::make(maxval, x)),
-                   op->value, match)) {
-        emit_texture_store(op->index[2], match[0]);
-    } else if (op->value.type().is_uint()){
-        // Store(..., uint8) -> gl_FragColor = ((float) val) / 255.f
-        emit_texture_store(op->index[2],
-                           Div::make(Cast::make(Float(32), op->value),
-                                     maxval));
-    } else {
-        internal_error << "Invalid Store node encountered.\n";
-    }
+void CodeGen_GLSL::visit(const Evaluate *op) {
+    op->value.accept(this);
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
@@ -233,6 +209,11 @@ void CodeGen_GLSL::visit(const Call *op) {
             << get_vector_suffix(op->args[3]);
         print_assignment(op->type, rhs.str());
         return;
+    } else if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_store") {
+        std::string sval = print_expr(op->args[4]);
+        do_indent();
+        stream << "gl_FragColor" << get_vector_suffix(op->args[3])
+               << " = " << sval << ";\n";
     } else {
         CodeGen_C::visit(op);
     }
@@ -265,7 +246,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             user_assert(args[i].read != args[i].write) <<
                 "Buffers may only be read OR written inside a kernel loop\n";
             user_assert(t == UInt(8) || t == UInt(16)) <<
-                "Buffers of type " << t << " aren't supported by OpenGL backend\n";
+                "Buffer " << args[i].name << " has invalid type " << t << ".\n";
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << (t == UInt(8) ? "uint8 " : "uint16 ")
                    << print_name(args[i].name) << "\n";
