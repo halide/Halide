@@ -329,6 +329,17 @@ private:
         }
     }
 
+    static float max_value(const Type &type) {
+        if (type == UInt(8)) {
+            return 255.0f;
+        } else if (type == UInt(16)) {
+            return 65535.0f;
+        } else {
+            internal_error << "Cannot determine max_value of type '" << type << "'\n";
+        }
+        return 1.0f;
+    }
+
     void visit(const Call *call) {
         if (!inside_kernel_loop) {
             IRMutator::visit(call);
@@ -340,8 +351,9 @@ private:
             name = name + '.' + int_to_string(call->value_index);
         }
 
-        vector<Expr> idx(call->args.size());
-        for (size_t i = 0; i < idx.size(); i++) {
+        vector<Expr> args;
+        args.push_back(Variable::make(Handle(), call->name));
+        for (size_t i = 0; i < call->args.size(); i++) {
             string d = int_to_string(i);
             string min_name = name + ".min." + d;
             string min_name_constrained = min_name + ".constrained";
@@ -356,18 +368,27 @@ private:
 
             Expr min = Variable::make(Int(32), min_name);
             Expr extent = Variable::make(Int(32), extent_name);
-            idx[i] = (call->args[i] - min);
 
-            // Normalize the two spatial coordinates x,y
+            Expr idx;
             if (i < 2) {
-                idx[i] = (Cast::make(Float(32), idx[i]) + 0.5f) / extent;
+                // Normalize the two spatial coordinates x,y
+                idx = (Cast::make(Float(32), call->args[i] - min) + 0.5f) / extent;
+            } else {
+                idx = call->args[i] - min;
             }
+            args.push_back(idx);
         }
+        args.push_back(Load::make(call->type, call->name, 0, call->image, call->param));
+        args.push_back(Variable::make(Handle(), call->name + ".buffer"));
 
         // Record that this buffer is accessed from a GPU kernel
         need_buffer_t.push(call->name, 0);
 
-        expr = Load::make(call->type, name, idx, call->image, call->param);
+        expr =
+            Cast::make(call->type,
+                       Mul::make(Call::make(Float(32), "glsl_texture_load",
+                                            args, Call::Intrinsic),
+                                 max_value(call->type)));
     }
 
     void visit(const LetStmt *let) {

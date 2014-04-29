@@ -1071,19 +1071,18 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
 }
 
 void CodeGen::visit(const Load *op) {
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index load.\n";
     bool possibly_misaligned = (might_be_misaligned.find(op->name) != might_be_misaligned.end());
 
     // There are several cases. Different architectures may wish to override some.
     if (op->type.is_scalar()) {
         // Scalar loads
-        Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index[0]);
+        Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
         LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bytes());
         add_tbaa_metadata(load, op->name);
         value = load;
     } else {
         int alignment = op->type.bytes(); // The size of a single element
-        const Ramp *ramp = op->index[0].as<Ramp>();
+        const Ramp *ramp = op->index.as<Ramp>();
         const IntImm *stride = ramp ? ramp->stride.as<IntImm>() : NULL;
 
         bool internal = !op->image.defined() && !op->param.defined();
@@ -1194,7 +1193,7 @@ void CodeGen::visit(const Load *op) {
             // Compute the index as scalars, and then do a gather
             Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
-                Expr idx = extract_lane(op->index[0], i);
+                Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
                 add_tbaa_metadata(val, op->name);
@@ -1203,7 +1202,7 @@ void CodeGen::visit(const Load *op) {
             value = vec;
         } else {
             // General gathers
-            Value *index = codegen(op->index[0]);
+            Value *index = codegen(op->index);
             Value *vec = UndefValue::get(llvm_type_of(op->type));
             for (int i = 0; i < op->type.width; i++) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
@@ -1506,10 +1505,9 @@ void CodeGen::visit(const Call *op) {
             internal_assert(op->type == Handle()) << "address_of must return a Handle type\n";
             const Load *load = op->args[0].as<Load>();
             internal_assert(load) << "The sole argument to address_of must be a Load node\n";
-            internal_assert(load->index.size() == 1) << "Can't take the address of a multi-index load\n";
-            internal_assert(load->index[0].type().is_scalar()) << "Can't take the address of a vector load\n";
+            internal_assert(load->index.type().is_scalar()) << "Can't take the address of a vector load\n";
 
-            value = codegen_buffer_pointer(load->name, load->type, load->index[0]);
+            value = codegen_buffer_pointer(load->name, load->type, load->index);
 
         } else if (op->name == Call::trace || op->name == Call::trace_expr) {
 

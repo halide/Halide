@@ -559,9 +559,8 @@ struct Load : public ExprNode<Load> {
     std::string name;
 
     // For most targets, buffers are indexed using a one-dimensional offset
-    // and 'index' is a scalar expression. The OpenGL backend currently uses a
-    // 3-dimensional index instead.
-    std::vector<Expr> index;
+    // and 'index' is a scalar expression.
+    Expr index;
 
     // If it's a load from an image argument or compiled-in constant
     // image, this will point to that
@@ -573,23 +572,6 @@ struct Load : public ExprNode<Load> {
     static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
         internal_assert(index.defined()) << "Load of undefined\n";
         internal_assert(type.width == index.type().width) << "Vector width of Load must match vector width of index\n";
-
-        Load *node = new Load;
-        node->type = type;
-        node->name = name;
-        node->index.push_back(index);
-        node->image = image;
-        node->param = param;
-        return node;
-    }
-
-    static Expr make(Type type, std::string name, const std::vector<Expr> &index, Buffer image, Parameter param) {
-        int max_width = 0;
-        for (size_t i = 0; i < index.size(); i++) {
-            internal_assert(index[i].defined()) << "Load of undefined\n";
-            max_width = std::max(max_width, index[i].type().width);
-        }
-        internal_assert(type.width == max_width) << "Vector width of Load must match vector width of index";
 
         Load *node = new Load;
         node->type = type;

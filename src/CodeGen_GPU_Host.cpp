@@ -262,6 +262,15 @@ protected:
 
     void visit(const For *op);
 
+    void visit(const Call *op) {
+        if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
+            string bufname = op->args[0].as<Variable>()->name;
+            BufferRef & ref = buffers[bufname];
+            ref.type = op->args[4].type();
+            ref.read = true;
+        }
+    }
+
     bool skip_gpu_loops;
 };
 
