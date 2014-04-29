@@ -633,13 +633,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name, false);
         for (size_t i = 0; i < kernel_name.size(); i++) {
-            switch (kernel_name[i]) {
-            case '$':
-            case '.':
+            if (!isalnum(kernel_name[i])) {
                 kernel_name[i] = '_';
-                break;
-            default:
-                break;
             }
         }
         cgdev->add_kernel(loop, kernel_name, c.arguments());
