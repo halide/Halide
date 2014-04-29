@@ -57,8 +57,17 @@ protected:
     /** Emit a statement */
     void print_stmt(Stmt);
 
-    /** Emit the C name for a halide type */
-    virtual std::string print_type(Type);
+    enum AppendSpaceIfNeeded {
+        DoNotAppendSpace,
+        AppendSpace,
+    };
+
+    /** Emit the C name for a halide type. If space_option is AppendSpace,
+     *  and there should be a space between the type and the next token,
+     *  one is appended. (This allows both "int foo" and "Foo *foo" to be
+     *  formatted correctly. Otherwise the latter is "Foo * foo".)
+     */
+    virtual std::string print_type(Type, AppendSpaceIfNeeded space_option = DoNotAppendSpace);
 
     /** Emit a statement to reinterpret an expression as another type */
     virtual std::string print_reinterpret(Type, Expr);

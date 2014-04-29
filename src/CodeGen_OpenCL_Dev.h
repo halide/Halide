@@ -42,7 +42,7 @@ protected:
 
     protected:
         using CodeGen_C::visit;
-        std::string print_type(Type type);
+        std::string print_type(Type type, AppendSpaceIfNeeded append_space = DoNotAppendSpace);
         std::string print_reinterpret(Type type, Expr e);
 
         void visit(const For *);

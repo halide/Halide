@@ -180,7 +180,8 @@ const string preamble =
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
 
 namespace {
-string type_to_c_type(Type type) {
+string type_to_c_type(Type type, bool include_space) {
+    bool needs_space = true;
     ostringstream oss;
     assert(type.width == 1 && "Can't codegen vector types to C (yet)");
     if (type.is_float()) {
@@ -193,7 +194,12 @@ string type_to_c_type(Type type) {
         }
 
     } else if (type.is_handle()) {
-        oss << "void *";
+        needs_space = false;
+        if (type.handle_type.empty()) {
+            oss << "void *";
+        } else {
+            oss << type.handle_type << " *";
+        }
     } else {
         switch (type.bits) {
         case 1:
@@ -207,12 +213,14 @@ string type_to_c_type(Type type) {
             assert(false && "Can't represent an integer with this many bits in C");
         }
     }
+    if (include_space && needs_space)
+        oss << " ";
     return oss.str();
 }
 }
 
-string CodeGen_C::print_type(Type type) {
-    return type_to_c_type(type);
+string CodeGen_C::print_type(Type type, AppendSpaceIfNeeded space_option) {
+    return type_to_c_type(type, space_option == AppendSpace);
 }
 
 string CodeGen_C::print_reinterpret(Type type, Expr e) {
@@ -255,8 +263,8 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
             stream << "buffer_t *" << print_name(args[i].name);
         } else {
             stream << "const "
-                   << print_type(args[i].type)
-                   << " " << print_name(args[i].name);
+                   << print_type(args[i].type, AppendSpace)
+                   << print_name(args[i].name);
         }
     }
     stream << ") HALIDE_FUNCTION_ATTRS;\n";
@@ -274,13 +282,13 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
         if (op->call_type == Call::Extern) {
             if (!emitted.count(op->name)) {
-                stream << "extern \"C\" " << type_to_c_type(op->type)
-                       << " " << op->name << "(";
+                stream << "extern \"C\" " << type_to_c_type(op->type, true)
+                       << op->name << "(";
                 for (size_t i = 0; i < op->args.size(); i++) {
                     if (i > 0) {
                         stream << ", ";
                     }
-                    stream << type_to_c_type(op->args[i].type());
+                    stream << type_to_c_type(op->args[i].type(), true);
                 }
                 stream << ");\n";
                 emitted.insert(op->name);
@@ -379,8 +387,7 @@ void CodeGen_C::compile(Stmt s, string name,
                    << print_name(args[i].name);
         } else {
             stream << "const "
-                   << print_type(args[i].type)
-                   << " "
+                   << print_type(args[i].type, AppendSpace)
                    << print_name(args[i].name);
         }
 
@@ -474,9 +481,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     if (cached == cache.end()) {
         id = unique_name('V');
         do_indent();
-        stream << print_type(t)
-               << " " << id
-               << " = " << rhs << ";\n";
+        stream << print_type(t, AppendSpace) << id << " = " << rhs << ";\n";
         cache[rhs] = id;
     } else {
         id = cached->second;
@@ -764,8 +769,8 @@ void CodeGen_C::visit(const Call *op) {
             string result_id = unique_name('V');
 
             do_indent();
-            stream << print_type(op->args[1].type())
-                   << " " << result_id << ";\n";
+            stream << print_type(op->args[1].type(), AppendSpace)
+                   << result_id << ";\n";
 
             string cond_id = print_expr(op->args[0]);
 
