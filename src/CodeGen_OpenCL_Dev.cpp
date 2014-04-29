@@ -20,7 +20,7 @@ CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev() {
     clc = new CodeGen_OpenCL_C(src_stream);
 }
 
-string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
+  string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type, AppendSpaceIfNeeded) {
     ostringstream oss;
     if (type.is_float()) {
         if (type.bits == 16) {
@@ -41,7 +41,7 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
             oss << "bool";
             break;
         case 8:
-            oss << "char";
+	  oss << "char";
             break;
         case 16:
             oss << "short";
@@ -122,7 +122,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
 
         open_scope();
         do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << id_idx << ";\n";
+        stream << print_type(Int(32), AppendSpace) << print_name(loop->name) << " = " << id_idx << ";\n";
         loop->body.accept(this);
         close_scope("for " + id_cond);
 

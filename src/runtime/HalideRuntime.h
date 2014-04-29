@@ -9,6 +9,12 @@
 #endif
 
 #ifdef __cplusplus
+// Forward declare type to allow naming typed handles.
+// See Type.h for documentation.
+template<typename T> struct halide_handle_traits;
+#endif
+
+#ifdef __cplusplus
 extern "C" {
 #endif
 
@@ -169,4 +175,3 @@ extern void halide_set_random_seed(uint32_t seed);
 #endif
 
 #endif // HALIDE_HALIDERUNTIME_H
-

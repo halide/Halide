@@ -15,13 +15,17 @@ struct ParameterContents {
     Type type;
     bool is_buffer;
     std::string name;
+    std::string handle_type;
     Buffer buffer;
+    bool initialized;
     uint64_t data;
+    uint64_t default_val;
     Expr min_constraint[4];
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()),
+        initialized(false), data(0), default_val(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -32,6 +36,12 @@ struct ParameterContents {
     T &as() {
         assert(type == type_of<T>());
         return *((T *)(&data));
+    }
+
+    template<typename T>
+    T &default_as() {
+        assert(type == type_of<T>());
+        return *((T *)(&default_val));
     }
 };
 
@@ -85,6 +95,26 @@ public:
         return contents.ptr->as<T>();
     }
 
+    /** If the parameter is a scalar parameter, set its default
+     * value. Useful when jitting and for introspection on code
+     * written in Halide. */
+    template<typename T>
+    T set_default(const T &val) const {
+        assert(contents.defined() && !contents.ptr->is_buffer);
+        contents.ptr->default_as<T>() = val;
+        if (!contents.ptr->initialized) {
+            contents.ptr->as<T>() = val;
+        }
+    }
+
+    /** If the parameter is a scalar parameter, get its default
+     * value. */
+    template<typename T>
+    T get_default() const {
+        assert(contents.defined() && !contents.ptr->is_buffer);
+        return contents.ptr->default_as<T>();
+    }
+
     /** If the parameter is a buffer parameter, get its currently
      * bound buffer. Only relevant when jitting */
     Buffer get_buffer() const {
@@ -97,6 +127,7 @@ public:
     template<typename T>
     void set_scalar(T val) {
         assert(contents.defined() && !contents.ptr->is_buffer);
+        contents.ptr->initialized = true;
         contents.ptr->as<T>() = val;
     }
 
@@ -113,6 +144,7 @@ public:
      * change. Only relevant when jitting. */
     const void *get_scalar_address() const {
         assert(contents.defined());
+        contents.ptr->initialized = true;
         return &contents.ptr->data;
     }
 

@@ -7,6 +7,14 @@
  * Defines halide types
  */
 
+template<typename T>
+struct halide_handle_traits {
+    // Empty string means "void *". We use the empty string
+    // here as it is often optimized in string implementations.
+    // Internally "" and "void" are treated as the same type.
+    static const std::string type_name() { return ""; }
+};
+
 namespace Halide {
 
 struct Expr;
@@ -33,6 +41,9 @@ struct Type {
     /** How many elements (if a vector type). Should be 1 for scalar types. */
     int width;
 
+  /** Type to be printed when declaring handles of this type. */
+    std::string handle_type;
+
     /** Is this type boolean (represented as UInt(1))? */
     bool is_bool() const {return code == UInt && bits == 1;}
 
@@ -54,25 +65,36 @@ struct Type {
     /** Is this type an opaque handle type (void *) */
     bool is_handle() const {return code == Handle;}
 
+    /** Check that the type name of two handles matches. */
+    bool same_handle_type(const Type &other) const {
+        const std::string name1 = handle_type.empty() ? "void" :
+                                                        handle_type;
+        const std::string name2 = other.handle_type.empty() ? "void" :
+                                                              other.handle_type;
+        return name1 == name2;
+    }
+
     /** Compare two types for equality */
     bool operator==(const Type &other) const {
-        return code == other.code && bits == other.bits && width == other.width;
+        return code == other.code && bits == other.bits && width == other.width &&
+            (code != Handle || same_handle_type(other));
     }
 
     /** Compare two types for inequality */
     bool operator!=(const Type &other) const {
-        return code != other.code || bits != other.bits || width != other.width;
+        return code != other.code || bits != other.bits || width != other.width ||
+            (code == Handle && !same_handle_type(other));
     }
 
     /** Produce a vector of this type, with 'width' elements */
     Type vector_of(int w) const {
-        Type type = {code, bits, w};
+        Type type = {code, bits, w, ""};
         return type;
     }
 
     /** Produce the type of a single element of this vector type */
     Type element_of() const {
-        Type type = {code, bits, 1};
+        Type type = {code, bits, 1, ""};
         return type;
     }
 
@@ -125,11 +147,12 @@ inline Type Bool(int width = 1) {
 }
 
 /** Construct a handle type */
-inline Type Handle(int width = 1) {
+inline Type Handle(int width = 1, const std::string &handle_type = "") {
     Type t;
     t.code = Type::Handle;
     t.bits = 64; // All handles are 64-bit for now
     t.width = width;
+    t.handle_type = handle_type;
     return t;
 }
 
@@ -140,7 +163,7 @@ struct type_of_helper;
 template<typename T>
 struct type_of_helper<T *> {
     operator Type() {
-        return Handle();
+      return Handle(1, halide_handle_traits<T>::type_name());
     }
 };
 
