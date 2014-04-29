@@ -376,6 +376,8 @@ DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
+DECLARE_CPP_INITMOD(linux_opengl_context)
+DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opencl_debug)
@@ -455,6 +457,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",
+                       "halide_opengl_get_proc_address",
+                       "halide_opengl_create_context",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -578,6 +582,13 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
             modules.push_back(get_initmod_opengl_debug(c, bits_64));
         } else {
             modules.push_back(get_initmod_opengl(c, bits_64));
+        }
+        if (t.os == Target::Linux) {
+            modules.push_back(get_initmod_linux_opengl_context(c, bits_64));
+        } else if (t.os == Target::OSX) {
+            modules.push_back(get_initmod_osx_opengl_context(c, bits_64));
+        } else {
+            // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
         }
     } else {
         modules.push_back(get_initmod_nogpu(c, bits_64));

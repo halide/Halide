@@ -12,7 +12,8 @@
 
 // This function must be provided by the host environment to retrieve pointers
 // to OpenGL API functions.
-extern "C" void *halide_opengl_get_proc_address(const char *name);
+extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *name);
+extern "C" int halide_opengl_create_context(void *user_context);
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
@@ -387,9 +388,15 @@ WEAK HalideOpenGLKernel *halide_opengl_find_kernel(const char *name) {
 EXPORT void halide_opengl_init(void *user_context) {
     if (ST.initialized) return;
 
+    // Make a context if there isn't one
+    if (halide_opengl_create_context(user_context)) {
+        halide_printf(user_context, "Failed to make opengl context\n");
+        return;
+    }
+
     // Initialize pointers to OpenGL functions.
 #define GLFUNC(TYPE, VAR)                                               \
-    ST.VAR = (TYPE)halide_opengl_get_proc_address("gl" #VAR);           \
+    ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR); \
     if (!ST.VAR) {                                                      \
         halide_printf(user_context, "Could not load function pointer for %s\n", "gl" #VAR); \
         return;                                                         \

@@ -468,21 +468,30 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
         }
     } else if (target.features & Target::OpenGL) {
-        const char *funcname = "halide_opengl_create_context";
-        if (have_symbol(funcname)) {
-            debug(1) << "OpenGL support code already linked in...\n";
+        if (target.os == Target::Linux) {
+            if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
+                debug(1) << "OpenGL support code already linked in...\n";
+            } else {
+                debug(1) << "Looking for OpenGL support code...\n";
+                string error;
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so", &error);
+                user_assert(error.empty()) << "Could not find libGL.so\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
+                user_assert(error.empty()) << "Could not find libX11.so\n";
+            }
+        } else if (target.os == Target::OSX) {
+            if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
+                debug(1) << "OpenGL support code already linked in...\n";
+            } else {
+                debug(1) << "Looking for OpenGL support code...\n";
+                string error;
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
+                user_assert(error.empty()) << "Could not find AGL.framework\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
+                user_assert(error.empty()) << "Could not find OpenGL.framework\n";
+            }
         } else {
-            debug(1) << "Looking for OpenGL support code...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libHalideOpenGLRuntime.so", &error);
-            user_assert(error.empty()) << "Could not find libHalideOpenGLRuntime.so\n";
-
-            void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol(funcname);
-            user_assert(ptr) << "Could not find halide_opengl_create_context in HalideOpenGLRuntime library\n";
-
-            void (*create_context)() = reinterpret_bits<void (*)()>(ptr);
-
-            create_context();
+            internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
         }
     }
 }
