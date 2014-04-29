@@ -166,9 +166,7 @@ void IRVisitor::visit(const For *op) {
 
 void IRVisitor::visit(const Store *op) {
     op->value.accept(this);
-    for (size_t i = 0; i < op->index.size(); i++) {
-        op->index[i].accept(this);
-    }
+    op->index.accept(this);
 }
 
 void IRVisitor::visit(const Provide *op) {
@@ -385,9 +383,7 @@ void IRGraphVisitor::visit(const For *op) {
 
 void IRGraphVisitor::visit(const Store *op) {
     include(op->value);
-    for (size_t i = 0; i < op->index.size(); i++) {
-        include(op->index[i]);
-    }
+    include(op->index);
 }
 
 void IRGraphVisitor::visit(const Provide *op) {

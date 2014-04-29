@@ -749,7 +749,7 @@ EXPORT void halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
 #ifdef DEBUG
         print_buffer(user_context, buf);
 #endif
-        halide_error(user_context, "Invalid copy_to_dev operation");
+        halide_error(user_context, "Invalid copy_to_dev operation\n");
         return;
     }
 

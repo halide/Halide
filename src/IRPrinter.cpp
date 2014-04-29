@@ -437,11 +437,7 @@ void IRPrinter::visit(const For *op) {
 void IRPrinter::visit(const Store *op) {
     do_indent();
     stream << op->name << "[";
-    for (size_t i = 0; i < op->index.size(); i++) {
-        print(op->index[i]);
-        if (i < op->index.size()-1)
-            stream << ",";
-    }
+    print(op->index);
     stream << "] = ";
     print(op->value);
     stream << '\n';

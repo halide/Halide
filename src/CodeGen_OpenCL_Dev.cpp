@@ -241,7 +241,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
     Type t = op->value.type();
 
     // If we're writing a contiguous ramp, use vstore instead.
-    Expr ramp_base = is_ramp1(op->index[0]);
+    Expr ramp_base = is_ramp1(op->index);
     if (ramp_base.defined()) {
         internal_assert(op->value.type().is_vector());
         string id_ramp_base = print_expr(ramp_base);
@@ -257,11 +257,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         return;
     }
 
-    if (op->index[0].type().is_vector()) {
+    if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
 
-        string id_index = print_expr(op->index[0]);
+        string id_index = print_expr(op->index);
 
         for (int i = 0; i < t.width; ++i) {
             do_indent();

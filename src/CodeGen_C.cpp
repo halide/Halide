@@ -871,14 +871,13 @@ void CodeGen_C::visit(const Load *op) {
 }
 
 void CodeGen_C::visit(const Store *op) {
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index store.\n";
 
     Type t = op->value.type();
 
     bool type_cast_needed = !(allocations.contains(op->name) &&
                               allocations.get(op->name) == t);
 
-    string id_index = print_expr(op->index[0]);
+    string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
     do_indent();
 

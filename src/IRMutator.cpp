@@ -91,7 +91,6 @@ void IRMutator::visit(const Select *op)  {
 
 void IRMutator::visit(const Load *op) {
     Expr index = mutate(op->index);
-
     if (index.same_as(op->index)) {
         expr = op;
     } else {
@@ -206,22 +205,11 @@ void IRMutator::visit(const For *op) {
 }
 
 void IRMutator::visit(const Store *op) {
-    vector<Expr > index(op->index.size());
-    bool changed = false;
-
-    for (size_t i = 0; i < op->index.size(); i++) {
-        Expr oldidx = op->index[i];
-        Expr newidx = mutate(oldidx);
-        if (!newidx.same_as(oldidx)) changed = true;
-        index[i] = newidx;
-    }
-
     Expr value = mutate(op->value);
-    if (value.same_as(op->value) && !changed) {
+    Expr index = mutate(op->index);
+    if (value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
-    } else {
-        stmt = Store::make(op->name, value, index);
-    }
+    } else stmt = Store::make(op->name, value, index);
 }
 
 void IRMutator::visit(const Provide *op) {

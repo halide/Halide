@@ -1689,12 +1689,6 @@ private:
     }
 
     void visit(const Allocate *op) {
-        // Allocate nodes depend implicitly on pre-allocated buffer_t's
-        string buffer_name = op->name + ".buffer";
-        if (var_info.contains(buffer_name)) {
-            var_info.ref(buffer_name).old_uses++;
-        }
-
         IRMutator::visit(op);
     }
 
