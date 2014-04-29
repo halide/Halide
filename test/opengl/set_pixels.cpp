@@ -8,7 +8,7 @@ int main() {
     Var x, y, c;
 
     f(x, y, c) = cast<uint8_t>(select(c == 0, 10*x + y,
-                                      select(c == 1, 127, 12)));
+                                      c == 1, 127, 12));
 
     Image<uint8_t> out(10, 10, 3);
     f.bound(c, 0, 3);
@@ -26,5 +26,7 @@ int main() {
             }
         }
     }
+
+    printf("Success!\n");
     return 0;
 }

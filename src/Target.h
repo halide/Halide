@@ -44,7 +44,7 @@ struct Target {
                    NoBoundsQuery = 1024, /// Disable the bounds querying functionality.
 		   ARMv7s = 2048,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
 		   AArch64Backend = 4096, /// Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
-                   OpenGL = 8192,         /// Enable the OpenGL runtime
+                   OpenGL = 8192         /// Enable the OpenGL runtime
     };
 
     /** A bitmask that stores the active features. */
