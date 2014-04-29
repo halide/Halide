@@ -36,6 +36,7 @@
 #include "Func.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "InjectOpenGLIntrinsics.h"
 
 namespace Halide {
 namespace Internal {
@@ -1611,8 +1612,15 @@ Stmt lower(Function f, const Target &t) {
     s = skip_stages(s, order);
     debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
+    Scope<int> need_buffer_t;
+    if (t.features & Target::OpenGL) {
+        debug(1) << "Injecting OpenGL texture intrinsics...\n";
+        s = inject_opengl_intrinsics(s, need_buffer_t);
+        debug(2) << "OpenGL intrinsics: \n" << s << "\n\n";
+    }
+
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env, t);
+    s = storage_flattening(s, env, need_buffer_t);
     debug(2) << "Storage flattening: \n" << s << "\n\n";
 
     debug(1) << "Removing code that depends on undef values...\n";
