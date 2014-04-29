@@ -23,42 +23,6 @@ static float max_value(const Type &type) {
     return 1.0f;
 }
 
-
-class InjectTextureLoads : public IRMutator {
-public:
-    using IRMutator::visit;
-
-    void visit(const Cast *op) {
-        const Load *load = op->value.as<Load>();
-        if (load && op->type.is_float() && load->type.is_uint()) {
-            // Cast(float, Load(uint8,)) -> texture2D() * 255.f
-            // Cast(float, Load(uint16,)) -> texture2D() * 65535.f
-            Expr new_load =
-                Mul::make(texture_load(load->name, load->index),
-                          max_value(load->type));
-            new_load.accept(this);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Load *op) {
-        Expr new_load =
-            Cast::make(op->type, Mul::make(texture_load(op->name, op->index),
-                                           max_value(op->type)));
-        new_load.accept(this);
-    }
-
-private:
-    Expr texture_load(const std::string &buffer,
-                      const std::vector<Expr> &index) {
-        internal_assert(index.size() == 3) << "Load from texture requires three indices\n";
-        return Call::make(Float(32), "glsl_texture_load",
-                          vec(Expr(buffer), index[0], index[1], index[2]),
-                          Call::Intrinsic);
-    }
-};
-
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
     debug(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream);
@@ -258,10 +222,10 @@ void CodeGen_GLSL::visit(const Store *op) {
     }
 }
 
-
 void CodeGen_GLSL::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
-        string buffername = op->args[0].as<StringImm>()->value;
+        string buffername = op->args[0].as<Variable>()->name;
+        buffername = buffername.substr(0, buffername.rfind(".buffer"));
         ostringstream rhs;
         rhs << "texture2D(" << buffername << ", vec2("
             << print_expr(op->args[1]) << ", "
@@ -286,8 +250,6 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
 
 void CodeGen_GLSL::compile(Stmt stmt, string name,
                            const vector<Argument> &args) {
-    stmt = simplify(InjectTextureLoads().mutate(stmt));
-
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
     // generator to the runtime, and the information Halide passes to the
@@ -301,9 +263,9 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             Type t = args[i].type.element_of();
 
             user_assert(args[i].read != args[i].write) <<
-                "Buffers may only be read OR written inside a kernel loop";
+                "Buffers may only be read OR written inside a kernel loop\n";
             user_assert(t == UInt(8) || t == UInt(16)) <<
-                "Only uint8 and uint16 buffers are supported by OpenGL backend";
+                "Buffers of type " << t << " aren't supported by OpenGL backend\n";
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << (t == UInt(8) ? "uint8 " : "uint16 ")
                    << print_name(args[i].name) << "\n";

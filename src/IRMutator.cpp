@@ -90,17 +90,9 @@ void IRMutator::visit(const Select *op)  {
 }
 
 void IRMutator::visit(const Load *op) {
-    vector<Expr > index(op->index.size());
-    bool changed = false;
+    Expr index = mutate(op->index);
 
-    for (size_t i = 0; i < op->index.size(); i++) {
-        Expr oldidx = op->index[i];
-        Expr newidx = mutate(oldidx);
-        if (!newidx.same_as(oldidx)) changed = true;
-        index[i] = newidx;
-    }
-
-    if (!changed) {
+    if (index.same_as(op->index)) {
         expr = op;
     } else {
         expr = Load::make(op->type, op->name, index, op->image, op->param);

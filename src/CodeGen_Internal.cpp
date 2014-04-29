@@ -33,9 +33,7 @@ void Closure::visit(const For *op) {
 }
 
 void Closure::visit(const Load *op) {
-    for (size_t i = 0; i < op->index.size(); i++) {
-        op->index[i].accept(this);
-    }
+    op->index.accept(this);
     if (!ignore.contains(op->name)) {
         debug(3) << "Adding " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];

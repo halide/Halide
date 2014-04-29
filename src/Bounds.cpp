@@ -595,9 +595,7 @@ private:
     }
 
     void visit(const Load *op) {
-        internal_assert(op->index.size() == 1) << "Bounds of multi-index load not supported\n";
-
-        op->index[0].accept(this);
+        op->index.accept(this);
         if (min.defined() && min.same_as(max)) {
             // If the index is const we can return the load of that index
             min = max = Load::make(op->type, op->name, min, op->image, op->param);

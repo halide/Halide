@@ -1209,8 +1209,7 @@ void CodeGen_ARM::visit(const Store *op) {
 }
 
 void CodeGen_ARM::visit(const Load *op) {
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index load.\n";
-    const Ramp *ramp = op->index[0].as<Ramp>();
+    const Ramp *ramp = op->index.as<Ramp>();
 
     // We only deal with ramps here
     if (!ramp) {
