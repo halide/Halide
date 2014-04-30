@@ -15,7 +15,8 @@ using std::map;
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e) : env(e) {}
+    FlattenDimensions(const map<string, Function> &e, const Scope<int> &need_buffer_t)
+        : need_buffer_t(need_buffer_t), env(e) {}
     Scope<int> scope;
     Scope<int> need_buffer_t;
 private:
@@ -269,142 +270,9 @@ private:
     }
 };
 
-class CreateOpenGLLoads : public IRMutator {
-public:
-    CreateOpenGLLoads() {
-        inside_kernel_loop = false;
-    }
-    Scope<int> scope;
-    Scope<int> need_buffer_t;
-    bool inside_kernel_loop;
-private:
-    using IRMutator::visit;
 
-    void visit(const Provide *provide) {
-        if (!inside_kernel_loop) {
-            IRMutator::visit(provide);
-            return;
-        }
-
-        vector<Expr> values(provide->values.size());
-        for (size_t i = 0; i < values.size(); i++) {
-            values[i] = mutate(provide->values[i]);
-
-            // Promote the type to be a multiple of 8 bits
-            Type t = values[i].type();
-            t.bits = t.bytes() * 8;
-            if (t.bits != values[i].type().bits) {
-                values[i] = Cast::make(t, values[i]);
-            }
-
-            // Record that this buffer is accessed from a GPU kernel
-            need_buffer_t.push(provide->name, i);
-        }
-
-        if (values.size() == 1) {
-            stmt = Store::make(provide->name, values[0], provide->args);
-        } else {
-            vector<string> names(provide->values.size());
-            Stmt result;
-
-            // Store the values by name
-            for (size_t i = 0; i < provide->values.size(); i++) {
-                string name = provide->name + "." + int_to_string(i);
-                names[i] = name + ".value";
-                Expr var = Variable::make(values[i].type(), names[i]);
-                Stmt store = Store::make(name, var, provide->args);
-                if (result.defined()) {
-                    result = Block::make(result, store);
-                } else {
-                    result = store;
-                }
-            }
-
-            // Add the let statements that define the values
-            for (size_t i = provide->values.size(); i > 0; i--) {
-                result = LetStmt::make(names[i-1], values[i-1], result);
-            }
-
-            stmt = result;
-        }
-    }
-
-    void visit(const Call *call) {
-        if (!inside_kernel_loop) {
-            IRMutator::visit(call);
-            return;
-        }
-
-        string name = call->name;
-        if (call->call_type == Call::Halide && call->func.outputs() > 1) {
-            name = name + '.' + int_to_string(call->value_index);
-        }
-
-        vector<Expr> idx(call->args.size());
-        for (size_t i = 0; i < idx.size(); i++) {
-            string d = int_to_string(i);
-            string min_name = name + ".min." + d;
-            string min_name_constrained = min_name + ".constrained";
-            if (scope.contains(min_name_constrained)) {
-                min_name = min_name_constrained;
-            }
-            string extent_name = name + ".extent." + d;
-            string extent_name_constrained = extent_name + ".constrained";
-            if (scope.contains(extent_name_constrained)) {
-                extent_name = extent_name_constrained;
-            }
-
-            Expr min = Variable::make(Int(32), min_name);
-            Expr extent = Variable::make(Int(32), extent_name);
-            idx[i] = (call->args[i] - min);
-
-            // Normalize the two spatial coordinates x,y
-            if (i < 2) {
-                idx[i] = (Cast::make(Float(32), idx[i]) + 0.5f) / extent;
-            }
-        }
-
-        // Record that this buffer is accessed from a GPU kernel
-        need_buffer_t.push(call->name, 0);
-
-        expr = Load::make(call->type, name, idx, call->image, call->param);
-    }
-
-    void visit(const LetStmt *let) {
-        // Discover constrained versions of things.
-        bool constrained_version_exists = ends_with(let->name, ".constrained");
-        if (constrained_version_exists) {
-            scope.push(let->name, 0);
-        }
-
-        IRMutator::visit(let);
-
-        if (constrained_version_exists) {
-            scope.pop(let->name);
-        }
-    }
-
-    void visit(const For *loop) {
-        bool old_kernel_loop = inside_kernel_loop;
-        if (loop->for_type == For::Parallel &&
-            (ends_with(loop->name, ".blockidx") || ends_with(loop->name, ".blockidy"))) {
-            inside_kernel_loop = true;
-        }
-        IRMutator::visit(loop);
-        inside_kernel_loop = old_kernel_loop;
-    }
-};
-
-
-Stmt storage_flattening(Stmt s, const map<string, Function> &env, const Target &target) {
-    if (target.features & Target::OpenGL) {
-        CreateOpenGLLoads opengl_loads;
-        s = opengl_loads.mutate(s);
-        FlattenDimensions flatten(env);
-        flatten.need_buffer_t = opengl_loads.need_buffer_t;
-        return flatten.mutate(s);
-    }
-    return FlattenDimensions(env).mutate(s);
+Stmt storage_flattening(Stmt s, const map<string, Function> &env, const Scope<int> &need_buffer_t) {
+    return FlattenDimensions(env, need_buffer_t).mutate(s);
 }
 
 }

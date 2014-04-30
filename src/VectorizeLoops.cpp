@@ -113,34 +113,7 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const Load *op) {
-            if (op->index.size() > 1) {
-                vector<Expr> index(op->index.size());
-                bool changed = false;
-                int max_width = 0;
-                for (size_t i = 0; i < op->index.size(); i++) {
-                    Expr oldidx = op->index[i];
-                    Expr newidx = mutate(oldidx);
-
-                    if (!newidx.same_as(oldidx)) changed = true;
-                    index[i] = newidx;
-                    max_width = std::max(newidx.type().width, max_width);
-                }
-
-                if (!changed) {
-                    expr = op;
-                } else {
-                    // TODO(dheck): Do this here or later during codegen?
-                    // // Widen the indices to have the same width as the max width found
-                    // for (size_t i = 0; i < new_index.size(); i++) {
-                    //     new_index[i] = widen(new_index[i], max_width);
-                    // }
-                    expr = Load::make(op->type.vector_of(max_width), op->name, index,
-                                      op->image, op->param);
-                }
-                return;
-            }
-
-            Expr index = mutate(op->index[0]);
+            Expr index = mutate(op->index);
 
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
@@ -158,7 +131,7 @@ class VectorizeLoops : public IRMutator {
                 }
             }
 
-            if (index.same_as(op->index[0])) {
+            if (index.same_as(op->index)) {
                 expr = op;
             } else {
                 int w = index.type().width;
@@ -269,27 +242,7 @@ class VectorizeLoops : public IRMutator {
 
         void visit(const Store *op) {
             Expr value = mutate(op->value);
-            if (op->index.size() > 1) {
-                vector<Expr> index(op->index.size());
-                bool changed = false;
-                int max_width = 0;
-                for (size_t i = 0; i < op->index.size(); i++) {
-                    Expr oldidx = op->index[i];
-                    Expr newidx = mutate(oldidx);
-                    if (!newidx.same_as(oldidx)) changed = true;
-                    index[i] = newidx;
-                    max_width = std::max(newidx.type().width, max_width);
-                }
-                if (value.same_as(op->value) && !changed) {
-                    stmt = op;
-                } else {
-                    int width = std::max(value.type().width, max_width);
-                    stmt = Store::make(op->name, widen(value, width), index);
-                }
-                return;
-            }
-
-            Expr index = mutate(op->index[0]);
+            Expr index = mutate(op->index);
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
                 int width = replacement.type().width;
@@ -306,7 +259,7 @@ class VectorizeLoops : public IRMutator {
                 }
             }
 
-            if (value.same_as(op->value) && index.same_as(op->index[0])) {
+            if (value.same_as(op->value) && index.same_as(op->index)) {
                 stmt = op;
             } else {
                 int width = std::max(value.type().width, index.type().width);

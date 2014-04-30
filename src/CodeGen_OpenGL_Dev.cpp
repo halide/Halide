@@ -12,53 +12,6 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-static float max_value(const Type &type) {
-    if (type == UInt(8)) {
-        return 255.0f;
-    } else if (type == UInt(16)) {
-        return 65535.0f;
-    } else {
-        internal_error << "Cannot determine max_value of type '" << type << "'\n";
-    }
-    return 1.0f;
-}
-
-
-class InjectTextureLoads : public IRMutator {
-public:
-    using IRMutator::visit;
-
-    void visit(const Cast *op) {
-        const Load *load = op->value.as<Load>();
-        if (load && op->type.is_float() && load->type.is_uint()) {
-            // Cast(float, Load(uint8,)) -> texture2D() * 255.f
-            // Cast(float, Load(uint16,)) -> texture2D() * 65535.f
-            Expr new_load =
-                Mul::make(texture_load(load->name, load->index),
-                          max_value(load->type));
-            new_load.accept(this);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
-
-    void visit(const Load *op) {
-        Expr new_load =
-            Cast::make(op->type, Mul::make(texture_load(op->name, op->index),
-                                           max_value(op->type)));
-        new_load.accept(this);
-    }
-
-private:
-    Expr texture_load(const std::string &buffer,
-                      const std::vector<Expr> &index) {
-        internal_assert(index.size() == 3) << "Load from texture requires three indices\n";
-        return Call::make(Float(32), "glsl_texture_load",
-                          vec(Expr(buffer), index[0], index[1], index[2]),
-                          Call::Intrinsic);
-    }
-};
-
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
     debug(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream);
@@ -226,49 +179,30 @@ void CodeGen_GLSL::visit(const Load *op) {
     internal_error << "Load nodes should have been removed by now\n";
 }
 
-void CodeGen_GLSL::emit_texture_store(Expr channel, Expr val) {
-    std::string sval = print_expr(val);
-    do_indent();
-    stream << "gl_FragColor" << get_vector_suffix(channel)
-           << " = " << sval << ";\n";
-}
-
 void CodeGen_GLSL::visit(const Store *op) {
-    internal_assert(op->index.size() == 3) << "Store to texture requires multi-index\n";
-    std::vector<Expr> matches;
-
-    float maxval = max_value(op->value.type());
-    Expr x = Variable::make(Float(32), "*");
-    std::vector<Expr> match;
-    // TODO(dheck): comment this
-    if (expr_match(Cast::make(op->value.type(),
-                              Mul::make(x, maxval)),
-                   op->value, match) ||
-        expr_match(Cast::make(op->value.type(),
-                              Mul::make(maxval, x)),
-                   op->value, match)) {
-        emit_texture_store(op->index[2], match[0]);
-    } else if (op->value.type().is_uint()){
-        // Store(..., uint8) -> gl_FragColor = ((float) val) / 255.f
-        emit_texture_store(op->index[2],
-                           Div::make(Cast::make(Float(32), op->value),
-                                     maxval));
-    } else {
-        internal_error << "Invalid Store node encountered.\n";
-    }
+    internal_error << "Store nodes should have been removed by now\n";
 }
 
+void CodeGen_GLSL::visit(const Evaluate *op) {
+    op->value.accept(this);
+}
 
 void CodeGen_GLSL::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
-        string buffername = op->args[0].as<StringImm>()->value;
+        string buffername = op->args[0].as<Variable>()->name;
+        buffername = buffername.substr(0, buffername.rfind(".buffer"));
         ostringstream rhs;
-        rhs << "texture2D(" << buffername << ", vec2("
+        rhs << "texture2D(" << print_name(buffername) << ", vec2("
             << print_expr(op->args[1]) << ", "
             << print_expr(op->args[2]) << "))"
             << get_vector_suffix(op->args[3]);
         print_assignment(op->type, rhs.str());
         return;
+    } else if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_store") {
+        std::string sval = print_expr(op->args[4]);
+        do_indent();
+        stream << "gl_FragColor" << get_vector_suffix(op->args[3])
+               << " = " << sval << ";\n";
     } else {
         CodeGen_C::visit(op);
     }
@@ -286,8 +220,6 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
 
 void CodeGen_GLSL::compile(Stmt stmt, string name,
                            const vector<Argument> &args) {
-    stmt = simplify(InjectTextureLoads().mutate(stmt));
-
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
     // generator to the runtime, and the information Halide passes to the
@@ -295,15 +227,15 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     // data types of arguments and whether textures are used for input or
     // output.
     ostringstream header;
-    header << "/// KERNEL " << print_name(name) << "\n";
+    header << "/// KERNEL " << name << "\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             Type t = args[i].type.element_of();
 
             user_assert(args[i].read != args[i].write) <<
-                "Buffers may only be read OR written inside a kernel loop";
+                "Buffers may only be read OR written inside a kernel loop\n";
             user_assert(t == UInt(8) || t == UInt(16)) <<
-                "Only uint8 and uint16 buffers are supported by OpenGL backend";
+                "Buffer " << args[i].name << " has invalid type " << t << ".\n";
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << (t == UInt(8) ? "uint8 " : "uint16 ")
                    << print_name(args[i].name) << "\n";

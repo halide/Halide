@@ -33,11 +33,9 @@ void Closure::visit(const For *op) {
 }
 
 void Closure::visit(const Load *op) {
-    for (size_t i = 0; i < op->index.size(); i++) {
-        op->index[i].accept(this);
-    }
+    op->index.accept(this);
     if (!ignore.contains(op->name)) {
-        debug(3) << "Adding " << op->name << " to closure\n";
+        debug(3) << "Adding buffer " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
         ref.type = op->type; // TODO: Validate type is the same as existing refs?
         ref.read = true;
@@ -47,12 +45,10 @@ void Closure::visit(const Load *op) {
 }
 
 void Closure::visit(const Store *op) {
-    for (size_t i = 0; i < op->index.size(); i++) {
-        op->index[i].accept(this);
-    }
+    op->index.accept(this);
     op->value.accept(this);
     if (!ignore.contains(op->name)) {
-        debug(3) << "Adding " << op->name << " to closure\n";
+        debug(3) << "Adding buffer " << op->name << " to closure\n";
         BufferRef & ref = buffers[op->name];
         ref.type = op->value.type(); // TODO: Validate type is the same as existing refs?
         ref.write = true;

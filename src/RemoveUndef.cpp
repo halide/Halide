@@ -115,16 +115,9 @@ class RemoveUndef : public IRMutator {
     }
 
     void visit(const Load *op) {
-        bool changed = false;
-        std::vector<Expr> index(op->index.size());
-        for (size_t i = 0; i < op->index.size(); i++) {
-            Expr newidx = mutate(op->index[i]);
-            if (!expr.defined()) return;
-            if (!newidx.same_as(op->index[i])) changed = true;
-            index[i] = newidx;
-        }
-
-        if (!changed) {
+        Expr index = mutate(op->index);
+        if (!expr.defined()) return;
+        if (index.same_as(op->index)) {
             expr = op;
         } else {
             expr = Load::make(op->type, op->name, index, op->image, op->param);
@@ -296,23 +289,18 @@ class RemoveUndef : public IRMutator {
             return;
         }
 
-        std::vector<Expr> index(op->index.size());
-        bool changed = false;
-        for (size_t i = 0; i < op->index.size(); i++) {
-            Expr newidx = mutate(op->index[i]);
-            if (!expr.defined()) {
-                stmt = Stmt();
-                return;
-            }
-            if (!newidx.same_as(op->index[i])) changed = true;
-            index[i] = newidx;
+        Expr index = mutate(op->index);
+        if (!expr.defined()) {
+            stmt = Stmt();
+            return;
         }
 
         if (predicate.defined()) {
             // This becomes a conditional store
             stmt = IfThenElse::make(predicate, Store::make(op->name, value, index));
             predicate = Expr();
-        } else if (value.same_as(op->value) && !changed) {
+        } else if (value.same_as(op->value) &&
+                   index.same_as(op->index)) {
             stmt = op;
         } else {
             stmt = Store::make(op->name, value, index);
