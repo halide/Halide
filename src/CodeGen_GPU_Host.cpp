@@ -474,7 +474,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             } else {
                 debug(1) << "Looking for OpenGL support code...\n";
                 string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so", &error);
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
                 user_assert(error.empty()) << "Could not find libGL.so\n";
                 llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
                 user_assert(error.empty()) << "Could not find libX11.so\n";
