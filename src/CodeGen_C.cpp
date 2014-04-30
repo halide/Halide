@@ -746,13 +746,13 @@ void CodeGen_C::visit(const Call *op) {
             rhs << "NULL";
         } else if (op->name == Call::address_of) {
             const Load *l = op->args[0].as<Load>();
-            internal_assert(op->args.size() == 1 && l && l->index.size() == 1);
+            internal_assert(op->args.size() == 1 && l);
             rhs << "(("
                 << print_type(l->type)
                 << " *)"
                 << print_name(l->name)
                 << " + "
-                << print_expr(l->index[0])
+                << print_expr(l->index)
                 << ")";
         } else if (op->name == Call::return_second) {
             internal_assert(op->args.size() == 2);
@@ -863,23 +863,21 @@ void CodeGen_C::visit(const Load *op) {
     } else {
         rhs << print_name(op->name);
     }
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index load.\n";
     rhs << "["
-        << print_expr(op->index[0])
+        << print_expr(op->index)
         << "]";
 
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_C::visit(const Store *op) {
-    internal_assert(op->index.size() == 1) << "Unexpected multi-index store.\n";
 
     Type t = op->value.type();
 
     bool type_cast_needed = !(allocations.contains(op->name) &&
                               allocations.get(op->name) == t);
 
-    string id_index = print_expr(op->index[0]);
+    string id_index = print_expr(op->index);
     string id_value = print_expr(op->value);
     do_indent();
 
