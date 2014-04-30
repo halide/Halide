@@ -78,7 +78,7 @@ public:
     /** Get the pointer to the current value of the scalar
      * parameter. For a given parameter, this address will never
      * change. Only relevant when jitting. */
-    EXPORT const void *get_scalar_address() const;
+    EXPORT void *get_scalar_address() const;
 
     /** Tests if this handle is the same as another handle */
     EXPORT bool same_as(const Parameter &other) const;
