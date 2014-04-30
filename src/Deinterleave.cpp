@@ -38,14 +38,12 @@ private:
     }
 
     void visit(const Load *op) {
-        internal_assert(op->index.size() == 1) << "Unexpected multi-index load\n";
-
         if (op->type.is_scalar()) {
             expr = op;
         } else {
             Type t = op->type;
             t.width = new_width;
-            expr = Load::make(t, op->name, mutate(op->index[0]), op->image, op->param);
+            expr = Load::make(t, op->name, mutate(op->index), op->image, op->param);
         }
     }
 

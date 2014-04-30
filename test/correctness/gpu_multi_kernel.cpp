@@ -24,8 +24,9 @@ int main(int argc, char *argv[]) {
 
     Image<int32_t> result = kernel3.realize(256, target);
 
-    for (int i = 0; i < 256; i ++)
-      assert(result(i) == static_cast<int32_t>(floor(((float)i + 0.5f) / 3.0f) + sqrt(4 * i * i) + i));
+    for (int i = 0; i < 256; i++) {
+        assert(result(i) == static_cast<int32_t>(floor(((float)i + 0.5f) / 3.0f) + sqrtf(4.0f * i * i) + i));
+    }
 
     std::cout << "Success!" << std::endl;
 }
