@@ -12,17 +12,6 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-static float max_value(const Type &type) {
-    if (type == UInt(8)) {
-        return 255.0f;
-    } else if (type == UInt(16)) {
-        return 65535.0f;
-    } else {
-        internal_error << "Cannot determine max_value of type '" << type << "'\n";
-    }
-    return 1.0f;
-}
-
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
     debug(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream);
@@ -203,7 +192,7 @@ void CodeGen_GLSL::visit(const Call *op) {
         string buffername = op->args[0].as<Variable>()->name;
         buffername = buffername.substr(0, buffername.rfind(".buffer"));
         ostringstream rhs;
-        rhs << "texture2D(" << buffername << ", vec2("
+        rhs << "texture2D(" << print_name(buffername) << ", vec2("
             << print_expr(op->args[1]) << ", "
             << print_expr(op->args[2]) << "))"
             << get_vector_suffix(op->args[3]);
@@ -238,7 +227,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     // data types of arguments and whether textures are used for input or
     // output.
     ostringstream header;
-    header << "/// KERNEL " << print_name(name) << "\n";
+    header << "/// KERNEL " << name << "\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             Type t = args[i].type.element_of();

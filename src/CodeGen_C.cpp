@@ -224,9 +224,18 @@ string CodeGen_C::print_reinterpret(Type type, Expr e) {
 string CodeGen_C::print_name(const string &name) {
     ostringstream oss;
     for (size_t i = 0; i < name.size(); i++) {
-        if (name[i] == '.') oss << '_';
-        else if (name[i] == '$') oss << "__";
+        if (name[i] == '.') {
+            oss << '_';
+        } else if (name[i] == '$') {
+            oss << "__";
+        } else if (name[i] != '_' && !isalnum(name[i])) {
+            oss << "___";
+        }
         else oss << name[i];
+    }
+    if (isalpha(name[name.size()-1])) {
+        // Suffix an underscore to avoid reserved words (e.g. a variable named "while")
+        oss << '_';
     }
     return oss.str();
 }
@@ -503,13 +512,7 @@ void CodeGen_C::close_scope(const std::string &comment) {
 }
 
 void CodeGen_C::visit(const Variable *op) {
-    ostringstream oss;
-    for (size_t i = 0; i < op->name.size(); i++) {
-        if (op->name[i] == '.') oss << '_';
-        else if (op->name[i] == '$') oss << "__";
-        else oss << op->name[i];
-    }
-    id = oss.str();
+    id = print_name(op->name);
 }
 
 void CodeGen_C::visit(const Cast *op) {
@@ -675,7 +678,7 @@ void CodeGen_C::visit(const Call *op) {
             }
 
             rhs << "halide_debug_to_file(";
-            rhs << (have_user_context ? "__user_context" : "NULL");
+            rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ", \"" + filename + "\", " + func;
             for (size_t i = 0; i < args.size(); i++) {
                 rhs << ", " << args[i];
@@ -737,7 +740,7 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::profiling_timer) {
             internal_assert(op->args.size() == 0);
             rhs << "halide_profiling_timer(";
-            rhs << (have_user_context ? "__user_context" : "NULL");
+            rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ")";
         } else if (op->name == Call::lerp) {
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
@@ -834,10 +837,10 @@ void CodeGen_C::visit(const Call *op) {
         for (size_t i = 0; i < op->args.size(); i++) {
             args[i] = print_expr(op->args[i]);
         }
-        rhs << print_name(op->name) << "(";
+        rhs << op->name << "(";
 
         if (CodeGen::function_takes_user_context(op->name)) {
-            rhs << (have_user_context ? "__user_context, " : "NULL, ");
+            rhs << (have_user_context ? "__user_context_, " : "NULL, ");
         }
 
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -942,7 +945,7 @@ void CodeGen_C::visit(const AssertStmt *op) {
     stream << "if (!" << id_cond << ") {\n";
     do_indent();
     stream << " halide_printf("
-           << (have_user_context ? "__user_context, " : "NULL, ")
+           << (have_user_context ? "__user_context_, " : "NULL, ")
            << Expr(op->message + "\n");
     for (size_t i = 0; i < op->args.size(); i++) {
         stream << ", " << id_args[i];
@@ -1046,7 +1049,7 @@ void CodeGen_C::visit(const Allocate *op) {
         open_scope();
         do_indent();
         stream << "halide_printf("
-               << (have_user_context ? "__user_context" : "NULL")
+               << (have_user_context ? "__user_context_" : "NULL")
                << ", \"32-bit signed overflow computing size of allocation "
                << op->name << "\\n\");\n";
         close_scope("overflow test " + op->name);
@@ -1066,7 +1069,7 @@ void CodeGen_C::visit(const Allocate *op) {
                << " = ("
                << print_type(op->type)
                << " *)halide_malloc("
-               << (have_user_context ? "__user_context" : "NULL")
+               << (have_user_context ? "__user_context_" : "NULL")
                << ", sizeof("
                << print_type(op->type)
                << ")*" << size_id << ");\n";
@@ -1085,7 +1088,7 @@ void CodeGen_C::visit(const Free *op) {
     if (heap_allocations.contains(op->name)) {
         do_indent();
         stream << "halide_free("
-               << (have_user_context ? "__user_context, " : "NULL, ")
+               << (have_user_context ? "__user_context_, " : "NULL, ")
                << print_name(op->name)
                << ");\n";
         heap_allocations.pop(op->name);
@@ -1146,54 +1149,55 @@ void CodeGen_C::test() {
     CodeGen_C cg(source);
     cg.compile(s, "test1", args, vector<Buffer>());
 
+    string src = source.str();
     string correct_source = preamble +
         "\n\n"
-        "extern \"C\" int test1(buffer_t *_buf, const float alpha, const int32_t beta, const void * __user_context) {\n"
-        "int32_t *buf = (int32_t *)(_buf->host);\n"
-        "const bool buf_host_and_dev_are_null = (_buf->host == NULL) && (_buf->dev == 0);\n"
-        "(void)buf_host_and_dev_are_null;\n"
-        "const int32_t buf_min_0 = _buf->min[0];\n"
-        "(void)buf_min_0;\n"
-        "const int32_t buf_min_1 = _buf->min[1];\n"
-        "(void)buf_min_1;\n"
-        "const int32_t buf_min_2 = _buf->min[2];\n"
-        "(void)buf_min_2;\n"
-        "const int32_t buf_min_3 = _buf->min[3];\n"
-        "(void)buf_min_3;\n"
-        "const int32_t buf_extent_0 = _buf->extent[0];\n"
-        "(void)buf_extent_0;\n"
-        "const int32_t buf_extent_1 = _buf->extent[1];\n"
-        "(void)buf_extent_1;\n"
-        "const int32_t buf_extent_2 = _buf->extent[2];\n"
-        "(void)buf_extent_2;\n"
-        "const int32_t buf_extent_3 = _buf->extent[3];\n"
-        "(void)buf_extent_3;\n"
-        "const int32_t buf_stride_0 = _buf->stride[0];\n"
-        "(void)buf_stride_0;\n"
-        "const int32_t buf_stride_1 = _buf->stride[1];\n"
-        "(void)buf_stride_1;\n"
-        "const int32_t buf_stride_2 = _buf->stride[2];\n"
-        "(void)buf_stride_2;\n"
-        "const int32_t buf_stride_3 = _buf->stride[3];\n"
-        "(void)buf_stride_3;\n"
-        "const int32_t buf_elem_size = _buf->elem_size;\n"
+        "extern \"C\" int test1(buffer_t *_buf_, const float alpha_, const int32_t beta_, const void * __user_context_) {\n"
+        "int32_t *buf_ = (int32_t *)(_buf_->host);\n"
+        "const bool buf__host_and_dev_are_null = (_buf_->host == NULL) && (_buf_->dev == 0);\n"
+        "(void)buf__host_and_dev_are_null;\n"
+        "const int32_t buf__min_0 = _buf_->min[0];\n"
+        "(void)buf__min_0;\n"
+        "const int32_t buf__min_1 = _buf_->min[1];\n"
+        "(void)buf__min_1;\n"
+        "const int32_t buf__min_2 = _buf_->min[2];\n"
+        "(void)buf__min_2;\n"
+        "const int32_t buf__min_3 = _buf_->min[3];\n"
+        "(void)buf__min_3;\n"
+        "const int32_t buf__extent_0 = _buf_->extent[0];\n"
+        "(void)buf__extent_0;\n"
+        "const int32_t buf__extent_1 = _buf_->extent[1];\n"
+        "(void)buf__extent_1;\n"
+        "const int32_t buf__extent_2 = _buf_->extent[2];\n"
+        "(void)buf__extent_2;\n"
+        "const int32_t buf__extent_3 = _buf_->extent[3];\n"
+        "(void)buf__extent_3;\n"
+        "const int32_t buf__stride_0 = _buf_->stride[0];\n"
+        "(void)buf__stride_0;\n"
+        "const int32_t buf__stride_1 = _buf_->stride[1];\n"
+        "(void)buf__stride_1;\n"
+        "const int32_t buf__stride_2 = _buf_->stride[2];\n"
+        "(void)buf__stride_2;\n"
+        "const int32_t buf__stride_3 = _buf_->stride[3];\n"
+        "(void)buf__stride_3;\n"
+        "const int32_t buf__elem_size = _buf_->elem_size;\n"
         "{\n"
         " int64_t V0 = 43;\n"
-        " int64_t V1 = V0 * beta;\n"
+        " int64_t V1 = V0 * beta_;\n"
         " if ((V1 > ((int64_t(1) << 31) - 1)) || ((V1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
-        "  halide_printf(__user_context, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "  halide_printf(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
         " } // overflow test tmp.heap\n"
-        " int32_t *tmp_heap = (int32_t *)halide_malloc(__user_context, sizeof(int32_t)*V1);\n"
+        " int32_t *tmp_heap_ = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*V1);\n"
         " {\n"
-        "  int32_t tmp_stack[127];\n"
-        "  int32_t V2 = beta + 1;\n"
+        "  int32_t tmp_stack_[127];\n"
+        "  int32_t V2 = beta_ + 1;\n"
         "  int32_t V3;\n"
         "  bool V4 = V2 < 1;\n"
         "  if (V4)\n"
         "  {\n"
         "   int64_t V5 = (int64_t)(3);\n"
-        "   int32_t V6 = halide_printf(__user_context, \"%lld \\n\", V5);\n"
+        "   int32_t V6 = halide_printf(__user_context_, \"%lld \\n\", V5);\n"
         "   int32_t V7 = (V6, 3);\n"
         "   V3 = V7;\n"
         "  } // if V4\n"
@@ -1202,17 +1206,28 @@ void CodeGen_C::test() {
         "   V3 = 3;\n"
         "  } // if V4 else\n"
         "  int32_t V8 = V3;\n"
-        "  bool V9 = alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  bool V9 = alpha_ > float_from_bits(1082130432 /* 4 */);\n"
         "  int32_t V10 = (int32_t)(V9 ? V8 : 2);\n"
-        "  buf[V2] = V10;\n"
-        " } // alloc tmp_stack\n"
-        " halide_free(__user_context, tmp_heap);\n"
-        "} // alloc tmp_heap\n"
+        "  buf_[V2] = V10;\n"
+        " } // alloc tmp_stack_\n"
+        " halide_free(__user_context_, tmp_heap_);\n"
+        "} // alloc tmp_heap_\n"
         "return 0;\n"
         "}\n";
-    internal_assert(source.str() == correct_source)
-        << "Correct source code:\n" << correct_source
-        << "Actual source code:\n" << source.str();
+    if (src != correct_source) {
+        int diff = 0;
+        while (src[diff] == correct_source[diff]) diff++;
+        int diff_end = diff + 1;
+        while (diff > 0 && src[diff] != '\n') diff--;
+        while (diff_end < (int)src.size() && src[diff_end] != '\n') diff_end++;
+
+        internal_error
+            << "Correct source code:\n" << correct_source
+            << "Actual source code:\n" << src
+            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n";
+
+    }
+
 
     std::cout << "CodeGen_C test passed\n";
 }
