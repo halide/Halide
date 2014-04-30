@@ -368,9 +368,10 @@ warning_%: $(BIN_DIR)/warning_%
 	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1 | egrep --q "^Warning"
 	@-echo
 
+opengl_%: HL_JIT_TARGET ?= host-opengl
 opengl_%: $(BIN_DIR)/opengl_%
 	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) ../$< 2>&1
+	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%
