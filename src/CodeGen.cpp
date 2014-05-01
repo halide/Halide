@@ -419,7 +419,6 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     options.StackAlignmentOverride = 0;
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
-    options.EnableSegmentedStacks = false;
     options.UseInitArray = false;
 
     TargetMachine *target_machine =

@@ -664,7 +664,7 @@ private:
         if (compute_level.match(for_loop->name)) {
             debug(3) << "Found compute level\n";
             if (function_is_used_in_stmt(func, body)) {
-	      body = build_pipeline(body);
+                body = build_pipeline(body);
             }
             found_compute_level = true;
         }
