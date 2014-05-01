@@ -51,7 +51,9 @@ private:
         for (size_t i = 0; i < provide->args.size(); i++) {
             args[i + 1] = provide->args[i];
         }
-        args[4] = Div::make(Cast::make(Float(32), value),
+        // TODO: Find a better way to prevent roundoff error.
+        const float epsilon = 1/65535.f;
+        args[4] = Div::make(Cast::make(Float(32), value) + epsilon,
                             max_value(value.type()));
         args[5] = Variable::make(Handle(), provide->name + ".buffer");
         stmt = Evaluate::make(
