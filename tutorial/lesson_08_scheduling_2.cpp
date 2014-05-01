@@ -3,11 +3,11 @@
 // This lesson demonstrates how schedule multi-stage pipelines.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
+// g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
 // LD_LIBRARY_PATH=../bin ./lesson_08
 
 // On os x:
-// g++ lesson_08*.cpp -I ../include -L ../bin -lHalide -o lesson_08
+// g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -o lesson_08
 // DYLD_LIBRARY_PATH=../bin ./lesson_08
 
 #include <Halide.h>

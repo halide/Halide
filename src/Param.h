@@ -6,11 +6,12 @@
  * Classes for declaring scalar and image parameters to halide pipelines
  */
 
-#include "IR.h"
-#include "Var.h"
-#include "IRPrinter.h"
 #include <sstream>
 #include <vector>
+
+#include "IR.h"
+#include "Var.h"
+#include "Util.h"
 
 namespace Halide {
 
@@ -26,7 +27,7 @@ class Param {
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
-    Param() : param(type_of<T>(), false) {}
+    Param() : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {}
 
     /** Construct a scalar parameter of type T with the given name */
     Param(const std::string &n) : param(type_of<T>(), false, n) {}
@@ -37,13 +38,19 @@ public:
     }
 
     /** Get the current value of this parameter. Only meaningful when jitting. */
-    T get() const {
+    NO_INLINE T get() const {
         return param.get_scalar<T>();
     }
 
     /** Set the current value of this parameter. Only meaningful when jitting */
-    void set(T val) {
+    NO_INLINE void set(T val) {
         param.set_scalar<T>(val);
+    }
+
+    /** Get a pointer to the location that stores the current value of
+     * this parameter. Only meaningful for jitting. */
+    NO_INLINE T *get_address() const {
+        return (T *)(param.get_scalar_address());
     }
 
     /** Get the halide type of T */
@@ -124,72 +131,35 @@ protected:
     void add_implicit_args_if_placeholder(std::vector<Expr> &args,
                                           Expr last_arg,
                                           int total_args,
-                                          bool *placeholder_seen) const {
-        const Internal::Variable *var = last_arg.as<Internal::Variable>();
-        bool is_placeholder = var && Var::is_placeholder(var->name);
-        if (is_placeholder) {
-            assert(!(*placeholder_seen) && "Only one implicit placeholder ('_') allowed in argument list for ImageParam.");
-            *placeholder_seen = true;
-
-            // The + 1 in the conditional is because one provided argument is an placeholder
-            for (int i = 0; i < (dims - total_args + 1); i++) {
-                args.push_back(Var::implicit(i));
-            }
-        } else {
-            args.push_back(last_arg);
-        }
-
-
-    }
-
+                                          bool *placeholder_seen) const;
 public:
 
     /** Construct a NULL image parameter handle. */
-    OutputImageParam() :
-        dims(0) {}
+    OutputImageParam() : dims(0) {}
 
     /** Construct an OutputImageParam that wraps an Internal Parameter object. */
-    OutputImageParam(const Internal::Parameter &p, int d) :
-        param(p), dims(d) {}
+    EXPORT OutputImageParam(const Internal::Parameter &p, int d);
 
     /** Get the name of this Param */
-    const std::string &name() const {
-        return param.name();
-    }
+    EXPORT const std::string &name() const;
 
     /** Get the type of the image data this Param refers to */
-    Type type() const {
-        return param.type();
-    }
+    EXPORT Type type() const;
 
     /** Is this parameter handle non-NULL */
-    bool defined() {
-        return param.defined();
-    }
+    EXPORT bool defined();
 
     /** Get an expression representing the minimum coordinates of this image
      * parameter in the given dimension. */
-    Expr min(int x) const {
-        std::ostringstream s;
-        s << name() << ".min." << x;
-        return Internal::Variable::make(Int(32), s.str(), param);
-    }
+    EXPORT Expr min(int x) const;
 
     /** Get an expression representing the extent of this image
      * parameter in the given dimension */
-    Expr extent(int x) const {
-        std::ostringstream s;
-        s << name() << ".extent." << x;
-        return Internal::Variable::make(Int(32), s.str(), param);
-    }
+    EXPORT Expr extent(int x) const;
 
     /** Get an expression representing the stride of this image in the
      * given dimension */
-    Expr stride(int x) const {
-        std::ostringstream s;
-        s << name() << ".stride." << x;
-        return Internal::Variable::make(Int(32), s.str(), param);
-    }
+    EXPORT Expr stride(int x) const;
 
     /** Set the extent in a given dimension to equal the given
      * expression. Images passed in that fail this check will generate
@@ -212,104 +182,64 @@ public:
      im.set_extent(0, (im.extent(0)/32)*32);
      \endcode
      * tells the compiler that the extent is a multiple of 32. */
-    OutputImageParam &set_extent(int dim, Expr extent) {
-        param.set_extent_constraint(dim, extent);
-        return *this;
-    }
+    EXPORT OutputImageParam &set_extent(int dim, Expr extent);
 
     /** Set the min in a given dimension to equal the given
      * expression. Setting the mins to zero may simplify some
      * addressing math. */
-    OutputImageParam &set_min(int dim, Expr min) {
-        param.set_min_constraint(dim, min);
-        return *this;
-    }
+    EXPORT OutputImageParam &set_min(int dim, Expr min);
 
     /** Set the stride in a given dimension to equal the given
      * value. This is particularly helpful to set when
      * vectorizing. Known strides for the vectorized dimension
      * generate better code. */
-    OutputImageParam &set_stride(int dim, Expr stride) {
-        param.set_stride_constraint(dim, stride);
-        return *this;
-    }
+    EXPORT OutputImageParam &set_stride(int dim, Expr stride);
 
     /** Set the min and extent in one call. */
-    OutputImageParam &set_bounds(int dim, Expr min, Expr extent) {
-        return set_min(dim, min).set_extent(dim, extent);
-    }
+    EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
 
     /** Get the dimensionality of this image parameter */
-    int dimensions() const {
-        return dims;
-    }
+    EXPORT int dimensions() const;
 
     /** Get an expression giving the minimum coordinate in dimension 0, which
      * by convention is the coordinate of the left edge of the image */
-    Expr left() const {
-        assert(dims >= 0);
-        return min(0);
-    }
+    EXPORT Expr left() const;
 
     /** Get an expression giving the maximum coordinate in dimension 0, which
      * by convention is the coordinate of the right edge of the image */
-    Expr right() const {
-        assert(dims >= 0);
-        return Internal::Add::make(min(0), Internal::Sub::make(extent(0), 1));
-    }
+    EXPORT Expr right() const;
 
     /** Get an expression giving the minimum coordinate in dimension 1, which
      * by convention is the top of the image */
-    Expr top() const {
-        assert(dims >= 1);
-        return min(1);
-    }
+    EXPORT Expr top() const;
 
     /** Get an expression giving the maximum coordinate in dimension 1, which
      * by convention is the bottom of the image */
-    Expr bottom() const {
-        assert(dims >= 1);
-        return Internal::Add::make(min(1), Internal::Sub::make(extent(1), 1));
-    }
+    EXPORT Expr bottom() const;
 
     /** Get an expression giving the extent in dimension 0, which by
      * convention is the width of the image */
-    Expr width() const {
-        assert(dims >= 0);
-        return extent(0);
-    }
+    EXPORT Expr width() const;
 
     /** Get an expression giving the extent in dimension 1, which by
      * convention is the height of the image */
-    Expr height() const {
-        assert(dims >= 1);
-        return extent(1);
-    }
+    EXPORT Expr height() const;
 
     /** Get an expression giving the extent in dimension 2, which by
      * convention is the channel-count of the image */
-    Expr channels() const {
-        assert(dims >= 2);
-        return extent(2);
-    }
+    EXPORT Expr channels() const;
 
     /** Get at the internal parameter object representing this ImageParam. */
-    Internal::Parameter parameter() const {
-        return param;
-    }
+    EXPORT Internal::Parameter parameter() const;
 
     /** Construct the appropriate argument matching this parameter,
      * for the purpose of generating the right type signature when
      * statically compiling halide pipelines. */
-    operator Argument() const {
-        return Argument(name(), true, type());
-    }
+    EXPORT operator Argument() const;
 
     /** Using a param as the argument to an external stage treats it
      * as an Expr */
-    operator ExternFuncArgument() const {
-        return param;
-    }
+    EXPORT operator ExternFuncArgument() const;
 };
 
 /** An Image parameter to a halide pipeline. E.g., the input image. */
@@ -322,27 +252,17 @@ public:
 
     /** Construct an image parameter of the given type and
      * dimensionality, with an auto-generated unique name. */
-    ImageParam(Type t, int d) :
-        OutputImageParam(Internal::Parameter(t, true), d) {}
+    EXPORT ImageParam(Type t, int d);
 
     /** Construct an image parameter of the given type and
      * dimensionality, with the given name */
-    ImageParam(Type t, int d, const std::string &n) :
-        OutputImageParam(Internal::Parameter(t, true, n), d) {
-        // Discourage future Funcs from having the same name
-        Internal::unique_name(n);
-    }
+    EXPORT ImageParam(Type t, int d, const std::string &n);
 
     /** Bind a buffer or image to this ImageParam. Only relevant for jitting */
-    void set(Buffer b) {
-        if (b.defined()) assert(b.type() == type() && "Setting buffer of incorrect type");
-        param.set_buffer(b);
-    }
+    EXPORT void set(Buffer b);
 
     /** Get the buffer bound to this ImageParam. Only relevant for jitting */
-    Buffer get() const {
-        return param.get_buffer();
-    }
+    EXPORT Buffer get() const;
 
     /** Construct an expression which loads from this image
      * parameter. The location is extended with enough implicit
@@ -350,77 +270,11 @@ public:
      * (see \ref Var::implicit)
      */
     // @{
-    Expr operator()() const {
-        assert(dimensions() == 0);
-        std::vector<Expr> args;
-        return Internal::Call::make(param, args);
-    }
-
-    /** Force the args to a call to an image to be int32. */
-    static void check_arg_types(const std::string &name, std::vector<Expr> *args) {
-        for (size_t i = 0; i < args->size(); i++) {
-            Type t = (*args)[i].type();
-            if (t.is_float() || (t.is_uint() && t.bits >= 32) || (t.is_int() && t.bits > 32)) {
-                std::cerr << "Error: implicit cast from " << t << " to int in argument " << (i+1)
-                          << " in call to " << name << " is not allowed. Use an explicit cast.\n";
-                assert(false);
-            }
-            // We're allowed to implicitly cast from other varieties of int
-            if (t != Int(32)) {
-                (*args)[i] = Internal::Cast::make(Int(32), (*args)[i]);
-            }
-        }
-    }
-
-    Expr operator()(Expr x) const {
-        std::vector<Expr> args;
-        bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 1, &placeholder_seen);
-
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
-        return Internal::Call::make(param, args);
-    }
-
-    Expr operator()(Expr x, Expr y) const {
-        std::vector<Expr> args;
-        bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 2, &placeholder_seen);
-        add_implicit_args_if_placeholder(args, y, 2, &placeholder_seen);
-
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
-        return Internal::Call::make(param, args);
-    }
-
-    Expr operator()(Expr x, Expr y, Expr z) const {
-        std::vector<Expr> args;
-        bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 3, &placeholder_seen);
-        add_implicit_args_if_placeholder(args, y, 3, &placeholder_seen);
-        add_implicit_args_if_placeholder(args, z, 3, &placeholder_seen);
-
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
-        return Internal::Call::make(param, args);
-    }
-
-    Expr operator()(Expr x, Expr y, Expr z, Expr w) const {
-        std::vector<Expr> args;
-        bool placeholder_seen = false;
-        add_implicit_args_if_placeholder(args, x, 4, &placeholder_seen);
-        add_implicit_args_if_placeholder(args, y, 4, &placeholder_seen);
-        add_implicit_args_if_placeholder(args, z, 4, &placeholder_seen);
-        add_implicit_args_if_placeholder(args, w, 4, &placeholder_seen);
-
-        assert(args.size() == (size_t)dims);
-
-        check_arg_types(name(), &args);
-        return Internal::Call::make(param, args);
-    }
+    EXPORT Expr operator()() const;
+    EXPORT Expr operator()(Expr x) const;
+    EXPORT Expr operator()(Expr x, Expr y) const;
+    EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
+    EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
     // @}
 
     /** Treating the image parameter as an Expr is equivalent to call
@@ -439,8 +293,8 @@ public:
     operator Expr() const {
         return (*this)(_);
     }
-};
 
+};
 
 }
 

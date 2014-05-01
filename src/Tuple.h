@@ -27,13 +27,13 @@ public:
 
     /** Get a reference to an element. */
     Expr &operator[](size_t x) {
-        assert((x < exprs.size()) && "Tuple access out of bounds");
+        user_assert(x < exprs.size()) << "Tuple access out of bounds\n";
         return exprs[x];
     }
 
     /** Get a copy of an element. */
     Expr operator[](size_t x) const {
-        assert((x < exprs.size()) && "Tuple access out of bounds");
+        user_assert(x < exprs.size()) << "Tuple access out of bounds\n";
         return exprs[x];
     }
 
@@ -62,7 +62,7 @@ public:
 
     /** Construct a Tuple from a vector of Exprs */
     explicit Tuple(const std::vector<Expr> &e) : exprs(e) {
-        assert((e.size() > 0) && "Tuples must have at least one element\n");
+        user_assert(e.size() > 0) << "Tuples must have at least one element\n";
     }
 
     /** Construct a Tuple from a function reference. */
@@ -88,19 +88,19 @@ public:
 
     /** Get a reference to one of the buffers. */
     Buffer &operator[](size_t x) {
-        assert(x < buffers.size() && "Realization access out of bounds");
+        user_assert(x < buffers.size()) << "Realization access out of bounds\n";
         return buffers[x];
     }
 
     /** Get one of the buffers. */
     Buffer operator[](size_t x) const {
-        assert((x < buffers.size()) && "Realization access out of bounds");
+        user_assert(x < buffers.size()) << "Realization access out of bounds\n";
         return buffers[x];
     }
 
     /** Single-element realizations are implicitly castable to Buffers. */
     operator Buffer() const {
-        assert((buffers.size() == 1) && "Can only cast single-element realizations to buffers or images");
+        user_assert(buffers.size() == 1) << "Can only cast single-element realizations to buffers or images\n";
         return buffers[0];
     }
 
@@ -124,7 +124,7 @@ public:
 
     /** Construct a Realization from a vector of Buffers */
     explicit Realization(const std::vector<Buffer> &e) : buffers(e) {
-        assert(e.size() > 0 && "Realizations must have at least one element\n");
+        user_assert(e.size() > 0) << "Realizations must have at least one element\n";
     }
 
     /** Treat the Realization as a vector of Buffers */

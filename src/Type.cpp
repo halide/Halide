@@ -14,7 +14,9 @@ int Type::imax() const {
         } else if (bits < 32) {
             return (int) ((1 << bits) - 1);
         } else {
-            assert(0 && "max of Type: Type is too large");
+            internal_error
+                << "Can't call Type::imax() on " << (*this)
+                << " because value is too large to represent as a signed 32-bit integer\n";
             return 0;
         }
     } else if (is_int()) {
@@ -23,11 +25,15 @@ int Type::imax() const {
         } else if (bits < 32) {
             return (int) ((1 << (bits-1)) - 1);
         } else {
-            assert(0 && "max of Type: Type is too large");
+            internal_error
+                << "Can't call Type::imax() on " << (*this)
+                << " because value is too large to represent as a signed 32-bit integer\n";
             return 0;
         }
     } else {
-        assert(0 && "max of Type: Not available for floating point types");
+        internal_error
+            << "Can't call Type::imax() on " << (*this)
+            << " because value is too large to represent as a signed 32-bit integer\n";
         return 0;
     }
 }
@@ -63,12 +69,15 @@ int Type::imin() const {
         } else if (bits < 32) {
             return -(1 << (bits-1));
         } else {
-            assert(0 && "min of Type: Type is too large");
+            internal_error
+                << "Can't call Type::imin() on " << (*this)
+                << " because value is too large to represent as a signed 32-bit integer\n";
             return 0;
         }
     } else {
-        // Use a run-time call to a math intrinsic
-        assert(0 && "min of Type: Not available for floating point types");
+        internal_error
+            << "Can't call Type::imin() on " << (*this)
+            << " because value is too large to represent as a signed 32-bit integer\n";
         return 0;
     }
 }

@@ -22,9 +22,9 @@ using namespace llvm;
 
 CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen(host) {
     #if !(WITH_PTX)
-    assert(false && "ptx not enabled for this build of Halide.");
+    user_error << "ptx not enabled for this build of Halide.\n";
     #endif
-    assert(llvm_NVPTX_enabled && "llvm build not configured with nvptx target enabled.");
+    user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args) {
@@ -149,14 +149,14 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
     } else if (ends_with(name, ".blockidw")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
-    assert(false && "simt_intrinsic called on bad variable name");
+    internal_error << "simt_intrinsic called on bad variable name\n";
     return "";
 }
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         debug(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        assert(loop->for_type == For::Parallel && "kernel loop must be parallel");
+        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
 
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
         Expr loop_var = loop->min + simt_idx;
@@ -227,7 +227,10 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         // be dealing with constants here.
         int32_t size = 0;
         bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
-        assert(is_constant && "Only fixed-size allocations are supported on the gpu. Try storing into shared memory instead.");
+        user_assert(is_constant)
+            << "Allocation " << alloc->name << " has a dynamic size. "
+            << "Only fixed-size allocations are supported on the gpu. "
+            << "Try storing into shared memory instead.";
 
         BasicBlock *here = builder->GetInsertBlock();
 
@@ -287,7 +290,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     std::string errStr;
     TheTarget = TargetRegistry::lookupTarget(TheTriple.getTriple(), errStr);
-    assert(TheTarget);
+    internal_assert(TheTarget);
 
     TargetOptions Options;
     Options.LessPreciseFPMADOption = true;
@@ -322,7 +325,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
                                               llvm::Reloc::Default,
                                               llvm::CodeModel::Default,
                                               OLvl));
-    assert(target.get() && "Could not allocate target machine!");
+    internal_assert(target.get()) << "Could not allocate target machine!";
     TargetMachine &Target = *target.get();
 
     // Set up passes
@@ -393,8 +396,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
                                            TargetMachine::CGFT_AssemblyFile,
                                            true);
     if (fail) {
-        debug(0) << "Failed to set up passes to emit PTX source\n";
-        assert(false);
+        internal_error << "Failed to set up passes to emit PTX source\n";
     }
 
     PM.run(*module);

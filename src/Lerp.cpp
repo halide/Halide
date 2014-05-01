@@ -12,8 +12,8 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
 
     Expr result;
 
-    assert(zero_val.type() == one_val.type());
-    assert(weight.type().is_uint() || weight.type().is_float());
+    internal_assert(zero_val.type() == one_val.type());
+    internal_assert(weight.type().is_uint() || weight.type().is_float());
 
     Type result_type = zero_val.type();
 
@@ -104,7 +104,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                     int shift_amount = std::min(computation_type.bits, weight.type().bits);
                     uint64_t scaling_factor = 1;
                     while (bits_left != 0) {
-                        assert(bits_left > 0);
+                        internal_assert(bits_left > 0);
                         scaling_factor = scaling_factor + (scaling_factor << shift_amount);
                         bits_left -= shift_amount;
                         shift_amount *= 2;
@@ -156,7 +156,7 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 // TODO: 64-bit lerp is not supported as current approach
                 // requires double-width multiply.
                 // There is an informative error message in IROperator.h.
-                assert(false);
+                internal_error << "Can't do a 64-bit lerp.\n";
                 break;
             default:
                 break;

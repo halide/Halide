@@ -170,8 +170,8 @@ private:
             op_type + " " +
             sanitize(op_name) + " " +
             parent_name_pair;
-        assert(begin_val.type() == UInt(64));
-        assert(end_val.type() == UInt(64));
+        internal_assert(begin_val.type() == UInt(64));
+        internal_assert(end_val.type() == UInt(64));
         Expr idx = get_index(full_name);
 
         string begin_var_name = "begin_" + full_name;
