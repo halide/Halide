@@ -69,14 +69,13 @@ char *start, *end;
 template<typename FP>
 void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &name, bool must_succeed, FP *result) {
 
-    assert(mod && ee);
+    internal_assert(mod && ee);
 
     debug(2) << "Retrieving " << name << " from module\n";
     llvm::Function *fn = mod->getFunction(name);
     if (!fn) {
         if (must_succeed) {
-            std::cerr << "Could not find function " << name << " in module\n";
-            assert(false);
+            internal_error << "Could not find function " << name << " in module\n";
         } else {
             *result = NULL;
             return;
@@ -86,8 +85,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
     debug(2) << "JIT Compiling " << name << "\n";
     void *f = ee->getPointerToFunction(fn);
     if (!f && must_succeed) {
-        std::cerr << "Compiling " << name << " returned NULL\n";
-        assert(false);
+        internal_error << "Compiling " << name << " returned NULL\n";
     }
 
     debug(2) << "Function " << name << " is at " << f << "\n";
@@ -148,7 +146,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     engine_builder.setMAttrs(vec<string>(cg->mattrs()));
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
-    assert(ee && "Couldn't create execution engine");
+    internal_assert(ee) << "Couldn't create execution engine\n";
 
     #ifdef __arm__
     start = end = NULL;

@@ -23,6 +23,7 @@ extern "C" int halide_trace(void *user_context, const halide_trace_event *ev) {
         assert(width == 33 || width == 34);
         assert(height == 33 || height == 34);
     }
+    return 0;
 }
 
 int main(int argc, char **argv) {

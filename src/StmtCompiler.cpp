@@ -25,7 +25,8 @@ StmtCompiler::StmtCompiler(Target target) {
             contents = new CodeGen_GPU_Host<CodeGen_ARM>(target);
         }
         else {
-            assert(false && "Invalid target architecture for GPU backend.");
+            user_error << "Invalid target architecture for GPU backend: "
+                       << target.to_string() << "\n";
         }
     } else if (target.arch == Target::X86) {
         contents = new CodeGen_X86(target);

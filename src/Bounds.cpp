@@ -524,55 +524,46 @@ private:
     }
 
     void visit(const EQ *) {
-        //assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const NE *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const LT *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const LE *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const GT *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const GE *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
 
     void visit(const And *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
 
     void visit(const Or *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
 
     void visit(const Not *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
@@ -615,11 +606,11 @@ private:
     }
 
     void visit(const Ramp *op) {
-        assert(false && "Bounds of vector");
+        internal_error << "Bounds of vector";
     }
 
     void visit(const Broadcast *) {
-        assert(false && "Bounds of vector");
+        internal_error << "Bounds of vector";
     }
 
     void visit(const Call *op) {
@@ -685,39 +676,39 @@ private:
     }
 
     void visit(const LetStmt *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const AssertStmt *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Pipeline *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const For *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Store *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Provide *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Allocate *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Realize *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Block *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 };
 
@@ -738,7 +729,7 @@ Interval interval_union(const Interval &a, const Interval &b) {
 }
 
 Region region_union(const Region &a, const Region &b) {
-    assert(a.size() == b.size() && "Mismatched dimensionality in region union");
+    internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
     Region result;
     for (size_t i = 0; i < a.size(); i++) {
         Expr min = Min::make(a[i].min, b[i].min);
@@ -764,7 +755,7 @@ void merge_boxes(Box &a, const Box &b) {
         return;
     }
 
-    assert(a.size() == b.size());
+    internal_assert(a.size() == b.size());
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
@@ -819,9 +810,9 @@ private:
         // actual memory access takes place.
         if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
             // Visit the args of the inner call
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
-            assert(c);
+            internal_assert(c);
             for (size_t i = 0; i < c->args.size(); i++) {
                 c->args[i].accept(this);
             }
@@ -1027,22 +1018,15 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
     Interval result = bounds_of_expr_in_scope(e, scope, fb);
     if (result.min.defined()) result.min = simplify(result.min);
     if (result.max.defined()) result.max = simplify(result.max);
-    bool success = true;
     if (!equal(result.min, correct_min)) {
-        std::cout << "In bounds of " << e << ":\n"
-                  << "Incorrect min: " << result.min << '\n'
-                  << "Should have been: " << correct_min << '\n';
-        success = false;
+        internal_error << "In bounds of " << e << ":\n"
+                       << "Incorrect min: " << result.min << '\n'
+                       << "Should have been: " << correct_min << '\n';
     }
     if (!equal(result.max, correct_max)) {
-        std::cout << "In bounds of " << e << ":\n"
-                  << "Incorrect max: " << result.max << '\n'
-                  << "Should have been: " << correct_max << '\n';
-        success = false;
-    }
-    if (!success) {
-        std::cout << "Bounds test failed\n";
-        assert(false);
+        internal_error << "In bounds of " << e << ":\n"
+                       << "Incorrect max: " << result.max << '\n'
+                       << "Should have been: " << correct_max << '\n';
     }
 }
 
@@ -1142,19 +1126,19 @@ void bounds_test() {
 
     map<string, Box> r;
     r = boxes_required(loop);
-    assert(r.find("output") == r.end());
-    assert(r.find("input") != r.end());
-    assert(equal(simplify(r["input"][0].min), 6));
-    assert(equal(simplify(r["input"][0].max), 25));
+    internal_assert(r.find("output") == r.end());
+    internal_assert(r.find("input") != r.end());
+    internal_assert(equal(simplify(r["input"][0].min), 6));
+    internal_assert(equal(simplify(r["input"][0].max), 25));
     r = boxes_provided(loop);
-    assert(r.find("output") != r.end());
-    assert(equal(simplify(r["output"][0].min), 4));
-    assert(equal(simplify(r["output"][0].max), 13));
+    internal_assert(r.find("output") != r.end());
+    internal_assert(equal(simplify(r["output"][0].min), 4));
+    internal_assert(equal(simplify(r["output"][0].max), 13));
 
     Box r2 = vec(Interval(Expr(5), Expr(19)));
     merge_boxes(r2, r["output"]);
-    assert(equal(simplify(r2[0].min), 4));
-    assert(equal(simplify(r2[0].max), 19));
+    internal_assert(equal(simplify(r2[0].min), 4));
+    internal_assert(equal(simplify(r2[0].max), 19));
 
     std::cout << "Bounds test passed" << std::endl;
 }

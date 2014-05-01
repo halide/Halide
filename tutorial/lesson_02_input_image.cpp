@@ -3,11 +3,11 @@
 // This lesson demonstrates how to pass in input images.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_02*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -o lesson_02
+// g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -o lesson_02
 // LD_LIBRARY_PATH=../bin ./lesson_02
 
 // On os x:
-// g++ lesson_02*.cpp -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02
+// g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_02
 // DYLD_LIBRARY_PATH=../bin ./lesson_02
 
 // The only Halide header file you need is Halide.h. It includes all of Halide.

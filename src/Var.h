@@ -21,10 +21,14 @@ class Var {
     std::string _name;
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n) : _name(n) {}
+    Var(const std::string &n) : _name(n) {
+        // Make sure we don't get a unique name with the same name as
+        // this later:
+        Internal::unique_name(n, false);
+    }
 
-    /** Construct a Var with an automatically-generated unique name */
-    Var() : _name(Internal::unique_name('v')) {}
+    /** Construct a Var with an automatically-generated unique name. */
+    Var() : _name(Internal::make_entity_name(this, "Halide::Var", 'v')) {}
 
     /** Get the name of a Var */
     const std::string &name() const {return _name;}

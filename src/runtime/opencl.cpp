@@ -170,11 +170,11 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
                 device_type |= CL_DEVICE_TYPE_CPU;
             if (strstr("gpu", dev_type))
                 device_type |= CL_DEVICE_TYPE_GPU;
-        } 
+        }
         // If no devices are specified yet, just use all.
         if (device_type == 0)
             device_type = CL_DEVICE_TYPE_ALL;
-        
+
         // Make sure we have a device
         const cl_uint maxDevices = 4;
         cl_device_id devices[maxDevices];
@@ -466,6 +466,10 @@ WEAK void halide_dev_run(
     // Always set at least 1 byte of shmem, to keep the launch happy
     CHECK_CALL( clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL), "clSetKernelArg" );
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     // Launch kernel
     int err =
     clEnqueueNDRangeKernel(
@@ -478,6 +482,12 @@ WEAK void halide_dev_run(
         0, NULL, NULL
     );
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
+
+    #ifdef DEBUG
+    halide_dev_sync(user_context);
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "Kernel took: %f ms\n", (t_after - t_before) / 1000000.0);
+    #endif
 }
 
 #ifdef TEST_STUB

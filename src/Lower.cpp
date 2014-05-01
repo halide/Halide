@@ -68,7 +68,7 @@ void lower_test() {
 
     Stmt result = lower(f.function(), get_host_target());
 
-    assert(result.defined() && "Lowering returned trivial function");
+    internal_assert(result.defined()) << "Lowering returned undefined Stmt";
 
     std::cout << "Lowering test passed" << std::endl;
 }
@@ -95,7 +95,6 @@ Stmt build_provide_loop_nest(Function f,
     // then wrapping it in for loops.
 
     // Make the (multi-dimensional multi-valued) store node.
-    assert(!values.empty());
     Stmt stmt = Provide::make(f.name(), values, site);
 
     // The dimensions for which we have a known static size.
@@ -127,7 +126,8 @@ Stmt build_provide_loop_nest(Function f,
             Schedule::Split &first = splits[i];
             Schedule::Split &second = splits[j];
             if (first.outer == second.old_var) {
-                assert(!second.is_rename() && "Rename of derived variable found in splits list. This should never happen.");
+                internal_assert(!second.is_rename())
+                    << "Rename of derived variable found in splits list. This should never happen.";
                 second.old_var = unique_name('s');
                 first.outer   = second.outer;
                 second.outer  = second.inner;
@@ -223,11 +223,11 @@ Stmt build_provide_loop_nest(Function f,
     // as possible. Use reverse insertion sort. Start at the first letstmt.
     for (int i = (int)s.dims.size(); i < (int)nest.size(); i++) {
         // Only push up LetStmts.
-        assert(nest[i].value.defined());
+        internal_assert(nest[i].value.defined());
 
         for (int j = i-1; j >= 0; j--) {
             // Try to push it up by one.
-            assert(nest[j+1].value.defined());
+            internal_assert(nest[j+1].value.defined());
             if (!expr_uses_var(nest[j+1].value, nest[j].name)) {
                 std::swap(nest[j+1], nest[j]);
             } else {
@@ -352,7 +352,7 @@ Stmt build_produce(Function f) {
                 Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
             } else {
-                assert(false && "Bad ExternFuncArgument type");
+                internal_error << "Bad ExternFuncArgument type\n";
             }
         }
 
@@ -671,8 +671,8 @@ private:
 
         if (store_level.match(for_loop->name)) {
             debug(3) << "Found store level\n";
-            assert(found_compute_level &&
-                   "The compute loop level was not found within the store loop level!");
+            internal_assert(found_compute_level)
+                << "The compute loop level was not found within the store loop level!\n";
 
             if (function_is_used_in_stmt(func, body)) {
                 body = build_realize(body);
@@ -805,7 +805,8 @@ vector<string> realization_order(string output, const map<string, Function> &env
             }
         }
 
-        assert(scheduled_something && "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?");
+        internal_assert(scheduled_something)
+            << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
     }
 
 }
@@ -841,7 +842,7 @@ private:
         f->extent.accept(this);
         size_t first_dot = f->name.find('.');
         size_t last_dot = f->name.rfind('.');
-        assert(first_dot != string::npos && last_dot != string::npos);
+        internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
         loops.push_back(Schedule::LoopLevel(func, var));
@@ -915,9 +916,9 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
             if (arg.is_func()) {
                 Function g(arg.func);
                 if (g.schedule().compute_level.is_inline()) {
-                    std::cerr << "Function " << g.name() << " cannot be scheduled to be computed inline, "
-                              << "because it is used in the externally-computed function " << f.name() << "\n";
-                    assert(false);
+                    user_error
+                        << "Function " << g.name() << " cannot be scheduled to be computed inline, "
+                        << "because it is used in the externally-computed function " << f.name() << "\n";
                 }
             }
         }
@@ -965,18 +966,19 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
 
         if (next != rvars.size()) {
-            std::cerr << "In function " << f.name() << " stage " << i
-                      << ", the reduction variables have been illegally reordered.\n"
-                      << "Correct order:";
+            std::ostringstream err;
+            err << "In function " << f.name() << " stage " << i
+                << ", the reduction variables have been illegally reordered.\n"
+                << "Correct order:";
             for (size_t j = 0; j < rvars.size(); j++) {
-                std::cerr << " " << rvars[j].var;
+                err << " " << rvars[j].var;
             }
-            std::cerr << "\nOrder specified by schedule:";
+            err << "\nOrder specified by schedule:";
             for (size_t j = 0; j < dims.size(); j++) {
-                std::cerr << " " << dims[j].var;
+                err << " " << dims[j].var;
             }
-            std::cerr << "\n";
-            assert(false);
+            err << "\n";
+            user_error << err.str();
         }
     }
 
@@ -992,9 +994,8 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
             (compute_at.is_inline() || compute_at.is_root())) {
             return;
         } else {
-            std::cerr << "Function " << f.name() << " is the output, so must"
-                      << " be scheduled compute_root (which is the default).\n";
-            assert(false);
+            user_error << "Function " << f.name() << " is the output, so must"
+                       << " be scheduled compute_root (which is the default).\n";
         }
     }
 
@@ -1014,15 +1015,16 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
     }
 
     if (!store_at_ok || !compute_at_ok) {
-        std::cerr << "Function " << f.name() << " is computed and stored in the following invalid location:\n"
-                  << schedule_to_source(f, store_at, compute_at) << "\n"
-                  << "Legal locations for this function are:\n";
+        std::ostringstream err;
+        err << "Function " << f.name() << " is computed and stored in the following invalid location:\n"
+            << schedule_to_source(f, store_at, compute_at) << "\n"
+            << "Legal locations for this function are:\n";
         for (size_t i = 0; i < loops.size(); i++) {
             for (size_t j = i; j < loops.size(); j++) {
-                std::cerr << schedule_to_source(f, loops[i], loops[j]) << "\n";
+                err << schedule_to_source(f, loops[i], loops[j]) << "\n";
             }
         }
-        assert(false);
+        user_error << err.str();
     }
 }
 
@@ -1051,14 +1053,14 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
             debug(1) << "Injecting realization of " << order[i-1] << '\n';
             InjectRealization injector(f, t);
             s = injector.mutate(s);
-            assert(injector.found_store_level && injector.found_compute_level);
+            internal_assert(injector.found_store_level && injector.found_compute_level);
         }
         debug(2) << s << '\n';
     }
 
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
-    assert(root_loop);
+    internal_assert(root_loop);
 
     return root_loop->body;
 }
@@ -1231,7 +1233,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         string buffer_name = is_output_buffer ? f.name() : name;
 
         Box touched = boxes[buffer_name];
-        assert((int)(touched.size()) == dimensions);
+        internal_assert((int)(touched.size()) == dimensions);
 
         // An expression returning whether or not we're in inference mode
         Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", param);
@@ -1266,10 +1268,9 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr actual_extent = Variable::make(Int(32), actual_extent_name);
             Expr actual_stride = Variable::make(Int(32), actual_stride_name);
             if (!touched[j].min.defined() || !touched[j].max.defined()) {
-                std::cerr << "Error: buffer " << name
-                          << " may be accessed in an unbounded way in dimension "
-                          << j << "\n";
-                assert(false);
+                user_error << "Buffer " << name
+                           << " may be accessed in an unbounded way in dimension "
+                           << j << "\n";
             }
 
             Expr min_required = touched[j].min;
@@ -1384,11 +1385,11 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                 // constrained to match the first output.
 
                 if (param.defined()) {
-                    assert(!param.extent_constraint(i).defined() &&
-                           !param.min_constraint(i).defined() &&
-                           "Can't constrain the min or extent of an output buffer beyond the "
-                           "first. They are implicitly constrained to have the same min and extent "
-                           "as the first output buffer.");
+                    user_assert(!param.extent_constraint(i).defined() &&
+                                !param.min_constraint(i).defined())
+                        << "Can't constrain the min or extent of an output buffer beyond the "
+                        << "first. They are implicitly constrained to have the same min and extent "
+                        << "as the first output buffer.\n";
 
                     stride_constrained = param.stride_constraint(i);
                 } else if (image.defined() && (int)i < image.dimensions()) {

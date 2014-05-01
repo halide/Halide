@@ -3,6 +3,10 @@
 #include <string.h>
 #include <fstream>
 
+#ifdef WIN32
+#include <intrin.h>
+#endif
+
 #include "IR.h"
 #include "Func.h"
 #include "Util.h"
@@ -37,54 +41,43 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_do_par_for(NULL),
                                  custom_do_task(NULL),
                                  custom_trace(NULL),
-                                 random_seed(0) {
+                                 random_seed(0),
+                                 user_context(user_context_param()) {
 }
 
-Func::Func() : func(unique_name('f')),
+Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                error_handler(NULL),
                custom_malloc(NULL),
                custom_free(NULL),
                custom_do_par_for(NULL),
                custom_do_task(NULL),
                custom_trace(NULL),
-               random_seed(0) {
+               random_seed(0),
+               user_context(user_context_param()) {
 }
 
-Func::Func(Expr e) : func(unique_name('f')),
+Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      error_handler(NULL),
                      custom_malloc(NULL),
                      custom_free(NULL),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
                      custom_trace(NULL),
-                     random_seed(0) {
+                     random_seed(0),
+                     user_context(user_context_param()) {
     (*this)(_) = e;
 }
 
 Func::Func(Function f) : func(f),
-                     error_handler(NULL),
-                     custom_malloc(NULL),
-                     custom_free(NULL),
-                     custom_do_par_for(NULL),
-                     custom_do_task(NULL),
-                     custom_trace(NULL),
-                     random_seed(0) {
+                         error_handler(NULL),
+                         custom_malloc(NULL),
+                         custom_free(NULL),
+                         custom_do_par_for(NULL),
+                         custom_do_task(NULL),
+                         custom_trace(NULL),
+                         random_seed(0),
+                         user_context(user_context_param()) {
 }
-
-/*
-Func::Func(Buffer b) : func(unique_name('f')),
-                       error_handler(NULL),
-                       custom_malloc(NULL),
-                       custom_free(NULL),
-                       custom_do_par_for(NULL),
-                       custom_do_task(NULL) {
-    vector<Expr> args;
-    for (int i = 0; i < b.dimensions(); i++) {
-        args.push_back(Var::implicit(i));
-    }
-    (*this)(_) = Internal::Call::make(b, args);
-}
-*/
 
 const string &Func::name() const {
     return func.name();
@@ -104,44 +97,52 @@ std::vector<Var> Func::args() const {
  * function. An error if the Func has no definition, or is defined as
  * a Tuple. */
 Expr Func::value() const {
-    assert(defined() &&
-           "Can't call Func::value() on an undefined Func. To check if a Func is defined, call Func::defined()");
-    assert(func.outputs() == 1 && "Can't call Func::value() on a func with multiple values");
+    user_assert(defined())
+        << "Can't call Func::value() on an undefined Func. To check if a Func is defined, call Func::defined()\n";
+    user_assert(func.outputs() == 1)
+        << "Can't call Func::value() on Func \"" << name() << "\", because it has multiple values.\n";
     return func.values()[0];
 }
 
 /** The values returned by a Func, in Tuple form. */
 Tuple Func::values() const {
-    assert(defined() &&
-           "Can't call Func::values() on an undefined Func. To check if a Func is defined, call Func::defined()");
+    user_assert(defined())
+        << "Can't call Func::values() on an undefined Func. To check if a Func is defined, call Func::defined().\n";
     return Tuple(func.values());
 }
 
 /** Get the left-hand-side of the reduction definition. An empty
  * vector if there's no reduction definition. */
 const std::vector<Expr> &Func::reduction_args(int idx) const {
-    assert(is_reduction() && "Can't call Func::reduction_args() on a func with no reduction definition. "
-           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
-    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    user_assert(is_reduction())
+        << "Can't call Func::reduction_args() on Func \"" << name()
+        << "\" as it has no reduction definition. "
+        << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
+    user_assert(idx < (int)func.reductions().size())
+        << "Reduction definition index out of bounds.\n";
     return func.reductions()[idx].args;
 }
 
 /** Get the right-hand-side of the reduction definition. An error if
  * there is no reduction definition. */
 Expr Func::reduction_value(int idx) const {
-    assert(is_reduction() && "Can't call Func::reduction_value() on a func with no reduction definition. "
-           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
-    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
-    assert(func.reductions()[idx].values.size() == 1 &&
-           "Can't call Func::reduction_value() on a func with multiple values");
+    user_assert(is_reduction())
+        << "Can't call Func::reduction_args() on Func \"" << name() << "\" as it has no reduction definition. "
+        << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
+    user_assert(idx < (int)func.reductions().size())
+        << "Reduction definition index out of bounds.\n";
+    user_assert(func.reductions()[idx].values.size() == 1)
+        << "Can't call Func::reduction_value() on Func \"" << name() << "\", because it has multiple values.\n";
     return func.reductions()[idx].values[0];
 }
 
 /** The reduction values returned by a Func, in Tuple form. */
 Tuple Func::reduction_values(int idx) const {
-    assert(is_reduction() && "Can't call Func::reduction_values() on a func with no reduction definition. "
-           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
-    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    user_assert(is_reduction())
+        << "Can't call Func::reduction_args() on Func \"" << name() << "\" as it has no reduction definition. "
+        << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
+    user_assert(idx < (int)func.reductions().size())
+        << "Reduction definition index out of bounds.\n";
     return Tuple(func.reductions()[idx].values);
 }
 
@@ -149,9 +150,11 @@ Tuple Func::reduction_values(int idx) const {
  * undefined RDom if there's no reduction definition, or if the
  * reduction definition has no domain. */
 RDom Func::reduction_domain(int idx) const {
-    assert(is_reduction() && "Can't call Func::reduction_domain() on a func with no reduction definition. "
-           "Use Func::is_reduction() to check for the existence of a reduction definition\n");
-    assert(idx < (int)func.reductions().size() && "Reduction index out of bounds\n");
+    user_assert(is_reduction())
+        << "Can't call Func::reduction_args() on Func \"" << name() << "\" as it has no reduction definition. "
+        << "Use Func::is_reduction() to check for the existence of a reduction definition.\n";
+    user_assert(idx < (int)func.reductions().size())
+        << "Reduction definition index out of bounds.\n";
     return func.reductions()[idx].domain;
 }
 
@@ -312,9 +315,8 @@ int Func::add_implicit_vars(vector<Var> &args) const {
     }
 
     if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
-        std::cerr << "Func " << name() << " was called with "
-                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
-        assert(false);
+        user_error << "Func \"" << name() << "\" was called with "
+                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
     return placeholder_pos;
@@ -341,9 +343,8 @@ int Func::add_implicit_vars(vector<Expr> &args) const {
     }
 
     if (func.has_pure_definition() && args.size() != (size_t)dimensions()) {
-        std::cerr << "Func " << name() << " was called with "
-                  << args.size() << " arguments, but was defined with " << dimensions() << "\n";
-        assert(false);
+        user_error << "Func \"" << name() << "\" was called with "
+                   << args.size() << " arguments, but was defined with " << dimensions() << "\n";
     }
 
     return placeholder_pos;
@@ -364,27 +365,29 @@ void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
             found = true;
             dims[i].for_type = t;
         } else if (t == For::Vectorized) {
-            assert(dims[i].for_type != For::Vectorized &&
-                   "Can't vectorize across more than one variable");
+            user_assert(dims[i].for_type != For::Vectorized)
+                << "Can't vectorize across " << var.name()
+                << " because Func is already vectorized across " << dims[i].var << "\n";
         }
     }
 
     if (!found) {
-        std::cerr << "Could not find dimension "
-                  << var.name()
-                  << " to mark as " << t
-                  << " in argument list for function\n";
-        dump_argument_list();
-        assert(false);
+        user_error << "Could not find dimension "
+                   << var.name()
+                   << " to mark as " << t
+                   << " in argument list for function\n"
+                   << dump_argument_list();
     }
 }
 
-void ScheduleHandle::dump_argument_list() {
-    std::cerr << "Argument list:";
+std::string ScheduleHandle::dump_argument_list() {
+    std::ostringstream oss;
+    oss << "Argument list:";
     for (size_t i = 0; i < schedule.dims.size(); i++) {
-        std::cerr << " " << schedule.dims[i].var;
+        oss << " " << schedule.dims[i].var;
     }
-    std::cerr << "\n";
+    oss << "\n";
+    return oss.str();
 }
 
 ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor) {
@@ -408,11 +411,10 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
     }
 
     if (!found) {
-        std::cerr << "Could not find split dimension in argument list: "
-                  << old.name()
-                  << "\n";
-        dump_argument_list();
-        assert(false);
+        user_error << "Could not find split dimension in argument list: "
+                   << old.name()
+                   << "\n"
+                   << dump_argument_list();
     }
 
     // Add the split to the splits list
@@ -440,11 +442,10 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
         }
     }
     if (!found_outer) {
-        std::cerr << "Could not find outer fuse dimension in argument list: "
-                  << outer.name()
-                  << "\n";
-        dump_argument_list();
-        assert(false);
+        user_error << "Could not find outer fuse dimension in argument list: "
+                   << outer.name()
+                   << "\n"
+                   << dump_argument_list();
     }
 
     for (size_t i = 0; (!found_inner) && i < dims.size(); i++) {
@@ -457,11 +458,10 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
     }
 
     if (!found_inner) {
-        std::cerr << "Could not find inner fuse dimension in argument list: "
-                  << inner.name()
-                  << "\n";
         dump_argument_list();
-        assert(false);
+        user_error << "Could not find inner fuse dimension in argument list: "
+                   << inner.name()
+                   << "\n";
     }
 
 
@@ -487,11 +487,11 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     string new_name = old_name + "." + new_var.name();
 
     if (!found) {
-        std::cerr << "Could not find rename dimension in argument list: "
-                  << old_var.name()
-                  << "\n";
+        user_error << "Could not find rename dimension in argument list: "
+                   << old_var.name()
+                   << "\n";
         dump_argument_list();
-        assert(false);
+
     }
 
     if (old_name.find('.') == string::npos) {
@@ -513,10 +513,12 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
                 break;
             }
             if (schedule.splits[i-1].old_var == old_name) {
-                assert(false && "Can't rename a variable that has already been renamed or split!");
+                user_error << "Can't rename a variable " << old_name
+                           << " because it has already been renamed or split.\n";
             }
         }
-        assert(found && "Rename failed: Old name is not an arg, and was not defined by a split.");
+        user_assert(found) << "Rename failed: Old name: " << old_name
+                           << " is not an arg, and was not defined by a split.\n";
     }
 
     return *this;
@@ -607,7 +609,8 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
             return *this;
         }
     }
-    assert(false && "Could not find these variables to reorder in schedule");
+    user_error << "Could not find these variables " << x.name()
+               << " and " << y.name() << " to reorder in the schedule.\n";
     return *this;
 }
 
@@ -812,13 +815,11 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
             found = true;
         }
     }
-    if (!found) {
-        std::cerr << "Can't bound variable " << var.name()
-                  << " of function " << name()
-                  << " because " << var.name()
-                  << " is not one of the pure variables of " << name() << "\n";
-        assert(false);
-    }
+    user_assert(found)
+        << "Can't bound variable " << var.name()
+        << " of function " << name()
+        << " because " << var.name()
+        << " is not one of the pure variables of " << name() << ".\n";
 
     Schedule::Bound b = {var.name(), min, extent};
     func.schedule().bounds.push_back(b);
@@ -966,7 +967,8 @@ Func &Func::reorder_storage(Var x, Var y) {
             return *this;
         }
     }
-    assert(false && "Could not find these variables to reorder in schedule");
+    user_error << "Could not find variables " << x.name()
+               << " and " << y.name() << " to reorder in schedule.\n";
     return *this;
 }
 
@@ -1098,6 +1100,11 @@ public:
 vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<string> a = args;
 
+    for (size_t i = 0; i < e.size(); i++) {
+        user_assert(e[i].defined())
+            << "Argument " << i << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
+
     CountImplicitVars count(e);
 
     if (count.count > 0) {
@@ -1122,12 +1129,10 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
                 found = true;
             }
         }
-        if (!found) {
-            std::cerr << "Right-hand-side of pure definition of " << func.name()
-                      << " uses implicit variables, but the left-hand-side does not"
-                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
-            assert(false);
-        }
+        user_assert(found)
+            << "Right-hand-side of pure definition of " << func.name()
+            << " uses implicit variables, but the left-hand-side does not"
+            << " contain the placeholder symbol '_'.\n";
     }
 
     return a;
@@ -1186,21 +1191,27 @@ void FuncRefVar::operator/=(Expr e) {
 }
 
 FuncRefVar::operator Expr() const {
-    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
+    user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
     vector<Expr> expr_args(args.size());
     for (size_t i = 0; i < expr_args.size(); i++) {
         expr_args[i] = Var(args[i]);
     }
-    assert(func.outputs() == 1 &&
-           "Can't convert a reference to a function that has multiple outputs to an Expr");
+    user_assert(func.outputs() == 1)
+        << "Can't convert a reference Func \"" << func.name()
+        << "\" to an Expr, because \"" << func.name() << "\" returns a Tuple.\n";
     return Call::make(func, expr_args);
 }
 
 Expr FuncRefVar::operator[](int i) const {
-    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
-    assert(func.outputs() != 1 &&
-           "Can't index into a reference to a function that only provides one output");
-    assert(i >= 0 && i < func.outputs() && "index out of range");
+    user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+
+    user_assert(func.outputs() != 1)
+        << "Can't index into a reference to Func \"" << func.name()
+        << "\", because it does not return a Tuple.\n";
+    user_assert(i >= 0 && i < func.outputs())
+        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
     vector<Expr> expr_args(args.size());
     for (size_t j = 0; j < expr_args.size(); j++) {
         expr_args[j] = Var(args[j]);
@@ -1212,26 +1223,9 @@ size_t FuncRefVar::size() const {
     return func.outputs();
 }
 
-/*
-FuncRefVar::operator Tuple() const {
-    assert(func.has_pure_definition() && "Can't call undefined function");
-    assert(func.outputs() != 1 &&
-           "Can't create a tuple from a call to a function that only provides one output");
-    vector<Expr> expr_args(args.size());
-    for (size_t j = 0; j < expr_args.size(); j++) {
-        expr_args[j] = Var(args[j]);
-    }
-    Tuple tuple(std::vector<Expr>(func.outputs()));
-    for (size_t i = 0; i < tuple.size(); i++) {
-        tuple[i] = Call::make(func, expr_args, i);
-    }
-    return tuple;
-}
-*/
-
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<Expr> &a, int placeholder_pos) : func(f), args(a) {
     implicit_placeholder_pos = placeholder_pos;
-    ImageParam::check_arg_types(f.name(), &args);
+    Internal::check_call_arg_types(f.name(), &args, args.size());
 }
 
 FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
@@ -1245,6 +1239,11 @@ FuncRefExpr::FuncRefExpr(Internal::Function f, const vector<string> &a,
 
 vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     vector<Expr> a = args;
+
+    for (size_t i = 0; i < e.size(); i++) {
+        user_assert(e[i].defined())
+            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
+    }
 
     CountImplicitVars count(e);
     // TODO: Check if there is a test case for this and add one if not.
@@ -1280,12 +1279,10 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
                 }
             }
         }
-        if (!found) {
-            std::cerr << "Right-hand-side of update definition of " << func.name()
-                      << " uses implicit variables, but the left-hand-side does not"
-                      << " contain the placeholder symbol '_'. This behavior has been deprecated.\n";
-            assert(false);
-        }
+        user_assert(found)
+            << "Right-hand-side of update definition of " << func.name()
+            << " uses implicit variables, but the left-hand-side does not"
+            << " contain the placeholder symbol '_'.\n";
     }
 
     return a;
@@ -1296,8 +1293,9 @@ void FuncRefExpr::operator=(Expr e) {
 }
 
 void FuncRefExpr::operator=(const Tuple &e) {
-    assert(func.has_pure_definition() &&
-           "Can't add a reduction definition to an undefined function");
+    user_assert(func.has_pure_definition())
+        << "Can't add a reduction definition to Func \"" << func.name()
+        << "\" because it does not have a pure definition.\n";
 
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_reduction(args, e.as_vector());
@@ -1364,21 +1362,27 @@ void FuncRefExpr::operator/=(Expr e) {
 }
 
 FuncRefExpr::operator Expr() const {
-    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
-    assert(func.outputs() == 1 &&
-           "Can't convert a reference to a function that has multiple outputs to an Expr");
+    user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
+
+    user_assert(func.outputs() == 1)
+        << "Can't convert a reference Func \"" << func.name()
+        << "\" to an Expr, because " << func.name() << " returns a Tuple.\n";
+
     return Call::make(func, args);
 }
 
 Expr FuncRefExpr::operator[](int i) const {
-    assert((func.has_pure_definition() || func.has_extern_definition()) && "Can't call undefined function");
-    if (func.has_pure_definition()) {
-        assert(func.outputs() != 1 &&
-               "Can't index into a reference to a function that only provides one output");
-    } else {
+    user_assert(func.has_pure_definition() || func.has_extern_definition())
+        << "Can't call Func \"" << func.name() << "\" because it has not yet been defined.\n";
 
-    }
-    assert(i >= 0 && i < func.outputs() && "index out of range");
+    user_assert(func.outputs() != 1)
+        << "Can't index into a reference to Func \"" << func.name()
+        << "\", because it does not return a Tuple.\n";
+
+    user_assert(i >= 0 && i < func.outputs())
+        << "Tuple index out of range in reference to Func \"" << func.name() << "\".\n";
+
     return Call::make(func, args, i);
 }
 
@@ -1386,21 +1390,8 @@ size_t FuncRefExpr::size() const {
     return func.outputs();
 }
 
-/*
-FuncRefExpr::operator Tuple() const {
-    assert(func.has_pure_definition() && "Can't call undefined function");
-    assert(func.outputs() != 1 &&
-           "Can't create a tuple from a call to a function that only provides one output");
-    Tuple tuple(std::vector<Expr>(func.outputs()));
-    for (size_t i = 0; i < tuple.size(); i++) {
-        tuple[i] = Call::make(func, args, i);
-    }
-    return tuple;
-}
-*/
-
 Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
-    assert(defined() && "Can't realize undefined function");
+    user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], sizes);
@@ -1411,7 +1402,7 @@ Realization Func::realize(std::vector<int32_t> sizes, const Target &target) {
 }
 
 Realization Func::realize(int x_size, int y_size, int z_size, int w_size, const Target &target) {
-    assert(defined() && "Can't realize undefined function");
+    user_assert(defined()) << "Can't realize undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size);
@@ -1434,7 +1425,7 @@ Realization Func::realize(int x_size, const Target &target) {
 }
 
 void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
-    assert(defined() && "Can't infer input bounds on an undefined function");
+    user_assert(defined()) << "Can't infer input bounds on an undefined Func.\n";
     vector<Buffer> outputs(func.outputs());
     for (size_t i = 0; i < outputs.size(); i++) {
         outputs[i] = Buffer(func.output_types()[i], x_size, y_size, z_size, w_size, (uint8_t *)1);
@@ -1444,13 +1435,17 @@ void Func::infer_input_bounds(int x_size, int y_size, int z_size, int w_size) {
 }
 
 OutputImageParam Func::output_buffer() const {
-    assert(defined() && "Can't access output buffer of undefined function");
-    assert(func.output_buffers().size() == 1 && "Can only call Func::output_buffer on Funcs with one value");
+    user_assert(defined())
+        << "Can't access output buffer of undefined Func.\n";
+    user_assert(func.output_buffers().size() == 1)
+        << "Can't call Func::output_buffer on Func \"" << name()
+        << "\" because it returns a Tuple.\n";
     return OutputImageParam(func.output_buffers()[0], dimensions());
 }
 
 vector<OutputImageParam> Func::output_buffers() const {
-    assert(defined() && "Can't access output buffers of undefined function");
+    user_assert(defined())
+        << "Can't access output buffers of undefined Func.\n";
 
     vector<OutputImageParam> bufs(func.output_buffers().size());
     for (size_t i = 0; i < bufs.size(); i++) {
@@ -1468,7 +1463,8 @@ public:
     vector<pair<int, Internal::Parameter> > image_param_args;
     vector<pair<int, Buffer> > image_args;
 
-    InferArguments(const string &o) : output(o) {}
+    InferArguments(const string &o) : output(o) {
+    }
 
 private:
     const string &output;
@@ -1554,7 +1550,7 @@ void validate_arguments(const string &output,
         for (size_t j = 0; !buf.defined() && j < infer_args.image_args.size(); j++) {
             if (infer_args.image_args[j].first == (int)i) {
                 buf = infer_args.image_args[j].second;
-                assert(buf.defined());
+                internal_assert(buf.defined());
             }
         }
 
@@ -1571,30 +1567,31 @@ void validate_arguments(const string &output,
             images_to_embed.push_back(buf);
             Internal::debug(1) << "Embedding image " << buf.name() << "\n";
         } else if (!found) {
-            std::cerr << "Generated code refers to ";
-            if (arg.is_buffer) std::cerr << "image ";
-            std::cerr << "parameter " << arg.name
-                      << ", which was not found in the argument list\n";
+            std::ostringstream err;
+            err << "Generated code refers to ";
+            if (arg.is_buffer) err << "image ";
+            err << "parameter " << arg.name
+                << ", which was not found in the argument list\n";
 
-            std::cerr << "\nArgument list specified: ";
+            err << "\nArgument list specified: ";
             for (size_t i = 0; i < args.size(); i++) {
-                std::cerr << args[i].name << " ";
+                err << args[i].name << " ";
             }
-            std::cerr << "\n\nParameters referenced in generated code: ";
+            err << "\n\nParameters referenced in generated code: ";
             for (size_t i = 0; i < required_args.size(); i++) {
-                std::cerr << required_args[i].name << " ";
+                err << required_args[i].name << " ";
             }
-            std::cerr << "\n\n";
-            assert(false);
+            err << "\n\n";
+            user_error << err.str();
         }
     }
 }
 }
 
 
-  void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
                                 const Target &target) {
-    assert(defined() && "Can't compile undefined function");
+    user_assert(defined()) << "Can't compile undefined Func.\n";
 
     if (!lowered.defined()) {
         lowered = Halide::Internal::lower(func, target);
@@ -1618,7 +1615,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
                              const Target &target) {
-    assert(defined() && "Can't compile undefined function");
+    user_assert(defined()) << "Can't compile undefined Func.\n";
 
     if (!lowered.defined()) {
         lowered = Halide::Internal::lower(func, target);
@@ -1713,7 +1710,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
-    assert(defined() && "Can't compile undefined function");
+    user_assert(defined()) << "Can't compile undefined Func.\n";
 
     if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
 
@@ -1774,15 +1771,82 @@ void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
 
+namespace {
+
+const int max_error_buffer_size = 4096;
+struct error_buffer {
+    char buf[max_error_buffer_size];
+    int end;
+};
+
+extern "C" void buffered_error_handler(void *ctx, const char *message) {
+    if (ctx) {
+        error_buffer *buf = (error_buffer *)ctx;
+        size_t len = strlen(message);
+        // Atomically claim some space in the buffer
+        #ifdef WIN32
+        int old_end = _InterlockedExchangeAdd((volatile long *)(&buf->end), len + 1);
+        #else
+        int old_end = __sync_fetch_and_add(&buf->end, len + 1);
+        #endif
+
+        if (old_end + len >= max_error_buffer_size - 2) {
+            // Out of space
+            return;
+        }
+
+        for (size_t i = 0; i < len; i++) {
+            buf->buf[old_end + i] = message[i];
+        }
+        buf->buf[old_end + len] = '\n';
+    }
+}
+
+}
+
+bool Func::prepare_to_catch_runtime_errors(void *b) {
+    error_buffer *buf = (error_buffer *)b;
+    buf->end = 0;
+    // If the user isn't using a custom error handler or custom user
+    // context, we can trap errors and convert them to exceptions.
+    bool my_user_context_active = false;
+    for (size_t i = 0; i < arg_values.size(); i++) {
+        if (arg_values[i] == user_context.get_address()) {
+            my_user_context_active = true;
+        }
+    }
+    if ((error_handler == &buffered_error_handler ||
+         error_handler == NULL) &&
+        my_user_context_active) {
+        compiled_module.set_error_handler(buffered_error_handler);
+        memset(buf->buf, 0, max_error_buffer_size);
+        user_context.set(buf);
+        return true;
+    }
+    return false;
+}
+
 void Func::realize(Realization dst, const Target &target) {
     if (!compiled_module.wrapped_function) compile_jit(target);
 
-    assert(compiled_module.wrapped_function);
+    internal_assert(compiled_module.wrapped_function);
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
-        assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-        assert(dst[i].type() == func.output_types()[i] && "Buffer and Func have different element types");
+        user_assert(dst[i].dimensions() == dimensions())
+            << "Can't realize Func \"" << name()
+            << "\" into Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" is " << dst[i].dimensions() << "-dimensional"
+            << ", but Func \"" << name()
+            << "\" is " << dimensions() << "-dimensional.\n";
+        user_assert(dst[i].type() == func.output_types()[i])
+            << "Can't realize Func \"" << name()
+            << "\" into Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" has type " << dst[i].type()
+            << ", but Func \"" << name()
+            << "\" has type " << func.output_types()[i] << ".\n";
     }
 
     // In case these have changed since the last realization
@@ -1802,16 +1866,25 @@ void Func::realize(Realization dst, const Target &target) {
     for (size_t i = 0; i < image_param_args.size(); i++) {
         Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
-        assert(b.defined() && "An ImageParam is not bound to a buffer");
+        user_assert(b.defined())
+            << "ImageParam \"" << image_param_args[i].second.name()
+            << "\" is not bound to a buffer.\n";
         buffer_t *buf = b.raw_buffer();
         arg_values[image_param_args[i].first] = buf;
-        assert((buf->host || buf->dev) && "An ImageParam is bound to a buffer with NULL host and dev pointers");
+        user_assert(buf->host || buf->dev)
+            << "ImageParam \"" << image_param_args[i].second.name()
+            << "\" is bound to Buffer " << b.name()
+            << " which has NULL host and dev pointers\n";
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
         Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] && "An argument to a jitted function is null\n");
+        internal_assert(arg_values[i])
+            << "An argument to a jitted function is null\n";
     }
+
+    error_buffer buf;
+    bool buffer_runtime_errors = prepare_to_catch_runtime_errors(&buf);
 
     Internal::debug(2) << "Calling jitted function\n";
     int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
@@ -1819,6 +1892,10 @@ void Func::realize(Realization dst, const Target &target) {
 
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
+    }
+
+    if (buffer_runtime_errors && exit_status) {
+        halide_runtime_error << buf.buf;
     }
 }
 
@@ -1831,13 +1908,25 @@ void Func::infer_input_bounds(Realization dst) {
         compile_jit();
     }
 
-    assert(compiled_module.wrapped_function);
+    internal_assert(compiled_module.wrapped_function);
 
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
-        assert(dst[i].dimensions() == dimensions() && "Buffer and Func have different dimensionalities");
-        assert(dst[i].type() == func.output_types()[i] && "Buffer and Func have different element types");
+        user_assert(dst[i].dimensions() == dimensions())
+            << "Can't infer input bounds for Func \"" << name()
+            << "\" using output Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" is " << dst[i].dimensions() << "-dimensional"
+            << ", but Func \"" << name()
+            << "\" is " << dimensions() << "-dimensional.\n";
+        user_assert(dst[i].type() == func.output_types()[i])
+            << "Can't infer input bounds for Func \"" << name()
+            << "\" using output Buffer \"" << dst[i].name()
+            << "\" because Buffer \"" << dst[i].name()
+            << "\" has type " << dst[i].type()
+            << ", but Func \"" << name()
+            << "\" has type " << func.output_types()[i] << ".\n";
     }
 
     // In case these have changed since the last realization
@@ -1871,7 +1960,7 @@ void Func::infer_input_bounds(Realization dst) {
 
     for (size_t i = 0; i < arg_values.size(); i++) {
         Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
-        assert(arg_values[i] && "An argument to a jitted function is null\n");
+        internal_assert(arg_values[i]) << "An argument to a jitted function is null.\n";
     }
 
     // Figure out which buffers to watch for changes
@@ -1888,6 +1977,10 @@ void Func::infer_input_bounds(Realization dst) {
 
     const int max_iters = 16;
     int iter = 0;
+
+    error_buffer buf;
+    bool buffer_runtime_errors = prepare_to_catch_runtime_errors(&buf);
+
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers we expect to be mutated
         for (size_t j = 0; j < tracked_buffers.size(); j++) {
@@ -1895,12 +1988,11 @@ void Func::infer_input_bounds(Realization dst) {
         }
         Internal::debug(2) << "Calling jitted function\n";
         int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
-        if (exit_status) {
-            std::cerr << "Calling " << name()
-                      << " in bounds inference mode returned non-success ("
-                      << exit_status << ")\n";
-            assert(false);
+
+        if (buffer_runtime_errors && exit_status) {
+            halide_runtime_error << buf.buf;
         }
+
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
 
@@ -1914,12 +2006,10 @@ void Func::infer_input_bounds(Realization dst) {
             break;
         }
     }
-    if (iter == max_iters) {
-        std::cerr << "Inferring input bounds on " << name()
-                  << " didn't converge after " << max_iters
-                  << " iterations. There may be unsatisfiable constraints\n";
-        assert(false);
-    }
+    user_assert(iter < max_iters)
+        << "Inferring input bounds on Func \"" << name() << "\""
+        << " didn't converge after " << max_iters
+        << " iterations. There may be unsatisfiable constraints\n";
 
     // Now allocate the resulting buffers
     size_t j = 0;
@@ -1965,13 +2055,19 @@ void Func::infer_input_bounds(Realization dst) {
 }
 
 void *Func::compile_jit(const Target &target) {
-    assert(defined() && "Can't realize undefined function");
+    user_assert(defined()) << "Can't jit-compile undefined Func.\n";
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func, target);
+    }
 
     // Infer arguments
     InferArguments infer_args(name());
     lowered.accept(&infer_args);
+
+    // Add the user context arg if it isn't there already
+    Expr(user_context).accept(&infer_args);
+
     arg_values = infer_args.arg_values;
 
     for (int i = 0; i < func.outputs(); i++) {
@@ -1996,7 +2092,16 @@ void *Func::compile_jit(const Target &target) {
     Target t = target;
     t.features |= Target::JIT;
     StmtCompiler cg(t);
-    cg.compile(lowered, name(), infer_args.arg_types, vector<Buffer>());
+
+    // Sanitise the name of the generated function
+    string n = name();
+    for (size_t i = 0; i < n.size(); i++) {
+        if (!isalnum(n[i])) {
+            n[i] = '_';
+        }
+    }
+
+    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
 
     if (debug::debug_level >= 3) {
         cg.compile_to_native(name() + ".s", true);

@@ -12,7 +12,7 @@ using std::vector;
 using std::string;
 using std::ostringstream;
 
-ostream &operator<<(ostream &out, Type type) {
+ostream &operator<<(ostream &out, const Type &type) {
     switch (type.code) {
     case Type::Int:
         out << "int";
@@ -32,7 +32,7 @@ ostream &operator<<(ostream &out, Type type) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, Expr ir) {
+ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
     } else {
@@ -51,7 +51,7 @@ void IRPrinter::test() {
     Expr y = Variable::make(Int(32), "y");
     ostringstream expr_source;
     expr_source << (x + 3) * (y / 2 + 17);
-    assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
+    internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
     Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, store);
@@ -81,9 +81,9 @@ void IRPrinter::test() {
         "}\n";
 
     if (source.str() != correct_source) {
-        std::cout << "Correct output:\n" << correct_source;
-        std::cout << "Actual output:\n" << source.str();
-        assert(false);
+        internal_error << "Correct output:\n" << correct_source
+                       << "Actual output:\n" << source.str();
+
     }
     std::cout << "IRPrinter test passed\n";
 }
@@ -106,7 +106,7 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, Stmt ir) {
+ostream &operator<<(ostream &stream, const Stmt &ir) {
     if (!ir.defined()) {
         stream << "(undefined)\n";
     } else {

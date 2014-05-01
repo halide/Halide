@@ -6,7 +6,7 @@ all: filter
 
 wavelet: ../../ wavelet.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) wavelet.cpp -I ../../include $(LDFLAGS) ../../$(LIB_HALIDE) -o wavelet -lpthread -ldl -lz
+	$(CXX) wavelet.cpp -I ../../include $(LDFLAGS) ../../$(LIB_HALIDE) -o wavelet -lpthread -ldl -lz -g
 
 $(HL_MODULES): wavelet
 	./wavelet
