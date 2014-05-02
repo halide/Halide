@@ -2,8 +2,6 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#define DEBUG
-
 #ifdef _WIN32
 #define CL_API_ENTRY
 #define CL_API_CALL     __stdcall
@@ -207,10 +205,6 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         CHECK_ERR( err, "clCreateContext" );
         // cuEventCreate(&__start, 0);
         // cuEventCreate(&__end, 0);
-
-        halide_assert(user_context, !(*cl_q));
-        *cl_q = clCreateCommandQueue(*cl_ctx, dev, 0, &err);
-        CHECK_ERR( err, "clCreateCommandQueue" );
     } else {
         #ifdef DEBUG
         halide_printf(user_context, "Already had context %p\n", *cl_ctx);
@@ -218,9 +212,16 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
         // Maintain ref count of context.
         CHECK_CALL( clRetainContext(*cl_ctx), "clRetainContext" );
-        CHECK_CALL( clRetainCommandQueue(*cl_q), "clRetainCommandQueue" );
 
         CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
+    }
+
+    if (!(*cl_q)) {
+        halide_assert(user_context, !(*cl_q));
+        *cl_q = clCreateCommandQueue(*cl_ctx, dev, 0, &err);
+        CHECK_ERR( err, "clCreateCommandQueue" );
+    } else {
+        CHECK_CALL( clRetainCommandQueue(*cl_q), "clRetainCommandQueue" );
     }
 
     // Create the module state if necessary
@@ -338,6 +339,9 @@ WEAK void halide_release(void *user_context) {
     // See TODO above...
     if (--ctx_refs == 0) {
         *cl_ctx = NULL;
+    }
+
+    if (--q_refs == 0) {
         *cl_q = NULL;
     }
 }
