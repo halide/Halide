@@ -2,6 +2,8 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
+#define DEBUG
+
 #ifdef _WIN32
 #define CL_API_ENTRY
 #define CL_API_CALL     __stdcall
@@ -317,8 +319,14 @@ WEAK void halide_release(void *user_context) {
     // TODO: This is not a good solution to deal with this problem (finding out if the
     // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
     // context scheme might be necessary.
-    cl_uint refs = 0;
-    clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
+    cl_uint ctx_refs = 0, q_refs = 0;
+    CHECK_CALL(clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(ctx_refs), &ctx_refs, NULL), "clGetContextInfo");
+    CHECK_CALL(clGetCommandQueueInfo(*cl_q, CL_QUEUE_REFERENCE_COUNT, sizeof(q_refs), &q_refs, NULL), "clGetCommandQueueInfo");
+
+    #ifdef DEBUG
+    halide_printf(user_context, "Context reference counter = %u\n", ctx_refs);
+    halide_printf(user_context, "Queue reference counter = %u\n", q_refs);
+    #endif
 
     // Unload context (ref counted).
     CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
@@ -328,7 +336,7 @@ WEAK void halide_release(void *user_context) {
     CHECK_CALL( clReleaseContext(*cl_ctx), "clReleaseContext" );
 
     // See TODO above...
-    if (--refs == 0) {
+    if (--ctx_refs == 0) {
         *cl_ctx = NULL;
         *cl_q = NULL;
     }
