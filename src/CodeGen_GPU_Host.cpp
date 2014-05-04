@@ -252,10 +252,16 @@ private:
     }
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
-            read_access(op->args[0].as<Variable>()->name);
-        } else if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_store") {
-            write_access(op->args[0].as<Variable>()->name);
+        if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_load) {
+            internal_assert(op->args.size() == 5);
+            internal_assert(op->args[0].as<StringImm>());
+            string bufname = op->args[0].as<StringImm>()->value;
+            read_access(bufname);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_store) {
+            internal_assert(op->args.size() == 6);
+            internal_assert(op->args[0].as<StringImm>());
+            string bufname = op->args[0].as<StringImm>()->value;
+            write_access(bufname);
         }
         IRVisitor::visit(op);
     }
@@ -281,14 +287,16 @@ protected:
 
     void visit(const Call *op) {
         if (op->call_type == Call::Intrinsic &&
-            (op->name == "glsl_texture_load" || op->name == "glsl_texture_store")) {
-            string bufname = op->args[0].as<Variable>()->name;
+            (op->name == Call::glsl_texture_load ||
+             op->name == Call::glsl_texture_store)) {
+            internal_assert(op->args[0].as<StringImm>());
+            string bufname = op->args[0].as<StringImm>()->value;
             BufferRef &ref = buffers[bufname];
-            ref.type = op->args[0].type();
+            ref.type = op->type;
 
-            if (op->name == "glsl_texture_load") {
+            if (op->name == Call::glsl_texture_load) {
                 ref.read = true;
-            } else if (op->name == "glsl_texture_store") {
+            } else if (op->name == Call::glsl_texture_store) {
                 ref.write = true;
             }
 
@@ -297,8 +305,8 @@ protected:
             ignore.push(bufname, 0);
             ignore.push(bufname + ".buffer", 0);
             Internal::Closure::visit(op);
-            ignore.pop(bufname);
             ignore.pop(bufname + ".buffer");
+            ignore.pop(bufname);
         } else {
             Internal::Closure::visit(op);
         }
