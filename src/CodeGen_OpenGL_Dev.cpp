@@ -63,14 +63,13 @@ string CodeGen_GLSL::print_type(Type type) {
             }
         } else if (type.bits == 1) {
             oss << "bool";
-        } else if (type.is_int()) {
-            if (type.bits == 32) {
-                oss << "int";
-            } else {
-                user_error << "Can't represent an integer with " << type.bits << " bits in GLSL\n";
-            }
-        } else if (type.is_uint()) {
+        } else if (type == Int(32)) {
             oss << "int";
+        } else if (type.bits <= 16) {
+            // Embed all other ints in a glsl float. Probably not
+            // actually valid for uint16 on systems with low float
+            // precision.
+            oss << "float";
         } else {
             user_error << "Can't represent type '"<< type << "' in GLSL\n";
         }
@@ -188,21 +187,26 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
-        string buffername = op->args[0].as<Variable>()->name;
-        buffername = buffername.substr(0, buffername.rfind(".buffer"));
+    if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_load) {
+        internal_assert(op->args.size() == 5);
+        internal_assert(op->args[0].as<StringImm>());
+        string buffername = op->args[0].as<StringImm>()->value;
         ostringstream rhs;
+        internal_assert(op->type == UInt(8) || op->type == UInt(16));
         rhs << "texture2D(" << print_name(buffername) << ", vec2("
-            << print_expr(op->args[1]) << ", "
-            << print_expr(op->args[2]) << "))"
-            << get_vector_suffix(op->args[3]);
+            << print_expr(op->args[2]) << ", "
+            << print_expr(op->args[3]) << "))"
+            << get_vector_suffix(op->args[4])
+            << " * " << op->type.imax() << ".0";
         print_assignment(op->type, rhs.str());
         return;
-    } else if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_store") {
-        std::string sval = print_expr(op->args[4]);
+    } else if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_store) {
+        internal_assert(op->args.size() == 6);
+        std::string sval = print_expr(op->args[5]);
+        internal_assert(op->args[5].type() == UInt(8) || op->args[5].type() == UInt(16));
         do_indent();
-        stream << "gl_FragColor" << get_vector_suffix(op->args[3])
-               << " = " << sval << ";\n";
+        stream << "gl_FragColor" << get_vector_suffix(op->args[4])
+               << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
     } else {
         CodeGen_C::visit(op);
     }

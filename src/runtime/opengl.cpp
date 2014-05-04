@@ -302,6 +302,11 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
     kernel->program_id = 0;
     kernel->next = NULL;
 
+    #ifdef DEBUG
+    halide_printf(user_context, "Compiling GLSL kernel:\n%s\n", 
+                  kernel->source);
+    #endif
+
     // Parse initial comment block
     const char *line = kernel->source;
     while (*line) {
@@ -577,7 +582,7 @@ EXPORT void halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
         buf->dev = tex;
         halide_allocated = true;
 #ifdef DEBUG
-        halide_printf(user_context, "Allocated texture of size %dx%d\n", width, height);
+        halide_printf(user_context, "Allocated texture %d of size %d x %d\n", tex, width, height);
 #endif
 
         ST.BindTexture(GL_TEXTURE_2D, 0);
@@ -785,6 +790,10 @@ EXPORT void halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
                          format, type, buf->host);
         CHECK_GLERROR();
     } else {
+        #ifdef DEBUG
+        halide_printf(user_context, "Warning: In copy_to_dev, host buffer is not interleaved. Doing slow interleave.\n");
+        #endif
+
         size_t size = width * height * buf->extent[2] * buf->elem_size;
         void *tmp = halide_malloc(user_context, size);
 
@@ -849,6 +858,10 @@ EXPORT void halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         ST.GetTexImage(GL_TEXTURE_2D, 0, format, type, buf->host);
         CHECK_GLERROR();
     } else {
+        #ifdef DEBUG
+        halide_printf(user_context, "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
+        #endif
+
         size_t size = width * height * buf->extent[2] * buf->elem_size;
         uint8_t *tmp = (uint8_t*)halide_malloc(user_context, size);
 
