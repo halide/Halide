@@ -956,6 +956,11 @@ Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GP
 
 Func &Func::glsl(Var x, Var y, Var c) {
     reorder(c, x, y);
+    // GLSL outputs must be stored interleaved
+    reorder_storage(c, x, y);
+
+    // TODO: Set appropriate constraints if this is the output buffer?
+
     ScheduleHandle(func.schedule()).gpu_blocks(x, y);
 
     bool constant_bounds = false;
