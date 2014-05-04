@@ -793,7 +793,8 @@ EXPORT int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     bool is_interleaved =
         (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
     if (is_interleaved) {
-        // TODO: GL_UNPACK_ROW_LENGTH
+        ST.PixelStorei(GL_UNPACK_ROW_LENGTH, buf->extent[1]);
+        ST.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
         ST.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
                          format, type, buf->host);
@@ -866,6 +867,8 @@ EXPORT int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
     if (is_interleaved) {
         // TODO: GL_UNPACK_ROW_LENGTH
+        ST.PixelStorei(GL_PACK_ROW_LENGTH, buf->extent[1]);
+        ST.PixelStorei(GL_PACK_ALIGNMENT, 1);
         ST.GetTexImage(GL_TEXTURE_2D, 0, format, type, buf->host);
         CHECK_GLERROR(1);
     } else {
