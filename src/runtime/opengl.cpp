@@ -80,7 +80,8 @@ enum ArgumentType {
     ARGTYPE_NONE,
     ARGTYPE_FLOAT,
     ARGTYPE_INT,
-    ARGTYPE_UINT8
+    ARGTYPE_UINT8,
+    ARGTYPE_UINT16
 };
 
 struct HalideOpenGLArgument {
@@ -275,6 +276,8 @@ static HalideOpenGLArgument *parse_argument(void *user_context, const char *src,
         type = ARGTYPE_INT;
     } else if ((name = match_prefix(src, "uint8 "))) {
         type = ARGTYPE_UINT8;
+    } else if ((name = match_prefix(src, "uint16 "))) {
+	type = ARGTYPE_UINT16;
     }
     if (type == ARGTYPE_NONE) {
         halide_error(user_context, "Internal error: argument type not supported");
