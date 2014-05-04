@@ -119,7 +119,7 @@ public:
     /** If this buffer was created *on-device* by a jit-compiled
      * realization, then copy it back to the cpu-side memory. This is
      * usually achieved by casting the Buffer to an Image. */
-    EXPORT void copy_to_host();
+    EXPORT int copy_to_host();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then copy the cpu-side data to
@@ -131,13 +131,13 @@ public:
      * host_dirty bit so that Halide can manage the copy lazily for
      * you. Casting the Buffer to an Image sets the dirty bit for
      * you. */
-    EXPORT void copy_to_dev();
+    EXPORT int copy_to_dev();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then free the device-side
      * allocation, if there is one. Done automatically when the last
      * reference to this buffer dies. */
-    EXPORT void free_dev_buffer();
+    EXPORT int free_dev_buffer();
 
 };
 

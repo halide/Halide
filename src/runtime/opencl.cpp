@@ -99,12 +99,12 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
     return true;
 }
 
-WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
+WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
     if (buf->dev == 0)
-      return;
+      return 0;
 
     #ifdef DEBUG
     halide_printf(user_context, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
@@ -113,6 +113,7 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
     halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
     CHECK_CALL( clReleaseMemObject((cl_mem)buf->dev), "clReleaseMemObject" );
     buf->dev = 0;
+    return 0;
 }
 
 WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* src, int size) {
@@ -372,10 +373,10 @@ static size_t __buf_size(void *user_context, buffer_t* buf) {
     return size;
 }
 
-WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
+WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     if (buf->dev) {
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-        return;
+        return 0;
     }
 
     size_t size = __buf_size(user_context, buf);
@@ -394,10 +395,14 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t* buf) {
     halide_printf(user_context, "dev_malloc allocated buffer %p of with buf->dev of %p\n",
                   buf, (void *)buf->dev);
     #endif
-    halide_assert(user_context, buf->dev);
+    if (!buf->dev) {
+        halide_error(user_context, "clCreateBuffer failed\n");
+        return 1;
+    }
+    return 0;
 }
 
-WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
+WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     if (buf->host_dirty) {
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
@@ -409,9 +414,10 @@ WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
         CHECK_ERR( err, "clEnqueueWriteBuffer" );
     }
     buf->host_dirty = false;
+    return 0;
 }
 
-WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
+WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     if (buf->dev_dirty) {
         clFinish(*cl_q); // block on completion before read back
         halide_assert(user_context, buf->host && buf->dev);
@@ -426,10 +432,11 @@ WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
         CHECK_ERR( err, "clEnqueueReadBuffer" );
     }
     buf->dev_dirty = false;
+    return 0;
 }
 #define _COPY_TO_HOST
 
-WEAK void halide_dev_run(
+WEAK int halide_dev_run(
     void *user_context,
     void *state_ptr,
     const char* entry_name,
@@ -488,6 +495,7 @@ WEAK void halide_dev_run(
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "Kernel took: %f ms\n", (t_after - t_before) / 1000000.0);
     #endif
+    return 0;
 }
 
 #ifdef TEST_STUB
