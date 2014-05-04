@@ -26,7 +26,7 @@ typedef struct buffer_t {
 } buffer_t;
 #endif
 
-extern "C" void halide_copy_to_host(void *user_context, buffer_t* buf);
+extern "C" int halide_copy_to_host(void *user_context, buffer_t* buf);
 
 template<typename T>
 class Image {
