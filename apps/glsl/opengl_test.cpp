@@ -4,7 +4,7 @@
 
 #include "../../src/buffer_t.h"
 
-// Defined in libHalideOpenGLRuntime.so
+// TODO: use custom version to test use of user-created OpenGL context.
 extern "C" int halide_opengl_create_context();
 
 class Image {

@@ -25,7 +25,7 @@ run: opengl_test
 	LD_LIBRARY_PATH=../../bin ./opengl_test
 
 opengl_test: blur.o ycc.o opengl_test.o
-	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin -lHalideOpenGLRuntime
+	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin
 
 blur.h blur.o: halide_blur
 	HL_TARGET=host-opengl-gpu_debug ./halide_blur
