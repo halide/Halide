@@ -391,15 +391,14 @@ WEAK HalideOpenGLKernel *halide_opengl_find_kernel(const char *name) {
     return NULL;
 }
 
-
 // Initialize the runtime, in particular all fields in halide_opengl_state.
-EXPORT void halide_opengl_init(void *user_context) {
-    if (ST.initialized) return;
+EXPORT int halide_opengl_init(void *user_context) {
+    if (ST.initialized) return 0;
 
     // Make a context if there isn't one
     if (halide_opengl_create_context(user_context)) {
         halide_printf(user_context, "Failed to make opengl context\n");
-        return;
+        return 1;
     }
 
     // Initialize pointers to OpenGL functions.
@@ -407,7 +406,7 @@ EXPORT void halide_opengl_init(void *user_context) {
     ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR); \
     if (!ST.VAR) {                                                      \
         halide_printf(user_context, "Could not load function pointer for %s\n", "gl" #VAR); \
-        return;                                                         \
+        return 1;                                                         \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
@@ -417,13 +416,13 @@ EXPORT void halide_opengl_init(void *user_context) {
 
     // Initialize all OpenGL objects that are shared between kernels.
     ST.GenFramebuffers(1, &ST.framebuffer_id);
-    CHECK_GLERROR();
+    CHECK_GLERROR(1);
 
     ST.vertex_shader_id = halide_opengl_make_shader(user_context,
         GL_VERTEX_SHADER, vertex_shader_src, NULL);
     if (ST.vertex_shader_id == 0) {
 	halide_error(user_context, "Failed to create vertex shader");
-	return;
+	return 1;
     }
 
     GLuint buf;
@@ -431,17 +430,18 @@ EXPORT void halide_opengl_init(void *user_context) {
     ST.BindBuffer(GL_ARRAY_BUFFER, buf);
     ST.BufferData(GL_ARRAY_BUFFER,
                   sizeof(square_vertices), square_vertices, GL_STATIC_DRAW);
-    CHECK_GLERROR();
+    CHECK_GLERROR(1);
     ST.vertex_buffer = buf;
 
     ST.GenBuffers(1, &buf);
     ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, buf);
     ST.BufferData(GL_ELEMENT_ARRAY_BUFFER,
                   sizeof(square_indices), square_indices, GL_STATIC_DRAW);
-    CHECK_GLERROR();
+    CHECK_GLERROR(1);
     ST.element_buffer = buf;
 
     ST.initialized = true;
+    return 0;
 }
 
 // Release all data allocated by the runtime.
@@ -524,7 +524,8 @@ static bool get_texture_format(void *user_context,
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 EXPORT int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
-    halide_opengl_init(user_context);
+    if (int error = halide_opengl_init(user_context))
+        return error;
 
     if (!buf) {
         halide_error(user_context, "Invalid buffer");
@@ -659,8 +660,10 @@ EXPORT int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
 // code into a fragment shader.
 EXPORT void *halide_opengl_init_kernels(void *user_context, void *state_ptr,
                                         const char *src, int size) {
-    if (!ST.initialized)
-        halide_opengl_init(user_context);
+    // TODO: handle error
+    if (int error = halide_opengl_init(user_context)) {
+        return NULL;
+    }
 
     // Use '/// KERNEL' comments to split 'src' into discrete blocks, one for
     // each kernel contained in it.
