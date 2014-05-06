@@ -1440,9 +1440,14 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             string error = "Applying the constraints to the required region made it smaller";
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
 
+            // stride_required is just a suggestion. It's ok if the
+            // constraints shuffle them around in ways that make it
+            // smaller.
+            /*
             check = (stride_proposed >= stride_required);
             error = "Applying the constraints to the required stride made it smaller";
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
+            */
         }
 
         // Assert all the conditions, and set the new values
