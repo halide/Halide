@@ -1939,7 +1939,7 @@ void Func::infer_input_bounds(Realization dst) {
     vector<buffer_t> dummy_buffers;
     // We're going to be taking addresses of elements as we push_back,
     // so reserve enough space to avoid reallocation.
-    dummy_buffers.reserve(image_param_args.size() + dst.size());
+    dummy_buffers.reserve(image_param_args.size());
     for (size_t i = 0; i < image_param_args.size(); i++) {
         Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
