@@ -1274,7 +1274,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
             string error_msg_extent = error_name + " is accessed at %d, which is beyond the max (%d) in dimension " + dim;
-            string error_msg_min = error_name + " is accessed at %d, which before the min (%d) in dimension " + dim;
+            string error_msg_min = error_name + " is accessed at %d, which is before the min (%d) in dimension " + dim;
 
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
