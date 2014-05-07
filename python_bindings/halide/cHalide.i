@@ -18,6 +18,11 @@
 %ignore halide_shutdown_trace;
 %ignore halide_set_random_seed;
 %ignore halide_printf;
+%ignore get_scalar;
+%ignore set_scalar;
+%ignore get;
+
+#define BUILDING_PYTHON 1
 
 %{
 #include "Halide.h"
@@ -28,6 +33,7 @@ using namespace Halide;
 namespace Halide {
 %ignore Internal;
 }
+%ignore HalideIntrospectionCanary;
 
 %include "std_string.i"
 %include "std_vector.i"
@@ -38,7 +44,6 @@ namespace Halide {
 
 %include "Halide.h"
 %include "py_util.h"
-
 
 %template(Image_uint8) Image<uint8_t>;
 %template(Image_uint16) Image<uint16_t>;
