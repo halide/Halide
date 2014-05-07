@@ -310,10 +310,12 @@ public:
     bool result;
     bool found_call;
 
-    MightBeSkippable(string f) : func(f), result(false), found_call(false) {}
+    MightBeSkippable(string f) : func(f), guarded(false), result(false), found_call(false) {}
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
+    // Don't consider the last stage, because it's the output, so it's
+    // never skippable.
     for (size_t i = order.size()-1; i > 0; i--) {
         MightBeSkippable check(order[i-1]);
         stmt.accept(&check);
