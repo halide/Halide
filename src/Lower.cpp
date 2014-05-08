@@ -1275,7 +1275,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
             string error_msg_extent = error_name + " is accessed at %d, which is beyond the max (%d) in dimension " + dim;
-            string error_msg_min = error_name + " is accessed at %d, which before the min (%d) in dimension " + dim;
+            string error_msg_min = error_name + " is accessed at %d, which is before the min (%d) in dimension " + dim;
 
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
@@ -1441,9 +1441,14 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             string error = "Applying the constraints to the required region made it smaller";
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
 
+            // stride_required is just a suggestion. It's ok if the
+            // constraints shuffle them around in ways that make it
+            // smaller.
+            /*
             check = (stride_proposed >= stride_required);
             error = "Applying the constraints to the required stride made it smaller";
             asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
+            */
         }
 
         // Assert all the conditions, and set the new values
