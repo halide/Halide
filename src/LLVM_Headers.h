@@ -27,6 +27,7 @@
 #else
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Support/FileSystem.h>
 #endif
 
 #include <llvm/Bitcode/ReaderWriter.h>

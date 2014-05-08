@@ -86,7 +86,7 @@ void Parameter::set_buffer(Buffer b) {
     contents.ptr->buffer = b;
 }
 
-const void *Parameter::get_scalar_address() const {
+void *Parameter::get_scalar_address() const {
     check_is_scalar();
     return &contents.ptr->data;
 }

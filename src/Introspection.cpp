@@ -510,7 +510,7 @@ public:
                 // register address)
                 address -= 2;
             } else {
-                debug(4) << "Skipping function because there's no callq before " << (void *)(inst_ptr) << "\n";
+                debug(4) << "Skipping function because there's no callq before " << (const void *)(inst_ptr) << "\n";
                 continue;
             }
 
@@ -1186,7 +1186,7 @@ private:
                             } else if (payload && payload[0] == 0x03 && val == (sizeof(void *) + 1)) {
                                 // It's a global
                                 // payload + 1 is an address
-                                void *addr = *((void **)(payload + 1));
+                                const void *addr = *((const void * const *)(payload + 1));
                                 gvar.addr = (uint64_t)(addr);
                             } else {
                                 // Some other format that we don't understand
@@ -1247,8 +1247,8 @@ private:
                         } else if (attr == attr_ranges) {
                             if (val < debug_ranges.size()) {
                                 // It's an array of addresses
-                                const void **ptr = (const void **)(debug_ranges.data() + val);
-                                const void **end = (const void **)(debug_ranges.data() + debug_ranges.size());
+                                const void * const * ptr = (const void * const *)(debug_ranges.data() + val);
+                                const void * const * end = (const void * const *)(debug_ranges.data() + debug_ranges.size());
                                 while (ptr[0] && ptr < end-1) {
                                     LiveRange r = {(uint64_t)ptr[0], (uint64_t)ptr[1]};
                                     r.pc_begin += compile_unit_base_pc;
