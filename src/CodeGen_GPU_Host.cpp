@@ -301,7 +301,7 @@ protected:
             }
 
             // The Func's name and the associated .buffer are mentioned in the
-            // argument lists to, but don't treat them as free variables.
+            // argument lists, but don't treat them as free variables.
             ignore.push(bufname, 0);
             ignore.push(bufname + ".buffer", 0);
             Internal::Closure::visit(op);
