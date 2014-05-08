@@ -110,7 +110,7 @@ struct HalideOpenGLTexture {
     HalideOpenGLTexture *next;
 };
 
-// All persistant state maintained by the runtime.
+// All persistent state maintained by the runtime.
 struct HalideOpenGLState {
     bool initialized;
 
@@ -322,21 +322,21 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
             kernel->name = strndup(args, next_line - args - 1);
         } else if ((args = match_prefix(line, var_marker))) {
             if (HalideOpenGLArgument *arg =
-                    parse_argument(user_context, args, next_line - 1)) {
+                parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = ARGKIND_VAR;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             }
         } else if ((args = match_prefix(line, input_marker))) {
             if (HalideOpenGLArgument *arg =
-                    parse_argument(user_context, args, next_line - 1)) {
+                parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = ARGKIND_INBUF;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             }
         } else if ((args = match_prefix(line, output_marker))) {
             if (HalideOpenGLArgument *arg =
-                    parse_argument(user_context, args, next_line - 1)) {
+                parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = ARGKIND_OUTBUF;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
