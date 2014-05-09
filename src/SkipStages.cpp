@@ -1,4 +1,5 @@
 #include "SkipStages.h"
+#include "Debug.h"
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IROperator.h"
@@ -13,6 +14,25 @@ namespace Internal {
 using std::string;
 using std::vector;
 using std::map;
+
+namespace {
+
+bool extern_call_uses_buffer(const Call *op, const std::string &func) {
+   if (op->call_type == Call::Extern) {
+     for (size_t i = 0; i < op->args.size(); i++) {
+            const Variable *var = op->args[i].as<Variable>();
+            if (var &&
+                starts_with(var->name, func + ".") &&
+                ends_with(var->name, ".buffer")) {
+               return true;
+           }
+        }
+    }
+    return false;
+}
+
+}
+
 
 class PredicateFinder : public IRVisitor {
 public:
@@ -129,9 +149,22 @@ private:
     }
 
     void visit(const Call *op) {
+        // Calls inside of an address_of aren't considered, because no
+        // actuall call to the Func happens.
+        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+            // Visit the args of the inner call
+            internal_assert(op->args.size() == 1);
+            const Call *c = op->args[0].as<Call>();
+            internal_assert(c);
+            for (size_t i = 0; i < c->args.size(); i++) {
+                c->args[i].accept(this);
+            }
+            return;
+        }
+
         IRVisitor::visit(op);
 
-        if (op->name == buffer) {
+        if (op->name == buffer || extern_call_uses_buffer(op, buffer)) {
             predicate = const_true();
         }
     }
@@ -250,8 +283,20 @@ class MightBeSkippable : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Call *op) {
+        // Calls inside of an address_of aren't considered, because no
+        // actuall call to the Func happens.
+        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+            // Visit the args of the inner call
+            internal_assert(op->args.size() == 1);
+            const Call *c = op->args[0].as<Call>();
+            internal_assert(c);
+            for (size_t i = 0; i < c->args.size(); i++) {
+                c->args[i].accept(this);
+            }
+            return;
+        }
         IRVisitor::visit(op);
-        if (op->name == func) {
+        if (op->name == func || extern_call_uses_buffer(op, func)) {
             if (!found_call) {
                 result = guarded;
                 found_call = true;
@@ -260,7 +305,6 @@ class MightBeSkippable : public IRVisitor {
             }
         }
     }
-
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
@@ -317,9 +361,11 @@ Stmt skip_stages(Stmt stmt, const vector<string> &order) {
     // Don't consider the last stage, because it's the output, so it's
     // never skippable.
     for (size_t i = order.size()-1; i > 0; i--) {
+        debug(2) << "skip_stages checking " << order[i-1] << "\n";
         MightBeSkippable check(order[i-1]);
         stmt.accept(&check);
         if (check.result) {
+            debug(2) << "skip_stages can skip " << order[i-1] << "\n";
             StageSkipper skipper(order[i-1]);
             stmt = skipper.mutate(stmt);
         }
