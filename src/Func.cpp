@@ -1505,13 +1505,13 @@ private:
 
     void visit(const Load *op) {
         IRGraphVisitor::visit(op);
-
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
     void visit(const Variable *op) {
         include_parameter(op->param);
+        include_buffer(op->image);
     }
 
     void visit(const Call *op) {
