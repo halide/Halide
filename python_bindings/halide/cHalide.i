@@ -40,7 +40,10 @@ namespace Halide {
 
 %naturalvar;
 %naturalvar Func;
+%naturalvar ScheduleHandle;
 %naturalvar Expr;
+%naturalvar RVar;
+%naturalvar RDom;
 
 %include "Halide.h"
 %include "py_util.h"
