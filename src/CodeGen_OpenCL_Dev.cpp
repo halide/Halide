@@ -12,9 +12,8 @@ using std::vector;
 
 static ostringstream nil;
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target tgt) {
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target tgt) : target(tgt) {
     clc = new CodeGen_OpenCL_C(src_stream);
-    target = tgt;
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
