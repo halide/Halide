@@ -2,32 +2,47 @@
 Dependencies
 ------------------------------------------------------------------
 
-Building halide requires at least llvm 3.2, along with the matching
+Building halide requires at least llvm 3.3, along with the matching
 version of clang. llvm-config and clang must be somewhere in the
-path. If your OS does not have packages for llvm-3.2, you can find
+path. If your OS does not have packages for llvm-3.3, you can find
 binaries for it at http://llvm.org/releases/download.html. Download an
 appropriate package and then either install it, or at least put the
 bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
-If you want to build it yourself, first check it out from subversions:
+If you want to build it yourself, first check it out from subversion:
 
-svn co https://llvm.org/svn/llvm-project/llvm/branches/release_32 llvm3.2
-svn co https://llvm.org/svn/llvm-project/cfe/branches/release_32 llvm3.2/tools/clang
+% svn co https://llvm.org/svn/llvm-project/llvm/branches/release_33 llvm3.3
+% svn co https://llvm.org/svn/llvm-project/cfe/branches/release_33 llvm3.3/tools/clang
 
 Then build it like so:
 
-cd llvm3.2
-./configure --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
-make -j8
+% cd llvm3.3
+% ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
+% make -j8
 
-(Users of OSX 10.8+ may need to explicitly specify GCC vs Clang, prepending "CC=gcc CXX=g++" to the configure command.)
+(Users of OSX 10.8+ may need to explicitly specify GCC vs Clang,
+prepending "CC=gcc CXX=g++" to the configure command.)
 
 Then finally tell Halide's Makefile about it like so:
 
-export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
-export CLANG=<path to llvm>/Release+Asserts/bin/clang
+% export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
+% export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
-If you want a newer llvm, then trunk llvm should also work.
+If you wish to use cmake to build llvm, the build procedure is:
+
+% cd llvm3.3
+% mkdir build
+% cd build
+% cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+% make -j8
+
+then to point Halide to it:
+
+export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+export CLANG=<path to llvm>/build/bin/clang
+
+On Ubuntu llvm 3.2 also works, but you should omit --disable-terminfo
+or -DLLVM_ENABLE_TERMINFO=OFF when configuring it.
 
 ------------------------------------------------------------------
 Building Halide
