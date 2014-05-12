@@ -160,7 +160,7 @@ _split0 = FuncType.split
 _tile0 = FuncType.tile
 _reorder0 = FuncType.reorder
 _bound0 = FuncType.bound
-#_gpu_tile0 = FuncType.gpu_tile
+_parallel0 = FuncType.parallel
 
 _generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,VarType) else key)
 _generic_getitem_expr = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
@@ -168,10 +168,14 @@ _generic_set = lambda x, y: set(x, wrap(y))
 #_realize = Func.realize
 
 FuncType.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
+
 def wrap_func_args(args):
     if all(isinstance(x, VarType) for x in args):
         return args
     return [wrap(y) for y in args]
+
+def wrap_gpu_args(args):
+    return [y if isinstance(y, VarType) else wrap(y) for y in args]
 
 FuncType.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,VarType) else key), wrap(value))
 FuncType.__getitem__ = _generic_getitem_var_or_expr
@@ -182,7 +186,7 @@ Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
 Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
 Func.reorder = lambda self, *a: _reorder0(self, *[VarOrRVar(v) for v in a])
 Func.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
-#Func.gpu_tile = lambda self, *a: _gpu_tile0(self, *wrap_gpu_args(a))
+Func.parallel = lambda self, *a: _parallel0(self, *wrap_gpu_args(a))
 
 class Func(object):
     """
@@ -532,9 +536,6 @@ _split1 = ScheduleHandleType.split
 _tile1 = ScheduleHandleType.tile
 _reorder1 = ScheduleHandleType.reorder
 _gpu_tile1 = ScheduleHandleType.gpu_tile
-
-def wrap_gpu_args(args):
-    return [y if isinstance(y, VarType) else wrap(y) for y in args]
 
 ScheduleHandle.split = lambda self, a, b, c, d: _split1(self, a, b, c, wrap(d))
 ScheduleHandle.tile = lambda self, *a: _tile1(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
