@@ -18,10 +18,12 @@ def main():
     z = Var('z')
     c = Var('c')
 
+    # Add a boundary condition
     clamped = Func('clamped')
     clamped[x, y] = input[clamp(x, 0, input.width()-1),
                           clamp(y, 0, input.height()-1),0]
 
+    # Construct the bilateral grid
     r = RDom(0, s_sigma, 0, s_sigma, 'r')
     val = clamped[x * s_sigma + r.x - s_sigma/2, y * s_sigma + r.y - s_sigma/2]
     val = clamp(val, 0.0, 1.0)
@@ -57,9 +59,10 @@ def main():
 
     target = get_target_from_environment()
     if target.has_gpu_feature():
+        # GPU schedule
         # Currently running this directly from the Python code is very slow.
-        # Probably because of the dispatch time.
-        # If compiling to file, this is equal to the C++ generated code.
+        # Probably because of the dispatch time because generated code
+        # is same speed as C++ generated code.
         print ("Compiling for GPU")
         histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
         histogram = histogram.update() # Because returns ScheduleHandle
@@ -69,6 +72,7 @@ def main():
         blurz.compute_root().gpu_tile(x, y, z, 8, 8, 4)
         bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma)
     else:
+        # CPU schedule
         print ("Compiling for CPU")
         histogram.compute_root().parallel(z)
         histogram = histogram.update() # Because returns ScheduleHandle
