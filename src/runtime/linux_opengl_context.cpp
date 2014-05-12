@@ -8,8 +8,7 @@ extern void *glXGetProcAddressARB(const char *);
 extern void *XOpenDisplay(void *);
 extern int XDefaultScreen(void *);
 extern int glXQueryExtension(void *, void *, void *);
-extern void *glXChooseVisual(void *, int, int *);
-extern void *glXCreateContext(void *, void *, int, int);
+extern void *glXCreateNewContext(void *, void *, int, void *, int);
 extern void **glXChooseFBConfig(void *, int, const int *, int *);
 extern unsigned long glXCreatePbuffer(void *, void *, const int *);
 extern int XFree(void *);
@@ -40,26 +39,28 @@ WEAK int halide_opengl_create_context(void *user_context) {
         return 1;
     }
 
-    int attribs[] = {4 /* GLX_RGBA */, 0 /* Sentinel */};
     int screen = XDefaultScreen(dpy);
 
-    void *vi = glXChooseVisual(dpy, screen, attribs);
-    if (!vi) {
-        halide_error(user_context, "Could not find suitable visual.\n");
-        return 1;
-    }
-
-    void *ctx = glXCreateContext(dpy, vi, 0, 1);
-    if (!ctx) {
-        halide_error(user_context, "Could not create OpenGL context.\n");
-        return 1;
-    }
-
-    int fb_attribs[] = {0};
+    int attribs[] = {
+        0x8011 /* GLX_RENDER_TYPE */, 1 /* GLX_RGBA_BIT */,
+        8 /* GLX_RED_SIZE */, 8,
+        9 /* GLX_GREEN_SIZE */, 8,
+        10 /* GLX_BLUE_SIZE */, 8,
+        11 /* GLX_ALPHA_SIZE */, 8,
+        0
+    };
     int num_configs = 0;
-    void** fb_config = glXChooseFBConfig(dpy, screen, fb_attribs, &num_configs);
+    void** fb_config = glXChooseFBConfig(dpy, screen, attribs, &num_configs);
     if (!num_configs) {
         halide_error(user_context, "Could not get framebuffer config.\n");
+        return 1;
+    }
+
+    void *ctx = glXCreateNewContext(dpy, fb_config[0],
+                                    0x8014 /* GLX_RGBA_TYPE */,
+                                    NULL /* share list */, 1 /* direct */);
+    if (!ctx) {
+        halide_error(user_context, "Could not create OpenGL context.\n");
         return 1;
     }
 

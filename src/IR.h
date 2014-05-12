@@ -969,6 +969,8 @@ struct Call : public ExprNode<Call> {
         return_second,
         if_then_else,
         trace,
+        glsl_texture_load, 
+        glsl_texture_store,
         trace_expr;
 
     // If it's a call to another halide function, this call node

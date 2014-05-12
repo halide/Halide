@@ -219,17 +219,16 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 	echo "}" >> msvc/initmod.cpp
 
 -include $(OBJECTS:.o=.d)
+-include $(INITIAL_MODULES:.o=.d)
 
-$(BUILD_DIR)/initmod.opengl_debug_64.ll: src/runtime/opengl.cpp
-$(BUILD_DIR)/initmod.opengl_debug_32.ll: src/runtime/opengl.cpp
-
+# -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -nobuiltininc -fno-blocks -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ # -m64 isn't respected unless we also use a 64-bit target
+	$(CLANG) -nobuiltininc -fno-blocks -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -nobuiltininc -fno-blocks -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@
+	$(CLANG) -nobuiltininc -fno-blocks -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
 	@-mkdir -p $(BUILD_DIR)

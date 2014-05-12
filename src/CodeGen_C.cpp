@@ -223,6 +223,12 @@ string CodeGen_C::print_reinterpret(Type type, Expr e) {
 
 string CodeGen_C::print_name(const string &name) {
     ostringstream oss;
+
+    // Prefix an underscore to avoid reserved words (e.g. a variable named "while")
+    if (isalpha(name[0])) {
+        oss << '_';
+    }
+
     for (size_t i = 0; i < name.size(); i++) {
         if (name[i] == '.') {
             oss << '_';
@@ -232,10 +238,6 @@ string CodeGen_C::print_name(const string &name) {
             oss << "___";
         }
         else oss << name[i];
-    }
-    if (isalpha(name[name.size()-1])) {
-        // Suffix an underscore to avoid reserved words (e.g. a variable named "while")
-        oss << '_';
     }
     return oss.str();
 }
@@ -362,7 +364,7 @@ void CodeGen_C::compile(Stmt s, string name,
                << "0};\n"; //dev_dirty
 
         // Make a global pointer to it
-        stream << "static buffer_t *_" << name << " = &" << name << "_buffer;\n";
+        stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
 
     }
 
@@ -384,8 +386,9 @@ void CodeGen_C::compile(Stmt s, string name,
     stream << "extern \"C\" int " << name << "(";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << "buffer_t *_"
-                   << print_name(args[i].name);
+            stream << "buffer_t *"
+                   << print_name(args[i].name)
+                   << "_buffer";
         } else {
             stream << "const "
                    << print_type(args[i].type)
@@ -416,29 +419,30 @@ void CodeGen_C::compile(Stmt s, string name,
 
 void CodeGen_C::unpack_buffer(Type t, const std::string &buffer_name) {
     string name = print_name(buffer_name);
+    string buf_name = name + "_buffer";
     string type = print_type(t);
     stream << type
            << " *"
            << name
            << " = ("
            << type
-           << " *)(_"
-           << name
+           << " *)("
+           << buf_name
            << "->host);\n";
     allocations.push(buffer_name, t);
 
     stream << "const bool "
            << name
-           << "_host_and_dev_are_null = (_"
-           << name << "->host == NULL) && (_"
-           << name << "->dev == 0);\n";
+           << "_host_and_dev_are_null = ("
+           << buf_name << "->host == NULL) && ("
+           << buf_name << "->dev == 0);\n";
     stream << "(void)" << name << "_host_and_dev_are_null;\n";
 
     for (int j = 0; j < 4; j++) {
         stream << "const int32_t "
                << name
-               << "_min_" << j << " = _"
-               << name
+               << "_min_" << j << " = "
+               << buf_name
                << "->min[" << j << "];\n";
         // emit a void cast to suppress "unused variable" warnings
         stream << "(void)" << name << "_min_" << j << ";\n";
@@ -446,23 +450,23 @@ void CodeGen_C::unpack_buffer(Type t, const std::string &buffer_name) {
     for (int j = 0; j < 4; j++) {
         stream << "const int32_t "
                << name
-               << "_extent_" << j << " = _"
-               << name
+               << "_extent_" << j << " = "
+               << buf_name
                << "->extent[" << j << "];\n";
         stream << "(void)" << name << "_extent_" << j << ";\n";
     }
     for (int j = 0; j < 4; j++) {
         stream << "const int32_t "
                << name
-               << "_stride_" << j << " = _"
-               << name
+               << "_stride_" << j << " = "
+               << buf_name
                << "->stride[" << j << "];\n";
         stream << "(void)" << name << "_stride_" << j << ";\n";
     }
     stream << "const int32_t "
            << name
-           << "_elem_size = _"
-           << name
+           << "_elem_size = "
+           << buf_name
            << "->elem_size;\n";
 }
 
@@ -481,7 +485,7 @@ string CodeGen_C::print_assignment(Type t, const std::string &rhs) {
     map<string, string>::iterator cached = cache.find(rhs);
 
     if (cached == cache.end()) {
-        id = unique_name('V');
+        id = unique_name('_');
         do_indent();
         stream << print_type(t)
                << " " << id
@@ -670,7 +674,7 @@ void CodeGen_C::visit(const Call *op) {
             string filename = string_imm->value;
             const Load *load = op->args[1].as<Load>();
             internal_assert(load);
-            string func = load->name;
+            string func = print_name(load->name);
 
             vector<string> args(6);
             for (size_t i = 0; i < args.size(); i++) {
@@ -722,8 +726,8 @@ void CodeGen_C::visit(const Call *op) {
             internal_assert(dims <= 4);
             vector<string> args(op->args.size());
             const Variable *v = op->args[0].as<Variable>();
-            internal_assert(v && ends_with(v->name, ".buffer"));
-            args[0] = "_" + v->name.substr(0, v->name.size() - 7);
+            internal_assert(v);
+            args[0] = print_name(v->name);
             for (size_t i = 1; i < op->args.size(); i++) {
                 args[i] = print_expr(op->args[i]);
             }
@@ -765,7 +769,7 @@ void CodeGen_C::visit(const Call *op) {
         } else if (op->name == Call::if_then_else) {
             internal_assert(op->args.size() == 3);
 
-            string result_id = unique_name('V');
+            string result_id = unique_name('_');
 
             do_indent();
             stream << print_type(op->args[1].type())
@@ -1152,66 +1156,66 @@ void CodeGen_C::test() {
     string src = source.str();
     string correct_source = preamble +
         "\n\n"
-        "extern \"C\" int test1(buffer_t *_buf_, const float alpha_, const int32_t beta_, const void * __user_context_) {\n"
-        "int32_t *buf_ = (int32_t *)(_buf_->host);\n"
-        "const bool buf__host_and_dev_are_null = (_buf_->host == NULL) && (_buf_->dev == 0);\n"
-        "(void)buf__host_and_dev_are_null;\n"
-        "const int32_t buf__min_0 = _buf_->min[0];\n"
-        "(void)buf__min_0;\n"
-        "const int32_t buf__min_1 = _buf_->min[1];\n"
-        "(void)buf__min_1;\n"
-        "const int32_t buf__min_2 = _buf_->min[2];\n"
-        "(void)buf__min_2;\n"
-        "const int32_t buf__min_3 = _buf_->min[3];\n"
-        "(void)buf__min_3;\n"
-        "const int32_t buf__extent_0 = _buf_->extent[0];\n"
-        "(void)buf__extent_0;\n"
-        "const int32_t buf__extent_1 = _buf_->extent[1];\n"
-        "(void)buf__extent_1;\n"
-        "const int32_t buf__extent_2 = _buf_->extent[2];\n"
-        "(void)buf__extent_2;\n"
-        "const int32_t buf__extent_3 = _buf_->extent[3];\n"
-        "(void)buf__extent_3;\n"
-        "const int32_t buf__stride_0 = _buf_->stride[0];\n"
-        "(void)buf__stride_0;\n"
-        "const int32_t buf__stride_1 = _buf_->stride[1];\n"
-        "(void)buf__stride_1;\n"
-        "const int32_t buf__stride_2 = _buf_->stride[2];\n"
-        "(void)buf__stride_2;\n"
-        "const int32_t buf__stride_3 = _buf_->stride[3];\n"
-        "(void)buf__stride_3;\n"
-        "const int32_t buf__elem_size = _buf_->elem_size;\n"
+        "extern \"C\" int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) {\n"
+        "int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
+        "const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
+        "(void)_buf_host_and_dev_are_null;\n"
+        "const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
+        "(void)_buf_min_0;\n"
+        "const int32_t _buf_min_1 = _buf_buffer->min[1];\n"
+        "(void)_buf_min_1;\n"
+        "const int32_t _buf_min_2 = _buf_buffer->min[2];\n"
+        "(void)_buf_min_2;\n"
+        "const int32_t _buf_min_3 = _buf_buffer->min[3];\n"
+        "(void)_buf_min_3;\n"
+        "const int32_t _buf_extent_0 = _buf_buffer->extent[0];\n"
+        "(void)_buf_extent_0;\n"
+        "const int32_t _buf_extent_1 = _buf_buffer->extent[1];\n"
+        "(void)_buf_extent_1;\n"
+        "const int32_t _buf_extent_2 = _buf_buffer->extent[2];\n"
+        "(void)_buf_extent_2;\n"
+        "const int32_t _buf_extent_3 = _buf_buffer->extent[3];\n"
+        "(void)_buf_extent_3;\n"
+        "const int32_t _buf_stride_0 = _buf_buffer->stride[0];\n"
+        "(void)_buf_stride_0;\n"
+        "const int32_t _buf_stride_1 = _buf_buffer->stride[1];\n"
+        "(void)_buf_stride_1;\n"
+        "const int32_t _buf_stride_2 = _buf_buffer->stride[2];\n"
+        "(void)_buf_stride_2;\n"
+        "const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
+        "(void)_buf_stride_3;\n"
+        "const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
         "{\n"
-        " int64_t V0 = 43;\n"
-        " int64_t V1 = V0 * beta_;\n"
-        " if ((V1 > ((int64_t(1) << 31) - 1)) || ((V1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
+        " int64_t _0 = 43;\n"
+        " int64_t _1 = _0 * _beta;\n"
+        " if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
         "  halide_printf(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
         " } // overflow test tmp.heap\n"
-        " int32_t *tmp_heap_ = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*V1);\n"
+        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_1);\n"
         " {\n"
-        "  int32_t tmp_stack_[127];\n"
-        "  int32_t V2 = beta_ + 1;\n"
-        "  int32_t V3;\n"
-        "  bool V4 = V2 < 1;\n"
-        "  if (V4)\n"
+        "  int32_t _tmp_stack[127];\n"
+        "  int32_t _2 = _beta + 1;\n"
+        "  int32_t _3;\n"
+        "  bool _4 = _2 < 1;\n"
+        "  if (_4)\n"
         "  {\n"
-        "   int64_t V5 = (int64_t)(3);\n"
-        "   int32_t V6 = halide_printf(__user_context_, \"%lld \\n\", V5);\n"
-        "   int32_t V7 = (V6, 3);\n"
-        "   V3 = V7;\n"
-        "  } // if V4\n"
+        "   int64_t _5 = (int64_t)(3);\n"
+        "   int32_t _6 = halide_printf(__user_context_, \"%lld \\n\", _5);\n"
+        "   int32_t _7 = (_6, 3);\n"
+        "   _3 = _7;\n"
+        "  } // if _4\n"
         "  else\n"
         "  {\n"
-        "   V3 = 3;\n"
-        "  } // if V4 else\n"
-        "  int32_t V8 = V3;\n"
-        "  bool V9 = alpha_ > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t V10 = (int32_t)(V9 ? V8 : 2);\n"
-        "  buf_[V2] = V10;\n"
-        " } // alloc tmp_stack_\n"
-        " halide_free(__user_context_, tmp_heap_);\n"
-        "} // alloc tmp_heap_\n"
+        "   _3 = 3;\n"
+        "  } // if _4 else\n"
+        "  int32_t _8 = _3;\n"
+        "  bool _9 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  int32_t _10 = (int32_t)(_9 ? _8 : 2);\n"
+        "  _buf[_2] = _10;\n"
+        " } // alloc _tmp_stack\n"
+        " halide_free(__user_context_, _tmp_heap);\n"
+        "} // alloc _tmp_heap\n"
         "return 0;\n"
         "}\n";
     if (src != correct_source) {
