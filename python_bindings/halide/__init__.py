@@ -11,7 +11,7 @@ import pkgutil
 import cStringIO
 import tempfile
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 
 exit_on_signal()                   # Install C++ debugging traceback
 
@@ -33,6 +33,7 @@ TypeType = Type
 FuncRefExprType = FuncRefExpr
 FuncRefVarType = FuncRefVar
 VarOrRVarType = VarOrRVar
+ArgumentType = Argument
 ScheduleHandleType = ScheduleHandle
 
 # ----------------------------------------------------
@@ -232,7 +233,7 @@ class Func(object):
         will produce serial code.
         """
 
-    def compile_to_file(self, filename_prefix, list_of_Argument):
+    def compile_to_file(self, filename_prefix, list_of_Argument, target):
         """
         Various signatures::
 
@@ -718,6 +719,37 @@ class ScheduleHandle(object):
 # ----------------------------------------------------
 # RDom and RVar
 # ----------------------------------------------------
+
+class Argument(object):
+    """
+    A multi-dimensional domain over which to iterate. Used when
+    defining functions as reductions. See apps/bilateral_grid.py for an
+    example of a reduction.
+
+    Constructors::
+
+      Argument(String name, Bool is_buffer, Type type)                             -- 1D reduction
+    """
+    def __new__(cls, *args):
+        return ArgumentType(*args)
+
+    def name(self):
+        """
+        The name of the argument.
+        """
+
+    def is_buffer(self, other):
+        """
+        An argument is either a primitive type (for parameters), or a
+        buffer pointer. If 'is_buffer' is true, then 'type' should be
+        ignored.
+        """
+
+    def type(self):
+        """
+        If this is a scalar parameter, then this is its type.
+        """
+
 
 class RDom(object):
     """

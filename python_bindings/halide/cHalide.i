@@ -44,6 +44,8 @@ namespace Halide {
 %naturalvar Expr;
 %naturalvar RVar;
 %naturalvar RDom;
+%naturalvar VarOrRVar;
+%naturalvar Argument;
 
 %include "Halide.h"
 %include "py_util.h"
