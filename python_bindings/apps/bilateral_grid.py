@@ -10,8 +10,8 @@ float_t = Float(32)
 def main():
 
     input = ImageParam(float_t, 3, 'input')
-    r_sigma = Param(float_t, 0.1)
-    s_sigma = 8
+    r_sigma = Param(float_t, 'r_sigma', 0.1) # Value needed if not generating an executable
+    s_sigma = 8 # This is passed during code generation in the C++ version
 
     x = Var('x')
     y = Var('y')
@@ -57,7 +57,9 @@ def main():
 
     target = get_target_from_environment()
     if target.has_gpu_feature():
-        # Best schedule for GPU
+        # Currently running this directly from the Python code is very slow.
+        # Probably because of the dispatch time.
+        # If compiling to file, this is equal to the C++ generated code.
         print ("Compiling for GPU")
         histogram.compute_root().reorder(c, z, x, y).gpu_tile(x, y, 8, 8);
         histogram = histogram.update() # Because returns ScheduleHandle
@@ -67,21 +69,27 @@ def main():
         blurz.compute_root().gpu_tile(x, y, z, 8, 8, 4)
         bilateral_grid.compute_root().gpu_tile(x, y, s_sigma, s_sigma)
     else:
-        # Best schedule for CPU
         print ("Compiling for CPU")
         histogram.compute_root().parallel(z)
-        histogram.update().reorder(c, r.x, r.y, x, y).unroll(c)
+        histogram = histogram.update() # Because returns ScheduleHandle
+        histogram.reorder(c, r.x, r.y, x, y).unroll(c)
         blurz.compute_root().reorder(c, z, x, y).parallel(y).vectorize(x, 4).unroll(c)
         blurx.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c)
         blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c)
         bilateral_grid.compute_root().parallel(y).vectorize(x, 4)
 
-    eval_func = filter_image(input, bilateral_grid, builtin_image('rgb.png'), disp_time=True)
-    I = eval_func()
-    if len(sys.argv) >= 2:
-        I.save(sys.argv[1])
+    generate = False # Set to False to run the jit immediately and get  instant gratification.
+    if generate:
+        # Need to copy the filter executable from the C++ apps/bilateral_grid folder to run this.
+        # (after making it of course)
+        bilateral_grid.compile_to_file("bilateral_grid", Argument('r_sigma', False, Float(32)), Argument('input', True, UInt(16)), target);
     else:
-        I.show()
+        eval_func = filter_image(input, bilateral_grid, builtin_image('rgb.png'), disp_time=True)
+        I = eval_func()
+        if len(sys.argv) >= 2:
+            I.save(sys.argv[1])
+        else:
+            I.show()
 
 if __name__ == '__main__':
     main()
