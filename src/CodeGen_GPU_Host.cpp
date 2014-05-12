@@ -252,10 +252,16 @@ private:
     }
 
     void visit(const Call *op) {
-        if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_load") {
-            read_access(op->args[0].as<Variable>()->name);
-        } else if (op->call_type == Call::Intrinsic && op->name == "glsl_texture_store") {
-            write_access(op->args[0].as<Variable>()->name);
+        if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_load) {
+            internal_assert(op->args.size() == 5);
+            internal_assert(op->args[0].as<StringImm>());
+            string bufname = op->args[0].as<StringImm>()->value;
+            read_access(bufname);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_store) {
+            internal_assert(op->args.size() == 6);
+            internal_assert(op->args[0].as<StringImm>());
+            string bufname = op->args[0].as<StringImm>()->value;
+            write_access(bufname);
         }
         IRVisitor::visit(op);
     }
@@ -281,24 +287,26 @@ protected:
 
     void visit(const Call *op) {
         if (op->call_type == Call::Intrinsic &&
-            (op->name == "glsl_texture_load" || op->name == "glsl_texture_store")) {
-            string bufname = op->args[0].as<Variable>()->name;
+            (op->name == Call::glsl_texture_load ||
+             op->name == Call::glsl_texture_store)) {
+            internal_assert(op->args[0].as<StringImm>());
+            string bufname = op->args[0].as<StringImm>()->value;
             BufferRef &ref = buffers[bufname];
-            ref.type = op->args[0].type();
+            ref.type = op->type;
 
-            if (op->name == "glsl_texture_load") {
+            if (op->name == Call::glsl_texture_load) {
                 ref.read = true;
-            } else if (op->name == "glsl_texture_store") {
+            } else if (op->name == Call::glsl_texture_store) {
                 ref.write = true;
             }
 
             // The Func's name and the associated .buffer are mentioned in the
-            // argument lists to, but don't treat them as free variables.
+            // argument lists, but don't treat them as free variables.
             ignore.push(bufname, 0);
             ignore.push(bufname + ".buffer", 0);
             Internal::Closure::visit(op);
-            ignore.pop(bufname);
             ignore.pop(bufname + ".buffer");
+            ignore.pop(bufname);
         } else {
             Internal::Closure::visit(op);
         }
@@ -656,13 +664,17 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             Value *user_context = get_user_context();
             Value *buf = sym_get(it->first + ".buffer");
             debug(4) << "halide_dev_malloc " << it->first << "\n";
-            builder->CreateCall2(dev_malloc_fn, user_context, buf);
+            Value *result = builder->CreateCall2(dev_malloc_fn, user_context, buf);
+            Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+            CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_malloc");
 
             // Anything dirty on the cpu that gets read on the gpu
             // needs to be copied over
             if (it->second.read) {
                 debug(4) << "halide_copy_to_dev " << it->first << "\n";
-                builder->CreateCall2(copy_to_dev_fn, user_context, buf);
+                Value *result = builder->CreateCall2(copy_to_dev_fn, user_context, buf);
+                Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+                CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_copy_to_dev");
             }
         }
 
@@ -739,7 +751,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
-        builder->CreateCall(dev_run_fn, launch_args);
+        Value *result = builder->CreateCall(dev_run_fn, launch_args);
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_run");
 
         // mark written buffers dirty
         for (it = c.buffers.begin(); it != c.buffers.end(); ++it) {
@@ -849,7 +863,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Allocate *alloc) {
         }
 
         Value *args[2] = { get_user_context(), buf };
-        builder->CreateCall(dev_malloc_fn, args);
+        Value *result = builder->CreateCall(dev_malloc_fn, args);
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_malloc");
 
         // Put the dev pointer in the symbol table. Mostly so we
         // remember to dev_free it.
@@ -877,7 +893,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Free *f) {
     if (sym_exists(f->name + ".dev")) {
         Value *args[2] = { get_user_context(),
                            sym_get(f->name + ".buffer") };
-        builder->CreateCall(dev_free_fn, args);
+        Value *result = builder->CreateCall(dev_free_fn, args);
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_free");
     }
 }
 
@@ -988,7 +1006,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Pipeline *n) {
                 // of codegen.
                 if (update_usage[i].used_on_host) {
                     // debug(0) << "Before update step " << j << " copy tuple element " << i << " to host\n";
-                    builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+                    Value *result = builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+                    Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+                    CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_copy_to_host");
                 }
             }
 
@@ -1020,7 +1040,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Pipeline *n) {
     for (size_t i = 0; i < bufs.size(); i++) {
         if (consume_usage[i].read_on_host) {
             // debug(0) << "Before consume step copy tuple element " << i << " to host\n";
-            builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+            Value *result = builder->CreateCall2(copy_to_host_fn, user_context, bufs[i]);
+            Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+            CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_copy_to_host");
         }
     }
 
@@ -1041,7 +1063,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Call *call) {
         if (buf) {
             // This buffer may have been last-touched on device
             Value *user_context = get_user_context();
-            builder->CreateCall2(copy_to_host_fn, user_context, buf);
+            Value *result = builder->CreateCall2(copy_to_host_fn, user_context, buf);
+            Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+            CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_copy_to_host");
         }
         // fall through
     }

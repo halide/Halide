@@ -79,17 +79,16 @@ int main(int argc, char **argv) {
 
     f(x) = x*x;
 
-    // Name of the function and the args, then types of the outputs, then dimensionality
-    g.define_extern("flip_x",
-                    Internal::vec<ExternFuncArgument>(input, f),
-                    UInt(8), 1);
+    std::vector<ExternFuncArgument> args(2);
+    args[0] = input;
+    args[1] = f;
+    g.define_extern("flip_x", args, UInt(8), 1);
 
     h(x) = g(x) * 2;
 
     f.compute_at(h, x);
     g.compute_at(h, x);
     Var xi;
-    //h.split(x, x, xi, 64);
     h.vectorize(x, 8).unroll(x, 2).split(x, x, xi, 4).parallel(x);
 
     Image<uint8_t> result = h.realize(100);
