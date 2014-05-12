@@ -38,13 +38,18 @@ bool relatively_equal(value_t a, value_t b) {
 // Version for a one argument function.
 #define fun_1(type, name, c_name)                                             \
     void test_##type##_##name(buffer_t *in_buf) {                             \
+        Target target = get_jit_target_from_environment();                    \
+        if ((target.features & Target::OpenCL) != 0 &&                        \
+            (target.features & Target::CLDoubles) == 0 &&                     \
+            type_of<type>() == type_of<double>()) {                           \
+            return;                                                           \
+        }                                                                     \
         Func test_##name("test_" #name);                                      \
         Var x("x");                                                           \
         ImageParam input(type_of<type>(), 1);                                 \
         test_##name(x) = name(input(x));                                      \
         Buffer in_buffer(type_of<type>(), in_buf);                            \
         input.set(in_buffer);                                                 \
-        Target target = get_jit_target_from_environment();                    \
         if (target.has_gpu_feature()) {                                       \
             test_##name.gpu_tile(x, 8, GPU_Default);                          \
         }                                                                     \
@@ -59,13 +64,18 @@ bool relatively_equal(value_t a, value_t b) {
 // Version for a one argument function
 #define fun_2(type, name, c_name)                                                   \
     void test_##type##_##name(buffer_t *in_buf) {                                   \
+        Target target = get_jit_target_from_environment();                          \
+        if ((target.features & Target::OpenCL) != 0 &&                              \
+            (target.features & Target::CLDoubles) == 0 &&                           \
+            type_of<type>() == type_of<double>()) {                                 \
+            return;                                                                 \
+        }                                                                           \
         Func test_##name("test_" #name);                                            \
         Var x("x");                                                                 \
         ImageParam input(type_of<type>(), 2);                                       \
         test_##name(x) = name(input(0, x), input(1, x));                            \
         Buffer in_buffer(type_of<type>(), in_buf);                                  \
         input.set(in_buffer);                                                       \
-        Target target = get_jit_target_from_environment();                          \
         if (target.has_gpu_feature()) {                                             \
           test_##name.gpu_tile(x, 8, GPU_Default);                                  \
         }                                                                           \
