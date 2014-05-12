@@ -3,10 +3,6 @@
 #include "CodeGen_OpenCL_Dev.h"
 #include "Debug.h"
 
-// TODO: This needs a runtime controlled switch based on the device extension
-// string.
-//#define ENABLE_CL_KHR_FP64
-
 namespace Halide {
 namespace Internal {
 
@@ -16,7 +12,7 @@ using std::vector;
 
 static ostringstream nil;
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev() {
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target tgt) : target(tgt) {
     clc = new CodeGen_OpenCL_C(src_stream);
 }
 
@@ -347,9 +343,9 @@ void CodeGen_OpenCL_Dev::init_module() {
     // This identifies the program as OpenCL C (as opposed to SPIR).
     src_stream << "/*OpenCL C*/\n";
 
-#ifdef ENABLE_CL_KHR_FP64
-    src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
-#endif
+    if ((target.features & Target::CLDoubles) != 0) {
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
+    }
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
