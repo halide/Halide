@@ -374,7 +374,7 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
         return new CodeGen_SPIR_Dev(t, 32);
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        return new CodeGen_OpenCL_Dev();
+        return new CodeGen_OpenCL_Dev(t);
     } else if (t.features & Target::OpenGL) {
         debug(1) << "Constructing OpenGL device codegen\n";
         return new CodeGen_OpenGL_Dev();

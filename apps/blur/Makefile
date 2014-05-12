@@ -4,7 +4,7 @@ all: test
 
 halide_blur: ../../ halide_blur.cpp
 	$(MAKE) -C ../../ $(LIB_HALIDE)
-	$(CXX) halide_blur.cpp -I ../../include $(LDFLAGS) ../../$(LIB_HALIDE) -o halide_blur -ldl -lpthread -lz
+	$(CXX) halide_blur.cpp -I ../../include ../../$(LIB_HALIDE) -o halide_blur -ldl -lpthread -lz $(LDFLAGS)
 
 halide_blur.o: halide_blur
 	./halide_blur

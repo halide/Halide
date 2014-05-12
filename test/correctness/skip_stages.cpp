@@ -194,8 +194,6 @@ int main(int argc, char **argv) {
         check_counts(0, 0, 0);
     }
 
-    // Complex schedule for consumer
     printf("Success!\n");
     return 0;
-
 }

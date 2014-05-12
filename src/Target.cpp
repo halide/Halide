@@ -271,6 +271,8 @@ bool Target::merge_string(const std::string &target) {
             features |= Target::NoAsserts;
         } else if (tok == "no_bounds_query") {
             features |= Target::NoBoundsQuery;
+        } else if (tok == "cl_doubles") {
+            features |= Target::CLDoubles;
         } else {
             return false;
         }
@@ -313,7 +315,7 @@ std::string Target::to_string() const {
   };
   const char* const feature_names[] = {
     "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64",
-    "no_asserts", "no_bounds_query", "armv7s", "aarch64"
+    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
