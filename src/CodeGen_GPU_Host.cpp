@@ -328,7 +328,7 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
         return new CodeGen_SPIR_Dev(t, 32);
     } else if (t.features & Target::OpenCL) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        return new CodeGen_OpenCL_Dev();
+        return new CodeGen_OpenCL_Dev(t);
     } else {
         internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
         return NULL;
