@@ -302,6 +302,27 @@ Stmt build_provide_loop_nest(Function f,
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
     }
 
+    // Make any specialized copies
+    for (size_t i = s.specializations.size(); i > 0; i--) {
+        Expr c = s.specializations[i-1].condition;
+        const EQ *eq = c.as<EQ>();
+        const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
+        if (var && eq) {
+            Stmt then_case = simplify_exprs(substitute(var->name, eq->b, stmt));
+            Stmt else_case = stmt;
+            if (eq->b.type().is_bool()) {
+                else_case = simplify_exprs(substitute(var->name, !eq->b, stmt));
+            }
+            stmt = IfThenElse::make(c, then_case, else_case);
+        } else if (var) {
+            Stmt then_case = simplify_exprs(substitute(var->name, const_true(), stmt));
+            Stmt else_case = simplify_exprs(substitute(var->name, const_false(), stmt));
+            stmt = IfThenElse::make(c, then_case, else_case);
+        } else {
+            stmt = IfThenElse::make(c, stmt, stmt);
+        }
+    }
+
     return stmt;
 }
 

@@ -471,6 +471,14 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::specialize(Expr condition) {
+    user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
+    Schedule::Specialization s;
+    s.condition = condition;
+    schedule.specializations.push_back(s);
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
@@ -775,6 +783,11 @@ Func &Func::fuse(Var inner, Var outer, Var fused) {
 
 Func &Func::rename(Var old_name, Var new_name) {
     ScheduleHandle(func.schedule()).rename(old_name, new_name);
+    return *this;
+}
+
+Func &Func::specialize(Expr c) {
+    ScheduleHandle(func.schedule()).specialize(c);
     return *this;
 }
 
