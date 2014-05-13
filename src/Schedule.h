@@ -133,6 +133,12 @@ struct Schedule {
      * function. See \ref Func::bound */
     std::vector<Bound> bounds;
 
+    struct Specialization {
+        Expr condition;
+    };
+    /** You may create several specialized versions of a func where
+     * different vars take on different values. */
+    std::vector<Specialization> specializations;
 
     Schedule() : touched(false) {};
 };

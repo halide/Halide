@@ -243,6 +243,7 @@ public:
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
+    EXPORT ScheduleHandle &specialize(Expr condition);
 
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_Default);
@@ -908,6 +909,12 @@ public:
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);
+
+    /** Specialize a Func. This creates a special-case version of the
+     * Func where the given condition is true. The most effective
+     * conditions are those of the form param == value, and boolean
+     * Params. */
+    EXPORT Func &specialize(Expr condition);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer

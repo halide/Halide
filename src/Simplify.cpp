@@ -1197,6 +1197,12 @@ private:
             // Divide both sides by a constant
             internal_assert(!is_zero(mul_a->b)) << "Multiplication by zero survived constant folding\n";
             expr = mutate(mul_a->a == mul_b->a);
+        } else if (a.type().is_bool() && is_one(b)) {
+            // a == true -> a
+            expr = a;
+        } else if (a.type().is_bool() && is_zero(b)) {
+            // a == false -> not(a)
+            expr = mutate(Not::make(a));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1419,6 +1425,55 @@ private:
             expr = op;
         } else {
             expr = Select::make(condition, true_value, false_value);
+        }
+    }
+
+    void visit(const IfThenElse *op) {
+        // If the condition is of the form var == value, then we can
+        // pretend the LHS is inside a let statement
+        Expr condition = mutate(op->condition);
+
+        if (is_one(condition)) {
+            stmt = mutate(op->then_case);
+            return;
+        }
+
+        if (is_zero(condition)) {
+            stmt = mutate(op->else_case);
+            if (!stmt.defined()) {
+                // Emit a noop
+                stmt = Evaluate::make(0);
+            }
+            return;
+        }
+
+        const EQ *eq = condition.as<EQ>();
+        const Variable *var = eq ? eq->a.as<Variable>() : condition.as<Variable>();
+
+        Stmt then_case;
+        if (eq && var) {
+            then_case = mutate(substitute(var->name, eq->b, op->then_case));
+        } else if (var) {
+            then_case = mutate(substitute(var->name, const_true(), op->then_case));
+        } else {
+            then_case = mutate(op->then_case);
+        }
+
+        Stmt else_case;
+        if (eq && var && eq->b.type().is_bool()) {
+            else_case = mutate(substitute(var->name, !eq->b, op->else_case));
+        } else if (!eq && var) {
+            else_case = mutate(substitute(var->name, const_false(), op->else_case));
+        } else {
+            else_case = mutate(op->else_case);
+        }
+
+        if (condition.same_as(op->condition) &&
+            then_case.same_as(op->then_case) &&
+            else_case.same_as(op->else_case)) {
+            stmt = op;
+        } else {
+            stmt = IfThenElse::make(condition, then_case, else_case);
         }
     }
 
@@ -1743,6 +1798,18 @@ Expr simplify(Expr e, bool remove_dead_lets) {
 
 Stmt simplify(Stmt s, bool remove_dead_lets) {
     return Simplify(remove_dead_lets).mutate(s);
+}
+
+class SimplifyExprs : public IRMutator {
+public:
+    using IRMutator::mutate;
+    Expr mutate(Expr e) {
+        return simplify(e);
+    }
+};
+
+Stmt simplify_exprs(Stmt s) {
+    return SimplifyExprs().mutate(s);
 }
 
 void check(Expr a, Expr b) {
