@@ -557,6 +557,7 @@ struct Select : public ExprNode<Select> {
  * no inherent type. */
 struct Load : public ExprNode<Load> {
     std::string name;
+
     Expr index;
 
     // If it's a load from an image argument or compiled-in constant
@@ -968,6 +969,8 @@ struct Call : public ExprNode<Call> {
         return_second,
         if_then_else,
         trace,
+        glsl_texture_load, 
+        glsl_texture_store,
         trace_expr;
 
     // If it's a call to another halide function, this call node
@@ -982,7 +985,7 @@ struct Call : public ExprNode<Call> {
     // pointer to that image's buffer
     Buffer image;
 
-    // If it's a call to an image parameter, this call nodes holds a
+    // If it's a call to an image parameter, this call node holds a
     // pointer to that
     Parameter param;
 

@@ -895,64 +895,89 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
 }
 
 Func &Func::gpu_threads(Var tx, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, Var ty, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, Var ty, Var tz, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
     return *this;
 }
 
-  Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
+Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, Var by, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, Var by, Var bz, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var tx, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
+    ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var by, Var tx, Var ty, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
+    ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
+    ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
     return *this;
 }
 
-  Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpuapi);
     return *this;
 }
 
-  Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
     return *this;
 }
+
+Func &Func::glsl(Var x, Var y, Var c) {
+    reorder(c, x, y);
+    // GLSL outputs must be stored interleaved
+    reorder_storage(c, x, y);
+
+    // TODO: Set appropriate constraints if this is the output buffer?
+
+    ScheduleHandle(func.schedule()).gpu_blocks(x, y);
+
+    bool constant_bounds = false;
+    Schedule &sched = func.schedule();
+    for (size_t i = 0; i < sched.bounds.size(); i++) {
+        if (c.name() == sched.bounds[i].var) {
+            constant_bounds = is_const(sched.bounds[i].min) &&
+                is_const(sched.bounds[i].extent);
+            break;
+        }
+    }
+    user_assert(constant_bounds)
+        << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
+    unroll(c);
+    return *this;
+}
+
 
 Func &Func::reorder_storage(Var x, Var y) {
     vector<string> &dims = func.schedule().storage_dims;
