@@ -16,10 +16,10 @@
 extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
 extern "C" int halide_host_cpu_count();
 extern "C" int64_t halide_current_time_ns();
-extern "C" void halide_copy_to_host(void *, buffer_t *);
-extern "C" void halide_copy_to_dev(void *, buffer_t *);
-extern "C" void halide_dev_malloc(void *, buffer_t *);
-extern "C" void halide_dev_free(void *, buffer_t *);
+extern "C" int halide_copy_to_host(void *, buffer_t *);
+extern "C" int halide_copy_to_dev(void *, buffer_t *);
+extern "C" int halide_dev_malloc(void *, buffer_t *);
+extern "C" int halide_dev_free(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
     LOGE(msg);

@@ -7,7 +7,7 @@
 // LD_LIBRARY_PATH=../bin ./lesson_09
 
 // On os x:
-// g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide -lpng -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide  `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
 #include <Halide.h>

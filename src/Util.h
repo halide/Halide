@@ -29,7 +29,7 @@
 #endif
 
 // If we're in user code, we don't want certain functions to be inlined.
-#ifdef COMPILING_HALIDE
+#if defined(COMPILING_HALIDE) || defined(BUILDING_PYTHON)
 #define NO_INLINE
 #else
 #ifdef _WIN32
