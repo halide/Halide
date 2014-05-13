@@ -57,8 +57,14 @@ def wrap(*a):
 pow0 = pow
 
 _lerp0 = lerp
-
 lerp =  lambda zero_value, one_value, weight: _lerp0(wrap(zero_value), wrap(one_value), weight)
+"""
+Linear interpolate between the two values according to a weight.
+  param zero_val The result when weight is 0
+  param one_val The result when weight is 1
+  param weight The interpolation amount
+
+"""
 
 for BaseT in (ExprType, FuncRefExpr, FuncRefVar, VarType, RDomType, RVarType, FuncType) + ParamTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
@@ -1340,6 +1346,69 @@ minimum = lambda x: minimum_func(wrap(x))
 maximum = lambda x: maximum_func(wrap(x))
 product = lambda x: product_func(wrap(x))
 sum     = lambda x: sum_func(wrap(x))
+
+lambda_counter=[0]
+
+def lambda0D(exp):
+    """
+    Create a 0 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev = exp
+    return prev
+
+def lambda2D(x, y, exp):
+    """
+    Create a 2 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y] = exp
+    return prev
+
+def lambda3D(x, y, z, exp):
+    """
+    Create a 3 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y, z] = exp
+    return prev
+
+def lambda4D(x, y, z, w, exp):
+    """
+    Create a 4 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y, z, w] = exp
+    return prev
+
+def lambda5D(x, y, z, w, v, exp):
+    """
+    Create a 5 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y, z, w, v] = exp
+    return prev
+
 
 # ----------------------------------------------------
 # Constructors
