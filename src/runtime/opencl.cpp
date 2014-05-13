@@ -36,26 +36,29 @@ extern int snprintf(char *, size_t, const char *, ...);
 extern char *getenv(const char *);
 extern const char * strstr(const char *, const char *);
 
+}
 
 #ifndef DEBUG
-#define CHECK_ERR(e,str)
-#define CHECK_CALL(c,str) (c)
-#else // DEBUG
-#define CHECK_ERR(err,str) \
-    do { \
-        if (err != CL_SUCCESS)                                                \
-            halide_printf(user_context, "CL: %s returned non-success: %d\n", str, err); \
-        halide_assert(user_context, err == CL_SUCCESS);                               \
+#define CHECK_ERR(e,str)                                  \
+    do {                                                  \
+        if (err != CL_SUCCESS)                            \
+            halide_error(user_context, str);              \
     } while (0) /* eat semicolon */
-#define CHECK_CALL(c,str)                                               \
-  do {                                                                  \
-    int err = (c);                                                      \
-    if (err != CL_SUCCESS)                                              \
-        halide_printf(user_context, "CL: %s returned non-success: %d\n", str, err); \
-    halide_assert(user_context, err == CL_SUCCESS);                                   \
-  } while (0) /* eat semicolon */
+#else // DEBUG
+#define CHECK_ERR(err,str)                                \
+    do {                                                  \
+        if (err != CL_SUCCESS)                            \
+            halide_printf(user_context, "CL: %s returned non-success: %d\n", str, err); \
+        halide_assert(user_context, err == CL_SUCCESS);   \
+    } while (0) /* eat semicolon */
 #endif //DEBUG
-}
+
+#define CHECK_CALL(c,str)                                 \
+  do {                                                    \
+    int err = (c);                                        \
+    CHECK_ERR(err, str);                                  \
+  } while (0) /* eat semicolon */
+
 extern "C" {
 // A cuda context defined in this module with weak linkage
 cl_context WEAK weak_cl_ctx = 0;
