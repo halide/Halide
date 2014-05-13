@@ -22,6 +22,15 @@
 %ignore set_scalar;
 %ignore get;
 
+%ignore halide_release;
+%ignore halide_copy_to_dev;
+%ignore halide_copy_to_host;
+%ignore halide_dev_sync;
+%ignore halide_init_kernels;
+%ignore halide_dev_run;
+%ignore halide_dev_malloc;
+%ignore halide_dev_free;
+
 #define BUILDING_PYTHON 1
 
 %{
