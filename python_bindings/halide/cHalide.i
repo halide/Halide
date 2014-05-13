@@ -18,6 +18,20 @@
 %ignore halide_shutdown_trace;
 %ignore halide_set_random_seed;
 %ignore halide_printf;
+%ignore get_scalar;
+%ignore set_scalar;
+%ignore get;
+
+%ignore halide_release;
+%ignore halide_copy_to_dev;
+%ignore halide_copy_to_host;
+%ignore halide_dev_sync;
+%ignore halide_init_kernels;
+%ignore halide_dev_run;
+%ignore halide_dev_malloc;
+%ignore halide_dev_free;
+
+#define BUILDING_PYTHON 1
 
 %{
 #include "Halide.h"
@@ -28,17 +42,22 @@ using namespace Halide;
 namespace Halide {
 %ignore Internal;
 }
+%ignore HalideIntrospectionCanary;
 
 %include "std_string.i"
 %include "std_vector.i"
 
 %naturalvar;
 %naturalvar Func;
+%naturalvar ScheduleHandle;
 %naturalvar Expr;
+%naturalvar RVar;
+%naturalvar RDom;
+%naturalvar VarOrRVar;
+%naturalvar Argument;
 
 %include "Halide.h"
 %include "py_util.h"
-
 
 %template(Image_uint8) Image<uint8_t>;
 %template(Image_uint16) Image<uint16_t>;
