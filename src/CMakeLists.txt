@@ -45,6 +45,10 @@ if (TARGET_OPENCL)
   add_definitions("-DWITH_OPENCL=1")
 endif()
 
+if (TARGET_OPENGL)
+  add_definitions("-DWITH_OPENGL=1")
+endif()
+
 if (TARGET_SPIR)
   add_definitions("-DWITH_SPIR=1")
 endif()
@@ -65,6 +69,7 @@ set(RUNTIME_CPP
   linux_clock
   nogpu
   opencl
+  opengl
   posix_allocator
   posix_clock
   osx_clock

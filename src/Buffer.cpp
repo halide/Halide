@@ -108,7 +108,8 @@ template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
     // Free any device-side allocation
     if (p->source_module.free_dev_buffer) {
-        p->source_module.free_dev_buffer(NULL, const_cast<buffer_t *>(&p->buf));
+        int error = p->source_module.free_dev_buffer(NULL, const_cast<buffer_t *>(&p->buf));
+        user_assert(!error);
     }
     free(p->allocation);
 
@@ -253,30 +254,33 @@ const Internal::JITCompiledModule &Buffer::source_module() {
     return contents.ptr->source_module;
 }
 
-void Buffer::copy_to_host() {
-    void (*copy_to_host)(void *, buffer_t *) =
+int Buffer::copy_to_host() {
+    int (*copy_to_host)(void *, buffer_t *) =
         contents.ptr->source_module.copy_to_host;
     if (copy_to_host) {
         /* The user context is always NULL when jitting, so it's safe to
          * pass NULL here. */
-        copy_to_host(NULL, raw_buffer());
+        return copy_to_host(NULL, raw_buffer());
     }
+    return 0;
 }
 
-void Buffer::copy_to_dev() {
-    void (*copy_to_dev)(void *, buffer_t *) =
+int Buffer::copy_to_dev() {
+    int (*copy_to_dev)(void *, buffer_t *) =
         contents.ptr->source_module.copy_to_dev;
     if (copy_to_dev) {
-        copy_to_dev(NULL, raw_buffer());
+        return copy_to_dev(NULL, raw_buffer());
     }
+    return 0;
 }
 
-void Buffer::free_dev_buffer() {
-    void (*free_dev_buffer)(void *, buffer_t *) =
+int Buffer::free_dev_buffer() {
+    int (*free_dev_buffer)(void *, buffer_t *) =
         contents.ptr->source_module.free_dev_buffer;
     if (free_dev_buffer) {
-        free_dev_buffer(NULL, raw_buffer());
+        return free_dev_buffer(NULL, raw_buffer());
     }
+    return 0;
 }
 
 

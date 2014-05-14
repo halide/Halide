@@ -15,7 +15,8 @@ using std::map;
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e) : env(e) {}
+    FlattenDimensions(const map<string, Function> &e, const Scope<int> &need_buffer_t)
+        : need_buffer_t(need_buffer_t), env(e) {}
     Scope<int> scope;
     Scope<int> need_buffer_t;
 private:
@@ -127,10 +128,19 @@ private:
                 stride_var[i] = Variable::make(Int(32), stride_name[i]);
             }
 
+            // Promote the type to be a multiple of 8 bits
+            Type t = realize->types[idx];
+            t.bits = t.bytes() * 8;
+
+            // Make the allocation node
+            stmt = Allocate::make(buffer_name, t, extents, stmt);
+
+            // Create a buffer_t object if necessary. The corresponding let is
+            // placed before the allocation node so that the buffer_t is
+            // already on the symbol table when doing the allocation.
             if (make_buffer_t[idx]) {
-                // We need to make a buffer_t for this buffer
                 vector<Expr> args(dims*3 + 2);
-                args[0] = Variable::make(Handle(), buffer_name);
+                args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
                 args[1] = realize->types[idx].bytes();
                 for (int i = 0; i < dims; i++) {
                     args[3*i+2] = min_var[i];
@@ -143,13 +153,6 @@ private:
                                      buf,
                                      stmt);
             }
-
-            // Promote the type to be a multiple of 8 bits
-            Type t = realize->types[idx];
-            t.bits = t.bytes() * 8;
-
-            // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -201,6 +204,7 @@ private:
                 names[i] = name + ".value";
                 Expr var = Variable::make(values[i].type(), names[i]);
                 Stmt store = Store::make(name, var, idx);
+
                 if (result.defined()) {
                     result = Block::make(result, store);
                 } else {
@@ -236,7 +240,6 @@ private:
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
                 name = name + '.' + int_to_string(call->value_index);
-
             }
 
             // Promote the type to be a multiple of 8 bits
@@ -267,8 +270,9 @@ private:
     }
 };
 
-Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    return FlattenDimensions(env).mutate(s);
+
+Stmt storage_flattening(Stmt s, const map<string, Function> &env, const Scope<int> &need_buffer_t) {
+    return FlattenDimensions(env, need_buffer_t).mutate(s);
 }
 
 }
