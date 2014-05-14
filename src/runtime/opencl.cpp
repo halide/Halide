@@ -41,15 +41,19 @@ extern const char * strstr(const char *, const char *);
 #ifndef DEBUG
 #define CHECK_ERR(e,str)                                  \
     do {                                                  \
-        if (err != CL_SUCCESS)                            \
+        if (err != CL_SUCCESS) {                          \
             halide_error(user_context, str);              \
+            return err;                                   \
+        }                                                 \
     } while (0) /* eat semicolon */
 #else // DEBUG
 #define CHECK_ERR(err,str)                                \
     do {                                                  \
-        if (err != CL_SUCCESS)                            \
-            halide_printf(user_context, "CL: %s returned non-success: %d\n", str, err); \
-        halide_assert(user_context, err == CL_SUCCESS);   \
+        if (err != CL_SUCCESS) {                          \
+            halide_printf(user_context, "CL: %s returned non-success at line %d: %d\n", str, __LINE__, err); \
+            halide_assert(user_context, err == CL_SUCCESS); \
+            return err;                                   \
+        }                                                 \
     } while (0) /* eat semicolon */
 #endif //DEBUG
 
@@ -65,8 +69,8 @@ cl_context WEAK weak_cl_ctx = 0;
 cl_command_queue WEAK weak_cl_q = 0;
 
 // These are pointers to the real context/queue stored elsewhere.
-static cl_context* cl_ctx = &weak_cl_ctx;
-static cl_command_queue* cl_q = &weak_cl_q;
+static cl_context* cl_ctx = NULL;
+static cl_command_queue* cl_q = NULL;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -119,11 +123,14 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* src, int size) {
-    int err;
-    cl_device_id dev;
+static int init_context(void *user_context) {
+    cl_int err = 0;
+
     // Initialize one shared context for all Halide compiled instances
-    if (!(*cl_ctx)) {
+    if (*cl_ctx == NULL) {
+        #ifdef DEBUG
+        halide_printf(user_context, "CL: Creating context\n");
+        #endif
         const cl_uint maxPlatforms = 4;
         cl_platform_id platforms[maxPlatforms];
         cl_uint platformCount = 0;
@@ -153,7 +160,7 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         }
         if (platform == NULL){
             halide_printf(user_context, "Failed to find OpenCL platform\n");
-            return NULL;
+            return -1;
         }
 
         #ifdef DEBUG
@@ -187,10 +194,10 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         CHECK_ERR( err, "clGetDeviceIDs" );
         if (deviceCount == 0) {
             halide_printf(user_context, "Failed to get device\n");
-            return NULL;
+            return -1;
         }
 
-        dev = devices[deviceCount-1];
+        cl_device_id dev = devices[deviceCount-1];
 
         #ifdef DEBUG
         const cl_uint maxDeviceName = 256;
@@ -217,22 +224,15 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         #ifdef DEBUG
         halide_printf(user_context, "Already had context %p\n", *cl_ctx);
         #endif
-
-        // Maintain ref count of context.
-        CHECK_CALL( clRetainContext(*cl_ctx), "clRetainContext" );
-        CHECK_CALL( clRetainCommandQueue(*cl_q), "clRetainCommandQueue" );
-
-        CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
     }
+    return err;
+}
 
-    // Create the module state if necessary
-    module_state *state = (module_state*)state_ptr;
-    if (!state) {
-        state = (module_state*)malloc(sizeof(module_state));
-        state->program = NULL;
-        state->next = state_list;
-        state_list = state;
-    }
+static int create_and_build_program(void *user_context, module_state *state, const char *src, int size) {
+    cl_int err = 0;
+    cl_device_id dev;
+
+    CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
 
     // Initialize a module for just this Halide module
     if ((!state->program) && (size > 1)) {
@@ -289,6 +289,37 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             halide_assert(user_context, err == CL_SUCCESS);
         }
     }
+    return err;
+}
+
+WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* src, int size) {
+    // If the context hasn't been set externally, use the weak context.
+    if (!cl_ctx) {
+        cl_ctx = &weak_cl_ctx;
+        cl_q = &weak_cl_q;
+    }
+
+    cl_int err = 0;
+
+    err = init_context(user_context);
+    if (err != CL_SUCCESS) {
+        return NULL;
+    }
+
+    // Create the module state if necessary
+    module_state *state = (module_state*)state_ptr;
+    if (!state) {
+        state = (module_state*)malloc(sizeof(module_state));
+        state->program = NULL;
+        state->next = state_list;
+        state_list = state;
+    }
+
+    err = create_and_build_program(user_context, state, src, size);
+    if (err != CL_SUCCESS) {
+        return NULL;
+    }
+
     return state;
 }
 
@@ -298,43 +329,46 @@ WEAK void halide_dev_sync(void *user_context) {
 }
 
 WEAK void halide_release(void *user_context) {
-    // TODO: this is for timing; bad for release-mode performance
     #ifdef DEBUG
-    halide_printf(user_context, "dev_sync on exit\n" );
+    halide_printf(user_context, "CL: halide_release\n");
     #endif
-    halide_dev_sync(user_context);
+    // Only perform release if a context has actually been created.
+    if (cl_ctx) {
+        // TODO: this is for timing; bad for release-mode performance
+        #ifdef DEBUG
+        halide_printf(user_context, "dev_sync on exit\n" );
+        #endif
+        halide_dev_sync(user_context);
 
-    // Unload the modules attached to this context
-    module_state *state = state_list;
-    while (state) {
-        if (state->program) {
-            #ifdef DEBUG
-            halide_printf(user_context, "clReleaseProgram %p\n", state->program);
-            #endif
+        // Unload the modules attached to this context
+        module_state *state = state_list;
+        while (state) {
+            if (state->program) {
+                #ifdef DEBUG
+                halide_printf(user_context, "clReleaseProgram %p\n", state->program);
+                #endif
 
-            CHECK_CALL( clReleaseProgram(state->program), "clReleaseProgram" );
-            state->program = NULL;
+                clReleaseProgram(state->program);
+                state->program = NULL;
+            }
+            state = state->next;
         }
-        state = state->next;
-    }
+        state_list = NULL;
 
-    // TODO: This is not a good solution to deal with this problem (finding out if the
-    // cl_ctx/cl_q are going to be freed). I think a larger redesign of the global
-    // context scheme might be necessary.
-    cl_uint refs = 0;
-    clGetContextInfo(*cl_ctx, CL_CONTEXT_REFERENCE_COUNT, sizeof(refs), &refs, NULL);
+        // Only release the context if we own it.
+        if (weak_cl_ctx) {
+            clReleaseCommandQueue(weak_cl_q);
+            #ifdef DEBUG
+            halide_printf(user_context, "clReleaseContext %p\n", weak_cl_ctx);
+            #endif
+            clReleaseContext(weak_cl_ctx);
 
-    // Unload context (ref counted).
-    CHECK_CALL( clReleaseCommandQueue(*cl_q), "clReleaseCommandQueue" );
-    #ifdef DEBUG
-    halide_printf(user_context, "clReleaseContext %p\n", *cl_ctx);
-    #endif
-    CHECK_CALL( clReleaseContext(*cl_ctx), "clReleaseContext" );
+            weak_cl_ctx = NULL;
+            weak_cl_q = NULL;
+        }
 
-    // See TODO above...
-    if (--refs == 0) {
-        *cl_ctx = NULL;
-        *cl_q = NULL;
+        cl_ctx = NULL;
+        cl_q = NULL;
     }
 }
 
@@ -346,7 +380,11 @@ static cl_kernel __get_kernel(void *user_context, cl_program program, const char
     // Get kernel function ptr
     int err;
     f = clCreateKernel(program, entry_name, &err);
-    CHECK_ERR(err, "clCreateKernel");
+    if (err != CL_SUCCESS) {
+        halide_error(user_context, "clCreateKernel failed");
+        return NULL;
+    }
+
     return f;
 }
 
