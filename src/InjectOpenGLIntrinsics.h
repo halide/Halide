@@ -7,7 +7,7 @@
 namespace Halide {
 namespace Internal {
 
-EXPORT Stmt inject_opengl_intrinsics(Stmt s, Scope<int> &needs_buffer_t);
+Stmt inject_opengl_intrinsics(Stmt s, Scope<int> &needs_buffer_t);
 
 }
 }
