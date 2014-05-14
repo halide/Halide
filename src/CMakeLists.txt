@@ -89,6 +89,7 @@ set(RUNTIME_CPP
   write_debug_image
   cuda_debug
   opencl_debug
+  opengl_debug
   windows_io)
 set (RUNTIME_LL
   arm
