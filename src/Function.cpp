@@ -174,9 +174,9 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Schedule::Dim d = {args[i], For::Serial};
-        contents.ptr->schedule.dims.push_back(d);
-        contents.ptr->schedule.storage_dims.push_back(args[i]);
+        Dim d = {args[i], For::Serial};
+        contents.ptr->schedule.dims().push_back(d);
+        contents.ptr->schedule.storage_dims().push_back(args[i]);
     }
 
     for (size_t i = 0; i < values.size(); i++) {
@@ -321,16 +321,16 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // First add any reduction domain
     if (r.domain.defined()) {
         for (size_t i = 0; i < r.domain.domain().size(); i++) {
-            Schedule::Dim d = {r.domain.domain()[i].var, For::Serial};
-            r.schedule.dims.push_back(d);
+            Dim d = {r.domain.domain()[i].var, For::Serial};
+            r.schedule.dims().push_back(d);
         }
     }
 
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Schedule::Dim d = {pure_args[i], For::Serial};
-            r.schedule.dims.push_back(d);
+            Dim d = {pure_args[i], For::Serial};
+            r.schedule.dims().push_back(d);
         }
     }
 
@@ -383,7 +383,7 @@ void Function::define_extern(const std::string &function_name,
     for (int i = 0; i < dimensionality; i++) {
         string arg = unique_name('e');
         contents.ptr->args[i] = arg;
-        contents.ptr->schedule.storage_dims.push_back(arg);
+        contents.ptr->schedule.storage_dims().push_back(arg);
     }
 
 }

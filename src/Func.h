@@ -198,15 +198,15 @@ enum GPUAPI {
     GPU_GLSL
 };
 
-/** A wrapper around a schedule used for common schedule manipulations */
+/** A temporary wrapper around a schedule used for common schedule manipulations */
 class ScheduleHandle {
-    Internal::Schedule &schedule;
+    Internal::Schedule schedule;
     void set_dim_type(Var var, Internal::For::ForType t);
     std::string dump_argument_list();
 public:
-    ScheduleHandle(Internal::Schedule &s) : schedule(s) {s.touched = true;}
+    ScheduleHandle(Internal::Schedule s) : schedule(s) {s.touched();}
 
-    /** Scheduling calls that control how the domain of this update is
+    /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
@@ -243,7 +243,7 @@ public:
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
-    EXPORT ScheduleHandle &specialize(Expr condition);
+    EXPORT ScheduleHandle specialize(Expr condition);
 
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_Default);
@@ -913,8 +913,10 @@ public:
     /** Specialize a Func. This creates a special-case version of the
      * Func where the given condition is true. The most effective
      * conditions are those of the form param == value, and boolean
-     * Params. */
-    EXPORT Func &specialize(Expr condition);
+     * Params. The specialized version gets its own schedule, which
+     * inherits every directive made about the parent Func's schedule
+     * so far except for its specializations. */
+    EXPORT ScheduleHandle specialize(Expr condition);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
