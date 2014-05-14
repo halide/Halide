@@ -164,6 +164,37 @@ extern int halide_shutdown_trace();
  * number generator. */
 extern void halide_set_random_seed(uint32_t seed);
 
+
+/** Release all data associated with the current GPU backend, in particular
+ * all resources (memory, texture, context handles) allocated by Halide. Must
+ * be called explicitly when using AOT compilation. */
+extern void halide_release(void *user_context);
+
+/** Copy image data from device memory to host memory. This must be called
+ * explicitly to copy back the results of a GPU-based filter. */
+extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
+
+/** Copy image data from host memory to device memory. This should not be
+ * called directly; Halide handles copying to the device automatically. */
+extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
+
+/** Wait for current GPU operations to complete. Calling this explicitly
+ * should rarely be necessary, except maybe for profiling. */
+extern void halide_dev_sync(void *user_context);
+
+extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
+extern int halide_dev_free(void *user_context, struct buffer_t *buf);
+extern void *halide_init_kernels(void *user_context, void *state_ptr,
+                                 const char *src, int size);
+extern int halide_dev_run(void *user_context,
+                          void *state_ptr,
+                          const char *entry_name,
+                          int blocksX, int blocksY, int blocksZ,
+                          int threadsX, int threadsY, int threadsZ,
+                          int shared_mem_bytes,
+                          size_t arg_sizes[],
+                          void *args[]);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

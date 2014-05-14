@@ -11,7 +11,7 @@ import pkgutil
 import cStringIO
 import tempfile
 
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 
 exit_on_signal()                   # Install C++ debugging traceback
 
@@ -32,6 +32,9 @@ RDomType = RDom
 TypeType = Type
 FuncRefExprType = FuncRefExpr
 FuncRefVarType = FuncRefVar
+VarOrRVarType = VarOrRVar
+ArgumentType = Argument
+ScheduleHandleType = ScheduleHandle
 
 # ----------------------------------------------------
 # Expr
@@ -52,6 +55,16 @@ def wrap(*a):
     return ExprType(*a)
 
 pow0 = pow
+
+_lerp0 = lerp
+lerp =  lambda zero_value, one_value, weight: _lerp0(wrap(zero_value), wrap(one_value), weight)
+"""
+Linear interpolate between the two values according to a weight.
+  param zero_val The result when weight is 0
+  param one_val The result when weight is 1
+  param weight The interpolation amount
+
+"""
 
 for BaseT in (ExprType, FuncRefExpr, FuncRefVar, VarType, RDomType, RVarType, FuncType) + ParamTypes:
     BaseT.__add__ = lambda x, y: add(wrap(x), wrap(y))
@@ -97,30 +110,30 @@ class Var(object):
     a name, and can be reused in places where no name conflict will
     occur. It can be used in the left-hand-side of a function
     definition, or as an Expr. As an Expr, it always has type Int(32).
-    
+
     Constructors::
-    
+
       Var()      -- Construct Var with an automatically-generated unique name
       Var(name)  -- Construct Var with the given string name.
     """
     def __new__(cls, *args):
         return VarType(*args)
-    
+
     def name(self):
         """
         Get the name of a Var.
         """
-    
+
     def same_as(self, other):
         """
         Test if two Vars are the same.
         """
-    
+
     def implicit(self, n):
         """
         Construct implicit Var from int n.
         """
-        
+
 for C in [VarType, FuncRefExpr, FuncRefVar]:
     C.__add__ = lambda x, y: add(wrap(x), wrap(y))
     C.__sub__ = lambda x, y: sub(wrap(x), wrap(y))
@@ -151,8 +164,9 @@ def raise_error(e):
 #_reset0 = Func.reset     # Reset schedule has been removed (could be reimplemented in C++ layer as a walk over all Funcs)
 _split0 = FuncType.split
 _tile0 = FuncType.tile
-#_reorder0 = Func.reorder
+_reorder0 = FuncType.reorder
 _bound0 = FuncType.bound
+_parallel0 = FuncType.parallel
 
 _generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,VarType) else key)
 _generic_getitem_expr = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
@@ -160,20 +174,25 @@ _generic_set = lambda x, y: set(x, wrap(y))
 #_realize = Func.realize
 
 FuncType.__call__ = lambda self, *L: raise_error(ValueError('used f(x, y) to refer to a Func -- proper syntax is f[x, y]'))
+
 def wrap_func_args(args):
     if all(isinstance(x, VarType) for x in args):
         return args
     return [wrap(y) for y in args]
-    
+
+def wrap_gpu_args(args):
+    return [y if isinstance(y, VarType) else wrap(y) for y in args]
+
 FuncType.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,VarType) else key), wrap(value))
 FuncType.__getitem__ = _generic_getitem_var_or_expr
 FuncType.set = _generic_set
 
 #Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
-FuncType.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
-FuncType.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-#Func.reorder = lambda self, *a: _reorder0(self, ListVar(a))
-FuncType.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
+Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
+Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+Func.reorder = lambda self, *a: _reorder0(self, *[VarOrRVar(v) for v in a])
+Func.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
+Func.parallel = lambda self, *a: _parallel0(self, *wrap_gpu_args(a))
 
 class Func(object):
     """
@@ -181,9 +200,9 @@ class Func(object):
     pipeline, and is the unit by which we schedule things. By default
     they are aggressively inlined, so you are encouraged to make lots
     of little functions, rather than storing things in Exprs.
-    
+
     Constructors::
-    
+
       Func()      -- Declare a new undefined function with an automatically-generated unique name
       Func(expr)  -- Declare a new function with an automatically-generated unique
                      name, and define it to return the given expression (which may
@@ -193,12 +212,12 @@ class Func(object):
     """
     def __new__(cls, *args):
         return FuncType(*args)
-    
+
     def set(self, y):
         """
         Typically one uses f[x, y] = expr to assign to a function. However f.set(expr) can be used also.
         """
-    
+
     def realize(self, x_size=0, y_size=0, z_size=0, w_size=0):
         """
         Evaluate this function over some rectangular domain and return
@@ -207,7 +226,7 @@ class Func(object):
 
         One can use f.realize(Buffer) to realize into an existing buffer.
         """
-        
+
     def compile_to_bitcode(self, filename, list_of_Argument, fn_name=""):
         """
         Statically compile this function to llvm bitcode, with the
@@ -215,7 +234,7 @@ class Func(object):
         signature, and C function name (which defaults to the same name
         as this halide function.
         """
-    
+
     def compile_to_c(self, filename, list_of_Argument, fn_name=""):
         """
         Statically compile this function to C source code. This is
@@ -223,21 +242,21 @@ class Func(object):
         many platforms. Vectorization will fail, and parallelization
         will produce serial code.
         """
-    
-    def compile_to_file(self, filename_prefix, list_of_Argument):
+
+    def compile_to_file(self, filename_prefix, list_of_Argument, target):
         """
         Various signatures::
-        
+
           compile_to_file(filename_prefix, list_of_Argument)
           compile_to_file(filename_prefix)
           compile_to_file(filename_prefix, Argument a)
           compile_to_file(filename_prefix, Argument a, Argument b)
-        
+
         Compile to object file and header pair, with the given
         arguments. Also names the C function to match the first
         argument.
         """
-    
+
     def compile_jit(self):
         """
         Eagerly jit compile the function to machine code. This
@@ -247,36 +266,36 @@ class Func(object):
         then you can call this ahead of time. Returns the raw function
         pointer to the compiled pipeline.
         """
-    
+
     def debug_to_file(self, filename):
         """
         When this function is compiled, include code that dumps its values
         to a file after it is realized, for the purpose of debugging.
         The file covers the realized extent at the point in the schedule that
         debug_to_file appears.
-      
+
         If filename ends in ".tif" or ".tiff" (case insensitive) the file
         is in TIFF format and can be read by standard tools.
         """
-    
+
     def name(self):
         """
         The name of this function, either given during construction, or automatically generated.
         """
-    
+
     def value(self):
         """
         The right-hand-side value of the pure definition of this
         function. May be undefined if the function has no pure
         definition yet.
         """
-    
+
     def dimensions(self):
         """
         The dimensionality (number of arguments) of this
         function. Zero if the function is not yet defined.
         """
-    
+
     def __getitem__(self, *args):
         """
         Either calls to the function, or the left-hand-side of a
@@ -285,7 +304,7 @@ class Func(object):
         function has dimensions, then enough implicit vars are added to
         the end of the argument list to make up the difference.
         """
-    
+
     def split(self, old, outer, inner, factor):
         """
         Split a dimension into inner and outer subdimensions with the
@@ -293,15 +312,22 @@ class Func(object):
         factor-1. The inner and outer subdimensions can then be dealt
         with using the other scheduling calls. It's ok to reuse the old
         variable name as either the inner or outer variable.
-        
+
         The arguments are all Var instances.
         """
-        
+
+    def fuse(self, inner, outer, fused):
+        """
+        Join two dimensions into a single fused dimension. The fused
+         dimension covers the product of the extents of the inner and
+         outer dimensions given.
+        """
+
     def parallel(self, var):
         """
         Mark a dimension (Var instance) to be traversed in parallel.
         """
-    
+
     def vectorize(self, var, factor):
         """
         Split a dimension (Var instance) by the given int factor, then vectorize the
@@ -310,7 +336,7 @@ class Func(object):
         one. After this call, var refers to the outer dimension of the
         split.
         """
-    
+
     def unroll(self, var, factor=None):
         """
         Split a dimension (Var instance) by the given int factor, then unroll the inner
@@ -318,7 +344,7 @@ class Func(object):
         some constant factor. After this call, var refers to the outer
         dimension of the split.
         """
-    
+
     def bound(self, min_expr, extent_expr):
         """
         Statically declare that the range over which a function should
@@ -330,34 +356,34 @@ class Func(object):
         more of this function than the bounds you have stated, a
         runtime error will occur when you try to run your pipeline.
         """
-    
+
     def tile(self, x, y, xo, yo, xi, yi, xfactor, yfactor):
         """
         Traverse in tiled order. Two signatures::
-        
-          tile(x, y, xi, yi, xfactor, yfactor)          
+
+          tile(x, y, xi, yi, xfactor, yfactor)
           tile(x, y, xo, yo, xi, yi, xfactor, yfactor)
-        
+
         Split two dimensions at once by the given factors, and then
         reorder the resulting dimensions to be xi, yi, xo, yo from
         innermost outwards. This gives a tiled traversal.
-        
+
         The shorter form of tile reuses the old variable names as
         the new outer dimensions.
         """
-    
+
     def reorder(self, *args):
         """
         Reorder the dimensions (Var arguments) to have the given nesting
         order, from innermost loop order to outermost.
         """
-    
+
     def rename(self, old_name, new_name):
         """
         Rename a dimension. Equivalent to split with a inner size of one.
         """
-    
-    def cuda_threads(self, *args):
+
+    def gpu_threads(self, *args):
         """
         Tell Halide that the following dimensions correspond to cuda
         thread indices. This is useful if you compute a producer
@@ -366,56 +392,107 @@ class Func(object):
         threads. If the selected target is not ptx, this just marks
         those dimensions as parallel.
         """
-    
-    def cuda_blocks(self, *args):
+
+    def gpu_blocks(self, *args):
         """
         Tell Halide that the following dimensions correspond to cuda
         block indices. This is useful for scheduling stages that will
         run serially within each cuda block. If the selected target is
         not ptx, this just marks those dimensions as parallel.
         """
-    
-    def cuda(self, block_x, thread_x):
+
+    def gpu(self, block_x, thread_x):
         """
         Three signatures::
-        
-          cuda(block_x, thread_x)
-          cuda(block_x, block_y, thread_x, thread_y)
-          cuda(block_x, block_y, block_z, thread_x, thread_y, thread_z)
-        
+
+          gpu(block_x, thread_x)
+          gpu(block_x, block_y, thread_x, thread_y)
+          gpu(block_x, block_y, block_z, thread_x, thread_y, thread_z)
+
         Tell Halide that the following dimensions correspond to cuda
         block indices and thread indices. If the selected target is not
         ptx, these just mark the given dimensions as parallel. The
         dimensions are consumed by this call, so do all other
         unrolling, reordering, etc first.
         """
-    
-    def cuda_tile(self, x, x_size):
+
+    def gpu_tile(self, x, x_size):
         """
         Three signatures:
-        
-          cuda_tile(x, x_size)
-          cuda_tile(x, y, x_size, y_size)
-          cuda_tile(x, y, z, x_size, y_size, z_size)
-        
+
+          gpu_tile(x, x_size)
+          gpu_tile(x, y, x_size, y_size)
+          gpu_tile(x, y, z, x_size, y_size, z_size)
+
         Short-hand for tiling a domain and mapping the tile indices
         to cuda block indices and the coordinates within each tile to
         cuda thread indices. Consumes the variables given, so do all
         other scheduling first.
         """
-    
+
+    def cuda_threads(self, *args):
+        """
+        deprecated Old name for #gpu_threads.
+        Tell Halide that the following dimensions correspond to cuda
+        thread indices. This is useful if you compute a producer
+        function within the block indices of a consumer function, and
+        want to control how that function's dimensions map to cuda
+        threads. If the selected target is not ptx, this just marks
+        those dimensions as parallel.
+        """
+
+    def cuda_blocks(self, *args):
+        """
+        deprecated Old name for #cuda_blocks.
+        Tell Halide that the following dimensions correspond to cuda
+        block indices. This is useful for scheduling stages that will
+        run serially within each cuda block. If the selected target is
+        not ptx, this just marks those dimensions as parallel.
+        """
+
+    def cuda(self, block_x, thread_x):
+        """
+        deprecated Old name for #cuda.
+        Three signatures::
+
+          cuda(block_x, thread_x)
+          cuda(block_x, block_y, thread_x, thread_y)
+          cuda(block_x, block_y, block_z, thread_x, thread_y, thread_z)
+
+        Tell Halide that the following dimensions correspond to cuda
+        block indices and thread indices. If the selected target is not
+        ptx, these just mark the given dimensions as parallel. The
+        dimensions are consumed by this call, so do all other
+        unrolling, reordering, etc first.
+        """
+
+    def cuda_tile(self, x, x_size):
+        """
+        deprecated Old name for #cuda_tile.
+        Three signatures:
+
+          cuda_tile(x, x_size)
+          cuda_tile(x, y, x_size, y_size)
+          cuda_tile(x, y, z, x_size, y_size, z_size)
+
+        Short-hand for tiling a domain and mapping the tile indices
+        to cuda block indices and the coordinates within each tile to
+        cuda thread indices. Consumes the variables given, so do all
+        other scheduling first.
+        """
+
     def reorder_storage(self, *args):
         """
         Scheduling calls that control how the storage for the function
         is laid out. Right now you can only reorder the dimensions.
         """
-    
+
     def compute_at(self, f, var):
         """
         Compute this function as needed for each unique value of the
         given var (can be a Var or an RVar) for the given calling function f.
         """
-    
+
     def compute_root(self):
         """
         Compute all of this function once ahead of time.
@@ -429,12 +506,12 @@ class Func(object):
         level at which computation occurs to trade off between locality
         and redundant work.
         """
-    
+
     def store_root(self):
         """
         Equivalent to Func.store_at, but schedules storage outside the outermost loop.
         """
-        
+
     def compute_inline(self):
         """
         Aggressively inline all uses of this function. This is the
@@ -442,61 +519,281 @@ class Func(object):
         a reduction, that means it gets computed as close to the
         innermost loop as possible.
         """
-    
+
     def update(self):
         """
         Get a handle on the update step of a reduction for the
         purposes of scheduling it. Only the pure dimensions of the
         update step can be meaningfully manipulated (see RDom).
         """
-    
+
     def function(self):
         """
         Get a handle on the internal halide function that this Func
         represents. Useful if you want to do introspection on Halide
         functions.
         """
-    
+
+# ----------------------------------------------------
+# ScheduleHandle
+# ----------------------------------------------------
+
+_split1 = ScheduleHandleType.split
+_tile1 = ScheduleHandleType.tile
+_reorder1 = ScheduleHandleType.reorder
+_gpu_tile1 = ScheduleHandleType.gpu_tile
+
+ScheduleHandle.split = lambda self, a, b, c, d: _split1(self, a, b, c, wrap(d))
+ScheduleHandle.tile = lambda self, *a: _tile1(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
+ScheduleHandle.reorder = lambda self, *a: _reorder1(self, *[VarOrRVar(v) for v in a])
+ScheduleHandle.gpu_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
+
+
+class ScheduleHandle(object):
+    """
+    Scheduling calls that control how the domain of this update is
+    traversed. This class represents one stage in a Halide
+    pipeline, and is the unit by which we schedule things. By default
+    they are aggressively inlined, so you are encouraged to make lots
+    of little functions, rather than storing things in Exprs.
+
+    """
+    def split(self, old, outer, inner, factor):
+        """
+        Split a dimension into inner and outer subdimensions with the
+        given names, where the inner dimension iterates from 0 to
+        factor-1. The inner and outer subdimensions can then be dealt
+        with using the other scheduling calls. It's ok to reuse the old
+        variable name as either the inner or outer variable.
+
+        The arguments are all Var instances.
+        """
+
+    def fuse(self, inner, outer, fused):
+        """
+        Join two dimensions into a single fused dimension. The fused
+         dimension covers the product of the extents of the inner and
+         outer dimensions given.
+        """
+
+    def parallel(self, var):
+        """
+        Mark a dimension (Var instance) to be traversed in parallel.
+        """
+
+    def vectorize(self, var, factor):
+        """
+        Split a dimension (Var instance) by the given int factor, then vectorize the
+        inner dimension. This is how you vectorize a loop of unknown
+        size. The variable to be vectorized should be the innermost
+        one. After this call, var refers to the outer dimension of the
+        split.
+        """
+
+    def unroll(self, var, factor=None):
+        """
+        Split a dimension (Var instance) by the given int factor, then unroll the inner
+        dimension. This is how you unroll a loop of unknown size by
+        some constant factor. After this call, var refers to the outer
+        dimension of the split.
+        """
+
+    def tile(self, x, y, xo, yo, xi, yi, xfactor, yfactor):
+        """
+        Traverse in tiled order. Two signatures::
+
+          tile(x, y, xi, yi, xfactor, yfactor)
+          tile(x, y, xo, yo, xi, yi, xfactor, yfactor)
+
+        Split two dimensions at once by the given factors, and then
+        reorder the resulting dimensions to be xi, yi, xo, yo from
+        innermost outwards. This gives a tiled traversal.
+
+        The shorter form of tile reuses the old variable names as
+        the new outer dimensions.
+        """
+
+    def reorder(self, *args):
+        """
+        Reorder the dimensions (Var arguments) to have the given nesting
+        order, from innermost loop order to outermost.
+        """
+
+    def rename(self, old_name, new_name):
+        """
+        Rename a dimension. Equivalent to split with a inner size of one.
+        """
+
+    def gpu_threads(self, *args):
+        """
+        Tell Halide that the following dimensions correspond to cuda
+        thread indices. This is useful if you compute a producer
+        function within the block indices of a consumer function, and
+        want to control how that function's dimensions map to cuda
+        threads. If the selected target is not ptx, this just marks
+        those dimensions as parallel.
+        """
+
+    def gpu_blocks(self, *args):
+        """
+        Tell Halide that the following dimensions correspond to cuda
+        block indices. This is useful for scheduling stages that will
+        run serially within each cuda block. If the selected target is
+        not ptx, this just marks those dimensions as parallel.
+        """
+
+    def gpu(self, block_x, thread_x):
+        """
+        Three signatures::
+
+          gpu(block_x, thread_x)
+          gpu(block_x, block_y, thread_x, thread_y)
+          gpu(block_x, block_y, block_z, thread_x, thread_y, thread_z)
+
+        Tell Halide that the following dimensions correspond to cuda
+        block indices and thread indices. If the selected target is not
+        ptx, these just mark the given dimensions as parallel. The
+        dimensions are consumed by this call, so do all other
+        unrolling, reordering, etc first.
+        """
+
+    def gpu_tile(self, x, x_size):
+        """
+        Three signatures:
+
+          gpu_tile(x, x_size)
+          gpu_tile(x, y, x_size, y_size)
+          gpu_tile(x, y, z, x_size, y_size, z_size)
+
+        Short-hand for tiling a domain and mapping the tile indices
+        to cuda block indices and the coordinates within each tile to
+        cuda thread indices. Consumes the variables given, so do all
+        other scheduling first.
+        """
+
+    def cuda_threads(self, *args):
+        """
+        deprecated Old name for #gpu_threads.
+        Tell Halide that the following dimensions correspond to cuda
+        thread indices. This is useful if you compute a producer
+        function within the block indices of a consumer function, and
+        want to control how that function's dimensions map to cuda
+        threads. If the selected target is not ptx, this just marks
+        those dimensions as parallel.
+        """
+
+    def cuda_blocks(self, *args):
+        """
+        deprecated Old name for #cuda_blocks.
+        Tell Halide that the following dimensions correspond to cuda
+        block indices. This is useful for scheduling stages that will
+        run serially within each cuda block. If the selected target is
+        not ptx, this just marks those dimensions as parallel.
+        """
+
+    def cuda(self, block_x, thread_x):
+        """
+        deprecated Old name for #cuda.
+        Three signatures::
+
+          cuda(block_x, thread_x)
+          cuda(block_x, block_y, thread_x, thread_y)
+          cuda(block_x, block_y, block_z, thread_x, thread_y, thread_z)
+
+        Tell Halide that the following dimensions correspond to cuda
+        block indices and thread indices. If the selected target is not
+        ptx, these just mark the given dimensions as parallel. The
+        dimensions are consumed by this call, so do all other
+        unrolling, reordering, etc first.
+        """
+
+    def cuda_tile(self, x, x_size):
+        """
+        deprecated Old name for #cuda_tile.
+        Three signatures:
+
+          cuda_tile(x, x_size)
+          cuda_tile(x, y, x_size, y_size)
+          cuda_tile(x, y, z, x_size, y_size, z_size)
+
+        Short-hand for tiling a domain and mapping the tile indices
+        to cuda block indices and the coordinates within each tile to
+        cuda thread indices. Consumes the variables given, so do all
+        other scheduling first.
+        """
+
+
 # ----------------------------------------------------
 # RDom and RVar
 # ----------------------------------------------------
+
+class Argument(object):
+    """
+    A multi-dimensional domain over which to iterate. Used when
+    defining functions as reductions. See apps/bilateral_grid.py for an
+    example of a reduction.
+
+    Constructors::
+
+      Argument(String name, Bool is_buffer, Type type)                             -- 1D reduction
+    """
+    def __new__(cls, *args):
+        return ArgumentType(*args)
+
+    def name(self):
+        """
+        The name of the argument.
+        """
+
+    def is_buffer(self, other):
+        """
+        An argument is either a primitive type (for parameters), or a
+        buffer pointer. If 'is_buffer' is true, then 'type' should be
+        ignored.
+        """
+
+    def type(self):
+        """
+        If this is a scalar parameter, then this is its type.
+        """
+
 
 class RDom(object):
     """
     A multi-dimensional domain over which to iterate. Used when
     defining functions as reductions. See apps/bilateral_grid.py for an
     example of a reduction.
-    
+
     Constructors::
-    
+
       RDom(Expr min, Expr extent, name="")                             -- 1D reduction
       RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, name="")  -- 2D reduction
       (Similar for 3D and 4D reductions)
       RDom(Buffer|ImageParam)                    -- Iterate over all points in the domain
 
     The following global functions can be used for inline reductions::
-    
+
         minimum, maximum, product, sum
     """
     def __new__(cls, *args):
         args = [wrap(x) if not isinstance(x,str) else x for x in args]
         return RDomType(*args)
-    
+
     def defined(self):
         """
         Check if reduction domain is non-NULL.
         """
-    
+
     def same_as(self, other):
         """
         Check if two reduction domains are the same.
         """
-    
+
     def dimensions(self):
         """
         Number of dimensions.
         """
-    
+
     x = property(doc="Access dimension 1 of reduction domain.")
     y = property(doc="Access dimension 2 of reduction domain.")
     z = property(doc="Access dimension 3 of reduction domain.")
@@ -517,18 +814,27 @@ class RVar(object):
         """
         The minimum value that this variable will take on.
         """
-    
+
     def extent(self):
         """
         The number that this variable will take on. The maximum value
         of this variable will be min() + extent() - 1.
         """
-    
+
     def name(self):
         """
         The name of this reduction variable.
         """
-        
+
+class VarOrRVar(object):
+    """
+    A class that can represent Vars or RVars. Used for reorder calls
+    which can accept a mix of either
+    """
+    def __new__(cls, *args):
+        return VarOrRVarType(*args)
+
+
 # ----------------------------------------------------
 # Image
 # ----------------------------------------------------
@@ -538,7 +844,7 @@ _flip_xy = True
 def flip_xy(flip=True):
     """
     Whether to flip array dimensions when converting to Numpy/PIL.
-    
+
     Halide examples use f[x,y] convention. If flip_xy(True) is called (the default) then the variables
     are flipped to I[y,x] convention when converting to Numpy/PIL.
     """
@@ -587,7 +893,7 @@ def _to_pil(I, maxval=None):
     A = numpy.asarray(I)
     if maxval is not None:
         A = numpy.asarray(A,'float32')*(1.0/maxval)
-  #  print 'converted to numpy', A.dtype
+#     print 'converted to numpy', A.dtype
     if A.dtype == numpy.uint8:
         pass
     elif A.dtype == numpy.uint16: #numpy.issubdtype(A.dtype, 'uint16'):
@@ -638,16 +944,16 @@ def _numpy_to_type(a):
          numpy.dtype('float32'): Float(32),
          numpy.dtype('float64'): Float(64)}
     return d[a.dtype]
-            
+
 class Image(object):
     """
     Construct an Image::
 
         Image(contents, [scale=None])
         Image([typeval=Int(n), UInt(n), Float(n), Bool()], contents, [scale=None])
-    
+
     The contents can be:
-    
+
         - PIL image
         - Numpy array
         - Filename of existing file (typeval defaults to UInt(8))
@@ -666,16 +972,16 @@ class Image(object):
     def __new__(cls, typeval, contents=None, scale=None):
         if contents is None:                        # If contents is None then Image(contents) is assumed as the call
             (typeval, contents) = (None, typeval)
-    
+
         if isinstance(contents, (str, unicode)):    # Convert filename to PIL image
             contents = PIL.open(contents)
             if typeval is None:
                 typeval = UInt(8)
                 contents = numpy.asarray(contents, 'uint8')
-            
+
         if hasattr(contents, 'putpixel'):           # Convert PIL images to numpy
             contents = numpy.asarray(contents)
-    
+
         if typeval is None:
             if hasattr(contents, 'type'):
                 typeval = contents.type()
@@ -685,10 +991,10 @@ class Image(object):
                 typeval = contents.as_vector()[0].type()
             else:
                 raise ValueError('unknown halide.Image constructor %r' % contents)
-                
+
         assert isinstance(typeval, TypeType), typeval
         sig = (typeval.bits, typeval.is_int(), typeval.is_uint(), typeval.is_float())
-        
+
         if sig == (8, True, False, False):
             C = Image_int8
             target_dtype = 'int8'
@@ -715,7 +1021,7 @@ class Image(object):
             target_dtype = 'float64'
         else:
             raise ValueError('unimplemented halide.Image type signature %r' % typeval)
-    
+
         if isinstance(contents, numpy.ndarray):
             if scale is None:
                 in_range = _numpy_to_type(contents).typical_max()
@@ -739,7 +1045,7 @@ class Image(object):
     def show(self, maxval=None):
         """
         Shows an Image instance on the screen, by converting through numpy and PIL.
-        
+
         If maxval is not None then rescales so that bright white is equal to maxval.
         """
 
@@ -753,7 +1059,7 @@ class Image(object):
     def to_pil(self):
         """
         Convert to PIL (Python Imaging Library) image.
-        
+
         The fromarray() constructor in PIL does not work due to ignoring array stride so this is a workaround.
         """
 
@@ -769,12 +1075,12 @@ class Image(object):
             set(Image, Buffer)
             set(ImageParam, Buffer|Image)
         """
-    
+
     def channels(self):
         """
         Number of channels.
         """
-    
+
     def copy_to_host(self):
         """
         Manually copy-back data to the host, if it's on a device. This
@@ -782,28 +1088,28 @@ class Image(object):
         you might need to call this if you realize a gpu kernel into an
         existing image.
         """
-    
+
     def defined(self):
         """
         Return whether buffer points to actual data (non-NULL Image).
         """
-    
+
     def dimensions(self):
         """
         Get the dimensionality of the data. Typically two for grayscale images, and three for color images.
         """
-    
+
     def extent(self, i):
         """
         Extent of dimension i.
         """
-    
+
     def height(self):
         """
         Get the extent of dimension 0, which by convention we use as
         the height of the image.
         """
-    
+
     def set_host_dirty(self, dirty=True):
         """
         Mark the buffer as dirty-on-host.  is done for you if you
@@ -811,7 +1117,7 @@ class Image(object):
         this if you realize a gpu kernel into an existing image, or
         modify the data via some other back-door.
         """
-    
+
     def stride(self, dim):
         """
         Get the number of elements in the buffer between two adjacent
@@ -820,18 +1126,18 @@ class Image(object):
         usually the extent of dimension 0. This is not necessarily true
         though.
         """
-    
+
     def width(self):
         """
         Get the extent of dimension 0, which by convention we use as
         the width of the image.
         """
-    
+
     def type(self):
         """
         Return Type instance for the data type of the image.
         """
-        
+
 # ----------------------------------------------------
 # Param
 # ----------------------------------------------------
@@ -842,12 +1148,12 @@ class Param(object):
     should be bound to an actual value of type T using the set method
     before you realize the function uses this. If you're statically
     compiling, this param should appear in the argument list.
-    
+
     Constructors::
-    
+
       Param(typeval, [value])
       Param(typeval, name, [value])
-    
+
     See Type for how to construct typeval.
     """
     def __new__(cls, typeval, *args):
@@ -887,22 +1193,22 @@ class Param(object):
         """
         String name of parameter.
         """
-    
+
     def get(self):
         """
         Get the current value of this parameter. Only meaningful when jitting.
         """
-    
+
     def set(self, val):
         """
         Set the current value of this parameter. Only meaningful when jitting.
         """
-    
+
     def type(self):
         """
         Get the Halide type.
         """
-        
+
 for ParamT in ParamTypes: # + (DynUniform,):
     ParamT.set = lambda x, y: set(x, y) #_generic_assign
 
@@ -924,21 +1230,21 @@ for _ImageT in [ImageParamType]:
 class Type(object):
     """
     A Halide type. Constructors are the following global functions::
-    
+
       Float(nbits)
       UInt(nbits)
       Int(nbits)
       Bool([width])
     """
-    
+
     def __new__(cls, *args):
         return TypeType(*args)
-    
+
     def to_numpy(self):
         """
         Convert to a numpy dtype instance.
         """
-    
+
     def typical_max(self):
         """
         Get typical maximum value of the type (1.0 for float, otherwise max int value).
@@ -948,34 +1254,34 @@ class Type(object):
         """
         True if Int() type.
         """
-    
+
     def is_uint(self):
         """
         True if UInt() type.
         """
-    
+
     def is_float(self):
         """
         True if Float() type.
         """
-    
+
     def is_bool(self):
         """
         True if Bool() type.
         """
-        
+
     def imin(self):
         """
         Minimum value for integer (assert if not integer).
         """
-    
+
     def imax(self):
         """
         Maximum value for integer (assert if not integer).
         """
-        
+
     bits = property(doc='Bits of type')
-    
+
 def _type_typical_max(typeval):          # The typical maximum value used for image processing (1.0 for float types)
     if typeval.is_uint():
         return 2**(typeval.bits)-1
@@ -1004,7 +1310,7 @@ TypeType.to_numpy = _type_to_numpy
 # ----------------------------------------------------
 
 VarType.__repr__ = lambda self: 'Var(%r)'%self.name()
-TypeType.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.is_uint() else 'Int(%d)'%self.bits if self.is_int() else 'Float(%d)'%self.bits if self.is_float() else 'Type(%d)'%self.bits 
+TypeType.__repr__ = lambda self: 'UInt(%d)'%self.bits if self.is_uint() else 'Int(%d)'%self.bits if self.is_int() else 'Float(%d)'%self.bits if self.is_float() else 'Type(%d)'%self.bits
 ExprType.__repr__ = lambda self: 'Expr(%s)' % ', '.join([repr(self.type())]) #  + [str(_x) for _x in self.vars()]
 FuncType.__repr__ = lambda self: 'Func(%r)' % self.name()
 
@@ -1041,6 +1347,69 @@ maximum = lambda x: maximum_func(wrap(x))
 product = lambda x: product_func(wrap(x))
 sum     = lambda x: sum_func(wrap(x))
 
+lambda_counter=[0]
+
+def lambda0D(exp):
+    """
+    Create a 0 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev = exp
+    return prev
+
+def lambda2D(x, y, exp):
+    """
+    Create a 2 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y] = exp
+    return prev
+
+def lambda3D(x, y, z, exp):
+    """
+    Create a 3 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y, z] = exp
+    return prev
+
+def lambda4D(x, y, z, w, exp):
+    """
+    Create a 4 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y, z, w] = exp
+    return prev
+
+def lambda5D(x, y, z, w, v, exp):
+    """
+    Create a 5 dimensional halide function that returns the given
+    expression. The function may have more dimensions if the expression
+    contains implicit arguments.
+    Replacement for halide_lambda
+    """
+    prev = Func('prev%d'%lambda_counter[0])
+    lambda_counter[0] += 1
+    prev[x, y, z, w, v] = exp
+    return prev
+
+
 # ----------------------------------------------------
 # Constructors
 # ----------------------------------------------------
@@ -1048,25 +1417,25 @@ sum     = lambda x: sum_func(wrap(x))
 class Expr(object):
     """
     An expression or fragment of Halide code.
-    
+
     One can explicitly coerce most types to Expr via the Expr(x) constructor.
     The following operators are implemented over Expr, and also other types
     such as Image, Func, Var, RVar generally coerce to Expr when used in arithmetic::
-    
+
       + - * / % ** & |
       -(unary) ~(unary)
       < <= == != > >=
       += -= *= /=
-    
+
     The following math global functions are also available::
-    
+
        Unary:
          abs acos acosh asin asinh atan atanh ceil cos cosh exp
          fast_exp fast_log floor log round sin sinh sqrt tan tanh
-       
+
        Binary:
          hypot fast_pow max min pow
-        
+
        Ternary:
          clamp(x, lo, hi)                  -- Clamp expression to [lo, hi]
          select(cond, if_true, if_false)   -- Return if_true if cond else if_false
@@ -1078,31 +1447,31 @@ class Expr(object):
         """
         Type of expression.
         """
-        
+
 class ImageParam(object):
     """
     An Image parameter to a halide pipeline. E.g., the input image.
-    
+
     Constructor::
 
       ImageParam(Type t, int dims, name="")
-      
+
     The image can be indexed via I[x], I[y,x], etc, which gives a Halide Expr. Supports most of
     the methods of Image.
     """
     def __new__(cls, *args):
         return ImageParamType(*args)
-    
+
     def name(self):
         """
         Get name of ImageParam.
         """
-        
+
     def set(self, I):
         """
         Bind a Buffer, Image, numpy array, or PIL image. Only relevant for jitting.
         """
-    
+
     def get(self):
         """
         Get the Buffer that is bound. Only relevant for jitting.

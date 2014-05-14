@@ -36,6 +36,7 @@
 #include "Func.h"
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
+#include "InjectOpenGLIntrinsics.h"
 
 namespace Halide {
 namespace Internal {
@@ -1234,7 +1235,8 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         internal_assert((int)(touched.size()) == dimensions);
 
         // An expression returning whether or not we're in inference mode
-        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", param);
+        ReductionDomain rdom;
+        Expr inference_mode = Variable::make(UInt(1), name + ".host_and_dev_are_null", image, param, rdom);
 
         maybe_return_condition = maybe_return_condition || inference_mode;
 
@@ -1245,7 +1247,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         // Check the elem size matches the internally-understood type
         {
             string elem_size_name = name + ".elem_size";
-            Expr elem_size = Variable::make(Int(32), elem_size_name);
+            Expr elem_size = Variable::make(Int(32), elem_size_name, image, param, rdom);
             int correct_size = type.bytes();
             ostringstream error_msg;
             error_msg << error_name << " has type " << type
@@ -1262,9 +1264,9 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             string actual_min_name = name + ".min." + dim;
             string actual_extent_name = name + ".extent." + dim;
             string actual_stride_name = name + ".stride." + dim;
-            Expr actual_min = Variable::make(Int(32), actual_min_name);
-            Expr actual_extent = Variable::make(Int(32), actual_extent_name);
-            Expr actual_stride = Variable::make(Int(32), actual_stride_name);
+            Expr actual_min = Variable::make(Int(32), actual_min_name, image, param, rdom);
+            Expr actual_extent = Variable::make(Int(32), actual_extent_name, image, param, rdom);
+            Expr actual_stride = Variable::make(Int(32), actual_stride_name, image, param, rdom);
             if (!touched[j].min.defined() || !touched[j].max.defined()) {
                 user_error << "Buffer " << name
                            << " may be accessed in an unbounded way in dimension "
@@ -1349,7 +1351,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             args.push_back(Variable::make(Int(32), name + ".extent." + dim + ".proposed"));
             args.push_back(Variable::make(Int(32), name + ".stride." + dim + ".proposed"));
         }
-        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic);
+        Expr call = Call::make(UInt(1), Call::rewrite_buffer, args, Call::Intrinsic, Function(), 0, image, param);
         Stmt rewrite = Evaluate::make(call);
         rewrite = IfThenElse::make(inference_mode, rewrite);
         buffer_rewrites.push_back(rewrite);
@@ -1364,9 +1366,9 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 
             Expr stride_constrained, extent_constrained, min_constrained;
 
-            Expr stride_orig = Variable::make(Int(32), stride_name);
-            Expr extent_orig = Variable::make(Int(32), extent_name);
-            Expr min_orig    = Variable::make(Int(32), min_name);
+            Expr stride_orig = Variable::make(Int(32), stride_name, image, param, rdom);
+            Expr extent_orig = Variable::make(Int(32), extent_name, image, param, rdom);
+            Expr min_orig    = Variable::make(Int(32), min_name, image, param, rdom);
 
             Expr stride_required = Variable::make(Int(32), stride_name + ".required");
             Expr extent_required = Variable::make(Int(32), extent_name + ".required");
@@ -1616,8 +1618,15 @@ Stmt lower(Function f, const Target &t) {
     s = skip_stages(s, order);
     debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
+    Scope<int> need_buffer_t;
+    if (t.features & Target::OpenGL) {
+        debug(1) << "Injecting OpenGL texture intrinsics...\n";
+        s = inject_opengl_intrinsics(s, need_buffer_t);
+        debug(2) << "OpenGL intrinsics: \n" << s << "\n\n";
+    }
+
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env);
+    s = storage_flattening(s, env, need_buffer_t);
     debug(2) << "Storage flattening: \n" << s << "\n\n";
 
     debug(1) << "Removing code that depends on undef values...\n";

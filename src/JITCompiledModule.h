@@ -47,9 +47,9 @@ struct JITCompiledModule {
      * objects. These pointers may be NULL if not compiling for a
      * gpu-like target. */
     // @{
-    void (*copy_to_host)(void *user_context, struct buffer_t*);
-    void (*copy_to_dev)(void *user_context, struct buffer_t*);
-    void (*free_dev_buffer)(void *user_context, struct buffer_t*);
+    int (*copy_to_host)(void *user_context, struct buffer_t*);
+    int (*copy_to_dev)(void *user_context, struct buffer_t*);
+    int (*free_dev_buffer)(void *user_context, struct buffer_t*);
     // @}
 
     /** The type of a halide runtime error handler function */

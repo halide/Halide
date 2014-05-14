@@ -557,6 +557,7 @@ struct Select : public ExprNode<Select> {
  * no inherent type. */
 struct Load : public ExprNode<Load> {
     std::string name;
+
     Expr index;
 
     // If it's a load from an image argument or compiled-in constant
@@ -968,6 +969,8 @@ struct Call : public ExprNode<Call> {
         return_second,
         if_then_else,
         trace,
+        glsl_texture_load, 
+        glsl_texture_store,
         trace_expr;
 
     // If it's a call to another halide function, this call node
@@ -982,7 +985,7 @@ struct Call : public ExprNode<Call> {
     // pointer to that image's buffer
     Buffer image;
 
-    // If it's a call to an image parameter, this call nodes holds a
+    // If it's a call to an image parameter, this call node holds a
     // pointer to that
     Parameter param;
 
@@ -1049,28 +1052,36 @@ struct Variable : public ExprNode<Variable> {
     std::string name;
 
     /** References to scalar parameters, or to the dimensions of buffer
-     * parameters hang onto those expressions */
+     * parameters hang onto those expressions. */
     Parameter param;
+
+    /** References to properties of literal image parameters. */
+    Buffer image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, Parameter(), ReductionDomain());
+        return make(type, name, Buffer(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, param, ReductionDomain());
+        return make(type, name, Buffer(), param, ReductionDomain());
+    }
+
+    static Expr make(Type type, std::string name, Buffer image) {
+        return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, Parameter(), reduction_domain);
+        return make(type, name, Buffer(), Parameter(), reduction_domain);
     }
 
-    static Expr make(Type type, std::string name, Parameter param, ReductionDomain reduction_domain) {
+    static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain) {
         Variable *node = new Variable;
         node->type = type;
         node->name = name;
+        node->image = image;
         node->param = param;
         node->reduction_domain = reduction_domain;
         return node;
