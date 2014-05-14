@@ -2013,6 +2013,16 @@ void Func::infer_input_bounds(Realization dst) {
         Buffer b = image_param_args[i].second.get_buffer();
         if (!b.defined()) {
             buffer_t buf = dummy_buffers[j];
+            
+            Internal::debug(1) << "Inferred bounds for " << image_param_args[i].second.name() << ": ("
+                << buf.min[0] << ","
+                << buf.min[1] << ","
+                << buf.min[2] << ","
+                << buf.min[3] << ")..("
+                << buf.min[0] + buf.extent[0] << ","
+                << buf.min[1] + buf.extent[1] << ","
+                << buf.min[2] + buf.extent[2] << ","
+                << buf.min[3] + buf.extent[3] << ")\n";
 
             // Figure out how much memory to allocate for this buffer
             size_t min_idx = 0, max_idx = 0;
