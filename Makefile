@@ -460,11 +460,13 @@ doc: src test
 	doxygen
 
 $(DISTRIB_DIR)/halide.tgz: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h
-	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/lib
-	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/lib
+	mkdir -p $(DISTRIB_DIR)/include $(DISTRIB_DIR)/bin $(DISTRIB_DIR)/tutorial
+	cp $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so $(DISTRIB_DIR)/bin
 	cp include/Halide.h $(DISTRIB_DIR)/include
 	cp include/HalideRuntime.h $(DISTRIB_DIR)/include
-	tar -czf $(DISTRIB_DIR)/halide.tgz -C $(DISTRIB_DIR) lib include
+	cp tutorial/*.cpp tutorial/*.h $(DISTRIB_DIR)/tutorial
+	cp README $(DISTRIB_DIR)
+	tar -czf $(DISTRIB_DIR)/halide.tgz -C $(DISTRIB_DIR) bin include tutorial README
 
 distrib: $(DISTRIB_DIR)/halide.tgz
 
