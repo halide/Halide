@@ -32,11 +32,11 @@ double test_copy(Image<uint8_t> src, Image<uint8_t> dst) {
 
 
 
-    double t1 = currentTime();
+    double t1 = current_time();
     for (int i = 0; i < 10; i++) {
         f.realize(dst);
     }
-    double t2 = currentTime();
+    double t2 = current_time();
     return t2 - t1;
 }
 
