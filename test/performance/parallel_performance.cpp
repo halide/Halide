@@ -22,18 +22,18 @@ int main(int argc, char **argv) {
 
     double t1, t2;
 
-    t1 = currentTime();
+    t1 = current_time();
     f.realize(imf);
-    t2 = currentTime();
+    t2 = current_time();
     double parallelTime = t2 - t1;
 
     printf("Realizing g\n");
     Image<float> img = g.realize(W, H);
     printf("Done realizing g\n");
 
-    t1 = currentTime();
+    t1 = current_time();
     g.realize(img);
-    t2 = currentTime();
+    t2 = current_time();
     double serialTime = t2 - t1;
 
     for (int y = 0; y < H; y++) {

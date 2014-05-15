@@ -77,12 +77,12 @@ int main(int argc, char **argv) {
     // Warm up caches, etc.
     dst.realize(dst_image);
 
-    double t1 = currentTime();
+    double t1 = current_time();
 
     for (int i = 0; i < iterations; i++)
         dst.realize(dst_image);
 
-    double t2 = currentTime();
+    double t2 = current_time();
 
     printf("Interleaved to planar bandwidth %.3e byte/s.\n", (buffer_size / (t2 - t1)) * 1000 * iterations);
 
@@ -107,12 +107,12 @@ int main(int argc, char **argv) {
 
     memset(dst_storage, 0, buffer_size);
 
-    double t3 = currentTime();
+    double t3 = current_time();
 
     for (int i = 0; i < iterations; i++)
         dst.realize(dst_image);
 
-    double t4 = currentTime();
+    double t4 = current_time();
 
     for (int32_t x = 0; x < buffer_side_length; x++) {
         for (int32_t y = 0; y < buffer_side_length; y++) {
