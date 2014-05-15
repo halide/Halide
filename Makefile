@@ -374,7 +374,8 @@ opengl_%: $(BIN_DIR)/opengl_%
 	@-echo
 
 tutorial_%: $(BIN_DIR)/tutorial_%
-	@-mkdir -p tmp
+	@-mkdir -p tmp/images
+	@-cp tutorial/images/*.png tmp/images/
 	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
