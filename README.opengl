@@ -54,10 +54,8 @@ channels.
 JIT Compilation
 ---------------
 
-To execute JIT-compiled filters, Halide tries to load a dynamic library called
-'HalideOpenGLRuntime', which contains platform-specific code for interacting
-with the system's OpenGL implementation. A simple default implementation of
-this library can be found in 'bin/HalideOpenGLRuntime.{so,dylib,dll}'.
+For JIT compilation Halide attempts to load the system libraries for opengl
+and creates a new context to use for each module. Windows is not yet supported.
 
 Examples for JIT execution of OpenGL-based filters can be found in test/opengl.
 
