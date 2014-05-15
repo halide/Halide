@@ -334,6 +334,30 @@ int main(int argc, char **argv) {
 
     }
 
+    {
+        // Check we don't need to specialize intermediate stages.
+        ImageParam im(Int(32), 1);
+        Func f, g, h, out;
+        Var x;
+        f(x) = im(x);
+        g(x) = f(x);
+        h(x) = g(x);
+        out(x) = h(x);
+
+        Expr w = out.output_buffer().extent(0);
+        out.output_buffer().set_min(0, 0);
+
+        f.compute_root().specialize(w >= 4).vectorize(x, 4);
+        g.compute_root().vectorize(x, 4);
+        h.compute_root().vectorize(x, 4);
+        out.specialize(w >= 4).vectorize(x, 4);
+
+        Image<int> input(3), output(3);
+        // Shouldn't throw a bounds error:
+        im.set(input);
+        out.realize(output);
+    }
+
     printf("Success!\n");
     return 0;
 
