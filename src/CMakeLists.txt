@@ -70,6 +70,8 @@ set(RUNTIME_CPP
   nogpu
   opencl
   opengl
+  osx_opengl_context
+  linux_opengl_context
   posix_allocator
   posix_clock
   osx_clock
@@ -179,6 +181,7 @@ set(HEADER_FILES
   CodeGen_GPU_Host.h
   CodeGen_PTX_Dev.h
   CodeGen_OpenCL_Dev.h
+  CodeGen_OpenGL_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_SPIR_Dev.h
   CodeGen_PNaCl.h
@@ -263,6 +266,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Host.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_OpenCL_Dev.cpp
+  CodeGen_OpenGL_Dev.cpp
   CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
