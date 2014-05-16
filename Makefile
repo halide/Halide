@@ -373,7 +373,11 @@ opengl_%: $(BIN_DIR)/opengl_%
 	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
 
-tutorial_%: $(BIN_DIR)/tutorial_%
+tmp/images/%.png: tutorial/images/%.png
+	@-mkdir -p tmp/images
+	cp $< tmp/images/
+
+tutorial_%: $(BIN_DIR)/tutorial_% tmp/images/rgb.png tmp/images/gray.png
 	@-mkdir -p tmp/images
 	@-cp tutorial/images/*.png tmp/images/
 	cd tmp ; $(LD_PATH_SETUP) ../$<
