@@ -113,7 +113,8 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
 }
 
 WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
-    ScopedSpinLock l(cl_lock);
+    // TODO: OpenCL API is thread safe after 1.0?
+    //ScopedSpinLock l(cl_lock);
 
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
@@ -467,7 +468,8 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
-    ScopedSpinLock l(cl_lock);
+    // TODO: OpenCL API is thread safe after 1.0?
+    //ScopedSpinLock l(cl_lock);
 
     if (buf->host_dirty) {
         halide_assert(user_context, buf->host && buf->dev);
@@ -484,7 +486,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
-    ScopedSpinLock l(cl_lock);
+    // TODO: OpenCL API is thread safe after 1.0?
+    //ScopedSpinLock l(cl_lock);
 
     if (buf->dev_dirty) {
         clFinish(*cl_q); // block on completion before read back
@@ -513,8 +516,6 @@ WEAK int halide_dev_run(
     size_t arg_sizes[],
     void* args[])
 {
-    ScopedSpinLock l(cl_lock);
-
     halide_assert(user_context, state_ptr);
     cl_program program = ((module_state*)state_ptr)->program;
     halide_assert(user_context, program);
