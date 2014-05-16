@@ -32,15 +32,15 @@ int main(int argc, char **argv) {
 
     double halide = 0, system = 0;
     for (int i = 0; i < iterations; i++) {
-        double t1 = currentTime();
+        double t1 = current_time();
         dst.realize(output);
         dst.realize(output);
         dst.realize(output);
-        double t2 = currentTime();
+        double t2 = current_time();
         memcpy(output.data(), input.data(), input.width());
         memcpy(output.data(), input.data(), input.width());
         memcpy(output.data(), input.data(), input.width());
-        double t3 = currentTime();
+        double t3 = current_time();
         system += t3-t2;
         halide += t2-t1;
     }

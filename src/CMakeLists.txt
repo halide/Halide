@@ -7,6 +7,10 @@ if (MSVC)
   add_definitions("-D_CRT_SECURE_NO_WARNINGS")
   add_definitions("-D_SCL_SECURE_NO_WARNINGS")
   add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
+else()
+  add_definitions("-D__STDC_LIMIT_MACROS")
+  add_definitions("-D__STDC_CONSTANT_MACROS")
+  add_definitions("-std=c++11")
 endif()
 
 if (HALIDE_SHARED_LIBRARY)
@@ -16,13 +20,13 @@ else()
   set(HALIDE_LIBRARY_TYPE STATIC)
 endif()
 
-include_directories ("${LLVM_INCLUDE}")
+include_directories ( "${LLVM_INCLUDE}")
 link_directories ("${LLVM_LIB}")
 
 if(WIN32)
   file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
 else()
-  execute_process(COMMAND ${LLVM_CONFIG} --libs OUTPUT_VARIABLE LIBS)
+  execute_process(COMMAND "${LLVM_CONFIG}" --ldflags --libs OUTPUT_VARIABLE LIBS)
 endif()
 
 if (TARGET_NATIVE_CLIENT)
@@ -70,6 +74,8 @@ set(RUNTIME_CPP
   nogpu
   opencl
   opengl
+  osx_opengl_context
+  linux_opengl_context
   posix_allocator
   posix_clock
   osx_clock
@@ -112,12 +118,17 @@ set(RUNTIME_DIR "${CMAKE_CURRENT_SOURCE_DIR}/runtime")
 file(TO_NATIVE_PATH "${RUNTIME_DIR}/" NATIVE_RUNTIME_DIR)
 file(TO_NATIVE_PATH "${CMAKE_CFG_INTDIR}/" NATIVE_INT_DIR)
 
+# ./ seems to confuse cmake on linux
+if("${NATIVE_INT_DIR}" STREQUAL "./")
+  set(NATIVE_INT_DIR "")
+endif()
+
 # Gather dependencies for runtime objects.
-file(GLOB RUNTIME_CL_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "${RUNTIME_DIR}/CL/*.h")
-file(GLOB RUNTIME_CPP_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/*.cpp")
-file(GLOB RUNTIME_H_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/*.h")
-file(GLOB RUNTIME_LL_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/*.ll")
-file(GLOB RUNTIME_BC_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "${RUNTIME_DIR}/nvidia_libdevice_bitcode/*.bc")
+file(GLOB RUNTIME_CL_DEPENDS "${RUNTIME_DIR}/CL/*.h")
+file(GLOB RUNTIME_CPP_DEPENDS "${RUNTIME_DIR}/*.cpp")
+file(GLOB RUNTIME_H_DEPENDS "${RUNTIME_DIR}/*.h")
+file(GLOB RUNTIME_LL_DEPENDS "${RUNTIME_DIR}/*.ll")
+file(GLOB RUNTIME_BC_DEPENDS "${RUNTIME_DIR}/nvidia_libdevice_bitcode/*.bc")
 set (RUNTIME_DEPENDS
   ${RUNTIME_CL_DEPENDS}
   ${RUNTIME_CPP_DEPENDS}
@@ -126,37 +137,37 @@ set (RUNTIME_DEPENDS
   ${RUNTIME_BC_DEPENDS})
 
 # Commands to build initial module objects.
-set (INITMOD_DIR "${CMAKE_CFG_INTDIR}/initmod")
+set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
-    set(INITMOD "${INITMOD_DIR}/${i}_${j}.cpp")
-    add_custom_command(OUTPUT ${INITMOD}
-                       COMMAND ${CLANG} -fno-blocks -m${j} -DCOMPILING_HALIDE -DBITS_${j} -emit-llvm -O3 -S ${NATIVE_RUNTIME_DIR}${i}.cpp -o ${NATIVE_INT_DIR}initmod.${i}_${j}.ll
-                       COMMAND "${LLVM_AS}" "${NATIVE_INT_DIR}initmod.${i}_${j}.ll" -o ${NATIVE_INT_DIR}initmod.${i}_${j}.bc
-                       COMMAND bitcode2cpp ${i}_${j} < "${NATIVE_INT_DIR}initmod.${i}_${j}.bc" > ${INITMOD}
-                       DEPENDS ${RUNTIME_DEPENDS} "${NATIVE_INT_DIR}clang_ok" "${NATIVE_INT_DIR}llvm_ok"
-                       COMMENT "Building initial module ${i}_${j}...")
+    set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+    add_custom_command(OUTPUT "${INITMOD}"
+                       COMMAND ${CLANG} -fno-blocks -m${j} -DCOMPILING_HALIDE -DBITS_${j} -emit-llvm -O3 -S "${NATIVE_RUNTIME_DIR}${i}.cpp" -o "${NATIVE_INT_DIR}initmod.${i}_${j}.ll"
+                       COMMAND "${LLVM_AS}" "${NATIVE_INT_DIR}initmod.${i}_${j}.ll" -o "${NATIVE_INT_DIR}initmod.${i}_${j}.bc"
+                       COMMAND bitcode2cpp "${i}_${j}" < "${NATIVE_INT_DIR}initmod.${i}_${j}.bc" > "${INITMOD}"
+                       COMMENT "Building initial module ${i}_${j}..."
+                       VERBATIM)
     list(APPEND INITIAL_MODULES ${INITMOD})
   endforeach()
 endforeach()
 foreach (i ${RUNTIME_LL} )
-  set(INITMOD "${INITMOD_DIR}/${i}.cpp")
-  add_custom_command(OUTPUT ${INITMOD}
-                     COMMAND "${LLVM_AS}" "${NATIVE_RUNTIME_DIR}${i}.ll" -o ${NATIVE_INT_DIR}initmod.${i}.bc
-                     COMMAND bitcode2cpp ${i}_ll < "${NATIVE_INT_DIR}initmod.${i}.bc" > ${INITMOD}
-                     DEPENDS ${RUNTIME_DEPENDS} "${NATIVE_INT_DIR}clang_ok" "${NATIVE_INT_DIR}llvm_ok"
-                     COMMENT "Building initial module ${i}...")
-  list(APPEND INITIAL_MODULES ${INITMOD})
+  set(INITMOD "${INITMOD_PREFIX}${i}.cpp")
+  add_custom_command(OUTPUT "${INITMOD}"
+                     COMMAND "${LLVM_AS}" "${NATIVE_RUNTIME_DIR}${i}.ll" -o "${NATIVE_INT_DIR}initmod.${i}.bc"
+                     COMMAND bitcode2cpp ${i}_ll < "${NATIVE_INT_DIR}initmod.${i}.bc" > "${INITMOD}"
+                     COMMENT "Building initial module ${i}..."
+                     VERBATIM)
+  list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 foreach (i ${RUNTIME_BC} )
-  set(INITMOD "${INITMOD_DIR}/ptx_${i}.cpp")
-  add_custom_command(OUTPUT ${INITMOD}
-                     COMMAND bitcode2cpp ptx_${i}_ll < "${NATIVE_RUNTIME_DIR}/nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > ${INITMOD}
-                     DEPENDS ${RUNTIME_DEPENDS} "${NATIVE_INT_DIR}clang_ok" "${NATIVE_INT_DIR}llvm_ok"
-                     COMMENT "Building initial module ${i}...")
-  list(APPEND INITIAL_MODULES ${INITMOD})
+  set(INITMOD "${INITMOD_PREFIX}ptx_${i}.cpp")
+  add_custom_command(OUTPUT "${INITMOD}"
+                     COMMAND bitcode2cpp "ptx_${i}_ll" < "${NATIVE_RUNTIME_DIR}nvidia_libdevice_bitcode/libdevice.${i}.10.bc" > "${INITMOD}"
+                     COMMENT "Building initial module ptx_${i}..."
+                     VERBATIM)
+  list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 
 add_library(InitialModules STATIC
@@ -179,6 +190,7 @@ set(HEADER_FILES
   CodeGen_GPU_Host.h
   CodeGen_PTX_Dev.h
   CodeGen_OpenCL_Dev.h
+  CodeGen_OpenGL_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_SPIR_Dev.h
   CodeGen_PNaCl.h
@@ -249,9 +261,9 @@ set(HEADER_FILES
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
-add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/include/Halide.h
-  COMMAND build_halide_h ${HEADER_FILES} > ${NATIVE_INCLUDE_PATH}Halide.h
-  WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
+  COMMAND build_halide_h ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h ${HEADER_FILES})
 
 add_definitions("-DCOMPILING_HALIDE")
@@ -263,6 +275,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Host.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_OpenCL_Dev.cpp
+  CodeGen_OpenGL_Dev.cpp
   CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
@@ -330,7 +343,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Image.cpp
   Debug.cpp
   InjectOpenGLIntrinsics.cpp
-  ${CMAKE_BINARY_DIR}/include/Halide.h
+  "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
 target_link_libraries(Halide InitialModules ${LIBS})

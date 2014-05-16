@@ -1,5 +1,5 @@
-// A currentTime function for use in the tests.
-// Returns time in milliseconds.
+// A current_time function for use in the tests.  Returns time in
+// milliseconds.
 
 #ifdef _WIN32
 extern "C" bool QueryPerformanceCounter(uint64_t *);

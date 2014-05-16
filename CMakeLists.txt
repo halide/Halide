@@ -4,9 +4,9 @@ cmake_minimum_required(VERSION 2.8.7)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 set(LLVM_BIN "llvm3.2/bin/Debug/"
   CACHE PATH "Path to LLVM bin directory")
@@ -82,11 +82,11 @@ if (WIN32)
 endif()
 
 function(halide_project name folder)
-  add_executable(${name} ${ARGN})
-  target_link_libraries(${name} Halide ${PROJECT_LIBS})
-  set_target_properties(${name} PROPERTIES FOLDER ${folder})
+  add_executable("${name}" ${ARGN})
+  target_link_libraries("${name}" Halide ${PROJECT_LIBS})
+  set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (WIN32)
-    set_target_properties(${name} PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
+    set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
   endif()
 endfunction(halide_project)
 
@@ -94,7 +94,7 @@ add_subdirectory(src)
 add_subdirectory(test)
 
 # The apps and tutorials don't really compile on windows yet
-if (!WIN32) 
+if (!WIN32)
   add_subdirectory(apps)
   add_subdirectory(tutorial)
 endif()
