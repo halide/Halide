@@ -1353,6 +1353,9 @@ private:
             expr = a;
         } else if (is_zero(b)) {
             expr = b;
+        } else if (equal(a, b)) {
+            // a && a -> a
+            expr = a;
         } else if (le_a && le_b && equal(le_a->a, le_b->a)) {
             // (x <= foo && x <= bar) -> x <= min(foo, bar)
             expr = mutate(le_a->a <= min(le_a->b, le_b->b));
@@ -1382,16 +1385,13 @@ private:
         } else if (le_a && lt_b &&
                    equal(le_a->a, lt_b->b) &&
                    equal(le_a->b, lt_b->a)) {
-            // a <= b || b < a
+            // a <= b && b < a
             expr = const_false(op->type.width);
         } else if (lt_a && le_b &&
                    equal(lt_a->a, le_b->b) &&
                    equal(lt_a->b, le_b->a)) {
-            // a < b || b <= a
+            // a < b && b <= a
             expr = const_false(op->type.width);
-        } else if (equal(a, b)) {
-            // x < x
-            expr = make_zero(a.type());
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2340,6 +2340,8 @@ void simplify_test() {
     check(!b1 || b1, t);
     check(b1 && !b1, f);
     check(!b1 && b1, f);
+    check(b1 && b1, b1);
+    check(b1 || b1, b1);
 
     Expr vec = Variable::make(Int(32, 4), "vec");
     // Check constants get pushed inwards
