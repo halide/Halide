@@ -1,4 +1,5 @@
 #include "mini_stdint.h"
+#include "scoped_spin_lock.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
@@ -42,7 +43,7 @@ extern const char * strstr(const char *, const char *);
 #define CHECK_ERR(e,str)                                  \
     do {                                                  \
         if (err != CL_SUCCESS) {                          \
-            halide_error(user_context, str);              \
+            halide_error_varargs(user_context, str ": %d", e);  \
             return err;                                   \
         }                                                 \
     } while (0) /* eat semicolon */
@@ -64,13 +65,17 @@ extern const char * strstr(const char *, const char *);
   } while (0) /* eat semicolon */
 
 extern "C" {
-// A cuda context defined in this module with weak linkage
+// An OpenCL context/queue defined in this module with weak linkage
 cl_context WEAK weak_cl_ctx = 0;
 cl_command_queue WEAK weak_cl_q = 0;
 
 // These are pointers to the real context/queue stored elsewhere.
 static cl_context* cl_ctx = NULL;
 static cl_command_queue* cl_q = NULL;
+
+// A single global context lock for OpenCL.
+volatile int WEAK weak_cl_lock = 0;
+static volatile int *cl_lock = NULL;
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
@@ -82,9 +87,10 @@ typedef struct _module_state_ {
     _module_state_ *next;
 } module_state;
 
-WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q) {
+WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q, volatile int* lock) {
     cl_ctx = ctx;
     cl_q = q;
+    cl_lock = lock;
 }
 
 WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
@@ -107,6 +113,8 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
 }
 
 WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+    ScopedSpinLock l(cl_lock);
+
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
@@ -148,6 +156,10 @@ static int init_context(void *user_context) {
                 char platformName[maxPlatformName];
                 err = clGetPlatformInfo( platforms[i], CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
                 if (err != CL_SUCCESS) continue;
+
+                #ifdef DEBUG
+                halide_printf(user_context, "Found platform '%s'\n", platformName);
+                #endif
 
                 if (strstr(platformName, name))
                 {
@@ -297,10 +309,13 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     if (!cl_ctx) {
         cl_ctx = &weak_cl_ctx;
         cl_q = &weak_cl_q;
+        cl_lock = &weak_cl_lock;
     }
 
-    cl_int err = 0;
+    // Do this after setting the lock.
+    ScopedSpinLock lock(cl_lock);
 
+    cl_int err = 0;
     err = init_context(user_context);
     if (err != CL_SUCCESS) {
         return NULL;
@@ -325,20 +340,25 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
 // Used to generate correct timings when tracing
 WEAK void halide_dev_sync(void *user_context) {
+    ScopedSpinLock l(cl_lock);
+
     clFinish(*cl_q);
 }
 
 WEAK void halide_release(void *user_context) {
+    ScopedSpinLock l(cl_lock);
+
     #ifdef DEBUG
     halide_printf(user_context, "CL: halide_release\n");
     #endif
+
     // Only perform release if a context has actually been created.
     if (cl_ctx) {
         // TODO: this is for timing; bad for release-mode performance
         #ifdef DEBUG
         halide_printf(user_context, "dev_sync on exit\n" );
         #endif
-        halide_dev_sync(user_context);
+        clFinish(*cl_q);
 
         // Unload the modules attached to this context
         module_state *state = state_list;
@@ -369,6 +389,7 @@ WEAK void halide_release(void *user_context) {
 
         cl_ctx = NULL;
         cl_q = NULL;
+        cl_lock = NULL;
     }
 }
 
@@ -415,6 +436,8 @@ static size_t __buf_size(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
+    ScopedSpinLock l(cl_lock);
+
     if (buf->dev) {
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
         return 0;
@@ -444,6 +467,8 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
+    ScopedSpinLock l(cl_lock);
+
     if (buf->host_dirty) {
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
@@ -459,6 +484,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
+    ScopedSpinLock l(cl_lock);
+
     if (buf->dev_dirty) {
         clFinish(*cl_q); // block on completion before read back
         halide_assert(user_context, buf->host && buf->dev);
@@ -475,7 +502,6 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     buf->dev_dirty = false;
     return 0;
 }
-#define _COPY_TO_HOST
 
 WEAK int halide_dev_run(
     void *user_context,
@@ -487,6 +513,8 @@ WEAK int halide_dev_run(
     size_t arg_sizes[],
     void* args[])
 {
+    ScopedSpinLock l(cl_lock);
+
     halide_assert(user_context, state_ptr);
     cl_program program = ((module_state*)state_ptr)->program;
     halide_assert(user_context, program);
@@ -532,7 +560,7 @@ WEAK int halide_dev_run(
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
 
     #ifdef DEBUG
-    halide_dev_sync(user_context);
+    clFinish(*cl_q);
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "Kernel took: %f ms\n", (t_after - t_before) / 1000000.0);
     #endif

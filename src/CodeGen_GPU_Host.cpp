@@ -54,6 +54,7 @@ struct SharedCudaContext {
 // A single global OpenCL context and command queue to share among modules.
 void * cl_ctx = 0;
 void * cl_q = 0;
+volatile int cl_lock = 0;
 
 using std::vector;
 using std::string;
@@ -573,9 +574,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
         internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
         void *f = ee->getPointerToFunction(fn);
         internal_assert(f) << "Could not find compiled form of halide_set_cl_context in module\n";
-        void (*set_cl_context)(void **, void **) =
-            reinterpret_bits<void (*)(void **, void **)>(f);
-        set_cl_context(&cl_ctx, &cl_q);
+        void (*set_cl_context)(void **, void **, volatile int *) =
+            reinterpret_bits<void (*)(void **, void **, volatile int *)>(f);
+        set_cl_context(&cl_ctx, &cl_q, &cl_lock);
 
         // When the module dies, we need to call halide_release
         fn = module->getFunction("halide_release");
