@@ -93,7 +93,7 @@ struct Bound {
     Expr min, extent;
 };
 
-class ScheduleContents;
+struct ScheduleContents;
 
 struct Specialization {
     Expr condition;
