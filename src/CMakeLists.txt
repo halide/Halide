@@ -70,6 +70,8 @@ set(RUNTIME_CPP
   nogpu
   opencl
   opengl
+  osx_opengl_context
+  linux_opengl_context
   posix_allocator
   posix_clock
   osx_clock
@@ -89,6 +91,7 @@ set(RUNTIME_CPP
   write_debug_image
   cuda_debug
   opencl_debug
+  opengl_debug
   windows_io)
 set (RUNTIME_LL
   arm
@@ -178,6 +181,7 @@ set(HEADER_FILES
   CodeGen_GPU_Host.h
   CodeGen_PTX_Dev.h
   CodeGen_OpenCL_Dev.h
+  CodeGen_OpenGL_Dev.h
   CodeGen_GPU_Dev.h
   CodeGen_SPIR_Dev.h
   CodeGen_PNaCl.h
@@ -200,6 +204,7 @@ set(HEADER_FILES
   IROperator.h
   IRPrinter.h
   IRVisitor.h
+  InjectOpenGLIntrinsics.h
   JITCompiledModule.h
   Lambda.h
   Debug.h
@@ -261,6 +266,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_GPU_Host.cpp
   CodeGen_PTX_Dev.cpp
   CodeGen_OpenCL_Dev.cpp
+  CodeGen_OpenGL_Dev.cpp
   CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
@@ -327,6 +333,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Error.cpp
   Image.cpp
   Debug.cpp
+  InjectOpenGLIntrinsics.cpp
   Schedule.cpp
   ${CMAKE_BINARY_DIR}/include/Halide.h
   ${HEADER_FILES})
