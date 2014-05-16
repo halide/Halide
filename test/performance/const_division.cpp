@@ -58,16 +58,16 @@ bool test(int w) {
     g.compile_jit();
     h.compile_jit();
 
-    double t1 = currentTime();
+    double t1 = current_time();
     Image<T> correct = g.realize(input.width(), num_vals);
     for (int i = 0; i < 30; i++) g.realize(correct);
-    double t2 = currentTime();
+    double t2 = current_time();
     Image<T> fast = f.realize(input.width(), num_vals);
     for (int i = 0; i < 30; i++) f.realize(fast);
-    double t3 = currentTime();
+    double t3 = current_time();
     Image<T> fast_dynamic = h.realize(input.width(), num_vals);
     for (int i = 0; i < 30; i++) h.realize(fast_dynamic);
-    double t4 = currentTime();
+    double t4 = current_time();
     printf("compile-time-constant divisor path is %1.3f x faster \n", (t2-t1)/(t3-t2));
     printf("fast_integer_divide path is           %1.3f x faster \n", (t4-t3)/(t3-t2));
 

@@ -511,17 +511,28 @@ void IRPrinter::visit(const Block *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     do_indent();
-    stream << "if (" << op->condition << ") {\n";
-    indent += 2;
-    print(op->then_case);
-    indent -= 2;
-
-    if (op->else_case.defined()) {
-        do_indent();
-        stream << "} else {\n";
+    while (1) {
+        stream << "if (" << op->condition << ") {\n";
         indent += 2;
-        print(op->else_case);
+        print(op->then_case);
         indent -= 2;
+
+        if (!op->else_case.defined()) {
+            break;
+        }
+
+        if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
+            do_indent();
+            stream << "} else ";
+            op = nested_if;
+        } else {
+            do_indent();
+            stream << "} else {\n";
+            indent += 2;
+            print(op->else_case);
+            indent -= 2;
+            break;
+        }
     }
 
     do_indent();

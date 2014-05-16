@@ -52,15 +52,15 @@ bool test(int vec_width) {
     Image<A> outputg = g.realize(W, H);
     Image<A> outputf = f.realize(W, H);
 
-    double t1 = currentTime();
+    double t1 = current_time();
     for (int i = 0; i < 10; i++) {
         g.realize(outputg);
     }
-    double t2 = currentTime();
+    double t2 = current_time();
     for (int i = 0; i < 10; i++) {
         f.realize(outputf);
     }
-    double t3 = currentTime();
+    double t3 = current_time();
 
     printf("%g %g %g\n", t1, t2, t3);
 
