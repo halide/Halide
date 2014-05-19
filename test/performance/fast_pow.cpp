@@ -30,19 +30,19 @@ int main(int argc, char **argv) {
 
     const int iterations = 20;
 
-    double t1 = currentTime();
+    double t1 = current_time();
     for (int i = 0; i < iterations; i++) {
         f.realize(correct_result);
     }
-    double t2 = currentTime();
+    double t2 = current_time();
     for (int i = 0; i < iterations; i++) {
         g.realize(fast_result);
     }
-    double t3 = currentTime();
+    double t3 = current_time();
     for (int i = 0; i < iterations; i++) {
         h.realize(faster_result);
     }
-    double t4 = currentTime();
+    double t4 = current_time();
 
     RDom r(correct_result);
     Func fast_error, faster_error;

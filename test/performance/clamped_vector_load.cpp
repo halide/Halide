@@ -31,11 +31,11 @@ double test(Func f, bool test_correctness = true) {
         }
     }
 
-    double t1 = currentTime();
+    double t1 = current_time();
     for (int i = 0; i < 10; i++) {
         f.realize(output);
     }
-    return currentTime() - t1;
+    return current_time() - t1;
 }
 
 int main(int argc, char **argv) {
