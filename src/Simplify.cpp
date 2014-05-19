@@ -1322,6 +1322,9 @@ private:
             expr = a;
         } else if (is_zero(b)) {
             expr = b;
+        } else if (equal(a, b)) {
+            // a && a -> a
+            expr = a;
         } else if (le_a && le_b && equal(le_a->a, le_b->a)) {
             // (x <= foo && x <= bar) -> x <= min(foo, bar)
             expr = mutate(le_a->a <= min(le_a->b, le_b->b));
@@ -1334,9 +1337,6 @@ private:
         } else if (lt_a && lt_b && equal(lt_a->b, lt_b->b)) {
             // (foo <= x && bar <= x) -> max(foo, bar) <= x
             expr = mutate(max(lt_a->a, lt_b->a) <= lt_a->b);
-        } else if (equal(a, b)) {
-            // x < x
-            expr = make_zero(a.type());
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
