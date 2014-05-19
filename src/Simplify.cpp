@@ -843,10 +843,14 @@ private:
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
         } else if (op->type == Int(32) && is_simple_const(b)) {
-            // Try to remove pointless mins that splitting introduces
-            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            if (ia.max.defined() &&
-                is_one(mutate(ia.max <= b))) {
+            Expr delta = mutate(a - b);
+            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
+            id.min = mutate(id.min);
+            id.max = mutate(id.max);
+            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
+                expr = b;
+                return;
+            } else if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
                 expr = a;
                 return;
             }
@@ -1013,6 +1017,20 @@ private:
 
         //const Add *add_a_a = div_a ? div_a->a.as<Add>() : NULL;
         //const Add *add_b_a = div_b ? div_b->a.as<Add>() : NULL;
+        if (op->type == Int(32) && is_simple_const(b) && !is_simple_const(a)) {
+            Expr delta = mutate(a - b);
+            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
+            id.min = mutate(id.min);
+            id.max = mutate(id.max);
+            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
+                expr = a;
+                return;
+            }
+            if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
+                expr = b;
+                return;
+            }
+        }
 
         if (equal(a, b)) {
             expr = a;
@@ -1249,6 +1267,20 @@ private:
         const Mul *mul_b = b.as<Mul>();
 
         int ia = 0, ib = 0;
+
+        if (delta.type() == Int(32) && !is_const(delta)) {
+            Interval i = bounds_of_expr_in_scope(delta, bounds_info);
+            i.max = mutate(i.max);
+            i.min = mutate(i.min);
+            if (i.max.defined() && is_negative_const(i.max)) {
+                expr = const_true();
+                return;
+            }
+            if (i.min.defined() && (is_zero(i.min) || is_positive_const(i.min))) {
+                expr = const_false();
+                return;
+            }
+        }
 
         // Note that the computation of delta could be incorrect if
         // ia and/or ib are large unsigned integer constants, especially when
