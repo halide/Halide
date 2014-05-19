@@ -1547,19 +1547,17 @@ private:
             if (const And *a = next.as<And>()) {
                 if (!or_chain) {
                     stack.push_back(a->b);
-                    next = a->a;
+                    stack.push_back(a->a);
                     and_chain = true;
-                } else {
-                    continue;
                 }
+                continue;
             } else if (const Or *o = next.as<Or>()) {
                 if (!and_chain) {
                     stack.push_back(o->b);
-                    next = o->a;
+                    stack.push_back(o->a);
                     or_chain = true;
-                } else {
-                    continue;
                 }
+                continue;
             }
 
             const EQ *eq = next.as<EQ>();
