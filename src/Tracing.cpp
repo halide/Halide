@@ -35,24 +35,38 @@ private:
         if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
+            const Load *l = op->args[0].as<Load>();
+
+            internal_assert(c || l);
+
+            std::vector<Expr> args;
+            if (c) {
+                args = c->args;
+            } else {
+                args.push_back(l->index);
+            }
 
             bool unchanged = true;
-            vector<Expr> new_args(c->args.size());
-            for (size_t i = 0; i < c->args.size(); i++) {
-                new_args[i] = mutate(c->args[i]);
-                unchanged = unchanged && (new_args[i].same_as(c->args[i]));
+            vector<Expr> new_args(args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                new_args[i] = mutate(args[i]);
+                unchanged = unchanged && (new_args[i].same_as(args[i]));
             }
 
             if (unchanged) {
                 expr = op;
                 return;
             } else {
-                Expr inner = Call::make(c->type, c->name, new_args, c->call_type,
-                                        c->func, c->value_index, c->image, c->param);
+                Expr inner;
+                if (c) {
+                    inner = Call::make(c->type, c->name, new_args, c->call_type,
+                                       c->func, c->value_index, c->image, c->param);
+                } else {
+                    Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
+                }
                 expr = Call::make(Handle(), Call::address_of, vec(inner), Call::Intrinsic);
                 return;
             }
-
         }
 
 

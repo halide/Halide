@@ -1658,6 +1658,12 @@ void CodeGen::visit(const Call *op) {
 
                 value = phi;
             }
+        } else if (op->name == Call::cache_expr) {
+            // Used as an annotation for caching, should be invisible to codegen.
+            internal_assert(op->args.size() == 1);
+            value = codegen(op->args[0]);
+        } else if (op->name == Call::copy_memory) {
+            value = builder->CreateMemCpy(codegen(op->args[0]), codegen(op->args[1]), codegen(op->args[2]), 0);
         } else {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
