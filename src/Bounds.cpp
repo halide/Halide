@@ -943,7 +943,9 @@ private:
 
         if (expr_uses_vars(op->condition, scope)) {
             op->then_case.accept(this);
-            op->else_case.accept(this);
+            if (op->else_case.defined()) {
+                op->else_case.accept(this);
+            }
         } else {
             // If the condition is based purely on params, then we'll only
             // ever go one way in a given run, so we should conditionalize
@@ -955,9 +957,11 @@ private:
             op->then_case.accept(this);
             then_boxes.swap(boxes);
 
-            else_boxes.swap(boxes);
-            op->else_case.accept(this);
-            else_boxes.swap(boxes);
+            if (op->else_case.defined()) {
+                else_boxes.swap(boxes);
+                op->else_case.accept(this);
+                else_boxes.swap(boxes);
+            }
 
             //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
 
