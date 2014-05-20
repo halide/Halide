@@ -14,7 +14,8 @@
 namespace Halide {
 namespace Internal {
 
-  Stmt inject_caching(Stmt s, const std::map<std::string, Function> &env);
+Stmt inject_caching(Stmt s, const std::map<std::string, Function> &env,
+                    const std::string &name);
 
 }
 }

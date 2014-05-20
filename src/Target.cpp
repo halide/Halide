@@ -393,6 +393,7 @@ DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
+DECLARE_CPP_INITMOD(cache)
 
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
@@ -543,6 +544,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));
     modules.push_back(get_initmod_posix_error_handler(c, bits_64));
+    // TODO: should this only get pushed if compute_cached is used?
+    modules.push_back(get_initmod_cache(c, bits_64));
 
     // These modules are optional
     if (t.arch == Target::X86) {

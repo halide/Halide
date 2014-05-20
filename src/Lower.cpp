@@ -1553,7 +1553,7 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "All realizations injected:\n" << s << '\n';
 
     debug(2) << "Injecting caching...\n";
-    s = inject_caching(s, env);
+    s = inject_caching(s, env, f.name());
     debug(2) << "Caching injected:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
