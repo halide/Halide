@@ -136,6 +136,21 @@ int main(int argc, char **argv) {
     argmax_implicit(x, _) = argmax(input_3d(x, _, all_z))[0];
     Image<int32_t> argmax_implicit_im = argmax_implicit.realize(10, 10);
 
+    // Verify that the min of negative floats and doubles is correct
+    // (this used to be buggy due to the minimum float being the
+    // smallest positive float instead of the smallest float).
+    float result_f32 = evaluate<float>(minimum(RDom(0, 11) * -0.5f));
+    if (result_f32 != -5.0f) {
+        printf("minimum is %f instead of -5.0f\n", result_f32);
+        return -1;
+    }
+
+    double result_f64 = evaluate<double>(minimum(RDom(0, 11) * cast<double>(-0.5f)));
+    if (result_f64 != -5.0) {
+        printf("minimum is %f instead of -5.0\n", result_f64);
+        return -1;
+    }
+
     printf("Success!\n");
     return 0;
 
