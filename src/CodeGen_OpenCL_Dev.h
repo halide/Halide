@@ -9,13 +9,14 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
 
 class CodeGen_OpenCL_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenCL_Dev();
+    CodeGen_OpenCL_Dev(Target target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
@@ -58,6 +59,8 @@ protected:
     std::ostringstream src_stream;
 
     std::string cur_kernel_name;
+
+    Target target;
 };
 
 }}

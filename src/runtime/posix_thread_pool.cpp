@@ -159,8 +159,8 @@ WEAK void *halide_worker_thread(void *void_arg) {
             work myjob = *job;
             job->next++;
 
-            // If there were no more tasks pending for this job, or if
-            // it has failed, remove it from the stack.
+            // If there were no more tasks pending for this job,
+            // remove it from the stack.
             if (job->next == job->max) {
                 halide_work_queue.jobs = job->next_job;
             }

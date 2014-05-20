@@ -320,10 +320,10 @@ class Func {
      * represents */
     Internal::Function func;
 
-    /** When you make a reference to this function to with fewer
-     * arguments that it has dimensions, the argument list is bulked
+    /** When you make a reference to this function with fewer
+     * arguments than it has dimensions, the argument list is bulked
      * up with 'implicit' vars with canonical names. This lets you
-     * pass around partially-applied halide functions. */
+     * pass around partially applied Halide functions. */
     // @{
     int add_implicit_vars(std::vector<Var> &) const;
     int add_implicit_vars(std::vector<Expr> &) const;
@@ -1009,6 +1009,9 @@ public:
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
     // @}
+
+    /** Scheduling for GLSL. */
+    EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These
      * calls let you specify the nesting order of the dimensions. For

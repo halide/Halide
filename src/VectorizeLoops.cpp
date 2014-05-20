@@ -131,8 +131,6 @@ class VectorizeLoops : public IRMutator {
                 }
             }
 
-
-
             if (index.same_as(op->index)) {
                 expr = op;
             } else {
@@ -245,7 +243,6 @@ class VectorizeLoops : public IRMutator {
         void visit(const Store *op) {
             Expr value = mutate(op->value);
             Expr index = mutate(op->index);
-
             // Internal allocations always get vectorized.
             if (internal_allocations.contains(op->name)) {
                 int width = replacement.type().width;
@@ -441,8 +438,6 @@ class VectorizeLoops : public IRMutator {
     }
 
 };
-
-
 
 Stmt vectorize_loops(Stmt s) {
     return VectorizeLoops().mutate(s);

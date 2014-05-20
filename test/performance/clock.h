@@ -4,7 +4,7 @@
 #ifdef _WIN32
 extern "C" bool QueryPerformanceCounter(uint64_t *);
 extern "C" bool QueryPerformanceFrequency(uint64_t *);
-double currentTime() {
+double current_time() {
     uint64_t t, freq;
     QueryPerformanceCounter(&t);
     QueryPerformanceFrequency(&freq);
@@ -12,7 +12,7 @@ double currentTime() {
 }
 #else
 #include <sys/time.h>
-double currentTime() {
+double current_time() {
     static bool first_call = true;
     static timeval reference_time;
     if (first_call) {

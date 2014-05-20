@@ -195,12 +195,12 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf) {
 #endif
 }
 
-WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
+WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
     if (buf->dev == 0)
-        return;
+        return 0;
 
     #ifdef DEBUG
     halide_printf(user_context, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
@@ -209,7 +209,7 @@ WEAK void halide_dev_free(void *user_context, buffer_t* buf) {
 
     CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
     buf->dev = 0;
-
+    return 0;
 }
 
 WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* ptx_src, int size) {
@@ -367,10 +367,10 @@ static size_t __buf_size(void *user_context, buffer_t *buf) {
     return size;
 }
 
-WEAK void halide_dev_malloc(void *user_context, buffer_t *buf) {
+WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     if (buf->dev) {
         // This buffer already has a device allocation
-        return;
+        return 0;
     }
 
     size_t size = __buf_size(user_context, buf);
@@ -387,14 +387,18 @@ WEAK void halide_dev_malloc(void *user_context, buffer_t *buf) {
     TIME_CALL( cuMemAlloc(&p, size), "dev_malloc");
 
     buf->dev = (uint64_t)p;
-    halide_assert(user_context, buf->dev);
+    if (!buf->dev) {
+        halide_error(user_context, "cuMemAlloc failed\n");
+        return 1;
+    }
 
     #ifdef DEBUG
     halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
     #endif
+    return 0;
 }
 
-WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
+WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     if (buf->host_dirty) {
       halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
@@ -407,9 +411,10 @@ WEAK void halide_copy_to_dev(void *user_context, buffer_t* buf) {
         TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
     }
     buf->host_dirty = false;
+    return 0;
 }
 
-WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
+WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     if (buf->dev_dirty) {
         halide_assert(user_context, buf->dev);
         halide_assert(user_context, buf->host);
@@ -422,6 +427,7 @@ WEAK void halide_copy_to_host(void *user_context, buffer_t* buf) {
         TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
     }
     buf->dev_dirty = false;
+    return 0;
 }
 
 // Used to generate correct timings when tracing
@@ -429,7 +435,7 @@ WEAK void halide_dev_sync(void *user_context) {
     cuCtxSynchronize();
 }
 
-WEAK void halide_dev_run(
+WEAK int halide_dev_run(
     void *user_context,
     void *state_ptr,
     const char* entry_name,
@@ -466,6 +472,7 @@ WEAK void halide_dev_run(
         ),
         msg
     );
+    return 0;
 }
 
 } // extern "C" linkage

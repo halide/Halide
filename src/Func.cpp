@@ -895,64 +895,89 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
 }
 
 Func &Func::gpu_threads(Var tx, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, Var ty, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, Var ty, Var tz, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
     return *this;
 }
 
-  Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
+Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, Var by, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, Var by, Var bz, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var tx, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
+    ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var by, Var tx, Var ty, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
+    ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
+    ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
     return *this;
 }
 
-  Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpuapi);
     return *this;
 }
 
-  Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
-  ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
     return *this;
 }
+
+Func &Func::glsl(Var x, Var y, Var c) {
+    reorder(c, x, y);
+    // GLSL outputs must be stored interleaved
+    reorder_storage(c, x, y);
+
+    // TODO: Set appropriate constraints if this is the output buffer?
+
+    ScheduleHandle(func.schedule()).gpu_blocks(x, y);
+
+    bool constant_bounds = false;
+    Schedule &sched = func.schedule();
+    for (size_t i = 0; i < sched.bounds.size(); i++) {
+        if (c.name() == sched.bounds[i].var) {
+            constant_bounds = is_const(sched.bounds[i].min) &&
+                is_const(sched.bounds[i].extent);
+            break;
+        }
+    }
+    user_assert(constant_bounds)
+        << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
+    unroll(c);
+    return *this;
+}
+
 
 Func &Func::reorder_storage(Var x, Var y) {
     vector<string> &dims = func.schedule().storage_dims;
@@ -1512,13 +1537,13 @@ private:
 
     void visit(const Load *op) {
         IRGraphVisitor::visit(op);
-
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
     void visit(const Variable *op) {
         include_parameter(op->param);
+        include_buffer(op->image);
     }
 
     void visit(const Call *op) {
@@ -1944,6 +1969,9 @@ void Func::infer_input_bounds(Realization dst) {
     // Update the addresses of the image param args
     Internal::debug(3) << image_param_args.size() << " image param args to set\n";
     vector<buffer_t> dummy_buffers;
+    // We're going to be taking addresses of elements as we push_back,
+    // so reserve enough space to avoid reallocation.
+    dummy_buffers.reserve(image_param_args.size());
     for (size_t i = 0; i < image_param_args.size(); i++) {
         Internal::debug(3) << "Updating address for image param: " << image_param_args[i].second.name() << "\n";
         Buffer b = image_param_args[i].second.get_buffer();
@@ -2017,6 +2045,16 @@ void Func::infer_input_bounds(Realization dst) {
         Buffer b = image_param_args[i].second.get_buffer();
         if (!b.defined()) {
             buffer_t buf = dummy_buffers[j];
+            
+            Internal::debug(1) << "Inferred bounds for " << image_param_args[i].second.name() << ": ("
+                << buf.min[0] << ","
+                << buf.min[1] << ","
+                << buf.min[2] << ","
+                << buf.min[3] << ")..("
+                << buf.min[0] + buf.extent[0] << ","
+                << buf.min[1] + buf.extent[1] << ","
+                << buf.min[2] + buf.extent[2] << ","
+                << buf.min[3] + buf.extent[3] << ")\n";
 
             // Figure out how much memory to allocate for this buffer
             size_t min_idx = 0, max_idx = 0;
