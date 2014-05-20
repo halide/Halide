@@ -47,7 +47,7 @@ INLINE float maxval_f32() {
 }
 
 INLINE float minval_f32() {
-    return float_from_bits(0x00800000);
+    return float_from_bits(0xff7fffff);
 }
 
 INLINE double double_from_bits(uint64_t bits) {
@@ -64,7 +64,7 @@ INLINE double maxval_f64() {
 }
 
 INLINE double minval_f64() {
-    return double_from_bits(UINT64_C(0x0010000000000000));
+    return double_from_bits(UINT64_C(0xffefffffffffffff));
 }
 
 }
