@@ -3,11 +3,11 @@
 // This lesson demonstrates how express multi-stage pipelines.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_07
+// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07
 
 // On os x:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide -o lesson_07
+// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
 // DYLD_LIBRARY_PATH=../bin ./lesson_07
 
 #include <Halide.h>
@@ -16,7 +16,7 @@
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "../apps/support/image_io.h"
+#include "image_io.h"
 
 int main(int argc, char **argv) {
     // First we'll declare some Vars to use below.
@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
     // first horizontally, and then vertically.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("../apps/images/rgb.png");
+        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
 
         // Upgrade it to 16-bit, so we can do math without it overflowing.
         Func input_16("input_16");

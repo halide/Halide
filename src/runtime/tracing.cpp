@@ -177,7 +177,7 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
                         if (print_bits == 32) {
                             buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(e->value))[i]);
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((double *)(e->value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%g", ((double *)(e->value))[i]);
                         }
                     } else if (e->type_code == 3) {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(e->value))[i]);

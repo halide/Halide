@@ -62,15 +62,15 @@ private:
             Type t = op->type;
             t.width = new_width;
             if (internal.contains(op->name)) {
-                expr = Variable::make(t, op->name, op->param, op->reduction_domain);
+                expr = Variable::make(t, op->name, op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 0 &&
                        lane_stride == 2) {
-                expr = Variable::make(t, op->name + ".even_lanes", op->param, op->reduction_domain);
+                expr = Variable::make(t, op->name + ".even_lanes", op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 1 &&
                        lane_stride == 2) {
-                expr = Variable::make(t, op->name + ".odd_lanes", op->param, op->reduction_domain);
+                expr = Variable::make(t, op->name + ".odd_lanes", op->image, op->param, op->reduction_domain);
             } else {
                 // Uh-oh, we don't know how to deinterleave this vector expression
                 // Make llvm do it
