@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Param.h"
+#include "Util.h"
 #include "Var.h"
 
 #include <map>
@@ -152,6 +153,7 @@ public:
         info.type = expr.type();
         info.size_expr = info.type.bytes();
         info.value_expr = expr;
+        dependency_info[DependencyKey(info.type.bytes(), unique_name("cache_tag", false))] = info;
     }
 
 #if 0
@@ -248,8 +250,8 @@ public:
     }
 
     // Return the number of bytes needed to store the cache key
-    // for the target function.
-    Expr key_size() { return key_size_expr; };
+    // for the target function. Make sure it takes 4 bytes in cache key.
+    Expr key_size() { return cast<int32_t>(key_size_expr); };
 
     // Code to fill in the Allocation named key_name with the byte of
     // the key. The Allocation is guaranteed to be 1d, of type uint8_t
@@ -262,7 +264,9 @@ public:
         // the buffer can be unaligned.
 
         Expr top_level_name_size = (int32_t)top_level_name.size();
-        writes.push_back(Store::make(key_name, Cast::make(Int(32), top_level_name_size), index));
+        writes.push_back(Store::make(key_name,
+                                     Cast::make(Int(32), top_level_name_size),
+                                     (index / Int(32).bytes())));
         index += 4;
         writes.push_back(call_copy_memory(key_name, top_level_name, index));
         // Align to four byte boundary again.
@@ -275,7 +279,9 @@ public:
         }
 
         Expr name_size = (int32_t)function_name.size();
-        writes.push_back(Store::make(key_name, Cast::make(Int(32), name_size), index));
+        writes.push_back(Store::make(key_name,
+                                     Cast::make(Int(32), name_size),
+                                     (index / Int(32).bytes())));
         index += 4;
         writes.push_back(call_copy_memory(key_name, function_name, index));
         index += name_size;
@@ -295,7 +301,9 @@ public:
         for (iter = dependencies.dependency_info.begin();
              iter != dependencies.dependency_info.end();
              iter++) {
-            writes.push_back(Store::make(key_name, iter->second.value_expr, index));
+            writes.push_back(Store::make(key_name,
+                                         iter->second.value_expr,
+                                         (index / iter->second.size_expr)));
             index += iter->second.size_expr;
         }
         Stmt blocks;

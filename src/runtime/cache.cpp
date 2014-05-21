@@ -70,7 +70,7 @@ bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
 extern "C" {
 
 WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *buf) {
-#if 1
+#if 0
   halide_printf(user_context, "halide_cache_lookup called called key size is %d.\n", size);
   for (int i = 0; i < size; i++) {
       if (cache_key[i] >= 32 && cache_key[i] <= '~') {
@@ -100,7 +100,7 @@ WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int3
 }
 
 WEAK void halide_cache_store(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *buf) {
-#if 1
+#if 0
   halide_printf(user_context, "halide_cache_store called key size is %d.\n", size);
   for (int i = 0; i < size; i++) {
       if (cache_key[i] >= 32 && cache_key[i] <= '~') {
