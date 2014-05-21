@@ -149,7 +149,6 @@ int main(int argc, char **argv) {
     }
 
     {
-      printf("In interesting case\n");
         Param<float> val;
 
         call_count_with_arg = 0;
@@ -179,7 +178,6 @@ int main(int argc, char **argv) {
                 assert(out2(i, j) == (23 + 23));
             }
         }
-        printf("call_count_with_arg %d\n", call_count_with_arg);
         assert(call_count_with_arg == 2);
     }
 
