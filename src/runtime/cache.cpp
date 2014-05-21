@@ -67,6 +67,19 @@ bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     return i == key_size;
 }
 
+bool bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
+    if (buf1.elem_size != buf2.elem_size)
+        return false;
+    for (size_t i = 0; i < 4; i++) {
+        if (buf1.min[i] != buf2.min[i] ||
+            buf1.extent[i] != buf2.extent[i] ||
+            buf1.stride[i] != buf2.stride[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 extern "C" {
 
 WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *buf) {
@@ -86,8 +99,9 @@ WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int3
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == size && keys_equal(entry->key, cache_key, size)) {
-            // Deal with bounds?
+        if (entry->hash == h && entry->key_size == size &&
+            keys_equal(entry->key, cache_key, size) &&
+            bounds_equal(entry->buf, *buf)) {
             copy_from_to(user_context, entry->buf, *buf);
             //      halide_printf(user_context, "halide_cache_lookup returning true.\n");
             return false;
@@ -116,7 +130,9 @@ WEAK void halide_cache_store(void *user_context, const uint8_t *cache_key, int32
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
-        if (entry->hash == h && entry->key_size == size && keys_equal(entry->key, cache_key, size)) {
+        if (entry->hash == h && entry->key_size == size &&
+            keys_equal(entry->key, cache_key, size) &&
+            bounds_equal(entry->buf, *buf)) {
             return;
         }
         entry = entry->next;
