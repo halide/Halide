@@ -378,8 +378,6 @@ tmp/images/%.png: tutorial/images/%.png
 	cp $< tmp/images/
 
 tutorial_%: $(BIN_DIR)/tutorial_% tmp/images/rgb.png tmp/images/gray.png
-	@-mkdir -p tmp/images
-	@-cp tutorial/images/*.png tmp/images/
 	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
