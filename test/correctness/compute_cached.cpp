@@ -52,8 +52,6 @@ int main(int argc, char **argv) {
         f(x, y) = count_calls(x, y) + count_calls(x, y);
         count_calls.compute_cached();
 
-        f.compile_to_lowered_stmt("/tmp/compute_cached.stmt");
-
         Image<uint8_t> out1 = f.realize(256, 256);
         Image<uint8_t> out2 = f.realize(256, 256);
 
@@ -84,8 +82,6 @@ int main(int argc, char **argv) {
         f(x, y) = count_calls_23(x, y) + count_calls_42(x, y);
         count_calls_23.compute_cached();
         count_calls_42.compute_cached();
-
-        f.compile_to_lowered_stmt("/tmp/compute_cached_with_arg.stmt");
 
         Image<uint8_t> out1 = f.realize(256, 256);
         Image<uint8_t> out2 = f.realize(256, 256);
@@ -120,8 +116,6 @@ int main(int argc, char **argv) {
         count_calls_val1.compute_cached();
         count_calls_val2.compute_cached();
 
-        f.compile_to_lowered_stmt("/tmp/compute_cached_params.stmt");
-
         val1.set(23);
         val2.set(42);
 
@@ -152,6 +146,69 @@ int main(int argc, char **argv) {
             }
         }
         assert(call_count_with_arg == 4);
+    }
+
+    {
+      printf("In interesting case\n");
+        Param<float> val;
+
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg",
+                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
+                                  UInt(8), 2);
+
+        Func f;
+        Var x, y;
+        f(x, y) = count_calls(x, y) + count_calls(x, y);
+        count_calls.compute_cached();
+
+        f.compile_to_lowered_stmt("/tmp/compute_cached.stmt");
+        std::vector<Argument> args;
+        args.push_back(val);
+        f.compile_to_assembly("/tmp/compute_cached.s", args, "foon");
+
+        val.set(23.0f);
+        Image<uint8_t> out1 = f.realize(256, 256);
+        val.set(23.4f);
+        Image<uint8_t> out2 = f.realize(256, 256);
+
+        for (int32_t i = 0; i < 256; i++) {
+            for (int32_t j = 0; j < 256; j++) {
+                assert(out1(i, j) == (23 + 23));
+                assert(out2(i, j) == (23 + 23));
+            }
+        }
+        printf("call_count_with_arg %d\n", call_count_with_arg);
+        assert(call_count_with_arg == 2);
+    }
+
+    {
+        Param<float> val;
+
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg",
+                                  Internal::vec(ExternFuncArgument(cache_tag(cast<uint8_t>(val)))),
+                                  UInt(8), 2);
+
+        Func f;
+        Var x, y;
+        f(x, y) = count_calls(x, y) + count_calls(x, y);
+        count_calls.compute_cached();
+
+        val.set(23.0f);
+        Image<uint8_t> out1 = f.realize(256, 256);
+        val.set(23.4f);
+        Image<uint8_t> out2 = f.realize(256, 256);
+
+        for (int32_t i = 0; i < 256; i++) {
+            for (int32_t j = 0; j < 256; j++) {
+                assert(out1(i, j) == (23 + 23));
+                assert(out2(i, j) == (23 + 23));
+            }
+        }
+        assert(call_count_with_arg == 1);
     }
 
     printf("Success!\n");

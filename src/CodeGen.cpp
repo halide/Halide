@@ -1293,7 +1293,9 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_profiling_timer",
         "halide_release",
         "halide_start_clock",
-        "halide_trace"
+        "halide_trace",
+        "halide_cache_lookup",
+        "halide_cache_store"
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -1659,11 +1661,15 @@ void CodeGen::visit(const Call *op) {
                 value = phi;
             }
         } else if (op->name == Call::cache_expr) {
-            // Used as an annotation for caching, should be invisible to codegen.
-            internal_assert(op->args.size() == 1);
+            // Used as an annotation for caching, should be invisible to
+            // codegen. Ignore arguments beyond the first as they are only
+            // used in the cache key.
+            internal_assert(op->args.size() > 0);
             value = codegen(op->args[0]);
         } else if (op->name == Call::copy_memory) {
-            value = builder->CreateMemCpy(codegen(op->args[0]), codegen(op->args[1]), codegen(op->args[2]), 0);
+            value = builder->CreateMemCpy(codegen(op->args[0]),
+                                          codegen(op->args[1]),
+                                          codegen(op->args[2]), 0);
         } else {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
@@ -1711,10 +1717,11 @@ void CodeGen::visit(const Call *op) {
             // Halide's type system doesn't preserve pointer types
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type.
+            size_t llvm_arg_offset = function_takes_user_context(op->name) ? 1 : 0;
             FunctionType *func_t = fn->getFunctionType();
             for (size_t i = 0; i < args.size(); i++) {
                 if (op->args[i].type().is_handle()) {
-                    llvm::Type *t = func_t->getParamType(i);
+                    llvm::Type *t = func_t->getParamType(i + llvm_arg_offset);
 
                     // Widen to vector-width as needed. If the
                     // function doesn't actually take a vector,
