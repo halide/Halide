@@ -1,4 +1,5 @@
 #include "Caching.h"
+#include "Error.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Param.h"
@@ -91,8 +92,14 @@ public:
         }
 
         if (call->call_type == Call::Intrinsic && call->name == Call::cache_expr) {
-            internal_assert(call->args.size() == 1);
-            record(call->args[0]);
+            internal_assert(call->args.size() > 0);
+            if (call->args.size() == 1) {
+                record(call->args[0]);
+            } else {
+                for (size_t i = 1; i < call->args.size(); i++) {
+                    record(call->args[i]);
+                }
+            }
         } else {
             // Do not look at anything inside a cache_expr bracket.
             visit_function(call->func);
@@ -121,9 +128,17 @@ public:
         info.type = parameter.type();
 
         if (parameter.is_buffer()) {
-            InternalError("Cannot yet cache computations which depend on buffer parameters");
+            internal_error << "Buffer parameter " << parameter.name() <<
+                " encountered in computed_cached computation.\n" <<
+                "Computations which depend on buffer parameters " <<
+                "cannot be scheduled compute_cached.\n" <<
+                "Use cache_tag to provide cache key information for buffer.\n";
         } else if (info.type.is_handle()) {
-            InternalError("Cannot yet cache computations which depend on handle parameters");
+            internal_error << "Handle parameter " << parameter.name() <<
+                " encountered in computed_cached computation.\n" <<
+                "Computations which depend on buffer parameters " <<
+                "cannot be scheduled compute_cached.\n" <<
+                "Use cache_tag to provide cache key information for buffer.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -297,7 +312,6 @@ public:
     // by the code in this call.
     Expr generate_lookup(std::string key_allocation_name, std::string storage_allocation_name) {
         std::vector<Expr> args;
-        args.push_back(Variable::make(type_of<void *>(), "__user_context", Parameter(Handle(), false, "__user_context")));
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name + ".host"));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), storage_allocation_name));
@@ -308,7 +322,6 @@ public:
     // Returns a statement which will store the result of a computation under this key
     Stmt store_computation(std::string key_allocation_name, std::string storage_allocation_name) {
         std::vector<Expr> args;
-        args.push_back(Variable::make(type_of<void *>(), "__user_context", Parameter(Handle(), false, "__user_context")));
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name + ".host"));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), storage_allocation_name));

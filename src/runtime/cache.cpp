@@ -35,9 +35,9 @@ void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
     for (int i = 0; i < 4; i++) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);
         halide_assert(user_context, from.stride[i] == to.stride[i]);
-	if ((from.extent[i] * from.stride[i]) > full_extent) {
-	    full_extent = from.extent[i] * from.stride[i];
-	}
+        if ((from.extent[i] * from.stride[i]) > full_extent) {
+            full_extent = from.extent[i] * from.stride[i];
+        }
     }
     // TODO: fix cheesy memcpy replacement.
     for (size_t i = 0; i < full_extent * from.elem_size; i++) {
@@ -51,7 +51,7 @@ buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
     for (int i = 0; i < 4; i++) {
         if ((result.extent[i] * result.stride[i]) > full_extent) {
             full_extent = result.extent[i] * result.stride[i];
-	}
+        }
     }
     result.host = (uint8_t *)halide_malloc(user_context, full_extent * result.elem_size);
     copy_from_to(user_context, buf, result);
@@ -61,7 +61,7 @@ buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
 bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     size_t i = 0;
     while (i < key_size &&
-	   key1[i] == key2[i]) {
+           key1[i] == key2[i]) {
         i++;
     }
     return i == key_size;
@@ -70,10 +70,14 @@ bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
 extern "C" {
 
 WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *buf) {
-#if 0
-  halide_printf(user_context, "halide_cache_lookup called key size is %d.\n", size);
+#if 1
+  halide_printf(user_context, "halide_cache_lookup called called key size is %d.\n", size);
   for (int i = 0; i < size; i++) {
-    halide_printf(user_context, "%x%x", (cache_key[i] >> 4), cache_key[i] & 0xf);
+      if (cache_key[i] >= 32 && cache_key[i] <= '~') {
+          halide_printf(user_context, "%c", cache_key[i]);
+      } else {
+          halide_printf(user_context, "%x%x", (cache_key[i] >> 4), cache_key[i] & 0xf);
+      }
   }
   halide_printf(user_context, "\n");
 #endif
@@ -83,11 +87,12 @@ WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int3
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == size && keys_equal(entry->key, cache_key, size)) {
-	    // Deal with bounds?
-	    copy_from_to(user_context, entry->buf, *buf);
-	    //	    halide_printf(user_context, "halide_cache_lookup returning true.\n");
-	    return false;
+            // Deal with bounds?
+            copy_from_to(user_context, entry->buf, *buf);
+            //      halide_printf(user_context, "halide_cache_lookup returning true.\n");
+            return false;
         }
+        entry = entry->next;
     }
 
     //    halide_printf(user_context, "halide_cache_lookup returning false.\n");
@@ -95,10 +100,14 @@ WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int3
 }
 
 WEAK void halide_cache_store(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *buf) {
-#if 0
+#if 1
   halide_printf(user_context, "halide_cache_store called key size is %d.\n", size);
   for (int i = 0; i < size; i++) {
-    halide_printf(user_context, "%x%x", (cache_key[i] >> 4), cache_key[i] & 0xf);
+      if (cache_key[i] >= 32 && cache_key[i] <= '~') {
+          halide_printf(user_context, "%c", cache_key[i]);
+      } else {
+          halide_printf(user_context, "%x%x", (cache_key[i] >> 4), cache_key[i] & 0xf);
+      }
   }
   halide_printf(user_context, "\n");
 #endif
@@ -108,8 +117,9 @@ WEAK void halide_cache_store(void *user_context, const uint8_t *cache_key, int32
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == size && keys_equal(entry->key, cache_key, size)) {
-	  halide_assert(user_context, false);
+            return;
         }
+        entry = entry->next;
     }
 
     // BUGGY: racey writes?
