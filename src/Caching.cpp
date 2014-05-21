@@ -232,15 +232,16 @@ public:
         dependencies.visit_function(function);
         std::map<FindParameterDependencies::DependencyKey,
                  FindParameterDependencies::DependencyInfo>::const_iterator iter;
-        key_size_expr = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
-        
-        size_t func_name_size = 4 + function_name.size();
+        size_t size_so_far = 0;
+
+        size_so_far = 4 + (int32_t)((top_level_name.size() + 3) & ~3);
+        size_so_far += 4 + function_name.size();
 
         size_t needed_alignment = parameters_alignment();
         if (needed_alignment > 1) {
-            func_name_size = (func_name_size + needed_alignment) & ~(needed_alignment - 1);
+            size_so_far = (size_so_far + needed_alignment) & ~(needed_alignment - 1);
         }
-        key_size_expr += (int32_t)func_name_size;
+        key_size_expr = (int32_t)size_so_far;
         
         for (iter = dependencies.dependency_info.begin();
              iter != dependencies.dependency_info.end();
@@ -271,7 +272,7 @@ public:
         writes.push_back(call_copy_memory(key_name, top_level_name, index));
         // Align to four byte boundary again.
         index += top_level_name_size;
-        size_t alignment = top_level_name.size();
+        size_t alignment = 4 + top_level_name.size();
         while (alignment % 4) {
             writes.push_back(Store::make(key_name, Cast::make(UInt(8), 0), index));
             index = index + 1;
