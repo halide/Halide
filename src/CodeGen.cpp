@@ -197,7 +197,6 @@ void CodeGen::compile(Stmt stmt, string name,
         }
     }
 
-
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
@@ -2223,7 +2222,12 @@ void CodeGen::visit(const Evaluate *op) {
 
 Value *CodeGen::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
     llvm::BasicBlock *here = builder->GetInsertBlock();
-    builder->SetInsertPoint(here->getParent()->getEntryBlock().getFirstNonPHI());
+    llvm::BasicBlock *entry = &here->getParent()->getEntryBlock();
+    if (entry->empty()) {
+        builder->SetInsertPoint(entry);
+    } else {
+        builder->SetInsertPoint(entry->getFirstInsertionPt());
+    }
     Value *size = ConstantInt::get(i32, n);
     Value *ptr = builder->CreateAlloca(t, size, name);
     builder->SetInsertPoint(here);
