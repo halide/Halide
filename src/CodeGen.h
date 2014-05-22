@@ -93,7 +93,8 @@ public:
      * after it jits. Does nothing by default. The third argument
      * gives the target a chance to inject calls to target-specific
      * module cleanup routines. */
-    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<void (*)()> *) {}
+    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
+                              std::vector<std::pair<void (*)(void *), void *> > *) {}
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
