@@ -1468,13 +1468,16 @@ void CodeGen::visit(const Call *op) {
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
             value = buffer_min(buffer, idx->value);
-        } else if (op->name == Call::extract_buffer_extent) {
+        } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
             internal_assert(idx);
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-            value = buffer_extent(buffer, idx->value);
+            Value *extent = buffer_extent(buffer, idx->value);
+            Value *min = buffer_min(buffer, idx->value);
+            Value *max_plus_one = builder->CreateNSWAdd(min, extent);
+            value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32, 1));
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
             internal_assert((int)(op->args.size()) == dims*3 + 2);
