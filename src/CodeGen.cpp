@@ -682,13 +682,18 @@ void CodeGen::visit(const StringImm *op) {
 }
 
 void CodeGen::visit(const Cast *op) {
-    value = codegen(op->value);
-
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
+
+    value = codegen(op->value);
+
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
-    if (!src.is_float() && !dst.is_float()) {
+    if (dst.is_handle() && src.is_handle()) {
+        value = builder->CreateBitCast(value, llvm_dst);
+    } else if (dst.is_handle() || src.is_handle()) {
+        internal_error << "Can't cast from " << src << " to " << dst << "\n";
+    } else if (!src.is_float() && !dst.is_float()) {
         // Widening integer casts either zero extend or sign extend,
         // depending on the source type. Narrowing integer casts
         // always truncate.
@@ -1380,7 +1385,43 @@ void CodeGen::visit(const Call *op) {
             value = builder->CreateNot(codegen(op->args[0]));
         } else if (op->name == Call::reinterpret) {
             internal_assert(op->args.size() == 1);
-            value = builder->CreateBitCast(codegen(op->args[0]), llvm_type_of(op->type));
+            Type dst = op->type;
+            Type src = op->args[0].type();
+            llvm::Type *llvm_dst = llvm_type_of(dst);
+            value = codegen(op->args[0]);
+            if (src.is_handle() && !dst.is_handle()) {
+                internal_assert(dst.is_uint() && dst.bits == 64);
+
+                // Handle -> UInt64
+                llvm::DataLayout d(module);
+                if (d.getPointerSize() == 4) {
+                    llvm::Type *intermediate = llvm_type_of(UInt(32, dst.width));
+                    value = builder->CreatePtrToInt(value, intermediate);
+                    value = builder->CreateZExt(value, llvm_dst);
+                } else if (d.getPointerSize() == 8) {
+                    value = builder->CreatePtrToInt(value, llvm_dst);
+                } else {
+                    internal_error << "Pointer size is neither 4 nor 8 bytes\n";
+                }
+
+            } else if (dst.is_handle() && !src.is_handle()) {
+                internal_assert(dst.is_uint() && dst.bits == 64);
+
+                // UInt64 -> Handle
+                llvm::DataLayout d(module);
+                if (d.getPointerSize() == 4) {
+                    llvm::Type *intermediate = llvm_type_of(UInt(32, src.width));
+                    value = builder->CreateTrunc(value, intermediate);
+                    value = builder->CreateIntToPtr(value, llvm_dst);
+                } else if (d.getPointerSize() == 8) {
+                    value = builder->CreateIntToPtr(value, llvm_dst);
+                } else {
+                    internal_error << "Pointer size is neither 4 nor 8 bytes\n";
+                }
+
+            } else {
+                value = builder->CreateBitCast(codegen(op->args[0]), llvm_dst);
+            }
         } else if (op->name == Call::shift_left) {
             internal_assert(op->args.size() == 2);
             value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
