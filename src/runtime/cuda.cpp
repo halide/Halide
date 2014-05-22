@@ -17,9 +17,10 @@ extern int snprintf(char *, size_t, const char *, ...);
 #define CHECK_CALL(c,str) do {\
     halide_printf(user_context, "Do %s\n", str);        \
     CUresult status = (c);                              \
-    if (status != CUDA_SUCCESS)                                         \
-        halide_printf(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
-    halide_assert(user_context, status == CUDA_SUCCESS);                \
+    if (status != CUDA_SUCCESS) {                       \
+        halide_error_varargs(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
+        return status;                                  \
+    }                                                   \
 } while(0)
 #define TIME_CALL(c,str) do {\
     cuEventRecord(__start, 0);                              \
@@ -150,14 +151,91 @@ extern "C" {
 
 // A cuda context defined in this module with weak linkage
 CUcontext WEAK weak_cuda_ctx = 0;
+volatile int WEAK weak_cuda_lock = 0;
 
 // A pointer to the cuda context to use, which may not be the one above. This pointer is followed at init_kernels time.
 CUcontext WEAK *cuda_ctx_ptr = NULL;
+volatile int WEAK *cuda_lock_ptr = NULL;
 
-WEAK void halide_set_cuda_context(CUcontext *ctx_ptr) {
+WEAK void halide_set_cuda_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
     cuda_ctx_ptr = ctx_ptr;
+    cuda_lock_ptr = lock_ptr;
 }
 
+static CUresult create_context(void *user_context, CUcontext *ctx);
+
+// The default implementation of halide_acquire_cl_context uses the global
+// pointers above, and serializes access with a spin lock.
+// Overriding implementations of acquire/release must implement the following
+// behavior:
+// - halide_acquire_cl_context should always store a valid context/command
+//   queue in ctx/q, or return an error code.
+// - A call to halide_acquire_cl_context is followed by a matching call to
+//   halide_release_cl_context. halide_acquire_cl_context should block while a
+//   previous call (if any) has not yet been released via halide_release_cl_context.
+WEAK int halide_acquire_cuda_context(void *user_context, CUcontext *ctx) {
+    // TODO: Should we use a more "assertive" assert, these asserts do
+    // not block execution on failure.
+    halide_assert(user_context, ctx != NULL);
+
+    if (cuda_ctx_ptr == NULL) {
+        cuda_ctx_ptr = &weak_cuda_ctx;
+        cuda_lock_ptr = &weak_cuda_lock;
+    }
+
+    halide_assert(user_context, cuda_lock_ptr != NULL);
+    while (__sync_lock_test_and_set(cuda_lock_ptr, 1)) { }
+
+    // If the context has not been initialized, initialize it now.
+    halide_assert(user_context, cuda_ctx_ptr != NULL);
+    if (*cuda_ctx_ptr == NULL) {
+        CUresult error = create_context(user_context, cuda_ctx_ptr);
+        if (error != CUDA_SUCCESS) {
+            __sync_lock_release(cuda_lock_ptr);
+            return error;
+        }
+    }
+
+    *ctx = *cuda_ctx_ptr;
+    return 0;
+}
+
+WEAK int halide_release_cuda_context(void *user_context) {
+    __sync_lock_release(cuda_lock_ptr);
+    return 0;
+}
+
+}
+
+// Helper object to acquire and release the OpenCL context.
+class CudaContext {
+    void *user_context;
+
+public:
+    CUcontext context;
+    int error;
+
+    // Constructor sets 'error' if any occurs.
+    CudaContext(void *user_context) : user_context(user_context),
+                                    context(NULL),
+                                    error(CUDA_SUCCESS) {
+        error = halide_acquire_cuda_context(user_context, &context);
+        halide_assert(user_context, context != NULL);
+        if (error != 0)
+            return;
+
+        error = cuCtxPushCurrent(context);
+    }
+
+    ~CudaContext() {
+        CUcontext old;
+        cuCtxPopCurrent(&old);
+
+        halide_release_cuda_context(user_context);
+    }
+};
+
+extern "C" {
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
 // modules that are attached to a context in order to release them all
@@ -196,6 +274,10 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+    CudaContext ctx(user_context);
+    if (ctx.error != CUDA_SUCCESS)
+        return ctx.error;
+
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
@@ -212,52 +294,70 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* ptx_src, int size) {
-    // If the context pointer isn't hooked up yet, point it at this module's weak-linkage context.
-    if (cuda_ctx_ptr == NULL) {
-        cuda_ctx_ptr = &weak_cuda_ctx;
+static CUresult create_context(void *user_context, CUcontext *ctx) {
+    // Initialize CUDA
+    CHECK_CALL( cuInit(0), "cuInit" );
+
+    // Make sure we have a device
+    int deviceCount = 0;
+    CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
+    halide_assert(user_context, deviceCount > 0);
+
+    char *device_str = getenv("HL_GPU_DEVICE");
+
+    CUdevice dev;
+    // Get device
+    CUresult status;
+    if (device_str) {
+        status = cuDeviceGet(&dev, atoi(device_str));
+    } else {
+        // Try to get a device >0 first, since 0 should be our display device
+        // For now, don't try devices > 2 to maintain compatibility with previous behavior.
+        if (deviceCount > 2)
+            deviceCount = 2;
+        for (int id = deviceCount - 1; id >= 0; id--) {
+            status = cuDeviceGet(&dev, id);
+            if (status == CUDA_SUCCESS) break;
+        }
+    }
+    if (status != CUDA_SUCCESS) {
+        halide_error(user_context, "CUDA: Failed to get device\n");
+        return status;
     }
 
-    // Initialize one shared context for all Halide compiled instances
-    if (*cuda_ctx_ptr == 0) {
-        // Initialize CUDA
-        CHECK_CALL( cuInit(0), "cuInit" );
+    #ifdef DEBUG
+    halide_printf(user_context, "Got device %d, about to create context (t=%lld)\n",
+                  dev, (long long)halide_current_time_ns(user_context));
+    #endif
 
-        // Make sure we have a device
-        int deviceCount = 0;
-        CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
-        halide_assert(user_context, deviceCount > 0);
+    // Create context
+    CHECK_CALL( cuCtxCreate(ctx, 0, dev), "cuCtxCreate" );
 
-        char *device_str = getenv("HL_GPU_DEVICE");
+    // Create two events for timing
+    if (!__start) {
+        cuEventCreate(&__start, 0);
+        cuEventCreate(&__end, 0);
+    }
 
-        CUdevice dev;
-        // Get device
-        CUresult status;
-        if (device_str) {
-            status = cuDeviceGet(&dev, atoi(device_str));
-        } else {
-            // Try to get a device >0 first, since 0 should be our display device
-            // For now, don't try devices > 2 to maintain compatibility with previous behavior.
-            if (deviceCount > 2)
-                deviceCount = 2;
-            for (int id = deviceCount - 1; id >= 0; id--) {
-                status = cuDeviceGet(&dev, id);
-                if (status == CUDA_SUCCESS) break;
-            }
-        }
+    return CUDA_SUCCESS;
+}
 
-        halide_assert(user_context, status == CUDA_SUCCESS && "Failed to get device\n");
+static CUresult create_module(void *user_context, module_state *state, const char *ptx_src, int size) {
+    // Create module
+    CHECK_CALL( cuModuleLoadData(&state->module, ptx_src), "cuModuleLoadData" );
 
-        #ifdef DEBUG
-        halide_printf(user_context, "Got device %d, about to create context (t=%lld)\n",
-                      dev, (long long)halide_current_time_ns(user_context));
-        #endif
+    #ifdef DEBUG
+    halide_printf(user_context, "-------\nCompiling PTX:\n%s\n--------\n",
+                  ptx_src);
+    #endif
 
+    return CUDA_SUCCESS;
+}
 
-        // Create context
-        CHECK_CALL( cuCtxCreate(cuda_ctx_ptr, 0, dev), "cuCtxCreate" );
-    } else {
-        //CHECK_CALL( cuCtxPushCurrent(*cuda_ctx_ptr), "cuCtxPushCurrent" );
+WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* ptx_src, int size) {
+    CudaContext ctx(user_context);
+    if (ctx.error != 0) {
+        return NULL;
     }
 
     // Create the module state if necessary
@@ -269,21 +369,12 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         state_list = state;
     }
 
-    // Initialize a module for just this Halide module
-    if ((!state->module)) {
-        // Create module
-        CHECK_CALL( cuModuleLoadData(&state->module, ptx_src), "cuModuleLoadData" );
-
-        #ifdef DEBUG
-        halide_printf(user_context, "-------\nCompiling PTX:\n%s\n--------\n",
-                      ptx_src);
-        #endif
-    }
-
-    // Create two events for timing
-    if (!__start) {
-        cuEventCreate(&__start, 0);
-        cuEventCreate(&__end, 0);
+    // Create the module itself if necessary.
+    if (!state->module) {
+        CUresult err = create_module(user_context, state, ptx_src, size);
+        if (err != CUDA_SUCCESS) {
+            return NULL;
+        }
     }
 
     return state;
@@ -302,42 +393,45 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 #endif
 
 WEAK void halide_release(void *user_context) {
-    // Do not do any of this if there is not context set. E.g.
-    // if halide_release is called and no CUDA calls have been made.
-    if (cuda_ctx_ptr != NULL) {
-        // It's possible that this is being called from the destructor of
-        // a static variable, in which case the driver may already be
-        // shutting down. For this reason we allow the deinitialized
-        // error.
-        CHECK_CALL_DEINIT_OK( cuCtxSynchronize(), "cuCtxSynchronize on exit" );
+    #ifdef DEBUG
+    halide_printf(user_context, "CUDA: halide_release\n");
+    #endif
 
-        // Destroy the events
-        if (__start) {
-            cuEventDestroy(__start);
-            cuEventDestroy(__end);
-            __start = __end = 0;
-        }
-
-        // Unload the modules attached to this context
-        module_state *state = state_list;
-        while (state) {
-            if (state->module) {
-                CHECK_CALL_DEINIT_OK( cuModuleUnload(state->module), "cuModuleUnload" );
-                state->module = 0;
-            }
-            state = state->next;
-        }
-
-        // Only destroy the context if we own it
-        if (weak_cuda_ctx) {
-            CHECK_CALL_DEINIT_OK( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );
-            weak_cuda_ctx = 0;
-        }
-
-        cuda_ctx_ptr = NULL;
+    CUcontext ctx;
+    int err = halide_acquire_cuda_context(user_context, &ctx);
+    if (err != 0 || !ctx) {
+        return;
     }
 
-    //CHECK_CALL( cuCtxPopCurrent(&ignore), "cuCtxPopCurrent" );
+    // It's possible that this is being called from the destructor of
+    // a static variable, in which case the driver may already be
+    // shutting down.
+    cuCtxSynchronize();
+
+    // Destroy the events
+    if (__start) {
+        cuEventDestroy(__start);
+        cuEventDestroy(__end);
+        __start = __end = 0;
+    }
+
+    // Unload the modules attached to this context
+    module_state *state = state_list;
+    while (state) {
+        if (state->module) {
+            CHECK_CALL_DEINIT_OK( cuModuleUnload(state->module), "cuModuleUnload" );
+            state->module = 0;
+        }
+        state = state->next;
+    }
+
+    // Only destroy the context if we own it
+    if (ctx == weak_cuda_ctx) {
+        CHECK_CALL_DEINIT_OK( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );
+        weak_cuda_ctx = NULL;
+    }
+
+    halide_release_cuda_context(user_context);
 }
 
 static CUfunction __get_kernel(void *user_context, CUmodule mod, const char* entry_name)
@@ -350,7 +444,7 @@ static CUfunction __get_kernel(void *user_context, CUmodule mod, const char* ent
     #endif
 
     // Get kernel function ptr
-    TIME_CALL( cuModuleGetFunction(&f, mod, entry_name), msg );
+    cuModuleGetFunction(&f, mod, entry_name);
 
     return f;
 }
@@ -368,6 +462,11 @@ static size_t __buf_size(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
+    CudaContext ctx(user_context);
+    if (ctx.error != CUDA_SUCCESS) {
+        return ctx.error;
+    }
+
     if (buf->dev) {
         // This buffer already has a device allocation
         return 0;
@@ -399,6 +498,11 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
+    CudaContext ctx(user_context);
+    if (ctx.error != CUDA_SUCCESS) {
+        return ctx.error;
+    }
+
     if (buf->host_dirty) {
       halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
@@ -415,6 +519,11 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
+    CudaContext ctx(user_context);
+    if (ctx.error != CUDA_SUCCESS) {
+        return ctx.error;
+    }
+
     if (buf->dev_dirty) {
         halide_assert(user_context, buf->dev);
         halide_assert(user_context, buf->host);
@@ -431,8 +540,15 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 }
 
 // Used to generate correct timings when tracing
-WEAK void halide_dev_sync(void *user_context) {
-    cuCtxSynchronize();
+WEAK int halide_dev_sync(void *user_context) {
+    CudaContext ctx(user_context);
+    if (ctx.error != CUDA_SUCCESS) {
+        return ctx.error;
+    }
+
+    CHECK_CALL( cuCtxSynchronize(), cuCtxSynchronize() );
+
+    return 0;
 }
 
 WEAK int halide_dev_run(
@@ -444,6 +560,10 @@ WEAK int halide_dev_run(
     int shared_mem_bytes,
     size_t arg_sizes[],
     void* args[]) {
+    CudaContext ctx(user_context);
+    if (ctx.error != CUDA_SUCCESS) {
+        return ctx.error;
+    }
 
     halide_assert(user_context, state_ptr);
     CUmodule mod = ((module_state*)state_ptr)->module;
