@@ -36,9 +36,10 @@ extern "C" { typedef struct CUctx_st *CUcontext; }
 int (*cuCtxDestroy)(CUctx_st *) = 0;
 struct SharedCudaContext {
     CUctx_st *ptr;
+    volatile int lock;
 
     // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0) {
+    SharedCudaContext() : ptr(0), lock(0) {
     }
 
     // Freed on program exit
@@ -596,9 +597,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
         internal_assert(fn) << "Could not find halide_set_cuda_context in module\n";
         void *f = ee->getPointerToFunction(fn);
         internal_assert(f) << "Could not find compiled form of halide_set_cuda_context in module\n";
-        void (*set_cuda_context)(CUcontext *) =
-            reinterpret_bits<void (*)(CUcontext *)>(f);
-        set_cuda_context(&cuda_ctx.ptr);
+        void (*set_cuda_context)(CUcontext *, volatile int *) =
+            reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
+        set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
     } else if (target.features & Target::OpenCL) {
         // Share the same cl_ctx, cl_q across all OpenCL modules.
         llvm::Function *fn = module->getFunction("halide_set_cl_context");
