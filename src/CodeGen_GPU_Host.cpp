@@ -591,7 +591,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
 
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module,
-                                                 vector<pair<void (*)(void *), void*> > *cleanup_routines) {
+                                                 vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
     if (target.features & Target::CUDA) {
         // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
         // CUDA behaves much better when you don't initialize >2 contexts.
@@ -618,9 +618,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
     if (fn) {
         void *f = ee->getPointerToFunction(fn);
         internal_assert(f) << "Could not find compiled form of halide_release in module\n";
-        void (*cleanup_fn)(void *) =
+        void (*cleanup_routine)(void *) =
             reinterpret_bits<void (*)(void *)>(f);
-        cleanup_routines->push_back(std::make_pair(cleanup_fn, (void *)NULL));
+        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
     }
 }
 
