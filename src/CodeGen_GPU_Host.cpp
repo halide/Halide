@@ -44,8 +44,8 @@ struct SharedCudaContext {
 
     // Freed on program exit
     ~SharedCudaContext() {
-        debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
         if (ptr && cuCtxDestroy) {
+            debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
             (*cuCtxDestroy)(ptr);
             ptr = 0;
         }
