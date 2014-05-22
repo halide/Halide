@@ -348,9 +348,9 @@ void IRPrinter::visit(const Call *op) {
             print(op->args[0]);
             stream << ".min[" << op->args[1] << "]";
             return;
-        } else if (op->name == Call::extract_buffer_extent) {
+        } else if (op->name == Call::extract_buffer_max) {
             print(op->args[0]);
-            stream << ".extent[" << op->args[1] << "]";
+            stream << ".max[" << op->args[1] << "]";
             return;
         }
     }
