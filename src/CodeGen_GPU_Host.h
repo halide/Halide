@@ -100,7 +100,7 @@ protected:
     /** Reaches inside the module at sets it to use a single shared
      * cuda context */
     void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
-                      std::vector<std::pair<void (*)(void *), void *> > *cleanup_routines);
+                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
 
     static bool lib_cuda_linked;
 
