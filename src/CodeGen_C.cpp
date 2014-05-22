@@ -816,11 +816,12 @@ void CodeGen_C::visit(const Call *op) {
                 stream << buf_id << ".stride[" << i << "] = " << args[i*3+4] << ";\n";
             }
             rhs << "(&" + buf_id + ")";
-        } else if (op->name == Call::extract_buffer_extent) {
+        } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "]";
+            rhs << "(((buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
+                "((buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
         } else if (op->name == Call::extract_buffer_min) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
