@@ -183,7 +183,7 @@ extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern void halide_dev_sync(void *user_context);
+extern int halide_dev_sync(void *user_context);
 
 extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
 extern int halide_dev_free(void *user_context, struct buffer_t *buf);
