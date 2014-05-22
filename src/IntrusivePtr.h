@@ -64,9 +64,14 @@ private:
 
     void decref(T *p) {
         if (p) {
+            // Note that if the refcount is already zero, then we're
+            // in a recursive destructor due to a self-reference (a
+            // cycle), where the ref_count has been adjusted to remove
+            // the counts due to the cycle. The next line then makes
+            // the ref_count negative, which prevents actually
+            // entering the destructor recursively.
             ref_count(p).decrement();
             if (ref_count(p).is_zero()) {
-                //std::cout << "Destroying " << ptr << ", " << live_objects << "\n";
                 destroy(p);
             }
         }
