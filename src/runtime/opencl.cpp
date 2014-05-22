@@ -3,14 +3,16 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#ifdef _WIN32
-#define CL_API_ENTRY
-#define CL_API_CALL     __stdcall
-#define CL_CALLBACK     __stdcall
-#else
+#define USED __attribute__((used))
+
+#ifdef BITS_64
 #define CL_API_ENTRY
 #define CL_API_CALL
 #define CL_CALLBACK
+#else
+#define CL_API_ENTRY
+#define CL_API_CALL     __stdcall
+#define CL_CALLBACK     __stdcall
 #endif
 #define CL_API_SUFFIX__VERSION_1_0
 #define CL_API_SUFFIX__VERSION_1_1
@@ -65,37 +67,102 @@ extern const char * strstr(const char *, const char *);
   } while (0) /* eat semicolon */
 
 extern "C" {
-// An OpenCL context/queue defined in this module with weak linkage
+// An OpenCL context/queue/synchronization lock defined in
+// this module with weak linkage
 cl_context WEAK weak_cl_ctx = 0;
 cl_command_queue WEAK weak_cl_q = 0;
-
-// These are pointers to the real context/queue stored elsewhere.
-static cl_context* cl_ctx = NULL;
-static cl_command_queue* cl_q = NULL;
-
-// A single global context lock for OpenCL.
 volatile int WEAK weak_cl_lock = 0;
-static volatile int *cl_lock = NULL;
+
+// In the non-JIT case, the context is stored in the weak globals above.
+// JIT modules will call halide_set_cl_context, changing the pointers below.
+cl_context WEAK *cl_ctx_ptr = &weak_cl_ctx;
+cl_command_queue WEAK *cl_q_ptr = &weak_cl_q;
+volatile int WEAK *cl_lock_ptr = &weak_cl_lock;
+
+WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
+    cl_ctx_ptr = ctx_ptr;
+    cl_q_ptr = q_ptr;
+    cl_lock_ptr = lock_ptr;
+}
+
+static int create_context(void *user_context, cl_context *ctx, cl_command_queue *q);
+
+// The default implementation of halide_acquire_cl_context uses the global
+// pointers above, and serializes access with a spin lock.
+WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
+    // TODO: Should we use a more "assertive" assert, these asserts do
+    // not block execution on failure.
+    halide_assert(user_context, ctx != NULL);
+    halide_assert(user_context, q != NULL);
+
+    halide_assert(user_context, cl_lock_ptr != NULL);
+    while (__sync_lock_test_and_set(cl_lock_ptr, 1)) { }
+
+    // If the context has not been initialized, initialize it now.
+    halide_assert(user_context, cl_ctx_ptr != NULL);
+    halide_assert(user_context, cl_q_ptr != NULL);
+    if (!(*cl_ctx_ptr)) {
+        cl_int error = create_context(user_context, cl_ctx_ptr, cl_q_ptr);
+        if (error != CL_SUCCESS) {
+            __sync_lock_release(cl_lock_ptr);
+            return error;
+        }
+
+        weak_cl_ctx = *cl_ctx_ptr;
+        weak_cl_q = *cl_q_ptr;
+    }
+
+    *ctx = *cl_ctx_ptr;
+    *q = *cl_q_ptr;
+    return 0;
+}
+
+WEAK int halide_release_cl_context(void *user_context) {
+    __sync_lock_release(cl_lock_ptr);
+    return 0;
+}
+
+}
+
+// Helper object to acquire and release the OpenCL context.
+class ClContext {
+    void *user_context;
+
+public:
+    cl_context context;
+    cl_command_queue cmd_queue;
+    cl_int error;
+
+    // Constructor sets 'error' if any occurs.
+    ClContext(void *user_context) : user_context(user_context),
+                                    context(NULL),
+                                    cmd_queue(NULL),
+                                    error(CL_SUCCESS) {
+        error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
+        halide_assert(user_context, context != NULL && cmd_queue != NULL);
+    }
+
+    ~ClContext() {
+        halide_release_cl_context(user_context);
+    }
+};
+
+extern "C" {
 
 // Structure to hold the state of a module attached to the context.
 // Also used as a linked-list to keep track of all the different
 // modules that are attached to a context in order to release them all
 // when then context is released.
-struct _module_state_ WEAK *state_list = NULL;
 typedef struct _module_state_ {
     cl_program program;
     _module_state_ *next;
 } module_state;
-
-WEAK void halide_set_cl_context(cl_context* ctx, cl_command_queue* q, volatile int* lock) {
-    cl_ctx = ctx;
-    cl_q = q;
-    cl_lock = lock;
-}
+module_state WEAK *state_list = NULL;
 
 WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
-    if (buf->dev == 0)
+    if (buf->dev == 0) {
         return true;
+    }
 
     size_t real_size;
     cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
@@ -113,14 +180,14 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
 }
 
 WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
-    // TODO: OpenCL API is thread safe after 1.0?
-    //ScopedSpinLock l(cl_lock);
+    ClContext ctx(user_context);
 
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
-    if (buf->dev == 0)
+    if (buf->dev == 0) {
       return 0;
+    }
 
     #ifdef DEBUG
     halide_printf(user_context, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
@@ -132,123 +199,122 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-static int init_context(void *user_context) {
+// Initializes the context used by the default implementation
+// of halide_acquire_context.
+static int create_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
     cl_int err = 0;
 
-    // Initialize one shared context for all Halide compiled instances
-    if (*cl_ctx == NULL) {
-        #ifdef DEBUG
-        halide_printf(user_context, "CL: Creating context\n");
-        #endif
-        const cl_uint maxPlatforms = 4;
-        cl_platform_id platforms[maxPlatforms];
-        cl_uint platformCount = 0;
+     #ifdef DEBUG
+    halide_printf(user_context, "CL: Creating context\n");
+    #endif
+    const cl_uint maxPlatforms = 4;
+    cl_platform_id platforms[maxPlatforms];
+    cl_uint platformCount = 0;
 
-        err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
-        CHECK_ERR( err, "clGetPlatformIDs" );
+    err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
+    CHECK_ERR( err, "clGetPlatformIDs" );
 
-        cl_platform_id platform = NULL;
+    cl_platform_id platform = NULL;
 
-        // Find the requested platform, or the first if none specified.
-        const char * name = getenv("HL_OCL_PLATFORM");
-        if (name != NULL) {
-            for (cl_uint i = 0; i < platformCount; ++i) {
-                const cl_uint maxPlatformName = 256;
-                char platformName[maxPlatformName];
-                err = clGetPlatformInfo( platforms[i], CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
-                if (err != CL_SUCCESS) continue;
+    // Find the requested platform, or the first if none specified.
+    const char * name = getenv("HL_OCL_PLATFORM");
+    if (name != NULL) {
+        for (cl_uint i = 0; i < platformCount; ++i) {
+            const cl_uint maxPlatformName = 256;
+            char platformName[maxPlatformName];
+            err = clGetPlatformInfo( platforms[i], CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
+            if (err != CL_SUCCESS) continue;
 
-                #ifdef DEBUG
-                halide_printf(user_context, "Found platform '%s'\n", platformName);
-                #endif
+            #ifdef DEBUG
+            halide_printf(user_context, "Found platform '%s'\n", platformName);
+            #endif
 
-                if (strstr(platformName, name))
-                {
-                    platform = platforms[i];
-                    break;
-                }
+            if (strstr(platformName, name)) {
+                platform = platforms[i];
+                break;
             }
-        } else if (platformCount > 0) {
-            platform = platforms[0];
         }
-        if (platform == NULL){
-            halide_printf(user_context, "Failed to find OpenCL platform\n");
-            return -1;
-        }
-
-        #ifdef DEBUG
-        const cl_uint maxPlatformName = 256;
-        char platformName[maxPlatformName];
-        err = clGetPlatformInfo( platform, CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
-        CHECK_ERR( err, "clGetPlatformInfo" );
-
-        halide_printf(user_context, "Got platform '%s', about to create context (t=%lld)\n",
-                      platformName, (long long)halide_current_time_ns(user_context));
-        #endif
-
-        cl_device_type device_type = 0;
-        // Find the device types requested.
-        const char * dev_type = getenv("HL_OCL_DEVICE");
-        if (dev_type != NULL) {
-            if (strstr("cpu", dev_type))
-                device_type |= CL_DEVICE_TYPE_CPU;
-            if (strstr("gpu", dev_type))
-                device_type |= CL_DEVICE_TYPE_GPU;
-        }
-        // If no devices are specified yet, just use all.
-        if (device_type == 0)
-            device_type = CL_DEVICE_TYPE_ALL;
-
-        // Make sure we have a device
-        const cl_uint maxDevices = 4;
-        cl_device_id devices[maxDevices];
-        cl_uint deviceCount = 0;
-        err = clGetDeviceIDs( platform, device_type, maxDevices, devices, &deviceCount );
-        CHECK_ERR( err, "clGetDeviceIDs" );
-        if (deviceCount == 0) {
-            halide_printf(user_context, "Failed to get device\n");
-            return -1;
-        }
-
-        cl_device_id dev = devices[deviceCount-1];
-
-        #ifdef DEBUG
-        const cl_uint maxDeviceName = 256;
-        char deviceName[maxDeviceName];
-        err = clGetDeviceInfo( dev, CL_DEVICE_NAME, maxDeviceName, deviceName, NULL );
-        CHECK_ERR( err, "clGetDeviceInfo" );
-
-        halide_printf(user_context, "Got device '%s', about to create context (t=%lld)\n",
-                      deviceName, (long long)halide_current_time_ns(user_context));
-        #endif
-
-
-        // Create context
-        cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
-        *cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
-        CHECK_ERR( err, "clCreateContext" );
-        // cuEventCreate(&__start, 0);
-        // cuEventCreate(&__end, 0);
-
-        halide_assert(user_context, !(*cl_q));
-        *cl_q = clCreateCommandQueue(*cl_ctx, dev, 0, &err);
-        CHECK_ERR( err, "clCreateCommandQueue" );
-    } else {
-        #ifdef DEBUG
-        halide_printf(user_context, "Already had context %p\n", *cl_ctx);
-        #endif
+    } else if (platformCount > 0) {
+        platform = platforms[0];
     }
+    if (platform == NULL){
+        halide_printf(user_context, "Failed to find OpenCL platform\n");
+        return -1;
+    }
+
+    #ifdef DEBUG
+    const cl_uint maxPlatformName = 256;
+    char platformName[maxPlatformName];
+    err = clGetPlatformInfo( platform, CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
+    CHECK_ERR( err, "clGetPlatformInfo" );
+
+    halide_printf(user_context, "Got platform '%s', about to create context (t=%lld)\n",
+                  platformName, (long long)halide_current_time_ns(user_context));
+    #endif
+
+    cl_device_type device_type = 0;
+    // Find the device types requested.
+    const char * dev_type = getenv("HL_OCL_DEVICE");
+    if (dev_type != NULL) {
+        if (strstr("cpu", dev_type)) {
+            device_type |= CL_DEVICE_TYPE_CPU;
+        }
+        if (strstr("gpu", dev_type)) {
+            device_type |= CL_DEVICE_TYPE_GPU;
+        }
+    }
+    // If no devices are specified yet, just use all.
+    if (device_type == 0) {
+        device_type = CL_DEVICE_TYPE_ALL;
+    }
+
+    // Make sure we have a device
+    const cl_uint maxDevices = 4;
+    cl_device_id devices[maxDevices];
+    cl_uint deviceCount = 0;
+    err = clGetDeviceIDs( platform, device_type, maxDevices, devices, &deviceCount );
+    CHECK_ERR( err, "clGetDeviceIDs" );
+    if (deviceCount == 0) {
+        halide_printf(user_context, "Failed to get device\n");
+        return -1;
+    }
+
+    cl_device_id dev = devices[deviceCount-1];
+
+    #ifdef DEBUG
+    const cl_uint maxDeviceName = 256;
+    char deviceName[maxDeviceName];
+    err = clGetDeviceInfo( dev, CL_DEVICE_NAME, maxDeviceName, deviceName, NULL );
+    CHECK_ERR( err, "clGetDeviceInfo" );
+
+    halide_printf(user_context, "Got device '%s', about to create context (t=%lld)\n",
+                  deviceName, (long long)halide_current_time_ns(user_context));
+    #endif
+
+
+    // Create context
+    halide_assert(user_context, !(*ctx));
+    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
+    *ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
+    CHECK_ERR( err, "clCreateContext" );
+    // cuEventCreate(&__start, 0);
+    // cuEventCreate(&__end, 0);
+
+    halide_assert(user_context, !(*q));
+    *q = clCreateCommandQueue(*ctx, dev, 0, &err);
+    CHECK_ERR( err, "clCreateCommandQueue" );
+
     return err;
 }
 
-static int create_and_build_program(void *user_context, module_state *state, const char *src, int size) {
+static int create_and_build_program(void *user_context, cl_context ctx, module_state *state, const char *src, int size) {
     cl_int err = 0;
     cl_device_id dev;
 
-    CHECK_CALL( clGetContextInfo(*cl_ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
+    CHECK_CALL( clGetContextInfo(ctx, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL), "clGetContextInfo" );
 
     // Initialize a module for just this Halide module
-    if ((!state->program) && (size > 1)) {
+    if (size > 1) {
         // Create module
 
         cl_device_id devices[] = { dev };
@@ -263,7 +329,7 @@ static int create_and_build_program(void *user_context, module_state *state, con
             #endif
 
             const char * sources[] = { src };
-            state->program = clCreateProgramWithSource(*cl_ctx, 1, &sources[0], NULL, &err );
+            state->program = clCreateProgramWithSource(ctx, 1, &sources[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithSource" );
         } else {
             // Program is SPIR binary.
@@ -273,7 +339,7 @@ static int create_and_build_program(void *user_context, module_state *state, con
             #endif
 
             const unsigned char * binaries[] = { (unsigned char *)src };
-            state->program = clCreateProgramWithBinary(*cl_ctx, 1, devices, lengths, &binaries[0], NULL, &err );
+            state->program = clCreateProgramWithBinary(ctx, 1, devices, lengths, &binaries[0], NULL, &err );
             CHECK_ERR( err, "clCreateProgramWithBinary" );
 
             build_options = "-x spir";
@@ -287,17 +353,20 @@ static int create_and_build_program(void *user_context, module_state *state, con
             halide_printf(user_context, "Error: Failed to build program executable! err = %d\n", err);
 
             // Get size of build log
-            if (clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len) == CL_SUCCESS)
+            if (clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len) == CL_SUCCESS) {
                 buffer = (char*)malloc((++len)*sizeof(char));
+            }
 
             // Get build log
-            if (buffer && clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, len, buffer, NULL) == CL_SUCCESS)
+            if (buffer && clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, len, buffer, NULL) == CL_SUCCESS) {
                 halide_printf(user_context, "Build Log:\n %s\n-----\n", buffer);
-            else
+            } else {
                 halide_printf(user_context, "clGetProgramBuildInfo failed to get build log!\n");
+            }
 
-            if (buffer)
+            if (buffer) {
                 free(buffer);
+            }
 
             halide_assert(user_context, err == CL_SUCCESS);
         }
@@ -306,19 +375,8 @@ static int create_and_build_program(void *user_context, module_state *state, con
 }
 
 WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* src, int size) {
-    // If the context hasn't been set externally, use the weak context.
-    if (!cl_ctx) {
-        cl_ctx = &weak_cl_ctx;
-        cl_q = &weak_cl_q;
-        cl_lock = &weak_cl_lock;
-    }
-
-    // Do this after setting the lock.
-    ScopedSpinLock lock(cl_lock);
-
-    cl_int err = 0;
-    err = init_context(user_context);
-    if (err != CL_SUCCESS) {
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
         return NULL;
     }
 
@@ -331,67 +389,69 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         state_list = state;
     }
 
-    err = create_and_build_program(user_context, state, src, size);
-    if (err != CL_SUCCESS) {
-        return NULL;
+    // Create the program if necessary.
+    if (!state->program) {
+        cl_int err = create_and_build_program(user_context, ctx.context, state, src, size);
+        if (err != CL_SUCCESS) {
+            return NULL;
+        }
     }
 
     return state;
 }
 
 // Used to generate correct timings when tracing
-WEAK void halide_dev_sync(void *user_context) {
-    ScopedSpinLock l(cl_lock);
+WEAK int halide_dev_sync(void *user_context) {
+    ClContext ctx(user_context);
+    halide_assert(user_context, ctx.error == CL_SUCCESS);
 
-    clFinish(*cl_q);
+    CHECK_CALL( clFinish(ctx.cmd_queue), "clFinish" );
+
+    return CL_SUCCESS;
 }
 
 WEAK void halide_release(void *user_context) {
-    ScopedSpinLock l(cl_lock);
-
     #ifdef DEBUG
     halide_printf(user_context, "CL: halide_release\n");
     #endif
 
-    // Only perform release if a context has actually been created.
-    if (cl_ctx) {
-        // TODO: this is for timing; bad for release-mode performance
-        #ifdef DEBUG
-        halide_printf(user_context, "dev_sync on exit\n" );
-        #endif
-        clFinish(*cl_q);
-
-        // Unload the modules attached to this context
-        module_state *state = state_list;
-        while (state) {
-            if (state->program) {
-                #ifdef DEBUG
-                halide_printf(user_context, "clReleaseProgram %p\n", state->program);
-                #endif
-
-                clReleaseProgram(state->program);
-                state->program = NULL;
-            }
-            state = state->next;
-        }
-        state_list = NULL;
-
-        // Only release the context if we own it.
-        if (weak_cl_ctx) {
-            clReleaseCommandQueue(weak_cl_q);
-            #ifdef DEBUG
-            halide_printf(user_context, "clReleaseContext %p\n", weak_cl_ctx);
-            #endif
-            clReleaseContext(weak_cl_ctx);
-
-            weak_cl_ctx = NULL;
-            weak_cl_q = NULL;
-        }
-
-        cl_ctx = NULL;
-        cl_q = NULL;
-        cl_lock = NULL;
+    // The ClContext object does not allow the context storage to be modified,
+    // so we use halide_acquire_context directly.
+    cl_context ctx;
+    cl_command_queue q;
+    int error = halide_acquire_cl_context(user_context, &ctx, &q);
+    if (error != 0 || !ctx) {
+        return;
     }
+
+    // Unload the modules attached to this context
+    module_state *state = state_list;
+    while (state) {
+        if (state->program) {
+            #ifdef DEBUG
+            halide_printf(user_context, "clReleaseProgram %p\n", state->program);
+            #endif
+
+            clReleaseProgram(state->program);
+            state->program = NULL;
+        }
+        state = state->next;
+    }
+    state_list = NULL;
+
+    // Release the context itself, if we created it.
+    if (ctx == weak_cl_ctx) {
+        clReleaseCommandQueue(*cl_q_ptr);
+        #ifdef DEBUG
+        halide_printf(user_context, "clReleaseContext %p\n", *cl_ctx_ptr);
+        #endif
+        clReleaseContext(*cl_ctx_ptr);
+
+        *cl_ctx_ptr = NULL;
+        *cl_q_ptr = NULL;
+    }
+
+    halide_release_cl_context(user_context);
 }
 
 static cl_kernel __get_kernel(void *user_context, cl_program program, const char* entry_name) {
@@ -410,14 +470,14 @@ static cl_kernel __get_kernel(void *user_context, cl_program program, const char
     return f;
 }
 
-static cl_mem __dev_malloc(void *user_context, size_t bytes) {
+static cl_mem __dev_malloc(void *user_context, cl_context ctx, size_t bytes) {
     cl_mem p;
     #ifdef DEBUG
     halide_printf(user_context, "dev_malloc (%lld bytes)\n", (long long)bytes);
     #endif
 
     int err;
-    p = clCreateBuffer(*cl_ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
+    p = clCreateBuffer(ctx, CL_MEM_READ_WRITE, bytes, NULL, &err );
     #ifdef DEBUG
     halide_printf(user_context, "    returned: %p (err: %d)\n", (void*)p, err);
     #endif
@@ -437,7 +497,10 @@ static size_t __buf_size(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
-    ScopedSpinLock l(cl_lock);
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
 
     if (buf->dev) {
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
@@ -455,7 +518,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
                   buf->elem_size);
     #endif
 
-    buf->dev = (uint64_t)__dev_malloc(user_context, size);
+    buf->dev = (uint64_t)__dev_malloc(user_context, ctx.context, size);
     #ifdef DEBUG
     halide_printf(user_context, "dev_malloc allocated buffer %p of with buf->dev of %p\n",
                   buf, (void *)buf->dev);
@@ -468,8 +531,10 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
-    // TODO: OpenCL API is thread safe after 1.0?
-    //ScopedSpinLock l(cl_lock);
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
 
     if (buf->host_dirty) {
         halide_assert(user_context, buf->host && buf->dev);
@@ -478,7 +543,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         halide_printf(user_context, "copy_to_dev (%lld bytes) %p -> %p\n", (long long)size, buf->host, (void*)buf->dev);
         #endif
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-        int err = clEnqueueWriteBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
+        int err = clEnqueueWriteBuffer( ctx.cmd_queue, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, "clEnqueueWriteBuffer" );
     }
     buf->host_dirty = false;
@@ -486,11 +551,12 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
-    // TODO: OpenCL API is thread safe after 1.0?
-    //ScopedSpinLock l(cl_lock);
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
 
     if (buf->dev_dirty) {
-        clFinish(*cl_q); // block on completion before read back
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         #ifdef DEBUG
@@ -499,7 +565,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         #endif
 
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
-        int err = clEnqueueReadBuffer( *cl_q, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
+        int err = clEnqueueReadBuffer( ctx.cmd_queue, (cl_mem)((void*)buf->dev), CL_TRUE, 0, size, buf->host, 0, NULL, NULL );
         CHECK_ERR( err, "clEnqueueReadBuffer" );
     }
     buf->dev_dirty = false;
@@ -516,6 +582,11 @@ WEAK int halide_dev_run(
     size_t arg_sizes[],
     void* args[])
 {
+    ClContext ctx(user_context);
+    if (ctx.error != CL_SUCCESS) {
+        return ctx.error;
+    }
+
     halide_assert(user_context, state_ptr);
     cl_program program = ((module_state*)state_ptr)->program;
     halide_assert(user_context, program);
@@ -550,7 +621,7 @@ WEAK int halide_dev_run(
     // Launch kernel
     int err =
     clEnqueueNDRangeKernel(
-        *cl_q,
+        ctx.cmd_queue,
         f,
         3,
         NULL,
@@ -561,7 +632,7 @@ WEAK int halide_dev_run(
     CHECK_ERR(err, "clEnqueueNDRangeKernel");
 
     #ifdef DEBUG
-    clFinish(*cl_q);
+    clFinish(ctx.cmd_queue);
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "Kernel took: %f ms\n", (t_after - t_before) / 1000000.0);
     #endif
