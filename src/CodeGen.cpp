@@ -1656,8 +1656,8 @@ void CodeGen::visit(const Call *op) {
                 (op->name == Call::count_leading_zeros) ? Intrinsic::ctlz :
                                                           Intrinsic::cttz,
                 arg_type);
-            llvm::Value *zero_is_undef = llvm::ConstantInt::getTrue(*context);
-            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_undef };
+            llvm::Value *zero_is_not_undef = llvm::ConstantInt::getFalse(*context);
+            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_not_undef };
             CallInst *call = builder->CreateCall(fn, args);
             value = call;
         } else if (op->name == Call::return_second) {
