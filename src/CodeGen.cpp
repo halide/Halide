@@ -1597,7 +1597,7 @@ void CodeGen::visit(const Call *op) {
             }
 
             StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
-            internal_assert(trace_event_type);
+            user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
             Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
 
             Value *members[10] = {
