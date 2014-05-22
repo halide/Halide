@@ -1319,7 +1319,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             // for extra safety. Ultimately we will want to make
             // Halide handle larger single buffers, at least on 64-bit
             // systems.
-            Expr max_size = cast<int64_t>(1) << 31 - 1;
+            Expr max_size = cast<int64_t>(0x7fffffff);
             Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
                                           "Total allocation for buffer " + name + " exceeds 2^31 - 1",
                                           std::vector<Expr>());
