@@ -149,6 +149,17 @@ inline Expr cast(Expr a) {
 inline Expr cast(Type t, Expr a) {
     user_assert(a.defined()) << "cast of undefined Expr\n";
     if (a.type() == t) return a;
+
+    if (t.is_handle() && !a.type().is_handle()) {
+        user_error << "Can't cast \"" << a << "\" to a handle. "
+                   << "The only legal cast from scalar types to a handle is: "
+                   << "reinterpret(Handle(), cast<uint64_t>(" << a << "));\n";
+    } else if (a.type().is_handle() && !t.is_handle()) {
+        user_error << "Can't cast handle \"" << a << "\" to type " << t << ". "
+                   << "The only legal cast from handles to scalar types is: "
+                   << "reinterpret(UInt64(), " << a << ");\n";
+    }
+
     if (t.is_vector()) {
         if (a.type().is_scalar()) {
             return Internal::Broadcast::make(cast(t.element_of(), a), t.width);

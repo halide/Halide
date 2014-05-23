@@ -959,7 +959,7 @@ struct Call : public ExprNode<Call> {
         lerp,
         create_buffer_t,
         extract_buffer_min,
-        extract_buffer_extent,
+        extract_buffer_max,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,
