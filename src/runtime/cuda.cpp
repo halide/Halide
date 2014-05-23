@@ -269,6 +269,10 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     if (buf->dev == 0)
         return 0;
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
 
     CUresult err = cuMemFree(buf->dev);
@@ -279,6 +283,12 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
         halide_error_varargs(user_context, "CUDA: cuMemFree failed (%d)", err);
         return err;
     }
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
+
     return 0;
 }
 
@@ -346,6 +356,10 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         return NULL;
     }
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     // Create the module state if necessary
     module_state *state = (module_state*)state_ptr;
     if (!state) {
@@ -363,6 +377,11 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             return NULL;
         }
     }
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
 
     return state;
 }
@@ -457,7 +476,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
 
     #ifdef DEBUG
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Time: %f ms", (t_after - t_before) / 1.0e6);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
 
     return 0;
@@ -489,7 +508,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 
         #ifdef DEBUG
         uint64_t t_after = halide_current_time_ns(user_context);
-        halide_printf(user_context, "    Time: %f ms", (t_after - t_before) / 1.0e6);
+        halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
         #endif
     }
     buf->host_dirty = false;
@@ -522,7 +541,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 
         #ifdef DEBUG
         uint64_t t_after = halide_current_time_ns(user_context);
-        halide_printf(user_context, "    Time: %f ms", (t_after - t_before) / 1.0e6);
+        halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
         #endif
     }
     buf->dev_dirty = false;
@@ -538,11 +557,20 @@ WEAK int halide_dev_sync(void *user_context) {
         return ctx.error;
     }
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     CUresult err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuCtxSynchronize failed (%d)", err);
         return err;
     }
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
 
     return 0;
 }
@@ -600,7 +628,7 @@ WEAK int halide_dev_run(void *user_context,
         return err;
     }
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Kernel time: %f ms\n", (t_after - t_before) / 1.0e6);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
     return 0;
 }
