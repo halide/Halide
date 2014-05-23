@@ -489,19 +489,24 @@ WEAK int halide_dev_run(
     size_t arg_sizes[],
     void* args[]) {
 
+    CUfunction f;
+    CUmodule mod;
+    #ifdef DEBUG
+    char msg[256];
+    #endif
+
     halide_assert(user_context, state_ptr);
     if (!state_ptr) goto error;
-    CUmodule mod = ((module_state*)state_ptr)->module;
+    mod = ((module_state*)state_ptr)->module;
     halide_assert(user_context, mod);
     if (!mod) goto error;
-    CUfunction f = __get_kernel(user_context, mod, entry_name);
+    f = __get_kernel(user_context, mod, entry_name);
     if (!f) {
         halide_error(user_context, "Invalid or unknown kernel\n");
         goto error;
     }
 
     #ifdef DEBUG
-    char msg[256];
     snprintf(
         msg, 256,
         "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)",
