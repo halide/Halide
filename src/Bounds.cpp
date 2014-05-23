@@ -651,6 +651,14 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::return_second) {
+            assert(op->args.size() == 2);
+            op->args[1].accept(this);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::if_then_else) {
+            assert(op->args.size() == 3);
+            // Probably more conservative than necessary
+            Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
+            equivalent_select.accept(this);
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
@@ -1113,6 +1121,9 @@ void bounds_test() {
     check(scope, Load::make(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+
+    check(scope, print(x, y), 0, 10);
+    check(scope, print_when(x > y, x, y), 0, 10);
 
     // Check some operations that may overflow
     check(scope, (cast<uint8_t>(x)+250), cast<uint8_t>(0), cast<uint8_t>(255));
