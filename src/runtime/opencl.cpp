@@ -190,7 +190,11 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
     buf->dev = 0;
-    return result;
+    if (result != CL_SUCCESS) {
+        halide_error_varargs(user_context, "CL: clReleaseMemObject failed (%d)", result);
+        return result;
+    }
+    return 0;
 }
 
 // Initializes the context used by the default implementation
@@ -306,6 +310,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         halide_error_varargs(user_context, "CL: clCreateContext failed (%d)\n", err);
         return err;
     }
+    DEBUG_PRINTF( user_context, "    Created context %p", *ctx );
 
     *q = clCreateCommandQueue(*ctx, dev, 0, &err);
     if (err != CL_SUCCESS) {
@@ -424,20 +429,24 @@ WEAK void halide_release(void *user_context) {
 
     // The ClContext object does not allow the context storage to be modified,
     // so we use halide_acquire_context directly.
+    int err;
     cl_context ctx;
     cl_command_queue q;
-    int error = halide_acquire_cl_context(user_context, &ctx, &q);
-    if (error != 0 || !ctx) {
+    err = halide_acquire_cl_context(user_context, &ctx, &q);
+    if (err != 0 || !ctx) {
         return;
     }
+
+    err = clFinish(q);
+    halide_assert(user_context, err == CL_SUCCESS);
 
     // Unload the modules attached to this context
     module_state *state = state_list;
     while (state) {
         if (state->program) {
             DEBUG_PRINTF(user_context, "    clReleaseProgram %p\n", state->program);
-
-            clReleaseProgram(state->program);
+            err = clReleaseProgram(state->program);
+            halide_assert(user_context, err == CL_SUCCESS);
             state->program = NULL;
         }
         state = state->next;
@@ -446,12 +455,14 @@ WEAK void halide_release(void *user_context) {
 
     // Release the context itself, if we created it.
     if (ctx == weak_cl_ctx) {
-        clReleaseCommandQueue(weak_cl_q);
-        DEBUG_PRINTF(user_context, "    clReleaseContext %p\n", weak_cl_ctx);
-        clReleaseContext(weak_cl_ctx);
-
-        weak_cl_ctx = NULL;
+        err = clReleaseCommandQueue(weak_cl_q);
+        halide_assert(user_context, err == CL_SUCCESS);
         weak_cl_q = NULL;
+
+        DEBUG_PRINTF(user_context, "    clReleaseContext %p\n", weak_cl_ctx);
+        err = clReleaseContext(weak_cl_ctx);
+        halide_assert(user_context, err == CL_SUCCESS);
+        weak_cl_ctx = NULL;
     }
 
     halide_release_cl_context(user_context);
@@ -491,7 +502,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
                  (long long)buf->stride[2], (long long)buf->stride[3],
                  buf->elem_size);
 
-    int err;
+    cl_int err;
     buf->dev = (uint64_t)clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
     if (err != CL_SUCCESS || buf->dev == 0) {
         halide_error_varargs(user_context, "CL: clCreateBuffer failed (%d)\n", err);
@@ -550,8 +561,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         DEBUG_PRINTF( user_context, "    copy_to_dev (%lld bytes, %p -> %p)\n",
                       (long long)size, (void *)buf->dev, buf );
 
-        int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)((void*)buf->dev),
-                                      CL_TRUE, 0, size, buf->host, 0, NULL, NULL);
+        cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)((void*)buf->dev),
+                                         CL_TRUE, 0, size, buf->host, 0, NULL, NULL);
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%d)\n", err);
             return err;
@@ -561,22 +572,21 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_dev_run(
-    void *user_context,
-    void *state_ptr,
-    const char* entry_name,
-    int blocksX, int blocksY, int blocksZ,
-    int threadsX, int threadsY, int threadsZ,
-    int shared_mem_bytes,
-    size_t arg_sizes[],
-    void* args[])
-{
+WEAK int halide_dev_run(void *user_context,
+                        void *state_ptr,
+                        const char* entry_name,
+                        int blocksX, int blocksY, int blocksZ,
+                        int threadsX, int threadsY, int threadsZ,
+                        int shared_mem_bytes,
+                        size_t arg_sizes[],
+                        void* args[]) {
     DEBUG_PRINTF( user_context, "CL: halide_dev_run (user_context: %p, entry: %s, blocks: %dx%dx%d, threads: %dx%dx%d, shmem: %d)\n",
                   user_context, entry_name,
                   blocksX, blocksY, blocksZ,
                   threadsX, threadsY, threadsZ,
                   shared_mem_bytes );
 
+    cl_int err;
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
@@ -587,7 +597,6 @@ WEAK int halide_dev_run(
     cl_program program = ((module_state*)state_ptr)->program;
 
     halide_assert(user_context, program);
-    cl_int err;
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clCreateKernel (%s) failed (%d)\n", entry_name, err);
