@@ -102,6 +102,10 @@ class AllocationInference : public IRMutator {
             string min_name = prefix + ".min_realized";
             string max_name = prefix + ".max_realized";
             string extent_name = prefix + ".extent_realized";
+            if (!b[i].min.defined() || !b[i].max.defined()) {
+                user_error << op->name << " is accessed over an unbounded domain in dimension "
+                           << f.args()[i] << "\n";
+            }
             Expr min = simplify(b[i].min);
             Expr max = simplify(b[i].max);
             Expr extent = simplify((max - min) + 1);

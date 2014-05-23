@@ -8,7 +8,7 @@
 #include "Random.h"
 #include "Introspection.h"
 #include "IRPrinter.h"
-
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,10 +18,14 @@ using std::string;
 using std::set;
 
 template<>
-EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {return f->ref_count;}
+EXPORT RefCount &ref_count<FunctionContents>(const FunctionContents *f) {
+    return f->ref_count;
+}
 
 template<>
-EXPORT void destroy<FunctionContents>(const FunctionContents *f) {delete f;}
+EXPORT void destroy<FunctionContents>(const FunctionContents *f) {
+    delete f;
+}
 
 // All variables present in any part of a function definition must
 // either be pure args, elements of the reduction domain, parameters
@@ -90,15 +94,21 @@ struct CheckVars : public IRGraphVisitor {
     }
 };
 
-struct CountSelfReferences : public IRGraphVisitor {
-    set<const Call *> calls;
+struct CountSelfReferences : public IRMutator {
+    int count;
     const Function *func;
 
-    using IRVisitor::visit;
+    using IRMutator::visit;
 
     void visit(const Call *c) {
+        IRMutator::visit(c);
+        c = expr.as<Call>();
+        internal_assert(c);
         if (c->func.same_as(*func)) {
-            calls.insert(c);
+            expr = Call::make(c->type, c->name, c->args, c->call_type,
+                              c->func, c->value_index,
+                              c->image, c->param);
+            count++;
         }
     }
 };
@@ -305,17 +315,17 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // that point back to this function in order to break the cycles.
     CountSelfReferences counter;
     counter.func = this;
+    counter.count = 0;
     for (size_t i = 0; i < args.size(); i++) {
-        args[i].accept(&counter);
+        r.args[i] = counter.mutate(r.args[i]);
     }
     for (size_t i = 0; i < values.size(); i++) {
-        values[i].accept(&counter);
+        r.values[i] = counter.mutate(r.values[i]);
     }
 
-    for (size_t i = 0; i < counter.calls.size(); i++) {
+    for (int i = 0; i < counter.count; i++) {
         contents.ptr->ref_count.decrement();
-        internal_assert(!contents.ptr->ref_count.is_zero())
-            << "Removed too many circular references when defining reduction.\n";
+        internal_assert(!contents.ptr->ref_count.is_zero());
     }
 
     // First add any reduction domain
@@ -338,7 +348,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // the args are pure, then this definition completely hides
     // earlier ones!
     if (!r.domain.defined() &&
-        counter.calls.empty() &&
+        counter.count == 0 &&
         pure) {
         user_warning
             << "In update definition of Func \"" << name() << "\":\n"

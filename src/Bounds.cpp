@@ -630,6 +630,11 @@ private:
             }
         }
 
+        if (op->type == Handle()) {
+            min = max = Expr();
+            return;
+        }
+
         if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
             min = max = Call::make(op->type, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
@@ -660,6 +665,21 @@ private:
             max = Call::make(op->type, op->name, vec<Expr>(max_a), op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
+        } else if (op->call_type == Call::Intrinsic &&
+                   (op->name == Call::extract_buffer_min ||
+                    op->name == Call::extract_buffer_max) &&
+                   !op->args.empty() &&
+                   op->args[0].as<Variable>()) {
+            // Bounds query results should have perfect nesting. Their
+            // max over a loop is just the same bounds query call at
+            // an outer loop level. This requires that the query is
+            // also done at the outer loop level so that the buffer
+            // arg is still valid, which it is, so it is.
+            //
+            // TODO: There should be an assert injected in the inner
+            // loop to check perfect nesting.
+            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
+            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
         } else if (op->func.has_pure_definition()) {
             bounds_of_func(op->func, op->value_index);
         } else {
