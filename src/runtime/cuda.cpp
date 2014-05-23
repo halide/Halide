@@ -442,6 +442,10 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
                  (long long)buf->stride[2], (long long)buf->stride[3],
                  buf->elem_size);
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     CUdeviceptr p;
     CUresult err = cuMemAlloc(&p, size);
     if (err != CUDA_SUCCESS) {
@@ -450,6 +454,11 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     }
     halide_assert(user_context, p);
     buf->dev = (uint64_t)p;
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms", (t_after - t_before) / 1.0e6);
+    #endif
 
     return 0;
 }
@@ -463,6 +472,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     }
 
     if (buf->host_dirty) {
+        #ifdef DEBUG
+        uint64_t t_before = halide_current_time_ns(user_context);
+        #endif
+
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         DEBUG_PRINTF( user_context, "    copy_to_dev (%lld bytes, %p -> %p)\n",
@@ -473,6 +486,11 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
             halide_error_varargs(user_context, "CUDA: cuMemcpyHtoD failed (%d)", err);
             return err;
         }
+
+        #ifdef DEBUG
+        uint64_t t_after = halide_current_time_ns(user_context);
+        halide_printf(user_context, "    Time: %f ms", (t_after - t_before) / 1.0e6);
+        #endif
     }
     buf->host_dirty = false;
     return 0;
@@ -487,6 +505,10 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     }
 
     if (buf->dev_dirty) {
+        #ifdef DEBUG
+        uint64_t t_before = halide_current_time_ns(user_context);
+        #endif
+
         halide_assert(user_context, buf->dev && buf->dev);
         size_t size = __buf_size(user_context, buf);
         DEBUG_PRINTF( user_context, "    copy_to_host (%lld bytes, %p -> %p)\n",
@@ -497,6 +519,11 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
             halide_error_varargs(user_context, "CUDA: cuMemcpyDtoH failed (%d)", err);
             return err;
         }
+
+        #ifdef DEBUG
+        uint64_t t_after = halide_current_time_ns(user_context);
+        halide_printf(user_context, "    Time: %f ms", (t_after - t_before) / 1.0e6);
+        #endif
     }
     buf->dev_dirty = false;
     return 0;
@@ -540,6 +567,10 @@ WEAK int halide_dev_run(void *user_context,
         return ctx.error;
     }
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     halide_assert(user_context, state_ptr);
     CUmodule mod = ((module_state*)state_ptr)->module;
     halide_assert(user_context, mod);
@@ -562,6 +593,15 @@ WEAK int halide_dev_run(void *user_context,
         return err;
     }
 
+    #ifdef DEBUG
+    err = cuCtxSynchronize();
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuCtxSynchronize failed (%d)\n", err);
+        return err;
+    }
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Kernel time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
     return 0;
 }
 
