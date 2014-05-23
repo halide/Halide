@@ -10,29 +10,13 @@ extern int64_t halide_current_time_ns(void *user_context);
 extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
 
-#ifndef DEBUG
-#define CHECK_CALL(c,str) c
-#define TIME_CALL(c,str) c
+#ifdef DEBUG
+#define DEBUG_PRINTF halide_printf
 #else
-#define CHECK_CALL(c,str) do {\
-    halide_printf(user_context, "Do %s\n", str);        \
-    CUresult status = (c);                              \
-    if (status != CUDA_SUCCESS) {                       \
-        halide_error_varargs(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
-        return status;                                  \
-    }                                                   \
-} while(0)
-#define TIME_CALL(c,str) do {\
-    cuEventRecord(__start, 0);                              \
-    CHECK_CALL((c),(str));                                  \
-    cuEventRecord(__end, 0);                                \
-    cuEventSynchronize(__end);                              \
-    float msec;                                             \
-    cuEventElapsedTime(&msec, __start, __end);              \
-    halide_printf(user_context, "   (took %fms, t=%lld)\n", msec,   \
-                  (long long)halide_current_time_ns(user_context)); \
-} while(0)
-#endif //DEBUG
+// This ensures that DEBUG and non-DEBUG have the same semicolon eating behavior.
+static void __noop_printf(void *, const char *, ...) { }
+#define DEBUG_PRINTF __noop_printf
+#endif
 
 // TODO: On windows this needs __stdcall
 //#define CUDAAPI __stdcall
@@ -174,7 +158,7 @@ static CUresult create_context(void *user_context, CUcontext *ctx);
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
 WEAK int halide_acquire_cuda_context(void *user_context, CUcontext *ctx) {
-    // TODO: Should we use a more "assertive" assert, these asserts do
+    // TODO: Should we use a more "assertive" assert? these asserts do
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
 
@@ -217,12 +201,13 @@ public:
 
     // Constructor sets 'error' if any occurs.
     CudaContext(void *user_context) : user_context(user_context),
-                                    context(NULL),
-                                    error(CUDA_SUCCESS) {
+                                      context(NULL),
+                                      error(CUDA_SUCCESS) {
         error = halide_acquire_cuda_context(user_context, &context);
         halide_assert(user_context, context != NULL);
-        if (error != 0)
+        if (error != 0) {
             return;
+        }
 
         error = cuCtxPushCurrent(context);
     }
@@ -246,9 +231,7 @@ typedef struct _module_state_ {
     _module_state_ *next;
 } module_state;
 
-static CUevent __start, __end;
-
-WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf) {
+WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
 // The technique using cuPointerGetAttribute and CU_POINTER_ATTRIBUTE_CONTEXT
 // requires unified virtual addressing is enabled and that is not the case
 // for 32-bit processes on Mac OS X. So for now, as a total hack, just return true
@@ -274,6 +257,8 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_dev_free (user_context: %p, buf: %p)\n", user_context, buf );
+
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS)
         return ctx.error;
@@ -284,24 +269,38 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     if (buf->dev == 0)
         return 0;
 
-    #ifdef DEBUG
-    halide_printf(user_context, "In dev_free of %p - dev: 0x%p\n", buf, (void*)buf->dev);
     halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-    #endif
 
-    CHECK_CALL( cuMemFree(buf->dev), "cuMemFree" );
+    CUresult err = cuMemFree(buf->dev);
+    // If cuMemFree fails, it isn't likely to succeed later, so just drop
+    // the reference.
     buf->dev = 0;
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuMemFree failed (%d)", err);
+        return err;
+    }
     return 0;
 }
 
 static CUresult create_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
-    CHECK_CALL( cuInit(0), "cuInit" );
+    CUresult err = cuInit(0);
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuInit failed (%d)", err);
+        return err;
+    }
 
     // Make sure we have a device
     int deviceCount = 0;
-    CHECK_CALL( cuDeviceGetCount(&deviceCount), "cuDeviceGetCount" );
-    halide_assert(user_context, deviceCount > 0);
+    err = cuDeviceGetCount(&deviceCount);
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuGetDeviceCount failed (%d)", err);
+        return err;
+    }
+    if (deviceCount <= 0) {
+        halide_error(user_context, "CUDA: No devices available");
+        return CUDA_ERROR_NO_DEVICE;
+    }
 
     char *device_str = getenv("HL_GPU_DEVICE");
 
@@ -325,36 +324,23 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
         return status;
     }
 
-    #ifdef DEBUG
-    halide_printf(user_context, "Got device %d, about to create context (t=%lld)\n",
-                  dev, (long long)halide_current_time_ns(user_context));
-    #endif
+    DEBUG_PRINTF( user_context, "    Got device %d\n", dev );
 
     // Create context
-    CHECK_CALL( cuCtxCreate(ctx, 0, dev), "cuCtxCreate" );
-
-    // Create two events for timing
-    if (!__start) {
-        cuEventCreate(&__start, 0);
-        cuEventCreate(&__end, 0);
+    err = cuCtxCreate(ctx, 0, dev);
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuCtxCreate failed (%d)", err);
+        return err;
     }
-
-    return CUDA_SUCCESS;
-}
-
-static CUresult create_module(void *user_context, module_state *state, const char *ptx_src, int size) {
-    // Create module
-    CHECK_CALL( cuModuleLoadData(&state->module, ptx_src), "cuModuleLoadData" );
-
-    #ifdef DEBUG
-    halide_printf(user_context, "-------\nCompiling PTX:\n%s\n--------\n",
-                  ptx_src);
-    #endif
+    DEBUG_PRINTF( user_context, "    Created context %p", *ctx );
 
     return CUDA_SUCCESS;
 }
 
 WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* ptx_src, int size) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_init_kernels (user_context: %p, state_ptr: %p, ptx_src: %p, %i)\n",
+                  user_context, state_ptr, ptx_src, size );
+
     CudaContext ctx(user_context);
     if (ctx.error != 0) {
         return NULL;
@@ -371,8 +357,9 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
     // Create the module itself if necessary.
     if (!state->module) {
-        CUresult err = create_module(user_context, state, ptx_src, size);
+        CUresult err = cuModuleLoadData(&state->module, ptx_src);
         if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuModuleLoadData failed (%d)", err);
             return NULL;
         }
     }
@@ -380,46 +367,29 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     return state;
 }
 
-#ifdef DEBUG
-#define CHECK_CALL_DEINIT_OK(c,str) do {\
-    halide_printf(user_context, "Do %s\n", str); \
-    CUresult status = (c); \
-    if (status != CUDA_SUCCESS && status != CUDA_ERROR_DEINITIALIZED) \
-        halide_printf(user_context, "CUDA: %s returned non-success: %d\n", str, status); \
-    halide_assert(user_context, status == CUDA_SUCCESS || status == CUDA_ERROR_DEINITIALIZED); \
-} while(0)
-#else
-#define CHECK_CALL_DEINIT_OK(c,str) c
-#endif
-
 WEAK void halide_release(void *user_context) {
-    #ifdef DEBUG
-    halide_printf(user_context, "CUDA: halide_release\n");
-    #endif
+    DEBUG_PRINTF( user_context, "CUDA: halide_release (user_context: %p)\n", user_context );
 
+    int err;
     CUcontext ctx;
-    int err = halide_acquire_cuda_context(user_context, &ctx);
-    if (err != 0 || !ctx) {
+    err = halide_acquire_cuda_context(user_context, &ctx);
+    if (err != CUDA_SUCCESS || !ctx) {
         return;
     }
 
     // It's possible that this is being called from the destructor of
     // a static variable, in which case the driver may already be
     // shutting down.
-    cuCtxSynchronize();
-
-    // Destroy the events
-    if (__start) {
-        cuEventDestroy(__start);
-        cuEventDestroy(__end);
-        __start = __end = 0;
-    }
+    err = cuCtxSynchronize();
+    halide_assert(user_context, err == CUDA_SUCCESS);
 
     // Unload the modules attached to this context
     module_state *state = state_list;
     while (state) {
         if (state->module) {
-            CHECK_CALL_DEINIT_OK( cuModuleUnload(state->module), "cuModuleUnload" );
+            DEBUG_PRINTF(user_context, "    cuModuleUnload %p\n", state->module);
+            err = cuModuleUnload(state->module);
+            halide_assert(user_context, err == CUDA_SUCCESS);
             state->module = 0;
         }
         state = state->next;
@@ -427,26 +397,13 @@ WEAK void halide_release(void *user_context) {
 
     // Only destroy the context if we own it
     if (ctx == weak_cuda_ctx) {
-        CHECK_CALL_DEINIT_OK( cuCtxDestroy(weak_cuda_ctx), "cuCtxDestroy on exit" );
+        DEBUG_PRINTF(user_context, "    cuCtxDestroy %p\n", weak_cuda_ctx);
+        err = cuCtxDestroy(weak_cuda_ctx);
+        halide_assert(user_context, err == CUDA_SUCCESS);
         weak_cuda_ctx = NULL;
     }
 
     halide_release_cuda_context(user_context);
-}
-
-static CUfunction __get_kernel(void *user_context, CUmodule mod, const char* entry_name)
-{
-    CUfunction f;
-
-    #ifdef DEBUG
-    char msg[256];
-    snprintf(msg, 256, "get_kernel %s (t=%lld)", entry_name, (long long)halide_current_time_ns(user_context) );
-    #endif
-
-    // Get kernel function ptr
-    cuModuleGetFunction(&f, mod, entry_name);
-
-    return f;
 }
 
 static size_t __buf_size(void *user_context, buffer_t *buf) {
@@ -462,78 +419,84 @@ static size_t __buf_size(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_dev_malloc (user_context: %p, buf: %p)\n", user_context, buf );
+
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
         return ctx.error;
     }
 
+    size_t size = __buf_size(user_context, buf);
     if (buf->dev) {
         // This buffer already has a device allocation
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
         return 0;
     }
 
-    size_t size = __buf_size(user_context, buf);
-
-    #ifdef DEBUG
-    halide_printf(user_context, "dev_malloc allocating buffer of %zd bytes, "
-                  "extents: %dx%dx%dx%d strides: %dx%dx%dx%d (%d bytes per element)\n",
-                  size, buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3],
-                  buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3],
-                  buf->elem_size);
-    #endif
+    DEBUG_PRINTF(user_context, "    allocating buffer of %lld bytes, "
+                 "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
+                 (long long)size,
+                 (long long)buf->extent[0], (long long)buf->extent[1],
+                 (long long)buf->extent[2], (long long)buf->extent[3],
+                 (long long)buf->stride[0], (long long)buf->stride[1],
+                 (long long)buf->stride[2], (long long)buf->stride[3],
+                 buf->elem_size);
 
     CUdeviceptr p;
-    TIME_CALL( cuMemAlloc(&p, size), "dev_malloc");
-
-    buf->dev = (uint64_t)p;
-    if (!buf->dev) {
-        halide_error(user_context, "cuMemAlloc failed\n");
-        return 1;
+    CUresult err = cuMemAlloc(&p, size);
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuMemAlloc failed (%d)", err);
+        return err;
     }
+    halide_assert(user_context, p);
+    buf->dev = (uint64_t)p;
 
-    #ifdef DEBUG
-    halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-    #endif
     return 0;
 }
 
 WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_copy_to_dev (user_context: %p, buf: %p)\n", user_context, buf );
+
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
         return ctx.error;
     }
 
     if (buf->host_dirty) {
-      halide_assert(user_context, buf->host && buf->dev);
+        halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
-        #ifdef DEBUG
-        char msg[256];
-        snprintf(msg, 256, "copy_to_dev (%zu bytes) %p -> %p (t=%lld)",
-                 size, buf->host, (void*)buf->dev, (long long)halide_current_time_ns(user_context) );
+        DEBUG_PRINTF( user_context, "    copy_to_dev (%lld bytes, %p -> %p)\n",
+                      (long long)size, buf->host, (void *)buf->dev );
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-        #endif
-        TIME_CALL( cuMemcpyHtoD(buf->dev, buf->host, size), msg );
+        CUresult err = cuMemcpyHtoD(buf->dev, buf->host, size);
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuMemcpyHtoD failed (%d)", err);
+            return err;
+        }
     }
     buf->host_dirty = false;
     return 0;
 }
 
 WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_copy_to_host (user_context: %p, buf: %p)\n", user_context, buf );
+
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
         return ctx.error;
     }
 
     if (buf->dev_dirty) {
-        halide_assert(user_context, buf->dev);
-        halide_assert(user_context, buf->host);
+        halide_assert(user_context, buf->dev && buf->dev);
         size_t size = __buf_size(user_context, buf);
-        #ifdef DEBUG
-        char msg[256];
-        snprintf(msg, 256, "copy_to_host (%zu bytes) %p -> %p", size, (void*)buf->dev, buf->host );
+        DEBUG_PRINTF( user_context, "    copy_to_host (%lld bytes, %p -> %p)\n",
+                      (long long)size, buf->host, (void *)buf->dev );
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-        #endif
-        TIME_CALL( cuMemcpyDtoH(buf->host, buf->dev, size), msg );
+        CUresult err = cuMemcpyDtoH(buf->host, buf->dev, size);
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuMemcpyDtoH failed (%d)", err);
+            return err;
+        }
     }
     buf->dev_dirty = false;
     return 0;
@@ -541,25 +504,37 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 
 // Used to generate correct timings when tracing
 WEAK int halide_dev_sync(void *user_context) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_dev_sync (user_context: %p)\n", user_context );
+
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
         return ctx.error;
     }
 
-    CHECK_CALL( cuCtxSynchronize(), cuCtxSynchronize() );
+    CUresult err = cuCtxSynchronize();
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuCtxSynchronize failed (%d)", err);
+        return err;
+    }
 
     return 0;
 }
 
-WEAK int halide_dev_run(
-    void *user_context,
-    void *state_ptr,
-    const char* entry_name,
-    int blocksX, int blocksY, int blocksZ,
-    int threadsX, int threadsY, int threadsZ,
-    int shared_mem_bytes,
-    size_t arg_sizes[],
-    void* args[]) {
+WEAK int halide_dev_run(void *user_context,
+                        void *state_ptr,
+                        const char* entry_name,
+                        int blocksX, int blocksY, int blocksZ,
+                        int threadsX, int threadsY, int threadsZ,
+                        int shared_mem_bytes,
+                        size_t arg_sizes[],
+                        void* args[]) {
+    DEBUG_PRINTF( user_context, "CUDA: halide_dev_run (user_context: %p, entry: %s, blocks: %dx%dx%d, threads: %dx%dx%d, shmem: %d)\n",
+                  user_context, entry_name,
+                  blocksX, blocksY, blocksZ,
+                  threadsX, threadsY, threadsZ,
+                  shared_mem_bytes );
+
+    CUresult err;
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS) {
         return ctx.error;
@@ -568,36 +543,26 @@ WEAK int halide_dev_run(
     halide_assert(user_context, state_ptr);
     CUmodule mod = ((module_state*)state_ptr)->module;
     halide_assert(user_context, mod);
-    CUfunction f = __get_kernel(user_context, mod, entry_name);
+    CUfunction f;
+    err = cuModuleGetFunction(&f, mod, entry_name);
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuModuleGetFunction failed (%d)", err);
+        return err;
+    }
 
-    #ifdef DEBUG
-    char msg[256];
-    snprintf(
-        msg, 256,
-        "dev_run %s with (%dx%dx%d) blks, (%dx%dx%d) threads, %d shmem (t=%lld)",
-        entry_name, blocksX, blocksY, blocksZ, threadsX, threadsY, threadsZ, shared_mem_bytes,
-        (long long)halide_current_time_ns(user_context)
-    );
-    #endif
+    err = cuLaunchKernel(f,
+                         blocksX,  blocksY,  blocksZ,
+                         threadsX, threadsY, threadsZ,
+                         shared_mem_bytes,
+                         NULL, // stream
+                         args,
+                         NULL);
+    if (err != CUDA_SUCCESS) {
+        halide_error_varargs(user_context, "CUDA: cuLaunchKernel failed (%d)", err);
+        return err;
+    }
 
-    TIME_CALL(
-        cuLaunchKernel(
-            f,
-            blocksX,  blocksY,  blocksZ,
-            threadsX, threadsY, threadsZ,
-            shared_mem_bytes,
-            NULL, // stream
-            args,
-            NULL
-        ),
-        msg
-    );
     return 0;
 }
 
 } // extern "C" linkage
-
-#undef CHECK_ERR
-#undef CHECK_CALL
-#undef TIME_START
-#undef TIME_CHECK
