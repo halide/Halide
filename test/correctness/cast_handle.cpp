@@ -12,6 +12,7 @@ int main(int argc, char **argv) {
     g(x) = reinterpret<uint64_t>(handle);
 
     int foo;
+
     handle.set(&foo);
 
     Image<uint64_t> out1 = f.realize(4);
@@ -19,7 +20,7 @@ int main(int argc, char **argv) {
     g.vectorize(x, 4);
     Image<uint64_t> out2 = g.realize(4);
 
-    uint64_t correct = (uint64_t)(&foo);
+    uint64_t correct = (uint64_t)((uintptr_t)(&foo));
 
     for (int x = 0; x < out1.width(); x++) {
         if (out1(x) != correct) {

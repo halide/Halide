@@ -825,14 +825,18 @@ Stmt create_initial_loop_nest(Function f, const Target &t) {
 
 class ComputeLegalSchedules : public IRVisitor {
 public:
-    vector<Schedule::LoopLevel> loops_allowed;
+    struct Site {
+        bool is_parallel;
+        Schedule::LoopLevel loop_level;
+    };
+    vector<Site> sites_allowed;
 
     ComputeLegalSchedules(Function f) : func(f), found(false) {}
 
 private:
     using IRVisitor::visit;
 
-    vector<Schedule::LoopLevel> loops;
+    vector<Site> sites;
     Function func;
     bool found;
 
@@ -844,20 +848,22 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
-        loops.push_back(Schedule::LoopLevel(func, var));
+        Site s = {f->for_type == For::Parallel || f->for_type == For::Vectorized,
+                  Schedule::LoopLevel(func, var)};
+        sites.push_back(s);
         f->body.accept(this);
-        loops.pop_back();
+        sites.pop_back();
     }
 
     void register_use() {
         if (!found) {
             found = true;
-            loops_allowed = loops;
+            sites_allowed = sites;
         } else {
             // Take the common prefix between loops and loops allowed
-            for (size_t i = 0; i < loops_allowed.size(); i++) {
-                if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
-                    loops_allowed.resize(i);
+            for (size_t i = 0; i < sites_allowed.size(); i++) {
+                if (i >= sites.size() || !sites[i].loop_level.match(sites_allowed[i].loop_level)) {
+                    sites_allowed.resize(i);
                     break;
                 }
             }
@@ -1003,24 +1009,43 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
     s.accept(&legal);
 
     bool store_at_ok = false, compute_at_ok = false;
-    const vector<Schedule::LoopLevel> &loops = legal.loops_allowed;
-    for (size_t i = 0; i < loops.size(); i++) {
-        if (loops[i].match(store_at)) {
+    const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
+    size_t store_idx = 0, compute_idx = 0;
+    for (size_t i = 0; i < sites.size(); i++) {
+        if (sites[i].loop_level.match(store_at)) {
             store_at_ok = true;
+            store_idx = i;
         }
-        if (loops[i].match(compute_at)) {
+        if (sites[i].loop_level.match(compute_at)) {
             compute_at_ok = store_at_ok;
+            compute_idx = i;
+        }
+    }
+
+    // Check there isn't a parallel loop between the compute_at and the store_at
+    std::ostringstream err;
+
+    if (store_at_ok && compute_at_ok) {
+        for (size_t i = store_idx + 1; i <= compute_idx; i++) {
+            if (sites[i].is_parallel) {
+                err << "Function \"" << f.name()
+                    << "\" is stored outside the parallel loop over "
+                    << sites[i].loop_level.func << "." << sites[i].loop_level.var
+                    << " but computed within it. This is a potential race condition.\n";
+                store_at_ok = compute_at_ok = false;
+            }
         }
     }
 
     if (!store_at_ok || !compute_at_ok) {
-        std::ostringstream err;
-        err << "Function " << f.name() << " is computed and stored in the following invalid location:\n"
+        err << "Function \"" << f.name() << "\" is computed and stored in the following invalid location:\n"
             << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
-        for (size_t i = 0; i < loops.size(); i++) {
-            for (size_t j = i; j < loops.size(); j++) {
-                err << schedule_to_source(f, loops[i], loops[j]) << "\n";
+        for (size_t i = 0; i < sites.size(); i++) {
+            for (size_t j = i; j < sites.size(); j++) {
+                if (j > i && sites[j].is_parallel) break;
+                err << schedule_to_source(f, sites[i].loop_level, sites[j].loop_level) << "\n";
+
             }
         }
         user_error << err.str();
@@ -1319,7 +1344,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             // for extra safety. Ultimately we will want to make
             // Halide handle larger single buffers, at least on 64-bit
             // systems.
-            Expr max_size = cast<int64_t>(1) << 31 - 1;
+            Expr max_size = cast<int64_t>(0x7fffffff);
             Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
                                           "Total allocation for buffer " + name + " exceeds 2^31 - 1",
                                           std::vector<Expr>());
