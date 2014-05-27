@@ -24,6 +24,29 @@
 #ifndef __OPENCL_CL_H
 #define __OPENCL_CL_H
 
+#ifdef BITS_64
+#define CL_API_ENTRY
+#define CL_API_CALL
+#define CL_CALLBACK
+#else
+#define CL_API_ENTRY
+#define CL_API_CALL     __stdcall
+#define CL_CALLBACK     __stdcall
+#endif
+#define CL_API_SUFFIX__VERSION_1_0
+#define CL_API_SUFFIX__VERSION_1_1
+#define CL_API_SUFFIX__VERSION_1_2
+#define CL_EXT_SUFFIX__VERSION_1_0_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_0_DEPRECATED
+#define CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
+#define CL_EXT_SUFFIX__VERSION_1_2_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_2_DEPRECATED
+typedef int32_t cl_int;
+typedef uint32_t cl_uint;
+typedef int64_t cl_long;
+typedef uint64_t cl_ulong;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
