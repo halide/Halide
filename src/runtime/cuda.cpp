@@ -400,7 +400,7 @@ WEAK void halide_release(void *user_context) {
     // a static variable, in which case the driver may already be
     // shutting down.
     err = cuCtxSynchronize();
-    halide_assert(user_context, err == CUDA_SUCCESS);
+    halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
     // Unload the modules attached to this context
     module_state *state = state_list;
@@ -408,7 +408,7 @@ WEAK void halide_release(void *user_context) {
         if (state->module) {
             DEBUG_PRINTF(user_context, "    cuModuleUnload %p\n", state->module);
             err = cuModuleUnload(state->module);
-            halide_assert(user_context, err == CUDA_SUCCESS);
+            halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
             state->module = 0;
         }
         state = state->next;
@@ -418,7 +418,7 @@ WEAK void halide_release(void *user_context) {
     if (ctx == weak_cuda_ctx) {
         DEBUG_PRINTF(user_context, "    cuCtxDestroy %p\n", weak_cuda_ctx);
         err = cuCtxDestroy(weak_cuda_ctx);
-        halide_assert(user_context, err == CUDA_SUCCESS);
+        halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
         weak_cuda_ctx = NULL;
     }
 
