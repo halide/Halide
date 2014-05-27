@@ -319,13 +319,14 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         halide_error_varargs(user_context, "CL: clCreateContext failed (%d)\n", err);
         return err;
     }
-    DEBUG_PRINTF( user_context, "    Created context %p", *ctx );
+    DEBUG_PRINTF( user_context, "    Created context %p\n", *ctx );
 
     *q = clCreateCommandQueue(*ctx, dev, 0, &err);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clCreateCommandQueue failed (%d)\n", err);
         return err;
     }
+    DEBUG_PRINTF( user_context, "    Created command queue %p\n", *q );
 
     return err;
 }
@@ -678,6 +679,7 @@ WEAK int halide_dev_run(void *user_context,
     }
     // Set the shared mem buffer last
     // Always set at least 1 byte of shmem, to keep the launch happy
+    DEBUG_PRINTF(user_context, "    clSetKernelArg %i %i [NULL]\n", i, shared_mem_bytes);
     err = clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clSetKernelArg failed (%d)\n", err);
