@@ -103,6 +103,14 @@ struct JITCompiledModule {
      * pointer members above with the result. */
     void compile_module(CodeGen *cg, llvm::Module *mod, const std::string &function_name);
 
+    /** Holds a cleanup routine and context parameter. */
+    struct CleanupRoutine {
+        void (*fn)(void *);
+        void *context;
+
+        CleanupRoutine() : fn(NULL), context(NULL) {}
+        CleanupRoutine(void (*fn)(void *), void *context) : fn(fn), context(context) {}
+    };
 };
 
 }

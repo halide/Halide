@@ -16,7 +16,7 @@ pipeline_native.o: pipeline
 	./pipeline
 
 run: run.cpp pipeline_native.h pipeline_c.c
-	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run $(CUDA_LDFLAGS)
+	$(CXX) -Wall run.cpp pipeline_c.c pipeline_native.o -lpthread -o run $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
 
 test: run
 	./run
