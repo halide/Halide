@@ -52,6 +52,10 @@ protected:
         void visit(const Load *op);
         void visit(const Store *op);
         void visit(const Cast *op);
+        void visit(const Allocate *op);
+
+        /** Maintains the kernel arguments that are in scope. */
+        Scope<Type> kernel_arguments;
     };
 
     CodeGen_OpenCL_C *clc;
