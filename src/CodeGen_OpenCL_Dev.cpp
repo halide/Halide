@@ -290,8 +290,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 
     debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
 
-    // If this is a shared allocation, there should already be a
-    // pointer into shared memory in the symbol table.
+    // If this is a shared allocation, there should be a kernel argument indicating
+    // its offset into the shared buffer.
     std::string offset_id = op->name + ".shared_mem";
     do_indent();
     if (kernel_arguments.contains(offset_id)) {
