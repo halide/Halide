@@ -3,32 +3,7 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#define USED __attribute__((used))
-
-#ifdef BITS_64
-#define CL_API_ENTRY
-#define CL_API_CALL
-#define CL_CALLBACK
-#else
-#define CL_API_ENTRY
-#define CL_API_CALL     __stdcall
-#define CL_CALLBACK     __stdcall
-#endif
-#define CL_API_SUFFIX__VERSION_1_0
-#define CL_API_SUFFIX__VERSION_1_1
-#define CL_API_SUFFIX__VERSION_1_2
-#define CL_EXT_SUFFIX__VERSION_1_0_DEPRECATED
-#define CL_EXT_PREFIX__VERSION_1_0_DEPRECATED
-#define CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
-#define CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
-#define CL_EXT_SUFFIX__VERSION_1_2_DEPRECATED
-#define CL_EXT_PREFIX__VERSION_1_2_DEPRECATED
-typedef int32_t cl_int;
-typedef uint32_t cl_uint;
-typedef int64_t cl_long;
-typedef uint64_t cl_ulong;
-
-#include "CL/cl.h"
+#include "mini_cl.h"
 
 #ifdef DEBUG
 #define DEBUG_PRINTF halide_printf
@@ -608,7 +583,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
-        DEBUG_PRINTF( user_context, "    copy_to_dev (%lld bytes, %p -> %p)\n",
+        DEBUG_PRINTF( user_context, "    copy_to_host (%lld bytes, %p -> %p)\n",
                       (long long)size, (void *)buf->dev, buf );
 
         cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)((void*)buf->dev),
