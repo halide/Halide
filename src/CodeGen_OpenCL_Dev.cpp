@@ -1,6 +1,7 @@
 #include <sstream>
 
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 
 namespace Halide {
@@ -282,6 +283,45 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     }
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
+    open_scope();
+
+    debug(1) << "Allocate " << op->name << " on device\n";
+
+    debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
+
+    // If this is a shared allocation, there should already be a
+    // pointer into shared memory in the symbol table.
+    std::string offset_id = op->name + ".shared_mem";
+    do_indent();
+    if (kernel_arguments.contains(offset_id)) {
+        stream << "__local " << print_type(op->type) << " * " << print_name(op->name) << " = "
+               << "(__local " << print_type(op->type) << "*)"
+               << "(shared + " << print_name(offset_id) << ");\n";
+    } else {
+        // Allocation is not a shared memory allocation, just make a local declaration.
+        // It must have a constant size.
+        int32_t size;
+        bool is_constant = constant_allocation_size(op->extents, op->name, size);
+        user_assert(is_constant)
+            << "Allocation " << op->name << " has a dynamic size. "
+            << "Only fixed-size allocations are supported on the gpu. "
+            << "Try storing into shared memory instead.";
+
+        stream << print_type(op->type) << ' '
+               << print_name(op->name) << "[" << size << "];\n";
+    }
+
+    allocations.push(op->name, op->type);
+
+    op->body.accept(this);
+
+    // Should have been freed internally
+    internal_assert(!allocations.contains(op->name));
+
+    close_scope("alloc " + print_name(op->name));
+}
+
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     debug(1) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
 
@@ -314,6 +354,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
                    << " "
                    << print_name(args[i].name);
         }
+        kernel_arguments.push(args[i].name, args[i].type);
 
         if (i < args.size()-1) stream << ",\n";
     }
@@ -325,11 +366,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
 
     stream << "}\n";
 
-    // Remove buffer arguments from allocation scope
     for (size_t i = 0; i < args.size(); i++) {
+        // Remove buffer arguments from allocation scope
         if (args[i].is_buffer) {
             allocations.pop(args[i].name);
         }
+        // Remove kernel arguments from scope.
+        kernel_arguments.pop(args[i].name);
     }
 }
 
