@@ -36,24 +36,53 @@ extern "C" { typedef struct CUctx_st *CUcontext; }
 int (*cuCtxDestroy)(CUctx_st *) = 0;
 struct SharedCudaContext {
     CUctx_st *ptr;
+    volatile int lock;
 
     // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0) {
+    SharedCudaContext() : ptr(0), lock(0) {
     }
 
     // Freed on program exit
     ~SharedCudaContext() {
-        debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
         if (ptr && cuCtxDestroy) {
+            debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
             (*cuCtxDestroy)(ptr);
             ptr = 0;
         }
     }
 } cuda_ctx;
 
-// A single global OpenCL context and command queue to share among modules.
-void * cl_ctx = 0;
-void * cl_q = 0;
+extern "C" {
+    typedef struct cl_context_st *cl_context;
+    typedef struct cl_command_queue_st *cl_command_queue;
+}
+
+int (*clReleaseContext)(cl_context);
+int (*clReleaseCommandQueue)(cl_command_queue);
+
+// A single global OpenCL context and command queue to share between jitted functions.
+struct SharedOpenCLContext {
+    cl_context context;
+    cl_command_queue command_queue;
+    volatile int lock;
+
+    SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
+    }
+
+    // Release context and command queue on exit.
+    ~SharedOpenCLContext() {
+        if (command_queue && clReleaseCommandQueue) {
+            debug(1) << "Cleaning up OpenCL command queue: " << command_queue << " , " << clReleaseCommandQueue << "\n";
+            clReleaseCommandQueue(command_queue);
+            command_queue = NULL;
+        }
+        if (context && clReleaseContext) {
+            debug(1) << "Cleaning up OpenCL context: " << context << " , " << clReleaseContext << "\n";
+            clReleaseContext(context);
+            context = NULL;
+        }
+    }
+} cl_ctx;
 
 using std::vector;
 using std::string;
@@ -517,6 +546,19 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             }
             user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
         }
+
+        // Now dig out clReleaseContext/CommandQueue so that we can clean up the
+        // shared context at termination
+        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
+        internal_assert(ptr) << "Could not find clReleaseContext\n";
+
+        clReleaseContext = reinterpret_bits<int (*)(cl_context)>(ptr);
+
+        ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
+        internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
+
+        clReleaseCommandQueue = reinterpret_bits<int (*)(cl_command_queue)>(ptr);
+
     } else if (target.features & Target::OpenGL) {
         if (target.os == Target::Linux) {
             if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
@@ -555,39 +597,23 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
         internal_assert(fn) << "Could not find halide_set_cuda_context in module\n";
         void *f = ee->getPointerToFunction(fn);
         internal_assert(f) << "Could not find compiled form of halide_set_cuda_context in module\n";
-        void (*set_cuda_context)(CUcontext *) =
-            reinterpret_bits<void (*)(CUcontext *)>(f);
-        set_cuda_context(&cuda_ctx.ptr);
-
-        // When the module dies, we need to call halide_release
-        fn = module->getFunction("halide_release");
-        internal_assert(fn) << "Could not find halide_release in module\n";
-        f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_release in module\n";
-        void (*cleanup_routine)() =
-            reinterpret_bits<void (*)()>(f);
-        cleanup_routines->push_back(cleanup_routine);
+        void (*set_cuda_context)(CUcontext *, volatile int *) =
+            reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
+        set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
     } else if (target.features & Target::OpenCL) {
         // Share the same cl_ctx, cl_q across all OpenCL modules.
         llvm::Function *fn = module->getFunction("halide_set_cl_context");
         internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
         void *f = ee->getPointerToFunction(fn);
         internal_assert(f) << "Could not find compiled form of halide_set_cl_context in module\n";
-        void (*set_cl_context)(void **, void **) =
-            reinterpret_bits<void (*)(void **, void **)>(f);
-        set_cl_context(&cl_ctx, &cl_q);
+        void (*set_cl_context)(cl_context *, cl_command_queue *, volatile int *) =
+            reinterpret_bits<void (*)(cl_context *, cl_command_queue *, volatile int *)>(f);
+        set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
+    }
 
-        // When the module dies, we need to call halide_release
-        fn = module->getFunction("halide_release");
-        internal_assert(fn) << "Could not find halide_release in module\n";
-        f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_release in module\n";
-        void (*cleanup_routine)() =
-            reinterpret_bits<void (*)()>(f);
-        cleanup_routines->push_back(cleanup_routine);
-    } else if (target.features & Target::OpenGL) {
-        llvm::Function *fn = module->getFunction("halide_release");
-        internal_assert(fn) << "Could not find halide_release in module\n";
+    // If the module contains a halide_release function, run it when the module dies.
+    llvm::Function *fn = module->getFunction("halide_release");
+    if (fn) {
         void *f = ee->getPointerToFunction(fn);
         internal_assert(f) << "Could not find compiled form of halide_release in module\n";
         void (*cleanup_routine)() =
