@@ -30,9 +30,10 @@ public:
     ~JITModuleHolder() {
         debug(2) << "Destroying JIT compiled module at " << this << "\n";
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
-            debug(2) << "  Calling target specific cleanup routine at " << ptr << "\n";
-            (*cleanup_routines[i])();
+            void *ptr = reinterpret_bits<void *>(cleanup_routines[i].fn);
+            debug(2) << "  Calling cleanup routine [" << ptr << "]("
+                     << cleanup_routines[i].context << ")\n";
+            cleanup_routines[i].fn(cleanup_routines[i].context);
         }
 
         shutdown_thread_pool();
@@ -47,7 +48,7 @@ public:
     void (*shutdown_thread_pool)();
 
     /** Do any target-specific module cleanup. */
-    std::vector<void (*)()> cleanup_routines;
+    std::vector<JITCompiledModule::CleanupRoutine> cleanup_routines;
 };
 
 template<>
