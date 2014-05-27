@@ -306,7 +306,7 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
     kernel->next = NULL;
 
     #ifdef DEBUG
-    halide_printf(user_context, "Compiling GLSL kernel:\n%s\n", 
+    halide_printf(user_context, "Compiling GLSL kernel:\n%s\n",
                   kernel->source);
     #endif
 
@@ -718,9 +718,10 @@ EXPORT void *halide_opengl_init_kernels(void *user_context, void *state_ptr,
     return NULL;
 }
 
-EXPORT void halide_opengl_dev_sync(void *user_context) {
-    CHECK_INITIALIZED();
+EXPORT int halide_opengl_dev_sync(void *user_context) {
+    CHECK_INITIALIZED(1);
     // TODO: glFinish()
+    return 0;
 }
 
 template <class T>
@@ -1137,7 +1138,7 @@ EXPORT int halide_dev_run(void *user_context,
                                  arg_sizes, args);
 }
 
-EXPORT void halide_dev_sync(void *user_context) {
+EXPORT int halide_dev_sync(void *user_context) {
     halide_opengl_dev_sync(user_context);
 }
 

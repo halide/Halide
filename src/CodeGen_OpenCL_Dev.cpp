@@ -283,7 +283,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
-    debug(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
+    debug(1) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -297,7 +297,7 @@ const string kernel_preamble = "";
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     cache.clear();
 
-    debug(0) << "hi! " << name << "\n";
+    debug(1) << "hi! " << name << "\n";
 
     stream << kernel_preamble;
 
@@ -334,7 +334,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
 }
 
 void CodeGen_OpenCL_Dev::init_module() {
-    debug(0) << "OpenCL device codegen init_module\n";
+    debug(1) << "OpenCL device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -412,6 +412,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
+    debug(1) << "OpenCL kernel:\n" << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
