@@ -185,6 +185,10 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
       return 0;
     }
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
     cl_int result = clReleaseMemObject((cl_mem)buf->dev);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
@@ -194,6 +198,12 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
         halide_error_varargs(user_context, "CL: clReleaseMemObject failed (%d)", result);
         return result;
     }
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
+
     return 0;
 }
 
@@ -297,8 +307,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         // This is just debug info, report the error but don't fail context create if it fails.
         //return err;
     } else {
-        halide_printf(user_context, "    Got device '%s', about to create context (t=%lld)\n",
-                      deviceName, (long long)halide_current_time_ns(user_context));
+        halide_printf(user_context, "    Got device '%s'\n", deviceName);
     }
     #endif
 
@@ -329,6 +338,10 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     if (ctx.error != CL_SUCCESS) {
         return NULL;
     }
+
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
 
     // Create the module state if necessary
     module_state *state = (module_state*)state_ptr;
@@ -405,6 +418,11 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         }
     }
 
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
+
     return state;
 }
 
@@ -415,11 +433,20 @@ WEAK int halide_dev_sync(void *user_context) {
     ClContext ctx(user_context);
     halide_assert(user_context, ctx.error == CL_SUCCESS);
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     cl_int err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clFinish failed (%d)\n", err);
         return err;
     }
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
 
     return CL_SUCCESS;
 }
@@ -493,7 +520,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
         return 0;
     }
 
-    DEBUG_PRINTF(user_context, "    allocating buffer of %lld bytes, "
+    DEBUG_PRINTF(user_context, "    Allocating buffer of %lld bytes, "
                  "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
                  (long long)size,
                  (long long)buf->extent[0], (long long)buf->extent[1],
@@ -502,6 +529,10 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
                  (long long)buf->stride[2], (long long)buf->stride[3],
                  buf->elem_size);
 
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
+
     cl_int err;
     buf->dev = (uint64_t)clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
     if (err != CL_SUCCESS || buf->dev == 0) {
@@ -509,8 +540,13 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
         return err;
     }
 
-    DEBUG_PRINTF(user_context, "    allocated device buffer %p for buffer %p\n",
+    DEBUG_PRINTF(user_context, "    Allocated device buffer %p for buffer %p\n",
                  (void *)buf->dev, buf);
+
+    #ifdef DEBUG
+    uint64_t t_after = halide_current_time_ns(user_context);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    #endif
 
     return CL_SUCCESS;
 }
@@ -527,6 +563,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     }
 
     if (buf->host_dirty) {
+        #ifdef DEBUG
+        uint64_t t_before = halide_current_time_ns(user_context);
+        #endif
+
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
@@ -538,6 +578,11 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
             halide_error_varargs(user_context, "CL: clEnqueueWriteBuffer failed (%d)\n", err);
             return err;
         }
+
+        #ifdef DEBUG
+        uint64_t t_after = halide_current_time_ns(user_context);
+        halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+        #endif
     }
     buf->host_dirty = false;
     return 0;
@@ -555,6 +600,10 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     }
 
     if (buf->dev_dirty) {
+        #ifdef DEBUG
+        uint64_t t_before = halide_current_time_ns(user_context);
+        #endif
+
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
@@ -567,6 +616,11 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
             halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%d)\n", err);
             return err;
         }
+
+        #ifdef DEBUG
+        uint64_t t_after = halide_current_time_ns(user_context);
+        halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+        #endif
     }
     buf->dev_dirty = false;
     return 0;
@@ -591,6 +645,10 @@ WEAK int halide_dev_run(void *user_context,
     if (ctx.error != CL_SUCCESS) {
         return ctx.error;
     }
+
+    #ifdef DEBUG
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
 
     // Create kernel object for entry_name from the program for this module.
     halide_assert(user_context, state_ptr);
@@ -626,10 +684,6 @@ WEAK int halide_dev_run(void *user_context,
         return err;
     }
 
-    #ifdef DEBUG
-    uint64_t t_before = halide_current_time_ns(user_context);
-    #endif
-
     // Launch kernel
     err = clEnqueueNDRangeKernel(ctx.cmd_queue, f,
                                  // NDRange
@@ -648,7 +702,7 @@ WEAK int halide_dev_run(void *user_context,
         return err;
     }
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Kernel took: %f ms\n", (t_after - t_before) / 1000000.0);
+    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
     return 0;
 }
