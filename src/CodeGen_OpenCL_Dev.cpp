@@ -111,7 +111,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         Expr cond = LT::make(simt_idx, loop->extent);
         debug(1) << "for -> if (" << cond << ")\n";
 
-        string id_idx = print_expr(simt_idx);
+        string id_idx = print_expr(loop_var);
         string id_cond = print_expr(cond);
 
         do_indent();
