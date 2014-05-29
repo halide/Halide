@@ -1,6 +1,7 @@
 #include <sstream>
 
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
 
 namespace Halide {
@@ -75,6 +76,30 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
 }
 
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Pipeline *op) {
+    // This is identical to CodeGen_C's implementation, but generates barriers.
+
+    // TODO: These barrier calls are hacked in, but often aren't necessary. They
+    // should be inserted elsewhere as needed.
+    do_indent();
+    stream << "// produce " << op->name << '\n';
+    print_stmt(op->produce);
+
+    if (op->update.defined()) {
+        do_indent();
+        stream << "barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);\n";
+        do_indent();
+        stream << "// update " << op->name << '\n';
+        print_stmt(op->update);
+    }
+
+    do_indent();
+    stream << "barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);\n";
+    do_indent();
+    stream << "// consume " << op->name << '\n';
+    print_stmt(op->consume);
+}
+
 
 namespace {
 Expr simt_intrinsic(const string &name) {
@@ -110,7 +135,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         Expr cond = LT::make(simt_idx, loop->extent);
         debug(1) << "for -> if (" << cond << ")\n";
 
-        string id_idx = print_expr(simt_idx);
+        string id_idx = print_expr(loop_var);
         string id_cond = print_expr(cond);
 
         do_indent();
@@ -282,8 +307,47 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     }
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
+    open_scope();
+
+    debug(1) << "Allocate " << op->name << " on device\n";
+
+    debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
+
+    // If this is a shared allocation, there should be a kernel argument indicating
+    // its offset into the shared buffer.
+    std::string offset_id = op->name + ".shared_mem";
+    do_indent();
+    if (kernel_arguments.contains(offset_id)) {
+        stream << "__local " << print_type(op->type) << " * " << print_name(op->name) << " = "
+               << "(__local " << print_type(op->type) << "*)"
+               << "(shared + " << print_name(offset_id) << ");\n";
+    } else {
+        // Allocation is not a shared memory allocation, just make a local declaration.
+        // It must have a constant size.
+        int32_t size;
+        bool is_constant = constant_allocation_size(op->extents, op->name, size);
+        user_assert(is_constant)
+            << "Allocation " << op->name << " has a dynamic size. "
+            << "Only fixed-size allocations are supported on the gpu. "
+            << "Try storing into shared memory instead.";
+
+        stream << print_type(op->type) << ' '
+               << print_name(op->name) << "[" << size << "];\n";
+    }
+
+    allocations.push(op->name, op->type);
+
+    op->body.accept(this);
+
+    // Should have been freed internally
+    internal_assert(!allocations.contains(op->name));
+
+    close_scope("alloc " + print_name(op->name));
+}
+
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
-    debug(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
+    debug(1) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
@@ -297,7 +361,7 @@ const string kernel_preamble = "";
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     cache.clear();
 
-    debug(0) << "hi! " << name << "\n";
+    debug(1) << "hi! " << name << "\n";
 
     stream << kernel_preamble;
 
@@ -314,6 +378,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
                    << " "
                    << print_name(args[i].name);
         }
+        kernel_arguments.push(args[i].name, args[i].type);
 
         if (i < args.size()-1) stream << ",\n";
     }
@@ -325,16 +390,18 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
 
     stream << "}\n";
 
-    // Remove buffer arguments from allocation scope
     for (size_t i = 0; i < args.size(); i++) {
+        // Remove buffer arguments from allocation scope
         if (args[i].is_buffer) {
             allocations.pop(args[i].name);
         }
+        // Remove kernel arguments from scope.
+        kernel_arguments.pop(args[i].name);
     }
 }
 
 void CodeGen_OpenCL_Dev::init_module() {
-    debug(0) << "OpenCL device codegen init_module\n";
+    debug(1) << "OpenCL device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -412,6 +479,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
+    debug(1) << "OpenCL kernel:\n" << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

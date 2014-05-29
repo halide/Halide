@@ -10,11 +10,10 @@ using std::vector;
 
 class InjectOpenGLIntrinsics : public IRMutator {
 public:
-    InjectOpenGLIntrinsics(Scope<int> &need_buffer_t)
-        : need_buffer_t(need_buffer_t), inside_kernel_loop(false) {
+    InjectOpenGLIntrinsics()
+        : inside_kernel_loop(false) {
     }
     Scope<int> scope;
-    Scope<int> &need_buffer_t;
     bool inside_kernel_loop;
 private:
     using IRMutator::visit;
@@ -27,9 +26,6 @@ private:
 
         internal_assert(provide->values.size() == 1) << "GLSL currently only supports single-valued stores.\n";
         user_assert(provide->args.size() == 3) << "GLSL stores requires three coordinates.\n";
-
-        // Record that this buffer is accessed from a GPU kernel
-        need_buffer_t.push(provide->name, 0);
 
         // Create glsl_texture_store(name, name.buffer, x, y, c, value)
         // intrinsic.
@@ -56,9 +52,6 @@ private:
         }
 
         user_assert(call->args.size() == 3) << "GLSL loads requires three coordinates.\n";
-
-        // Record that this buffer is accessed from a GPU kernel
-        need_buffer_t.push(call->name, 0);
 
         // Create glsl_texture_load(name, name.buffer, x, y, c) intrinsic.
         vector<Expr> args(5);
@@ -116,8 +109,8 @@ private:
     }
 };
 
-Stmt inject_opengl_intrinsics(Stmt s, Scope<int> &needs_buffer_t) {
-    return InjectOpenGLIntrinsics(needs_buffer_t).mutate(s);
+Stmt inject_opengl_intrinsics(Stmt s) {
+    return InjectOpenGLIntrinsics().mutate(s);
 }
 
 }

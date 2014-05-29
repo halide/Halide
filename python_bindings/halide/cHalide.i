@@ -12,6 +12,7 @@
 %ignore halide_profiling_timer;
 %ignore halide_printf;
 %ignore halide_error;
+%ignore halide_error_varargs;
 %ignore halide_do_par_for;
 %ignore halide_shutdown_thread_pool;
 %ignore halide_trace;

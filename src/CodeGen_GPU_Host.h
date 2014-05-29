@@ -75,14 +75,7 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Pipeline *);
-    void visit(const Call *);
     // @}
-
-    // We track buffer_t's for each allocation in order to manage dirty bits
-    bool track_buffers() {return true;}
 
     //** Runtime function handles */
     // @{
@@ -99,7 +92,8 @@ protected:
 
     /** Reaches inside the module at sets it to use a single shared
      * cuda context */
-    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod, std::vector<void (*)()> *cleanup_routines);
+    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
+                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
 
     static bool lib_cuda_linked;
 

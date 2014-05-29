@@ -15,10 +15,9 @@ using std::map;
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e, const Scope<int> &need_buffer_t)
-        : need_buffer_t(need_buffer_t), env(e) {}
+    FlattenDimensions(const map<string, Function> &e)
+        : env(e) {}
     Scope<int> scope;
-    Scope<int> need_buffer_t;
 private:
     const map<string, Function> &env;
 
@@ -70,15 +69,6 @@ private:
 
     void visit(const Realize *realize) {
         Stmt body = mutate(realize->body);
-
-        // Check if we need to create a buffer_t for this realization
-        vector<bool> make_buffer_t(realize->types.size());
-        while (need_buffer_t.contains(realize->name)) {
-            int idx = need_buffer_t.get(realize->name);
-            internal_assert(idx < (int)make_buffer_t.size());
-            make_buffer_t[idx] = true;
-            need_buffer_t.pop(realize->name);
-        }
 
         // Compute the size
         std::vector<Expr> extents;
@@ -132,27 +122,25 @@ private:
             Type t = realize->types[idx];
             t.bits = t.bytes() * 8;
 
+            // Create a buffer_t object for this allocation.
+            vector<Expr> args(dims*3 + 2);
+            //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+            Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
+            args[0] = Call::make(Handle(), Call::address_of, vec(first_elem), Call::Intrinsic);
+            args[1] = realize->types[idx].bytes();
+            for (int i = 0; i < dims; i++) {
+                args[3*i+2] = min_var[i];
+                args[3*i+3] = extent_var[i];
+                args[3*i+4] = stride_var[i];
+            }
+            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                  args, Call::Intrinsic);
+            stmt = LetStmt::make(buffer_name + ".buffer",
+                                 buf,
+                                 stmt);
+
             // Make the allocation node
             stmt = Allocate::make(buffer_name, t, extents, stmt);
-
-            // Create a buffer_t object if necessary. The corresponding let is
-            // placed before the allocation node so that the buffer_t is
-            // already on the symbol table when doing the allocation.
-            if (make_buffer_t[idx]) {
-                vector<Expr> args(dims*3 + 2);
-                args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                args[1] = realize->types[idx].bytes();
-                for (int i = 0; i < dims; i++) {
-                    args[3*i+2] = min_var[i];
-                    args[3*i+3] = extent_var[i];
-                    args[3*i+4] = stride_var[i];
-                }
-                Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                      args, Call::Intrinsic);
-                stmt = LetStmt::make(buffer_name + ".buffer",
-                                     buf,
-                                     stmt);
-            }
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -271,8 +259,8 @@ private:
 };
 
 
-Stmt storage_flattening(Stmt s, const map<string, Function> &env, const Scope<int> &need_buffer_t) {
-    return FlattenDimensions(env, need_buffer_t).mutate(s);
+Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
+    return FlattenDimensions(env).mutate(s);
 }
 
 }
