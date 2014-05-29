@@ -152,6 +152,11 @@ endif
 
 ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -lOpenCL
+TEST_CXX_FLAGS += -DTEST_OPENCL
+endif
+
+ifneq ($(TEST_PTX), )
+TEST_CXX_FLAGS += -DTEST_PTX
 endif
 
 # Compiling the tutorials requires libpng

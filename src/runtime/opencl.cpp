@@ -3,32 +3,7 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#define USED __attribute__((used))
-
-#ifdef BITS_64
-#define CL_API_ENTRY
-#define CL_API_CALL
-#define CL_CALLBACK
-#else
-#define CL_API_ENTRY
-#define CL_API_CALL     __stdcall
-#define CL_CALLBACK     __stdcall
-#endif
-#define CL_API_SUFFIX__VERSION_1_0
-#define CL_API_SUFFIX__VERSION_1_1
-#define CL_API_SUFFIX__VERSION_1_2
-#define CL_EXT_SUFFIX__VERSION_1_0_DEPRECATED
-#define CL_EXT_PREFIX__VERSION_1_0_DEPRECATED
-#define CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
-#define CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
-#define CL_EXT_SUFFIX__VERSION_1_2_DEPRECATED
-#define CL_EXT_PREFIX__VERSION_1_2_DEPRECATED
-typedef int32_t cl_int;
-typedef uint32_t cl_uint;
-typedef int64_t cl_long;
-typedef uint64_t cl_ulong;
-
-#include "CL/cl.h"
+#include "mini_cl.h"
 
 #ifdef DEBUG
 #define DEBUG_PRINTF halide_printf
@@ -319,13 +294,14 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         halide_error_varargs(user_context, "CL: clCreateContext failed (%d)\n", err);
         return err;
     }
-    DEBUG_PRINTF( user_context, "    Created context %p", *ctx );
+    DEBUG_PRINTF( user_context, "    Created context %p\n", *ctx );
 
     *q = clCreateCommandQueue(*ctx, dev, 0, &err);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clCreateCommandQueue failed (%d)\n", err);
         return err;
     }
+    DEBUG_PRINTF( user_context, "    Created command queue %p\n", *q );
 
     return err;
 }
@@ -607,7 +583,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
-        DEBUG_PRINTF( user_context, "    copy_to_dev (%lld bytes, %p -> %p)\n",
+        DEBUG_PRINTF( user_context, "    copy_to_host (%lld bytes, %p -> %p)\n",
                       (long long)size, (void *)buf->dev, buf );
 
         cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)((void*)buf->dev),
@@ -678,6 +654,7 @@ WEAK int halide_dev_run(void *user_context,
     }
     // Set the shared mem buffer last
     // Always set at least 1 byte of shmem, to keep the launch happy
+    DEBUG_PRINTF(user_context, "    clSetKernelArg %i %i [NULL]\n", i, shared_mem_bytes);
     err = clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clSetKernelArg failed (%d)\n", err);
@@ -707,97 +684,5 @@ WEAK int halide_dev_run(void *user_context,
     return 0;
 }
 
-#ifdef TEST_STUB
-const char* src = "                                               \n"\
-"__kernel void knl(                                                       \n" \
-"   __global float* input,                                              \n" \
-"   __global float* output,                                             \n" \
-"   const unsigned int count,                                           \n" \
-"   __local uchar* shared)                                            \n" \
-"{                                                                      \n" \
-"   int i = get_global_id(0);                                           \n" \
-"   if(i < count)                                                       \n" \
-"       output[i] = input[i] * input[i];                                \n" \
-"}                                                                      \n";
-
-int f( buffer_t *input, buffer_t *result, int N )
-{
-    const char* entry_name = "knl";
-
-    int threadsX = 128;
-    int threadsY =  1;
-    int threadsZ =  1;
-    int blocksX = N / threadsX;
-    int blocksY = 1;
-    int blocksZ = 1;
-
-
-    threadsX = 8;
-    threadsY =  1;
-    threadsZ =  1;
-    blocksX = 4;
-    blocksY = 4;
-    blocksZ = 1;
-
-    // Invoke
-    size_t argSizes[] = { sizeof(cl_mem), sizeof(cl_mem), sizeof(int), 0 };
-    void* args[] = { &input->dev, &result->dev, &N, 0 };
-    halide_dev_run(
-        entry_name,
-        blocksX,  blocksY,  blocksZ,
-        threadsX, threadsY, threadsZ,
-        1, // sharedMemBytes
-        argSizes,
-        args
-    );
-
-    return 0;
-}
-
-int main(int argc, char* argv[]) {
-    void *program = halide_init_kernels(NULL, src, 0, NULL);
-
-    const int N = 2048;
-    buffer_t in, out;
-
-    in.dev = 0;
-    in.host = (uint8_t*)malloc(N*sizeof(float));
-    in.elem_size = sizeof(float);
-    in.extent[0] = N; in.extent[1] = 1; in.extent[2] = 1; in.extent[3] = 1;
-
-    out.dev = 0;
-    out.host = (uint8_t*)malloc(N*sizeof(float));
-    out.elem_size = sizeof(float);
-    out.extent[0] = N; out.extent[1] = 1; out.extent[2] = 1; out.extent[3] = 1;
-
-    for (int i = 0; i < N; i++) {
-        ((float*)in.host)[i] = i / 2.0;
-    }
-    in.host_dirty = true;
-
-    halide_dev_malloc(&in);
-    halide_dev_malloc(&out);
-    halide_copy_to_dev(&in);
-
-    f( &in, &out, N );
-
-    out.dev_dirty = true;
-    halide_copy_to_host(&out);
-
-    for (int i = 0; i < N; i++) {
-        float a = ((float*)in.host)[i];
-        float b = ((float*)out.host)[i];
-        if (b != a*a) {
-            printf("[%d] %f != %f^2\n", i, b, a);
-        }
-    }
-}
-
-#endif
-
 } // extern "C" linkage
 
-#undef CHECK_ERR
-#undef CHECK_CALL
-#undef TIME_START
-#undef TIME_CHECK
