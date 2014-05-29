@@ -192,6 +192,16 @@ struct Expr : public Internal::IRHandle {
     EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
     }
 
+    /** Make an expression representing a const 32-bit float, given a
+     * double. Also emits a warning due to truncation. */
+    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make((float)x)) {
+        user_warning << "Halide cannot represent double constants. "
+                     << "Converting " << x << " to float. "
+                     << "If you wanted a double, use cast<double>(" << x
+                     << (x == (int64_t)(x) ? ".0f" : "f")
+                     << ")\n";
+    }
+
     /** Make an expression representing a const string (i.e. a StringImm) */
     EXPORT Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {
     }
@@ -960,6 +970,8 @@ struct Call : public ExprNode<Call> {
         create_buffer_t,
         extract_buffer_min,
         extract_buffer_max,
+        set_host_dirty,
+        set_dev_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,

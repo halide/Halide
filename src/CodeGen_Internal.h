@@ -2,7 +2,7 @@
 #define HALIDE_CODEGEN_INTERNAL_H
 
 /** \file
- * 
+ *
  * Defines functionality that's useful to multiple target-specific
  * CodeGen paths, but shouldn't live in CodeGen.h (because that's the
  * front-end-facing interface to CodeGen).
@@ -13,7 +13,7 @@
 #include "Scope.h"
 #include "IR.h"
 
-namespace Halide { 
+namespace Halide {
 namespace Internal {
 
 /** A helper class to manage closures. Walks over a statement and
@@ -36,7 +36,6 @@ protected:
     void visit(const Allocate *op);
     void visit(const Variable *op);
 
-    bool track_buffers;
     llvm::StructType *buffer_t;
 
 public:
@@ -57,20 +56,17 @@ public:
 
 public:
     /** Traverse a statement and find all references to external
-     * symbols. 
-     * 
-     * Simple backends just create a pointer for internal
-     * allocations. If the backend creates a whole buffer_t (e.g. in
-     * order to track dirty bits), then the third argument should be
-     * set to true. When the closure encounters a read or write to
-     * 'foo', it assumes that the host pointer is found in the symbol
-     * table as 'foo.host', and any buffer_t pointer is found under
+     * symbols.
+     *
+     * When the closure encounters a read or write to 'foo', it
+     * assumes that the host pointer is found in the symbol table as
+     * 'foo.host', and any buffer_t pointer is found under
      * 'foo.buffer'. */
-    static Closure make(Stmt s, const std::string &loop_variable, bool track_buffers, llvm::StructType *buffer_t);
+    static Closure make(Stmt s, const std::string &loop_variable, llvm::StructType *buffer_t);
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;
-    
+
     /** External allocations referenced. */
     std::map<std::string, BufferRef> buffers;
 

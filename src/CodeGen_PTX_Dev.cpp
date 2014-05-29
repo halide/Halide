@@ -410,6 +410,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
 
     string str = outs.str();
+    debug(1) << "PTX kernel:\n" << str.c_str() << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;
