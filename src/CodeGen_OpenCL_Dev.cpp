@@ -76,6 +76,30 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
 }
 
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Pipeline *op) {
+    // This is identical to CodeGen_C's implementation, but generates barriers.
+
+    // TODO: These barrier calls are hacked in, but often aren't necessary. They
+    // should be inserted elsewhere as needed.
+    do_indent();
+    stream << "// produce " << op->name << '\n';
+    print_stmt(op->produce);
+
+    if (op->update.defined()) {
+        do_indent();
+        stream << "barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);\n";
+        do_indent();
+        stream << "// update " << op->name << '\n';
+        print_stmt(op->update);
+    }
+
+    do_indent();
+    stream << "barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);\n";
+    do_indent();
+    stream << "// consume " << op->name << '\n';
+    print_stmt(op->consume);
+}
+
 
 namespace {
 Expr simt_intrinsic(const string &name) {

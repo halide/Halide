@@ -46,6 +46,7 @@ protected:
         std::string print_type(Type type);
         std::string print_reinterpret(Type type, Expr e);
 
+        void visit(const Pipeline *);
         void visit(const For *);
         void visit(const Ramp *op);
         void visit(const Broadcast *op);
