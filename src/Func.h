@@ -459,6 +459,13 @@ public:
     // @{
     EXPORT void realize(Realization dst, const Target &target = get_jit_target_from_environment());
     EXPORT void realize(Buffer dst, const Target &target = get_jit_target_from_environment());
+
+    template<typename T>
+    void realize(Image<T> dst, const Target &target = get_jit_target_from_environment()) {
+        // Images are expected to exist on-host.
+        realize(Buffer(dst), target);
+        dst.copy_to_host();
+    }
     // @}
 
     /** For a given size of output, or a given output buffer,
