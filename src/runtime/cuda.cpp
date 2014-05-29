@@ -483,6 +483,11 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
+    int err = halide_dev_malloc(user_context, buf);
+    if (err) {
+        return err;
+    }
+
     DEBUG_PRINTF( user_context, "CUDA: halide_copy_to_dev (user_context: %p, buf: %p)\n", user_context, buf );
 
     CudaContext ctx(user_context);
