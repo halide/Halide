@@ -287,6 +287,12 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (!emitted.count(op->name)) {
                 stream << "extern \"C\" " << type_to_c_type(op->type)
                        << " " << op->name << "(";
+                if (CodeGen::function_takes_user_context(op->name)) {
+                    stream << "void *";
+                    if (op->args.size()) {
+                        stream << ", ";
+                    }
+                }
                 for (size_t i = 0; i < op->args.size(); i++) {
                     if (i > 0) {
                         stream << ", ";
@@ -827,6 +833,20 @@ void CodeGen_C::visit(const Call *op) {
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+        } else if (op->name == Call::set_host_dirty) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << "((buffer_t *)(" << a0 << "))->host_dirty = " << a1 << ";\n";
+            rhs << "0";
+        } else if (op->name == Call::set_dev_dirty) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << "((buffer_t *)(" << a0 << "))->dev_dirty = " << a1 << ";\n";
+            rhs << "0";
         } else if (op->name == Call::abs) {
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);

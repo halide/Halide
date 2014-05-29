@@ -970,6 +970,8 @@ struct Call : public ExprNode<Call> {
         create_buffer_t,
         extract_buffer_min,
         extract_buffer_max,
+        set_host_dirty,
+        set_dev_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,

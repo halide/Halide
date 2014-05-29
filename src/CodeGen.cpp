@@ -1540,6 +1540,18 @@ void CodeGen::visit(const Call *op) {
 
             // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
+        } else if (op->name == Call::set_host_dirty) {
+            internal_assert(op->args.size() == 2);
+            Value *buffer = codegen(op->args[0]);
+            Value *arg = codegen(op->args[1]);
+            builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+            value = ConstantInt::get(i32, 0);
+        } else if (op->name == Call::set_dev_dirty) {
+            internal_assert(op->args.size() == 2);
+            Value *buffer = codegen(op->args[0]);
+            Value *arg = codegen(op->args[1]);
+            builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+            value = ConstantInt::get(i32, 0);
         } else if (op->name == Call::null_handle) {
             internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
             internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
@@ -2032,7 +2044,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t_type);
+        Closure closure = Closure::make(op->body, op->name, buffer_t_type);
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);

@@ -37,6 +37,8 @@
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "InjectOpenGLIntrinsics.h"
+#include "InjectSyncthreads.h"
+#include "InjectHostDevBufferCopies.h"
 
 namespace Halide {
 namespace Internal {
@@ -1643,16 +1645,27 @@ Stmt lower(Function f, const Target &t) {
     s = skip_stages(s, order);
     debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
-    Scope<int> need_buffer_t;
     if (t.features & Target::OpenGL) {
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
-        s = inject_opengl_intrinsics(s, need_buffer_t);
+        s = inject_opengl_intrinsics(s);
         debug(2) << "OpenGL intrinsics: \n" << s << "\n\n";
     }
 
+    if (t.has_gpu_feature()) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = inject_syncthreads(s);
+        debug(2) << "Injected per-block gpu synchronization:\n" << s << "\n\n";
+    }
+
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env, need_buffer_t);
+    s = storage_flattening(s, env);
     debug(2) << "Storage flattening: \n" << s << "\n\n";
+
+    if (t.has_gpu_feature() || t.features & Target::OpenGL) {
+        debug(1) << "Injecting host <-> dev buffer copies...\n";
+        s = inject_host_dev_buffer_copies(s);
+        debug(2) << "Injected host <-> dev buffer copies:\n" << s << "\n\n";
+    }
 
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
@@ -1692,6 +1705,12 @@ Stmt lower(Function f, const Target &t) {
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Injected early frees: \n" << s << "\n\n";
+
+    if (t.has_gpu_feature()) {
+        debug(1) << "Injecting device frees...\n";
+        s = inject_dev_frees(s);
+        debug(2) << "Injected device frees: \n" << s << "\n\n";
+    }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
