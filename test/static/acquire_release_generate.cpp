@@ -13,8 +13,11 @@ int main(int argc, char **argv) {
 
     f(x, y) = input(x, y) * 2.0f + 1.0f;
 
-    // Use the GPU for this f.
-    f.gpu_tile(x, y, 16, 16).compute_root();
+    // Use the GPU for this f if a GPU is available.
+    Target target = get_target_from_environment();
+    if (target.has_gpu_feature()) {
+        f.gpu_tile(x, y, 16, 16).compute_root();
+    }
 
     f.compile_to_file("acquire_release", input);
 
