@@ -983,6 +983,7 @@ struct Call : public ExprNode<Call> {
         trace,
         glsl_texture_load,
         glsl_texture_store,
+        gpu_thread_barrier,
         trace_expr;
 
     // If it's a call to another halide function, this call node
