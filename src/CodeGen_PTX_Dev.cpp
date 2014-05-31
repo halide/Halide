@@ -155,76 +155,51 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        debug(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
-
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
-        Expr loop_var = loop->min + simt_idx;
-        Expr cond = simt_idx < loop->extent;
-        debug(3) << "for -> if (" << cond << ")\n";
-
-        BasicBlock *loop_bb = BasicBlock::Create(*context, loop->name + "_loop", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, loop->name + "_after_loop", function);
-
-        builder->CreateCondBr(codegen(cond), loop_bb, after_bb);
-        builder->SetInsertPoint(loop_bb);
-
-        sym_push(loop->name, codegen(loop_var));
+        internal_assert(is_zero(loop->min));
+        sym_push(loop->name, codegen(simt_idx));
         codegen(loop->body);
         sym_pop(loop->name);
-
-        builder->CreateBr(after_bb);
-        builder->SetInsertPoint(after_bb);
     } else {
         CodeGen::visit(loop);
     }
 }
 
-void CodeGen_PTX_Dev::visit(const Pipeline *n) {
-    n->produce.accept(this);
+void CodeGen_PTX_Dev::visit(const Call *c) {
+    if (c->name == Call::gpu_thread_barrier && c->call_type == Call::Intrinsic) {
+        // Grab the syncthreads intrinsic, or declare it if it doesn't exist yet
+        llvm::Function *syncthreads = module->getFunction("llvm.nvvm.barrier0");
+        if (!syncthreads) {
+            FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);
+            syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
+            syncthreads->setCallingConv(CallingConv::C);
+            debug(2) << "Declaring syncthreads intrinsic\n";
+        }
 
-    // Grab the syncthreads intrinsic, or declare it if it doesn't exist yet
-    llvm::Function *syncthreads = module->getFunction("llvm.nvvm.barrier0");
-    if (!syncthreads) {
-        FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);
-        syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
-        syncthreads->setCallingConv(CallingConv::C);
-        debug(2) << "Declaring syncthreads intrinsic\n";
-    }
-
-    if (n->update.defined()) {
-        // If we're producing into shared or global memory we need a
-        // syncthreads before continuing.
         builder->CreateCall(syncthreads, std::vector<Value *>());
-        n->update.accept(this);
+        value = ConstantInt::get(i32, 0);
+    } else {
+        CodeGen::visit(c);
     }
-
-    builder->CreateCall(syncthreads, std::vector<Value *>());
-    n->consume.accept(this);
 }
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
-    debug(1) << "Allocate " << alloc->name << " on device\n";
-
-    llvm::Type *llvm_type = llvm_type_of(alloc->type);
-
-    string allocation_name = alloc->name + ".host";
-    debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
-
-    // If this is a shared allocation, there should already be a
-    // pointer into shared memory in the symbol table.
-    Value *ptr;
-    Value *offset = sym_get(alloc->name + ".shared_mem", false);
-
-    if (offset) {
-        // Bit-cast it to a shared memory pointer (address-space 3 is shared memory)
-        ptr = builder->CreateIntToPtr(offset, PointerType::get(llvm_type, 3));
+    if (alloc->name == "__shared__") {
+        // PTX uses zero in address space 3 as the base address for shared memory
+        Value *shared_base = Constant::getNullValue(PointerType::get(i8, 3));
+        sym_push(alloc->name + ".host", shared_base);
     } else {
-        // Otherwise jump back to the entry and generate an
-        // alloca. Note that by jumping back we're rendering any
-        // expression we carry back meaningless, so we had better only
-        // be dealing with constants here.
+
+        debug(2) << "Allocate " << alloc->name << " on device\n";
+
+        string allocation_name = alloc->name + ".host";
+        debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+
+        // Jump back to the entry and generate an alloca. Note that by
+        // jumping back we're rendering any expression we carry back
+        // meaningless, so we had better only be dealing with
+        // constants here.
         int32_t size = 0;
         bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
         user_assert(is_constant)
@@ -235,11 +210,10 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
+        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
         builder->SetInsertPoint(here);
+        sym_push(allocation_name, ptr);
     }
-
-    sym_push(allocation_name, ptr);
     codegen(alloc->body);
 }
 
