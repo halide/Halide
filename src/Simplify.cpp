@@ -69,6 +69,9 @@ private:
     }
 
     bool const_float(Expr e, float *f) {
+        if (!e.defined()) {
+            return false;
+        }
         const FloatImm *c = e.as<FloatImm>();
         if (c) {
             *f = c->value;
@@ -79,6 +82,9 @@ private:
     }
 
     bool const_int(Expr e, int *i) {
+        if (!e.defined()) {
+            return false;
+        }
         const IntImm *c = e.as<IntImm>();
         if (c) {
             *i = c->value;
@@ -823,12 +829,16 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && const_int(b, &ib)) {
             // Try to remove pointless mins that splitting introduces
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            if (ia.max.defined() &&
-                is_one(mutate(ia.max <= b))) {
-                expr = a;
+            int max_a, min_a;
+            if (const_int(ia.min, &min_a) && const_int(ia.max, &max_a)) {
+                if (max_a <= ib) {
+                    expr = a;
+                } else if (ib <= min_a) {
+                    expr = b;
+                }
                 return;
             }
         }
@@ -997,25 +1007,46 @@ private:
 
         if (equal(a, b)) {
             expr = a;
+            return;
         } else if (const_int(a, &ia) && const_int(b, &ib)) {
             expr = std::max(ia, ib);
+            return;
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = std::max(fa, fb);
+            return;
         } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (op->type.is_uint()) {
                 expr = make_const(op->type, std::max(((unsigned int) ia), ((unsigned int) ib)));
             } else {
                 expr = make_const(op->type, std::max(ia, ib));
             }
+            return;
         } else if (const_castint(b, &ib) && ib == b.type().imin()) {
             // Compute maximum of expression of type and minimum of type --> expression
             expr = a;
+            return;
         } else if (const_castint(b, &ib) && ib == b.type().imax()) {
             // Compute maximum of expression of type and maximum of type --> max of type
             expr = b;
+            return;
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
-        } else if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
+            return;
+        } else if (op->type == Int(32) && const_int(b, &ib)) {
+            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
+            int max_a, min_a;
+            if (const_int(ia.min, &min_a) && const_int(ia.max, &max_a)) {
+                if (max_a <= ib) {
+                    expr = b;
+                } else if (ib <= min_a) {
+                    expr = a;
+                }
+                return;
+            }
+        }
+
+
+        if (add_a && const_int(add_a->b, &ia) && add_b && const_int(add_b->b, &ib) && equal(add_a->a, add_b->a)) {
             // max(x + 3, x - 2) -> x - 2
             if (ia > ib) {
                 expr = a;
