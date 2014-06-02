@@ -250,9 +250,14 @@ class ExtractSharedAllocations : public IRMutator {
 
     set<string> shared;
 
+    bool in_threads;
+
     void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
-            stmt = op;
+            bool old = in_threads;
+            in_threads = true;
+            IRMutator::visit(op);
+            in_threads = old;
         } else {
             Interval min_bounds = bounds_of_expr_in_scope(op->min, scope);
             Interval extent_bounds = bounds_of_expr_in_scope(op->extent, scope);
@@ -264,6 +269,11 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     void visit(const Allocate *op) {
+        if (in_threads) {
+            IRMutator::visit(op);
+            return;
+        }
+
         shared.insert(op->name);
         IRMutator::visit(op);
         shared.erase(op->name);
@@ -304,6 +314,11 @@ class ExtractSharedAllocations : public IRMutator {
     }
 
     void visit(const LetStmt *op) {
+        if (in_threads) {
+            IRMutator::visit(op);
+            return;
+        }
+
         Expr value = mutate(op->value);
         Interval bounds = bounds_of_expr_in_scope(value, scope);
         scope.push(op->name, bounds);
@@ -362,6 +377,8 @@ public:
 
         return s;
     }
+
+    ExtractSharedAllocations() : in_threads(false) {}
 };
 
 class FuseGPUThreadLoops : public IRMutator {
@@ -382,6 +399,11 @@ class FuseGPUThreadLoops : public IRMutator {
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
 
+            ExtractSharedAllocations h;
+            body = h.mutate(body);
+
+            debug(3) << "Pulled out shared allocations:\n" << body << "\n\n";
+
             InjectThreadBarriers i;
             body = i.mutate(body);
 
@@ -391,11 +413,6 @@ class FuseGPUThreadLoops : public IRMutator {
             body = f.mutate(body);
 
             debug(3) << "Replaced for with if:\n" << body << "\n\n";
-
-            ExtractSharedAllocations h;
-            body = h.mutate(body);
-
-            debug(3) << "Pulled out shared allocations:\n" << body << "\n\n";
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < e.dimensions(); i++) {
