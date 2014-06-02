@@ -242,7 +242,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
                 << "[" << id_index << ".s" << vector_elements[i] << "];\n";
         }
     } else {
-        CodeGen_C::visit(op);
+        print_assignment(op->type, rhs.str());
     }
 }
 
