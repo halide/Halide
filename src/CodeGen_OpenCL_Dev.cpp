@@ -264,10 +264,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
                << print_name(op->name) << " + " << id_ramp_base
                << ");\n";
 
-        return;
-    }
-
-    if (op->index.type().is_vector()) {
+    } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
 
@@ -303,6 +300,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         stream << "[" << id_index << "] = "
                << id_value << ";\n";
     }
+
+    cache.clear();
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {

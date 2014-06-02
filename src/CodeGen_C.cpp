@@ -923,6 +923,8 @@ void CodeGen_C::visit(const Store *op) {
            << "] = "
            << id_value
            << ";\n";
+
+    cache.clear();
 }
 
 void CodeGen_C::visit(const Let *op) {
