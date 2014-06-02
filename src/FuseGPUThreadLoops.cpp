@@ -121,22 +121,17 @@ class NormalizeDimensionality : public IRMutator {
     int depth;
     int max_depth;
 
-    bool should_wrap;
-
-
     Stmt wrap(Stmt s) {
-        if (depth != 0 || !should_wrap) {
-            return s;
+        if (depth != 0) {
+            return mutate(s);
         }
         max_depth = 0;
-        should_wrap = false;
         s = mutate(s);
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
             s = For::make(name, 0, 1, For::Parallel, s);
             max_depth++;
         }
-        should_wrap = true;
         return s;
     }
 
@@ -195,7 +190,7 @@ class NormalizeDimensionality : public IRMutator {
     }
 
 public:
-    NormalizeDimensionality(const ExtractBlockSize &e) : block_size(e), depth(0), max_depth(0), should_wrap(true) {}
+    NormalizeDimensionality(const ExtractBlockSize &e) : block_size(e), depth(0), max_depth(0) {}
 };
 
 class ReplaceForWithIf : public IRMutator {
