@@ -77,6 +77,8 @@ public:
 class ExtractBlockSize : public IRVisitor {
     Expr block_extent[4];
 
+    Scope<Interval> scope;
+
     using IRVisitor::visit;
 
     void found_for(int dim, Expr extent) {
@@ -89,13 +91,25 @@ class ExtractBlockSize : public IRVisitor {
     }
 
     void visit(const For *op) {
+
+        Interval ie = bounds_of_expr_in_scope(op->extent, scope);
+        Interval im = bounds_of_expr_in_scope(op->min, scope);
+
         for (int i = 0; i < 4; i++) {
             if (ends_with(op->name, thread_names[i])) {
-                found_for(i, op->extent);
+                found_for(i, ie.max);
             }
         }
 
+        scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
         IRVisitor::visit(op);
+        scope.pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {
+        scope.push(op->name, bounds_of_expr_in_scope(op->value, scope));
+        op->body.accept(this);
+        scope.pop(op->name);
     }
 
 public:
