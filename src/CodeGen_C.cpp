@@ -1145,6 +1145,10 @@ void CodeGen_C::visit(const IfThenElse *op) {
 
 void CodeGen_C::visit(const Evaluate *op) {
     string id = print_expr(op->value);
+    if (id == "0") {
+        // Skip evaluate(0) nodes. They're how we represent no-ops.
+        return;
+    }
     do_indent();
     stream << "(void)" << id << ";\n";
 }
