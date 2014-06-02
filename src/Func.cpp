@@ -502,23 +502,37 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
         // It's a derived name, so just rewrite the split or rename that defines it.
         bool found = false;
         for (size_t i = schedule.splits.size(); i > 0; i--) {
-            if (schedule.splits[i-1].inner == old_name) {
-                schedule.splits[i-1].inner = new_name;
-                found = true;
-                break;
-            }
-            if (schedule.splits[i-1].outer == old_name) {
-                schedule.splits[i-1].outer = new_name;
-                found = true;
-                break;
-            }
-            if (schedule.splits[i-1].old_var == old_name) {
-                user_error << "Can't rename a variable " << old_name
-                           << " because it has already been renamed or split.\n";
+            if (schedule.splits[i-1].is_fuse()) {
+                if (schedule.splits[i-1].inner == old_name ||
+                    schedule.splits[i-1].outer == old_name) {
+                    user_error << "Can't rename a variable " << old_name
+                               << " because it has already been fused into "
+                               << schedule.splits[i-1].old_var << "\n";
+                }
+                if (schedule.splits[i-1].old_var == old_name) {
+                    schedule.splits[i-1].old_var = new_name;
+                    found = true;
+                    break;
+                }
+            } else {
+                if (schedule.splits[i-1].inner == old_name) {
+                    schedule.splits[i-1].inner = new_name;
+                    found = true;
+                    break;
+                }
+                if (schedule.splits[i-1].outer == old_name) {
+                    schedule.splits[i-1].outer = new_name;
+                    found = true;
+                    break;
+                }
+                if (schedule.splits[i-1].old_var == old_name) {
+                    user_error << "Can't rename a variable " << old_name
+                               << " because it has already been renamed or split.\n";
+                }
             }
         }
         user_assert(found) << "Rename failed: Old name: " << old_name
-                           << " is not an arg, and was not defined by a split.\n";
+                           << " is not an arg, and was not defined by a split, rename, or fuse.\n";
     }
 
     return *this;
@@ -2038,7 +2052,7 @@ void Func::infer_input_bounds(Realization dst) {
         Buffer b = image_param_args[i].second.get_buffer();
         if (!b.defined()) {
             buffer_t buf = dummy_buffers[j];
-            
+
             Internal::debug(1) << "Inferred bounds for " << image_param_args[i].second.name() << ": ("
                 << buf.min[0] << ","
                 << buf.min[1] << ","
