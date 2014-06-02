@@ -147,6 +147,16 @@ public:
     operator Expr() {
         return Internal::Variable::make(Int(32), name());
     }
+
+    /** Vars to use for scheduling producer/consumer pairs on the gpu. */
+    // @{
+    static Var gpu_blocks() {
+        return Var("blockidx");
+    }
+    static Var gpu_threads() {
+        return Var("threadidx");
+    }
+    // @}
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */

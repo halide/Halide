@@ -23,11 +23,11 @@ int main(int argc, char **argv) {
 
     out.gpu_tile(x, y, z, 4, 4, 4);
     out.update().gpu_tile(x, y, 4, 4);
-    h.compute_at(out, Var("blockidx")).gpu_threads(x, y);
+    h.compute_at(out, Var::gpu_blocks()).gpu_threads(x, y);
     h.update().gpu_threads(x);
     g.compute_at(h, Var("threadidy")).gpu_threads(x);
     g.update();
-    f.compute_at(g, Var("threadidx"));
+    f.compute_at(g, Var::gpu_threads());
     f.update();
 
     Image<int> o = out.realize(64, 64, 64);

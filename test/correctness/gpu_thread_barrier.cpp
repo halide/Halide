@@ -28,7 +28,7 @@ int main(int argc, char **argv) {
     g(x, y) = f(0, 0)+ f(9, 7);
 
     g.gpu_tile(x, y, 16, 16);
-    f.compute_at(g, Var("blockidx"));
+    f.compute_at(g, Var::gpu_blocks());
 
     for (int i = 0; i < passes; i++) {
         f.update(i*4 + 0).gpu_threads(y);

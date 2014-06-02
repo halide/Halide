@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
     out(x, y) = in_func(y, x);
 
     // Load a tile on input and store it into shared.
-    in_func.compute_at(out, Var("blockidx")).gpu_threads(x, y);
+    in_func.compute_at(out, Var::gpu_blocks()).gpu_threads(x, y);
 
     // Do a nested tiling of the output into 4x4 tiles of 16x16
     // pixels.  We'll make blockidy be the tile index, and blockidx be
