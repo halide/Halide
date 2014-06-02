@@ -437,6 +437,8 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float neg_inf_f32() { return -INFINITY; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "#define mod(a, b) (((a % b) < 0) ? ((a % b) + b) : (a % b))\n"
+               << "#define sdiv(a, b) ((a - mod(a, b))/b)\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
