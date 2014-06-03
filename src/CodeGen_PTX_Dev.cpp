@@ -165,24 +165,6 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
     }
 }
 
-void CodeGen_PTX_Dev::visit(const Call *c) {
-    if (c->name == Call::gpu_thread_barrier && c->call_type == Call::Intrinsic) {
-        // Grab the syncthreads intrinsic, or declare it if it doesn't exist yet
-        llvm::Function *syncthreads = module->getFunction("llvm.nvvm.barrier0");
-        if (!syncthreads) {
-            FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);
-            syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
-            syncthreads->setCallingConv(CallingConv::C);
-            debug(2) << "Declaring syncthreads intrinsic\n";
-        }
-
-        builder->CreateCall(syncthreads, std::vector<Value *>());
-        value = ConstantInt::get(i32, 0);
-    } else {
-        CodeGen::visit(c);
-    }
-}
-
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
     if (alloc->name == "__shared__") {

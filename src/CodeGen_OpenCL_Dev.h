@@ -56,7 +56,6 @@ protected:
         void visit(const Cast *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
-        void visit(const Call *op);
 
         /** Maintains the kernel arguments that are in scope. */
         Scope<Type> kernel_arguments;

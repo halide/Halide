@@ -37,7 +37,7 @@ class InjectThreadBarriers : public IRMutator {
     }
 
     Stmt barrier() {
-        return Evaluate::make(Call::make(Int(32), Call::gpu_thread_barrier, vector<Expr>(), Call::Intrinsic));
+        return Evaluate::make(Call::make(Int(32), "halide_gpu_thread_barrier", vector<Expr>(), Call::Extern));
     }
 
     void visit(const Pipeline *op) {

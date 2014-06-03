@@ -77,17 +77,6 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
 }
 
 
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Call *op) {
-    if (op->name == Call::gpu_thread_barrier && op->call_type == Call::Intrinsic) {
-        do_indent();
-        stream << "barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);\n";
-        // This Call always evaluates to zero.
-        id = "0";
-    } else {
-        CodeGen_C::visit(op);
-    }
-}
-
 
 namespace {
 string simt_intrinsic(const string &name) {
@@ -459,7 +448,11 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define cosh_f32 cosh \n"
                << "#define acosh_f32 acosh \n"
                << "#define tanh_f32 tanh \n"
-               << "#define atanh_f32 atanh \n";
+               << "#define atanh_f32 atanh \n"
+               << "int halide_gpu_thread_barrier() {\n"
+               << "  barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);\n"
+               << "  return 0;\n"
+               << "}\n";
 
 #ifdef ENABLE_CL_KHR_FP64
     src_stream << "#define sqrt_f64 sqrt\n"
