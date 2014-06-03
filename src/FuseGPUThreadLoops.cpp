@@ -127,7 +127,15 @@ public:
         return block_extent[d];
     }
 
-    ExtractBlockSize(Scope<Interval> &s) : scope(s) {}
+    void max_over_blocks(const Scope<Interval> &scope) {
+        for (int i = 0; i < 4; i++) {
+            if (block_extent[i].defined()) {
+                block_extent[i] = simplify(block_extent[i]);
+                block_extent[i] = bounds_of_expr_in_scope(block_extent[i], scope).max;
+            }
+        }
+    }
+
 };
 
 class NormalizeDimensionality : public IRMutator {
@@ -404,8 +412,9 @@ class FuseGPUThreadLoops : public IRMutator {
 
             Stmt body = op->body;
 
-            ExtractBlockSize e(scope);
+            ExtractBlockSize e;
             body.accept(&e);
+            e.max_over_blocks(scope);
 
             debug(3) << "Fusing thread block:\n" << body << "\n\n";
 
