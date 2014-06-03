@@ -16,10 +16,18 @@ int main(int argc, char **argv) {
 
     Func out;
 
-    Expr e = 0;
+    Expr e = cast<uint64_t>(0);
+    int offset = 0;
     for (int i = 0; i < n_types; i++) {
-        funcs[i](x) = cast(types[i], x + i);
-        e += cast<int>(funcs[i](x));
+        int off = 0;
+        if ((types[i].is_int() || types[i].is_uint()) && 
+            types[i].bits <= 64) {
+            off = (1 << (types[i].bits - 4)) + 17;
+        }
+        offset += off;
+
+        funcs[i](x) = cast(types[i], x/16 + off);
+        e += cast<uint64_t>(funcs[i](x));
         funcs[i].compute_at(out, Var::gpu_blocks()).gpu_threads(x);
     }
     
@@ -27,9 +35,9 @@ int main(int argc, char **argv) {
     out(x) = e;
     out.gpu_tile(x, 23);
 
-    Image<int> output = out.realize(23*5);
-    for (int x = 0; x < output.width(); x++) {
-        int correct = n_types * x + (n_types * (n_types - 1)) / 2;
+    Image<uint64_t> output = out.realize(23*5);
+    for (uint64_t x = 0; x < output.width(); x++) {
+        uint64_t correct = n_types * (x / 16) + offset;
         if (output(x) != correct) {
             printf("output(%d) = %d instead of %d\n", 
                    x, output(x), correct);
