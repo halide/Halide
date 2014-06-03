@@ -107,7 +107,8 @@ class ExtractBlockSize : public IRVisitor {
     }
 
     void visit(const LetStmt *op) {
-        scope.push(op->name, bounds_of_expr_in_scope(op->value, scope));
+        Interval i = bounds_of_expr_in_scope(op->value, scope);
+        scope.push(op->name, i);
         op->body.accept(this);
         scope.pop(op->name);
     }
@@ -125,6 +126,8 @@ public:
     Expr extent(int d) const {
         return block_extent[d];
     }
+
+    ExtractBlockSize(Scope<Interval> &s) : scope(s) {}
 };
 
 class NormalizeDimensionality : public IRMutator {
@@ -188,15 +191,7 @@ class NormalizeDimensionality : public IRMutator {
             if (depth > max_depth) {
                 max_depth = depth;
             }
-            if (!is_zero(op->min)) {
-                // Shift them all to be zero-based.
-                Expr var = Variable::make(Int(32), op->name);
-                Stmt body = substitute(op->name, var + op->min, op->body);
-                body = mutate(body);
-                stmt = For::make(op->name, 0, op->extent, For::Parallel, body);
-            } else {
-                IRMutator::visit(op);
-            }
+            IRMutator::visit(op);
             depth--;
         } else {
             IRMutator::visit(op);
@@ -294,8 +289,9 @@ class ExtractSharedAllocations : public IRMutator {
         alloc.type = op->type;
         alloc.size = 1;
         for (size_t i = 0; i < op->extents.size(); i++) {
-            alloc.size *= bounds_of_expr_in_scope(op->extents[i], scope).max;
+            alloc.size *= op->extents[i];
         }
+        alloc.size = bounds_of_expr_in_scope(simplify(alloc.size), scope).max;
         allocations.push_back(alloc);
         stmt = op->body;
 
@@ -393,12 +389,22 @@ public:
 class FuseGPUThreadLoops : public IRMutator {
     using IRMutator::visit;
 
+    Scope<Interval> scope;
+
     void visit(const For *op) {
+        bool should_pop = false;
+        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
+            Interval im = bounds_of_expr_in_scope(op->min, scope);
+            Interval ie = bounds_of_expr_in_scope(op->extent, scope);
+            scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
+            should_pop = true;
+        }
+
         if (ends_with(op->name, ".blockidx")) {
 
             Stmt body = op->body;
 
-            ExtractBlockSize e;
+            ExtractBlockSize e(scope);
             body.accept(&e);
 
             debug(3) << "Fusing thread block:\n" << body << "\n\n";
@@ -449,7 +455,18 @@ class FuseGPUThreadLoops : public IRMutator {
             IRMutator::visit(op);
         }
 
-        // Shift the min to be zero
+        if (should_pop) {
+            scope.pop(op->name);
+        }
+    }
+};
+
+// Rewrite all GPU loops to have a min of zero
+class ZeroGPULoopMins : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
             op = stmt.as<For>();
             internal_assert(op);
@@ -460,10 +477,12 @@ class FuseGPUThreadLoops : public IRMutator {
     }
 };
 
-
 Stmt fuse_gpu_thread_loops(Stmt s) {
+    ZeroGPULoopMins z;
+    s = z.mutate(s);
     FuseGPUThreadLoops f;
-    return f.mutate(s);
+    s = f.mutate(s);
+    return s;
 }
 
 }
