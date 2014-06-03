@@ -100,7 +100,7 @@ public:
     Expr num_blocks[4];
     Expr shared_mem_size;
 
-    ExtractBounds() : shared_mem_size(0) {
+    ExtractBounds() : shared_mem_size(0), found_shared(false) {
         for (int i = 0; i < 4; i++) {
             num_threads[i] = num_blocks[i] = 1;
         }
@@ -108,40 +108,63 @@ public:
 
 private:
 
+    bool found_shared;
+    Scope<Interval> scope;
+
     using IRVisitor::visit;
 
-    void visit(const For *loop) {
-        if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-            internal_assert(is_zero(loop->min));
+    void visit(const For *op) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            internal_assert(is_zero(op->min));
         }
 
-        if (ends_with(loop->name, ".threadidx")) {
-            num_threads[0] = loop->extent;
-        } else if (ends_with(loop->name, ".threadidy")) {
-            num_threads[1] = loop->extent;
-        } else if (ends_with(loop->name, ".threadidz")) {
-            num_threads[2] = loop->extent;
-        } else if (ends_with(loop->name, ".threadidw")) {
-            num_threads[3] = loop->extent;
-        } else if (ends_with(loop->name, ".blockidx")) {
-            num_blocks[0] = loop->extent;
-        } else if (ends_with(loop->name, ".blockidy")) {
-            num_blocks[1] = loop->extent;
-        } else if (ends_with(loop->name, ".blockidz")) {
-            num_blocks[2] = loop->extent;
-        } else if (ends_with(loop->name, ".blockidw")) {
-            num_blocks[3] = loop->extent;
+        if (ends_with(op->name, ".threadidx")) {
+            num_threads[0] = op->extent;
+        } else if (ends_with(op->name, ".threadidy")) {
+            num_threads[1] = op->extent;
+        } else if (ends_with(op->name, ".threadidz")) {
+            num_threads[2] = op->extent;
+        } else if (ends_with(op->name, ".threadidw")) {
+            num_threads[3] = op->extent;
+        } else if (ends_with(op->name, ".blockidx")) {
+            num_blocks[0] = op->extent;
+        } else if (ends_with(op->name, ".blockidy")) {
+            num_blocks[1] = op->extent;
+        } else if (ends_with(op->name, ".blockidz")) {
+            num_blocks[2] = op->extent;
+        } else if (ends_with(op->name, ".blockidw")) {
+            num_blocks[3] = op->extent;
         }
 
-        loop->body.accept(this);
+        if (!found_shared) {
+            Interval ie = bounds_of_expr_in_scope(op->extent, scope);
+            Interval im = bounds_of_expr_in_scope(op->min, scope);
+            scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
+            op->body.accept(this);
+            scope.pop(op->name);
+        } else {
+            op->body.accept(this);
+        }
     }
 
     void visit(const Allocate *allocate) {
         if (allocate->name == "__shared__") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
-            shared_mem_size = allocate->extents[0];
+            shared_mem_size = bounds_of_expr_in_scope(allocate->extents[0], scope).max;
+            found_shared = true;
         }
         allocate->body.accept(this);
+    }
+
+    void visit(const LetStmt *op) {
+        if (!found_shared) {
+            Interval i = bounds_of_expr_in_scope(op->value, scope);
+            scope.push(op->name, i);
+            op->body.accept(this);
+            scope.pop(op->name);
+        } else {
+            op->body.accept(this);
+        }
     }
 };
 
