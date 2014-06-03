@@ -397,7 +397,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
 
         if (i < args.size()-1) stream << ",\n";
     }
-    stream << ",\n" << "__local uchar* __shared__";
+    stream << ",\n" << "__local ulong* __shared__";
 
     stream << ") {\n";
 
