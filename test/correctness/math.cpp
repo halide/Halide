@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
     call_1(asin, 256, -1.0, 1.0)
     call_1(acos, 256, -1.0, 1.0)
     call_1(atan, 256, -256, 100)
-    call_2(atan2, 256, -20, 20, -2, 2)
+    call_2(atan2, 256, -20, 20, -2, 2.001)
 
     call_1(sinh, 256, 5 * -3.1415, 5 * 3.1415)
     call_1(cosh, 256, 0, 1)
