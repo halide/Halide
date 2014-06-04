@@ -22,7 +22,7 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 else
     BITS=64
-    # ptx falls into this category
+    # ptx and opencl fall into this category
     export LD="ld"
     export CC="${CC} -m64"
     export CXX="${CXX} -m64"
