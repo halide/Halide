@@ -15,8 +15,8 @@ using std::string;
 using std::set;
 
 namespace {
-string thread_names[] = {"threadidx", "threadidy", "threadidz", "threadidw"};
-string shared_mem_name = "__shared__";
+string thread_names[] = {"__thread_id_x", "__thread_id_y", "__thread_id_z", "__thread_id_w"};
+string shared_mem_name = "__shared";
 }
 
 class InjectThreadBarriers : public IRMutator {
@@ -154,7 +154,7 @@ class NormalizeDimensionality : public IRMutator {
         s = mutate(s);
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make(name, 0, 1, For::Parallel, s);
+            s = For::make("." + name, 0, 1, For::Parallel, s);
             max_depth++;
         }
         return s;
@@ -408,7 +408,7 @@ class FuseGPUThreadLoops : public IRMutator {
             should_pop = true;
         }
 
-        if (ends_with(op->name, ".blockidx")) {
+        if (ends_with(op->name, ".__block_id_x")) {
 
             Stmt body = op->body;
 
@@ -443,9 +443,9 @@ class FuseGPUThreadLoops : public IRMutator {
                 body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, body);
             }
 
-            // There at least needs to be a loop over threadidx as a marker for codegen
+            // There at least needs to be a loop over __thread_id_x as a marker for codegen
             if (e.dimensions() == 0) {
-                body = For::make(".threadidx", 0, 1, For::Parallel, body);
+                body = For::make(".__thread_id_x", 0, 1, For::Parallel, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";

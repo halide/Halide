@@ -118,21 +118,21 @@ private:
             internal_assert(is_zero(op->min));
         }
 
-        if (ends_with(op->name, ".threadidx")) {
+        if (ends_with(op->name, ".__thread_id_x")) {
             num_threads[0] = op->extent;
-        } else if (ends_with(op->name, ".threadidy")) {
+        } else if (ends_with(op->name, ".__thread_id_y")) {
             num_threads[1] = op->extent;
-        } else if (ends_with(op->name, ".threadidz")) {
+        } else if (ends_with(op->name, ".__thread_id_z")) {
             num_threads[2] = op->extent;
-        } else if (ends_with(op->name, ".threadidw")) {
+        } else if (ends_with(op->name, ".__thread_id_w")) {
             num_threads[3] = op->extent;
-        } else if (ends_with(op->name, ".blockidx")) {
+        } else if (ends_with(op->name, ".__block_id_x")) {
             num_blocks[0] = op->extent;
-        } else if (ends_with(op->name, ".blockidy")) {
+        } else if (ends_with(op->name, ".__block_id_y")) {
             num_blocks[1] = op->extent;
-        } else if (ends_with(op->name, ".blockidz")) {
+        } else if (ends_with(op->name, ".__block_id_z")) {
             num_blocks[2] = op->extent;
-        } else if (ends_with(op->name, ".blockidw")) {
+        } else if (ends_with(op->name, ".__block_id_w")) {
             num_blocks[3] = op->extent;
         }
 
@@ -148,7 +148,7 @@ private:
     }
 
     void visit(const Allocate *allocate) {
-        if (allocate->name == "__shared__") {
+        if (allocate->name == "__shared") {
             internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
             shared_mem_size = bounds_of_expr_in_scope(allocate->extents[0], scope).max;
             found_shared = true;

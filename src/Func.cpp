@@ -670,15 +670,15 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, V
 
 ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
-    rename(tx, Var("threadidx"));
+    rename(tx, Var("__thread_id_x"));
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
-    rename(tx, Var("threadidx"));
-    rename(ty, Var("threadidy"));
+    rename(tx, Var("__thread_id_x"));
+    rename(ty, Var("__thread_id_y"));
     return *this;
 }
 
@@ -686,23 +686,23 @@ ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, Var tz, GPUAPI /* gp
     parallel(tx);
     parallel(ty);
     parallel(tz);
-    rename(tx, Var("threadidx"));
-    rename(ty, Var("threadidy"));
-    rename(tz, Var("threadidz"));
+    rename(tx, Var("__thread_id_x"));
+    rename(ty, Var("__thread_id_y"));
+    rename(tz, Var("__thread_id_z"));
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
-    rename(tx, Var("blockidx"));
+    rename(tx, Var("__block_id_x"));
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
-    rename(tx, Var("blockidx"));
-    rename(ty, Var("blockidy"));
+    rename(tx, Var("__block_id_x"));
+    rename(ty, Var("__block_id_y"));
     return *this;
 }
 
@@ -710,9 +710,9 @@ ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, Var tz, GPUAPI /* gpu
     parallel(tx);
     parallel(ty);
     parallel(tz);
-    rename(tx, Var("blockidx"));
-    rename(ty, Var("blockidy"));
-    rename(tz, Var("blockidz"));
+    rename(tx, Var("__block_id_x"));
+    rename(ty, Var("__block_id_y"));
+    rename(tz, Var("__block_id_z"));
     return *this;
 }
 
@@ -732,7 +732,7 @@ ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by, Var bz,
 }
 
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api */) {
-    Var bx("blockidx"), tx("threadidx");
+    Var bx("__block_id_x"), tx("__thread_id_x");
     split(x, bx, tx, x_size);
     parallel(bx);
     parallel(tx);
@@ -743,7 +743,7 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api *
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
                                          Expr x_size, Expr y_size,
 					 GPUAPI /* gpu_api */) {
-    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
+    Var bx("__block_id_x"), by("__block_id_y"), tx("__thread_id_x"), ty("__thread_id_y");
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
     parallel(by);
@@ -755,8 +755,8 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
                                          Expr x_size, Expr y_size, Expr z_size,
 					 GPUAPI /* gpu_api */) {
-    Var bx("blockidx"), by("blockidy"), bz("blockidz"),
-        tx("threadidx"), ty("threadidy"), tz("threadidz");
+    Var bx("__block_id_x"), by("__block_id_y"), bz("__block_id_z"),
+        tx("__thread_id_x"), ty("__thread_id_y"), tz("__thread_id_z");
     split(x, bx, tx, x_size);
     split(y, by, ty, y_size);
     split(z, bz, tz, z_size);
