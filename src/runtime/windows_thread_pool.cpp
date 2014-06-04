@@ -22,7 +22,7 @@ extern int halide_printf(void *user_context, const char *, ...);
 // These sizes are large enough for 32-bit and 64-bit
 typedef uint64_t ConditionVariable;
 typedef uint64_t InitOnce;
-typedef uint64_t Thread;
+typedef void * Thread;
 typedef struct {
     uint8_t buf[40];
 } CriticalSection;
@@ -36,8 +36,7 @@ extern WIN32API void DeleteCriticalSection(CriticalSection *);
 extern WIN32API void EnterCriticalSection(CriticalSection *);
 extern WIN32API void LeaveCriticalSection(CriticalSection *);
 extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
-extern WIN32API bool InitOnceExecuteOnce(InitOnce *, 
-  bool WIN32API (*f)(InitOnce *, void *, void **), void *, void **);
+extern WIN32API bool InitOnceExecuteOnce(InitOnce *, bool WIN32API (*f)(InitOnce *, void *, void **), void *, void **);
 
 
 struct work {
@@ -55,7 +54,7 @@ struct work {
 #define MAX_THREADS 64
 WEAK struct {
     // Initialization of the critical section is guarded by this
-    InitOnce init_once; 
+    InitOnce init_once;
 
     // all fields are protected by this mutex.
     CriticalSection mutex;
@@ -212,7 +211,7 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
 
     // Create the mutex
     InitOnceExecuteOnce(&halide_work_queue.init_once, InitOnceCallback, NULL, NULL);
-    
+
     // halide_printf(user_context, "Grabbing mutex\n");
 
     // Grab it
@@ -220,7 +219,7 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
 
     if (!halide_thread_pool_initialized) {
         halide_work_queue.shutdown = false;
-        
+
         //  halide_printf(user_context, "Making condition variable\n");
 
         InitializeConditionVariable(&halide_work_queue.state_change);
@@ -262,7 +261,7 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     // Push the job onto the stack.
     job.next_job = halide_work_queue.jobs;
     halide_work_queue.jobs = &job;
-    
+
     // halide_printf(user_context, "Releasing mutex\n");
     LeaveCriticalSection(&halide_work_queue.mutex);
 

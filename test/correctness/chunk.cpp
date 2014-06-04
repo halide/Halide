@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
     if (target.has_gpu_feature()) {
         Var xi, yi;
         g.gpu_tile(x, y, 8, 8);
-        f.compute_at(g, Var("blockidx")).gpu_threads(x, y);
+        f.compute_at(g, Var::gpu_blocks()).gpu_threads(x, y);
     }
 
     printf("Realizing function...\n");

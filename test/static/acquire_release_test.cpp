@@ -10,7 +10,12 @@ const int W = 256, H = 256;
 
 #if defined(TEST_OPENCL)
 // Implement OpenCL custom context.
+
+#ifdef __APPLE__
+#include <OpenCL/cl.h>
+#else
 #include <CL/cl.h>
+#endif
 
 // Just use a global context and queue, created and destroyed by main.
 cl_context cl_ctx = NULL;
