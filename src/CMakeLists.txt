@@ -215,7 +215,6 @@ set(HEADER_FILES
   IRVisitor.h
   InjectOpenGLIntrinsics.h
   InjectHostDevBufferCopies.h
-  InjectSyncthreads.h
   JITCompiledModule.h
   Lambda.h
   Debug.h
