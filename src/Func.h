@@ -212,6 +212,7 @@ public:
 
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
+    EXPORT ScheduleHandle &serial(Var var);
     EXPORT ScheduleHandle &parallel(Var var);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
@@ -801,6 +802,9 @@ public:
      * outer dimensions given. */
     EXPORT Func &fuse(Var inner, Var outer, Var fused);
 
+
+    /** Mark a dimension to be traversed serially. This is the default. */
+    EXPORT Func &serial(Var var);
 
     /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
