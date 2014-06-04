@@ -348,7 +348,10 @@ class ExtractSharedAllocations : public IRMutator {
 public:
     Stmt rewrap(Stmt s) {
         // Sort the allocations by size in bytes of the primitive
-        // type. Use reverse insertion sort.
+        // type. Because the type sizes are then decreasing powers of
+        // two, doing this guarantees that all allocations are aligned
+        // to then element type as long as the original one is aligned
+        // to the widest type.
         for (size_t i = 1; i < allocations.size(); i++) {
             for (size_t j = i; j > 0; j--) {
                 if (allocations[j].type.bytes() > allocations[j - 1].type.bytes()) {
