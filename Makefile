@@ -139,6 +139,9 @@ TEST_CXX_FLAGS += -rdynamic
 ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -L/usr/lib/nvidia-current -lcuda
 endif
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -lOpenCL
+endif
 HOST_OS=linux
 endif
 
@@ -147,11 +150,13 @@ ifeq ($(UNAME), Darwin)
 ifneq ($(TEST_PTX), )
 STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
 endif
+ifneq ($(TEST_OPENCL), )
+STATIC_TEST_LIBS ?= -framework OpenCL
+endif
 HOST_OS=os_x
 endif
 
 ifneq ($(TEST_OPENCL), )
-STATIC_TEST_LIBS ?= -lOpenCL
 TEST_CXX_FLAGS += -DTEST_OPENCL
 endif
 
