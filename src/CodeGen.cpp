@@ -1797,25 +1797,20 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
+        // We also have several impure runtime functions that do not
+        // take a handle.
+        if (op->name == "halide_current_time_ns" ||
+            op->name == "halide_gpu_thread_barrier") {
+            pure = false;
+        }
+
         // Add a user context arg as needed. It's never a vector.
         if (function_takes_user_context(op->name)) {
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
 
-        // TODO: Need a general solution here to side-effecty functions
-        if (op->name == "halide_current_time_ns") {
-            internal_assert(op->args.size() == 0);
-            debug(4) << "Creating scalar call to " << op->name << "\n";
-            CallInst *call = builder->CreateCall(fn, get_user_context());
-            value = call;
-        } else if (op->name == "rand_i32" || op->name == "rand_f32") {
-            internal_assert(op->args.size() == 1);
-            debug(4) << "Creating scalar call to " << op->name << "\n";
-            Value *arg = codegen(op->args[0]);
-            CallInst *call = builder->CreateCall2(fn, get_user_context(), arg);
-            value = call;
-        } else if (op->type.is_scalar()) {
+        if (op->type.is_scalar()) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
             if (pure) {

@@ -109,7 +109,7 @@ public:
      * same name in an outer scope) */
     void pop(const std::string &name) {
         typename std::map<std::string, SmallStack<T> >::iterator iter = table.find(name);
-        internal_assert(iter != table.end()) << "Name not in symbol table";
+        internal_assert(iter != table.end()) << "Name not in symbol table: " << name << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
