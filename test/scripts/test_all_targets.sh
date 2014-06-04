@@ -179,7 +179,7 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == release-3.2 ]]; then
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
     else
-        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx"
+        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx opencl"
     fi
 
     for TARGET in $TARGETS; do
