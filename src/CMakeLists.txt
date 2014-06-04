@@ -215,7 +215,6 @@ set(HEADER_FILES
   IRVisitor.h
   InjectOpenGLIntrinsics.h
   InjectHostDevBufferCopies.h
-  InjectSyncthreads.h
   JITCompiledModule.h
   Lambda.h
   Debug.h
@@ -346,8 +345,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   InjectOpenGLIntrinsics.cpp
   InjectHostDevBufferCopies.cpp
-  InjectSyncthreads.cpp
   Schedule.cpp
+  FuseGPUThreadLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

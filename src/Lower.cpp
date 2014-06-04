@@ -37,7 +37,7 @@
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "InjectOpenGLIntrinsics.h"
-#include "InjectSyncthreads.h"
+#include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
 
 namespace Halide {
@@ -1694,12 +1694,6 @@ Stmt lower(Function f, const Target &t) {
         debug(2) << "OpenGL intrinsics: \n" << s << "\n\n";
     }
 
-    if (t.has_gpu_feature()) {
-        debug(1) << "Injecting per-block gpu synchronization...\n";
-        s = inject_syncthreads(s);
-        debug(2) << "Injected per-block gpu synchronization:\n" << s << "\n\n";
-    }
-
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, env);
     debug(2) << "Storage flattening: \n" << s << "\n\n";
@@ -1708,6 +1702,12 @@ Stmt lower(Function f, const Target &t) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s);
         debug(2) << "Injected host <-> dev buffer copies:\n" << s << "\n\n";
+    }
+
+    if (t.has_gpu_feature()) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = fuse_gpu_thread_loops(s);
+        debug(2) << "Injected per-block gpu synchronization:\n" << s << "\n\n";
     }
 
     debug(1) << "Removing code that depends on undef values...\n";

@@ -90,123 +90,84 @@ using std::map;
 
 using namespace llvm;
 
-
 // Sniff the contents of a kernel to extracts the bounds of all the
-// thread indices (so we know how many threads to launch), and the max
-// size of each allocation (so we know how much local and shared
-// memory to allocate).
+// thread indices (so we know how many threads to launch), and the
+// amount of shared memory to allocate.
 class ExtractBounds : public IRVisitor {
 public:
 
-    Expr thread_extent[4];
-    Expr block_extent[4];
-    map<string, Expr> shared_allocations;
-    map<string, Expr> local_allocations;
+    Expr num_threads[4];
+    Expr num_blocks[4];
+    Expr shared_mem_size;
 
-    ExtractBounds(Stmt s) : inside_thread(false) {
-        s.accept(this);
+    ExtractBounds() : shared_mem_size(0), found_shared(false) {
         for (int i = 0; i < 4; i++) {
-            if (!thread_extent[i].defined()) {
-                thread_extent[i] = 1;
-            } else {
-                thread_extent[i] = simplify(thread_extent[i]);
-            }
-            if (!block_extent[i].defined()) {
-                block_extent[i] = 1;
-            } else {
-                block_extent[i] = simplify(block_extent[i]);
-            }
+            num_threads[i] = num_blocks[i] = 1;
         }
     }
 
 private:
 
-    bool inside_thread;
+    bool found_shared;
     Scope<Interval> scope;
 
     using IRVisitor::visit;
 
-    Expr unify(Expr a, Expr b) {
-        if (!a.defined()) return b;
-        if (!b.defined()) return a;
-        return Halide::max(a, b);
-    }
-
-    void visit(const For *loop) {
-        // What's the largest the extent could be?
-        Expr max_extent = bounds_of_expr_in_scope(loop->extent, scope).max;
-
-        bool old_inside_thread = inside_thread;
-
-        if (ends_with(loop->name, ".threadidx")) {
-            thread_extent[0] = unify(thread_extent[0], max_extent);
-            inside_thread = true;
-        } else if (ends_with(loop->name, ".threadidy")) {
-            thread_extent[1] = unify(thread_extent[1], max_extent);
-            inside_thread = true;
-        } else if (ends_with(loop->name, ".threadidz")) {
-            thread_extent[2] = unify(thread_extent[2], max_extent);
-            inside_thread = true;
-        } else if (ends_with(loop->name, ".threadidw")) {
-            thread_extent[3] = unify(thread_extent[3], max_extent);
-            inside_thread = true;
-        } else if (ends_with(loop->name, ".blockidx")) {
-            block_extent[0] = unify(block_extent[0], max_extent);
-        } else if (ends_with(loop->name, ".blockidy")) {
-            block_extent[1] = unify(block_extent[1], max_extent);
-        } else if (ends_with(loop->name, ".blockidz")) {
-            block_extent[2] = unify(block_extent[2], max_extent);
-        } else if (ends_with(loop->name, ".blockidw")) {
-            block_extent[3] = unify(block_extent[3], max_extent);
+    void visit(const For *op) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            internal_assert(is_zero(op->min));
         }
 
-        // What's the largest the loop variable could be?
-        Expr max_loop = bounds_of_expr_in_scope(loop->min + loop->extent - 1, scope).max;
-        Expr min_loop = bounds_of_expr_in_scope(loop->min, scope).min;
+        if (ends_with(op->name, ".__thread_id_x")) {
+            num_threads[0] = op->extent;
+        } else if (ends_with(op->name, ".__thread_id_y")) {
+            num_threads[1] = op->extent;
+        } else if (ends_with(op->name, ".__thread_id_z")) {
+            num_threads[2] = op->extent;
+        } else if (ends_with(op->name, ".__thread_id_w")) {
+            num_threads[3] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_x")) {
+            num_blocks[0] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_y")) {
+            num_blocks[1] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_z")) {
+            num_blocks[2] = op->extent;
+        } else if (ends_with(op->name, ".__block_id_w")) {
+            num_blocks[3] = op->extent;
+        }
 
-        scope.push(loop->name, Interval(min_loop, max_loop));
-
-        // Recurse into the loop body
-        loop->body.accept(this);
-
-        scope.pop(loop->name);
-
-        inside_thread = old_inside_thread;
-    }
-
-    void visit(const LetStmt *let) {
-        Interval bounds = bounds_of_expr_in_scope(let->value, scope);
-        scope.push(let->name, bounds);
-        let->body.accept(this);
-        scope.pop(let->name);
+        if (!found_shared) {
+            Interval ie = bounds_of_expr_in_scope(op->extent, scope);
+            Interval im = bounds_of_expr_in_scope(op->min, scope);
+            scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
+            op->body.accept(this);
+            scope.pop(op->name);
+        } else {
+            op->body.accept(this);
+        }
     }
 
     void visit(const Allocate *allocate) {
-        map<string, Expr> &table = inside_thread ? local_allocations : shared_allocations;
-
-        // We should only encounter each allocate once
-        internal_assert(table.find(allocate->name) == table.end());
-
-        Expr size;
-        if (allocate->extents.size() == 0) {
-            size = 1;
-        } else {
-            size = allocate->extents[0];
-            // TODO: worry about overflow
-            for (size_t i = 1; i < allocate->extents.size(); i++) {
-                size *= allocate->extents[i];
-            }
-            size = simplify(size);
+        if (allocate->name == "__shared") {
+            internal_assert(allocate->type == UInt(8) && allocate->extents.size() == 1);
+            shared_mem_size = bounds_of_expr_in_scope(allocate->extents[0], scope).max;
+            found_shared = true;
         }
-
-        // What's the largest this allocation could be (in bytes)?
-        Expr elements = bounds_of_expr_in_scope(size, scope).max;
-        int bytes_per_element = allocate->type.bits/8;
-        table[allocate->name] = simplify(elements * bytes_per_element);
-
         allocate->body.accept(this);
     }
+
+    void visit(const LetStmt *op) {
+        if (!found_shared) {
+            Interval i = bounds_of_expr_in_scope(op->value, scope);
+            scope.push(op->name, i);
+            op->body.accept(this);
+            scope.pop(op->name);
+        } else {
+            op->body.accept(this);
+        }
+    }
 };
+
 
 class GPU_Host_Closure : public Halide::Internal::Closure {
 public:
@@ -291,12 +252,6 @@ bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
     CodeGen_CPU(target),
-    dev_malloc_fn(NULL),
-    dev_free_fn(NULL),
-    copy_to_dev_fn(NULL),
-    copy_to_host_fn(NULL),
-    dev_run_fn(NULL),
-    dev_sync_fn(NULL),
     cgdev(make_dev(target)) {
 }
 
@@ -344,23 +299,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     module = get_initial_module_for_target(target, context);
 
     // grab runtime helper functions
-    dev_malloc_fn = module->getFunction("halide_dev_malloc");
-    internal_assert(dev_malloc_fn) << "Could not find halide_dev_malloc in module\n";
 
-    dev_free_fn = module->getFunction("halide_dev_free");
-    internal_assert(dev_free_fn) << "Could not find halide_dev_free in module\n";
-
-    copy_to_host_fn = module->getFunction("halide_copy_to_host");
-    internal_assert(copy_to_host_fn) << "Could not find halide_copy_to_host in module\n";
-
-    copy_to_dev_fn = module->getFunction("halide_copy_to_dev");
-    internal_assert(copy_to_dev_fn) << "Could not find halide_copy_to_dev in module\n";
-
-    dev_run_fn = module->getFunction("halide_dev_run");
-    internal_assert(dev_run_fn) << "Could not find halide_dev_run in module\n";
-
-    dev_sync_fn = module->getFunction("halide_dev_sync");
-    internal_assert(dev_sync_fn) << "Could not find halide_dev_sync in module\n";
 
     // Fix the target triple
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -537,53 +476,24 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
+        // We're in the loop over innermost thread dimension
         debug(2) << "Kernel launch: " << loop->name << "\n";
 
-        // compute kernel launch bounds
-        ExtractBounds bounds(loop);
+        ExtractBounds bounds;
+        loop->accept(&bounds);
 
-        Expr n_tid_x   = bounds.thread_extent[0];
-        Expr n_tid_y   = bounds.thread_extent[1];
-        Expr n_tid_z   = bounds.thread_extent[2];
-        Expr n_tid_w   = bounds.thread_extent[3];
-        Expr n_blkid_x = bounds.block_extent[0];
-        Expr n_blkid_y = bounds.block_extent[1];
-        Expr n_blkid_z = bounds.block_extent[2];
-        Expr n_blkid_w = bounds.block_extent[3];
         debug(2) << "Kernel bounds: ("
-               << n_tid_x << ", " << n_tid_y << ", " << n_tid_z << ", " << n_tid_w << ") threads, ("
-               << n_blkid_x << ", " << n_blkid_y << ", " << n_blkid_z << ", " << n_blkid_w << ") blocks\n";
+                 << bounds.num_threads[0] << ", "
+                 << bounds.num_threads[1] << ", "
+                 << bounds.num_threads[2] << ", "
+                 << bounds.num_threads[3] << ") threads, ("
+                 << bounds.num_blocks[0] << ", "
+                 << bounds.num_blocks[1] << ", "
+                 << bounds.num_blocks[2] << ", "
+                 << bounds.num_blocks[3] << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
         GPU_Host_Closure c = GPU_Host_Closure::make(loop, loop->name);
-
-        // Note that we currently do nothing with the thread-local
-        // allocations found. Currently we only handle const-sized
-        // ones, and we handle those by generating allocas at the top
-        // of the device kernel.
-
-        // Compute and pass in offsets into shared memory for all the internal allocations
-        Expr n_threads = n_tid_x * n_tid_y * n_tid_z * n_tid_w;
-        Value *shared_mem_size = ConstantInt::get(i32, 0);
-        vector<string> shared_mem_allocations;
-        for (map<string, Expr>::iterator iter = bounds.shared_allocations.begin();
-             iter != bounds.shared_allocations.end(); ++iter) {
-
-            // TODO: Might offsets into shared memory need to be
-            // aligned? What if it's OpenCL and the kernel does vector
-            // loads?
-            debug(2) << "Internal shared allocation" << iter->first
-                     << " has max size " << iter->second << "\n";
-
-            Value *size = codegen(iter->second);
-
-            string name = iter->first + ".shared_mem";
-            shared_mem_allocations.push_back(name);
-            sym_push(name, shared_mem_size);
-            c.vars[name] = Int(32);
-
-            shared_mem_size = builder->CreateAdd(shared_mem_size, size);
-        }
 
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name, false);
@@ -606,13 +516,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 
+        // NULL-terminated list
         Value *gpu_args_arr =
-            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1), // NULL-terminated list
+            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1),
                                    num_args+1,
                                    kernel_name + "_args");
 
+        // NULL-terminated list of size_t's
         Value *gpu_arg_sizes_arr =
-            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1), // NULL-terminated list of size_t's
+            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1),
                                    num_args+1,
                                    kernel_name + "_arg_sizes");
 
@@ -652,34 +564,28 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
 
-        // Figure out how much shared memory we need to allocate, and
-        // build offsets into it for the internal allocations
-
         // TODO: only three dimensions can be passed to
-        // cuLaunchKernel. How should we handle blkid_w?
+        // cuLaunchKernel. How should we handle blkid[3]?
+        internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
         Value *launch_args[] = {
             get_user_context(),
             builder->CreateLoad(get_module_state()),
             entry_name_str,
-            codegen(n_blkid_x), codegen(n_blkid_y), codegen(n_blkid_z),
-            codegen(n_tid_x), codegen(n_tid_y), codegen(n_tid_z),
-            shared_mem_size,
+            codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
+            codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
+            codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
+        llvm::Function *dev_run_fn = module->getFunction("halide_dev_run");
+        internal_assert(dev_run_fn) << "Could not find halide_dev_run in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
         CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_run");
-
-        // Pop the shared memory allocations from the symbol table
-        for (size_t i = 0; i < shared_mem_allocations.size(); i++) {
-            sym_pop(shared_mem_allocations[i]);
-        }
     } else {
         CodeGen_CPU::visit(loop);
     }
 }
-
 
 template<typename CodeGen_CPU>
 Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
