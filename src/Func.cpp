@@ -555,6 +555,11 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::serial(Var var) {
+    set_dim_type(var, For::Serial);
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::parallel(Var var) {
     set_dim_type(var, For::Parallel);
     return *this;
@@ -811,6 +816,11 @@ Func &Func::rename(Var old_name, Var new_name) {
 
 ScheduleHandle Func::specialize(Expr c) {
     return ScheduleHandle(func.schedule()).specialize(c);
+}
+
+Func &Func::serial(Var var) {
+    ScheduleHandle(func.schedule()).serial(var);
+    return *this;
 }
 
 Func &Func::parallel(Var var) {
