@@ -151,10 +151,10 @@ public:
     /** Vars to use for scheduling producer/consumer pairs on the gpu. */
     // @{
     static Var gpu_blocks() {
-        return Var("blockidx");
+        return Var("__block_id_x");
     }
     static Var gpu_threads() {
-        return Var("threadidx");
+        return Var("__thread_id_x");
     }
     // @}
 };

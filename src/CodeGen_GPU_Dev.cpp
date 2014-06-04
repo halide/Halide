@@ -11,25 +11,17 @@ bool CodeGen_GPU_Dev::is_gpu_var(const std::string &name) {
 }
 
 bool CodeGen_GPU_Dev::is_gpu_block_var(const std::string &name) {
-    std::string n = base_name(name);
-
-    bool result = (n == "blockidx" ||
-                   n == "blockidy" ||
-                   n == "blockidz" ||
-                   n == "blockidw");
-
-    return result;
+    return (ends_with(name, ".__block_id_x") ||
+            ends_with(name, ".__block_id_y") ||
+            ends_with(name, ".__block_id_z") ||
+            ends_with(name, ".__block_id_w"));
 }
 
 bool CodeGen_GPU_Dev::is_gpu_thread_var(const std::string &name) {
-    std::string n = base_name(name);
-
-    bool result = (n == "threadidx" ||
-                   n == "threadidy" ||
-                   n == "threadidz" ||
-                   n == "threadidw");
-
-    return result;
+    return (ends_with(name, ".__thread_id_x") ||
+            ends_with(name, ".__thread_id_y") ||
+            ends_with(name, ".__thread_id_z") ||
+            ends_with(name, ".__thread_id_w"));
 }
 
 }}

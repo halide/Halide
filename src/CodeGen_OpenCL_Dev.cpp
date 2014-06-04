@@ -80,21 +80,21 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
 
 namespace {
 string simt_intrinsic(const string &name) {
-    if (ends_with(name, ".threadidx")) {
+    if (ends_with(name, ".__thread_id_x")) {
         return "get_local_id(0)";
-    } else if (ends_with(name, ".threadidy")) {
+    } else if (ends_with(name, ".__thread_id_y")) {
         return "get_local_id(1)";
-    } else if (ends_with(name, ".threadidz")) {
+    } else if (ends_with(name, ".__thread_id_z")) {
         return "get_local_id(2)";
-    } else if (ends_with(name, ".threadidw")) {
+    } else if (ends_with(name, ".__thread_id_w")) {
         return "get_local_id(3)";
-    } else if (ends_with(name, ".blockidx")) {
+    } else if (ends_with(name, ".__block_id_x")) {
         return "get_group_id(0)";
-    } else if (ends_with(name, ".blockidy")) {
+    } else if (ends_with(name, ".__block_id_y")) {
         return "get_group_id(1)";
-    } else if (ends_with(name, ".blockidz")) {
+    } else if (ends_with(name, ".__block_id_z")) {
         return "get_group_id(2)";
-    } else if (ends_with(name, ".blockidw")) {
+    } else if (ends_with(name, ".__block_id_w")) {
         return "get_group_id(3)";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
@@ -162,7 +162,7 @@ Expr is_ramp1(Expr e) {
 
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
-    if (buf == "__shared__") {
+    if (buf == "__shared") {
         return "__local";
     } else if (internal_allocations.contains(buf)) {
         return "__private";
@@ -303,7 +303,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 
-    if (op->name == "__shared__") {
+    if (op->name == "__shared") {
         // Already handled
         op->body.accept(this);
     } else {
@@ -340,7 +340,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
-    if (op->name == "__shared__") {
+    if (op->name == "__shared") {
         return;
     } else {
         // Should have been freed internally
@@ -386,7 +386,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
 
         if (i < args.size()-1) stream << ",\n";
     }
-    stream << ",\n" << "__local ulong* __shared__";
+    stream << ",\n" << "__local ulong* __shared";
 
     stream << ") {\n";
 

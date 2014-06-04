@@ -25,7 +25,9 @@ int main(int argc, char **argv) {
     out.update().gpu_tile(x, y, 4, 4);
     h.compute_at(out, Var::gpu_blocks()).gpu_threads(x, y);
     h.update().gpu_threads(x);
-    g.compute_at(h, Var("threadidy")).gpu_threads(x);
+    // Normally it isn't useful to schedule things at in-between
+    // thread levels, so Halide doesn't expose a clean name for it.
+    g.compute_at(h, Var("__thread_id_y")).gpu_threads(x);
     g.update();
     f.compute_at(g, Var::gpu_threads());
     f.update();

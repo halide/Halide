@@ -132,21 +132,21 @@ void CodeGen_PTX_Dev::init_module() {
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
-    if (ends_with(name, ".threadidx")) {
+    if (ends_with(name, ".__thread_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
-    } else if (ends_with(name, ".threadidy")) {
+    } else if (ends_with(name, ".__thread_id_y")) {
         return "llvm.nvvm.read.ptx.sreg.tid.y";
-    } else if (ends_with(name, ".threadidz")) {
+    } else if (ends_with(name, ".__thread_id_z")) {
         return "llvm.nvvm.read.ptx.sreg.tid.z";
-    } else if (ends_with(name, ".threadidw")) {
+    } else if (ends_with(name, ".__thread_id_w")) {
         return "llvm.nvvm.read.ptx.sreg.tid.w";
-    } else if (ends_with(name, ".blockidx")) {
+    } else if (ends_with(name, ".__block_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.x";
-    } else if (ends_with(name, ".blockidy")) {
+    } else if (ends_with(name, ".__block_id_y")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.y";
-    } else if (ends_with(name, ".blockidz")) {
+    } else if (ends_with(name, ".__block_id_z")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.z";
-    } else if (ends_with(name, ".blockidw")) {
+    } else if (ends_with(name, ".__block_id_w")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
     internal_error << "simt_intrinsic called on bad variable name\n";
@@ -167,7 +167,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
 
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
-    if (alloc->name == "__shared__") {
+    if (alloc->name == "__shared") {
         // PTX uses zero in address space 3 as the base address for shared memory
         Value *shared_base = Constant::getNullValue(PointerType::get(i8, 3));
         sym_push(alloc->name + ".host", shared_base);
