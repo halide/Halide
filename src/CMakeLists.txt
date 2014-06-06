@@ -339,6 +339,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Debug.cpp
   InjectOpenGLIntrinsics.cpp
   InjectHostDevBufferCopies.cpp
+  Schedule.cpp
   FuseGPUThreadLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
