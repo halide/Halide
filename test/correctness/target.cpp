@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
             Target::GPUDebug;
     t1 = Target(Target::Android, Target::ARM, 32, features);
     ts = t1.to_string();
-    if (ts != "arm-32-android-jit-sse41-avx-avx2-cuda-opencl-gpu_debug-opengl") {
+    if (ts != "arm-32-android-jit-sse41-avx-avx2-cuda-opencl-opengl-gpu_debug") {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
