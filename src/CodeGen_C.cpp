@@ -1128,9 +1128,9 @@ void CodeGen_C::visit(const Realize *op) {
 }
 
 void CodeGen_C::visit(const IfThenElse *op) {
-    do_indent();
     string cond_id = print_expr(op->condition);
 
+    do_indent();
     stream << "if (" << cond_id << ")\n";
     open_scope();
     op->then_case.accept(this);
