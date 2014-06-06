@@ -334,6 +334,8 @@ class ExtractSharedAllocations : public IRMutator {
 
         Expr value = mutate(op->value);
         Interval bounds = bounds_of_expr_in_scope(value, scope);
+        bounds.min = simplify(bounds.min);
+        bounds.max = simplify(bounds.max);
         scope.push(op->name, bounds);
         Stmt body = mutate(op->body);
         scope.pop(op->name);
