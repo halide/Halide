@@ -68,7 +68,6 @@ option(TARGET_ARM "Include ARM target" ON)
 option(TARGET_PTX "Include PTX target" ON)
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
-option(TARGET_SPIR "Include SPIR/SPIR64 targets" ON)
 
 set(CAT cat)
 if(WIN32)
