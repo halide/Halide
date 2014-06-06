@@ -225,8 +225,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
-    optimize_module();
-
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
     /*int argc = sizeof(argv)/sizeof(char*);*/
