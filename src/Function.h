@@ -6,8 +6,8 @@
  */
 
 #include "IntrusivePtr.h"
-#include "Reduction.h"
 #include "Schedule.h"
+#include "Reduction.h"
 
 #include <string>
 #include <vector>
