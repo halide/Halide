@@ -41,8 +41,8 @@ struct Target {
                    GPUDebug  = 1 << 7,  /// Increase the level of checking and the verbosity of the gpu runtimes.
                    NoAsserts = 1 << 8,  /// Disable all runtime checks, for slightly tighter code.
                    NoBoundsQuery = 1 << 9, /// Disable the bounds querying functionality.
-		   ARMv7s    = 1 << 10,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
-		   AArch64Backend = 1 << 11, /// Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
+                   ARMv7s    = 1 << 10,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
+                   AArch64Backend = 1 << 11, /// Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
                    CLDoubles = 1 << 12, /// Enable double support on OpenCL targets
 
     };
