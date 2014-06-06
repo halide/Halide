@@ -343,28 +343,14 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         size_t lengths[] = { size };
         const char *build_options = NULL;
 
-        if (strstr(src, "/*OpenCL C*/")) {
-            // Program is OpenCL C.
-            DEBUG_PRINTF(user_context, "    Compiling OpenCL C kernel: (%i chars)\n", size);
+        // Program is OpenCL C.
+        DEBUG_PRINTF(user_context, "    Compiling OpenCL C kernel: (%i chars)\n", size);
 
-            const char * sources[] = { src };
-            state->program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
-            if (err != CL_SUCCESS) {
-                halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%d)\n", err);
-                return NULL;
-            }
-        } else {
-            // Program is SPIR binary.
-            DEBUG_PRINTF(user_context, "    Compiling SPIR kernel (%i bytes)\n", size);
-
-            const unsigned char * binaries[] = { (unsigned char *)src };
-            state->program = clCreateProgramWithBinary(ctx.context, 1, devices, lengths, &binaries[0], NULL, &err );
-            if (err != CL_SUCCESS) {
-                halide_error_varargs(user_context, "CL: clCreateProgramWithBinary failed (%d)\n", err);
-                return NULL;
-            }
-
-            build_options = "-x spir";
+        const char * sources[] = { src };
+        state->program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
+        if (err != CL_SUCCESS) {
+            halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%d)\n", err);
+            return NULL;
         }
 
         err = clBuildProgram(state->program, 1, &dev, build_options, NULL, NULL );
