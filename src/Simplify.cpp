@@ -1791,14 +1791,18 @@ private:
         bool new_value_tracked = false;
         if (new_value.defined() && new_value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(new_value, alignment_info);
-            alignment_info.push(new_name, mod_rem);
-            new_value_tracked = true;
+            if (mod_rem.modulus > 1) {
+                alignment_info.push(new_name, mod_rem);
+                new_value_tracked = true;
+            }
         }
         bool value_tracked = false;
         if (value.type() == Int(32)) {
             ModulusRemainder mod_rem = modulus_remainder(value, alignment_info);
-            alignment_info.push(op->name, mod_rem);
-            value_tracked = true;
+            if (mod_rem.modulus > 1) {
+                alignment_info.push(op->name, mod_rem);
+                value_tracked = true;
+            }
         }
 
         body = mutate(body);

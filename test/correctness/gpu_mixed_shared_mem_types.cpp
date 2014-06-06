@@ -4,6 +4,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Not running test because no gpu target enabled\n");
+        return 0;
+    }
 
     const int n_types = 9;
 
@@ -20,7 +24,7 @@ int main(int argc, char **argv) {
     int offset = 0;
     for (int i = 0; i < n_types; i++) {
         int off = 0;
-        if ((types[i].is_int() || types[i].is_uint()) && 
+        if ((types[i].is_int() || types[i].is_uint()) &&
             types[i].bits <= 64) {
             off = (1 << (types[i].bits - 4)) + 17;
         }
@@ -30,7 +34,7 @@ int main(int argc, char **argv) {
         e += cast<uint64_t>(funcs[i](x));
         funcs[i].compute_at(out, Var::gpu_blocks()).gpu_threads(x);
     }
-    
+
 
     out(x) = e;
     out.gpu_tile(x, 23);
@@ -39,7 +43,7 @@ int main(int argc, char **argv) {
     for (uint64_t x = 0; x < output.width(); x++) {
         uint64_t correct = n_types * (x / 16) + offset;
         if (output(x) != correct) {
-            printf("output(%lld) = %lld instead of %lld\n", 
+            printf("output(%lld) = %lld instead of %lld\n",
                    x, output(x), correct);
             return -1;
         }
