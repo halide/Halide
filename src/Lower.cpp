@@ -269,16 +269,6 @@ Stmt build_provide_loop_nest(Function f,
         }
     }
 
-    /*
-    // Build the loop nest
-    for (size_t i = 0; i < s.dims.size(); i++) {
-        const Dim &dim = s.dims[i];
-        Expr min = Variable::make(Int(32), prefix + dim.var + ".loop_min");
-        Expr extent = Variable::make(Int(32), prefix + dim.var + ".loop_extent");
-        stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
-    }
-    */
-
     // Define the bounds on the split dimensions using the bounds
     // on the function args
     for (size_t i = splits.size(); i > 0; i--) {
