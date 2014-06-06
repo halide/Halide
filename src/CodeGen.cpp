@@ -1761,7 +1761,7 @@ void CodeGen::visit(const Call *op) {
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
             // fixed params (not varags) in llvm function.
-            // Funntions which take a user context have it added below so the
+            // Functions which take a user context have it added below so the
             // llvm function argument indexing is one greater in that case.
             size_t llvm_arg_offset = function_takes_user_context(op->name) ? 1 : 0;
             FunctionType *func_t = fn->getFunctionType();
