@@ -45,6 +45,7 @@ private:
     string buffer;
     bool varies;
     Scope<int> varying;
+    Scope<int> in_pipeline;
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -96,6 +97,7 @@ private:
     }
 
     void visit(const Pipeline *op) {
+        in_pipeline.push(op->name, 0);
         if (op->name != buffer) {
             op->produce.accept(this);
             if (op->update.defined()) {
@@ -103,6 +105,7 @@ private:
             }
         }
         op->consume.accept(this);
+        in_pipeline.pop(op->name);
     }
 
     template<typename T>
@@ -161,6 +164,8 @@ private:
             }
             return;
         }
+
+        varies |= in_pipeline.contains(op->name);
 
         IRVisitor::visit(op);
 

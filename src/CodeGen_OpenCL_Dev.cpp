@@ -363,8 +363,6 @@ const string kernel_preamble = "";
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
-    cache.clear();
-
     debug(2) << "Adding OpenCL kernel " << name << "\n";
 
     stream << kernel_preamble;
@@ -388,11 +386,11 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
     }
     stream << ",\n" << "__local ulong* __shared";
 
-    stream << ") {\n";
+    stream << ")\n";
 
+    open_scope();
     print(s);
-
-    stream << "}\n";
+    close_scope("kernel " + name);
 
     for (size_t i = 0; i < args.size(); i++) {
         // Remove buffer arguments from allocation scope
