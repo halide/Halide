@@ -31,19 +31,19 @@ struct Target {
     int bits;
 
     /** Optional features a target can have. */
-    enum Features {JIT = 1,       /// Generate code that will run immediately inside the calling process.
-                   SSE41 = 2,     /// Use SSE 4.1 and earlier instructions. Only relevant on x86.
-                   AVX = 4,       /// Use AVX 1 instructions. Only relevant on x86.
-                   AVX2 = 8,      /// Use AVX 2 instructions. Only relevant on x86.
-                   CUDA = 16,     /// Enable the CUDA runtime.
-                   OpenCL = 32,   /// Enable the OpenCL runtime.
-                   GPUDebug = 64, /// Increase the level of checking and the verbosity of the gpu runtimes.
-                   NoAsserts = 512, /// Disable all runtime checks, for slightly tighter code.
-                   NoBoundsQuery = 1024, /// Disable the bounds querying functionality.
-		   ARMv7s = 2048,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
-		   AArch64Backend = 4096, /// Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
-                   OpenGL = 8192,         /// Enable the OpenGL runtime
-                   CLDoubles = 16384 /// Enable double support on OpenCL targets
+    enum Features {JIT       = 1 << 0,  /// Generate code that will run immediately inside the calling process.
+                   SSE41     = 1 << 1,  /// Use SSE 4.1 and earlier instructions. Only relevant on x86.
+                   AVX       = 1 << 2,  /// Use AVX 1 instructions. Only relevant on x86.
+                   AVX2      = 1 << 3,  /// Use AVX 2 instructions. Only relevant on x86.
+                   CUDA      = 1 << 4,  /// Enable the CUDA runtime.
+                   OpenCL    = 1 << 5,  /// Enable the OpenCL runtime.
+                   OpenGL    = 1 << 6,  /// Enable the OpenGL runtime.
+                   GPUDebug  = 1 << 7,  /// Increase the level of checking and the verbosity of the gpu runtimes.
+                   NoAsserts = 1 << 8,  /// Disable all runtime checks, for slightly tighter code.
+                   NoBoundsQuery = 1 << 9, /// Disable the bounds querying functionality.
+		   ARMv7s    = 1 << 10,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
+		   AArch64Backend = 1 << 11, /// Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
+                   CLDoubles = 1 << 12, /// Enable double support on OpenCL targets
 
     };
 

@@ -310,8 +310,8 @@ std::string Target::to_string() const {
     "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
   const char* const feature_names[] = {
-    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "", "",
-    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "opengl", "cl_doubles"
+    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
+    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
