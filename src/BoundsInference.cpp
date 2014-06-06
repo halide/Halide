@@ -149,8 +149,8 @@ public:
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
                 string prefix = name + ".s" + int_to_string(stage) + ".";
-                for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
-                    const Schedule::Bound &bound = func.schedule().bounds[i];
+                for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
+                    const Bound &bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_bound = bound.min;
@@ -305,7 +305,7 @@ public:
 
             /*
             for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
-                const Schedule::Bound &b = func.schedule().bounds[i];
+                const Bound &b = func.schedule().bounds[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }
             */
@@ -329,7 +329,7 @@ public:
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
-                f[i].schedule().compute_level.is_inline() &&
+                f[i].schedule().compute_level().is_inline() &&
                 f[i].is_pure()) {
                 inlined[i] = true;
             } else {
@@ -377,7 +377,7 @@ public:
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
             if (stages[i].func.same_as(output_function) ||
-                !stages[i].func.schedule().compute_level.is_inline() ||
+                !stages[i].func.schedule().compute_level().is_inline() ||
                 !stages[i].func.is_pure()) {
                 new_stages.push_back(stages[i]);
             }

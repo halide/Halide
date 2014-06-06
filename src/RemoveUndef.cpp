@@ -10,11 +10,12 @@ namespace Internal {
 using std::vector;
 
 class RemoveUndef : public IRMutator {
+public:
+    Expr predicate;
+private:
     using IRMutator::visit;
 
     Scope<int> dead_vars;
-
-    Expr predicate;
 
     void visit(const Variable *op) {
         if (dead_vars.contains(op->name)) {
@@ -455,7 +456,10 @@ class RemoveUndef : public IRMutator {
 };
 
 Stmt remove_undef(Stmt s) {
-    return RemoveUndef().mutate(s);
+    RemoveUndef r;
+    s = r.mutate(s);
+    internal_assert(!r.predicate.defined()) << "Undefined expression leaked outside of a Store node\n";
+    return s;
 }
 
 }

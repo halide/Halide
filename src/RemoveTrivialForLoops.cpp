@@ -22,6 +22,8 @@ class RemoveTrivialForLoops : public IRMutator {
                           << "Not vectorizing.\n";
             }
             stmt = LetStmt::make(for_loop->name, for_loop->min, body);
+        } else if (is_zero(for_loop->extent)) {
+            stmt = Evaluate::make(0);
         } else if (body.same_as(for_loop->body)) {
             stmt = for_loop;
         } else {
