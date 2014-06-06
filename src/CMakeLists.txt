@@ -53,10 +53,6 @@ if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL=1")
 endif()
 
-if (TARGET_SPIR)
-  add_definitions("-DWITH_SPIR=1")
-endif()
-
 if (TARGET_ARM64)
   add_definitions("-DWITH_ARM64=1")
 endif()
@@ -192,7 +188,6 @@ set(HEADER_FILES
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_GPU_Dev.h
-  CodeGen_SPIR_Dev.h
   CodeGen_PNaCl.h
   Deinterleave.h
   Derivative.h
@@ -277,7 +272,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PTX_Dev.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
-  CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
   CodeGen_PNaCl.cpp

@@ -38,8 +38,6 @@ struct Target {
                    CUDA = 16,     /// Enable the CUDA runtime.
                    OpenCL = 32,   /// Enable the OpenCL runtime.
                    GPUDebug = 64, /// Increase the level of checking and the verbosity of the gpu runtimes.
-                   SPIR = 128,    /// Enable the OpenCL SPIR runtime in 32-bit mode
-                   SPIR64 = 256,  /// Enable the OpenCL SPIR runtime in 64-bit mode
                    NoAsserts = 512, /// Disable all runtime checks, for slightly tighter code.
                    NoBoundsQuery = 1024, /// Disable the bounds querying functionality.
 		   ARMv7s = 2048,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
@@ -56,7 +54,7 @@ struct Target {
     Target(OS o, Arch a, int b, uint64_t f) : os(o), arch(a), bits(b), features(f) {}
 
     bool has_gpu_feature() const {
-        return (features & (CUDA|OpenCL|SPIR|SPIR64));
+        return (features & (CUDA|OpenCL));
     }
 
     bool operator==(const Target &other) const {
@@ -144,9 +142,6 @@ llvm::Module *get_initial_module_for_target(Target, llvm::LLVMContext *);
 
 /** Create an llvm module containing the support code for ptx device. */
 llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c);
-
-/** Create an llvm module containing the support code for SPIR device code. */
-llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c, int bits);
 
 }
 
