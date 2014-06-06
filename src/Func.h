@@ -198,20 +198,21 @@ enum GPUAPI {
     GPU_GLSL
 };
 
-/** A wrapper around a schedule used for common schedule manipulations */
+/** A temporary wrapper around a schedule used for common schedule manipulations */
 class ScheduleHandle {
-    Internal::Schedule &schedule;
+    Internal::Schedule schedule;
     void set_dim_type(Var var, Internal::For::ForType t);
     std::string dump_argument_list();
 public:
-    ScheduleHandle(Internal::Schedule &s) : schedule(s) {s.touched = true;}
+    ScheduleHandle(Internal::Schedule s) : schedule(s) {s.touched();}
 
-    /** Scheduling calls that control how the domain of this update is
+    /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
+    EXPORT ScheduleHandle &serial(Var var);
     EXPORT ScheduleHandle &parallel(Var var);
     EXPORT ScheduleHandle &vectorize(Var var);
     EXPORT ScheduleHandle &unroll(Var var);
@@ -243,6 +244,7 @@ public:
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
     EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
+    EXPORT ScheduleHandle specialize(Expr condition);
 
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_Default);
@@ -801,6 +803,9 @@ public:
     EXPORT Func &fuse(Var inner, Var outer, Var fused);
 
 
+    /** Mark a dimension to be traversed serially. This is the default. */
+    EXPORT Func &serial(Var var);
+
     /** Mark a dimension to be traversed in parallel */
     EXPORT Func &parallel(Var var);
 
@@ -915,6 +920,172 @@ public:
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(Var old_name, Var new_name);
+
+    /** Specialize a Func. This creates a special-case version of the
+     * Func where the given condition is true. The most effective
+     * conditions are those of the form param == value, and boolean
+     * Params. Consider a simple example:
+     \code
+     f(x) = x + select(cond, 0, 1);
+     f.compute_root();
+     \endcode
+     * This is equivalent to:
+     \code
+     for (int x = 0; x < width; x++) {
+       f[x] = x + (cond ? 0 : 1);
+     }
+     \endcode
+     * Adding the scheduling directive:
+     \code
+     f.specialize(cond)
+     \endcode
+     * makes it equivalent to:
+     \code
+     if (cond) {
+       for (int x = 0; x < width; x++) {
+         f[x] = x;
+       }
+     } else {
+       for (int x = 0; x < width; x++) {
+         f[x] = x + 1;
+       }
+     }
+     \endcode
+     * Note that the inner loops have been simplified. In the first
+     * path Halide knows that cond is true, and in the second path
+     * Halide knows that it is false.
+     *
+     * The specialized version gets its own schedule, which inherits
+     * every directive made about the parent Func's schedule so far
+     * except for its specializations. This method returns a handle to
+     * the new schedule. If you wish to retrieve the specialized
+     * sub-schedule again later, you can call this method with the
+     * same condition. Consider the following example of scheduling
+     * the specialized version:
+     *
+     \code
+     f(x) = x;
+     f.compute_root();
+     f.specialize(width > 1).unroll(x, 2);
+     \endcode
+     * Assuming for simplicity that width is even, this is equivalent to:
+     \code
+     if (width > 1) {
+       for (int x = 0; x < width/2; x++) {
+         f[2*x] = 2*x;
+         f[2*x + 1] = 2*x + 1;
+       }
+     } else {
+       for (int x = 0; x < width/2; x++) {
+         f[x] = x;
+       }
+     }
+     \endcode
+     * For this case, it may be better to schedule the un-specialized
+     * case instead:
+     \code
+     f(x) = x;
+     f.compute_root();
+     f.specialize(width == 1); // Creates a copy of the schedule so far.
+     f.unroll(x, 2); // Only applies to the unspecialized case.
+     \endcode
+     * This is equivalent to:
+     \code
+     if (width == 1) {
+       f[0] = 0;
+     } else {
+       for (int x = 0; x < width/2; x++) {
+         f[2*x] = 2*x;
+         f[2*x + 1] = 2*x + 1;
+       }
+     }
+     \endcode
+     * This can be a good way to write a pipeline that splits,
+     * vectorizes, or tiles, but can still handle small inputs.
+     *
+     * If a Func has several specializations, the first matching one
+     * will be used, so the order in which you define specializations
+     * is significant. For example:
+     *
+     \code
+     f(x) = x + select(cond1, a, b) - select(cond2, c, d);
+     f.specialize(cond1);
+     f.specialize(cond2);
+     \endcode
+     * is equivalent to:
+     \code
+     if (cond1) {
+       for (int x = 0; x < width; x++) {
+         f[x] = x + a - (cond2 ? c : d);
+       }
+     } else if (cond2) {
+       for (int x = 0; x < width; x++) {
+         f[x] = x + b - c;
+       }
+     } else {
+       for (int x = 0; x < width; x++) {
+         f[x] = x + b - d;
+       }
+     }
+     \endcode
+     *
+     * Specializations may in turn be specialized, which creates a
+     * nested if statement in the generated code.
+     *
+     \code
+     f(x) = x + select(cond1, a, b) - select(cond2, c, d);
+     f.specialize(cond1).specialize(cond2);
+     \endcode
+     * This is equivalent to:
+     \code
+     if (cond1) {
+       if (cond2) {
+         for (int x = 0; x < width; x++) {
+           f[x] = x + a - c;
+         }
+       } else {
+         for (int x = 0; x < width; x++) {
+           f[x] = x + a - d;
+         }
+       }
+     } else {
+       for (int x = 0; x < width; x++) {
+         f[x] = x + b - (cond2 ? c : d);
+       }
+     }
+     \endcode
+     * To create a 4-way if statement that simplifies away all of the
+     * ternary operators above, you could say:
+     \code
+     f.specialize(cond1).specialize(cond2);
+     f.specialize(cond2);
+     \endcode
+     * or
+     \code
+     f.specialize(cond1 && cond2);
+     f.specialize(cond1);
+     f.specialize(cond2);
+     \endcode
+     *
+     * Any prior Func which is compute_at some variable of this Func
+     * gets separately included in all paths of the generated if
+     * statement. The Var in the compute_at call to must exist in all
+     * paths, but it may have been generated via a different path of
+     * splits, fuses, and renames. This can be used somewhat
+     * creatively. Consider the following code:
+     \code
+     g(x, y) = 8*x;
+     f(x, y) = g(x, y) + 1;
+     f.compute_root().specialize(cond);
+     Var g_loop;
+     f.specialize(cond).rename(y, g_loop);
+     f.rename(x, g_loop);
+     g.compute_at(f, g_loop);
+     \endcode
+     * When cond is true, this is equivalent to g.compute_at(f,y).
+     * When it is false, this is equivalent to g.compute_at(f,x).
+     */
+    EXPORT ScheduleHandle specialize(Expr condition);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer

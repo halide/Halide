@@ -1,0 +1,54 @@
+#include <Halide.h>
+#include <stdio.h>
+
+using namespace Halide;
+
+int main(int argc, char **argv) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("Not running test because no gpu feature enabled in target.\n");
+        return 0;
+    }
+
+    // A sequence of stages which may or may not run on the gpu.
+    Func f, g, h;
+    ImageParam in(Int(32), 1);
+    Var x;
+
+    f(x) = in(x) + in(x + 1);
+    g(x) = f(x * 2);
+    h(x) = g(x) - 7;
+
+    Param<bool> gpu_f, gpu_g, gpu_h;
+
+    f.compute_root().specialize(gpu_f).gpu_tile(x, 16);
+    g.compute_root().specialize(gpu_g).gpu_tile(x, 16);
+    h.compute_root().specialize(gpu_h).gpu_tile(x, 16);
+
+    Image<int> out(128), reference(128), input(256);
+
+    lambda(x, x * 17 + 43 + x * x).realize(input);
+    in.set(input);
+
+    gpu_f.set(false);
+    gpu_g.set(false);
+    gpu_h.set(false);
+    h.realize(reference);
+
+    for (int i = 1; i < 8; i++) {
+        gpu_f.set((bool)(i & 1));
+        gpu_g.set((bool)(i & 2));
+        gpu_h.set((bool)(i & 4));
+
+        h.realize(out);
+
+        RDom r(out);
+        uint32_t err = evaluate<uint32_t>(sum(abs(out(r) - reference(r))));
+        if (err) {
+            printf("Incorrect results for test %d\n", i);
+            return -1;
+        }
+    }
+
+    printf("Success!\n");
+    return 0;
+}
