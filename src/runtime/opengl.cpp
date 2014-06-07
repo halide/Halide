@@ -2,9 +2,6 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#include "posix_allocator.cpp"
-#include "posix_io.cpp"
-#include "posix_error_handler.cpp"
 #include "mini_string.h"
 #include "mini_opengl.h"
 
