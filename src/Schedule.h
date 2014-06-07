@@ -109,7 +109,7 @@ public:
 
     Schedule(IntrusivePtr<ScheduleContents> c) : contents(c) {}
     Schedule(const Schedule &other) : contents(other.contents) {}
-    Schedule();
+    EXPORT Schedule();
 
     /** This flag is set to true if the dims list has been manipulated
      * by the user (or if a ScheduleHandle was created that could have
