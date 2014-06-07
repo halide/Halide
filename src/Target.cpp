@@ -259,10 +259,6 @@ bool Target::merge_string(const std::string &target) {
             features |= Target::CUDA;
         } else if (tok == "opencl") {
             features |= Target::OpenCL;
-        } else if (tok == "spir") {
-            features |= Target::OpenCL | Target::SPIR;
-        } else if (tok == "spir64") {
-            features |= Target::OpenCL | Target::SPIR64;
         } else if (tok == "gpu_debug") {
             features |= Target::GPUDebug;
         } else if (tok == "opengl") {
@@ -314,7 +310,7 @@ std::string Target::to_string() const {
     "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
   const char* const feature_names[] = {
-    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64",
+    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
     "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles"
   };
   string result = string(arch_names[arch])
@@ -411,9 +407,6 @@ DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
-DECLARE_LL_INITMOD(spir_dev)
-DECLARE_LL_INITMOD(spir64_dev)
-DECLARE_LL_INITMOD(spir_common_dev)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -637,19 +630,6 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
     return modules[0];
 }
 #endif
-
-llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c, int bits) {
-    internal_assert(bits == 32 || bits == 64);
-
-    vector<llvm::Module *> modules;
-    if (bits == 32)
-        modules.push_back(get_initmod_spir_dev_ll(c));
-    else
-        modules.push_back(get_initmod_spir64_dev_ll(c));
-    modules.push_back(get_initmod_spir_common_dev_ll(c));
-    link_modules(modules);
-    return modules[0];
-}
 
 }
 
