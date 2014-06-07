@@ -1,6 +1,5 @@
 #include <Halide.h>
 #include <stdio.h>
-#include <HalideRuntime.h>
 
 using namespace Halide;
 
