@@ -625,6 +625,13 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
         if (!f->isDeclaration() && !f->hasFnAttribute(llvm::Attribute::NoInline)) {
             f->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
         }
+
+        // Also mark the halide_gpu_thread_barrier as noduplicate.
+        #if LLVM_VERSION > 32
+        if (f->getName() == "halide_gpu_thread_barrier") {
+            f->addFnAttr(llvm::Attribute::NoDuplicate);
+        }
+        #endif
     }
 
     return modules[0];
