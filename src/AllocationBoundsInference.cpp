@@ -48,52 +48,6 @@ class AllocationInference : public IRMutator {
 
         Stmt new_body = mutate(op->body);
 
-        // If f is used by an extern, make a buffer for it (TODO: This
-        // is similar to the buffer made by the GPU backend, should
-        // unify the two ideas).
-        if (touched_by_extern.count(f.name())) {
-            vector<Expr> mins(f.args().size());
-            vector<Expr> extents(f.args().size());
-            vector<Expr> strides(f.args().size());
-            for (size_t i = 0; i < f.args().size(); i++) {
-                mins[i] = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".min_realized");
-                extents[i] = Variable::make(Int(32), f.name() + "." + f.args()[i] + ".extent_realized");
-            }
-
-            for (int i = 0; i < f.outputs(); i++) {
-                string buffer_name = f.name();
-                if (f.outputs() > 1) {
-                    buffer_name += "." + int_to_string(i);
-                }
-                buffer_name += ".buffer";
-                Expr min_point = Call::make(f, mins, i);
-                Expr address = Call::make(Handle(), Call::address_of, vec(min_point), Call::Intrinsic);
-                vector<Expr> buffer_fields(f.dimensions()*3 + 2);
-                buffer_fields[0] = address;
-                buffer_fields[1] = f.output_types()[i].bytes();
-                for (int j = 0; j < f.dimensions(); j++) {
-                    buffer_fields[j*3 + 2] = mins[j];
-                    buffer_fields[j*3 + 3] = extents[j];
-
-                    Expr stride;
-                    if (f.outputs() > 1) {
-                        stride = Variable::make(Int(32),
-                                                f.name() + "." +
-                                                int_to_string(i) + ".stride." +
-                                                int_to_string(j));
-                    } else {
-                        stride = Variable::make(Int(32),
-                                                f.name() + ".stride." +
-                                                int_to_string(j));
-                    }
-                    buffer_fields[j*3 + 4] = stride;
-
-                }
-                Expr buffer = Call::make(Handle(), Call::create_buffer_t, buffer_fields, Call::Intrinsic);
-                new_body = LetStmt::make(buffer_name, buffer, new_body);
-            }
-        }
-
         stmt = Realize::make(op->name, op->types, op->bounds, new_body);
 
         internal_assert(b.size() == op->bounds.size());

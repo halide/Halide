@@ -1,6 +1,8 @@
 #include "InjectOpenGLIntrinsics.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "CodeGen_GPU_Dev.h"
+#include "Substitute.h"
 
 namespace Halide {
 namespace Internal {
@@ -10,11 +12,10 @@ using std::vector;
 
 class InjectOpenGLIntrinsics : public IRMutator {
 public:
-    InjectOpenGLIntrinsics(Scope<int> &need_buffer_t)
-        : need_buffer_t(need_buffer_t), inside_kernel_loop(false) {
+    InjectOpenGLIntrinsics()
+        : inside_kernel_loop(false) {
     }
     Scope<int> scope;
-    Scope<int> &need_buffer_t;
     bool inside_kernel_loop;
 private:
     using IRMutator::visit;
@@ -27,9 +28,6 @@ private:
 
         internal_assert(provide->values.size() == 1) << "GLSL currently only supports single-valued stores.\n";
         user_assert(provide->args.size() == 3) << "GLSL stores requires three coordinates.\n";
-
-        // Record that this buffer is accessed from a GPU kernel
-        need_buffer_t.push(provide->name, 0);
 
         // Create glsl_texture_store(name, name.buffer, x, y, c, value)
         // intrinsic.
@@ -56,9 +54,6 @@ private:
         }
 
         user_assert(call->args.size() == 3) << "GLSL loads requires three coordinates.\n";
-
-        // Record that this buffer is accessed from a GPU kernel
-        need_buffer_t.push(call->name, 0);
 
         // Create glsl_texture_load(name, name.buffer, x, y, c) intrinsic.
         vector<Expr> args(5);
@@ -108,7 +103,7 @@ private:
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
         if (loop->for_type == For::Parallel &&
-            (ends_with(loop->name, ".blockidx") || ends_with(loop->name, ".blockidy"))) {
+            CodeGen_GPU_Dev::is_gpu_block_var(loop->name)) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);
@@ -116,8 +111,27 @@ private:
     }
 };
 
-Stmt inject_opengl_intrinsics(Stmt s, Scope<int> &needs_buffer_t) {
-    return InjectOpenGLIntrinsics(needs_buffer_t).mutate(s);
+// Rewrite all GPU loops to have a min of zero
+class ZeroGPULoopMins : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        IRMutator::visit(op);
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
+            op = stmt.as<For>();
+            internal_assert(op);
+            Expr adjusted = Variable::make(Int(32), op->name) + op->min;
+            Stmt body = substitute(op->name, adjusted, op->body);
+            stmt = For::make(op->name, 0, op->extent, op->for_type, body);
+        }
+    }
+};
+
+Stmt inject_opengl_intrinsics(Stmt s) {
+    ZeroGPULoopMins z;
+    s = z.mutate(s);
+    InjectOpenGLIntrinsics gl;
+    return gl.mutate(s);
 }
 
 }

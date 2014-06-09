@@ -440,7 +440,7 @@ public:
 
         if (!s->else_case.defined() && op->else_case.defined()) {
             result = -1;
-        } else if (s->else_case.defined() && op->else_case.defined()) {
+        } else if (s->else_case.defined() && !op->else_case.defined()) {
             result = 1;
         } else {
 

@@ -80,7 +80,7 @@ private:
         }
 
         Function f = op->func;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
+        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
 
         if (f.is_tracing_loads() || (global_level > 2 && !inlined)) {
 
@@ -106,7 +106,7 @@ private:
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
+        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
 
         if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
             // Wrap each expr in a tracing call

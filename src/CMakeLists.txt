@@ -29,6 +29,8 @@ else()
   execute_process(COMMAND "${LLVM_CONFIG}" --ldflags --libs OUTPUT_VARIABLE LIBS)
 endif()
 
+message("${LLVM_LIB} ${LIBS}")
+
 if (TARGET_NATIVE_CLIENT)
   add_definitions("-DWITH_NATIVE_CLIENT=1")
 endif()
@@ -51,10 +53,6 @@ endif()
 
 if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL=1")
-endif()
-
-if (TARGET_SPIR)
-  add_definitions("-DWITH_SPIR=1")
 endif()
 
 if (TARGET_ARM64)
@@ -102,9 +100,6 @@ set (RUNTIME_LL
   posix_math
   pnacl_math
   ptx_dev
-  spir_dev
-  spir64_dev
-  spir_common_dev
   x86_avx
   x86
   x86_sse41
@@ -123,42 +118,43 @@ if("${NATIVE_INT_DIR}" STREQUAL "./")
   set(NATIVE_INT_DIR "")
 endif()
 
-# Gather dependencies for runtime objects.
-file(GLOB RUNTIME_CL_DEPENDS "${RUNTIME_DIR}/CL/*.h")
-file(GLOB RUNTIME_CPP_DEPENDS "${RUNTIME_DIR}/*.cpp")
-file(GLOB RUNTIME_H_DEPENDS "${RUNTIME_DIR}/*.h")
-file(GLOB RUNTIME_LL_DEPENDS "${RUNTIME_DIR}/*.ll")
-file(GLOB RUNTIME_BC_DEPENDS "${RUNTIME_DIR}/nvidia_libdevice_bitcode/*.bc")
-set (RUNTIME_DEPENDS
-  ${RUNTIME_CL_DEPENDS}
-  ${RUNTIME_CPP_DEPENDS}
-  ${RUNTIME_H_DEPENDS}
-  ${RUNTIME_LL_DEPENDS}
-  ${RUNTIME_BC_DEPENDS})
-
 # Commands to build initial module objects.
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
+    set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
+    set(LL "${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+    set(BC "${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+    add_custom_command(OUTPUT "${LL}"
+                       DEPENDS "${SOURCE}"
+                       COMMAND ${CLANG} -fno-blocks -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE -DBITS_${j} -emit-llvm -O3 -S "${SOURCE}" -o "${LL}"
+                       COMMENT "${SOURCE} -> ${LL}")
+    add_custom_command(OUTPUT "${BC}"
+                       DEPENDS "${LL}"
+                       COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
+		       COMMENT "${LL} -> ${BC}")
     add_custom_command(OUTPUT "${INITMOD}"
-                       COMMAND ${CLANG} -fno-blocks -m${j} -DCOMPILING_HALIDE -DBITS_${j} -emit-llvm -O3 -S "${NATIVE_RUNTIME_DIR}${i}.cpp" -o "${NATIVE_INT_DIR}initmod.${i}_${j}.ll"
-                       COMMAND "${LLVM_AS}" "${NATIVE_INT_DIR}initmod.${i}_${j}.ll" -o "${NATIVE_INT_DIR}initmod.${i}_${j}.bc"
-                       COMMAND bitcode2cpp "${i}_${j}" < "${NATIVE_INT_DIR}initmod.${i}_${j}.bc" > "${INITMOD}"
-                       COMMENT "Building initial module ${i}_${j}..."
-                       VERBATIM)
+                       DEPENDS "${BC}"
+                       COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
+                       COMMENT "${BC} -> ${INITMOD}")
     list(APPEND INITIAL_MODULES ${INITMOD})
   endforeach()
 endforeach()
 foreach (i ${RUNTIME_LL} )
+  set(LL "${NATIVE_RUNTIME_DIR}${i}.ll")
+  set(BC "${NATIVE_INT_DIR}initmod.${i}.bc")
   set(INITMOD "${INITMOD_PREFIX}${i}.cpp")
+  add_custom_command(OUTPUT "${BC}"
+                     DEPENDS "${LL}"
+                     COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
+                     COMMENT "${LL} -> ${BC}")
   add_custom_command(OUTPUT "${INITMOD}"
-                     COMMAND "${LLVM_AS}" "${NATIVE_RUNTIME_DIR}${i}.ll" -o "${NATIVE_INT_DIR}initmod.${i}.bc"
-                     COMMAND bitcode2cpp ${i}_ll < "${NATIVE_INT_DIR}initmod.${i}.bc" > "${INITMOD}"
-                     COMMENT "Building initial module ${i}..."
-                     VERBATIM)
+                     DEPENDS "${BC}"
+                     COMMAND bitcode2cpp ${i}_ll < "${BC}" > "${INITMOD}"
+                     COMMENT "${BC} -> ${INITMOD}")
   list(APPEND INITIAL_MODULES "${INITMOD}")
 endforeach()
 foreach (i ${RUNTIME_BC} )
@@ -192,7 +188,6 @@ set(HEADER_FILES
   CodeGen_OpenCL_Dev.h
   CodeGen_OpenGL_Dev.h
   CodeGen_GPU_Dev.h
-  CodeGen_SPIR_Dev.h
   CodeGen_PNaCl.h
   Deinterleave.h
   Derivative.h
@@ -214,6 +209,7 @@ set(HEADER_FILES
   IRPrinter.h
   IRVisitor.h
   InjectOpenGLIntrinsics.h
+  InjectHostDevBufferCopies.h
   JITCompiledModule.h
   Lambda.h
   Debug.h
@@ -276,7 +272,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_PTX_Dev.cpp
   CodeGen_OpenCL_Dev.cpp
   CodeGen_OpenGL_Dev.cpp
-  CodeGen_SPIR_Dev.cpp
   CodeGen_GPU_Dev.cpp
   CodeGen_Posix.cpp
   CodeGen_PNaCl.cpp
@@ -343,6 +338,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Image.cpp
   Debug.cpp
   InjectOpenGLIntrinsics.cpp
+  InjectHostDevBufferCopies.cpp
+  Schedule.cpp
+  FuseGPUThreadLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

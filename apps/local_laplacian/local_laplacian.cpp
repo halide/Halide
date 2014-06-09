@@ -118,7 +118,7 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
         // gpu schedule
-        output.compute_root().gpu_tile(x, y, 32, 32, GPU_Default);
+        output.compute_root().gpu_tile(x, y, 32, 16, GPU_Default);
         for (int j = 0; j < J; j++) {
             int blockw = 32, blockh = 16;
             if (j > 3) {

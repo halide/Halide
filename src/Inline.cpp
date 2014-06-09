@@ -26,14 +26,14 @@ class Inliner : public IRMutator {
 
         const Schedule &s = f.schedule();
 
-        if (!s.store_level.is_inline()) {
+        if (!s.store_level().is_inline()) {
             user_error << "Function " << f.name() << " is scheduled to be computed inline, "
                        << "but is not scheduled to be stored inline. A storage schedule "
                        << "is meaningless for functions computed inline.\n";
         }
 
-        for (size_t i = 0; i < s.dims.size(); i++) {
-            Schedule::Dim d = s.dims[i];
+        for (size_t i = 0; i < s.dims().size(); i++) {
+            Dim d = s.dims()[i];
             if (d.for_type == For::Parallel) {
                 user_error << "Cannot parallelize dimension "
                            << d.var << " of function "
@@ -49,33 +49,33 @@ class Inliner : public IRMutator {
             }
         }
 
-        for (size_t i = 0; i < s.splits.size(); i++) {
-            if (s.splits[i].is_rename()) {
+        for (size_t i = 0; i < s.splits().size(); i++) {
+            if (s.splits()[i].is_rename()) {
                 user_warning << "It is meaningless to rename variable "
-                             << s.splits[i].old_var << " of function "
-                             << f.name() << " to " << s.splits[i].outer
+                             << s.splits()[i].old_var << " of function "
+                             << f.name() << " to " << s.splits()[i].outer
                              << " because " << f.name() << " is scheduled inline.\n";
-            } else if (s.splits[i].is_fuse()) {
+            } else if (s.splits()[i].is_fuse()) {
                 user_warning << "It is meaningless to fuse variables "
-                             << s.splits[i].inner << " and " << s.splits[i].outer
+                             << s.splits()[i].inner << " and " << s.splits()[i].outer
                              << " because " << f.name() << " is scheduled inline.\n";
             } else {
                 user_warning << "It is meaningless to split variable "
-                             << s.splits[i].old_var << " of function "
+                             << s.splits()[i].old_var << " of function "
                              << f.name() << " into "
-                             << s.splits[i].outer << " * "
-                             << s.splits[i].factor << " + "
-                             << s.splits[i].inner << " because "
+                             << s.splits()[i].outer << " * "
+                             << s.splits()[i].factor << " + "
+                             << s.splits()[i].inner << " because "
                              << f.name() << " is scheduled inline.\n";
             }
         }
 
-        for (size_t i = 0; i < s.bounds.size(); i++) {
+        for (size_t i = 0; i < s.bounds().size(); i++) {
             user_warning << "It is meaningless to bound dimension "
-                         << s.bounds[i].var << " of function "
+                         << s.bounds()[i].var << " of function "
                          << f.name() << " to be within ["
-                         << s.bounds[i].min << ", "
-                         << s.bounds[i].extent << "] because the function is scheduled inline.\n";
+                         << s.bounds()[i].min << ", "
+                         << s.bounds()[i].extent << "] because the function is scheduled inline.\n";
         }
 
     }

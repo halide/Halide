@@ -61,6 +61,19 @@ private:
         }
     }
 
+    void visit(const IfThenElse *op) {
+        // It's a bad idea to inject it in either side of an
+        // ifthenelse, so we treat this as being in a loop.
+        op->condition.accept(this);
+        bool old_in_loop = in_loop;
+        in_loop = true;
+        op->then_case.accept(this);
+        if (op->else_case.defined()) {
+            op->else_case.accept(this);
+        }
+        in_loop = old_in_loop;
+    }
+
     void visit(const Pipeline *pipe) {
         if (in_loop) {
             IRVisitor::visit(pipe);

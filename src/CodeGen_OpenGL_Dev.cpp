@@ -104,13 +104,14 @@ void CodeGen_GLSL::visit(const Cast *op) {
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
-    if (ends_with(loop->name, ".blockidx") || ends_with(loop->name, ".blockidy")) {
+    if (ends_with(loop->name, ".__block_id_x") ||
+        ends_with(loop->name, ".__block_id_y")) {
         debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
 
         string idx;
-        if (ends_with(loop->name, ".blockidx")) {
+        if (ends_with(loop->name, ".__block_id_x")) {
             idx = "int(pixcoord.x)";
-        } else if (ends_with(loop->name, ".blockidy")) {
+        } else if (ends_with(loop->name, ".__block_id_y")) {
             idx = "int(pixcoord.y)";
         }
         do_indent();
