@@ -309,7 +309,7 @@ define weak_odr double @atanh_f64(double %x) nounwind uwtable readnone alwaysinl
        ret double %y
 }
 
-define weak_odr i32 @halide_gpu_thread_barrier() nounwind uwtable alwaysinline noduplicate {
-       call void @llvm.nvvm.barrier0() nounwind noduplicate
+define weak_odr i32 @halide_gpu_thread_barrier() nounwind uwtable alwaysinline {
+       call void @llvm.nvvm.barrier0() nounwind
        ret i32 0
 }
