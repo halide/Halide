@@ -16,9 +16,10 @@ struct ScheduleContents {
     std::vector<std::string> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Specialization> specializations;
+    bool cached;
     bool touched;
 
-    ScheduleContents() : touched(false) {};
+  ScheduleContents() : cached(false), touched(false) {};
 };
 
 
@@ -33,6 +34,14 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
 }
 
 Schedule::Schedule() : contents(new ScheduleContents) {}
+
+bool &Schedule::cached() {
+    return contents.ptr->cached;
+}
+
+bool Schedule::cached() const {
+    return contents.ptr->cached;
+}
 
 bool &Schedule::touched() {
     return contents.ptr->touched;
