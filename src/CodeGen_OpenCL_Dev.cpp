@@ -1,7 +1,9 @@
 #include <sstream>
 
 #include "CodeGen_OpenCL_Dev.h"
+#include "CodeGen_Internal.h"
 #include "Debug.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
@@ -12,8 +14,8 @@ using std::vector;
 
 static ostringstream nil;
 
-CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target tgt) : target(tgt) {
-    clc = new CodeGen_OpenCL_C(src_stream);
+CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
+    clc(CodeGen_OpenCL_C(src_stream)), target(t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {
@@ -77,50 +79,39 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_reinterpret(Type type, Expr e
 
 
 namespace {
-Expr simt_intrinsic(const string &name) {
-    if (ends_with(name, ".threadidx")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(0)), Call::Extern);
-    } else if (ends_with(name, ".threadidy")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(1)), Call::Extern);
-    } else if (ends_with(name, ".threadidz")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(2)), Call::Extern);
-    } else if (ends_with(name, ".threadidw")) {
-        return Call::make(Int(32), "get_local_id", vec(Expr(3)), Call::Extern);
-    } else if (ends_with(name, ".blockidx")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(0)), Call::Extern);
-    } else if (ends_with(name, ".blockidy")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(1)), Call::Extern);
-    } else if (ends_with(name, ".blockidz")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(2)), Call::Extern);
-    } else if (ends_with(name, ".blockidw")) {
-        return Call::make(Int(32), "get_group_id", vec(Expr(3)), Call::Extern);
+string simt_intrinsic(const string &name) {
+    if (ends_with(name, ".__thread_id_x")) {
+        return "get_local_id(0)";
+    } else if (ends_with(name, ".__thread_id_y")) {
+        return "get_local_id(1)";
+    } else if (ends_with(name, ".__thread_id_z")) {
+        return "get_local_id(2)";
+    } else if (ends_with(name, ".__thread_id_w")) {
+        return "get_local_id(3)";
+    } else if (ends_with(name, ".__block_id_x")) {
+        return "get_group_id(0)";
+    } else if (ends_with(name, ".__block_id_y")) {
+        return "get_group_id(1)";
+    } else if (ends_with(name, ".__block_id_z")) {
+        return "get_group_id(2)";
+    } else if (ends_with(name, ".__block_id_w")) {
+        return "get_group_id(3)";
     }
     internal_error << "simt_intrinsic called on bad variable name: " << name << "\n";
-    return Expr();
+    return "";
 }
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        debug(1) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
         internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
-
-        Expr simt_idx = simt_intrinsic(loop->name);
-        Expr loop_var = Add::make(loop->min, simt_idx);
-        Expr cond = LT::make(simt_idx, loop->extent);
-        debug(1) << "for -> if (" << cond << ")\n";
-
-        string id_idx = print_expr(simt_idx);
-        string id_cond = print_expr(cond);
+        internal_assert(is_zero(loop->min));
 
         do_indent();
-        stream << "if (" << id_cond << ")\n";
+        stream << print_type(Int(32)) << " " << print_name(loop->name)
+               << " = " << simt_intrinsic(loop->name) << ";\n";
 
-        open_scope();
-        do_indent();
-        stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << id_idx << ";\n";
         loop->body.accept(this);
-        close_scope("for " + id_cond);
 
     } else {
     	user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
@@ -169,6 +160,17 @@ Expr is_ramp1(Expr e) {
 }
 }
 
+
+string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
+    if (buf == "__shared") {
+        return "__local";
+    } else if (internal_allocations.contains(buf)) {
+        return "__private";
+    } else {
+        return "__global";
+    }
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
     // If we're loading a contiguous ramp into a vector, use vload instead.
     Expr ramp_base = is_ramp1(op->index);
@@ -178,8 +180,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
 
         ostringstream rhs;
         rhs << "vload" << op->type.width
-            << "(0, "
-            << "(__global " << print_type(op->type.element_of()) << "*)"
+            << "(0, (" << get_memory_space(op->name) << " "
+            << print_type(op->type.element_of()) << "*)"
             << print_name(op->name) << " + " << id_ramp_base << ")";
 
         print_assignment(op->type, rhs.str());
@@ -193,7 +195,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
                               allocations.get(op->name) == op->type);
     ostringstream rhs;
     if (type_cast_needed) {
-        rhs << "((" << print_type(op->type) << " *)"
+        rhs << "((" << get_memory_space(op->name) << " "
+            << print_type(op->type) << " *)"
             << print_name(op->name)
             << ")";
     } else {
@@ -222,13 +225,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
             do_indent();
             stream
                 << id << ".s" << vector_elements[i]
-                << " = "
-                << "((__global " << print_type(op->type.element_of()) << "*)"
+                << " = ((" << get_memory_space(op->name) << " "
+                << print_type(op->type.element_of()) << "*)"
                 << print_name(op->name) << ")"
                 << "[" << id_index << ".s" << vector_elements[i] << "];\n";
         }
     } else {
-        CodeGen_C::visit(op);
+        print_assignment(op->type, rhs.str());
     }
 }
 
@@ -245,15 +248,12 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
         do_indent();
         stream << "vstore" << t.width << "("
                << id_value << ","
-               << 0 << ", "
-               << "(__global " << print_type(t.element_of()) << "*)"
+               << 0 << ", (" << get_memory_space(op->name) << " "
+               << print_type(t.element_of()) << "*)"
                << print_name(op->name) << " + " << id_ramp_base
                << ");\n";
 
-        return;
-    }
-
-    if (op->index.type().is_vector()) {
+    } else if (op->index.type().is_vector()) {
         // If index is a vector, scatter vector elements.
         internal_assert(t.is_vector());
 
@@ -261,17 +261,36 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Store *op) {
 
         for (int i = 0; i < t.width; ++i) {
             do_indent();
-            stream << "((__global " << print_type(t.element_of()) << " *)"
+            stream << "((" << get_memory_space(op->name) << " "
+                   << print_type(t.element_of()) << " *)"
                    << print_name(op->name)
-                   << ")";
-
-            stream << "[" << id_index << ".s" << vector_elements[i] << "] = "
-                   << id_value << ".s" << vector_elements[i]
-                   << ";\n";
+                   << ")["
+                   << id_index << ".s" << vector_elements[i] << "] = "
+                   << id_value << ".s" << vector_elements[i] << ";\n";
         }
     } else {
-        CodeGen_C::visit(op);
+        bool type_cast_needed = !(allocations.contains(op->name) &&
+                                  allocations.get(op->name) == t);
+
+        string id_index = print_expr(op->index);
+        string id_value = print_expr(op->value);
+        do_indent();
+
+        if (type_cast_needed) {
+            stream << "(("
+                   << get_memory_space(op->name) << " "
+                   << print_type(t)
+                   << " *)"
+                   << print_name(op->name)
+                   << ")";
+        } else {
+            stream << print_name(op->name);
+        }
+        stream << "[" << id_index << "] = "
+               << id_value << ";\n";
     }
+
+    cache.clear();
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
@@ -282,12 +301,61 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
     }
 }
 
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
+
+    if (op->name == "__shared") {
+        // Already handled
+        op->body.accept(this);
+    } else {
+        open_scope();
+
+        debug(2) << "Allocate " << op->name << " on device\n";
+
+        debug(3) << "Pushing allocation called " << op->name << " onto the symbol table\n";
+
+        // Allocation is not a shared memory allocation, just make a local declaration.
+        // It must have a constant size.
+        int32_t size;
+        bool is_constant = constant_allocation_size(op->extents, op->name, size);
+        user_assert(is_constant)
+            << "Allocation " << op->name << " has a dynamic size. "
+            << "Only fixed-size allocations are supported on the gpu. "
+            << "Try storing into shared memory instead.";
+
+        do_indent();
+        stream << print_type(op->type) << ' '
+               << print_name(op->name) << "[" << size << "];\n";
+
+        allocations.push(op->name, op->type);
+        internal_allocations.push(op->name, 0);
+
+        op->body.accept(this);
+
+        internal_allocations.pop(op->name);
+        // Should have been freed internally
+        internal_assert(!allocations.contains(op->name));
+
+        close_scope("alloc " + print_name(op->name));
+    }
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
+    if (op->name == "__shared") {
+        return;
+    } else {
+        // Should have been freed internally
+        internal_assert(allocations.contains(op->name));
+        allocations.pop(op->name);
+    }
+}
+
+
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
-    debug(0) << "hi CodeGen_OpenCL_Dev::compile! " << name << "\n";
+    debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
     cur_kernel_name = name;
-    clc->add_kernel(s, name, args);
+    clc.add_kernel(s, name, args);
 }
 
 namespace {
@@ -295,9 +363,7 @@ const string kernel_preamble = "";
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
-    cache.clear();
-
-    debug(0) << "hi! " << name << "\n";
+    debug(2) << "Adding OpenCL kernel " << name << "\n";
 
     stream << kernel_preamble;
 
@@ -314,27 +380,30 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
                    << " "
                    << print_name(args[i].name);
         }
+        kernel_arguments.push(args[i].name, args[i].type);
 
         if (i < args.size()-1) stream << ",\n";
     }
-    stream << ",\n" << "__local uchar* shared";
+    stream << ",\n" << "__local ulong* __shared";
 
-    stream << ") {\n";
+    stream << ")\n";
 
+    open_scope();
     print(s);
+    close_scope("kernel " + name);
 
-    stream << "}\n";
-
-    // Remove buffer arguments from allocation scope
     for (size_t i = 0; i < args.size(); i++) {
+        // Remove buffer arguments from allocation scope
         if (args[i].is_buffer) {
             allocations.pop(args[i].name);
         }
+        // Remove kernel arguments from scope.
+        kernel_arguments.pop(args[i].name);
     }
 }
 
 void CodeGen_OpenCL_Dev::init_module() {
-    debug(0) << "OpenCL device codegen init_module\n";
+    debug(2) << "OpenCL device codegen init_module\n";
 
     // wipe the internal kernel source
     src_stream.str("");
@@ -355,6 +424,8 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float neg_inf_f32() { return -INFINITY; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
+               << "#define mod(a, b) (((a % b) < 0) ? ((a % b) + b) : (a % b))\n"
+               << "#define sdiv(a, b) ((a - mod(a, b))/b)\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -375,7 +446,11 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define cosh_f32 cosh \n"
                << "#define acosh_f32 acosh \n"
                << "#define tanh_f32 tanh \n"
-               << "#define atanh_f32 atanh \n";
+               << "#define atanh_f32 atanh \n"
+               << "int halide_gpu_thread_barrier() {\n"
+               << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
+               << "  return 0;\n"
+               << "}\n";
 
 #ifdef ENABLE_CL_KHR_FP64
     src_stream << "#define sqrt_f64 sqrt\n"
@@ -412,6 +487,7 @@ void CodeGen_OpenCL_Dev::init_module() {
 
 vector<char> CodeGen_OpenCL_Dev::compile_to_src() {
     string str = src_stream.str();
+    debug(1) << "OpenCL kernel:\n" << str << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

@@ -37,6 +37,8 @@
 #include "ExprUsesVar.h"
 #include "FindCalls.h"
 #include "InjectOpenGLIntrinsics.h"
+#include "FuseGPUThreadLoops.h"
+#include "InjectHostDevBufferCopies.h"
 #include "Caching.h"
 
 namespace Halide {
@@ -101,45 +103,64 @@ Stmt build_provide_loop_nest(Function f,
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
     // First hunt through the bounds for them.
-    for (size_t i = 0; i < s.bounds.size(); i++) {
-        known_size_dims[s.bounds[i].var] = s.bounds[i].extent;
+    for (size_t i = 0; i < s.bounds().size(); i++) {
+        known_size_dims[s.bounds()[i].var] = s.bounds()[i].extent;
     }
 
-    vector<Schedule::Split> splits = s.splits;
+    vector<Split> splits = s.splits();
 
     // Rebalance the split tree to make the outermost split first.
     for (size_t i = 0; i < splits.size(); i++) {
         for (size_t j = i+1; j < splits.size(); j++) {
 
-            // Given two splits:
-            // X  ->  a * Xo  + Xi
-            // (splits stuff other than Xo, including Xi)
-            // Xo ->  b * Xoo + Xoi
-
-            // Re-write to:
-            // X  -> ab * Xoo + s0
-            // s0 ->  a * Xoi + Xi
-            // (splits on stuff other than Xo, including Xi)
-
-            // The name Xo went away, because it was legal for it to
-            // be X before, but not after.
-
-            Schedule::Split &first = splits[i];
-            Schedule::Split &second = splits[j];
+            Split &first = splits[i];
+            Split &second = splits[j];
             if (first.outer == second.old_var) {
                 internal_assert(!second.is_rename())
                     << "Rename of derived variable found in splits list. This should never happen.";
-                second.old_var = unique_name('s');
-                first.outer   = second.outer;
-                second.outer  = second.inner;
-                second.inner  = first.inner;
-                first.inner   = second.old_var;
-                Expr f = simplify(first.factor * second.factor);
-                second.factor = first.factor;
-                first.factor  = f;
-                // Push the second split back to just after the first
-                for (size_t k = j; k > i+1; k--) {
-                    std::swap(splits[k], splits[k-1]);
+
+                if (first.is_rename()) {
+                    // Given a rename:
+                    // X -> Y
+                    // And a split:
+                    // Y -> f * Z + W
+                    // Coalesce into:
+                    // X -> f * Z + W
+                    second.old_var = first.old_var;
+                    // Drop first entirely
+                    for (size_t k = i; k < splits.size()-1; k++) {
+                        splits[k] = splits[k+1];
+                    }
+                    splits.pop_back();
+                    // Start processing this split from scratch,
+                    // because we just clobbered it.
+                    j = i+1;
+                } else {
+                    // Given two splits:
+                    // X  ->  a * Xo  + Xi
+                    // (splits stuff other than Xo, including Xi)
+                    // Xo ->  b * Xoo + Xoi
+
+                    // Re-write to:
+                    // X  -> ab * Xoo + s0
+                    // s0 ->  a * Xoi + Xi
+                    // (splits on stuff other than Xo, including Xi)
+
+                    // The name Xo went away, because it was legal for it to
+                    // be X before, but not after.
+
+                    second.old_var = unique_name('s');
+                    first.outer   = second.outer;
+                    second.outer  = second.inner;
+                    second.inner  = first.inner;
+                    first.inner   = second.old_var;
+                    Expr f = simplify(first.factor * second.factor);
+                    second.factor = first.factor;
+                    first.factor  = f;
+                    // Push the second split back to just after the first
+                    for (size_t k = j; k > i+1; k--) {
+                        std::swap(splits[k], splits[k-1]);
+                    }
                 }
             }
         }
@@ -148,7 +169,7 @@ Stmt build_provide_loop_nest(Function f,
     // Define the function args in terms of the loop variables using the splits
     map<string, pair<string, Expr> > base_values;
     for (size_t i = 0; i < splits.size(); i++) {
-        const Schedule::Split &split = splits[i];
+        const Split &split = splits[i];
         Expr outer = Variable::make(Int(32), prefix + split.outer);
         if (split.is_split()) {
             Expr inner = Variable::make(Int(32), prefix + split.inner);
@@ -207,8 +228,8 @@ Stmt build_provide_loop_nest(Function f,
     vector<Container> nest;
 
     // Put the desired loop nest into the containers vector.
-    for (int i = (int)s.dims.size() - 1; i >= 0; i--) {
-        const Schedule::Dim &dim = s.dims[i];
+    for (int i = (int)s.dims().size() - 1; i >= 0; i--) {
+        const Dim &dim = s.dims()[i];
         Container c = {i, prefix + dim.var, Expr()};
         nest.push_back(c);
     }
@@ -222,7 +243,7 @@ Stmt build_provide_loop_nest(Function f,
 
     // Resort the containers vector so that lets are as far outwards
     // as possible. Use reverse insertion sort. Start at the first letstmt.
-    for (int i = (int)s.dims.size(); i < (int)nest.size(); i++) {
+    for (int i = (int)s.dims().size(); i < (int)nest.size(); i++) {
         // Only push up LetStmts.
         internal_assert(nest[i].value.defined());
 
@@ -242,27 +263,17 @@ Stmt build_provide_loop_nest(Function f,
         if (nest[i].value.defined()) {
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
         } else {
-            const Schedule::Dim &dim = s.dims[nest[i].dim_idx];
+            const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
             stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
         }
     }
 
-    /*
-    // Build the loop nest
-    for (size_t i = 0; i < s.dims.size(); i++) {
-        const Schedule::Dim &dim = s.dims[i];
-        Expr min = Variable::make(Int(32), prefix + dim.var + ".loop_min");
-        Expr extent = Variable::make(Int(32), prefix + dim.var + ".loop_extent");
-        stmt = For::make(prefix + dim.var, min, extent, dim.for_type, stmt);
-    }
-    */
-
     // Define the bounds on the split dimensions using the bounds
     // on the function args
     for (size_t i = splits.size(); i > 0; i--) {
-        const Schedule::Split &split = splits[i-1];
+        const Split &split = splits[i-1];
         Expr old_var_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
         Expr old_var_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
         Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
@@ -301,6 +312,32 @@ Stmt build_provide_loop_nest(Function f,
                              stmt);
         stmt = LetStmt::make(var + ".loop_min", min, stmt);
         stmt = LetStmt::make(var + ".loop_max", max, stmt);
+    }
+
+    // Make any specialized copies
+    for (size_t i = s.specializations().size(); i > 0; i--) {
+        Expr c = s.specializations()[i-1].condition;
+        Schedule sched = s.specializations()[i-1].schedule;
+        const EQ *eq = c.as<EQ>();
+        const Variable *var = eq ? eq->a.as<Variable>() : c.as<Variable>();
+
+        Stmt then_case =
+            build_provide_loop_nest(f, prefix, site, values, sched, is_update);
+
+        if (var && eq) {
+            then_case = simplify_exprs(substitute(var->name, eq->b, then_case));
+            Stmt else_case = stmt;
+            if (eq->b.type().is_bool()) {
+                else_case = simplify_exprs(substitute(var->name, !eq->b, else_case));
+            }
+            stmt = IfThenElse::make(c, then_case, else_case);
+        } else if (var) {
+            then_case = simplify_exprs(substitute(var->name, const_true(), then_case));
+            Stmt else_case = simplify_exprs(substitute(var->name, const_false(), stmt));
+            stmt = IfThenElse::make(c, then_case, else_case);
+        } else {
+            stmt = IfThenElse::make(c, then_case, stmt);
+        }
     }
 
     return stmt;
@@ -362,7 +399,7 @@ Stmt build_produce(Function f) {
         // already injected by allocation bounds inference. If it's
         // the output to the pipeline then it will similarly be in the
         // symbol table.
-        if (f.schedule().store_level == f.schedule().compute_level) {
+        if (f.schedule().store_level() == f.schedule().compute_level()) {
             for (int j = 0; j < f.outputs(); j++) {
                 string buf_name = f.name();
                 if (f.outputs() > 1) {
@@ -513,8 +550,8 @@ pair<Stmt, Stmt> build_production(Function func) {
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     const Schedule &s = func.schedule();
     for (size_t stage = 0; stage <= func.reductions().size(); stage++) {
-        for (size_t i = 0; i < s.bounds.size(); i++) {
-            Schedule::Bound b = s.bounds[i];
+        for (size_t i = 0; i < s.bounds().size(); i++) {
+            Bound b = s.bounds()[i];
             Expr max_val = (b.extent + b.min) - 1;
             Expr min_val = b.min;
             string prefix = func.name() + ".s" + int_to_string(stage) + "." + b.var;
@@ -635,8 +672,8 @@ private:
 
     void visit(const For *for_loop) {
         debug(3) << "InjectRealization of " << func.name() << " entering for loop over " << for_loop->name << "\n";
-        const Schedule::LoopLevel &compute_level = func.schedule().compute_level;
-        const Schedule::LoopLevel &store_level = func.schedule().store_level;
+        const LoopLevel &compute_level = func.schedule().compute_level();
+        const LoopLevel &store_level = func.schedule().store_level();
 
         Stmt body = for_loop->body;
 
@@ -649,7 +686,7 @@ private:
 
         // Can't schedule extern things inside a vector for loop
         if (func.has_extern_definition() &&
-            func.schedule().compute_level.is_inline() &&
+            func.schedule().compute_level().is_inline() &&
             for_loop->for_type == For::Vectorized &&
             function_is_used_in_stmt(func, for_loop)) {
 
@@ -702,7 +739,7 @@ private:
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
             !func.is_pure() &&
-            func.schedule().compute_level.is_inline() &&
+            func.schedule().compute_level().is_inline() &&
             function_is_used_in_stmt(func, op)) {
 
             // Prefix all calls to func in op
@@ -827,14 +864,18 @@ Stmt create_initial_loop_nest(Function f, const Target &t) {
 
 class ComputeLegalSchedules : public IRVisitor {
 public:
-    vector<Schedule::LoopLevel> loops_allowed;
+    struct Site {
+        bool is_parallel;
+        LoopLevel loop_level;
+    };
+    vector<Site> sites_allowed;
 
     ComputeLegalSchedules(Function f) : func(f), found(false) {}
 
 private:
     using IRVisitor::visit;
 
-    vector<Schedule::LoopLevel> loops;
+    vector<Site> sites;
     Function func;
     bool found;
 
@@ -846,21 +887,30 @@ private:
         internal_assert(first_dot != string::npos && last_dot != string::npos);
         string func = f->name.substr(0, first_dot);
         string var = f->name.substr(last_dot + 1);
-        loops.push_back(Schedule::LoopLevel(func, var));
+        Site s = {f->for_type == For::Parallel ||
+                  f->for_type == For::Vectorized,
+                  LoopLevel(func, var)};
+        sites.push_back(s);
         f->body.accept(this);
-        loops.pop_back();
+        sites.pop_back();
     }
 
     void register_use() {
         if (!found) {
             found = true;
-            loops_allowed = loops;
+            sites_allowed = sites;
         } else {
-            // Take the common prefix between loops and loops allowed
-            for (size_t i = 0; i < loops_allowed.size(); i++) {
-                if (i >= loops.size() || !loops[i].match(loops_allowed[i])) {
-                    loops_allowed.resize(i);
-                    break;
+            // Take the common sites between loops and loops allowed
+            for (size_t i = 0; i < sites_allowed.size(); i++) {
+                bool ok = false;
+                for (size_t j = 0; j < sites.size(); j++) {
+                    if (sites_allowed[i].loop_level.match(sites[j].loop_level)) {
+                        ok = true;
+                    }
+                }
+                if (!ok) {
+                    sites_allowed[i] = sites_allowed.back();
+                    sites_allowed.pop_back();
                 }
             }
         }
@@ -884,8 +934,8 @@ private:
 };
 
 string schedule_to_source(Function f,
-                          Schedule::LoopLevel store_at,
-                          Schedule::LoopLevel compute_at) {
+                          LoopLevel store_at,
+                          LoopLevel compute_at) {
     std::ostringstream ss;
     ss << f.name();
     if (compute_at.is_inline()) {
@@ -916,7 +966,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
             ExternFuncArgument arg = f.extern_arguments()[i];
             if (arg.is_func()) {
                 Function g(arg.func);
-                if (g.schedule().compute_level.is_inline()) {
+                if (g.schedule().compute_level().is_inline()) {
                     user_error
                         << "Function " << g.name() << " cannot be scheduled to be computed inline, "
                         << "because it is used in the externally-computed function " << f.name() << "\n";
@@ -926,15 +976,15 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
     }
 
     // Emit a warning if only some of the steps have been scheduled.
-    bool any_scheduled = f.schedule().touched;
+    bool any_scheduled = f.schedule().touched();
     for (size_t i = 0; i < f.reductions().size(); i++) {
         const ReductionDefinition &r = f.reductions()[i];
-        any_scheduled = any_scheduled || r.schedule.touched;
+        any_scheduled = any_scheduled || r.schedule.touched();
     }
     if (any_scheduled) {
         for (size_t i = 0; i < f.reductions().size(); i++) {
             const ReductionDefinition &r = f.reductions()[i];
-            if (!r.schedule.touched) {
+            if (!r.schedule.touched()) {
                 std::cerr << "Warning: Update step " << i
                           << " of function " << f.name()
                           << " has not been scheduled, even though some other"
@@ -956,7 +1006,7 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
 
         const vector<ReductionVariable> &rvars = r.domain.domain();
-        const vector<Schedule::Dim> &dims = r.schedule.dims;
+        const vector<Dim> &dims = r.schedule.dims();
 
         // Look for the rvars in order
         size_t next = 0;
@@ -983,8 +1033,8 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
     }
 
-    Schedule::LoopLevel store_at = f.schedule().store_level;
-    Schedule::LoopLevel compute_at = f.schedule().compute_level;
+    LoopLevel store_at = f.schedule().store_level();
+    LoopLevel compute_at = f.schedule().compute_level();
     // Inlining is always allowed
     if (store_at.is_inline() && compute_at.is_inline()) {
         return;
@@ -1005,24 +1055,43 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
     s.accept(&legal);
 
     bool store_at_ok = false, compute_at_ok = false;
-    const vector<Schedule::LoopLevel> &loops = legal.loops_allowed;
-    for (size_t i = 0; i < loops.size(); i++) {
-        if (loops[i].match(store_at)) {
+    const vector<ComputeLegalSchedules::Site> &sites = legal.sites_allowed;
+    size_t store_idx = 0, compute_idx = 0;
+    for (size_t i = 0; i < sites.size(); i++) {
+        if (sites[i].loop_level.match(store_at)) {
             store_at_ok = true;
+            store_idx = i;
         }
-        if (loops[i].match(compute_at)) {
+        if (sites[i].loop_level.match(compute_at)) {
             compute_at_ok = store_at_ok;
+            compute_idx = i;
+        }
+    }
+
+    // Check there isn't a parallel loop between the compute_at and the store_at
+    std::ostringstream err;
+
+    if (store_at_ok && compute_at_ok) {
+        for (size_t i = store_idx + 1; i <= compute_idx; i++) {
+            if (sites[i].is_parallel) {
+                err << "Function \"" << f.name()
+                    << "\" is stored outside the parallel loop over "
+                    << sites[i].loop_level.func << "." << sites[i].loop_level.var
+                    << " but computed within it. This is a potential race condition.\n";
+                store_at_ok = compute_at_ok = false;
+            }
         }
     }
 
     if (!store_at_ok || !compute_at_ok) {
-        std::ostringstream err;
-        err << "Function " << f.name() << " is computed and stored in the following invalid location:\n"
+        err << "Function \"" << f.name() << "\" is computed and stored in the following invalid location:\n"
             << schedule_to_source(f, store_at, compute_at) << "\n"
             << "Legal locations for this function are:\n";
-        for (size_t i = 0; i < loops.size(); i++) {
-            for (size_t j = i; j < loops.size(); j++) {
-                err << schedule_to_source(f, loops[i], loops[j]) << "\n";
+        for (size_t i = 0; i < sites.size(); i++) {
+            for (size_t j = i; j < sites.size(); j++) {
+                if (j > i && sites[j].is_parallel) break;
+                err << schedule_to_source(f, sites[i].loop_level, sites[j].loop_level) << "\n";
+
             }
         }
         user_error << err.str();
@@ -1034,7 +1103,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
                         const map<string, set<string> > &graph, const Target &t) {
 
     // Inject a loop over root to give us a scheduling point
-    string root_var = Schedule::LoopLevel::root().func + "." + Schedule::LoopLevel::root().var;
+    string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
     s = For::make(root_var, 0, 1, For::Serial, s);
 
     for (size_t i = order.size(); i > 0; i--) {
@@ -1047,7 +1116,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
         if (f.has_pure_definition() &&
             !f.has_reduction_definition() &&
-            f.schedule().compute_level.is_inline()) {
+            f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
         } else {
@@ -1258,8 +1327,13 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error_msg.str(), vec<Expr>(elem_size)));
         }
 
+        if (touched.used.defined()) {
+            debug(3) << "Image " << name << " is only used when " << touched.used << "\n";
+        }
+
         // Check that the region passed in (after applying constraints) is within the region used
         debug(3) << "In image " << name << " region touched is:\n";
+
 
         for (int j = 0; j < dimensions; j++) {
             string dim = int_to_string(j);
@@ -1277,6 +1351,12 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
+
+            if (touched.used.defined()) {
+                min_required = select(touched.used, min_required, actual_min);
+                extent_required = select(touched.used, extent_required, actual_extent);
+            }
+
             string error_msg_extent = error_name + " is accessed at %d, which is beyond the max (%d) in dimension " + dim;
             string error_msg_min = error_name + " is accessed at %d, which is before the min (%d) in dimension " + dim;
 
@@ -1291,8 +1371,13 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 
             asserts_required.push_back(AssertStmt::make(actual_min <= min_required_var, error_msg_min,
                                                         vec<Expr>(min_required_var, actual_min)));
+
             Expr actual_max = actual_min + actual_extent - 1;
             Expr max_required = min_required_var + extent_required_var - 1;
+
+            if (touched.used.defined()) {
+                max_required = select(touched.used, max_required, actual_max);
+            }
             asserts_required.push_back(AssertStmt::make(actual_max >= max_required,
                                                         error_msg_extent,
                                                         vec<Expr>(max_required, actual_max)));
@@ -1624,16 +1709,27 @@ Stmt lower(Function f, const Target &t) {
     s = skip_stages(s, order);
     debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
 
-    Scope<int> need_buffer_t;
     if (t.features & Target::OpenGL) {
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
-        s = inject_opengl_intrinsics(s, need_buffer_t);
+        s = inject_opengl_intrinsics(s);
         debug(2) << "OpenGL intrinsics: \n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env, need_buffer_t);
+    s = storage_flattening(s, env);
     debug(2) << "Storage flattening: \n" << s << "\n\n";
+
+    if (t.has_gpu_feature() || t.features & Target::OpenGL) {
+        debug(1) << "Injecting host <-> dev buffer copies...\n";
+        s = inject_host_dev_buffer_copies(s);
+        debug(2) << "Injected host <-> dev buffer copies:\n" << s << "\n\n";
+    }
+
+    if (t.has_gpu_feature()) {
+        debug(1) << "Injecting per-block gpu synchronization...\n";
+        s = fuse_gpu_thread_loops(s);
+        debug(2) << "Injected per-block gpu synchronization:\n" << s << "\n\n";
+    }
 
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
@@ -1673,6 +1769,12 @@ Stmt lower(Function f, const Target &t) {
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
     debug(2) << "Injected early frees: \n" << s << "\n\n";
+
+    if (t.has_gpu_feature()) {
+        debug(1) << "Injecting device frees...\n";
+        s = inject_dev_frees(s);
+        debug(2) << "Injected device frees: \n" << s << "\n\n";
+    }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);

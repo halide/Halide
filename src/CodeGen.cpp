@@ -1542,6 +1542,18 @@ void CodeGen::visit(const Call *op) {
 
             // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
+        } else if (op->name == Call::set_host_dirty) {
+            internal_assert(op->args.size() == 2);
+            Value *buffer = codegen(op->args[0]);
+            Value *arg = codegen(op->args[1]);
+            builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+            value = ConstantInt::get(i32, 0);
+        } else if (op->name == Call::set_dev_dirty) {
+            internal_assert(op->args.size() == 2);
+            Value *buffer = codegen(op->args[0]);
+            Value *arg = codegen(op->args[1]);
+            builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+            value = ConstantInt::get(i32, 0);
         } else if (op->name == Call::null_handle) {
             internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
             internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
@@ -1761,7 +1773,7 @@ void CodeGen::visit(const Call *op) {
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
             // fixed params (not varags) in llvm function.
-            // Funntions which take a user context have it added below so the
+            // Functions which take a user context have it added below so the
             // llvm function argument indexing is one greater in that case.
             size_t llvm_arg_offset = function_takes_user_context(op->name) ? 1 : 0;
             FunctionType *func_t = fn->getFunctionType();
@@ -1797,25 +1809,20 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
+        // We also have several impure runtime functions that do not
+        // take a handle.
+        if (op->name == "halide_current_time_ns" ||
+            op->name == "halide_gpu_thread_barrier") {
+            pure = false;
+        }
+
         // Add a user context arg as needed. It's never a vector.
         if (function_takes_user_context(op->name)) {
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
 
-        // TODO: Need a general solution here to side-effecty functions
-        if (op->name == "halide_current_time_ns") {
-            internal_assert(op->args.size() == 0);
-            debug(4) << "Creating scalar call to " << op->name << "\n";
-            CallInst *call = builder->CreateCall(fn, get_user_context());
-            value = call;
-        } else if (op->name == "rand_i32" || op->name == "rand_f32") {
-            internal_assert(op->args.size() == 1);
-            debug(4) << "Creating scalar call to " << op->name << "\n";
-            Value *arg = codegen(op->args[0]);
-            CallInst *call = builder->CreateCall2(fn, get_user_context(), arg);
-            value = call;
-        } else if (op->type.is_scalar()) {
+        if (op->type.is_scalar()) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
             if (pure) {
@@ -2044,7 +2051,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t_type);
+        Closure closure = Closure::make(op->body, op->name, buffer_t_type);
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
