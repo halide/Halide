@@ -201,7 +201,7 @@ enum GPUAPI {
 /** A temporary wrapper around a schedule used for common schedule manipulations */
 class ScheduleHandle {
     Internal::Schedule schedule;
-    void set_dim_type(Var var, Internal::For::ForType t);
+    void set_dim_type(VarOrRVar var, Internal::For::ForType t);
     std::string dump_argument_list();
 public:
     ScheduleHandle(Internal::Schedule s) : schedule(s) {s.touched();}
@@ -212,10 +212,10 @@ public:
 
     EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
     EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
-    EXPORT ScheduleHandle &serial(Var var);
-    EXPORT ScheduleHandle &parallel(Var var);
-    EXPORT ScheduleHandle &vectorize(Var var);
-    EXPORT ScheduleHandle &unroll(Var var);
+    EXPORT ScheduleHandle &serial(VarOrRVar var);
+    EXPORT ScheduleHandle &parallel(VarOrRVar var);
+    EXPORT ScheduleHandle &vectorize(VarOrRVar var);
+    EXPORT ScheduleHandle &unroll(VarOrRVar var);
     EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
     EXPORT ScheduleHandle &vectorize(Var var, int factor);
     EXPORT ScheduleHandle &unroll(Var var, int factor);
@@ -802,12 +802,11 @@ public:
      * outer dimensions given. */
     EXPORT Func &fuse(Var inner, Var outer, Var fused);
 
-
     /** Mark a dimension to be traversed serially. This is the default. */
-    EXPORT Func &serial(Var var);
+    EXPORT Func &serial(VarOrRVar var);
 
     /** Mark a dimension to be traversed in parallel */
-    EXPORT Func &parallel(Var var);
+    EXPORT Func &parallel(VarOrRVar var);
 
     /** Split a dimension by the given task_size, and the parallelize the
      * outer dimension. This creates parallel tasks that have size
@@ -823,13 +822,13 @@ public:
      * constant factor. For most uses of vectorize you want the two
      * argument form. The variable to be vectorized should be the
      * innermost one. */
-    EXPORT Func &vectorize(Var var);
+    EXPORT Func &vectorize(VarOrRVar var);
 
     /** Mark a dimension to be completely unrolled. The dimension
      * should have constant extent - e.g. because it is the inner
      * dimension following a split by a constant factor. For most uses
      * of unroll you want the two-argument form. */
-    EXPORT Func &unroll(Var var);
+    EXPORT Func &unroll(VarOrRVar var);
 
     /** Split a dimension by the given factor, then vectorize the
      * inner dimension. This is how you vectorize a loop of unknown

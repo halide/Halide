@@ -358,7 +358,15 @@ bool var_name_match(string candidate, string var) {
 }
 }
 
-void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
+void ScheduleHandle::set_dim_type(VarOrRVar var, For::ForType t) {
+    // If it's an rvar and the for type is parallel, we need to
+    // validate that this doesn't introduce a race condition.
+    if (var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+        user_warning << "Marking var " << var.name()
+                     << " as parallel or vectorized may introduce a race"
+                     << " condition resulting in incorrect output.\n";
+    }
+
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
@@ -555,22 +563,22 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::serial(Var var) {
+ScheduleHandle &ScheduleHandle::serial(VarOrRVar var) {
     set_dim_type(var, For::Serial);
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::parallel(Var var) {
+ScheduleHandle &ScheduleHandle::parallel(VarOrRVar var) {
     set_dim_type(var, For::Parallel);
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::vectorize(Var var) {
+ScheduleHandle &ScheduleHandle::vectorize(VarOrRVar var) {
     set_dim_type(var, For::Vectorized);
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::unroll(Var var) {
+ScheduleHandle &ScheduleHandle::unroll(VarOrRVar var) {
     set_dim_type(var, For::Unrolled);
     return *this;
 }
@@ -818,22 +826,22 @@ ScheduleHandle Func::specialize(Expr c) {
     return ScheduleHandle(func.schedule()).specialize(c);
 }
 
-Func &Func::serial(Var var) {
+Func &Func::serial(VarOrRVar var) {
     ScheduleHandle(func.schedule()).serial(var);
     return *this;
 }
 
-Func &Func::parallel(Var var) {
+Func &Func::parallel(VarOrRVar var) {
     ScheduleHandle(func.schedule()).parallel(var);
     return *this;
 }
 
-Func &Func::vectorize(Var var) {
+Func &Func::vectorize(VarOrRVar var) {
     ScheduleHandle(func.schedule()).vectorize(var);
     return *this;
 }
 
-Func &Func::unroll(Var var) {
+Func &Func::unroll(VarOrRVar var) {
     ScheduleHandle(func.schedule()).unroll(var);
     return *this;
 }
