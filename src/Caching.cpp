@@ -357,7 +357,7 @@ private:
     void visit(const Pipeline *op) {
         std::map<std::string, Function>::const_iterator f = env.find(op->name);
         if (f != env.end() &&
-            f->second.schedule().cached) {
+            f->second.schedule().cached()) {
             Stmt produce = mutate(op->produce);
             Stmt update = mutate(op->update);
             Stmt consume = mutate(op->consume);

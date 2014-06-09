@@ -1088,9 +1088,9 @@ Func &Func::compute_root() {
 }
 
 Func &Func::compute_cached() {
-    func.schedule().compute_level = Schedule::LoopLevel::root();
-    func.schedule().store_level = Schedule::LoopLevel::root();
-    func.schedule().cached = true;
+    func.schedule().compute_level() = LoopLevel::root();
+    func.schedule().store_level() = LoopLevel::root();
+    func.schedule().cached() = true;
     return *this;
 }
 
