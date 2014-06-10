@@ -9,6 +9,7 @@
 #include "Introspection.h"
 #include "IRPrinter.h"
 #include "IRMutator.h"
+#include "ParallelRVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -331,7 +332,15 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // First add any reduction domain
     if (r.domain.defined()) {
         for (size_t i = 0; i < r.domain.domain().size(); i++) {
-            Dim d = {r.domain.domain()[i].var, For::Serial};
+            // Is this RVar actually pure (safe to parallelize and
+            // reorder)? It's pure if one value of the RVar can never
+            // access from the same memory that another RVar is
+            // writing to.
+            const string &v = r.domain.domain()[i].var;
+
+            bool pure = can_parallelize_rvar(v, name(), r);
+
+            Dim d = {v, For::Serial, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -339,7 +348,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], For::Serial};
+            Dim d = {pure_args[i], For::Serial, true};
             r.schedule.dims().push_back(d);
         }
     }
