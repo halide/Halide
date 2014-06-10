@@ -309,6 +309,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     r.args = args;
     r.values = values;
     r.domain = check.reduction_domain;
+    r.schedule.set_reduction_domain(r.domain);
 
     // The reduction value and args probably refer back to the
     // function itself, introducing circular references and hence

@@ -9,7 +9,7 @@ using std::string;
 using std::vector;
 
 RVar::operator Expr() const {
-    return Internal::Variable::make(Int(32), name(), domain);
+    return Internal::Variable::make(Int(32), name(), domain());
 }
 
 Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
