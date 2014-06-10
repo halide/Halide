@@ -1006,15 +1006,18 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         const vector<ReductionVariable> &rvars = r.domain.domain();
         const vector<Dim> &dims = r.schedule.dims();
 
-        // Look for the rvars in order
-        size_t next = 0;
-        for (size_t j = 0; j < dims.size() && next < rvars.size(); j++) {
-            if (rvars[next].var == dims[j].var) {
-                next++;
+        // Match each impure var to an rvar
+        size_t rvar_idx = 0;
+        for (size_t j = 0; j < dims.size(); j++) {
+            if (dims[j].pure) continue;
+            for (; rvar_idx < rvars.size(); rvar_idx++) {
+                if (rvars[rvar_idx].var == dims[j].var) {
+                    break;
+                }
             }
         }
 
-        if (next != rvars.size()) {
+        if (rvar_idx == rvars.size()) {
             std::ostringstream err;
             err << "In function " << f.name() << " stage " << i
                 << ", the reduction variables have been illegally reordered.\n"
