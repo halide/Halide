@@ -166,6 +166,8 @@ string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf)
         return "__local";
     } else if (internal_allocations.contains(buf)) {
         return "__private";
+    } else if (constant_allocations.contains(buf)) {
+        return "__constant";
     } else {
         return "__global";
     }
@@ -359,19 +361,85 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> 
 }
 
 namespace {
-const string kernel_preamble = "";
+// Check to see if an expression is uniform within a workgroup.
+// This is done by checking to see if the expression depends on any GPU 
+// thread indices. 
+class IsExprWorkgroupUniform : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) {
+        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
+	    result = false;
+	}
+    }
+
+public:
+    bool result;
+
+    IsExprWarpUniform() : result(true) {
+    }
+};
+
+bool is_expr_warp_uniform(Expr e) {
+    IsExprWarpUniform v;
+    e.accept(&v);
+    return v.result;
 }
+
+// Check to see if a buffer is a candidate for constant memory storage.
+// A buffer is a candidate for constant memory if it is never written to,
+// and loads are uniform within the workgroup.
+class IsBufferConstant : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Store *op) {
+        if (op->name == buffer) {
+	    result = false;
+	}
+	if (result) {
+	    op->value.accept(this);
+	}
+    }
+
+    void visit(const Load *op) {
+        if (op->name == buffer && !is_expr_warp_uniform(op->index)) {
+	    result = false;
+	}
+	if (result) {
+            op->index.accept(this);
+	}
+    }
+public:
+
+    bool result;
+    const string &buffer;
+
+    IsBufferConstant(const string &b) : result(true), buffer(b) {
+    }
+};
+
+bool is_buffer_constant(Stmt s, const string &buffer) {
+    IsBufferConstant v(buffer);
+    s.accept(&v);
+    return v.result;
+}
+}
+
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     debug(2) << "Adding OpenCL kernel " << name << "\n";
-
-    stream << kernel_preamble;
 
     // Emit the function prototype
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << " __global " << print_type(args[i].type) << " *"
+	    if (is_buffer_constant(s, args[i].name)) {
+	        constant_allocations.push(args[i].name, 0);
+		stream << " __constant ";
+	    } else {
+	        stream << " __global ";
+	    }
+            stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
             allocations.push(args[i].name, args[i].type);
         } else {
@@ -396,6 +464,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
         // Remove buffer arguments from allocation scope
         if (args[i].is_buffer) {
             allocations.pop(args[i].name);
+	    if (constant_allocations.contains(args[i].name)) {
+		constant_allocations.pop(args[i].name);
+	    }
         }
         // Remove kernel arguments from scope.
         kernel_arguments.pop(args[i].name);
