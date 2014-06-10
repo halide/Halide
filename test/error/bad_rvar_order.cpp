@@ -9,10 +9,10 @@ int main(int argc, char **argv) {
     Func f("f");
     Var x, y;
     f(x, y) = x + y;
-    f(r1.x, r1.y) += r1.x * r1.y;
+    f(r1.x, r1.y) += f(r1.y, r1.x);
 
     // It's not permitted to change the relative ordering of reduction
-    // domain variables.
+    // domain variables when it could change the meaning.
     f.update().reorder(r1.y, r1.x);
 
     f.realize(10, 10);
