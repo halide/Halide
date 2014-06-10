@@ -483,9 +483,6 @@ void CodeGen_OpenCL_Dev::init_module() {
     // This identifies the program as OpenCL C (as opposed to SPIR).
     src_stream << "/*OpenCL C*/\n";
 
-    if ((target.features & Target::CLDoubles) != 0) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
-    }
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
@@ -523,29 +520,30 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "  return 0;\n"
                << "}\n";
 
-#ifdef ENABLE_CL_KHR_FP64
-    src_stream << "#define sqrt_f64 sqrt\n"
-               << "#define sin_f64 sin\n"
-               << "#define cos_f64 cos\n"
-               << "#define exp_f64 exp\n"
-               << "#define log_f64 log\n"
-               << "#define abs_f64 fabs\n"
-               << "#define floor_f64 floor\n"
-               << "#define ceil_f64 ceil\n"
-               << "#define round_f64 round\n"
-               << "#define pow_f64 pow\n"
-               << "#define asin_f64 asin\n"
-               << "#define acos_f64 acos\n"
-               << "#define tan_f64 tan\n"
-               << "#define atan_f64 atan\n"
-               << "#define atan2_f64 atan2\n"
-               << "#define sinh_f64 sinh\n"
-               << "#define asinh_f64 asinh\n"
-               << "#define cosh_f64 cosh\n"
-               << "#define acosh_f64 acosh\n"
-               << "#define tanh_f64 tanh\n"
-               << "#define atanh_f64 atanh\n";
-#endif
+    if ((target.features & Target::CLDoubles) != 0) {
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
+        src_stream << "#define sqrt_f64 sqrt\n"
+                   << "#define sin_f64 sin\n"
+                   << "#define cos_f64 cos\n"
+                   << "#define exp_f64 exp\n"
+                   << "#define log_f64 log\n"
+                   << "#define abs_f64 fabs\n"
+                   << "#define floor_f64 floor\n"
+                   << "#define ceil_f64 ceil\n"
+                   << "#define round_f64 round\n"
+                   << "#define pow_f64 pow\n"
+                   << "#define asin_f64 asin\n"
+                   << "#define acos_f64 acos\n"
+                   << "#define tan_f64 tan\n"
+                   << "#define atan_f64 atan\n"
+                   << "#define atan2_f64 atan2\n"
+                   << "#define sinh_f64 sinh\n"
+                   << "#define asinh_f64 asinh\n"
+                   << "#define cosh_f64 cosh\n"
+                   << "#define acosh_f64 acosh\n"
+                   << "#define tanh_f64 tanh\n"
+                   << "#define atanh_f64 atanh\n";
+    }
 
     src_stream << '\n';
 
