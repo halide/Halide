@@ -360,72 +360,6 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> 
     clc.add_kernel(s, name, args);
 }
 
-namespace {
-// Check to see if an expression is uniform within a workgroup.
-// This is done by checking to see if the expression depends on any GPU 
-// thread indices. 
-class IsExprWorkgroupUniform : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) {
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
-	    result = false;
-	}
-    }
-
-public:
-    bool result;
-
-    IsExprWarpUniform() : result(true) {
-    }
-};
-
-bool is_expr_warp_uniform(Expr e) {
-    IsExprWarpUniform v;
-    e.accept(&v);
-    return v.result;
-}
-
-// Check to see if a buffer is a candidate for constant memory storage.
-// A buffer is a candidate for constant memory if it is never written to,
-// and loads are uniform within the workgroup.
-class IsBufferConstant : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Store *op) {
-        if (op->name == buffer) {
-	    result = false;
-	}
-	if (result) {
-	    op->value.accept(this);
-	}
-    }
-
-    void visit(const Load *op) {
-        if (op->name == buffer && !is_expr_warp_uniform(op->index)) {
-	    result = false;
-	}
-	if (result) {
-            op->index.accept(this);
-	}
-    }
-public:
-
-    bool result;
-    const string &buffer;
-
-    IsBufferConstant(const string &b) : result(true), buffer(b) {
-    }
-};
-
-bool is_buffer_constant(Stmt s, const string &buffer) {
-    IsBufferConstant v(buffer);
-    s.accept(&v);
-    return v.result;
-}
-}
-
-
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
     debug(2) << "Adding OpenCL kernel " << name << "\n";
 
@@ -433,7 +367,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-	    if (is_buffer_constant(s, args[i].name)) {
+	    if (CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name)) {
 	        constant_allocations.push(args[i].name, 0);
 		stream << " __constant ";
 	    } else {
@@ -452,7 +386,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
 
         if (i < args.size()-1) stream << ",\n";
     }
-    stream << ",\n" << "__local ulong* __shared";
+    stream << ",\n" << " __local ulong* __shared";
 
     stream << ")\n";
 
