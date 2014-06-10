@@ -33,6 +33,14 @@ struct CodeGen_GPU_Dev {
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);
     static bool is_gpu_thread_var(const std::string &name);
+
+    /** Checks if expr is block uniform, i.e. does not depend on a thread
+     * var. */
+    static bool is_expr_block_uniform(Expr expr);
+    /** Checks if the buffer is a candidate for constant storage. Most
+     * GPUs (APIs) support a constant memory storage class that cannot be
+     * written to and performs well for block uniform accesses. */
+    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
 };
 
 }}
