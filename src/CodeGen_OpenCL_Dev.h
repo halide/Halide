@@ -62,6 +62,9 @@ protected:
 
         /** Tracks per-thread allocations. */
         Scope<int> internal_allocations;
+
+	/** Tracks allocations placed in __constant kernel arguments */
+	Scope<int> constant_allocations;
     };
 
     std::ostringstream src_stream;
