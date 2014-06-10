@@ -359,20 +359,21 @@ bool var_name_match(string candidate, string var) {
 }
 
 void ScheduleHandle::set_dim_type(VarOrRVar var, For::ForType t) {
-    // If it's an rvar and the for type is parallel, we need to
-    // validate that this doesn't introduce a race condition.
-    if (var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
-        user_warning << "Marking var " << var.name()
-                     << " as parallel or vectorized may introduce a race"
-                     << " condition resulting in incorrect output.\n";
-    }
-
     bool found = false;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, var.name())) {
             found = true;
             dims[i].for_type = t;
+
+            // If it's an rvar and the for type is parallel, we need to
+            // validate that this doesn't introduce a race condition.
+            if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
+                user_warning << "Marking var " << var.name()
+                             << " as parallel or vectorized may introduce a race"
+                             << " condition resulting in incorrect output.\n";
+            }
+
         } else if (t == For::Vectorized) {
             user_assert(dims[i].for_type != For::Vectorized)
                 << "Can't vectorize across " << var.name()

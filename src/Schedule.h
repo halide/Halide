@@ -86,6 +86,7 @@ struct Split {
 struct Dim {
     std::string var;
     For::ForType for_type;
+    bool pure;
 };
 
 struct Bound {
