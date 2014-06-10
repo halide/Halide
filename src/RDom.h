@@ -25,8 +25,8 @@ public:
      * we can make vectors of RVars */
     RVar() {}
 
-    /** An undefined, but named reduction variable. This constructor only exists to
-     * improve error messages wneh an undefined RVar is used */
+    /** A named but undefined reduction variable. This constructor only exists
+     * to improve error messages when an undefined RVar is used */
     explicit RVar(const std::string _name) : _name(_name) {}
 
     /** Construct a reduction variable with the given name and
