@@ -1,5 +1,6 @@
 #include "IR.h"
 #include "Schedule.h"
+#include "Reduction.h"
 
 namespace Halide {
 namespace Internal {
@@ -16,6 +17,7 @@ struct ScheduleContents {
     std::vector<std::string> storage_dims;
     std::vector<Bound> bounds;
     std::vector<Specialization> specializations;
+    ReductionDomain reduction_domain;
     bool touched;
 
     ScheduleContents() : touched(false) {};
@@ -106,6 +108,14 @@ const LoopLevel &Schedule::compute_level() const {
     return contents.ptr->compute_level;
 }
 
+
+const ReductionDomain &Schedule::reduction_domain() const {
+    return contents.ptr->reduction_domain;
+}
+
+void Schedule::set_reduction_domain(const ReductionDomain &d) {
+    contents.ptr->reduction_domain = d;
+}
 
 }
 }

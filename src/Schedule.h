@@ -65,6 +65,7 @@ struct LoopLevel {
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
+    bool exact; // Is it required that the factor divides the extent of the old var. True for splits of RVars.
 
     enum SplitType {SplitVar = 0, RenameVar, FuseVars};
 
@@ -100,6 +101,8 @@ struct Specialization {
     Expr condition;
     IntrusivePtr<ScheduleContents> schedule;
 };
+
+class ReductionDomain;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
@@ -140,6 +143,12 @@ public:
     // @{
     const std::vector<Dim> &dims() const;
     std::vector<Dim> &dims();
+    // @}
+
+    /** Any reduction domain associated with this schedule. */
+    // @{
+    const ReductionDomain &reduction_domain() const;
+    void set_reduction_domain(const ReductionDomain &d);
     // @}
 
     /** The list and order of dimensions used to store this

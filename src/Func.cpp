@@ -400,50 +400,75 @@ std::string ScheduleHandle::dump_argument_list() {
     return oss.str();
 }
 
-ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor) {
+void ScheduleHandle::split(const string &old, const string &outer, const string &inner, Expr factor, bool exact) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string inner_name, outer_name, old_name;
     vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, old.name())) {
+        if (var_name_match(dims[i].var, old)) {
             found = true;
             old_name = dims[i].var;
-            inner_name = old_name + "." + inner.name();
-            outer_name = old_name + "." + outer.name();
+            inner_name = old_name + "." + inner;
+            outer_name = old_name + "." + outer;
             dims[i].var = inner_name;
             dims.push_back(dims[dims.size()-1]);
             for (size_t j = dims.size(); j > i+1; j--) {
                 dims[j-1] = dims[j-2];
             }
             dims[i+1].var = outer_name;
+            dims[i+1].pure = dims[i].pure;
         }
     }
 
     if (!found) {
         user_error << "Could not find split dimension in argument list: "
-                   << old.name()
+                   << old
                    << "\n"
                    << dump_argument_list();
     }
 
     // Add the split to the splits list
-    Split split = {old_name, outer_name, inner_name, factor, Split::SplitVar};
+    Split split = {old_name, outer_name, inner_name, factor, exact, Split::SplitVar};
     schedule.splits().push_back(split);
+}
+
+ScheduleHandle &ScheduleHandle::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor) {
+    if (old.is_rvar) {
+        user_assert(outer.is_rvar) << "Can't split RVar " << old.name() << " into Var " << outer.name() << "\n";
+        user_assert(inner.is_rvar) << "Can't split RVar " << old.name() << " into Var " << inner.name() << "\n";
+    } else {
+        user_assert(!outer.is_rvar) << "Can't split Var " << old.name() << " into RVar " << outer.name() << "\n";
+        user_assert(!inner.is_rvar) << "Can't split Var " << old.name() << " into RVar " << inner.name() << "\n";
+    }
+    split(old.name(), outer.name(), inner.name(), factor, old.is_rvar);
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
+    if (inner.is_rvar) {
+        user_assert(outer.is_rvar) << "Can't fuse RVar " << inner.name()
+                                   << " with Var " << outer.name() << "\n";
+        user_assert(fused.is_rvar) << "Can't fuse RVar " << inner.name()
+                                   << "into Var " << fused.name() << "\n";
+    } else {
+        user_assert(!outer.is_rvar) << "Can't fuse Var " << inner.name()
+                                    << " with RVar " << outer.name() << "\n";
+        user_assert(!fused.is_rvar) << "Can't fuse Var " << inner.name()
+                                    << "into RVar " << fused.name() << "\n";
+    }
 
-ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
     // Replace the old dimensions with the new dimension in the dims list
     bool found_outer = false, found_inner = false;
     string inner_name, outer_name, fused_name;
     vector<Dim> &dims = schedule.dims();
 
+    bool outer_pure = false;
     for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, outer.name())) {
             found_outer = true;
             outer_name = dims[i].var;
+            outer_pure = dims[i].pure;
             // Remove it
             for (size_t j = i; j < dims.size()-1; j++) {
                 dims[j] = dims[j+1];
@@ -464,6 +489,7 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
             inner_name = dims[i].var;
             fused_name = inner_name + "." + fused.name();
             dims[i].var = fused_name;
+            dims[i].pure &= outer_pure;
         }
     }
 
@@ -474,9 +500,8 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
                    << "\n";
     }
 
-
     // Add the fuse to the splits list
-    Split split = {fused_name, outer_name, inner_name, Expr(), Split::FuseVars};
+    Split split = {fused_name, outer_name, inner_name, Expr(), true, Split::FuseVars};
     schedule.splits().push_back(split);
     return *this;
 }
@@ -497,7 +522,15 @@ ScheduleHandle ScheduleHandle::specialize(Expr condition) {
     return ScheduleHandle(s.schedule);
 }
 
-ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
+ScheduleHandle &ScheduleHandle::rename(VarOrRVar old_var, VarOrRVar new_var) {
+    if (old_var.is_rvar) {
+        user_assert(new_var.is_rvar) << "Can't rename RVar " << old_var.name()
+                                     << " to Var " << new_var.name() << "\n";
+    } else {
+        user_assert(!new_var.is_rvar) << "Can't rename Var " << old_var.name()
+                                      << " to RVar " << new_var.name() << "\n";
+    }
+
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string old_name;
@@ -522,7 +555,7 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
 
     if (old_name.find('.') == string::npos) {
         // If it's a primitive name, add the rename to the splits list.
-        Split split = {old_name, new_name, "", 1, Split::RenameVar};
+        Split split = {old_name, new_name, "", 1, old_var.is_rvar, Split::RenameVar};
         schedule.splits().push_back(split);
     } else {
         // It's a derived name, so just rewrite the split or rename that defines it.
@@ -584,35 +617,58 @@ ScheduleHandle &ScheduleHandle::unroll(VarOrRVar var) {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::parallel(Var var, Expr factor) {
-    Var tmp;
-    split(var, var, tmp, factor);
+ScheduleHandle &ScheduleHandle::parallel(VarOrRVar var, Expr factor) {
+    if (var.is_rvar) {
+        RVar tmp;
+        split(var.rvar, var.rvar, tmp, factor);
+    } else {
+        Var tmp;
+        split(var.var, var.var, tmp, factor);
+    }
     parallel(var);
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::vectorize(Var var, int factor) {
-    Var tmp;
-    split(var, var, tmp, factor);
-    vectorize(tmp);
+ScheduleHandle &ScheduleHandle::vectorize(VarOrRVar var, int factor) {
+    if (var.is_rvar) {
+        RVar tmp;
+        split(var.rvar, var.rvar, tmp, factor);
+        vectorize(tmp);
+    } else {
+        Var tmp;
+        split(var.var, var.var, tmp, factor);
+        vectorize(tmp);
+    }
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::unroll(Var var, int factor) {
-    Var tmp;
-    split(var, var, tmp, factor);
-    unroll(tmp);
+ScheduleHandle &ScheduleHandle::unroll(VarOrRVar var, int factor) {
+    if (var.is_rvar) {
+        RVar tmp;
+        split(var.rvar, var.rvar, tmp, factor);
+        unroll(tmp);
+    } else {
+        Var tmp;
+        split(var.var, var.var, tmp, factor);
+        unroll(tmp);
+    }
+
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+ScheduleHandle &ScheduleHandle::tile(VarOrRVar x, VarOrRVar y,
+                                     VarOrRVar xo, VarOrRVar yo,
+                                     VarOrRVar xi, VarOrRVar yi,
+                                     Expr xfactor, Expr yfactor) {
     split(x, xo, xi, xfactor);
     split(y, yo, yi, yfactor);
     reorder(xi, yi, xo, yo);
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+ScheduleHandle &ScheduleHandle::tile(VarOrRVar x, VarOrRVar y,
+                                     VarOrRVar xi, VarOrRVar yi,
+                                     Expr xfactor, Expr yfactor) {
     split(x, x, xi, xfactor);
     split(y, y, yi, yfactor);
     reorder(xi, yi, x, y);
@@ -699,71 +755,72 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, V
     return reorder_vars(*this, vars, 10);
 }
 
-ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu_threads(VarOrRVar tx, GPUAPI /* gpu_api */) {
     parallel(tx);
-    rename(tx, Var("__thread_id_x"));
+    rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, GPUAPI /* gpu_api */) {
-    parallel(tx);
-    parallel(ty);
-    rename(tx, Var("__thread_id_x"));
-    rename(ty, Var("__thread_id_y"));
-    return *this;
-}
-
-ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, Var tz, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
-    parallel(tz);
-    rename(tx, Var("__thread_id_x"));
-    rename(ty, Var("__thread_id_y"));
-    rename(tz, Var("__thread_id_z"));
+    rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
+    rename(ty, VarOrRVar("__thread_id_y", tx.is_rvar));
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, GPUAPI /* gpu_api */) {
-    parallel(tx);
-    rename(tx, Var("__block_id_x"));
-    return *this;
-}
-
-ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, GPUAPI /* gpu_api */) {
-    parallel(tx);
-    parallel(ty);
-    rename(tx, Var("__block_id_x"));
-    rename(ty, Var("__block_id_y"));
-    return *this;
-}
-
-ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, Var tz, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     parallel(tz);
-    rename(tx, Var("__block_id_x"));
-    rename(ty, Var("__block_id_y"));
-    rename(tz, Var("__block_id_z"));
+    rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
+    rename(ty, VarOrRVar("__thread_id_y", tx.is_rvar));
+    rename(tz, VarOrRVar("__thread_id_z", tx.is_rvar));
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::gpu(Var bx, Var tx, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu_blocks(VarOrRVar tx, GPUAPI /* gpu_api */) {
+    parallel(tx);
+    rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::gpu_blocks(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
+    parallel(tx);
+    parallel(ty);
+    rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
+    rename(ty, VarOrRVar("__block_id_y", tx.is_rvar));
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu_api */) {
+    parallel(tx);
+    parallel(ty);
+    parallel(tz);
+    rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
+    rename(ty, VarOrRVar("__block_id_y", tx.is_rvar));
+    rename(tz, VarOrRVar("__block_id_z", tx.is_rvar));
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI /* gpu_api */) {
     return gpu_blocks(bx).gpu_threads(tx);
 }
 
-ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by,
-                                    Var tx, Var ty, GPUAPI /* gpu_api */) {
+ScheduleHandle &ScheduleHandle::gpu(VarOrRVar bx, VarOrRVar by,
+                                    VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
     return gpu_blocks(bx, by).gpu_threads(tx, ty);
 }
 
-ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by, Var bz,
-                                    Var tx, Var ty, Var tz,
+ScheduleHandle &ScheduleHandle::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
+                                    VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
 				    GPUAPI /* gpu_api */) {
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
-ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api */) {
-    Var bx("__block_id_x"), tx("__thread_id_x");
+ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, Expr x_size, GPUAPI /* gpu_api */) {
+    VarOrRVar bx("__block_id_x", x.is_rvar),
+        tx("__thread_id_x", x.is_rvar);
     split(x, bx, tx, x_size);
     parallel(bx);
     parallel(tx);
@@ -771,10 +828,13 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api *
 }
 
 
-ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
+ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, VarOrRVar y,
                                          Expr x_size, Expr y_size,
 					 GPUAPI /* gpu_api */) {
-    Var bx("__block_id_x"), by("__block_id_y"), tx("__thread_id_x"), ty("__thread_id_y");
+    VarOrRVar bx("__block_id_x", x.is_rvar),
+        by("__block_id_y", x.is_rvar),
+        tx("__thread_id_x", x.is_rvar),
+        ty("__thread_id_y", x.is_rvar);
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
     parallel(by);
@@ -783,11 +843,15 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
+ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                          Expr x_size, Expr y_size, Expr z_size,
 					 GPUAPI /* gpu_api */) {
-    Var bx("__block_id_x"), by("__block_id_y"), bz("__block_id_z"),
-        tx("__thread_id_x"), ty("__thread_id_y"), tz("__thread_id_z");
+    VarOrRVar bx("__block_id_x", x.is_rvar),
+        by("__block_id_y", x.is_rvar),
+        bz("__block_id_z", x.is_rvar),
+        tx("__thread_id_x", x.is_rvar),
+        ty("__thread_id_y", x.is_rvar),
+        tz("__thread_id_z", x.is_rvar);
     split(x, bx, tx, x_size);
     split(y, by, ty, y_size);
     split(z, bz, tz, z_size);
@@ -808,17 +872,17 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
     return *this;
 }
 
-Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
+Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor) {
     ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
     return *this;
 }
 
-Func &Func::fuse(Var inner, Var outer, Var fused) {
+Func &Func::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     ScheduleHandle(func.schedule()).fuse(inner, outer, fused);
     return *this;
 }
 
-Func &Func::rename(Var old_name, Var new_name) {
+Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
     ScheduleHandle(func.schedule()).rename(old_name, new_name);
     return *this;
 }
@@ -847,17 +911,17 @@ Func &Func::unroll(VarOrRVar var) {
     return *this;
 }
 
-Func &Func::parallel(Var var, Expr factor) {
+Func &Func::parallel(VarOrRVar var, Expr factor) {
     ScheduleHandle(func.schedule()).parallel(var, factor);
     return *this;
 }
 
-Func &Func::vectorize(Var var, int factor) {
+Func &Func::vectorize(VarOrRVar var, int factor) {
     ScheduleHandle(func.schedule()).vectorize(var, factor);
     return *this;
 }
 
-Func &Func::unroll(Var var, int factor) {
+Func &Func::unroll(VarOrRVar var, int factor) {
     ScheduleHandle(func.schedule()).unroll(var, factor);
     return *this;
 }
@@ -880,12 +944,17 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
     return *this;
 }
 
-Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+Func &Func::tile(VarOrRVar x, VarOrRVar y,
+                 VarOrRVar xo, VarOrRVar yo,
+                 VarOrRVar xi, VarOrRVar yi,
+                 Expr xfactor, Expr yfactor) {
     ScheduleHandle(func.schedule()).tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
     return *this;
 }
 
-Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+Func &Func::tile(VarOrRVar x, VarOrRVar y,
+                 VarOrRVar xi, VarOrRVar yi,
+                 Expr xfactor, Expr yfactor) {
     ScheduleHandle(func.schedule()).tile(x, y, xi, yi, xfactor, yfactor);
     return *this;
 }
@@ -948,62 +1017,62 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
     return *this;
 }
 
-Func &Func::gpu_threads(Var tx, GPUAPI gpuapi) {
+Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_threads(Var tx, Var ty, GPUAPI gpuapi) {
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_threads(Var tx, Var ty, Var tz, GPUAPI gpuapi) {
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
+Func &Func::gpu_blocks(VarOrRVar bx, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_blocks(Var bx, Var by, GPUAPI gpuapi) {
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_blocks(Var bx, Var by, Var bz, GPUAPI gpuapi) {
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
     return *this;
 }
 
-Func &Func::gpu(Var bx, Var tx, GPUAPI gpuapi) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
     return *this;
 }
 
-Func &Func::gpu(Var bx, Var by, Var tx, Var ty, GPUAPI gpuapi) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
     return *this;
 }
 
-Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz, GPUAPI gpuapi) {
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(VarOrRVar x, int x_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpuapi);
     return *this;
 }
 
-Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
     ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
     return *this;
 }

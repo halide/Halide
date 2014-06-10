@@ -30,6 +30,7 @@ class FuncRefExpr;
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
+    VarOrRVar(const std::string &n, bool r) : var(n), rvar(n), is_rvar(r) {}
     VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
     VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
     VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
@@ -202,6 +203,7 @@ enum GPUAPI {
 class ScheduleHandle {
     Internal::Schedule schedule;
     void set_dim_type(VarOrRVar var, Internal::For::ForType t);
+    void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string dump_argument_list();
 public:
     ScheduleHandle(Internal::Schedule s) : schedule(s) {s.touched();}
@@ -210,17 +212,22 @@ public:
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
-    EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
-    EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
+    EXPORT ScheduleHandle &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
+    EXPORT ScheduleHandle &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
     EXPORT ScheduleHandle &serial(VarOrRVar var);
     EXPORT ScheduleHandle &parallel(VarOrRVar var);
     EXPORT ScheduleHandle &vectorize(VarOrRVar var);
     EXPORT ScheduleHandle &unroll(VarOrRVar var);
-    EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
-    EXPORT ScheduleHandle &vectorize(Var var, int factor);
-    EXPORT ScheduleHandle &unroll(Var var, int factor);
-    EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
-    EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT ScheduleHandle &parallel(VarOrRVar var, Expr task_size);
+    EXPORT ScheduleHandle &vectorize(VarOrRVar var, int factor);
+    EXPORT ScheduleHandle &unroll(VarOrRVar var, int factor);
+    EXPORT ScheduleHandle &tile(VarOrRVar x, VarOrRVar y,
+                                VarOrRVar xo, VarOrRVar yo,
+                                VarOrRVar xi, VarOrRVar yi, Expr
+                                xfactor, Expr yfactor);
+    EXPORT ScheduleHandle &tile(VarOrRVar x, VarOrRVar y,
+                                VarOrRVar xi, VarOrRVar yi,
+                                Expr xfactor, Expr yfactor);
     EXPORT ScheduleHandle &reorder(const std::vector<VarOrRVar> &vars);
     EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y);
     EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
@@ -243,70 +250,70 @@ public:
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
-    EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
+    EXPORT ScheduleHandle &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT ScheduleHandle specialize(Expr condition);
 
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu(Var block_x, Var thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu(Var block_x, Var block_y,
-                               Var thread_x, Var thread_y,
+    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y,
+                               VarOrRVar thread_x, VarOrRVar thread_y,
 			       GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu(Var block_x, Var block_y, Var block_z,
-                               Var thread_x, Var thread_y, Var thread_z,
+    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                               VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
 			       GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Expr x_size, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Expr x_size, Expr y_size,
+    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
 				    GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Var z,
+    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
     // @}
 
     // These calls are for legacy compatibility only.
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x) {
+    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x) {
         return gpu_threads(thread_x);
     }
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y) {
+    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu_threads(thread_x, thread_y);
     }
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu_threads(thread_x, thread_y, thread_z);
     }
 
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x) {
+    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x) {
         return gpu_blocks(block_x);
     }
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y) {
+    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
         return gpu_blocks(block_x, block_y);
     }
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z) {
+    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
         return gpu_blocks(block_x, block_y, block_z);
     }
 
-    EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x) {
+    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
         return gpu(block_x, thread_x);
     }
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
-                                Var thread_x, Var thread_y) {
+    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar block_y,
+                                VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu(block_x, thread_x, block_y, thread_y);
     }
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
-                                Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
     }
-    EXPORT ScheduleHandle &cuda_tile(Var x, int x_size) {
+    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, int x_size) {
         return gpu_tile(x, x_size);
     }
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size) {
+    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
         return gpu_tile(x, y, x_size, y_size);
     }
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
+    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
@@ -795,12 +802,12 @@ public:
      * factor-1. The inner and outer subdimensions can then be dealt
      * with using the other scheduling calls. It's ok to reuse the old
      * variable name as either the inner or outer variable. */
-    EXPORT Func &split(Var old, Var outer, Var inner, Expr factor);
+    EXPORT Func &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
 
     /** Join two dimensions into a single fused dimenion. The fused
      * dimension covers the product of the extents of the inner and
      * outer dimensions given. */
-    EXPORT Func &fuse(Var inner, Var outer, Var fused);
+    EXPORT Func &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
 
     /** Mark a dimension to be traversed serially. This is the default. */
     EXPORT Func &serial(VarOrRVar var);
@@ -814,7 +821,7 @@ public:
      * the split. The inner dimension has a new anonymous name. If you
      * wish to mutate it, or schedule with respect to it, do the split
      * manually. */
-    EXPORT Func &parallel(Var var, Expr task_size);
+    EXPORT Func &parallel(VarOrRVar var, Expr task_size);
 
     /** Mark a dimension to be computed all-at-once as a single
      * vector. The dimension should have constant extent -
@@ -835,13 +842,13 @@ public:
      * size. The variable to be vectorized should be the innermost
      * one. After this call, var refers to the outer dimension of the
      * split. */
-    EXPORT Func &vectorize(Var var, int factor);
+    EXPORT Func &vectorize(VarOrRVar var, int factor);
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by
      * some constant factor. After this call, var refers to the outer
      * dimension of the split. */
-    EXPORT Func &unroll(Var var, int factor);
+    EXPORT Func &unroll(VarOrRVar var, int factor);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
@@ -856,11 +863,16 @@ public:
     /** Split two dimensions at once by the given factors, and then
      * reorder the resulting dimensions to be xi, yi, xo, yo from
      * innermost outwards. This gives a tiled traversal. */
-    EXPORT Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT Func &tile(VarOrRVar x, VarOrRVar y,
+                      VarOrRVar xo, VarOrRVar yo,
+                      VarOrRVar xi, VarOrRVar yi,
+                      Expr xfactor, Expr yfactor);
 
     /** A shorter form of tile, which reuses the old variable names as
      * the new outer dimensions */
-    EXPORT Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT Func &tile(VarOrRVar x, VarOrRVar y,
+                      VarOrRVar xi, VarOrRVar yi,
+                      Expr xfactor, Expr yfactor);
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
@@ -918,7 +930,7 @@ public:
                          VarOrRVar t6);
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
-    EXPORT Func &rename(Var old_name, Var new_name);
+    EXPORT Func &rename(VarOrRVar old_name, VarOrRVar new_name);
 
     /** Specialize a Func. This creates a special-case version of the
      * Func where the given condition is true. The most effective
@@ -1093,20 +1105,20 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(Var thread_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_threads. */
     // @{
-    EXPORT Func &cuda_threads(Var thread_x) {
+    EXPORT Func &cuda_threads(VarOrRVar thread_x) {
         return gpu_threads(thread_x);
     }
-    EXPORT Func &cuda_threads(Var thread_x, Var thread_y) {
+    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu_threads(thread_x, thread_y);
     }
-    EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu_threads(thread_x, thread_y, thread_z);
     }
     // @}
@@ -1116,20 +1128,20 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(Var block_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
     // @{
-    EXPORT Func &cuda_blocks(Var block_x) {
+    EXPORT Func &cuda_blocks(VarOrRVar block_x) {
         return gpu_blocks(block_x);
     }
-    EXPORT Func &cuda_blocks(Var block_x, Var block_y) {
+    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
         return gpu_blocks(block_x, block_y);
     }
-    EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z) {
+    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
         return gpu_blocks(block_x, block_y, block_z);
     }
     // @}
@@ -1140,24 +1152,24 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(Var block_x, Var thread_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu(Var block_x, Var block_y,
-		     Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu(Var block_x, Var block_y, Var block_z,
-                     Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
+		     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu. */
     // @{
-    EXPORT Func &cuda(Var block_x, Var thread_x) {
+    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
         return gpu(block_x, thread_x);
     }
-    EXPORT Func &cuda(Var block_x, Var block_y,
-                      Var thread_x, Var thread_y) {
+    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y,
+                      VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu(block_x, thread_x, block_y, thread_y);
     }
-    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
-                      Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
     }
     // @}
@@ -1167,21 +1179,21 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(Var x, int x_size, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_tile(Var x, Var y, Var z,
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                           int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */
     // @{
-    EXPORT Func &cuda_tile(Var x, int x_size) {
+    EXPORT Func &cuda_tile(VarOrRVar x, int x_size) {
         return gpu_tile(x, x_size);
     }
-    EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size) {
+    EXPORT Func &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
         return gpu_tile(x, y, x_size, y_size);
     }
-    EXPORT Func &cuda_tile(Var x, Var y, Var z,
+    EXPORT Func &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }

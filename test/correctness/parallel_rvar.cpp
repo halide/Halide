@@ -7,9 +7,9 @@ int main(int argc, char **argv) {
 
     Func f[2];
     Var x, y;
-    RDom r(0, 10, 0, 10);
+    RDom r(0, 12, 0, 10);
 
-    RDom r2(0, 10);
+    RDom r2(0, 12);
     for (int i = 0; i < 2; i++) {
         f[i](x, y) = x + y;
         // All of these update definitions should be safe to
@@ -25,10 +25,11 @@ int main(int argc, char **argv) {
     }
 
     f[0].compute_root();
-    f[0].update(0).parallel(r.x).parallel(r.y).reorder(r.y, r.x);
-    f[0].update(1).parallel(r.x).parallel(r.y);
-    f[0].update(2).parallel(r2);
-    f[0].update(3).parallel(r2);
+    RVar rxo, ryo, rxi, ryi, rt;
+    f[0].update(0).tile(r.x, r.y, rxo, ryo, rxi, ryi, 4, 2).fuse(rxo, ryo, rt).parallel(rt);
+    f[0].update(1).parallel(r.x).parallel(r.y).unroll(r.y, 2);
+    f[0].update(2).vectorize(r2, 4).unroll(r2);
+    f[0].update(3).parallel(r2, 4);
     f[1].compute_root();
 
     RDom r_check(0, 20, 0, 20);

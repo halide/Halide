@@ -105,6 +105,13 @@ Stmt build_provide_loop_nest(Function f,
     for (size_t i = 0; i < s.bounds().size(); i++) {
         known_size_dims[s.bounds()[i].var] = s.bounds()[i].extent;
     }
+    // Then use any reduction domain.
+    const ReductionDomain &rdom = s.reduction_domain();
+    if (rdom.defined()) {
+        for (size_t i = 0; i < rdom.domain().size(); i++) {
+            known_size_dims[rdom.domain()[i].var] = rdom.domain()[i].extent;
+        }
+    }
 
     vector<Split> splits = s.splits();
 
@@ -148,6 +155,8 @@ Stmt build_provide_loop_nest(Function f,
                     // The name Xo went away, because it was legal for it to
                     // be X before, but not after.
 
+                    first.exact |= second.exact;
+                    second.exact = first.exact;
                     second.old_var = unique_name('s');
                     first.outer   = second.outer;
                     second.outer  = second.inner;
@@ -186,6 +195,15 @@ Stmt build_provide_loop_nest(Function f,
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base.
                 known_size_dims[split.outer] = iter->second / split.factor;
+            } else if (split.exact) {
+                // It's an exact split but we failed to prove that the
+                // extent divides the factor. This is a problem.
+                user_error << "When splitting " << split.old_var << " into "
+                           << split.outer << " and " << split.inner << ", "
+                           << "could not prove the split factor (" << split.factor << ") "
+                           << "divides the extent of " << split.old_var
+                           << " (" << iter->second << "). This is required when "
+                           << "the split originates from an RVar.\n";
             } else if (!is_update) {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
