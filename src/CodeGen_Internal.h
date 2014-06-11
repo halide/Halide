@@ -51,7 +51,10 @@ public:
         /** The buffer is written to. */
         bool write;
 
-        BufferRef() : read(false), write(false) { }
+        /** The size of the buffer if known, otherwise zero. */
+        size_t size;
+
+        BufferRef() : read(false), write(false), size(0) { }
     };
 
 public:

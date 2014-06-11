@@ -39,6 +39,14 @@ void Closure::visit(const Load *op) {
         BufferRef & ref = buffers[op->name];
         ref.type = op->type; // TODO: Validate type is the same as existing refs?
         ref.read = true;
+
+        // If reading an image/buffer, compute the size.
+        if (op->image.defined()) {
+            ref.size = (size_t)op->image.type().bytes();
+            for (int i = 0; i < op->image.dimensions(); i++) {
+                ref.size *= op->image.extent(i);
+            }
+        }
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";
     }
