@@ -81,6 +81,11 @@ apps/wavelet/inverse_haar_x.h
 apps/wavelet/wavelet
 apps/local_laplacian/ispc/process
 apps/local_laplacian/process
+apps/HelloAndroid*/bin
+apps/HelloAndroid*/gen
+apps/HelloAndroid*/obj
+apps/HelloAndroid*/libs
+apps/HelloAndroid/*/*.d
 
 # test intermediates
 log.txt
