@@ -185,7 +185,7 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], For::Serial};
+        Dim d = {args[i], For::Serial, true};
         contents.ptr->schedule.dims().push_back(d);
         contents.ptr->schedule.storage_dims().push_back(args[i]);
     }
