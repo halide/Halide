@@ -178,7 +178,7 @@ public:
         return c;
     }
 
-    vector<Argument> arguments();
+    vector<GPU_Argument> arguments();
 
 protected:
     using Internal::Closure::visit;
@@ -215,19 +215,19 @@ protected:
     bool skip_gpu_loops;
 };
 
-vector<Argument> GPU_Host_Closure::arguments() {
-    vector<Argument> res;
+vector<GPU_Argument> GPU_Host_Closure::arguments() {
+    vector<GPU_Argument> res;
     for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "var: " << iter->first << "\n";
-        res.push_back(Argument(iter->first, false, iter->second));
+        res.push_back(GPU_Argument(iter->first, false, iter->second));
     }
     for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        debug(2) << "buffer: " << iter->first;
+        debug(2) << "buffer: " << iter->first << " " << iter->second.size;
         if (iter->second.read) debug(2) << " (read)";
         if (iter->second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        Argument arg(iter->first, true, iter->second.type);
+        GPU_Argument arg(iter->first, true, iter->second.type, iter->second.size);
         arg.read = iter->second.read;
         arg.write = iter->second.write;
         res.push_back(arg);
@@ -495,7 +495,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
-        cgdev->add_kernel(loop, kernel_name, c.arguments());
+
+        vector<GPU_Argument> arguments = c.arguments();
+        for (size_t i = 0; i < arguments.size(); i++) {
+            if (arguments[i].is_buffer && allocations.contains(arguments[i].name)) {
+                arguments[i].size = allocations.get(arguments[i].name).stack_size;
+            }
+        }
+
+        cgdev->add_kernel(loop, kernel_name, arguments);
 
         // get the actual name of the generated kernel for this loop
         kernel_name = cgdev->get_current_kernel_name();
@@ -505,7 +513,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
 
         // build the kernel arguments array
-        vector<Argument> closure_args = c.arguments();
+        vector<GPU_Argument> closure_args = c.arguments();
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 

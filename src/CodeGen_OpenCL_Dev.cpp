@@ -1,4 +1,5 @@
 #include <sstream>
+#include <algorithm>
 
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_Internal.h"
@@ -11,6 +12,9 @@ namespace Internal {
 using std::ostringstream;
 using std::string;
 using std::vector;
+using std::pair;
+using std::make_pair;
+using std::sort;
 
 static ostringstream nil;
 
@@ -352,7 +356,9 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
 }
 
 
-void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
+                                    string name,
+                                    const vector<GPU_Argument> &args) {
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -360,16 +366,68 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> 
     clc.add_kernel(s, name, args);
 }
 
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
+namespace {
+struct ConstantSizeOrdering {
+    bool operator () (pair<string, int> a,
+                      pair<string, int> b) const {
+        return a.second < b.second;
+    }
+} constant_ordering;
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
+                                                      string name,
+                                                      const vector<GPU_Argument> &args) {
+
     debug(2) << "Adding OpenCL kernel " << name << "\n";
+
+    // Figure out which arguments should be passed in __constant.
+    // Such arguments should be:
+    // - not written to,
+    // - loads are block-uniform,
+    // - constant size,
+    // - and all allocations together should be less than the max constant
+    //   buffer size given by CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE.
+    // The last condition is handled via the preprocessor in the kernel
+    // declaration.
+    vector<pair<string, int> > constants;
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer &&
+            CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
+            args[i].size > 0) {
+            constants.push_back(make_pair(args[i].name, args[i].size));
+        }
+    }
+
+    // Sort the constant candidates from smallest to largest. This will put
+    // as many of the constant allocations in __constant as possible.
+    // Ideally, we would prioritize constant buffers by how frequently they
+    // are accessed.
+    sort(constants.begin(), constants.end(), constant_ordering);
+
+    // Compute the cumulative sum of the constants.
+    for (size_t i = 1; i < constants.size(); i++) {
+        constants[i].second += constants[i - 1].second;
+    }
 
     // Emit the function prototype
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-	    if (CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name)) {
-	        constant_allocations.push(args[i].name, 0);
-		stream << " __constant ";
+            vector<pair<string, int> >::iterator constant = constants.begin();
+            while (constant != constants.end() &&
+                   constant->first != args[i].name) {
+                constant++;
+            }
+
+	    if (constant != constants.end()) {
+                stream << "\n";
+                stream << "#if " << constant->second << " < MAX_CONSTANT_BUFFER_SIZE && " << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
+		stream << " __constant\n";
+                stream << "#else\n";
+                stream << " __global\n";
+                stream << "#endif\n";
+                stream << " ";
 	    } else {
 	        stream << " __global ";
 	    }
