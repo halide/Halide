@@ -256,6 +256,7 @@ public:
     EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
 
     EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
@@ -1110,6 +1111,12 @@ public:
     EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
     // @}
 
+    /** Tell Halide to run this stage using a single gpu thread and
+     * block. This is not an efficient use of your GPU, but it can be
+     * useful to avoid copy-back for intermediate update stages that
+     * touch a very small part of your Func. */
+    EXPORT Func &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+
     /** \deprecated Old name for #gpu_threads. */
     // @{
     EXPORT Func &cuda_threads(VarOrRVar thread_x) {
@@ -1536,7 +1543,7 @@ NO_INLINE T evaluate(Expr e) {
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
-    f(_) = e;
+    f() = e;
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1555,7 +1562,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b) {
         << " as a scalar of type " << type_of<B>() << "\n";
 
     Func f;
-    f(_) = t;
+    f() = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1577,7 +1584,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c) {
         << " as a scalar of type " << type_of<C>() << "\n";
 
     Func f;
-    f(_) = t;
+    f() = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1604,7 +1611,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
         << " as a scalar of type " << type_of<D>() << "\n";
 
     Func f;
-    f(_) = t;
+    f() = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1625,20 +1632,13 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
-    Image<T> im;
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = e;
-
-    if (get_jit_target_from_environment().has_gpu_feature()) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	im = g.realize(1);
-	im.copy_to_host();
-    } else {
-	im = f.realize();
+    f() = e;
+    if (has_gpu_feature) {
+	f.gpu_single_thread();
     }
+    Image<T> im = f.realize();
     return im(0);
 }
 
@@ -1658,23 +1658,13 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
 
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = t;
-    Image<A> result_a(has_gpu_feature ? 1 : 0);
-    Image<B> result_b(has_gpu_feature ? 1 : 0);
-    Realization r(result_a, result_b);
+    f() = t;
     if (has_gpu_feature) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	g.realize(r);
-	result_a.copy_to_host();
-	result_b.copy_to_host();
-    } else {
-	f.realize(r);
+	f.gpu_single_thread();
     }
-    *a = result_a(0);
-    *b = result_b(0);
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
 }
 
 template<typename A, typename B, typename C>
@@ -1693,26 +1683,14 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << " as a scalar of type " << type_of<C>() << "\n";
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = t;
-    Image<A> result_a(has_gpu_feature ? 1 : 0);
-    Image<B> result_b(has_gpu_feature ? 1 : 0);
-    Image<C> result_c(has_gpu_feature ? 1 : 0);
-    Realization r(result_a, result_b, result_c);
+    f() = t;
     if (has_gpu_feature) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	g.realize(r);
-	result_a.copy_to_host();
-	result_b.copy_to_host();
-	result_c.copy_to_host();
-    } else {
-	f.realize(r);
+        f.gpu_single_thread();
     }
-    *a = result_a(0);
-    *b = result_b(0);
-    *c = result_c(0);
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
 }
 
 template<typename A, typename B, typename C, typename D>
@@ -1736,29 +1714,15 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
 
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = t;
-    Image<A> result_a(has_gpu_feature ? 1 : 0);
-    Image<B> result_b(has_gpu_feature ? 1 : 0);
-    Image<C> result_c(has_gpu_feature ? 1 : 0);
-    Image<D> result_d(has_gpu_feature ? 1 : 0);
-    Realization r(result_a, result_b, result_c, result_d);
+    f() = t;
     if (has_gpu_feature) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	g.realize(r);
-	result_a.copy_to_host();
-	result_b.copy_to_host();
-	result_c.copy_to_host();
-	result_d.copy_to_host();
-    } else {
-	f.realize(r);
+        f.gpu_single_thread();
     }
-    *a = result_a(0);
-    *b = result_b(0);
-    *c = result_c(0);
-    *d = result_d(0);
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
+    *d = Image<D>(r[3])(0);
 }
 // @}
 
