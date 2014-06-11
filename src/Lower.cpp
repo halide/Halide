@@ -1012,46 +1012,6 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
     }
 
-    // Check the rvars haven't been illegally reordered
-    for (size_t i = 0; i < f.reductions().size(); i++) {
-        const ReductionDefinition &r = f.reductions()[i];
-
-        if (!r.domain.defined()) {
-            // No reduction domain
-            continue;
-        }
-
-        const vector<ReductionVariable> &rvars = r.domain.domain();
-        const vector<Dim> &dims = r.schedule.dims();
-
-        // Match each impure var to an rvar
-        size_t rvar_idx = 0;
-        for (size_t j = 0; j < dims.size(); j++) {
-            if (dims[j].pure) continue;
-            for (; rvar_idx < rvars.size(); rvar_idx++) {
-                if (rvars[rvar_idx].var == dims[j].var) {
-                    break;
-                }
-            }
-        }
-
-        if (rvar_idx == rvars.size()) {
-            std::ostringstream err;
-            err << "In function " << f.name() << " stage " << i
-                << ", the reduction variables have been illegally reordered.\n"
-                << "Correct order:";
-            for (size_t j = 0; j < rvars.size(); j++) {
-                err << " " << rvars[j].var;
-            }
-            err << "\nOrder specified by schedule:";
-            for (size_t j = 0; j < dims.size(); j++) {
-                err << " " << dims[j].var;
-            }
-            err << "\n";
-            user_error << err.str();
-        }
-    }
-
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
     // Inlining is always allowed
