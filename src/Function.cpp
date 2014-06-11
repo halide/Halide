@@ -10,6 +10,7 @@
 #include "IRPrinter.h"
 #include "IRMutator.h"
 #include "ParallelRVar.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -190,6 +191,12 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         contents.ptr->schedule.storage_dims().push_back(args[i]);
     }
 
+    // Add the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), For::Serial, true};
+        contents.ptr->schedule.dims().push_back(d);
+    }
+
     for (size_t i = 0; i < values.size(); i++) {
         string buffer_name = name();
         if (values.size() > 1) {
@@ -352,6 +359,12 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
             Dim d = {pure_args[i], For::Serial, true};
             r.schedule.dims().push_back(d);
         }
+    }
+
+    // Then the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), For::Serial, true};
+        r.schedule.dims().push_back(d);
     }
 
     // If there's no recursive reference, no reduction domain, and all
