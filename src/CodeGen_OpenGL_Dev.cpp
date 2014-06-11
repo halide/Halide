@@ -90,6 +90,23 @@ string CodeGen_GLSL::print_type(Type type) {
     return oss.str();
 }
 
+static std::string replace_all(std::string &str,
+                               const std::string &find, const std::string &replace) {
+    size_t pos = 0;
+    while ((pos = str.find(find, pos)) != std::string::npos) {
+        str.replace(pos, find.length(), replace);
+        pos += replace.length();
+    }
+    return str;
+}
+
+// Identifiers containing double underscores '__' are reserved in GLSL, so we
+// have to use a different name mangling scheme than in the C code generator.
+std::string CodeGen_GLSL::print_name(const std::string &name) {
+    std::string mangled = CodeGen_C::print_name(name);
+    return replace_all(mangled, "__", "XX");
+}
+
 void CodeGen_GLSL::visit(const FloatImm *op) {
     // TODO(dheck): use something like dtoa to avoid precision loss in
     // float->decimal conversion

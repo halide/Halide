@@ -43,6 +43,7 @@ public:
 protected:
     using CodeGen_C::visit;
     std::string print_type(Type type);
+    std::string print_name(const std::string &);
 
     void visit(const FloatImm *op);
 
