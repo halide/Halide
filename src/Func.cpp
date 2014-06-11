@@ -553,45 +553,43 @@ ScheduleHandle &ScheduleHandle::rename(VarOrRVar old_var, VarOrRVar new_var) {
 
     }
 
-    if (old_name.find('.') == string::npos) {
-        // If it's a primitive name, add the rename to the splits list.
-        Split split = {old_name, new_name, "", 1, old_var.is_rvar, Split::RenameVar};
-        schedule.splits().push_back(split);
-    } else {
-        // It's a derived name, so just rewrite the split or rename that defines it.
-        bool found = false;
-        for (size_t i = schedule.splits().size(); i > 0; i--) {
-            if (schedule.splits()[i-1].is_fuse()) {
-                if (schedule.splits()[i-1].inner == old_name ||
-                    schedule.splits()[i-1].outer == old_name) {
-                    user_error << "Can't rename a variable " << old_name
-                               << " because it has already been fused into "
-                               << schedule.splits()[i-1].old_var << "\n";
-                }
-                if (schedule.splits()[i-1].old_var == old_name) {
-                    schedule.splits()[i-1].old_var = new_name;
-                    found = true;
-                    break;
-                }
-            } else {
-                if (schedule.splits()[i-1].inner == old_name) {
-                    schedule.splits()[i-1].inner = new_name;
-                    found = true;
-                    break;
-                }
-                if (schedule.splits()[i-1].outer == old_name) {
-                    schedule.splits()[i-1].outer = new_name;
-                    found = true;
-                    break;
-                }
-                if (schedule.splits()[i-1].old_var == old_name) {
-                    user_error << "Can't rename a variable " << old_name
-                               << " because it has already been renamed or split.\n";
-                }
+
+    // If possible, rewrite the split or rename that defines it.
+    found = false;
+    for (size_t i = schedule.splits().size(); i > 0; i--) {
+        if (schedule.splits()[i-1].is_fuse()) {
+            if (schedule.splits()[i-1].inner == old_name ||
+                schedule.splits()[i-1].outer == old_name) {
+                user_error << "Can't rename a variable " << old_name
+                           << " because it has already been fused into "
+                           << schedule.splits()[i-1].old_var << "\n";
+            }
+            if (schedule.splits()[i-1].old_var == old_name) {
+                schedule.splits()[i-1].old_var = new_name;
+                found = true;
+                break;
+            }
+        } else {
+            if (schedule.splits()[i-1].inner == old_name) {
+                schedule.splits()[i-1].inner = new_name;
+                found = true;
+                break;
+            }
+            if (schedule.splits()[i-1].outer == old_name) {
+                schedule.splits()[i-1].outer = new_name;
+                found = true;
+                break;
+            }
+            if (schedule.splits()[i-1].old_var == old_name) {
+                user_error << "Can't rename a variable " << old_name
+                           << " because it has already been renamed or split.\n";
             }
         }
-        user_assert(found) << "Rename failed: Old name: " << old_name
-                           << " is not an arg, and was not defined by a split, rename, or fuse.\n";
+    }
+
+    if (!found) {
+        Split split = {old_name, new_name, "", 1, old_var.is_rvar, Split::RenameVar};
+        schedule.splits().push_back(split);
     }
 
     return *this;
