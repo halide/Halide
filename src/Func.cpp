@@ -677,82 +677,105 @@ ScheduleHandle &ScheduleHandle::tile(VarOrRVar x, VarOrRVar y,
 
 namespace {
 // An helper function for reordering vars in a schedule.
-ScheduleHandle &reorder_vars(ScheduleHandle& sched, const VarOrRVar *vars, size_t size) {
-    if (size <= 1) {
-        return sched;
+void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size) {
+    vector<Dim> dims = dims_old;
+
+    // Tag all the vars with their locations in the dims list.
+    vector<size_t> idx(size);
+    for (size_t i = 0; i < size; i++) {
+        bool found = false;
+        for (size_t j = 0; j < dims.size(); j++) {
+            if (var_name_match(dims[j].var, vars[i].name())) {
+                idx[i] = j;
+                found = true;
+            }
+        }
+        user_assert(found) << "Could not find var " << vars[i].name() << " to reorder in the vars list\n";
     }
-    if (size == 2) {
-        return sched.reorder(vars[0], vars[1]);
+
+    // Look for illegal reorderings
+    for (size_t i = 0; i < idx.size(); i++) {
+        if (dims[idx[i]].pure) continue;
+        for (size_t j = i+1; j < idx.size(); j++) {
+            if (dims[idx[j]].pure) continue;
+
+            if (idx[i] > idx[j]) {
+                user_error << "Can't reorder RVars " << vars[i].name()
+                           << " and " << vars[j].name()
+                           << " because it may change the meaning of the algorithm.\n";
+            }
+        }
     }
-    for (size_t i = 1; i < size; i++) {
-        sched.reorder(vars[0], vars[i]);
+
+    // Sort idx to get the new locations
+    vector<size_t> sorted = idx;
+    std::sort(sorted.begin(), sorted.end());
+
+    for (size_t i = 0; i < size; i++) {
+        dims[sorted[i]] = dims_old[idx[i]];
     }
-    return reorder_vars(sched, vars + 1, size - 1);
+
+    dims_old.swap(dims);
 }
 }
 
 ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
-    return reorder_vars(*this, &vars[0], vars.size());
+    reorder_vars(schedule.dims(), &vars[0], vars.size());
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
-    vector<Dim> &dims = schedule.dims();
-    bool found_y = false;
-    size_t y_loc = 0;
-    for (size_t i = 0; i < dims.size(); i++) {
-        if (var_name_match(dims[i].var, y.name())) {
-            found_y = true;
-            y_loc = i;
-        } else if (var_name_match(dims[i].var, x.name())) {
-            if (found_y) {
-                std::swap(dims[i], dims[y_loc]);
-            }
-            return *this;
-        }
-    }
-    user_error << "Could not find these variables " << x.name()
-               << " and " << y.name() << " to reorder in the schedule.\n";
+    VarOrRVar vars[] = {x, y};
+    reorder_vars(schedule.dims(), vars, 2);
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
     VarOrRVar vars[] = {x, y, z};
-    return reorder_vars(*this, vars, 3);
+    reorder_vars(schedule.dims(), vars, 3);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     VarOrRVar vars[] = {x, y, z, w};
-    return reorder_vars(*this, vars, 4);
+    reorder_vars(schedule.dims(), vars, 4);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
     VarOrRVar vars[] = {x, y, z, w, t};
-    return reorder_vars(*this, vars, 5);
+    reorder_vars(schedule.dims(), vars, 5);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2};
-    return reorder_vars(*this, vars, 6);
+    reorder_vars(schedule.dims(), vars, 6);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
-    return reorder_vars(*this, vars, 7);
+    reorder_vars(schedule.dims(), vars, 7);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
-    return reorder_vars(*this, vars, 8);
+    reorder_vars(schedule.dims(), vars, 8);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
-    return reorder_vars(*this, vars, 9);
+    reorder_vars(schedule.dims(), vars, 9);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    return reorder_vars(*this, vars, 10);
+    reorder_vars(schedule.dims(), vars, 10);
+    return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_threads(VarOrRVar tx, GPUAPI /* gpu_api */) {
