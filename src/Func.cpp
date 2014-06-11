@@ -824,6 +824,12 @@ ScheduleHandle &ScheduleHandle::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::gpu_single_thread(GPUAPI /* gpu_api */) {
+    split(Var::outermost(), Var::outermost(), Var::gpu_blocks(), 1);
+    parallel(Var::gpu_blocks());
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI /* gpu_api */) {
     return gpu_blocks(bx).gpu_threads(tx);
 }
