@@ -93,7 +93,8 @@ public:
      * after it jits. Does nothing by default. The third argument
      * gives the target a chance to inject calls to target-specific
      * module cleanup routines. */
-    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<void (*)()> *) {}
+    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
+                              std::vector<JITCompiledModule::CleanupRoutine> *) {}
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
@@ -266,9 +267,6 @@ protected:
     virtual void visit(const Evaluate *);
     // @}
 
-    /** Recursive code for generating a gather using a binary tree. */
-    llvm::Value *codegen_gather(llvm::Value *indices, const Load *op);
-
     /** Generate code for an allocate node. It has no default
      * implementation - it must be handled in an architecture-specific
      * way. */
@@ -278,13 +276,6 @@ protected:
      * implementation and must be handled in an architecture-specific
      * way. */
     virtual void visit(const Free *) = 0;
-
-    /** Some backends may wish to track entire buffer_t's for each
-     * allocation instead of just a host pointer. Those backends
-     * should override this method to return true, and when allocating
-     * should also place a pointer to the buffer_t in the symbol table
-     * under 'allocation_name.buffer'. */
-    virtual bool track_buffers() {return false;}
 
     /** These IR nodes should have been removed during
      * lowering. CodeGen will error out if they are present */

@@ -287,6 +287,12 @@ class ExternCallPrototypes : public IRGraphVisitor {
             if (!emitted.count(op->name)) {
                 stream << "extern \"C\" " << type_to_c_type(op->type)
                        << " " << op->name << "(";
+                if (CodeGen::function_takes_user_context(op->name)) {
+                    stream << "void *";
+                    if (op->args.size()) {
+                        stream << ", ";
+                    }
+                }
                 for (size_t i = 0; i < op->args.size(); i++) {
                     if (i > 0) {
                         stream << ", ";
@@ -816,16 +822,31 @@ void CodeGen_C::visit(const Call *op) {
                 stream << buf_id << ".stride[" << i << "] = " << args[i*3+4] << ";\n";
             }
             rhs << "(&" + buf_id + ")";
-        } else if (op->name == Call::extract_buffer_extent) {
+        } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
-            rhs << "((buffer_t *)(" << a0 << "))->extent[" << a1 << "]";
+            rhs << "(((buffer_t *)(" << a0 << "))->min[" << a1 << "] + " <<
+                "((buffer_t *)(" << a0 << "))->extent[" << a1 << "] - 1)";
         } else if (op->name == Call::extract_buffer_min) {
             internal_assert(op->args.size() == 2);
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << "((buffer_t *)(" << a0 << "))->min[" << a1 << "]";
+        } else if (op->name == Call::set_host_dirty) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << "((buffer_t *)(" << a0 << "))->host_dirty = " << a1 << ";\n";
+            rhs << "0";
+        } else if (op->name == Call::set_dev_dirty) {
+            internal_assert(op->args.size() == 2);
+            string a0 = print_expr(op->args[0]);
+            string a1 = print_expr(op->args[1]);
+            do_indent();
+            stream << "((buffer_t *)(" << a0 << "))->dev_dirty = " << a1 << ";\n";
+            rhs << "0";
         } else if (op->name == Call::abs) {
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
@@ -902,6 +923,8 @@ void CodeGen_C::visit(const Store *op) {
            << "] = "
            << id_value
            << ";\n";
+
+    cache.clear();
 }
 
 void CodeGen_C::visit(const Let *op) {
@@ -1105,9 +1128,9 @@ void CodeGen_C::visit(const Realize *op) {
 }
 
 void CodeGen_C::visit(const IfThenElse *op) {
-    do_indent();
     string cond_id = print_expr(op->condition);
 
+    do_indent();
     stream << "if (" << cond_id << ")\n";
     open_scope();
     op->then_case.accept(this);
@@ -1124,6 +1147,10 @@ void CodeGen_C::visit(const IfThenElse *op) {
 
 void CodeGen_C::visit(const Evaluate *op) {
     string id = print_expr(op->value);
+    if (id == "0") {
+        // Skip evaluate(0) nodes. They're how we represent no-ops.
+        return;
+    }
     do_indent();
     stream << "(void)" << id << ";\n";
 }

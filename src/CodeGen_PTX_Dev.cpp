@@ -132,21 +132,21 @@ void CodeGen_PTX_Dev::init_module() {
 }
 
 string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
-    if (ends_with(name, ".threadidx")) {
+    if (ends_with(name, ".__thread_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.tid.x";
-    } else if (ends_with(name, ".threadidy")) {
+    } else if (ends_with(name, ".__thread_id_y")) {
         return "llvm.nvvm.read.ptx.sreg.tid.y";
-    } else if (ends_with(name, ".threadidz")) {
+    } else if (ends_with(name, ".__thread_id_z")) {
         return "llvm.nvvm.read.ptx.sreg.tid.z";
-    } else if (ends_with(name, ".threadidw")) {
+    } else if (ends_with(name, ".__thread_id_w")) {
         return "llvm.nvvm.read.ptx.sreg.tid.w";
-    } else if (ends_with(name, ".blockidx")) {
+    } else if (ends_with(name, ".__block_id_x")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.x";
-    } else if (ends_with(name, ".blockidy")) {
+    } else if (ends_with(name, ".__block_id_y")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.y";
-    } else if (ends_with(name, ".blockidz")) {
+    } else if (ends_with(name, ".__block_id_z")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.z";
-    } else if (ends_with(name, ".blockidw")) {
+    } else if (ends_with(name, ".__block_id_w")) {
         return "llvm.nvvm.read.ptx.sreg.ctaid.w";
     }
     internal_error << "simt_intrinsic called on bad variable name\n";
@@ -155,76 +155,33 @@ string CodeGen_PTX_Dev::simt_intrinsic(const string &name) {
 
 void CodeGen_PTX_Dev::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
-        debug(2) << "Dropping loop " << loop->name << " (" << loop->min << ", " << loop->extent << ")\n";
-        internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
-
         Expr simt_idx = Call::make(Int(32), simt_intrinsic(loop->name), std::vector<Expr>(), Call::Extern);
-        Expr loop_var = loop->min + simt_idx;
-        Expr cond = simt_idx < loop->extent;
-        debug(3) << "for -> if (" << cond << ")\n";
-
-        BasicBlock *loop_bb = BasicBlock::Create(*context, loop->name + "_loop", function);
-        BasicBlock *after_bb = BasicBlock::Create(*context, loop->name + "_after_loop", function);
-
-        builder->CreateCondBr(codegen(cond), loop_bb, after_bb);
-        builder->SetInsertPoint(loop_bb);
-
-        sym_push(loop->name, codegen(loop_var));
+        internal_assert(is_zero(loop->min));
+        sym_push(loop->name, codegen(simt_idx));
         codegen(loop->body);
         sym_pop(loop->name);
-
-        builder->CreateBr(after_bb);
-        builder->SetInsertPoint(after_bb);
     } else {
         CodeGen::visit(loop);
     }
 }
 
-void CodeGen_PTX_Dev::visit(const Pipeline *n) {
-    n->produce.accept(this);
-
-    // Grab the syncthreads intrinsic, or declare it if it doesn't exist yet
-    llvm::Function *syncthreads = module->getFunction("llvm.nvvm.barrier0");
-    if (!syncthreads) {
-        FunctionType *func_t = FunctionType::get(llvm::Type::getVoidTy(*context), vector<llvm::Type *>(), false);
-        syncthreads = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.nvvm.barrier0", module);
-        syncthreads->setCallingConv(CallingConv::C);
-        debug(2) << "Declaring syncthreads intrinsic\n";
-    }
-
-    if (n->update.defined()) {
-        // If we're producing into shared or global memory we need a
-        // syncthreads before continuing.
-        builder->CreateCall(syncthreads, std::vector<Value *>());
-        n->update.accept(this);
-    }
-
-    builder->CreateCall(syncthreads, std::vector<Value *>());
-    n->consume.accept(this);
-}
-
 void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
 
-    debug(1) << "Allocate " << alloc->name << " on device\n";
-
-    llvm::Type *llvm_type = llvm_type_of(alloc->type);
-
-    string allocation_name = alloc->name + ".host";
-    debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
-
-    // If this is a shared allocation, there should already be a
-    // pointer into shared memory in the symbol table.
-    Value *ptr;
-    Value *offset = sym_get(alloc->name + ".shared_mem", false);
-
-    if (offset) {
-        // Bit-cast it to a shared memory pointer (address-space 3 is shared memory)
-        ptr = builder->CreateIntToPtr(offset, PointerType::get(llvm_type, 3));
+    if (alloc->name == "__shared") {
+        // PTX uses zero in address space 3 as the base address for shared memory
+        Value *shared_base = Constant::getNullValue(PointerType::get(i8, 3));
+        sym_push(alloc->name + ".host", shared_base);
     } else {
-        // Otherwise jump back to the entry and generate an
-        // alloca. Note that by jumping back we're rendering any
-        // expression we carry back meaningless, so we had better only
-        // be dealing with constants here.
+
+        debug(2) << "Allocate " << alloc->name << " on device\n";
+
+        string allocation_name = alloc->name + ".host";
+        debug(3) << "Pushing allocation called " << allocation_name << " onto the symbol table\n";
+
+        // Jump back to the entry and generate an alloca. Note that by
+        // jumping back we're rendering any expression we carry back
+        // meaningless, so we had better only be dealing with
+        // constants here.
         int32_t size = 0;
         bool is_constant = constant_allocation_size(alloc->extents, allocation_name, size);
         user_assert(is_constant)
@@ -235,11 +192,10 @@ void CodeGen_PTX_Dev::visit(const Allocate *alloc) {
         BasicBlock *here = builder->GetInsertBlock();
 
         builder->SetInsertPoint(entry_block);
-        ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
+        Value *ptr = builder->CreateAlloca(llvm_type_of(alloc->type), ConstantInt::get(i32, size));
         builder->SetInsertPoint(here);
+        sym_push(allocation_name, ptr);
     }
-
-    sym_push(allocation_name, ptr);
     codegen(alloc->body);
 }
 
@@ -268,8 +224,6 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     #if WITH_PTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
-
-    optimize_module();
 
     // DISABLED - hooked in here to force PrintBeforeAll option - seems to be the only way?
     /*char* argv[] = { "llc", "-print-before-all" };*/
@@ -410,6 +364,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
 
     string str = outs.str();
+    debug(1) << "PTX kernel:\n" << str.c_str() << "\n";
     vector<char> buffer(str.begin(), str.end());
     buffer.push_back(0);
     return buffer;

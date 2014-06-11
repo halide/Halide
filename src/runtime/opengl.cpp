@@ -6,9 +6,6 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#include "posix_allocator.cpp"
-#include "posix_io.cpp"
-#include "posix_error_handler.cpp"
 #include "mini_string.h"
 #include "mini_opengl.h"
 
@@ -522,8 +519,9 @@ static bool get_texture_format(void *user_context,
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
 EXPORT int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
-    if (int error = halide_opengl_init(user_context))
+    if (int error = halide_opengl_init(user_context)) {
         return error;
+    }
 
     if (!buf) {
         halide_error(user_context, "Invalid buffer");
@@ -718,9 +716,10 @@ EXPORT void *halide_opengl_init_kernels(void *user_context, void *state_ptr,
     return NULL;
 }
 
-EXPORT void halide_opengl_dev_sync(void *user_context) {
-    CHECK_INITIALIZED();
+EXPORT int halide_opengl_dev_sync(void *user_context) {
+    CHECK_INITIALIZED(1);
     // TODO: glFinish()
+    return 0;
 }
 
 template <class T>
@@ -761,9 +760,13 @@ static void interleaved_to_halide(buffer_t *buf, T *src, int width, int height,
     }
 }
 
-// Copy image data from host memory to texture. We assume that the texture has
-// already been allocated using halide_opengl_dev_malloc.
+// Copy image data from host memory to texture.
 EXPORT int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
+    int err = halide_opengl_dev_malloc(user_context, buf);
+    if (err) {
+        return err;
+    }
+
     CHECK_INITIALIZED(1);
     if (!buf->host_dirty) {
         return 0;
@@ -1160,8 +1163,8 @@ EXPORT int halide_dev_run(void *user_context,
                                  arg_sizes, args);
 }
 
-EXPORT void halide_dev_sync(void *user_context) {
-    halide_opengl_dev_sync(user_context);
+EXPORT int halide_dev_sync(void *user_context) {
+    return halide_opengl_dev_sync(user_context);
 }
 
 EXPORT void *halide_init_kernels(void *user_context, void *state_ptr,

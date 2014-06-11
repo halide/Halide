@@ -118,20 +118,19 @@ public:
                     for (int i = 0; i < func.dimensions(); i++) {
                         Expr outer_min = Call::make(Int(32), Call::extract_buffer_min,
                                                     vec<Expr>(outer_query, i), Call::Intrinsic);
-                        Expr outer_extent = Call::make(Int(32), Call::extract_buffer_extent,
-                                                       vec<Expr>(outer_query, i), Call::Intrinsic);
-                        Expr outer_max_plus_one = outer_min + outer_extent;
+                        Expr outer_max = Call::make(Int(32), Call::extract_buffer_max,
+                                                    vec<Expr>(outer_query, i), Call::Intrinsic);
 
                         Expr inner_min = Call::make(Int(32), Call::extract_buffer_min,
                                                     vec<Expr>(inner_query, i), Call::Intrinsic);
-                        Expr inner_extent = Call::make(Int(32), Call::extract_buffer_extent,
-                                                       vec<Expr>(inner_query, i), Call::Intrinsic);
-                        Expr inner_max_plus_one = inner_min + inner_extent;
+                        Expr inner_max = Call::make(Int(32), Call::extract_buffer_max,
+                                                    vec<Expr>(inner_query, i), Call::Intrinsic);
+                        Expr inner_extent = inner_max - inner_min + 1;
 
                         // Push 'inner' inside of 'outer'
-                        Expr new_min = Min::make(inner_min, outer_max_plus_one - inner_extent);
-                        Expr new_extent = inner_extent;
-                        Expr new_max = new_min + new_extent - 1;
+                        Expr shift = Min::make(0, outer_max - inner_max);
+                        Expr new_min = inner_min + shift;
+                        Expr new_max = inner_max + shift;
 
                         // Modify the region to be computed accordingly
                         s = LetStmt::make(func.name() + ".s0." + func.args()[i] + ".max", new_max, s);
@@ -150,8 +149,8 @@ public:
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
                 string prefix = name + ".s" + int_to_string(stage) + ".";
-                for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
-                    const Schedule::Bound &bound = func.schedule().bounds[i];
+                for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
+                    const Bound &bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_bound = bound.min;
@@ -306,7 +305,7 @@ public:
 
             /*
             for (size_t i = 0; i < func.schedule().bounds.size(); i++) {
-                const Schedule::Bound &b = func.schedule().bounds[i];
+                const Bound &b = func.schedule().bounds[i];
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }
             */
@@ -330,7 +329,7 @@ public:
         vector<bool> inlined(f.size());
         for (size_t i = 0; i < inlined.size(); i++) {
             if (i < f.size() - 1 &&
-                f[i].schedule().compute_level.is_inline() &&
+                f[i].schedule().compute_level().is_inline() &&
                 f[i].is_pure()) {
                 inlined[i] = true;
             } else {
@@ -378,7 +377,7 @@ public:
         vector<Stage> new_stages;
         for (size_t i = 0; i < stages.size(); i++) {
             if (stages[i].func.same_as(output_function) ||
-                !stages[i].func.schedule().compute_level.is_inline() ||
+                !stages[i].func.schedule().compute_level().is_inline() ||
                 !stages[i].func.is_pure()) {
                 new_stages.push_back(stages[i]);
             }
@@ -421,9 +420,8 @@ public:
                             Expr buf = Variable::make(Handle(), buf_name);
                             Expr min = Call::make(Int(32), Call::extract_buffer_min,
                                                   vec<Expr>(buf, d), Call::Intrinsic);
-                            Expr extent = Call::make(Int(32), Call::extract_buffer_extent,
-                                                     vec<Expr>(buf, d), Call::Intrinsic);
-                            Expr max = min + extent - 1;
+                            Expr max = Call::make(Int(32), Call::extract_buffer_max,
+                                                  vec<Expr>(buf, d), Call::Intrinsic);
                             b[d] = Interval(min, max);
                         }
                         merge_boxes(boxes[f.name()], b);
