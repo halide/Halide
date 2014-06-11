@@ -319,6 +319,14 @@ Stmt build_provide_loop_nest(Function f,
         }
     }
 
+    // Define the bounds on the outermost dummy dimension.
+    {
+        string o = prefix + Var::outermost().name();
+        stmt = LetStmt::make(o + ".loop_min", 0, stmt);
+        stmt = LetStmt::make(o + ".loop_max", 1, stmt);
+        stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
+    }
+
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
     for (size_t i = 0; i < f.args().size(); i++) {
         string var = prefix + f.args()[i];
@@ -1077,6 +1085,18 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
     }
 }
 
+class RemoveLoopsOverOutermost : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        if (ends_with(op->name, ".__outermost")) {
+            stmt = op->body;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+};
+
 Stmt schedule_functions(Stmt s, const vector<string> &order,
                         const map<string, Function> &env,
                         const map<string, set<string> > &graph, const Target &t) {
@@ -1110,8 +1130,13 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
     internal_assert(root_loop);
+    s = root_loop->body;
 
-    return root_loop->body;
+    // We can also remove all the loops over __outermost now.
+    RemoveLoopsOverOutermost r;
+    s = r.mutate(s);
+
+    return s;
 }
 
 // Insert checks to make sure that parameters are within their

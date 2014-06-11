@@ -157,6 +157,12 @@ public:
         return Var("__thread_id_x");
     }
     // @}
+
+    /** A Var that represents the location outside the outermost loop. */
+    static Var outermost() {
+        return Var("__outermost");
+    }
+
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */
