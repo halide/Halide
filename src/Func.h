@@ -1105,9 +1105,9 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_threads. */
@@ -1128,9 +1128,9 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
@@ -1152,11 +1152,11 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
-		     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpuapi = GPU_Default);
+		     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
-                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpuapi = GPU_Default);
+                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu. */
@@ -1179,10 +1179,10 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api = GPU_Default);
     EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
-                          int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_Default);
+                          int x_size, int y_size, int z_size, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */
