@@ -25,10 +25,14 @@ public:
      * we can make vectors of RVars */
     RVar() {}
 
+    /** A named but undefined reduction variable. This constructor only exists
+     * to improve error messages when an undefined RVar is used */
+    explicit RVar(const std::string _name) : _name(_name) {}
+
     /** Construct a reduction variable with the given name and
      * bounds. Must be a member of the given reduction domain. */
-    RVar(std::string __name, Expr __min, Expr __extent, Internal::ReductionDomain _domain) :
-        _name(__name), _min(__min), _extent(__extent), domain(_domain) {}
+    RVar(std::string name, Expr min, Expr extent, Internal::ReductionDomain _domain) :
+        _name(name), _min(min), _extent(extent), domain(_domain) {}
 
     /** The minimum value that this variable will take on */
     Expr min() const {return _min;}
