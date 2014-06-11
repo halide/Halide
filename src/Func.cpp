@@ -21,6 +21,7 @@
 #include "Param.h"
 #include "Debug.h"
 #include "Target.h"
+#include "IREquality.h"
 
 namespace Halide {
 
@@ -359,7 +360,7 @@ bool var_name_match(string candidate, string var) {
 
 void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
     bool found = false;
-    vector<Schedule::Dim> &dims = schedule.dims;
+    vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; i < dims.size(); i++) {
         if (var_name_match(dims[i].var, var.name())) {
             found = true;
@@ -383,8 +384,8 @@ void ScheduleHandle::set_dim_type(Var var, For::ForType t) {
 std::string ScheduleHandle::dump_argument_list() {
     std::ostringstream oss;
     oss << "Argument list:";
-    for (size_t i = 0; i < schedule.dims.size(); i++) {
-        oss << " " << schedule.dims[i].var;
+    for (size_t i = 0; i < schedule.dims().size(); i++) {
+        oss << " " << schedule.dims()[i].var;
     }
     oss << "\n";
     return oss.str();
@@ -394,7 +395,7 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string inner_name, outer_name, old_name;
-    vector<Schedule::Dim> &dims = schedule.dims;
+    vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old.name())) {
             found = true;
@@ -418,8 +419,8 @@ ScheduleHandle &ScheduleHandle::split(Var old, Var outer, Var inner, Expr factor
     }
 
     // Add the split to the splits list
-    Schedule::Split split = {old_name, outer_name, inner_name, factor, Schedule::Split::SplitVar};
-    schedule.splits.push_back(split);
+    Split split = {old_name, outer_name, inner_name, factor, Split::SplitVar};
+    schedule.splits().push_back(split);
     return *this;
 }
 
@@ -428,7 +429,7 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
     // Replace the old dimensions with the new dimension in the dims list
     bool found_outer = false, found_inner = false;
     string inner_name, outer_name, fused_name;
-    vector<Schedule::Dim> &dims = schedule.dims;
+    vector<Dim> &dims = schedule.dims();
 
     for (size_t i = 0; (!found_outer) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, outer.name())) {
@@ -466,16 +467,32 @@ ScheduleHandle &ScheduleHandle::fuse(Var inner, Var outer, Var fused) {
 
 
     // Add the fuse to the splits list
-    Schedule::Split split = {fused_name, outer_name, inner_name, Expr(), Schedule::Split::FuseVars};
-    schedule.splits.push_back(split);
+    Split split = {fused_name, outer_name, inner_name, Expr(), Split::FuseVars};
+    schedule.splits().push_back(split);
     return *this;
+}
+
+ScheduleHandle ScheduleHandle::specialize(Expr condition) {
+    user_assert(condition.type().is_bool()) << "Argument passed to specialize must be of type bool\n";
+
+    // The user may be retrieving a reference to an existing
+    // specialization.
+    for (size_t i = 0; i < schedule.specializations().size(); i++) {
+        if (equal(condition, schedule.specializations()[i].condition)) {
+            return ScheduleHandle(schedule.specializations()[i].schedule);
+        }
+    }
+
+    const Specialization &s = schedule.add_specialization(condition);
+
+    return ScheduleHandle(s.schedule);
 }
 
 ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string old_name;
-    vector<Schedule::Dim> &dims = schedule.dims;
+    vector<Dim> &dims = schedule.dims();
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old_var.name())) {
             found = true;
@@ -496,31 +513,50 @@ ScheduleHandle &ScheduleHandle::rename(Var old_var, Var new_var) {
 
     if (old_name.find('.') == string::npos) {
         // If it's a primitive name, add the rename to the splits list.
-        Schedule::Split split = {old_name, new_name, "", 1, Schedule::Split::RenameVar};
-        schedule.splits.push_back(split);
+        Split split = {old_name, new_name, "", 1, Split::RenameVar};
+        schedule.splits().push_back(split);
     } else {
         // It's a derived name, so just rewrite the split or rename that defines it.
         bool found = false;
-        for (size_t i = schedule.splits.size(); i > 0; i--) {
-            if (schedule.splits[i-1].inner == old_name) {
-                schedule.splits[i-1].inner = new_name;
-                found = true;
-                break;
-            }
-            if (schedule.splits[i-1].outer == old_name) {
-                schedule.splits[i-1].outer = new_name;
-                found = true;
-                break;
-            }
-            if (schedule.splits[i-1].old_var == old_name) {
-                user_error << "Can't rename a variable " << old_name
-                           << " because it has already been renamed or split.\n";
+        for (size_t i = schedule.splits().size(); i > 0; i--) {
+            if (schedule.splits()[i-1].is_fuse()) {
+                if (schedule.splits()[i-1].inner == old_name ||
+                    schedule.splits()[i-1].outer == old_name) {
+                    user_error << "Can't rename a variable " << old_name
+                               << " because it has already been fused into "
+                               << schedule.splits()[i-1].old_var << "\n";
+                }
+                if (schedule.splits()[i-1].old_var == old_name) {
+                    schedule.splits()[i-1].old_var = new_name;
+                    found = true;
+                    break;
+                }
+            } else {
+                if (schedule.splits()[i-1].inner == old_name) {
+                    schedule.splits()[i-1].inner = new_name;
+                    found = true;
+                    break;
+                }
+                if (schedule.splits()[i-1].outer == old_name) {
+                    schedule.splits()[i-1].outer = new_name;
+                    found = true;
+                    break;
+                }
+                if (schedule.splits()[i-1].old_var == old_name) {
+                    user_error << "Can't rename a variable " << old_name
+                               << " because it has already been renamed or split.\n";
+                }
             }
         }
         user_assert(found) << "Rename failed: Old name: " << old_name
-                           << " is not an arg, and was not defined by a split.\n";
+                           << " is not an arg, and was not defined by a split, rename, or fuse.\n";
     }
 
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::serial(Var var) {
+    set_dim_type(var, For::Serial);
     return *this;
 }
 
@@ -595,7 +631,7 @@ ScheduleHandle &ScheduleHandle::reorder(const std::vector<VarOrRVar>& vars) {
 }
 
 ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y) {
-    vector<Schedule::Dim> &dims = schedule.dims;
+    vector<Dim> &dims = schedule.dims();
     bool found_y = false;
     size_t y_loc = 0;
     for (size_t i = 0; i < dims.size(); i++) {
@@ -656,15 +692,15 @@ ScheduleHandle &ScheduleHandle::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, V
 
 ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
-    rename(tx, Var("threadidx"));
+    rename(tx, Var("__thread_id_x"));
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
-    rename(tx, Var("threadidx"));
-    rename(ty, Var("threadidy"));
+    rename(tx, Var("__thread_id_x"));
+    rename(ty, Var("__thread_id_y"));
     return *this;
 }
 
@@ -672,23 +708,23 @@ ScheduleHandle &ScheduleHandle::gpu_threads(Var tx, Var ty, Var tz, GPUAPI /* gp
     parallel(tx);
     parallel(ty);
     parallel(tz);
-    rename(tx, Var("threadidx"));
-    rename(ty, Var("threadidy"));
-    rename(tz, Var("threadidz"));
+    rename(tx, Var("__thread_id_x"));
+    rename(ty, Var("__thread_id_y"));
+    rename(tz, Var("__thread_id_z"));
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, GPUAPI /* gpu_api */) {
     parallel(tx);
-    rename(tx, Var("blockidx"));
+    rename(tx, Var("__block_id_x"));
     return *this;
 }
 
 ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
-    rename(tx, Var("blockidx"));
-    rename(ty, Var("blockidy"));
+    rename(tx, Var("__block_id_x"));
+    rename(ty, Var("__block_id_y"));
     return *this;
 }
 
@@ -696,9 +732,9 @@ ScheduleHandle &ScheduleHandle::gpu_blocks(Var tx, Var ty, Var tz, GPUAPI /* gpu
     parallel(tx);
     parallel(ty);
     parallel(tz);
-    rename(tx, Var("blockidx"));
-    rename(ty, Var("blockidy"));
-    rename(tz, Var("blockidz"));
+    rename(tx, Var("__block_id_x"));
+    rename(ty, Var("__block_id_y"));
+    rename(tz, Var("__block_id_z"));
     return *this;
 }
 
@@ -718,7 +754,7 @@ ScheduleHandle &ScheduleHandle::gpu(Var bx, Var by, Var bz,
 }
 
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api */) {
-    Var bx("blockidx"), tx("threadidx");
+    Var bx("__block_id_x"), tx("__thread_id_x");
     split(x, bx, tx, x_size);
     parallel(bx);
     parallel(tx);
@@ -729,7 +765,7 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Expr x_size, GPUAPI /* gpu_api *
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
                                          Expr x_size, Expr y_size,
 					 GPUAPI /* gpu_api */) {
-    Var bx("blockidx"), by("blockidy"), tx("threadidx"), ty("threadidy");
+    Var bx("__block_id_x"), by("__block_id_y"), tx("__thread_id_x"), ty("__thread_id_y");
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
     parallel(by);
@@ -741,8 +777,8 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y,
 ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
                                          Expr x_size, Expr y_size, Expr z_size,
 					 GPUAPI /* gpu_api */) {
-    Var bx("blockidx"), by("blockidy"), bz("blockidz"),
-        tx("threadidx"), ty("threadidy"), tz("threadidz");
+    Var bx("__block_id_x"), by("__block_id_y"), bz("__block_id_z"),
+        tx("__thread_id_x"), ty("__thread_id_y"), tz("__thread_id_z");
     split(x, bx, tx, x_size);
     split(y, by, ty, y_size);
     split(z, bz, tz, z_size);
@@ -775,6 +811,15 @@ Func &Func::fuse(Var inner, Var outer, Var fused) {
 
 Func &Func::rename(Var old_name, Var new_name) {
     ScheduleHandle(func.schedule()).rename(old_name, new_name);
+    return *this;
+}
+
+ScheduleHandle Func::specialize(Expr c) {
+    return ScheduleHandle(func.schedule()).specialize(c);
+}
+
+Func &Func::serial(Var var) {
+    ScheduleHandle(func.schedule()).serial(var);
     return *this;
 }
 
@@ -821,8 +866,8 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
         << " because " << var.name()
         << " is not one of the pure variables of " << name() << ".\n";
 
-    Schedule::Bound b = {var.name(), min, extent};
-    func.schedule().bounds.push_back(b);
+    Bound b = {var.name(), min, extent};
+    func.schedule().bounds().push_back(b);
     return *this;
 }
 
@@ -965,10 +1010,10 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
-    for (size_t i = 0; i < sched.bounds.size(); i++) {
-        if (c.name() == sched.bounds[i].var) {
-            constant_bounds = is_const(sched.bounds[i].min) &&
-                is_const(sched.bounds[i].extent);
+    for (size_t i = 0; i < sched.bounds().size(); i++) {
+        if (c.name() == sched.bounds()[i].var) {
+            constant_bounds = is_const(sched.bounds()[i].min) &&
+                is_const(sched.bounds()[i].extent);
             break;
         }
     }
@@ -980,7 +1025,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
 
 Func &Func::reorder_storage(Var x, Var y) {
-    vector<string> &dims = func.schedule().storage_dims;
+    vector<string> &dims = func.schedule().storage_dims();
     bool found_y = false;
     size_t y_loc = 0;
     for (size_t i = 0; i < dims.size(); i++) {
@@ -1026,18 +1071,18 @@ Func &Func::compute_at(Func f, RVar var) {
 }
 
 Func &Func::compute_at(Func f, Var var) {
-    Schedule::LoopLevel loop_level(f.name(), var.name());
-    func.schedule().compute_level = loop_level;
-    if (func.schedule().store_level.is_inline()) {
-        func.schedule().store_level = loop_level;
+    LoopLevel loop_level(f.name(), var.name());
+    func.schedule().compute_level() = loop_level;
+    if (func.schedule().store_level().is_inline()) {
+        func.schedule().store_level() = loop_level;
     }
     return *this;
 }
 
 Func &Func::compute_root() {
-    func.schedule().compute_level = Schedule::LoopLevel::root();
-    if (func.schedule().store_level.is_inline()) {
-        func.schedule().store_level = Schedule::LoopLevel::root();
+    func.schedule().compute_level() = LoopLevel::root();
+    if (func.schedule().store_level().is_inline()) {
+        func.schedule().store_level() = LoopLevel::root();
     }
     return *this;
 }
@@ -1047,18 +1092,18 @@ Func &Func::store_at(Func f, RVar var) {
 }
 
 Func &Func::store_at(Func f, Var var) {
-    func.schedule().store_level = Schedule::LoopLevel(f.name(), var.name());
+    func.schedule().store_level() = LoopLevel(f.name(), var.name());
     return *this;
 }
 
 Func &Func::store_root() {
-    func.schedule().store_level = Schedule::LoopLevel::root();
+    func.schedule().store_level() = LoopLevel::root();
     return *this;
 }
 
 Func &Func::compute_inline() {
-    func.schedule().compute_level = Schedule::LoopLevel();
-    func.schedule().store_level = Schedule::LoopLevel();
+    func.schedule().compute_level() = LoopLevel();
+    func.schedule().store_level() = LoopLevel();
     return *this;
 }
 
@@ -2038,7 +2083,7 @@ void Func::infer_input_bounds(Realization dst) {
         Buffer b = image_param_args[i].second.get_buffer();
         if (!b.defined()) {
             buffer_t buf = dummy_buffers[j];
-            
+
             Internal::debug(1) << "Inferred bounds for " << image_param_args[i].second.name() << ": ("
                 << buf.min[0] << ","
                 << buf.min[1] << ","

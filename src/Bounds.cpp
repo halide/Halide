@@ -10,6 +10,7 @@
 #include "Util.h"
 #include "Var.h"
 #include "Debug.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -630,6 +631,11 @@ private:
             }
         }
 
+        if (op->type == Handle()) {
+            min = max = Expr();
+            return;
+        }
+
         if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
             min = max = Call::make(op->type, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
@@ -646,6 +652,14 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::return_second) {
+            assert(op->args.size() == 2);
+            op->args[1].accept(this);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::if_then_else) {
+            assert(op->args.size() == 3);
+            // Probably more conservative than necessary
+            Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
+            equivalent_select.accept(this);
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
@@ -660,6 +674,21 @@ private:
             max = Call::make(op->type, op->name, vec<Expr>(max_a), op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
+        } else if (op->call_type == Call::Intrinsic &&
+                   (op->name == Call::extract_buffer_min ||
+                    op->name == Call::extract_buffer_max) &&
+                   !op->args.empty() &&
+                   op->args[0].as<Variable>()) {
+            // Bounds query results should have perfect nesting. Their
+            // max over a loop is just the same bounds query call at
+            // an outer loop level. This requires that the query is
+            // also done at the outer loop level so that the buffer
+            // arg is still valid, which it is, so it is.
+            //
+            // TODO: There should be an assert injected in the inner
+            // loop to check perfect nesting.
+            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
+            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
         } else if (op->func.has_pure_definition()) {
             bounds_of_func(op->func, op->value_index);
         } else {
@@ -760,18 +789,57 @@ void merge_boxes(Box &a, const Box &b) {
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].min.defined() && b[i].min.defined()) {
-                a[i].min = min(a[i].min, b[i].min);
+                if (a.used.defined() && b.used.defined()) {
+                    if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
+                        a[i].min = select(a.used, a[i].min, b[i].min);
+                    } else {
+                        a[i].min = select(a.used && b.used, min(a[i].min, b[i].min),
+                                          a.used, a[i].min,
+                                          b[i].min);
+                    }
+                } else if (a.used.defined()) {
+                    a[i].min = select(a.used, min(a[i].min, b[i].min), b[i].min);
+                } else if (b.used.defined()) {
+                    a[i].min = select(b.used, min(a[i].min, b[i].min), a[i].min);
+                } else {
+                    a[i].min = min(a[i].min, b[i].min);
+                }
             } else {
                 a[i].min = Expr();
             }
         }
         if (!a[i].max.same_as(b[i].max)) {
             if (a[i].max.defined() && b[i].max.defined()) {
-                a[i].max = max(a[i].max, b[i].max);
+                if (a.used.defined() && b.used.defined()) {
+                    if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
+                        a[i].max = select(a.used, a[i].max, b[i].max);
+                    } else {
+                        a[i].max = select(a.used && b.used, max(a[i].max, b[i].max),
+                                          a.used, a[i].max,
+                                          b[i].max);
+                    }
+                } else if (a.used.defined()) {
+                    a[i].max = select(a.used, max(a[i].max, b[i].max), b[i].max);
+                } else if (b.used.defined()) {
+                    a[i].max = select(b.used, max(a[i].max, b[i].max), a[i].max);
+                } else {
+                    a[i].max = max(a[i].max, b[i].max);
+                }
             } else {
                 a[i].max = Expr();
             }
         }
+    }
+
+    if (a.used.defined() && b.used.defined()) {
+        if (!equal(a.used, b.used)) {
+            a.used = simplify(a.used || b.used);
+            if (is_one(a.used)) {
+                a.used = Expr();
+            }
+        }
+    } else {
+        a.used = Expr();
     }
 }
 
@@ -825,8 +893,6 @@ private:
             op->call_type == Call::Extern) {
             return;
         }
-
-        string name = op->name;
 
         Box b(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -898,6 +964,68 @@ private:
                 }
             }
         }
+    }
+
+    void visit(const IfThenElse *op) {
+        op->condition.accept(this);
+
+        if (expr_uses_vars(op->condition, scope)) {
+            op->then_case.accept(this);
+            if (op->else_case.defined()) {
+                op->else_case.accept(this);
+            }
+        } else {
+            // If the condition is based purely on params, then we'll only
+            // ever go one way in a given run, so we should conditionalize
+            // the boxes touched on the condition.
+
+            // Fork the boxes touched and go down each path
+            map<string, Box> then_boxes, else_boxes;
+            then_boxes.swap(boxes);
+            op->then_case.accept(this);
+            then_boxes.swap(boxes);
+
+            if (op->else_case.defined()) {
+                else_boxes.swap(boxes);
+                op->else_case.accept(this);
+                else_boxes.swap(boxes);
+            }
+
+            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+
+            // Make sure all the then boxes have an entry on the else
+            // side so that the merge doesn't skip them.
+            for (map<string, Box>::iterator iter = then_boxes.begin();
+                 iter != then_boxes.end(); ++iter) {
+                else_boxes[iter->first];
+            }
+
+            // Merge
+            for (map<string, Box>::iterator iter = else_boxes.begin();
+                 iter != else_boxes.end(); ++iter) {
+                Box &else_box = iter->second;
+                Box &then_box = then_boxes[iter->first];
+                Box &orig_box = boxes[iter->first];
+
+                //debug(0) << " Merging boxes for " << iter->first << "\n";
+
+                if (then_box.used.defined()) {
+                    then_box.used = then_box.used && op->condition;
+                } else {
+                    then_box.used = op->condition;
+                }
+
+                if (else_box.used.defined()) {
+                    else_box.used = else_box.used && !op->condition;
+                } else {
+                    else_box.used = !op->condition;
+                }
+
+                merge_boxes(orig_box, then_box);
+                merge_boxes(orig_box, else_box);
+            }
+        }
+
     }
 
     void visit(const For *op) {
@@ -1093,6 +1221,9 @@ void bounds_test() {
     check(scope, Load::make(Int(8), "buf", x, Buffer(), Parameter()), cast(Int(8), -128), cast(Int(8), 127));
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
+
+    check(scope, print(x, y), 0, 10);
+    check(scope, print_when(x > y, x, y), 0, 10);
 
     // Check some operations that may overflow
     check(scope, (cast<uint8_t>(x)+250), cast<uint8_t>(0), cast<uint8_t>(255));

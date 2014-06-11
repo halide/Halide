@@ -62,13 +62,14 @@ file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BIN}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_BIN}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
 
+message(${CLANG})
+
 option(TARGET_NATIVE_CLIENT "Include Native Client" ON)
 option(TARGET_X86 "Include x86 target" ON)
 option(TARGET_ARM "Include ARM target" ON)
 option(TARGET_PTX "Include PTX target" ON)
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
-option(TARGET_SPIR "Include SPIR/SPIR64 targets" ON)
 
 set(CAT cat)
 if(WIN32)

@@ -46,20 +46,27 @@ protected:
         std::string print_type(Type type);
         std::string print_reinterpret(Type type, Expr e);
 
+        std::string get_memory_space(const std::string &);
+
         void visit(const For *);
         void visit(const Ramp *op);
         void visit(const Broadcast *op);
         void visit(const Load *op);
         void visit(const Store *op);
         void visit(const Cast *op);
+        void visit(const Allocate *op);
+        void visit(const Free *op);
+
+        /** Maintains the kernel arguments that are in scope. */
+        Scope<Type> kernel_arguments;
+
+        /** Tracks per-thread allocations. */
+        Scope<int> internal_allocations;
     };
 
-    CodeGen_OpenCL_C *clc;
-
     std::ostringstream src_stream;
-
     std::string cur_kernel_name;
-
+    CodeGen_OpenCL_C clc;
     Target target;
 };
 

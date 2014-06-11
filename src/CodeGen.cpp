@@ -197,7 +197,6 @@ void CodeGen::compile(Stmt stmt, string name,
         }
     }
 
-
     // Make the initial basic block
     BasicBlock *block = BasicBlock::Create(*context, "entry", function);
     builder->SetInsertPoint(block);
@@ -682,13 +681,18 @@ void CodeGen::visit(const StringImm *op) {
 }
 
 void CodeGen::visit(const Cast *op) {
-    value = codegen(op->value);
-
     Halide::Type src = op->value.type();
     Halide::Type dst = op->type;
+
+    value = codegen(op->value);
+
     llvm::Type *llvm_dst = llvm_type_of(dst);
 
-    if (!src.is_float() && !dst.is_float()) {
+    if (dst.is_handle() && src.is_handle()) {
+        value = builder->CreateBitCast(value, llvm_dst);
+    } else if (dst.is_handle() || src.is_handle()) {
+        internal_error << "Can't cast from " << src << " to " << dst << "\n";
+    } else if (!src.is_float() && !dst.is_float()) {
         // Widening integer casts either zero extend or sign extend,
         // depending on the source type. Narrowing integer casts
         // always truncate.
@@ -1380,7 +1384,43 @@ void CodeGen::visit(const Call *op) {
             value = builder->CreateNot(codegen(op->args[0]));
         } else if (op->name == Call::reinterpret) {
             internal_assert(op->args.size() == 1);
-            value = builder->CreateBitCast(codegen(op->args[0]), llvm_type_of(op->type));
+            Type dst = op->type;
+            Type src = op->args[0].type();
+            llvm::Type *llvm_dst = llvm_type_of(dst);
+            value = codegen(op->args[0]);
+            if (src.is_handle() && !dst.is_handle()) {
+                internal_assert(dst.is_uint() && dst.bits == 64);
+
+                // Handle -> UInt64
+                llvm::DataLayout d(module);
+                if (d.getPointerSize() == 4) {
+                    llvm::Type *intermediate = llvm_type_of(UInt(32, dst.width));
+                    value = builder->CreatePtrToInt(value, intermediate);
+                    value = builder->CreateZExt(value, llvm_dst);
+                } else if (d.getPointerSize() == 8) {
+                    value = builder->CreatePtrToInt(value, llvm_dst);
+                } else {
+                    internal_error << "Pointer size is neither 4 nor 8 bytes\n";
+                }
+
+            } else if (dst.is_handle() && !src.is_handle()) {
+                internal_assert(dst.is_uint() && dst.bits == 64);
+
+                // UInt64 -> Handle
+                llvm::DataLayout d(module);
+                if (d.getPointerSize() == 4) {
+                    llvm::Type *intermediate = llvm_type_of(UInt(32, src.width));
+                    value = builder->CreateTrunc(value, intermediate);
+                    value = builder->CreateIntToPtr(value, llvm_dst);
+                } else if (d.getPointerSize() == 8) {
+                    value = builder->CreateIntToPtr(value, llvm_dst);
+                } else {
+                    internal_error << "Pointer size is neither 4 nor 8 bytes\n";
+                }
+
+            } else {
+                value = builder->CreateBitCast(codegen(op->args[0]), llvm_dst);
+            }
         } else if (op->name == Call::shift_left) {
             internal_assert(op->args.size() == 2);
             value = builder->CreateShl(codegen(op->args[0]), codegen(op->args[1]));
@@ -1468,13 +1508,16 @@ void CodeGen::visit(const Call *op) {
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
             value = buffer_min(buffer, idx->value);
-        } else if (op->name == Call::extract_buffer_extent) {
+        } else if (op->name == Call::extract_buffer_max) {
             internal_assert(op->args.size() == 2);
             const IntImm *idx = op->args[1].as<IntImm>();
             internal_assert(idx);
             Value *buffer = codegen(op->args[0]);
             buffer = builder->CreatePointerCast(buffer, buffer_t_type->getPointerTo());
-            value = buffer_extent(buffer, idx->value);
+            Value *extent = buffer_extent(buffer, idx->value);
+            Value *min = buffer_min(buffer, idx->value);
+            Value *max_plus_one = builder->CreateNSWAdd(min, extent);
+            value = builder->CreateNSWSub(max_plus_one, ConstantInt::get(i32, 1));
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
             internal_assert((int)(op->args.size()) == dims*3 + 2);
@@ -1497,6 +1540,18 @@ void CodeGen::visit(const Call *op) {
 
             // From the point of view of the continued code (a containing assert stmt), this returns true.
             value = codegen(const_true());
+        } else if (op->name == Call::set_host_dirty) {
+            internal_assert(op->args.size() == 2);
+            Value *buffer = codegen(op->args[0]);
+            Value *arg = codegen(op->args[1]);
+            builder->CreateStore(arg, buffer_host_dirty_ptr(buffer));
+            value = ConstantInt::get(i32, 0);
+        } else if (op->name == Call::set_dev_dirty) {
+            internal_assert(op->args.size() == 2);
+            Value *buffer = codegen(op->args[0]);
+            Value *arg = codegen(op->args[1]);
+            builder->CreateStore(arg, buffer_dev_dirty_ptr(buffer));
+            value = ConstantInt::get(i32, 0);
         } else if (op->name == Call::null_handle) {
             internal_assert(op->args.size() == 0) << "null_handle takes no arguments\n";
             internal_assert(op->type == Handle()) << "null_handle must return a Handle type\n";
@@ -1554,7 +1609,7 @@ void CodeGen::visit(const Call *op) {
             }
 
             StructType *trace_event_type = module->getTypeByName("struct.halide_trace_event");
-            internal_assert(trace_event_type);
+            user_assert(trace_event_type) << "The module being generated does not support tracing.\n";
             Value *trace_event = create_alloca_at_entry(trace_event_type, 1);
 
             Value *members[10] = {
@@ -1613,8 +1668,8 @@ void CodeGen::visit(const Call *op) {
                 (op->name == Call::count_leading_zeros) ? Intrinsic::ctlz :
                                                           Intrinsic::cttz,
                 arg_type);
-            llvm::Value *zero_is_undef = llvm::ConstantInt::getTrue(*context);
-            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_undef };
+            llvm::Value *zero_is_not_undef = llvm::ConstantInt::getFalse(*context);
+            llvm::Value *args[2] = { codegen(op->args[0]), zero_is_not_undef };
             CallInst *call = builder->CreateCall(fn, args);
             value = call;
         } else if (op->name == Call::return_second) {
@@ -1706,7 +1761,7 @@ void CodeGen::visit(const Call *op) {
             // correctly (they just get called "Handle()"), so we may
             // need to pointer cast to the appropriate type. Only look at
             // fixed params (not varags) in llvm function.
-            // Funntions which take a user context have it added below so the
+            // Functions which take a user context have it added below so the
             // llvm function argument indexing is one greater in that case.
             size_t llvm_arg_offset = function_takes_user_context(op->name) ? 1 : 0;
             FunctionType *func_t = fn->getFunctionType();
@@ -1742,25 +1797,20 @@ void CodeGen::visit(const Call *op) {
             }
         }
 
+        // We also have several impure runtime functions that do not
+        // take a handle.
+        if (op->name == "halide_current_time_ns" ||
+            op->name == "halide_gpu_thread_barrier") {
+            pure = false;
+        }
+
         // Add a user context arg as needed. It's never a vector.
         if (function_takes_user_context(op->name)) {
             debug(4) << "Adding user_context to " << op->name << " args\n";
             args.insert(args.begin(), get_user_context());
         }
 
-        // TODO: Need a general solution here to side-effecty functions
-        if (op->name == "halide_current_time_ns") {
-            internal_assert(op->args.size() == 0);
-            debug(4) << "Creating scalar call to " << op->name << "\n";
-            CallInst *call = builder->CreateCall(fn, get_user_context());
-            value = call;
-        } else if (op->name == "rand_i32" || op->name == "rand_f32") {
-            internal_assert(op->args.size() == 1);
-            debug(4) << "Creating scalar call to " << op->name << "\n";
-            Value *arg = codegen(op->args[0]);
-            CallInst *call = builder->CreateCall2(fn, get_user_context(), arg);
-            value = call;
-        } else if (op->type.is_scalar()) {
+        if (op->type.is_scalar()) {
             debug(4) << "Creating scalar call to " << op->name << "\n";
             CallInst *call = builder->CreateCall(fn, args);
             if (pure) {
@@ -1989,7 +2039,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure = Closure::make(op->body, op->name, track_buffers(), buffer_t_type);
+        Closure closure = Closure::make(op->body, op->name, buffer_t_type);
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
@@ -2179,7 +2229,12 @@ void CodeGen::visit(const Evaluate *op) {
 
 Value *CodeGen::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {
     llvm::BasicBlock *here = builder->GetInsertBlock();
-    builder->SetInsertPoint(here->getParent()->getEntryBlock().getFirstNonPHI());
+    llvm::BasicBlock *entry = &here->getParent()->getEntryBlock();
+    if (entry->empty()) {
+        builder->SetInsertPoint(entry);
+    } else {
+        builder->SetInsertPoint(entry->getFirstInsertionPt());
+    }
     Value *size = ConstantInt::get(i32, n);
     Value *ptr = builder->CreateAlloca(t, size, name);
     builder->SetInsertPoint(here);

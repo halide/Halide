@@ -58,7 +58,10 @@ extern int halide_printf(void *user_context, const char *, ...);
  * implementation of halide_error in AOT code.  See
  * Func::set_error_handler.
  */
+//@{
 extern void halide_error(void *user_context, const char *);
+extern void halide_error_varargs(void *user_context, const char *, ...);
+//@}
 
 /** A macro that calls halide_error if the supplied condition is false. */
 #define halide_assert(user_context, cond) if (!(cond)) halide_error(user_context, #cond);
@@ -180,7 +183,7 @@ extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern void halide_dev_sync(void *user_context);
+extern int halide_dev_sync(void *user_context);
 
 extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
 extern int halide_dev_free(void *user_context, struct buffer_t *buf);

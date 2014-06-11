@@ -4,6 +4,20 @@
 #include "mini_stdint.h"
 #include "../buffer_t.h"
 
-extern "C" WEAK int halide_copy_to_host(void *user_context, buffer_t *) {
+extern "C" WEAK int halide_copy_to_host(void *user_context, buffer_t *buf) {
+    return 0;
+}
+
+extern "C" WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf) {
+    halide_error(user_context, "No gpu target enabled");
+    return -1;
+}
+
+extern "C" WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
+    halide_error(user_context, "No gpu target enabled");
+    return -1;
+}
+
+extern "C" WEAK int halide_dev_free(void *user_context, buffer_t *buf) {
     return 0;
 }

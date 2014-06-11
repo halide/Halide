@@ -37,14 +37,19 @@ bool extern_call_uses_buffer(const Call *op, const std::string &func) {
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b) : predicate(const_false()), buffer(b), varies(false) {}
+    PredicateFinder(const string &b, bool s) : predicate(const_false()),
+                                               buffer(b),
+                                               varies(false),
+                                               treat_selects_as_guards(s) {}
 
 private:
 
     using IRVisitor::visit;
     string buffer;
     bool varies;
+    bool treat_selects_as_guards;
     Scope<int> varying;
+    Scope<int> in_pipeline;
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -96,6 +101,7 @@ private:
     }
 
     void visit(const Pipeline *op) {
+        in_pipeline.push(op->name, 0);
         if (op->name != buffer) {
             op->produce.accept(this);
             if (op->update.defined()) {
@@ -103,6 +109,7 @@ private:
             }
         }
         op->consume.accept(this);
+        in_pipeline.pop(op->name);
     }
 
     template<typename T>
@@ -141,7 +148,11 @@ private:
     }
 
     void visit(const Select *op) {
-        visit_conditional(op->condition, op->true_value, op->false_value);
+        if (treat_selects_as_guards) {
+            visit_conditional(op->condition, op->true_value, op->false_value);
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 
     void visit(const IfThenElse *op) {
@@ -161,6 +172,8 @@ private:
             }
             return;
         }
+
+        varies |= in_pipeline.contains(op->name);
 
         IRVisitor::visit(op);
 
@@ -246,27 +259,32 @@ private:
 
     void visit(const Realize *op) {
         if (op->name == func) {
-            PredicateFinder f(op->name);
-            op->body.accept(&f);
-            Expr predicate = simplify(f.predicate);
+            PredicateFinder find_compute(op->name, true);
+            op->body.accept(&find_compute);
+            Expr compute_predicate = simplify(find_compute.predicate);
 
-            if (expr_uses_vars(predicate, vector_vars)) {
+            if (expr_uses_vars(compute_predicate, vector_vars)) {
                 // Don't try to skip stages if the predicate may vary
                 // per lane. This will just unvectorize the
                 // production, which is probably contrary to the
                 // intent of the user.
-                predicate = const_true();
+                compute_predicate = const_true();
             }
 
-            if (!is_one(predicate)) {
-                ProductionGuarder g(op->name, predicate);
+            if (!is_one(compute_predicate)) {
+                PredicateFinder find_alloc(op->name, false);
+                op->body.accept(&find_alloc);
+                Expr alloc_predicate = simplify(find_alloc.predicate);
+
+                ProductionGuarder g(op->name, compute_predicate);
                 Stmt body = g.mutate(op->body);
-                // In the future we may be able to shrink the size
-                // updated, but right now those values may be
-                // loaded. They can be incorrect, but they must be
-                // loadable. Perhaps we can mmap some readable junk memory
-                // (e.g. lots of pages of /dev/zero).
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+
+                Region bounds = op->bounds;
+                if (!is_one(alloc_predicate)) {
+                    // We can maybe skip the realize too.
+                    bounds.back().extent = select(alloc_predicate, bounds.back().extent, 0);
+                }
+                stmt = Realize::make(op->name, op->types, bounds, body);
             } else {
                 IRMutator::visit(op);
             }
