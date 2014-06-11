@@ -1038,63 +1038,68 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
+Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_threads(tx, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
+Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
+Func &Func::gpu_blocks(VarOrRVar bx, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
+Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpu_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
+Func &Func::gpu_single_thread(GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_single_thread(gpu_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
+Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu(bx, tx, gpu_api);
     return *this;
 }
 
-Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, int x_size, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpuapi);
+Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpuapi);
+Func &Func::gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpu_api);
     return *this;
 }
 
-Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
-    ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpu_api);
+    return *this;
+}
+
+Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, GPUAPI gpu_api) {
+    ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpu_api);
     return *this;
 }
 
