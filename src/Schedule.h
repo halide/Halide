@@ -35,11 +35,11 @@ struct LoopLevel {
     /** root is a special LoopLevel value which represents the
      * location outside of all for loops */
     static LoopLevel root() {
-        return LoopLevel("", "<root>");
+        return LoopLevel("", "__root");
     }
     /** Test if a loop level is 'root', which describes the site
      * outside of all for loops */
-    bool is_root() const {return var == "<root>";}
+    bool is_root() const {return var == "__root";}
 
     /** Compare this loop level against the variable name of a for
      * loop, to see if this loop level refers to the site
@@ -187,7 +187,6 @@ public:
     LoopLevel &store_level();
     LoopLevel &compute_level();
     // @}
-
 };
 
 }
