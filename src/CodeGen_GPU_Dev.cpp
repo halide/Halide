@@ -28,7 +28,7 @@ namespace {
 // Check to see if an expression is uniform within a block.
 // This is done by checking to see if the expression depends on any GPU
 // thread indices.
-class IsExprBlockUniform : public IRVisitor {
+class IsBlockUniform : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Variable *op) {
@@ -40,13 +40,13 @@ class IsExprBlockUniform : public IRVisitor {
 public:
     bool result;
 
-    IsExprBlockUniform() : result(true) {
+    IsBlockUniform() : result(true) {
     }
 };
 }
 
-bool CodeGen_GPU_Dev::is_expr_block_uniform(Expr expr) {
-    IsExprBlockUniform v;
+bool CodeGen_GPU_Dev::is_block_uniform(Expr expr) {
+    IsBlockUniform v;
     expr.accept(&v);
     return v.result;
 }
@@ -68,7 +68,8 @@ class IsBufferConstant : public IRVisitor {
     }
 
     void visit(const Load *op) {
-        if (op->name == buffer && !CodeGen_GPU_Dev::is_expr_block_uniform(op->index)) {
+        if (op->name == buffer &&
+            !CodeGen_GPU_Dev::is_block_uniform(op->index)) {
 	    result = false;
 	}
 	if (result) {
@@ -85,7 +86,8 @@ public:
 };
 }
 
-bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel, const std::string &buffer) {
+bool CodeGen_GPU_Dev::is_buffer_constant(Stmt kernel,
+                                         const std::string &buffer) {
     IsBufferConstant v(buffer);
     kernel.accept(&v);
     return v.result;
