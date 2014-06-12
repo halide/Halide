@@ -21,8 +21,9 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
     delete glc;
 }
 
-void CodeGen_OpenGL_Dev::add_kernel(Stmt s, string name,
-                                    const vector<Argument> &args) {
+void CodeGen_OpenGL_Dev::add_kernel(Stmt s,
+                                    string name,
+                                    const vector<GPU_Argument> &args) {
     cur_kernel_name = name;
     glc->compile(s, name, args);
 }
@@ -223,8 +224,9 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
     print_assignment(op->type, rhs.str());
 }
 
-void CodeGen_GLSL::compile(Stmt stmt, string name,
-                           const vector<Argument> &args) {
+void CodeGen_GLSL::compile(Stmt stmt,
+                           string name,
+                           const vector<GPU_Argument> &args) {
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
     // generator to the runtime, and the information Halide passes to the
