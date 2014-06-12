@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     // The same pipeline, with a boundary condition on the input.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("../apps/images/rgb.png");
+        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
 
         // This time, we'll wrap the input in a Func that prevents
         // reading out of bounds:
