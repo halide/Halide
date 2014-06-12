@@ -341,10 +341,33 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
         cl_device_id devices[] = { dev };
         size_t lengths[] = { size };
-        const char *build_options = NULL;
+
+        // Get the max constant buffer size supported by this OpenCL implementation.
+        cl_ulong max_constant_buffer_size = 0;
+        err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, NULL);
+        if (err != CL_SUCCESS) {
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed (%d)\n", err);
+            return NULL;
+        }
+        // Get the max number of constant arguments supported by this OpenCL implementation.
+        cl_uint max_constant_args = 0;
+        err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, NULL);
+        if (err != CL_SUCCESS) {
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed (%d)\n", err);
+            return NULL;
+        }
+
+        char options[256];
 
         // Program is OpenCL C.
         DEBUG_PRINTF(user_context, "    Compiling OpenCL C kernel: (%i chars)\n", size);
+
+        // Build the compile argument options.
+        snprintf(options, sizeof(options),
+                 "-D MAX_CONSTANT_BUFFER_SIZE=%lld -D MAX_CONSTANT_ARGS=%i",
+                 max_constant_buffer_size,
+                 max_constant_args);
+        DEBUG_PRINTF(user_context, "    Build options: %s\n", options);
 
         const char * sources[] = { src };
         state->program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
@@ -353,7 +376,7 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             return NULL;
         }
 
-        err = clBuildProgram(state->program, 1, &dev, build_options, NULL, NULL );
+        err = clBuildProgram(state->program, 1, devices, options, NULL, NULL );
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clBuildProgram failed (%d)\n", err);
 

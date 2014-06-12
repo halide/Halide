@@ -21,7 +21,9 @@ public:
     ~CodeGen_OpenGL_Dev();
 
     // CodeGen_GPU_Dev interface
-    void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void add_kernel(Stmt stmt,
+                    std::string name,
+                    const std::vector<GPU_Argument> &args);
     void init_module();
     std::vector<char> compile_to_src();
     std::string get_current_kernel_name();
@@ -38,7 +40,9 @@ private:
 class CodeGen_GLSL : public CodeGen_C {
 public:
     CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {}
-    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void compile(Stmt stmt,
+                 std::string name,
+                 const std::vector<GPU_Argument> &args);
 
 protected:
     using CodeGen_C::visit;
