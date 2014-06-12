@@ -4,7 +4,7 @@
 // does not start at (0, 0).
 
 // On linux, you can compile and run it like so:
-// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -o lesson_06
+// g++ lesson_06*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_06
 // LD_LIBRARY_PATH=../bin ./lesson_06
 
 // On os x:
