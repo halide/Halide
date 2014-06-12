@@ -25,7 +25,7 @@ public:
     RVar() : _name(Internal::make_entity_name(this, "Halide::RVar", 'r')) {}
 
     /** Construct an RVar with the given name */
-    RVar(const std::string &n) : _name(n) {
+    explicit RVar(const std::string &n) : _name(n) {
         // Make sure we don't get a unique name with the same name as
         // this later:
         Internal::unique_name(n, false);
