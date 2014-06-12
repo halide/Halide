@@ -365,14 +365,11 @@ struct BufferSize {
 
     BufferSize() : size(0) {}
     BufferSize(string name, size_t size) : name(name), size(size) {}
-};
 
-struct BufferSizeOrdering {
-    bool operator () (const BufferSize &a,
-                      const BufferSize &b) const {
-        return a.size < b.size;
+    bool operator < (const BufferSize &r) const {
+        return size < r.size;
     }
-} buffer_size_ordering;
+};
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
@@ -403,7 +400,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     // as many of the constant allocations in __constant as possible.
     // Ideally, we would prioritize constant buffers by how frequently they
     // are accessed.
-    sort(constants.begin(), constants.end(), buffer_size_ordering);
+    sort(constants.begin(), constants.end());
 
     // Compute the cumulative sum of the constants.
     for (size_t i = 1; i < constants.size(); i++) {
