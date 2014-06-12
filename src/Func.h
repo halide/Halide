@@ -274,6 +274,8 @@ public:
 				    GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
+
+    EXPORT ScheduleHandle &allow_race_conditions();
     // @}
 
     // These calls are for legacy compatibility only.
@@ -932,6 +934,15 @@ public:
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(VarOrRVar old_name, VarOrRVar new_name);
+
+    /** Specify that race conditions are permitted for this Func,
+     * which enables parallelizing over RVars even when Halide cannot
+     * prove that it is safe to do so. Use this with great caution,
+     * and only if you can prove to yourself that this is safe, as it
+     * may result in a non-deterministic routine that returns
+     * different values at different times or on different machines. */
+    EXPORT Func &allow_race_conditions();
+
 
     /** Specialize a Func. This creates a special-case version of the
      * Func where the given condition is true. The most effective

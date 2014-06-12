@@ -19,8 +19,9 @@ struct ScheduleContents {
     std::vector<Specialization> specializations;
     ReductionDomain reduction_domain;
     bool touched;
+    bool allow_race_conditions;
 
-    ScheduleContents() : touched(false) {};
+    ScheduleContents() : touched(false), allow_race_conditions(false) {};
 };
 
 
@@ -115,6 +116,14 @@ const ReductionDomain &Schedule::reduction_domain() const {
 
 void Schedule::set_reduction_domain(const ReductionDomain &d) {
     contents.ptr->reduction_domain = d;
+}
+
+bool &Schedule::allow_race_conditions() {
+    return contents.ptr->allow_race_conditions;
+}
+
+bool Schedule::allow_race_conditions() const {
+    return contents.ptr->allow_race_conditions;
 }
 
 }

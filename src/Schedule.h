@@ -187,6 +187,13 @@ public:
     LoopLevel &store_level();
     LoopLevel &compute_level();
     // @}
+
+    /** Are race conditions permitted? */
+    // @{
+    bool allow_race_conditions() const;
+    bool &allow_race_conditions();
+    // @}
+
 };
 
 }
