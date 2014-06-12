@@ -3,7 +3,7 @@
 // This lesson demonstrates basic usage of Halide as a JIT compiler for imaging.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -o lesson_01
+// g++ lesson_01*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_01
 // LD_LIBRARY_PATH=../bin ./lesson_01
 
 // On os x:
