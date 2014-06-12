@@ -42,10 +42,11 @@ void Closure::visit(const Load *op) {
 
         // If reading an image/buffer, compute the size.
         if (op->image.defined()) {
-            ref.size = (size_t)op->image.type().bytes();
+            ref.size = 1;
             for (int i = 0; i < op->image.dimensions(); i++) {
-                ref.size *= op->image.extent(i);
+                ref.size += (op->image.extent(i) - 1)*op->image.stride(i);
             }
+            ref.size *= op->image.type().bytes();
         }
     } else {
         debug(3) << "Not adding " << op->name << " to closure\n";
