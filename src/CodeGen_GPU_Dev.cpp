@@ -63,7 +63,7 @@ class IsBufferConstant : public IRVisitor {
             result = false;
         }
         if (result) {
-            op->value.accept(this);
+            IRVisitor::visit(op);
         }
     }
 
@@ -73,11 +73,11 @@ class IsBufferConstant : public IRVisitor {
             result = false;
         }
         if (result) {
-            op->index.accept(this);
+            IRVisitor::visit(op);
         }
     }
-public:
 
+public:
     bool result;
     const std::string &buffer;
 
