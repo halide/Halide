@@ -116,8 +116,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-    	user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
-    	CodeGen_C::visit(loop);
+        user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
+        CodeGen_C::visit(loop);
     }
 }
 
@@ -420,16 +420,16 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
                 constant++;
             }
 
-	    if (constant != constants.end()) {
+            if (constant != constants.end()) {
                 stream << "#if " << constant->size << " < MAX_CONSTANT_BUFFER_SIZE && "
                        << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
-	        stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
+                stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
                 stream << "#else\n";
-	        stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
                 stream << "#endif\n";
-	    } else {
-	        stream << "#define " << get_memory_space(args[i].name) << " __global\n";
-	    }
+            } else {
+                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+            }
         }
     }
 

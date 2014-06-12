@@ -33,8 +33,8 @@ class IsBlockUniform : public IRVisitor {
 
     void visit(const Variable *op) {
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
-	    result = false;
-	}
+            result = false;
+        }
     }
 
 public:
@@ -60,21 +60,21 @@ class IsBufferConstant : public IRVisitor {
 
     void visit(const Store *op) {
         if (op->name == buffer) {
-	    result = false;
-	}
-	if (result) {
-	    op->value.accept(this);
-	}
+            result = false;
+        }
+        if (result) {
+            op->value.accept(this);
+        }
     }
 
     void visit(const Load *op) {
         if (op->name == buffer &&
             !CodeGen_GPU_Dev::is_block_uniform(op->index)) {
-	    result = false;
-	}
-	if (result) {
+            result = false;
+        }
+        if (result) {
             op->index.accept(this);
-	}
+        }
     }
 public:
 
