@@ -12,6 +12,19 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
+namespace {
+std::string replace_all(std::string &str,
+                        const std::string &find,
+                        const std::string &replace) {
+    size_t pos = 0;
+    while ((pos = str.find(find, pos)) != std::string::npos) {
+        str.replace(pos, find.length(), replace);
+        pos += replace.length();
+    }
+    return str;
+}
+}
+
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
     debug(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream);
@@ -88,16 +101,6 @@ string CodeGen_GLSL::print_type(Type type) {
         user_error << "Vector types wider than 4 aren't supported in GLSL\n";
     }
     return oss.str();
-}
-
-static std::string replace_all(std::string &str,
-                               const std::string &find, const std::string &replace) {
-    size_t pos = 0;
-    while ((pos = str.find(find, pos)) != std::string::npos) {
-        str.replace(pos, find.length(), replace);
-        pos += replace.length();
-    }
-    return str;
 }
 
 // Identifiers containing double underscores '__' are reserved in GLSL, so we
@@ -268,8 +271,8 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         }
     }
 
-    stream << "#version 120\n";
     stream << header.str();
+//    stream << "#version 120\n";
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {

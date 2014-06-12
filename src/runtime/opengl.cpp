@@ -94,11 +94,9 @@ struct HalideOpenGLArgument {
 
 struct HalideOpenGLKernel {
     char *source;
-    char *name;
     HalideOpenGLArgument *arguments;
     GLuint shader_id;
     GLuint program_id;
-    HalideOpenGLKernel *next;
 };
 
 // Information about each known texture.
@@ -111,6 +109,11 @@ struct HalideOpenGLTexture {
     HalideOpenGLTexture *next;
 };
 
+struct ModuleState {
+    HalideOpenGLKernel *kernel;
+    ModuleState *next;
+};
+
 // All persistent state maintained by the runtime.
 struct HalideOpenGLState {
     bool initialized;
@@ -121,11 +124,10 @@ struct HalideOpenGLState {
     GLuint vertex_buffer;
     GLuint element_buffer;
 
-    // A list of all defined kernels
-    HalideOpenGLKernel *kernels;
-
     // A list of all textures that are still active
     HalideOpenGLTexture *textures;
+
+    ModuleState *state_list;
 
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
@@ -285,11 +287,9 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
         (HalideOpenGLKernel *)malloc(sizeof(HalideOpenGLKernel));
 
     kernel->source = strndup(src, size);
-    kernel->name = NULL;
     kernel->arguments = NULL;
     kernel->shader_id = 0;
     kernel->program_id = 0;
-    kernel->next = NULL;
 
     #ifdef DEBUG
     halide_printf(user_context, "Compiling GLSL kernel:\n%s\n",
@@ -305,7 +305,7 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
 
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
-            kernel->name = strndup(args, next_line - args - 1);
+            // ignore
         } else if ((args = match_prefix(line, var_marker))) {
             if (HalideOpenGLArgument *arg =
                 parse_argument(user_context, args, next_line - 1)) {
@@ -333,10 +333,6 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
         }
         line = next_line;
     }
-    if (!kernel->name) {
-        halide_error(user_context, "Internal error: kernel name not specified");
-        return NULL;
-    }
 
     // Arguments are currently in reverse order, flip the list.
     HalideOpenGLArgument *cur = kernel->arguments;
@@ -363,18 +359,7 @@ WEAK void halide_opengl_delete_kernel(void *user_context, HalideOpenGLKernel *ke
         free(arg);
         arg = next;
     }
-    free(kernel->name);
     free(kernel);
-}
-
-// Find a kernel by name. Return NULL if not found.
-WEAK HalideOpenGLKernel *halide_opengl_find_kernel(const char *name) {
-    for (HalideOpenGLKernel *cur = ST.kernels; cur; cur = cur->next) {
-        if (0 == strcmp(cur->name, name)) {
-            return cur;
-        }
-    }
-    return NULL;
 }
 
 // Initialize the runtime, in particular all fields in halide_opengl_state.
@@ -397,8 +382,8 @@ EXPORT int halide_opengl_init(void *user_context) {
     USED_GL_FUNCTIONS;
 #undef GLFUNC
 
-    ST.kernels = NULL;
     ST.textures = NULL;
+    ST.state_list = NULL;
 
     // Initialize framebuffer.
     ST.GenFramebuffers(1, &ST.framebuffer_id);
@@ -448,11 +433,12 @@ EXPORT void halide_opengl_release(void *user_context) {
     ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
-    HalideOpenGLKernel *cur = ST.kernels;
-    while (cur) {
-        HalideOpenGLKernel *next = cur->next;
-        halide_opengl_delete_kernel(user_context, cur);
-        cur = next;
+    ModuleState *mod = ST.state_list;
+    while (mod) {
+        halide_opengl_delete_kernel(user_context, mod->kernel);
+        ModuleState *next = mod->next;
+        free(mod);
+        mod = next;
     }
 
     // Delete all textures that were allocated by us.
@@ -483,8 +469,8 @@ EXPORT void halide_opengl_release(void *user_context) {
     ST.framebuffer_id = 0;
     ST.vertex_buffer = 0;
     ST.element_buffer = 0;
-    ST.kernels = NULL;
     ST.textures = NULL;
+    ST.state_list = NULL;
     ST.initialized = false;
 }
 
@@ -638,12 +624,15 @@ EXPORT int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
         }
     }
     if (!texinfo) {
-        halide_error(user_context, "Internal error: texture not found");
+        halide_error(user_context, "Internal error: texture not found.\n");
         return 1;
     }
 
     // Delete texture if it was allocated by us.
     if (texinfo->halide_allocated) {
+#ifdef DEBUG
+        halide_printf(user_context, "Deleting texture %d\n", tex);
+#endif
         ST.DeleteTextures(1, &tex);
         CHECK_GLERROR(1);
         buf->dev = 0;
@@ -660,27 +649,24 @@ EXPORT void *halide_opengl_init_kernels(void *user_context, void *state_ptr,
                                         const char *src, int size) {
     // TODO: handle error
     if (int error = halide_opengl_init(user_context)) {
-        return NULL;
+        return state_ptr;
     }
 
-    // Use '/// KERNEL' comments to split 'src' into discrete blocks, one for
-    // each kernel contained in it.
-    char *begin = strstr(src, kernel_marker);
-    char *end = NULL;
-    for (; begin && begin[0]; begin = end) {
-        end = strstr(begin + sizeof(kernel_marker) - 1, kernel_marker);
-        if (!end) {
-            end = begin + strlen(begin);
-        }
-        HalideOpenGLKernel *kernel = create_kernel(user_context, begin, end - begin);
+    ModuleState *mod = (ModuleState *)state_ptr;
+    if (!mod) {
+        mod = (ModuleState *)malloc(sizeof(ModuleState));
+        mod->kernel = NULL;
+        mod->next = ST.state_list;
+        ST.state_list = mod;
+    }
+
+    if (!mod->kernel) {
+        HalideOpenGLKernel *kernel = create_kernel(user_context, src, size);
         if (!kernel) {
-            // Simply skip invalid kernels
-            continue;
+            halide_error(user_context, "Invalid kernel\n");
+            return mod;
         }
 
-#ifdef DEBUG
-        halide_printf(user_context, "Defining kernel '%s'\n", kernel->name);
-#endif
         // Compile shader
         kernel->shader_id = halide_opengl_make_shader(user_context, GL_FRAGMENT_SHADER,
                                                       kernel->source, NULL);
@@ -705,15 +691,10 @@ EXPORT void *halide_opengl_init_kernels(void *user_context, void *state_ptr,
         }
         kernel->program_id = program;
 
-        if (halide_opengl_find_kernel(kernel->name)) {
-            halide_printf(user_context, "Duplicate kernel name '%s'\n", kernel->name);
-            halide_opengl_delete_kernel(user_context, kernel);
-        } else {
-            kernel->next = ST.kernels;
-            ST.kernels = kernel;
-        }
+        mod->kernel = kernel;
     }
-    return NULL;
+
+    return mod;
 }
 
 EXPORT int halide_opengl_dev_sync(void *user_context) {
@@ -949,10 +930,15 @@ EXPORT int halide_opengl_dev_run(
 {
     CHECK_INITIALIZED(1);
 
-    HalideOpenGLKernel *kernel = halide_opengl_find_kernel(entry_name);
+    ModuleState *mod = (ModuleState *)state_ptr;
+    if (!mod) {
+        halide_error(user_context, "Internal error: module state is NULL\n");
+        return -1;
+    }
+
+    HalideOpenGLKernel *kernel = mod->kernel;
     if (!kernel) {
-        halide_printf(user_context, "Could not find a kernel named '%s'\n",
-                      entry_name);
+        halide_printf(user_context, "Internal error: unknown kernel named '%s'\n", entry_name);
         return 1;
     }
 
@@ -999,16 +985,16 @@ EXPORT int halide_opengl_dev_run(
             switch (kernel_arg->type) {
             case ARGTYPE_INT:
                 #ifdef DEBUG
-                halide_printf(user_context, "Int argument %d (%s): %d\n", i,
-                              kernel_arg->name, *((int *)args[i]));
+                halide_printf(user_context, "Setting int %s = %d (loc=%d)\n",
+                              kernel_arg->name, *((GLint *)args[i]), loc);
                 #endif
                 ST.Uniform1iv(loc, 1, (GLint *)args[i]);
                 break;
             case ARGTYPE_FLOAT: {
-#ifdef DEBUG
-                halide_printf(user_context, "Float argument %d (%s): %g\n", i,
-                              kernel_arg->name, *((float *)args[i]));
-#endif
+                #ifdef DEBUG
+                halide_printf(user_context, "Setting float %s = %g (loc=%d)\n",
+                              kernel_arg->name, *((GLfloat *)args[i]), loc);
+                #endif
                 ST.Uniform1fv(loc, 1, (GLfloat *)args[i]);
                 break;
             }
@@ -1065,8 +1051,7 @@ EXPORT int halide_opengl_dev_run(
     }
     // TODO: GL_MAX_DRAW_BUFFERS
     if (num_output_textures == 0) {
-        halide_printf(user_context, "Warning: kernel '%s' has no output\n",
-                      kernel->name);
+        halide_printf(user_context, "Warning: kernel has no output\n");
         // TODO: cleanup
         return 1;
     } else {
