@@ -369,9 +369,14 @@ void ScheduleHandle::set_dim_type(VarOrRVar var, For::ForType t) {
             // If it's an rvar and the for type is parallel, we need to
             // validate that this doesn't introduce a race condition.
             if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
-                user_warning << "Marking var " << var.name()
-                             << " as parallel or vectorized may introduce a race"
-                             << " condition resulting in incorrect output.\n";
+                user_assert(schedule.allow_race_conditions())
+                    << "Marking var " << var.name()
+                    << " as parallel or vectorized may introduce a race"
+                    << " condition resulting in incorrect output."
+                    << " It is possible to override this error using"
+                    << " the allow_race_conditions() method. Use this"
+                    << " with great caution, and only when you can prove"
+                    << " to yourself that no race condition exists.\n";
             }
 
         } else if (t == For::Vectorized) {
@@ -592,6 +597,11 @@ ScheduleHandle &ScheduleHandle::rename(VarOrRVar old_var, VarOrRVar new_var) {
         schedule.splits().push_back(split);
     }
 
+    return *this;
+}
+
+ScheduleHandle &ScheduleHandle::allow_race_conditions() {
+    schedule.allow_race_conditions() = true;
     return *this;
 }
 
@@ -911,6 +921,11 @@ Func &Func::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
 
 Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
     ScheduleHandle(func.schedule()).rename(old_name, new_name);
+    return *this;
+}
+
+Func &Func::allow_race_conditions() {
+    ScheduleHandle(func.schedule()).allow_race_conditions();
     return *this;
 }
 
