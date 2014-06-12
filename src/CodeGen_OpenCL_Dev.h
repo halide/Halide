@@ -60,15 +60,6 @@ protected:
         void visit(const Cast *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
-
-        /** Maintains the kernel arguments that are in scope. */
-        Scope<Type> kernel_arguments;
-
-        /** Tracks per-thread allocations. */
-        Scope<int> internal_allocations;
-
-	/** Tracks allocations placed in __constant kernel arguments */
-	Scope<int> constant_allocations;
     };
 
     std::ostringstream src_stream;
