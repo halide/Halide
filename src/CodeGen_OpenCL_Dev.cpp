@@ -447,7 +447,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
         if (i < args.size()-1) stream << ",\n";
     }
-    stream << ",\n" << " __local ulong* __shared";
+    stream << ",\n" << " __address_space___shared int16* __shared";
 
     stream << ")\n";
 
