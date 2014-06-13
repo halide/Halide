@@ -1071,10 +1071,11 @@ private:
             if (const_int(ia.min, &min_a) && const_int(ia.max, &max_a)) {
                 if (max_a <= ib) {
                     expr = b;
+                    return;
                 } else if (ib <= min_a) {
                     expr = a;
+                    return;
                 }
-                return;
             }
         }
 
