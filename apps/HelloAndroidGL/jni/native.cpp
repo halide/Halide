@@ -185,7 +185,7 @@ static int LockBitmap(JNIEnv *env, buffer_t *buf, jobject bitmap) {
 }
 
 extern "C" {
-JNIEXPORT void JNICALL Java_com_example_hellohalide_HelloHalide_processFrame(
+JNIEXPORT void JNICALL Java_com_example_hellohalide_HelloHalide_processBitmapHalide(
     JNIEnv *env, jobject obj, jobject src, jobject dst) {
 
     static bool first_call = true;
@@ -232,4 +232,41 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_HelloHalide_processFrame(
     AndroidBitmap_unlockPixels(env, src);
     AndroidBitmap_unlockPixels(env, dst);
 }
+
+
+JNIEXPORT void JNICALL Java_com_example_hellohalide_HelloHalide_processTextureHalide(
+    JNIEnv *env, jobject obj, jobject src, jobject dst) {
+
+    static bool first_call = true;
+    static unsigned counter = 0;
+    static unsigned times[16];
+    if (first_call) {
+        LOGD("According to Halide, host system has %d cpus\n", halide_host_cpu_count());
+        first_call = false;
+        for (int t = 0; t < 16; t++) times[t] = 0;
+    }
+
+    halide_set_error_handler(handler);
+
+    buffer_t srcBuf = {0};
+    buffer_t dstBuf = {0};
+
+    int64_t t1 = halide_current_time_ns();
+
+    // Add filter call here
+
+
+    int64_t t2 = halide_current_time_ns();
+    unsigned elapsed_us = (t2 - t1)/1000;
+
+    times[counter & 15] = elapsed_us;
+    counter++;
+    unsigned min = times[0];
+    for (int i = 1; i < 16; i++) {
+        if (times[i] < min) min = times[i];
+    }
+    LOGD("Time taken: %d (%d)", elapsed_us, min);
+
+}
+
 }

@@ -1091,7 +1091,6 @@ EXPORT int halide_opengl_dev_run(
     // Setup viewport
     ST.Viewport(0, 0, output_extent[0], output_extent[1]);
 
-
     // Execute shader
     GLint position = ST.GetAttribLocation(kernel->program_id, "position");
     ST.BindBuffer(GL_ARRAY_BUFFER, ST.vertex_buffer);
