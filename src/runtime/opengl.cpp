@@ -430,6 +430,7 @@ EXPORT int halide_opengl_init(void *user_context) {
 // we leave it untouched.
 EXPORT void halide_opengl_release(void *user_context) {
     CHECK_INITIALIZED();
+    halide_printf(user_context, "halide_opengl_release\n");
     ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
@@ -501,6 +502,14 @@ static bool get_texture_format(void *user_context,
     return true;
 }
 
+
+EXPORT HalideOpenGLTexture *halide_opengl_find_texture(GLuint tex) {
+    HalideOpenGLTexture *texinfo = ST.textures;
+    while (texinfo && texinfo->id != tex) {
+        texinfo = texinfo->next;
+    }
+    return texinfo;
+}
 
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
@@ -578,28 +587,24 @@ EXPORT int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
 
     // Record main information about texture and remember it for later. In
     // halide_opengl_dev_run we are only given the texture ID and not the full
-    // buffer_t, so we copy the interesting information here.
-    HalideOpenGLTexture *texinfo = (HalideOpenGLTexture*)
-        malloc(sizeof(HalideOpenGLTexture));
-    texinfo->id = tex;
-    for (int i=0; i<3; i++) {
-        texinfo->min[i] = buf->min[i];
-        texinfo->extent[i] = buf->extent[i];
+    // buffer_t, so we copy the interesting information here.  (There can be
+    // multiple dev_malloc calls for the same buffer_t. Only record texture
+    // information once.)
+    if (!halide_opengl_find_texture(tex)) {
+        HalideOpenGLTexture *texinfo =
+            (HalideOpenGLTexture*)malloc(sizeof(HalideOpenGLTexture));
+        texinfo->id = tex;
+        for (int i=0; i<3; i++) {
+            texinfo->min[i] = buf->min[i];
+            texinfo->extent[i] = buf->extent[i];
+        }
+        texinfo->format = format;
+        texinfo->halide_allocated = halide_allocated;
+
+        texinfo->next = ST.textures;
+        ST.textures = texinfo;
     }
-    texinfo->format = format;
-    texinfo->halide_allocated = halide_allocated;
-
-    texinfo->next = ST.textures;
-    ST.textures = texinfo;
     return 0;
-}
-
-EXPORT HalideOpenGLTexture *halide_opengl_find_texture(GLuint tex) {
-    HalideOpenGLTexture *texinfo = ST.textures;
-    for (; texinfo; texinfo = texinfo->next)
-        if (texinfo->id == tex)
-            return texinfo;
-    return NULL;
 }
 
 // Delete all texture information associated with a buffer. The OpenGL texture
