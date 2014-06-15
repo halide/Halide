@@ -9,6 +9,10 @@ using std::string;
 using std::vector;
 
 RVar::operator Expr() const {
+    if (!min().defined() || !extent().defined()) {
+        user_error << "Use of undefined RDom dimension: " <<
+            (name().empty() ? "<unknown>" : name()) << "\n";
+    }
     return Internal::Variable::make(Int(32), name(), domain);
 }
 
@@ -65,6 +69,9 @@ RDom::RDom(Expr min, Expr extent, string name) {
                        "", Expr(), Expr(),
                        "", Expr(), Expr());
     x = RVar(name + ".x$r", min, extent, dom);
+    y = RVar(name + ".y");
+    z = RVar(name + ".z");
+    w = RVar(name + ".w");
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
@@ -79,6 +86,8 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
                        "", Expr(), Expr());
     x = RVar(name + ".x$r", min0, extent0, dom);
     y = RVar(name + ".y$r", min1, extent1, dom);
+    z = RVar(name + ".z");
+    w = RVar(name + ".w");
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
@@ -96,6 +105,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     x = RVar(name + ".x$r", min0, extent0, dom);
     y = RVar(name + ".y$r", min1, extent1, dom);
     z = RVar(name + ".z$r", min2, extent2, dom);
+    w = RVar(name + ".w");
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name) {
