@@ -1,4 +1,5 @@
 #include <sstream>
+#include <algorithm>
 
 #include "CodeGen_OpenCL_Dev.h"
 #include "CodeGen_Internal.h"
@@ -11,6 +12,7 @@ namespace Internal {
 using std::ostringstream;
 using std::string;
 using std::vector;
+using std::sort;
 
 static ostringstream nil;
 
@@ -114,8 +116,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
         loop->body.accept(this);
 
     } else {
-    	user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
-    	CodeGen_C::visit(loop);
+        user_assert(loop->for_type != For::Parallel) << "Cannot use parallel loops inside OpenCL kernel\n";
+        CodeGen_C::visit(loop);
     }
 }
 
@@ -162,13 +164,7 @@ Expr is_ramp1(Expr e) {
 
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::get_memory_space(const string &buf) {
-    if (buf == "__shared") {
-        return "__local";
-    } else if (internal_allocations.contains(buf)) {
-        return "__private";
-    } else {
-        return "__global";
-    }
+    return "__address_space_" + print_name(buf);
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Load *op) {
@@ -325,13 +321,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
         do_indent();
         stream << print_type(op->type) << ' '
                << print_name(op->name) << "[" << size << "];\n";
+        do_indent();
+        stream << "#define " << get_memory_space(op->name) << " __private\n";
 
         allocations.push(op->name, op->type);
-        internal_allocations.push(op->name, 0);
 
         op->body.accept(this);
 
-        internal_allocations.pop(op->name);
         // Should have been freed internally
         internal_assert(!allocations.contains(op->name));
 
@@ -346,11 +342,15 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
         // Should have been freed internally
         internal_assert(allocations.contains(op->name));
         allocations.pop(op->name);
+        do_indent();
+        stream << "#undef " << get_memory_space(op->name) << "\n";
     }
 }
 
 
-void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
+                                    string name,
+                                    const vector<GPU_Argument> &args) {
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
     // TODO: do we have to uniquify these names, or can we trust that they are safe?
@@ -359,19 +359,83 @@ void CodeGen_OpenCL_Dev::add_kernel(Stmt s, string name, const vector<Argument> 
 }
 
 namespace {
-const string kernel_preamble = "";
+struct BufferSize {
+    string name;
+    size_t size;
+
+    BufferSize() : size(0) {}
+    BufferSize(string name, size_t size) : name(name), size(size) {}
+
+    bool operator < (const BufferSize &r) const {
+        return size < r.size;
+    }
+};
 }
 
-void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const vector<Argument> &args) {
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
+                                                      string name,
+                                                      const vector<GPU_Argument> &args) {
+
     debug(2) << "Adding OpenCL kernel " << name << "\n";
 
-    stream << kernel_preamble;
+    // Figure out which arguments should be passed in __constant.
+    // Such arguments should be:
+    // - not written to,
+    // - loads are block-uniform,
+    // - constant size,
+    // - and all allocations together should be less than the max constant
+    //   buffer size given by CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE.
+    // The last condition is handled via the preprocessor in the kernel
+    // declaration.
+    vector<BufferSize> constants;
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer &&
+            CodeGen_GPU_Dev::is_buffer_constant(s, args[i].name) &&
+            args[i].size > 0) {
+            constants.push_back(BufferSize(args[i].name, args[i].size));
+        }
+    }
+
+    // Sort the constant candidates from smallest to largest. This will put
+    // as many of the constant allocations in __constant as possible.
+    // Ideally, we would prioritize constant buffers by how frequently they
+    // are accessed.
+    sort(constants.begin(), constants.end());
+
+    // Compute the cumulative sum of the constants.
+    for (size_t i = 1; i < constants.size(); i++) {
+        constants[i].size += constants[i - 1].size;
+    }
+
+    // Create preprocessor replacements for the address spaces of all our buffers.
+    stream << "// Address spaces for " << name << "\n";
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            vector<BufferSize>::iterator constant = constants.begin();
+            while (constant != constants.end() &&
+                   constant->name != args[i].name) {
+                constant++;
+            }
+
+            if (constant != constants.end()) {
+                stream << "#if " << constant->size << " < MAX_CONSTANT_BUFFER_SIZE && "
+                       << constant - constants.begin() << " < MAX_CONSTANT_ARGS\n";
+                stream << "#define " << get_memory_space(args[i].name) << " __constant\n";
+                stream << "#else\n";
+                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+                stream << "#endif\n";
+            } else {
+                stream << "#define " << get_memory_space(args[i].name) << " __global\n";
+            }
+        }
+    }
 
     // Emit the function prototype
     stream << "__kernel void " << name << "(\n";
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
-            stream << " __global " << print_type(args[i].type) << " *"
+            stream << " " << get_memory_space(args[i].name) << " ";
+            stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
             allocations.push(args[i].name, args[i].type);
         } else {
@@ -380,11 +444,10 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
                    << " "
                    << print_name(args[i].name);
         }
-        kernel_arguments.push(args[i].name, args[i].type);
 
         if (i < args.size()-1) stream << ",\n";
     }
-    stream << ",\n" << "__local ulong* __shared";
+    stream << ",\n" << " __address_space___shared int16* __shared";
 
     stream << ")\n";
 
@@ -397,8 +460,13 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s, string name, const
         if (args[i].is_buffer) {
             allocations.pop(args[i].name);
         }
-        // Remove kernel arguments from scope.
-        kernel_arguments.pop(args[i].name);
+    }
+
+    // Undef all the buffer address spaces, in case they're different in another kernel.
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            stream << "#undef " << get_memory_space(args[i].name) << "\n";
+        }
     }
 }
 
@@ -412,9 +480,6 @@ void CodeGen_OpenCL_Dev::init_module() {
     // This identifies the program as OpenCL C (as opposed to SPIR).
     src_stream << "/*OpenCL C*/\n";
 
-    if ((target.features & Target::CLDoubles) != 0) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
-    }
     src_stream << "#pragma OPENCL FP_CONTRACT ON\n";
 
     // Write out the Halide math functions.
@@ -452,29 +517,33 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "  return 0;\n"
                << "}\n";
 
-#ifdef ENABLE_CL_KHR_FP64
-    src_stream << "#define sqrt_f64 sqrt\n"
-               << "#define sin_f64 sin\n"
-               << "#define cos_f64 cos\n"
-               << "#define exp_f64 exp\n"
-               << "#define log_f64 log\n"
-               << "#define abs_f64 fabs\n"
-               << "#define floor_f64 floor\n"
-               << "#define ceil_f64 ceil\n"
-               << "#define round_f64 round\n"
-               << "#define pow_f64 pow\n"
-               << "#define asin_f64 asin\n"
-               << "#define acos_f64 acos\n"
-               << "#define tan_f64 tan\n"
-               << "#define atan_f64 atan\n"
-               << "#define atan2_f64 atan2\n"
-               << "#define sinh_f64 sinh\n"
-               << "#define asinh_f64 asinh\n"
-               << "#define cosh_f64 cosh\n"
-               << "#define acosh_f64 acosh\n"
-               << "#define tanh_f64 tanh\n"
-               << "#define atanh_f64 atanh\n";
-#endif
+    // __shared always has address space __local.
+    src_stream << "#define __address_space___shared __local\n";
+
+    if ((target.features & Target::CLDoubles) != 0) {
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
+        src_stream << "#define sqrt_f64 sqrt\n"
+                   << "#define sin_f64 sin\n"
+                   << "#define cos_f64 cos\n"
+                   << "#define exp_f64 exp\n"
+                   << "#define log_f64 log\n"
+                   << "#define abs_f64 fabs\n"
+                   << "#define floor_f64 floor\n"
+                   << "#define ceil_f64 ceil\n"
+                   << "#define round_f64 round\n"
+                   << "#define pow_f64 pow\n"
+                   << "#define asin_f64 asin\n"
+                   << "#define acos_f64 acos\n"
+                   << "#define tan_f64 tan\n"
+                   << "#define atan_f64 atan\n"
+                   << "#define atan2_f64 atan2\n"
+                   << "#define sinh_f64 sinh\n"
+                   << "#define asinh_f64 asinh\n"
+                   << "#define cosh_f64 cosh\n"
+                   << "#define acosh_f64 acosh\n"
+                   << "#define tanh_f64 tanh\n"
+                   << "#define atanh_f64 atanh\n";
+    }
 
     src_stream << '\n';
 

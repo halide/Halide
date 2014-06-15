@@ -3,7 +3,7 @@
 // This lesson demonstrates how express multi-stage pipelines.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_07
+// g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07
 
 // On os x:
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     // The same pipeline, with a boundary condition on the input.
     {
         // Take a color 8-bit input
-        Image<uint8_t> input = load<uint8_t>("../apps/images/rgb.png");
+        Image<uint8_t> input = load<uint8_t>("images/rgb.png");
 
         // This time, we'll wrap the input in a Func that prevents
         // reading out of bounds:
