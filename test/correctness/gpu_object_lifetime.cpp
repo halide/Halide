@@ -15,32 +15,23 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < 2; i++) {
         Var x;
 
-        Func kernel1;
-        kernel1(x) = floor((x + 0.5f) / 3.0f);
-
-        Func kernel2;
-        kernel2(x) = sqrt(4 * x * x) + kernel1(x);
-
-        Func kernel3;
-        kernel3(x) = cast<int32_t>(x + kernel2(x));
+        Func f;
+        f(x) = x;
 
         Target target = get_jit_target_from_environment();
         if (target.has_gpu_feature()) {
-            kernel1.gpu_tile(x, 32, GPU_Default).compute_root();
-            kernel2.gpu_tile(x, 32, GPU_Default).compute_root();
-            kernel3.gpu_tile(x, 32, GPU_Default);
+            f.gpu_tile(x, 32);
         }
 
-        kernel3.set_custom_print(halide_print);
+        f.set_custom_print(halide_print);
         // We need gpu_debug to record object creation.
         target.features |= Target::GPUDebug;
 
-        Image<int32_t> result = kernel3.realize(256, target);
+        Image<int32_t> result = f.realize(256, target);
 
         for (int i = 0; i < 256; i++) {
-            int32_t correct = static_cast<int32_t>(floor(((float)i + 0.5f) / 3.0f) + sqrtf(4.0f * i * i) + i);
-            if (result(i) != correct) {
-                std::cout << "Error! " << result(i) << " != " << correct << " at " << i << std::endl;
+            if (result(i) != i) {
+                std::cout << "Error! " << result(i) << " != " << i << std::endl;
                 return -1;
             }
         }
