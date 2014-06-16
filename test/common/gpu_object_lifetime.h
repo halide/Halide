@@ -1,6 +1,9 @@
 #ifndef GPU_OBJECT_LIFETIME_H
 #define GPU_OBJECT_LIFETIME_H
 
+#include <stdio.h>
+#include <string.h>
+
 struct ObjectType {
     const char *created;
     const char *destroyed;
@@ -42,7 +45,7 @@ static void record_gpu_debug(const char *str) {
 }
 
 // Check that there are no live objects remaining, and we created at least one object.
-static int validate_gpu_object_lifetime(bool allow_globals) {
+static int validate_gpu_object_lifetime(bool allow_globals, bool allow_none) {
     int total = 0;
     for (int i = 0; i < object_type_count; i++) {
         if (object_types[i].live_count != 0 &&
@@ -53,7 +56,7 @@ static int validate_gpu_object_lifetime(bool allow_globals) {
         }
         total += object_types[i].total_created;
     }
-    if (total == 0) {
+    if (!allow_none && total == 0) {
         printf("Error! No objects created. Ensure gpu_debug is set, ");
         printf("and record_gpu_debug is called from halide_print.\n");
         return -1;
