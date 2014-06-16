@@ -53,7 +53,7 @@ extern "C" {
 extern int halide_printf(void *user_context, const char *, ...);
 
 /** Unformatted print used to support halide_printf. This function
- * can be replaced in JITed code by using halide_set_error_handler
+ * can be replaced in JITed code by using halide_custom_print
  * and providing an implementation of halide_print in AOT code. See
  * Func::set_custom_print.
  */
