@@ -367,6 +367,10 @@ class Func {
 
     // @}
 
+    /** The current print function used for realizing this
+     * function. May be NULL. Only relevant when jitting. */
+    void (*custom_print)(void *user_context, const char *);
+
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
 
@@ -651,6 +655,16 @@ public:
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
+
+    /** Set the function called to print messages from the runtime.
+     * If you are compiling statically, you can also just define your
+     * own function with signature
+     \code
+     extern "C" void halide_print(void *user_context, const char *);
+     \endcode
+     * This will clobber Halide's version.
+     */
+    EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
