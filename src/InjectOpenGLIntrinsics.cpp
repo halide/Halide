@@ -43,7 +43,8 @@ private:
     }
 
     void visit(const Call *call) {
-        if (!inside_kernel_loop || call->call_type == Call::Intrinsic) {
+        if (!inside_kernel_loop ||
+            call->call_type == Call::Intrinsic || call->call_type == Call::Extern) {
             IRMutator::visit(call);
             return;
         }
