@@ -364,6 +364,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
+    // Create the state object if necessary. This only happens once regardless
+    // of how many times halide_init_kernels/halide_release is called.
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
@@ -410,7 +412,7 @@ WEAK void halide_release(void *user_context) {
     err = cuCtxSynchronize();
     halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
-    // Unload the modules attached to this context
+    // Unload the modules attached to this context.
     module_state *state = state_list;
     while (state) {
         if (state->module) {
