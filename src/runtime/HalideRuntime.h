@@ -48,9 +48,12 @@ extern "C" {
   * PrintStmt in IR. Also called by the default halide_error
   * implementation.
   *
-  * Cannot be replaced in JITted code at present.
+  * Do not replace this function, replace halide_print instead.
   */
 extern int halide_printf(void *user_context, const char *, ...);
+
+/** Unformatted print used to support halide_printf. */
+extern void halide_print(void *user_context, const char *);
 
 /** Define halide_error to catch errors messages at runtime, for
  * example bounds checking failures. Per the description above, use
