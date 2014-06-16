@@ -190,8 +190,8 @@ extern int halide_dev_sync(void *user_context);
 
 extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
 extern int halide_dev_free(void *user_context, struct buffer_t *buf);
-extern void *halide_init_kernels(void *user_context, void *state_ptr,
-                                 const char *src, int size);
+extern int halide_init_kernels(void *user_context, void **state_ptr,
+                               const char *src, int size);
 extern int halide_dev_run(void *user_context,
                           void *state_ptr,
                           const char *entry_name,

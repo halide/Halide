@@ -351,43 +351,39 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
     return CUDA_SUCCESS;
 }
 
-WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* ptx_src, int size) {
+WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* ptx_src, int size) {
     DEBUG_PRINTF( user_context, "CUDA: halide_init_kernels (user_context: %p, state_ptr: %p, ptx_src: %p, %i)\n",
                   user_context, state_ptr, ptx_src, size );
 
     CudaContext ctx(user_context);
     if (ctx.error != 0) {
-        return NULL;
+        return ctx.error;
     }
 
     #ifdef DEBUG
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    module_state *state = (module_state*)state_ptr;
+    module_state **state = (module_state**)state_ptr;
+    if (!(*state)) {
+        *state = (module_state*)malloc(sizeof(module_state));
+        (*state)->module = NULL;
+        (*state)->next = state_list;
+        state_list = *state;
+    }
 
     // Create the module itself if necessary.
-    if (!(state && state->module)) {
+    if (!(*state)->module) {
         DEBUG_PRINTF( user_context, "    cuModuleLoadData %p, %i -> ", ptx_src, size );
         CUmodule module;
-        CUresult err = cuModuleLoadData(&module, ptx_src);
+        CUresult err = cuModuleLoadData(&(*state)->module, ptx_src);
         if (err != CUDA_SUCCESS) {
             DEBUG_PRINTF( user_context, "%d\n", err );
             halide_error_varargs(user_context, "CUDA: cuModuleLoadData failed (%d)", err);
-            return NULL;
+            return err;
         } else {
             DEBUG_PRINTF( user_context, "%p\n", module );
         }
-
-        // Create the module state if necessary
-        if (!state) {
-            state = (module_state*)malloc(sizeof(module_state));
-        }
-
-        // Add module to state list
-        state->module = module;
-        state->next = state_list;
-        state_list = state;
     }
 
     #ifdef DEBUG
@@ -395,7 +391,7 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
 
-    return state;
+    return 0;
 }
 
 WEAK void halide_release(void *user_context) {
