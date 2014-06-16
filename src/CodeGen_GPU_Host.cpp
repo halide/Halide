@@ -323,10 +323,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     internal_assert(init) << "Could not find function halide_init_kernels in initial module\n";
-    Value *state = builder->CreateCall4(init, user_context,
-                                        builder->CreateLoad(get_module_state()),
-                                        kernel_src_ptr, kernel_size);
-    builder->CreateStore(state, get_module_state());
+    /*Value *result =*/ builder->CreateCall4(init, user_context,
+                                         get_module_state(),
+                                         kernel_src_ptr, kernel_size);
+    //Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+    //CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_init_kernels");
 
     // Optimize the module
     CodeGen::optimize_module();

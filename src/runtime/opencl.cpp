@@ -165,7 +165,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     #endif
 
     halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-    DEBUG_PRINTF(user_context, "    clReleaseMemObject %p\n" );
+    DEBUG_PRINTF(user_context, "    clReleaseMemObject %p\n", (cl_mem)buf->dev );
     cl_int result = clReleaseMemObject((cl_mem)buf->dev);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
@@ -313,30 +313,36 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     return err;
 }
 
-WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* src, int size) {
+WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* src, int size) {
     DEBUG_PRINTF( user_context, "CL: halide_init_kernels (user_context: %p, state_ptr: %p, program: %p, %i)\n",
                   user_context, state_ptr, src, size );
 
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
-        return NULL;
+        return ctx.error;
     }
 
     #ifdef DEBUG
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    module_state *state = (module_state*)state_ptr;
+    module_state **state = (module_state**)state_ptr;
+    if (!(*state)) {
+        *state = (module_state*)malloc(sizeof(module_state));
+        (*state)->program = NULL;
+        (*state)->next = state_list;
+        state_list = *state;
+    }
 
     // Create the program if necessary.
-    if (!(state && state->program) && size > 1) {
+    if (!(*state && (*state)->program) && size > 1) {
         cl_int err = 0;
         cl_device_id dev;
 
         err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL);
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed (%d)\n", err);
-            return NULL;
+            return err;
         }
 
         cl_device_id devices[] = { dev };
@@ -347,14 +353,14 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, NULL);
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed (%d)\n", err);
-            return NULL;
+            return err;
         }
         // Get the max number of constant arguments supported by this OpenCL implementation.
         cl_uint max_constant_args = 0;
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, NULL);
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed (%d)\n", err);
-            return NULL;
+            return err;
         }
 
         // Build the compile argument options.
@@ -370,10 +376,11 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
         if (err != CL_SUCCESS) {
             DEBUG_PRINTF( user_context, "%d\n", err );
             halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%d)\n", err);
-            return NULL;
+            return err;
         } else {
             DEBUG_PRINTF( user_context, "%p\n", program );
         }
+        (*state)->program = program;
 
         DEBUG_PRINTF( user_context, "    clBuildProgram %p\n", program );
         err = clBuildProgram(program, 1, devices, options, NULL, NULL );
@@ -383,12 +390,20 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             // Allocate an appropriately sized buffer for the build log.
             size_t len = 0;
             char *buffer = NULL;
-            if (clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len) == CL_SUCCESS) {
+            if (clGetProgramBuildInfo(program,
+                                      dev,
+                                      CL_PROGRAM_BUILD_LOG,
+                                      0, NULL,
+                                      &len) == CL_SUCCESS) {
                 buffer = (char*)malloc((++len)*sizeof(char));
             }
 
             // Get build log
-            if (buffer && clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG, len, buffer, NULL) == CL_SUCCESS) {
+            if (buffer && clGetProgramBuildInfo(program,
+                                                dev,
+                                                CL_PROGRAM_BUILD_LOG,
+                                                len, buffer,
+                                                NULL) == CL_SUCCESS) {
                 halide_printf(user_context, "    Build Log:\n %s\n-----\n", buffer);
             } else {
                 halide_printf(user_context, "    clGetProgramBuildInfo failed\n");
@@ -399,20 +414,8 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             }
 
             halide_assert(user_context, err == CL_SUCCESS);
-            DEBUG_PRINTF( user_context, "    clReleaseProgram %p\n", program);
-            clReleaseProgram(program);
-            return NULL;
+            return err;
         }
-
-        // Create the module state if necessary
-        if (!state) {
-            state = (module_state*)malloc(sizeof(module_state));
-        }
-
-        // Add module to the state list
-        state->program = program;
-        state->next = state_list;
-        state_list = state;
     }
 
     #ifdef DEBUG
@@ -420,7 +423,7 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
 
-    return state;
+    return 0;
 }
 
 // Used to generate correct timings when tracing
@@ -475,7 +478,6 @@ WEAK void halide_release(void *user_context) {
         }
         state = state->next;
     }
-    state_list = NULL;
 
     // Release the context itself, if we created it.
     if (ctx == weak_cl_ctx) {
