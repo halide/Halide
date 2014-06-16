@@ -148,7 +148,7 @@ static const char *vertex_shader_src =
     "void main() {\n"
     "    gl_Position = vec4(position, 0.0, 1.0);\n"
     "    vec2 texcoord = 0.5 * position + 0.5;\n"
-    "    pixcoord = floor(texcoord * vec2(output_extent.x, output_extent.y)) + vec2(output_min.x, output_min.y);\n"
+    "    pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n"
     "}\n";
 
 static const char kernel_marker[] = "/// KERNEL ";
@@ -419,6 +419,9 @@ EXPORT int halide_opengl_init(void *user_context) {
                   sizeof(square_indices), square_indices, GL_STATIC_DRAW);
     ST.element_buffer = buf;
 
+    ST.BindBuffer(GL_ARRAY_BUFFER, 0);
+    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
     CHECK_GLERROR(1);
     ST.initialized = true;
     return 0;
@@ -429,7 +432,8 @@ EXPORT int halide_opengl_init(void *user_context) {
 // The OpenGL context itself is generally managed by the host application, so
 // we leave it untouched.
 EXPORT void halide_opengl_release(void *user_context) {
-    CHECK_INITIALIZED();
+    if (!ST.initialized) return;
+
     halide_printf(user_context, "halide_opengl_release\n");
     ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
@@ -969,6 +973,7 @@ EXPORT int halide_opengl_dev_run(
         } else if (kernel_arg->kind == ARGKIND_INBUF) {
             GLint loc =
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
+            CHECK_GLERROR(1);
             if (loc == -1) {
                 halide_error(user_context, "No sampler defined for input texture.\n");
                 return 1;
@@ -982,6 +987,7 @@ EXPORT int halide_opengl_dev_run(
         } else if (kernel_arg->kind == ARGKIND_VAR) {
             GLint loc =
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
+            CHECK_GLERROR(1);
             if (loc == -1) {
                 // Argument was probably optimized away by GLSL compiler.
                 continue;
@@ -1112,6 +1118,8 @@ EXPORT int halide_opengl_dev_run(
         ST.BindTexture(GL_TEXTURE_2D, 0);
     }
     ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    ST.BindBuffer(GL_ARRAY_BUFFER, 0);
+    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     return 0;
 }
 
