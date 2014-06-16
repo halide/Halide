@@ -478,7 +478,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     #endif
 
     CUdeviceptr p;
-    DEBUG_PRINTF( user_context, "    cuMemAlloc %lld ->", size );
+    DEBUG_PRINTF( user_context, "    cuMemAlloc %lld -> ", size );
     CUresult err = cuMemAlloc(&p, size);
     if (err != CUDA_SUCCESS) {
         DEBUG_PRINTF( user_context, "%d\n", err );
@@ -519,8 +519,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->host && buf->dev);
         size_t size = __buf_size(user_context, buf);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-        DEBUG_PRINTF( user_context, "    cuMemcpyHtoD %p, %p, %lld\n",
-                      (void *)buf->dev, buf->host, (long long)size );
+        DEBUG_PRINTF( user_context, "    cuMemcpyHtoD %p -> %p, %lld bytes\n",
+                      buf->host, (void *)buf->dev, (long long)size );
         CUresult err = cuMemcpyHtoD(buf->dev, buf->host, size);
         if (err != CUDA_SUCCESS) {
             halide_error_varargs(user_context, "CUDA: cuMemcpyHtoD failed (%d)", err);
@@ -552,8 +552,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->dev && buf->dev);
         size_t size = __buf_size(user_context, buf);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
-        DEBUG_PRINTF( user_context, "    cuMemcpyDtoH %p, %p, %lld\n",
-                      buf->host, buf->dev, (long long)size );
+        DEBUG_PRINTF( user_context, "    cuMemcpyDtoH %p -> %p, %lld bytes\n",
+                      buf->dev, buf->host, (long long)size );
         CUresult err = cuMemcpyDtoH(buf->host, buf->dev, size);
         if (err != CUDA_SUCCESS) {
             halide_error_varargs(user_context, "CUDA: cuMemcpyDtoH failed (%d)", err);
