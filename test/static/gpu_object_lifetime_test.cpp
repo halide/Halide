@@ -14,35 +14,20 @@ extern "C" void halide_print(void *user_context, const char *str) {
 
 int main(int argc, char **argv) {
 
-    const int W = 80;
-    const int H = 80;
-
     // Run the whole program several times.
     for (int i = 0; i < 2; i++) {
-        Image<int> input(W, H);
-        for (int y = 0; y < input.height(); y++) {
-            for (int x = 0; x < input.width(); x++) {
-                input(x, y) = x + y;
-            }
-        }
-        input.set_host_dirty();
+        Image<int> output(80);
 
-        Image<int> output(W, H);
-
-        printf("Evaluating output over %d x %d\n", W, H);
-        func_gpu_object_lifetime(input, output);
+        func_gpu_object_lifetime(output);
 
         output.copy_to_host();
-        for (int y = 0; y < input.height(); y++) {
-            for (int x = 0; x < input.width(); x++) {
-                if (2*input(x, y) != output(x, y)) {
-                    printf("Error! %d != 2*%d at %d, %d\n", output(x, y), input(x, y), x, y);
-                    return -1;
-                }
+        for (int x = 0; x < output.width(); x++) {
+            if (output(x) != x) {
+                printf("Error! %d != %d\n", output(x), x);
+                return -1;
             }
         }
 
-        printf("Releasing\n");
         halide_release(NULL);
     }
 
