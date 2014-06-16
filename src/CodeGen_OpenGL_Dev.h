@@ -49,6 +49,7 @@ protected:
 
     void visit(const Cast *);
     void visit(const For *);
+    void visit(const Select *);
 
     void visit(const Max *);
     void visit(const Min *);

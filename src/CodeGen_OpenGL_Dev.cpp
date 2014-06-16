@@ -143,6 +143,29 @@ void CodeGen_GLSL::visit(const For *loop) {
     }
 }
 
+void CodeGen_GLSL::visit(const Select *op) {
+    string cond = print_expr(op->condition);
+
+    string id_value = unique_name('_');
+    do_indent();
+    stream << print_type(op->type) << " " << id_value << ";\n";
+    do_indent();
+    stream << "if (" << cond << ")\n";
+    open_scope(); {
+        string true_val = print_expr(op->true_value);
+        stream << id_value << " = " << true_val << ";\n";
+    } close_scope("");
+    do_indent();
+    stream << "else\n";
+    open_scope(); {
+        string false_val = print_expr(op->false_value);
+        stream << id_value << " = " << false_val<< ";\n";
+        do_indent();
+    } close_scope("");
+
+    id = id_value;
+}
+
 void CodeGen_GLSL::visit(const Max *op) {
     // version 120 only supports min of floats, so we have to cast back and forth
     Expr a = op->a;
