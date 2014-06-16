@@ -302,7 +302,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
 
@@ -317,17 +316,25 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src");
 
-    // Jump to the start of the function and insert a call to halide_init_kernels
-    builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
+    // Remember the entry block so we can branch to it upon init success.
+    BasicBlock *entry = &function->getEntryBlock();
+
+    // Insert a new block to run initialization at the beginning of the function.
+    BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
+                                                     function, entry);
+    builder->SetInsertPoint(init_kernels_bb);
     Value *user_context = get_user_context();
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     internal_assert(init) << "Could not find function halide_init_kernels in initial module\n";
-    /*Value *result =*/ builder->CreateCall4(init, user_context,
+    Value *result = builder->CreateCall4(init, user_context,
                                          get_module_state(),
                                          kernel_src_ptr, kernel_size);
-    //Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-    //CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_init_kernels");
+    Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+    CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_init_kernels");
+
+    // Upon success, jump to the original entry.
+    builder->CreateBr(entry);
 
     // Optimize the module
     CodeGen::optimize_module();
