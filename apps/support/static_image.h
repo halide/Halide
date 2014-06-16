@@ -27,6 +27,7 @@ typedef struct buffer_t {
 #endif
 
 extern "C" int halide_copy_to_host(void *user_context, buffer_t* buf);
+extern "C" int halide_dev_free(void *user_context, buffer_t *buf);
 
 template<typename T>
 class Image {
@@ -36,6 +37,7 @@ class Image {
         int ref_count;
         uint8_t *alloc;
         ~Contents() {
+            halide_dev_free(NULL, &buf);
             delete[] alloc;
         }
     };
