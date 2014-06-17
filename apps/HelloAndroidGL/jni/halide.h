@@ -20,5 +20,5 @@ typedef struct buffer_t {
 #ifdef __cplusplus
 extern "C"
 #endif
-int halide(buffer_t *_input, buffer_t *_f0) HALIDE_FUNCTION_ATTRS;
+int halide(const float _p0, buffer_t *_f0) HALIDE_FUNCTION_ATTRS;
 #endif

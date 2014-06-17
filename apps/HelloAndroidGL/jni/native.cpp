@@ -34,8 +34,6 @@ extern "C" int halide_printf(void *user_context, const char *fmt, ...) {
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 
-#define USED_GL_FUNCTIONS                                               \
-
 extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *name) {
     static struct {
         const char *name;
@@ -58,7 +56,6 @@ extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *
         { "glDeleteTextures", (void*)&glDeleteTextures },
         { "glDisable", (void*)&glDisable },
         { "glDisableVertexAttribArray", (void*)&glDisableVertexAttribArray },
-//        { "glDrawBuffers", (void*)&glDrawBuffers },
         { "glDrawElements", (void*)&glDrawElements },
         { "glEnableVertexAttribArray", (void*)&glEnableVertexAttribArray },
         { "glFramebufferTexture2D", (void*)&glFramebufferTexture2D },
@@ -71,8 +68,6 @@ extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *
         { "glGetProgramiv", (void*)&glGetProgramiv },
         { "glGetShaderInfoLog", (void*)&glGetShaderInfoLog },
         { "glGetShaderiv", (void*)&glGetShaderiv },
-//        { "glGetTexImage", (void*)&glGetTexImage },
-//        { "glGetTexLevelParameteriv", (void*)&glGetTexLevelParameteriv },
         { "glGetUniformLocation", (void*)&glGetUniformLocation },
         { "glLinkProgram", (void*)&glLinkProgram },
         { "glReadPixels", (void*)&glReadPixels },
@@ -101,6 +96,8 @@ extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *
 extern "C" int halide_opengl_create_context(void *user_context) {
     if (eglGetCurrentContext() != EGL_NO_CONTEXT)
         return 0;
+
+    LOGD("Creating new OpenGL context\n");
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
@@ -160,113 +157,32 @@ static int handler(void */* user_context */, const char *msg) {
     LOGE("%s", msg);
 }
 
-static int LockBitmap(JNIEnv *env, buffer_t *buf, jobject bitmap) {
-    AndroidBitmapInfo info;
-    AndroidBitmap_getInfo(env, bitmap, &info);
-
-    buf->extent[0] = info.width;
-    buf->extent[1] = info.height;
-    buf->extent[2] = 4;
-    buf->extent[3] = 0;
-    buf->stride[0] = 4;
-    buf->stride[1] = info.stride;
-    buf->stride[2] = 1;
-    buf->stride[3] = 0;
-    buf->min[0] = 0;
-    buf->min[1] = 0;
-    buf->min[2] = 0;
-    buf->elem_size = 1;
-
-    if (int err = AndroidBitmap_lockPixels(env, bitmap, reinterpret_cast<void**>(&buf->host))) {
-        LOGE("AndroidBitmap_lockPixels failed with error code %d.\n", err);
-        return 1;
-    }
-    return 0;
-}
-
-extern "C" {
-JNIEXPORT void JNICALL Java_com_example_hellohalide_HelloHalide_processBitmapHalide(
-    JNIEnv *env, jobject obj, jobject src, jobject dst) {
-
-    static bool first_call = true;
-    static unsigned counter = 0;
-    static unsigned times[16];
-    if (first_call) {
-        LOGD("According to Halide, host system has %d cpus\n", halide_host_cpu_count());
-        first_call = false;
-        for (int t = 0; t < 16; t++) times[t] = 0;
-    }
-
+static void RunHalideFilter(buffer_t *buf) {
+    static float time = 0.0f;
     halide_set_error_handler(handler);
-
-    buffer_t srcBuf = {0};
-    buffer_t dstBuf = {0};
-    if (LockBitmap(env, &srcBuf, src)) return;
-    if (LockBitmap(env, &dstBuf, dst)) {
-        AndroidBitmap_unlockPixels(env, src);
-        return;
-    }
-
-    int64_t t1 = halide_current_time_ns();
-
-
-    srcBuf.host_dirty = 1;
-    if (int err = halide(&srcBuf, &dstBuf)) {
+    if (int err = halide(time, buf)) {
         LOGD("Halide filter failed with error code %d\n", err);
     }
-    halide_copy_to_host(NULL, &dstBuf);
-    halide_dev_free(NULL, &dstBuf);
-    halide_dev_free(NULL, &srcBuf);
-
-    int64_t t2 = halide_current_time_ns();
-    unsigned elapsed_us = (t2 - t1)/1000;
-
-    times[counter & 15] = elapsed_us;
-    counter++;
-    unsigned min = times[0];
-    for (int i = 1; i < 16; i++) {
-        if (times[i] < min) min = times[i];
-    }
-    LOGD("Time taken: %d (%d)", elapsed_us, min);
-
-    AndroidBitmap_unlockPixels(env, src);
-    AndroidBitmap_unlockPixels(env, dst);
+    time += 1.0f/16.0f;
 }
 
+extern "C"
+JNIEXPORT void JNICALL Java_com_example_hellohalide_HalideGLView_processTextureHalide(
+    JNIEnv *env, jobject obj, jint dst, jint width, jint height) {
 
-JNIEXPORT void JNICALL Java_com_example_hellohalide_HelloHalide_processTextureHalide(
-    JNIEnv *env, jobject obj, jobject src, jobject dst) {
-
-    static bool first_call = true;
-    static unsigned counter = 0;
-    static unsigned times[16];
-    if (first_call) {
-        LOGD("According to Halide, host system has %d cpus\n", halide_host_cpu_count());
-        first_call = false;
-        for (int t = 0; t < 16; t++) times[t] = 0;
-    }
-
-    halide_set_error_handler(handler);
-
-    buffer_t srcBuf = {0};
     buffer_t dstBuf = {0};
+    dstBuf.extent[0] = width;
+    dstBuf.extent[1] = height;
+    dstBuf.extent[2] = 4;
+    dstBuf.stride[0] = 4;
+    dstBuf.stride[1] = 4 * width;
+    dstBuf.stride[2] = 1;
+    dstBuf.min[0] = 0;
+    dstBuf.min[1] = 0;
+    dstBuf.min[2] = 0;
+    dstBuf.elem_size = 1;
+    dstBuf.host = NULL;
+    dstBuf.dev = dst;
 
-    int64_t t1 = halide_current_time_ns();
-
-    // Add filter call here
-
-
-    int64_t t2 = halide_current_time_ns();
-    unsigned elapsed_us = (t2 - t1)/1000;
-
-    times[counter & 15] = elapsed_us;
-    counter++;
-    unsigned min = times[0];
-    for (int i = 1; i < 16; i++) {
-        if (times[i] < min) min = times[i];
-    }
-    LOGD("Time taken: %d (%d)", elapsed_us, min);
-
-}
-
+    RunHalideFilter(&dstBuf);
 }
