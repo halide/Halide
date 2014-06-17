@@ -13,23 +13,15 @@
 
 #define DEBUG 1
 
+extern "C" void halide_error_varargs(void *user_context, const char *fmg, ...);
 extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
-extern "C" int halide_host_cpu_count();
-extern "C" int64_t halide_current_time_ns();
-extern "C" int halide_copy_to_host(void *, buffer_t *);
-extern "C" int halide_copy_to_dev(void *, buffer_t *);
-extern "C" int halide_dev_malloc(void *, buffer_t *);
-extern "C" int halide_dev_free(void *, buffer_t *);
-
 extern "C" int halide_printf(void *user_context, const char *fmt, ...) {
     __builtin_va_list args;
     __builtin_va_start(args,fmt);
     int result = __android_log_vprint(ANDROID_LOG_DEBUG, "halide", fmt, args);
     __builtin_va_end(args);
     return result;
-//    LOGD("%s", ...);
 }
-
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
@@ -97,15 +89,12 @@ extern "C" int halide_opengl_create_context(void *user_context) {
     if (eglGetCurrentContext() != EGL_NO_CONTEXT)
         return 0;
 
-    LOGD("Creating new OpenGL context\n");
-
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
-        LOGE("Could not initialize EGL display %d", eglGetError());
+        halide_error_varargs(user_context,
+                             "Could not initialize EGL display %d", eglGetError());
         return 1;
     }
-
-    // eglBindAPI(EGL_OPENGL_ES_API);
 
     EGLint attribs[] = {
         EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
@@ -120,8 +109,9 @@ extern "C" int halide_opengl_create_context(void *user_context) {
     int numconfig;
     eglChooseConfig(display, attribs, &config, 1, &numconfig);
     if (numconfig != 1) {
-        LOGE(
-            "Error: eglChooseConfig(): config not found %d - %d.\n", eglGetError(), numconfig);
+        halide_error_varargs(user_context,
+                             "Error: eglChooseConfig(): config not found %d - %d.\n",
+                             eglGetError(), numconfig);
         exit(-1);
     }
 
@@ -132,24 +122,24 @@ extern "C" int halide_opengl_create_context(void *user_context) {
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT,
                                           context_attribs);
     if (context == EGL_NO_CONTEXT) {
-        LOGE(
-            "Error: eglCreateContext failed - %d.\n", eglGetError());
-        exit(-1);
+        halide_error_varargs(user_context,
+                             "Error: eglCreateContext failed - %d.\n", eglGetError());
+        return -1;
     }
 
     GLint surface_attribs[] = {
-        EGL_WIDTH, 320,
-        EGL_HEIGHT, 200,
+        EGL_WIDTH, 1,
+        EGL_HEIGHT, 1,
         EGL_NONE
     };
     EGLSurface surface = eglCreatePbufferSurface(display, config,  surface_attribs);
     if (surface == EGL_NO_SURFACE) {
-        LOGE("Error: Could not create EGL window surface: %d\n", eglGetError());
-        exit(-1);
+        halide_error_varargs(user_context,
+                             "Error: Could not create EGL window surface: %d\n", eglGetError());
+        return -1;
     }
 
     eglMakeCurrent(display, surface, surface, context);
-    LOGD("Created new OpenGL context\n");
     return 0;
 }
 
