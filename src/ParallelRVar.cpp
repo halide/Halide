@@ -13,8 +13,9 @@ using std::string;
 using std::vector;
 using std::map;
 
-// Note that we don't pick up lets for simplicity. This makes the
-// comparison conservative, because the let variables become unknowns.
+/** Find all calls arguments to the given function. Note that we don't
+ * pick up lets for simplicity. This makes the comparison
+ * conservative, because the let variables become unknowns. */
 class FindLoads : public IRVisitor {
     using IRVisitor::visit;
 
@@ -33,6 +34,7 @@ public:
     vector<vector<Expr> > loads;
 };
 
+/** Rename all free variables to unique new names. */
 class RenameFreeVars : public IRMutator {
     using IRMutator::visit;
 

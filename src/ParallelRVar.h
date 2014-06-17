@@ -4,14 +4,22 @@
 #include "Function.h"
 #include <string>
 
-// TODO: file-level comment
+/** \file
+ *
+ * Method for checking if it's safe to parallelize a reduction
+ * definition across a reduction variable.
+ */
 
 namespace Halide {
 namespace Internal {
 
-// TODO: comment
-bool can_parallelize_rvar(const std::string &v,
-                          const std::string &f,
+/** Returns whether or not Halide can prove that it is safe to
+ * parallelize a reduction definition across a specific variable. If
+ * this returns true, it's definitely safe. If this returns false, it
+ * may still be safe, but Halide couldn't prove it.
+ */
+bool can_parallelize_rvar(const std::string &rvar,
+                          const std::string &func,
                           const ReductionDefinition &r);
 
 }
