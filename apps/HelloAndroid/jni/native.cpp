@@ -22,7 +22,7 @@ extern "C" int halide_dev_malloc(void *, buffer_t *);
 extern "C" int halide_dev_free(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
-    LOGE(msg);
+    LOGE("%s", msg);
 }
 
 extern "C" {
