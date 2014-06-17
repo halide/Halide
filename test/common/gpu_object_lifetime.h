@@ -23,6 +23,7 @@ ObjectType object_types[] = {
     // "clCreateProgramWithBinary".
     ObjectType("clCreateProgram", "clReleaseProgram"),
     ObjectType("clCreateBuffer", "clReleaseMemObject"),
+    ObjectType("clCreateKernel", "clReleaseKernel"),
 
     ObjectType("cuCtxCreate", "cuCtxDestroy", true),
     ObjectType("cuModuleLoad", "cuModuleUnload"),
