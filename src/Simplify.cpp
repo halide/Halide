@@ -61,15 +61,6 @@ private:
 
     using IRMutator::visit;
 
-
-    void visit(const IntImm *op) {
-        IRMutator::visit(op);
-    }
-
-    void visit(const FloatImm *op) {
-        IRMutator::visit(op);
-    }
-
     bool const_float(Expr e, float *f) {
         if (!e.defined()) {
             return false;
@@ -1651,14 +1642,6 @@ private:
         }
     }
 
-    void visit(const Ramp *op) {
-        IRMutator::visit(op);
-    }
-
-    void visit(const Broadcast *op) {
-        IRMutator::visit(op);
-    }
-
     void visit(const Call *op) {
         // Calls implicitly depend on mins and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
@@ -1849,9 +1832,6 @@ private:
         }
     }
 
-    void visit(const Pipeline *op) {
-        IRMutator::visit(op);
-    }
 
     void visit(const For *op) {
         Expr new_min = mutate(op->min);
@@ -1880,10 +1860,6 @@ private:
         }
     }
 
-    void visit(const Store *op) {
-        IRMutator::visit(op);
-    }
-
     void visit(const Provide *op) {
         // Provides implicitly depend on mins and strides of the buffer referenced
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1905,14 +1881,6 @@ private:
             }
         }
 
-        IRMutator::visit(op);
-    }
-
-    void visit(const Allocate *op) {
-        IRMutator::visit(op);
-    }
-
-    void visit(const Realize *op) {
         IRMutator::visit(op);
     }
 
