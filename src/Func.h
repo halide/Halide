@@ -336,9 +336,15 @@ class Func {
      * re-lowering */
     Internal::Stmt lowered;
 
+    /** Lower the func if it hasn't been already. */
+    void lower(const Target &t);
+
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
     Internal::JITCompiledModule compiled_module;
+
+    /** Invalidate the cached lowered stmt and compiled module. */
+    void invalidate_cache();
 
     /** The current error handler used for realizing this
      * function. May be NULL. Only relevant when jitting. */
@@ -528,12 +534,16 @@ public:
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
-    EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_c(const std::string &filename,
+                             std::vector<Argument>,
+                             const std::string &fn_name = "",
+                             const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Canonical extension is
      * .stmt, which must be supplied in filename. */
-    EXPORT void compile_to_lowered_stmt(const std::string &filename);
+    EXPORT void compile_to_lowered_stmt(const std::string &filename,
+                                        const Target &target = get_target_from_environment());
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
