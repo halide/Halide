@@ -319,17 +319,10 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    // Create the module state if necessary
     module_state *state = (module_state*)state_ptr;
-    if (!state) {
-        state = (module_state*)malloc(sizeof(module_state));
-        state->program = NULL;
-        state->next = state_list;
-        state_list = state;
-    }
 
     // Create the program if necessary.
-    if (!state->program && size > 1) {
+    if (!(state && state->program) && size > 1) {
         cl_int err = 0;
         cl_device_id dev;
 
@@ -341,31 +334,54 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
 
         cl_device_id devices[] = { dev };
         size_t lengths[] = { size };
-        const char *build_options = NULL;
+
+        // Get the max constant buffer size supported by this OpenCL implementation.
+        cl_ulong max_constant_buffer_size = 0;
+        err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, NULL);
+        if (err != CL_SUCCESS) {
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed (%d)\n", err);
+            return NULL;
+        }
+        // Get the max number of constant arguments supported by this OpenCL implementation.
+        cl_uint max_constant_args = 0;
+        err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, NULL);
+        if (err != CL_SUCCESS) {
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed (%d)\n", err);
+            return NULL;
+        }
+
+        char options[256];
 
         // Program is OpenCL C.
         DEBUG_PRINTF(user_context, "    Compiling OpenCL C kernel: (%i chars)\n", size);
 
+        // Build the compile argument options.
+        snprintf(options, sizeof(options),
+                 "-D MAX_CONSTANT_BUFFER_SIZE=%lld -D MAX_CONSTANT_ARGS=%i",
+                 max_constant_buffer_size,
+                 max_constant_args);
+        DEBUG_PRINTF(user_context, "    Build options: %s\n", options);
+
         const char * sources[] = { src };
-        state->program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
+        cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%d)\n", err);
             return NULL;
         }
 
-        err = clBuildProgram(state->program, 1, &dev, build_options, NULL, NULL );
+        err = clBuildProgram(program, 1, devices, options, NULL, NULL );
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clBuildProgram failed (%d)\n", err);
 
             // Allocate an appropriately sized buffer for the build log.
             size_t len = 0;
             char *buffer = NULL;
-            if (clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len) == CL_SUCCESS) {
+            if (clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG, 0, NULL, &len) == CL_SUCCESS) {
                 buffer = (char*)malloc((++len)*sizeof(char));
             }
 
             // Get build log
-            if (buffer && clGetProgramBuildInfo(state->program, dev, CL_PROGRAM_BUILD_LOG, len, buffer, NULL) == CL_SUCCESS) {
+            if (buffer && clGetProgramBuildInfo(program, dev, CL_PROGRAM_BUILD_LOG, len, buffer, NULL) == CL_SUCCESS) {
                 halide_printf(user_context, "    Build Log:\n %s\n-----\n", buffer);
             } else {
                 halide_printf(user_context, "    clGetProgramBuildInfo failed\n");
@@ -378,6 +394,16 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
             halide_assert(user_context, err == CL_SUCCESS);
             return NULL;
         }
+
+        // Create the module state if necessary
+        if (!state) {
+            state = (module_state*)malloc(sizeof(module_state));
+        }
+
+        // Add module to the state list
+        state->program = program;
+        state->next = state_list;
+        state_list = state;
     }
 
     #ifdef DEBUG

@@ -360,22 +360,26 @@ WEAK void* halide_init_kernels(void *user_context, void *state_ptr, const char* 
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    // Create the module state if necessary
     module_state *state = (module_state*)state_ptr;
-    if (!state) {
-        state = (module_state*)malloc(sizeof(module_state));
-        state->module = NULL;
-        state->next = state_list;
-        state_list = state;
-    }
 
     // Create the module itself if necessary.
-    if (!state->module) {
-        CUresult err = cuModuleLoadData(&state->module, ptx_src);
+    if (!(state && state->module)) {
+        CUmodule module;
+        CUresult err = cuModuleLoadData(&module, ptx_src);
         if (err != CUDA_SUCCESS) {
             halide_error_varargs(user_context, "CUDA: cuModuleLoadData failed (%d)", err);
             return NULL;
         }
+
+        // Create the module state if necessary
+        if (!state) {
+            state = (module_state*)malloc(sizeof(module_state));
+        }
+
+        // Add module to state list
+        state->module = module;
+        state->next = state_list;
+        state_list = state;
     }
 
     #ifdef DEBUG

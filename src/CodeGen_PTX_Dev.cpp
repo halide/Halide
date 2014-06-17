@@ -27,7 +27,9 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen(host) {
     user_assert(llvm_NVPTX_enabled) << "llvm build not configured with nvptx target enabled\n.";
 }
 
-void CodeGen_PTX_Dev::add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args) {
+void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
+                                 std::string name,
+                                 const std::vector<GPU_Argument> &args) {
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
 

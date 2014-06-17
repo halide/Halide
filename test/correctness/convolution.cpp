@@ -35,14 +35,14 @@ int main(int argc, char **argv) {
 
     RDom r(tent);
 
-    /* This iterates over r outermost. I.e. the for loop looks like:
+    /* This first zeros blur1, and then accumulates into it. I.e. the for loops look like:
      * for y:
      *   for x:
      *     blur1(x, y) = 0
-     * for r.y:
-     *   for r.x:
-     *     for y:
-     *       for x:
+     * for y:
+     *   for x:
+     *     for r.y:
+     *       for r.x:
      *         blur1(x, y) += tent(r.x, r.y) * input(x + r.x - 1, y + r.y - 1)
      *
      * In general, reductions iterate over the reduction domain outermost.
@@ -71,8 +71,8 @@ int main(int argc, char **argv) {
         // Initialization (basically memset) done in a GPU kernel
         blur1.gpu_tile(x, y, 16, 16, GPU_Default);
 
-        // Summation is done as an outermost loop is done on the cpu
-        blur1.update().gpu_tile(x, y, 16, 16, GPU_Default);
+        // Summation is done as an outermost loop on the cpu
+        blur1.update().reorder(x, y, r.x, r.y).gpu_tile(x, y, 16, 16, GPU_Default);
 
         // Summation is done as a sequential loop within each gpu thread
         blur2.gpu_tile(x, y, 16, 16, GPU_Default);
