@@ -295,6 +295,10 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     }
 
     stream << header.str();
+    stream << "precision highp float;\n";
+    stream << "#define sin_f32 sin\n";
+    stream << "#define cos_f32 cos\n";
+    stream << "#define sqrt_f32 sqrt\n";
 //    stream << "#version 120\n";
 
     // Declare input textures and variables
