@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="com.example.hellohalide"
+          package="org.halide_lang.hellohalidegl"
           android:versionCode="1"
           android:versionName="1.0">
   <application android:label="@string/app_name" android:icon="@drawable/ic_launcher">
-    <activity android:name=".HelloHalide"
+    <activity android:name=".HelloHalideGL"
               android:label="@string/app_name"
               android:screenOrientation="landscape"
               android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">

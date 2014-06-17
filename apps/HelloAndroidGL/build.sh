@@ -8,5 +8,5 @@ cd ..
 pwd
 ndk-build
 ant debug
-adb install -r bin/HelloAndroid-debug.apk
+adb install -r bin/HelloAndroidGL-debug.apk
 adb logcat

@@ -167,7 +167,8 @@ static void RunHalideFilter(buffer_t *buf) {
 }
 
 extern "C"
-JNIEXPORT void JNICALL Java_com_example_hellohalide_HalideGLView_processTextureHalide(
+
+JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
     JNIEnv *env, jobject obj, jint dst, jint width, jint height) {
 
     buffer_t dstBuf = {0};
