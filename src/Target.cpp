@@ -397,6 +397,7 @@ DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
+DECLARE_CPP_INITMOD(posix_print)
 
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
@@ -454,6 +455,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_host_cpu_count",
                        "halide_opengl_get_proc_address",
                        "halide_opengl_create_context",
+                       "halide_set_custom_print",
+                       "halide_print",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -546,6 +549,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));
     modules.push_back(get_initmod_posix_error_handler(c, bits_64));
+    modules.push_back(get_initmod_posix_print(c, bits_64));
 
     // These modules are optional
     if (t.arch == Target::X86) {

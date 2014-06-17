@@ -10,6 +10,7 @@
 #include <memory>
 #include <limits>
 #include <stdlib.h>
+#include <cassert>
 
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
@@ -27,6 +28,7 @@ typedef struct buffer_t {
 #endif
 
 extern "C" int halide_copy_to_host(void *user_context, buffer_t* buf);
+extern "C" int halide_dev_free(void *user_context, buffer_t *buf);
 
 template<typename T>
 class Image {
@@ -35,7 +37,15 @@ class Image {
         buffer_t buf;
         int ref_count;
         uint8_t *alloc;
+
+        void dev_free() {
+            halide_dev_free(NULL, &buf);
+        }
+
         ~Contents() {
+            if (buf.dev) {
+                dev_free();
+            }
             delete[] alloc;
         }
     };
@@ -122,6 +132,11 @@ public:
             halide_copy_to_host(NULL, &contents->buf);
             contents->buf.dev_dirty = false;
         }
+    }
+
+    void dev_free() {
+        assert(!contents->buf.dev_dirty);
+        contents->dev_free();
     }
 
     Image(T vals[]) {
