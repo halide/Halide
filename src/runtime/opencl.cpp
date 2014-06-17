@@ -328,6 +328,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
 
     // Create the state object if necessary. This only happens once, regardless
     // of how many times halide_init_kernels/halide_release is called.
+    // halide_release traverses this list and releases the program objects, but
+    // it does not modify the list nodes created/inserted here.
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
@@ -336,7 +338,9 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         state_list = *state;
     }
 
-    // Create the program if necessary.
+    // Create the program if necessary. TODO: The program object needs to not
+    // only already exist, but be created for the same context/device as the
+    // calling context/device.
     if (!(*state && (*state)->program) && size > 1) {
         cl_int err = 0;
         cl_device_id dev;
@@ -469,7 +473,11 @@ WEAK void halide_release(void *user_context) {
     err = clFinish(q);
     halide_assert(user_context, err == CL_SUCCESS);
 
-    // Unload the modules attached to this context.
+    // Unload the modules attached to this context. Note that the list
+    // nodes themselves are not freed, only the program objects are
+    // released. Subsequent calls to halide_init_kernels might re-create
+    // the program object using the same list node to store the program
+    // object.
     module_state *state = state_list;
     while (state) {
         if (state->program) {

@@ -364,8 +364,10 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    // Create the state object if necessary. This only happens once regardless
+    // Create the state object if necessary. This only happens once, regardless
     // of how many times halide_init_kernels/halide_release is called.
+    // halide_release traverses this list and releases the module objects, but
+    // it does not modify the list nodes created/inserted here.
     module_state **state = (module_state**)state_ptr;
     if (!(*state)) {
         *state = (module_state*)malloc(sizeof(module_state));
@@ -412,7 +414,11 @@ WEAK void halide_release(void *user_context) {
     err = cuCtxSynchronize();
     halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
 
-    // Unload the modules attached to this context.
+    // Unload the modules attached to this context. Note that the list
+    // nodes themselves are not freed, only the module objects are
+    // released. Subsequent calls to halide_init_kernels might re-create
+    // the program object using the same list node to store the module
+    // object.
     module_state *state = state_list;
     while (state) {
         if (state->module) {
