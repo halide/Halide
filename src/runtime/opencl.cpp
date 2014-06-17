@@ -674,10 +674,20 @@ WEAK int halide_dev_run(void *user_context,
     cl_program program = ((module_state*)state_ptr)->program;
 
     halide_assert(user_context, program);
+    DEBUG_PRINTF( user_context, "    clCreateKernel %s -> ", entry_name );
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
+        DEBUG_PRINTF( user_context, "%d\n", err );
         halide_error_varargs(user_context, "CL: clCreateKernel (%s) failed (%d)\n", entry_name, err);
         return err;
+    } else {
+        #ifdef DEBUG
+        uint64_t t_create_kernel = halide_current_time_ns(user_context);
+        DEBUG_PRINTF( user_context, "%p (%f ms)\n",
+                      f, (t_create_kernel - t_before) / 1.0e6 );
+        #else
+        DEBUG_PRINTF( user_context, "%p\n", f );
+        #endif
     }
 
     // Pack dims
@@ -705,15 +715,24 @@ WEAK int halide_dev_run(void *user_context,
     }
 
     // Launch kernel
+    DEBUG_PRINTF( user_context, "    clEnqueueNDRangeKernel %dx%dx%d, %dx%dx%d -> ",
+                  blocksX, blocksY, blocksZ,
+                  threadsX, threadsY, threadsZ );
     err = clEnqueueNDRangeKernel(ctx.cmd_queue, f,
                                  // NDRange
                                  3, NULL, global_dim, local_dim,
                                  // Events
                                  0, NULL, NULL);
     if (err != CL_SUCCESS) {
+        DEBUG_PRINTF( user_context, "%d\n", err );
         halide_error_varargs(user_context, "CL: clEnqueueNDRangeKernel failed (%d)\n", err);
         return err;
+    } else {
+        DEBUG_PRINTF ( user_context, "CL_SUCCESS\n" );
     }
+
+    DEBUG_PRINTF( user_context, "    clReleaseKernel %p\n", f );
+    clReleaseKernel(f);
 
     #ifdef DEBUG
     err = clFinish(ctx.cmd_queue);
