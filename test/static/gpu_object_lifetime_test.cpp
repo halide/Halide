@@ -16,17 +16,17 @@ int main(int argc, char **argv) {
 
     // Run the whole program several times.
     for (int i = 0; i < 2; i++) {
-        {
-            Image<int> output(80);
+        Image<int> output(80);
 
-            func_gpu_object_lifetime(output);
+        func_gpu_object_lifetime(output);
 
-            output.copy_to_host();
-            for (int x = 0; x < output.width(); x++) {
-                if (output(x) != x) {
-                    printf("Error! %d != %d\n", output(x), x);
-                    return -1;
-                }
+        output.copy_to_host();
+        output.dev_free();
+
+        for (int x = 0; x < output.width(); x++) {
+            if (output(x) != x) {
+                printf("Error! %d != %d\n", output(x), x);
+                return -1;
             }
         }
 
