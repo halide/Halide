@@ -1070,7 +1070,8 @@ EXPORT int halide_opengl_dev_run(
             malloc(num_output_textures * sizeof(GLenum));
         for (int i=0; i<num_output_textures; i++)
             draw_buffers[i] = GL_COLOR_ATTACHMENT0 + i;
-//////////////////////////////////////////////////
+// TODO: disabled for now, since OpenGL ES 2 doesn't support multiple render
+// targets.
 //        ST.DrawBuffers(num_output_textures, draw_buffers);
         CHECK_GLERROR(1);
         free(draw_buffers);
