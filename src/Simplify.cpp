@@ -46,6 +46,7 @@ int do_indirect_int_cast(Type t, int x) {
 class Simplify : public IRMutator {
 public:
     Simplify(bool r) : remove_dead_lets(r) {}
+
 private:
     bool remove_dead_lets;
 
@@ -59,6 +60,7 @@ private:
     Scope<Interval> bounds_info;
 
     using IRMutator::visit;
+
 
     void visit(const IntImm *op) {
         IRMutator::visit(op);
@@ -848,7 +850,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1021,23 +1023,6 @@ private:
         const Min *min_a_a = max_a ? max_a->a.as<Min>() : NULL;
         const Min *min_b_a = max_b ? max_b->a.as<Min>() : NULL;
 
-        //const Add *add_a_a = div_a ? div_a->a.as<Add>() : NULL;
-        //const Add *add_b_a = div_b ? div_b->a.as<Add>() : NULL;
-        if (op->type == Int(32) && is_simple_const(b) && !is_simple_const(a)) {
-            Expr delta = mutate(a - b);
-            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
-            id.min = mutate(id.min);
-            id.max = mutate(id.max);
-            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
-                expr = a;
-                return;
-            }
-            if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
-                expr = b;
-                return;
-            }
-        }
-
         if (equal(a, b)) {
             expr = a;
             return;
@@ -1065,15 +1050,17 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && const_int(b, &ib)) {
-            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            int max_a, min_a;
-            if (const_int(ia.min, &min_a) && const_int(ia.max, &max_a)) {
-                if (max_a <= ib) {
-                    expr = b;
-                } else if (ib <= min_a) {
-                    expr = a;
-                }
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
+            Expr delta = mutate(a - b);
+            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
+            id.min = mutate(id.min);
+            id.max = mutate(id.max);
+            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
+                expr = a;
+                return;
+            }
+            if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
+                expr = b;
                 return;
             }
         }
