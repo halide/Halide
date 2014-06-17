@@ -3,7 +3,7 @@
 // This lesson demonstrates how to define a Func in multiple passes, including scattering.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=../bin ./lesson_09
 
 // On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):

@@ -267,6 +267,10 @@ public:
 
     // Get the debug name of a global var from a pointer to it
     std::string get_global_variable_name(const void *global_pointer, const std::string &type_name = "") {
+        if (global_variables.empty()) {
+            debug(4) << "Considering possible global at " << global_pointer << " but global_variables is empty\n";
+            return "";
+        }
         debug(4) << "Considering possible global at " << global_pointer << "\n";
 
         debug(4) << "Known globals range from " << std::hex << global_variables.front().addr << " to " << global_variables.back().addr << std::dec << "\n";
