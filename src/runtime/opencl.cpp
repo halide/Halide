@@ -683,10 +683,8 @@ WEAK int halide_dev_run(void *user_context,
     } else {
         #ifdef DEBUG
         uint64_t t_create_kernel = halide_current_time_ns(user_context);
-        DEBUG_PRINTF( user_context, "%p (%f ms)\n",
-                      f, (t_create_kernel - t_before) / 1.0e6 );
-        #else
-        DEBUG_PRINTF( user_context, "%p\n", f );
+        halide_printf( user_context, "%p (%f ms)\n",
+                       f, (t_create_kernel - t_before) / 1.0e6 );
         #endif
     }
 
