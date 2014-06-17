@@ -78,6 +78,10 @@ struct JITCompiledModule {
     typedef int (*TraceFn)(void *, const halide_trace_event *);
     void (*set_custom_trace)(TraceFn);
 
+    /** Set a custom print function for this module. See
+     * \ref Func::set_custom_print. */
+    void (*set_custom_print)(void (*custom_print)(void *, const char *));
+
     /** Shutdown the thread pool maintained by this JIT module. This
      * is also done automatically when the last reference to this
      * module is destroyed. */
@@ -97,6 +101,7 @@ struct JITCompiledModule {
         set_custom_do_par_for(NULL),
         set_custom_do_task(NULL),
         set_custom_trace(NULL),
+        set_custom_print(NULL),
         shutdown_thread_pool(NULL) {}
 
     /** Take an llvm module and compile it. Populates the function

@@ -42,6 +42,7 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_do_par_for(NULL),
                                  custom_do_task(NULL),
                                  custom_trace(NULL),
+                                 custom_print(NULL),
                                  random_seed(0),
                                  user_context(user_context_param()) {
 }
@@ -53,6 +54,7 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_do_par_for(NULL),
                custom_do_task(NULL),
                custom_trace(NULL),
+               custom_print(NULL),
                random_seed(0),
                user_context(user_context_param()) {
 }
@@ -64,6 +66,7 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
                      custom_trace(NULL),
+                     custom_print(NULL),
                      random_seed(0),
                      user_context(user_context_param()) {
     (*this)(_) = e;
@@ -76,6 +79,7 @@ Func::Func(Function f) : func(f),
                          custom_do_par_for(NULL),
                          custom_do_task(NULL),
                          custom_trace(NULL),
+                         custom_print(NULL),
                          random_seed(0),
                          user_context(user_context_param()) {
 }
@@ -1885,6 +1889,13 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     }
 }
 
+void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
+    custom_print = cust_print;
+    if (compiled_module.set_custom_print) {
+        compiled_module.set_custom_print(custom_print);
+    }
+}
+
 void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
@@ -1975,6 +1986,7 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_custom_print(custom_print);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2055,6 +2067,7 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_custom_print(custom_print);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
