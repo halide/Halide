@@ -1,4 +1,4 @@
-package com.example.hellohalide;
+package org.halide_lang.hellohalidegl;
 
 import android.app.Activity;
 import android.content.Context;
@@ -77,7 +77,7 @@ class HalideGLView extends GLSurfaceView {
             gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS, status, 0);
             if (status[0] == 0) {
                 String log = gl.glGetShaderInfoLog(shader);
-                Log.e(HelloHalide.TAG, log);
+                Log.e(HelloHalideGL.TAG, log);
                 throw new RuntimeException("Compiling shader failed");
             }
             return shader;
@@ -104,7 +104,7 @@ class HalideGLView extends GLSurfaceView {
             gl.glGetProgramiv(program, gl.GL_LINK_STATUS, status, 0);
             if (status[0] == 0) {
                 String log = gl.glGetProgramInfoLog(program);
-                Log.e(HelloHalide.TAG, log);
+                Log.e(HelloHalideGL.TAG, log);
                 throw new RuntimeException("Linking GLSL program failed");
             }
         }
@@ -169,7 +169,7 @@ class HalideGLView extends GLSurfaceView {
     }
 }
 
-public class HelloHalide extends Activity {
+public class HelloHalideGL extends Activity {
     static final String TAG = "HelloHalideGL";
 
     private GLSurfaceView view;
