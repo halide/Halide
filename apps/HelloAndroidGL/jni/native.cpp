@@ -13,151 +13,7 @@
 
 #define DEBUG 1
 
-extern "C" void halide_error_varargs(void *user_context, const char *fmg, ...);
-extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
-extern "C" int halide_printf(void *user_context, const char *fmt, ...) {
-    __builtin_va_list args;
-    __builtin_va_start(args,fmt);
-    int result = __android_log_vprint(ANDROID_LOG_DEBUG, "halide", fmt, args);
-    __builtin_va_end(args);
-    return result;
-}
-
-#include <EGL/egl.h>
-#include <GLES2/gl2.h>
-
-extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *name) {
-    static struct {
-        const char *name;
-        void *func;
-    } tab[] = {
-        { "glActiveTexture", (void*)&glActiveTexture },
-        { "glAttachShader", (void*)&glAttachShader },
-        { "glBindBuffer", (void*)&glBindBuffer },
-        { "glBindFramebuffer", (void*)&glBindFramebuffer },
-        { "glBindTexture", (void*)&glBindTexture },
-        { "glBufferData", (void*)&glBufferData },
-        { "glCheckFramebufferStatus", (void*)&glCheckFramebufferStatus },
-        { "glCompileShader", (void*)&glCompileShader },
-        { "glCreateProgram", (void*)&glCreateProgram },
-        { "glCreateShader", (void*)&glCreateShader },
-        { "glDeleteBuffers", (void*)&glDeleteBuffers },
-        { "glDeleteFramebuffers", (void*)&glDeleteFramebuffers },
-        { "glDeleteProgram", (void*)&glDeleteProgram },
-        { "glDeleteShader", (void*)&glDeleteShader },
-        { "glDeleteTextures", (void*)&glDeleteTextures },
-        { "glDisable", (void*)&glDisable },
-        { "glDisableVertexAttribArray", (void*)&glDisableVertexAttribArray },
-        { "glDrawElements", (void*)&glDrawElements },
-        { "glEnableVertexAttribArray", (void*)&glEnableVertexAttribArray },
-        { "glFramebufferTexture2D", (void*)&glFramebufferTexture2D },
-        { "glGenBuffers", (void*)&glGenBuffers },
-        { "glGenFramebuffers", (void*)&glGenFramebuffers },
-        { "glGenTextures", (void*)&glGenTextures },
-        { "glGetAttribLocation", (void*)&glGetAttribLocation },
-        { "glGetError", (void*)&glGetError },
-        { "glGetProgramInfoLog", (void*)&glGetProgramInfoLog },
-        { "glGetProgramiv", (void*)&glGetProgramiv },
-        { "glGetShaderInfoLog", (void*)&glGetShaderInfoLog },
-        { "glGetShaderiv", (void*)&glGetShaderiv },
-        { "glGetUniformLocation", (void*)&glGetUniformLocation },
-        { "glLinkProgram", (void*)&glLinkProgram },
-        { "glReadPixels", (void*)&glReadPixels },
-        { "glPixelStorei", (void*)&glPixelStorei },
-        { "glShaderSource", (void*)&glShaderSource },
-        { "glTexImage2D", (void*)&glTexImage2D },
-        { "glTexParameteri", (void*)&glTexParameteri },
-        { "glTexSubImage2D", (void*)&glTexSubImage2D },
-        { "glUniform1fv", (void*)&glUniform1fv },
-        { "glUniform1iv", (void*)&glUniform1iv },
-        { "glUniform2iv", (void*)&glUniform2iv },
-        { "glUseProgram", (void*)&glUseProgram },
-        { "glVertexAttribPointer", (void*)&glVertexAttribPointer },
-        { "glViewport", (void*)&glViewport },
-        { NULL, NULL },
-    };
-    for (unsigned i = 0; tab[i].name != NULL; i++) {
-        if (strcmp(name, tab[i].name) == 0) {
-            return tab[i].func;
-        }
-    }
-    LOGD("get_proc failed: %s\n", name);
-    return NULL;
-}
-
-extern "C" int halide_opengl_create_context(void *user_context) {
-    if (eglGetCurrentContext() != EGL_NO_CONTEXT)
-        return 0;
-
-    EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
-        halide_error_varargs(user_context,
-                             "Could not initialize EGL display %d", eglGetError());
-        return 1;
-    }
-
-    EGLint attribs[] = {
-        EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_RED_SIZE, 8,
-        EGL_GREEN_SIZE, 8,
-        EGL_BLUE_SIZE, 8,
-        EGL_ALPHA_SIZE, 8,
-        EGL_NONE,
-    };
-    EGLConfig config;
-    int numconfig;
-    eglChooseConfig(display, attribs, &config, 1, &numconfig);
-    if (numconfig != 1) {
-        halide_error_varargs(user_context,
-                             "Error: eglChooseConfig(): config not found %d - %d.\n",
-                             eglGetError(), numconfig);
-        exit(-1);
-    }
-
-    GLint context_attribs[] = {
-        EGL_CONTEXT_CLIENT_VERSION, 2,
-        EGL_NONE
-    };
-    EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT,
-                                          context_attribs);
-    if (context == EGL_NO_CONTEXT) {
-        halide_error_varargs(user_context,
-                             "Error: eglCreateContext failed - %d.\n", eglGetError());
-        return -1;
-    }
-
-    GLint surface_attribs[] = {
-        EGL_WIDTH, 1,
-        EGL_HEIGHT, 1,
-        EGL_NONE
-    };
-    EGLSurface surface = eglCreatePbufferSurface(display, config,  surface_attribs);
-    if (surface == EGL_NO_SURFACE) {
-        halide_error_varargs(user_context,
-                             "Error: Could not create EGL window surface: %d\n", eglGetError());
-        return -1;
-    }
-
-    eglMakeCurrent(display, surface, surface, context);
-    return 0;
-}
-
-static int handler(void */* user_context */, const char *msg) {
-    LOGE("%s", msg);
-}
-
-static void RunHalideFilter(buffer_t *buf) {
-    static float time = 0.0f;
-    halide_set_error_handler(handler);
-    if (int err = halide(time, buf)) {
-        LOGD("Halide filter failed with error code %d\n", err);
-    }
-    time += 1.0f/16.0f;
-}
-
 extern "C"
-
 JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
     JNIEnv *env, jobject obj, jint dst, jint width, jint height) {
 
@@ -175,5 +31,9 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     dstBuf.host = NULL;
     dstBuf.dev = dst;
 
-    RunHalideFilter(&dstBuf);
+    static float time = 0.0f;
+    if (int err = halide(time, &dstBuf)) {
+        LOGD("Halide filter failed with error code %d\n", err);
+    }
+    time += 1.0f/16.0f;
 }
