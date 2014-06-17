@@ -25,7 +25,9 @@ public:
     /** Create a PTX device code generator. */
     CodeGen_PTX_Dev(Target host);
 
-    void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void add_kernel(Stmt stmt,
+                    std::string name,
+                    const std::vector<GPU_Argument> &args);
 
     /** (Re)initialize the PTX module. This is separate from compile, since
      * a PTX device module will often have many kernels compiled into it for
