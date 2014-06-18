@@ -482,7 +482,6 @@ class FuseGPUThreadLoops : public IRMutator {
     }
 };
 
-// Rewrite all GPU loops to have a min of zero
 class ZeroGPULoopMins : public IRMutator {
     using IRMutator::visit;
 
@@ -498,9 +497,13 @@ class ZeroGPULoopMins : public IRMutator {
     }
 };
 
-Stmt fuse_gpu_thread_loops(Stmt s) {
+Stmt zero_gpu_loop_mins(Stmt s) {
     ZeroGPULoopMins z;
-    s = z.mutate(s);
+    return z.mutate(s);
+}
+
+Stmt fuse_gpu_thread_loops(Stmt s) {
+    s = zero_gpu_loop_mins(s);
     FuseGPUThreadLoops f;
     s = f.mutate(s);
     return s;
@@ -508,5 +511,3 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
 
 }
 }
-
-
