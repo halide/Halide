@@ -482,21 +482,28 @@ class FuseGPUThreadLoops : public IRMutator {
     }
 };
 
+class ZeroGPULoopMins : public IRMutator {
+    using IRMutator::visit;
 
-void ZeroGPULoopMins::visit(const For *op) {
-    IRMutator::visit(op);
-    if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
-        op = stmt.as<For>();
-        internal_assert(op);
-        Expr adjusted = Variable::make(Int(32), op->name) + op->min;
-        Stmt body = substitute(op->name, adjusted, op->body);
-        stmt = For::make(op->name, 0, op->extent, op->for_type, body);
+    void visit(const For *op) {
+        IRMutator::visit(op);
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
+            op = stmt.as<For>();
+            internal_assert(op);
+            Expr adjusted = Variable::make(Int(32), op->name) + op->min;
+            Stmt body = substitute(op->name, adjusted, op->body);
+            stmt = For::make(op->name, 0, op->extent, op->for_type, body);
+        }
     }
+};
+
+Stmt zero_gpu_loop_mins(Stmt s) {
+    ZeroGPULoopMins z;
+    return z.mutate(s);
 }
 
 Stmt fuse_gpu_thread_loops(Stmt s) {
-    ZeroGPULoopMins z;
-    s = z.mutate(s);
+    s = zero_gpu_loop_mins(s);
     FuseGPUThreadLoops f;
     s = f.mutate(s);
     return s;
