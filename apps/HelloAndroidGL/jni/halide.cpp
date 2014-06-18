@@ -23,14 +23,13 @@ int main(int argc, char **argv) {
     kx = kx * cos(angle) - ky * sin(angle);
     ky = kx * sin(angle) + ky * cos(angle);
 
-    Expr v = 0.0;
-//    v += sin(kx + time);
+    Expr v = 0.0f;
     v += sin((ky + time) / 2.0f);
     v += sin((kx + ky + time) / 2.0f);
     v += sin(sqrt(xx * xx + yy * yy + 1.0f) + time);
 
     result(x, y, c) = cast<uint8_t>(
-        select(c == 0, 64,
+        select(c == 0, 32,
                select(c == 1, cos(pi * v),
                       sin(pi * v)) * 80 + (255 - 80)));
 
