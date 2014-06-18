@@ -416,11 +416,8 @@ void ScheduleHandle::split(const string &old, const string &outer, const string 
             old_name = dims[i].var;
             inner_name = old_name + "." + inner;
             outer_name = old_name + "." + outer;
+            dims.insert(dims.begin() + i, dims[i]);
             dims[i].var = inner_name;
-            dims.push_back(dims[dims.size()-1]);
-            for (size_t j = dims.size(); j > i+1; j--) {
-                dims[j-1] = dims[j-2];
-            }
             dims[i+1].var = outer_name;
             dims[i+1].pure = dims[i].pure;
         }
@@ -474,11 +471,7 @@ ScheduleHandle &ScheduleHandle::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar
             found_outer = true;
             outer_name = dims[i].var;
             outer_pure = dims[i].pure;
-            // Remove it
-            for (size_t j = i; j < dims.size()-1; j++) {
-                dims[j] = dims[j+1];
-            }
-            dims.pop_back();
+            dims.erase(dims.begin() + i);
         }
     }
     if (!found_outer) {
