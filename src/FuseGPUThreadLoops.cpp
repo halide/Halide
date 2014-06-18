@@ -405,6 +405,13 @@ class FuseGPUThreadLoops : public IRMutator {
     Scope<Interval> scope;
 
     void visit(const For *op) {
+        user_assert(!CodeGen_GPU_Dev::is_gpu_thread_var(op->name))
+            << "Loops over GPU thread variable: \"" << op->name
+            << "\" is outside of any loop over a GPU block variable. "
+            << "This schedule is malformed. There must be a GPU block "
+            << "variable, and it must reordered to be outside all GPU "
+            << "thread variables.\n";
+
         bool should_pop = false;
         if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
             Interval im = bounds_of_expr_in_scope(op->min, scope);
@@ -475,7 +482,6 @@ class FuseGPUThreadLoops : public IRMutator {
     }
 };
 
-// Rewrite all GPU loops to have a min of zero
 class ZeroGPULoopMins : public IRMutator {
     using IRMutator::visit;
 
@@ -491,9 +497,13 @@ class ZeroGPULoopMins : public IRMutator {
     }
 };
 
-Stmt fuse_gpu_thread_loops(Stmt s) {
+Stmt zero_gpu_loop_mins(Stmt s) {
     ZeroGPULoopMins z;
-    s = z.mutate(s);
+    return z.mutate(s);
+}
+
+Stmt fuse_gpu_thread_loops(Stmt s) {
+    s = zero_gpu_loop_mins(s);
     FuseGPUThreadLoops f;
     s = f.mutate(s);
     return s;
@@ -501,5 +511,3 @@ Stmt fuse_gpu_thread_loops(Stmt s) {
 
 }
 }
-
-
