@@ -113,8 +113,7 @@ private:
 };
 
 Stmt inject_opengl_intrinsics(Stmt s) {
-    ZeroGPULoopMins z;
-    s = z.mutate(s);
+    s = zero_gpu_loop_mins(s);
     InjectOpenGLIntrinsics gl;
     return gl.mutate(s);
 }
