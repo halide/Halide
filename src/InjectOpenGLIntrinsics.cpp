@@ -112,7 +112,7 @@ private:
 };
 
 // Rewrite all GPU loops to have a min of zero
-class ZeroGPULoopMins : public IRMutator {
+class ZeroOpenGLLoopMins : public IRMutator {
     using IRMutator::visit;
 
     void visit(const For *op) {
@@ -128,7 +128,7 @@ class ZeroGPULoopMins : public IRMutator {
 };
 
 Stmt inject_opengl_intrinsics(Stmt s) {
-    ZeroGPULoopMins z;
+    ZeroOpenGLLoopMins z;
     s = z.mutate(s);
     InjectOpenGLIntrinsics gl;
     return gl.mutate(s);
