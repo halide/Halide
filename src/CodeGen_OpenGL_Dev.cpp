@@ -25,7 +25,8 @@ std::string replace_all(std::string &str,
 }
 }
 
-CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
+CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
+    : target(target) {
     debug(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream);
 }
@@ -38,7 +39,7 @@ void CodeGen_OpenGL_Dev::add_kernel(Stmt s,
                                     string name,
                                     const vector<GPU_Argument> &args) {
     cur_kernel_name = name;
-    glc->compile(s, name, args);
+    glc->compile(s, name, args, target);
 }
 
 void CodeGen_OpenGL_Dev::init_module() {
@@ -269,7 +270,8 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
 
 void CodeGen_GLSL::compile(Stmt stmt,
                            string name,
-                           const vector<GPU_Argument> &args) {
+                           const vector<GPU_Argument> &args,
+                           const Target &target) {
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
     // generator to the runtime, and the information Halide passes to the
@@ -297,7 +299,15 @@ void CodeGen_GLSL::compile(Stmt stmt,
     }
 
     stream << header.str();
-    stream << "precision highp float;\n";
+
+    // TODO: we probably need a better way to switch between GL and GL ES
+    bool opengl_es = target.os == Target::Android ||
+        target.os == Target::IOS;
+
+    // Specify default float precision when compiling for OpenGL ES.
+    if (opengl_es) {
+        stream << "precision highp float;\n";
+    }
     stream << "#define sin_f32 sin\n";
     stream << "#define cos_f32 cos\n";
     stream << "#define sqrt_f32 sqrt\n";
