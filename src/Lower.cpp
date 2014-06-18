@@ -1629,7 +1629,6 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 }
 
 Stmt lower(Function f, const Target &t) {
-
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
 
