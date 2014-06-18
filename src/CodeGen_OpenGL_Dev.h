@@ -7,6 +7,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Target.h"
 
 #include <sstream>
 
@@ -17,7 +18,7 @@ class CodeGen_GLSL;
 
 class CodeGen_OpenGL_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenGL_Dev();
+    CodeGen_OpenGL_Dev(const Target &target);
     ~CodeGen_OpenGL_Dev();
 
     // CodeGen_GPU_Dev interface
@@ -33,6 +34,7 @@ private:
     CodeGen_GLSL *glc;
     std::ostringstream src_stream;
     std::string cur_kernel_name;
+    Target target;
 };
 
 
@@ -42,7 +44,8 @@ public:
     CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {}
     void compile(Stmt stmt,
                  std::string name,
-                 const std::vector<GPU_Argument> &args);
+                 const std::vector<GPU_Argument> &args,
+                 const Target &target);
 
 protected:
     using CodeGen_C::visit;
