@@ -336,9 +336,15 @@ class Func {
      * re-lowering */
     Internal::Stmt lowered;
 
+    /** Lower the func if it hasn't been already. */
+    void lower(const Target &t);
+
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
     Internal::JITCompiledModule compiled_module;
+
+    /** Invalidate the cached lowered stmt and compiled module. */
+    void invalidate_cache();
 
     /** The current error handler used for realizing this
      * function. May be NULL. Only relevant when jitting. */
@@ -366,6 +372,10 @@ class Func {
     int32_t (*custom_trace)(void *, const halide_trace_event *);
 
     // @}
+
+    /** The current print function used for realizing this
+     * function. May be NULL. Only relevant when jitting. */
+    void (*custom_print)(void *user_context, const char *);
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
@@ -528,12 +538,16 @@ public:
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
-    EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_c(const std::string &filename,
+                             std::vector<Argument>,
+                             const std::string &fn_name = "",
+                             const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Canonical extension is
      * .stmt, which must be supplied in filename. */
-    EXPORT void compile_to_lowered_stmt(const std::string &filename);
+    EXPORT void compile_to_lowered_stmt(const std::string &filename,
+                                        const Target &target = get_target_from_environment());
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
@@ -651,6 +665,16 @@ public:
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
+
+    /** Set the function called to print messages from the runtime.
+     * If you are compiling statically, you can also just define your
+     * own function with signature
+     \code
+     extern "C" void halide_print(void *user_context, const char *);
+     \endcode
+     * This will clobber Halide's version.
+     */
+    EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of

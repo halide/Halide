@@ -94,7 +94,8 @@ set(RUNTIME_CPP
   cuda_debug
   opencl_debug
   opengl_debug
-  windows_io)
+  windows_io
+  posix_print)
 set (RUNTIME_LL
   arm
   posix_math

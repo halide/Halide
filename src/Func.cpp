@@ -42,6 +42,7 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_do_par_for(NULL),
                                  custom_do_task(NULL),
                                  custom_trace(NULL),
+                                 custom_print(NULL),
                                  random_seed(0),
                                  user_context(user_context_param()) {
 }
@@ -53,6 +54,7 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_do_par_for(NULL),
                custom_do_task(NULL),
                custom_trace(NULL),
+               custom_print(NULL),
                random_seed(0),
                user_context(user_context_param()) {
 }
@@ -64,6 +66,7 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_do_par_for(NULL),
                      custom_do_task(NULL),
                      custom_trace(NULL),
+                     custom_print(NULL),
                      random_seed(0),
                      user_context(user_context_param()) {
     (*this)(_) = e;
@@ -76,6 +79,7 @@ Func::Func(Function f) : func(f),
                          custom_do_par_for(NULL),
                          custom_do_task(NULL),
                          custom_trace(NULL),
+                         custom_print(NULL),
                          random_seed(0),
                          user_context(user_context_param()) {
 }
@@ -800,60 +804,72 @@ ScheduleHandle &ScheduleHandle::gpu_tile(Var x, Var y, Var z,
 }
 
 Func &Func::split(Var old, Var outer, Var inner, Expr factor) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).split(old, outer, inner, factor);
     return *this;
 }
 
 Func &Func::fuse(Var inner, Var outer, Var fused) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).fuse(inner, outer, fused);
     return *this;
 }
 
 Func &Func::rename(Var old_name, Var new_name) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).rename(old_name, new_name);
     return *this;
 }
 
 ScheduleHandle Func::specialize(Expr c) {
+    invalidate_cache();
     return ScheduleHandle(func.schedule()).specialize(c);
 }
 
 Func &Func::serial(Var var) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).serial(var);
     return *this;
 }
 
 Func &Func::parallel(Var var) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).parallel(var);
     return *this;
 }
 
 Func &Func::vectorize(Var var) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).vectorize(var);
     return *this;
 }
 
 Func &Func::unroll(Var var) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).unroll(var);
     return *this;
 }
 
 Func &Func::parallel(Var var, Expr factor) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).parallel(var, factor);
     return *this;
 }
 
 Func &Func::vectorize(Var var, int factor) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).vectorize(var, factor);
     return *this;
 }
 
 Func &Func::unroll(Var var, int factor) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).unroll(var, factor);
     return *this;
 }
 
 Func &Func::bound(Var var, Expr min, Expr extent) {
+    invalidate_cache();
     bool found = false;
     for (size_t i = 0; i < func.args().size(); i++) {
         if (var.name() == func.args()[i]) {
@@ -872,55 +888,65 @@ Func &Func::bound(Var var, Expr min, Expr extent) {
 }
 
 Func &Func::tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
     return *this;
 }
 
 Func &Func::tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).tile(x, y, xi, yi, xfactor, yfactor);
     return *this;
 }
 
 Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(vars);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4);
     return *this;
 }
@@ -928,6 +954,7 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
                     VarOrRVar t5) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
     return *this;
 }
@@ -935,71 +962,86 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
                     VarOrRVar t5, VarOrRVar t6) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_threads(tx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, Var ty, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_threads(tx, ty, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_threads(Var tx, Var ty, Var tz, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_threads(tx, ty, tz, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_blocks(bx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, Var by, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_blocks(bx, by, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_blocks(Var bx, Var by, Var bz, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_blocks(bx, by, bz, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var tx, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu(bx, tx, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var by, Var tx, Var ty, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu(bx, by, tx, ty, gpuapi);
     return *this;
 }
 
 Func &Func::gpu(Var bx, Var by, Var bz, Var tx, Var ty, Var tz, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_tile(Var x, int x_size, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_tile(x, x_size, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_tile(x, y, x_size, y_size, gpuapi);
     return *this;
 }
 
 Func &Func::gpu_tile(Var x, Var y, Var z, int x_size, int y_size, int z_size, GPUAPI gpuapi) {
+    invalidate_cache();
     ScheduleHandle(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpuapi);
     return *this;
 }
 
 Func &Func::glsl(Var x, Var y, Var c) {
+    invalidate_cache();
+
     reorder(c, x, y);
     // GLSL outputs must be stored interleaved
     reorder_storage(c, x, y);
@@ -1025,6 +1067,8 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
 
 Func &Func::reorder_storage(Var x, Var y) {
+    invalidate_cache();
+
     vector<string> &dims = func.schedule().storage_dims();
     bool found_y = false;
     size_t y_loc = 0;
@@ -1071,6 +1115,7 @@ Func &Func::compute_at(Func f, RVar var) {
 }
 
 Func &Func::compute_at(Func f, Var var) {
+    invalidate_cache();
     LoopLevel loop_level(f.name(), var.name());
     func.schedule().compute_level() = loop_level;
     if (func.schedule().store_level().is_inline()) {
@@ -1080,6 +1125,7 @@ Func &Func::compute_at(Func f, Var var) {
 }
 
 Func &Func::compute_root() {
+    invalidate_cache();
     func.schedule().compute_level() = LoopLevel::root();
     if (func.schedule().store_level().is_inline()) {
         func.schedule().store_level() = LoopLevel::root();
@@ -1092,42 +1138,55 @@ Func &Func::store_at(Func f, RVar var) {
 }
 
 Func &Func::store_at(Func f, Var var) {
+    invalidate_cache();
     func.schedule().store_level() = LoopLevel(f.name(), var.name());
     return *this;
 }
 
 Func &Func::store_root() {
+    invalidate_cache();
     func.schedule().store_level() = LoopLevel::root();
     return *this;
 }
 
 Func &Func::compute_inline() {
+    invalidate_cache();
     func.schedule().compute_level() = LoopLevel();
     func.schedule().store_level() = LoopLevel();
     return *this;
 }
 
 Func &Func::trace_loads() {
+    invalidate_cache();
     func.trace_loads();
     return *this;
 }
 
 Func &Func::trace_stores() {
+    invalidate_cache();
     func.trace_stores();
     return *this;
 }
 
 Func &Func::trace_realizations() {
+    invalidate_cache();
     func.trace_realizations();
     return *this;
 }
 
 void Func::debug_to_file(const string &filename) {
+    invalidate_cache();
     func.debug_file() = filename;
 }
 
 ScheduleHandle Func::update(int idx) {
+    invalidate_cache();
     return ScheduleHandle(func.reduction_schedule(idx));
+}
+
+void Func::invalidate_cache() {
+    lowered = Stmt();
+    compiled_module = JITCompiledModule();
 }
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
@@ -1651,14 +1710,19 @@ void validate_arguments(const string &output,
 }
 }
 
+void Func::lower(const Target &t) {
+    if (!lowered.defined()) {
+        lowered = Halide::Internal::lower(func, t);
+        // Forbid new definitions of the func
+        func.freeze();
+    }
+}
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
                                 const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
-    if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func, target);
-    }
+    lower(target);
 
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
@@ -1676,13 +1740,11 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
     compile_to_bitcode(filename, args, "", target);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args, const string &fn_name,
-                             const Target &target) {
+void Func::compile_to_object(const string &filename, vector<Argument> args,
+                             const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
-    if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func, target);
-    }
+    lower(target);
 
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
@@ -1710,10 +1772,9 @@ void Func::compile_to_header(const string &filename, vector<Argument> args, cons
     cg.compile_header(fn_name.empty() ? name() : fn_name, args);
 }
 
-void Func::compile_to_c(const string &filename, vector<Argument> args, const string &fn_name) {
-    if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func, get_host_target());
-    }
+void Func::compile_to_c(const string &filename, vector<Argument> args,
+                        const string &fn_name, const Target &target) {
+    lower(target);
 
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
@@ -1727,10 +1788,8 @@ void Func::compile_to_c(const string &filename, vector<Argument> args, const str
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename) {
-    if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func, get_host_target());
-    }
+void Func::compile_to_lowered_stmt(const string &filename, const Target &target) {
+    lower(target);
 
     ofstream stmt_output(filename.c_str());
     stmt_output << lowered;
@@ -1775,7 +1834,7 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
                                const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
-    if (!lowered.defined()) lowered = Halide::Internal::lower(func, target);
+    lower(target);
 
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
@@ -1827,6 +1886,13 @@ void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
     custom_trace = t;
     if (compiled_module.set_custom_trace) {
         compiled_module.set_custom_trace(t);
+    }
+}
+
+void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
+    custom_print = cust_print;
+    if (compiled_module.set_custom_print) {
+        compiled_module.set_custom_print(custom_print);
     }
 }
 
@@ -1890,7 +1956,9 @@ bool Func::prepare_to_catch_runtime_errors(void *b) {
 }
 
 void Func::realize(Realization dst, const Target &target) {
-    if (!compiled_module.wrapped_function) compile_jit(target);
+    if (!compiled_module.wrapped_function) {
+        compile_jit(target);
+    }
 
     internal_assert(compiled_module.wrapped_function);
 
@@ -1918,6 +1986,7 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_custom_print(custom_print);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -1998,6 +2067,7 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_custom_print(custom_print);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2133,9 +2203,7 @@ void Func::infer_input_bounds(Realization dst) {
 void *Func::compile_jit(const Target &target) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
 
-    if (!lowered.defined()) {
-        lowered = Halide::Internal::lower(func, target);
-    }
+    lower(target);
 
     // Infer arguments
     InferArguments infer_args(name());
