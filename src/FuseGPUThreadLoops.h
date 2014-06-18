@@ -7,9 +7,17 @@
  */
 
 #include "IR.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
+
+// Rewrite all GPU loops to have a min of zero
+class ZeroGPULoopMins : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op);
+};
 
 /** Converts Halide's GPGPU IR to the OpenCL/CUDA model. Within every
  * loop over gpu block indices, fuse the inner loops over thread
