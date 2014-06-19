@@ -408,7 +408,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         void *src = (void *)(c.src + off);
                         CUdeviceptr dst = (CUdeviceptr)(c.dst + off);
                         uint64_t size = c.chunk_size;
-                        DEBUG_PRINTF( user_context, "    cuMemcpyHtoD %p -> %p, %lld bytes\n",
+                        DEBUG_PRINTF( user_context, "    cuMemcpyHtoD (%d, %d, %d, %d), %p -> %p, %lld bytes\n",
+                                      x, y, z, w,
                                       src, (void *)dst, (long long)size );
                         CUresult err = cuMemcpyHtoD(dst, src, size);
                         if (err != CUDA_SUCCESS) {
@@ -456,11 +457,12 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         CUdeviceptr src = (CUdeviceptr)(c.src + off);
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
-                        DEBUG_PRINTF( user_context, "    cuMemcpyDtoH %p -> %p, %lld bytes\n",
+                        DEBUG_PRINTF( user_context, "    cuMemcpyDtoH (%d, %d, %d, %d), %p -> %p, %lld bytes\n",
+                                      x, y, z, w,
                                       (void *)src, dst, (long long)size );
                         CUresult err = cuMemcpyDtoH(dst, src, size);
                         if (err != CUDA_SUCCESS) {
-                            halide_error_varargs(user_context, "CUDA: cuMemcpyDtoZH failed (%d)", err);
+                            halide_error_varargs(user_context, "CUDA: cuMemcpyDtoH failed (%d)", err);
                             return err;
                         }
                     }

@@ -591,7 +591,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
 
-                        DEBUG_PRINTF( user_context, "    clEnqueueWriteBuffer (%lld bytes, %p -> %p)\n",
+                        DEBUG_PRINTF( user_context, "    clEnqueueWriteBuffer ((%d, %d, %d, %d), %lld bytes, %p -> %p)\n",
+                                      x, y, z, w,
                                       (long long)size, src, (void *)dst );
                         cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
                                                           CL_FALSE, off, size, src, 0, NULL, NULL);
@@ -603,7 +604,6 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                 }
             }
         }
-        clFinish(ctx.cmd_queue);
 
         #ifdef DEBUG
         uint64_t t_after = halide_current_time_ns(user_context);
@@ -644,7 +644,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
 
-                        DEBUG_PRINTF( user_context, "    clEnqueueReadBuffer (%lld bytes, %p -> %p)\n",
+                        DEBUG_PRINTF( user_context, "    clEnqueueReadBuffer ((%d, %d, %d, %d), %lld bytes, %p -> %p)\n",
+                                      x, y, z, w,
                                       (long long)size, (void *)src, dst );
 
                         cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
@@ -657,6 +658,9 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                 }
             }
         }
+        // The writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't read
+        // bad data.
         clFinish(ctx.cmd_queue);
 
         #ifdef DEBUG
