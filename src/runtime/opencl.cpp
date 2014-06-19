@@ -7,6 +7,9 @@
 
 #include "cuda_opencl_shared.h"
 
+// Allow OpenCL 1.1 features to be used.
+#define ENABLE_OPENCL_11
+
 #ifdef DEBUG
 #define DEBUG_PRINTF halide_printf
 #else
@@ -390,7 +393,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         }
         (*state)->program = program;
 
-        DEBUG_PRINTF( user_context, "    clBuildProgram %p\n", program );
+        DEBUG_PRINTF( user_context, "    clBuildProgram %p %s\n", program, options );
         err = clBuildProgram(program, 1, devices, options, NULL, NULL );
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clBuildProgram failed (%d)\n", err);
@@ -521,6 +524,9 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
         return 0;
     }
 
+    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
+                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
+
     DEBUG_PRINTF(user_context, "    Allocating buffer of %lld bytes, "
                  "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
                  (long long)size,
@@ -584,6 +590,31 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 
         for (int w = 0; w < c.extent[3]; w++) {
             for (int z = 0; z < c.extent[2]; z++) {
+#ifdef ENABLE_OPENCL_11
+                // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+                // can deal with the 2 innermost strides with OpenCL.
+                uint64_t off = z * c.stride[2] + w * c.stride[3];
+
+                size_t offset[3] = { off, 0, 0 };
+                size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+
+                DEBUG_PRINTF( user_context, "    clEnqueueWriteBufferRect ((%p -> %p) + %i, %ix%ix%i bytes, %ix%i)\n",
+                              (void *)c.src, c.dst, (int)off,
+                              (int)region[0], (int)region[1], (int)region[2],
+                              (int)c.stride[0], (int)c.stride[1]);
+
+                cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
+                                                      offset, offset, region,
+                                                      c.stride[0], c.stride[1],
+                                                      c.stride[0], c.stride[1],
+                                                      (void *)c.src,
+                                                      0, NULL, NULL);
+
+                if (err != CL_SUCCESS) {
+                    halide_error_varargs(user_context, "CL: clEnqueueWriteBufferRect failed (%d)\n", err);
+                    return err;
+                }
+#else
                 for (int y = 0; y < c.extent[1]; y++) {
                     for (int x = 0; x < c.extent[0]; x++) {
                         uint64_t off = x * c.stride[0] + y * c.stride[1] + z * c.stride[2] + w * c.stride[3];
@@ -601,6 +632,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         }
                     }
                 }
+#endif
             }
         }
         clFinish(ctx.cmd_queue);
@@ -637,6 +669,31 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 
         for (int w = 0; w < c.extent[3]; w++) {
             for (int z = 0; z < c.extent[2]; z++) {
+#ifdef ENABLE_OPENCL_11
+                // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+                // can deal with the 2 innermost strides with OpenCL.
+                uint64_t off = z * c.stride[2] + w * c.stride[3];
+
+                size_t offset[3] = { off, 0, 0 };
+                size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+
+                DEBUG_PRINTF( user_context, "    clEnqueueReadBufferRect ((%p -> %p) + %i, %ix%ix%i bytes, %ix%i)\n",
+                              (void *)c.src, c.dst, (int)off,
+                              (int)region[0], (int)region[1], (int)region[2],
+                              (int)c.stride[0], (int)c.stride[1]);
+
+                cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
+                                                     offset, offset, region,
+                                                     c.stride[0], c.stride[1],
+                                                     c.stride[0], c.stride[1],
+                                                     (void *)c.dst,
+                                                     0, NULL, NULL);
+
+                if (err != CL_SUCCESS) {
+                    halide_error_varargs(user_context, "CL: clEnqueueReadBufferRect failed (%d)\n", err);
+                    return err;
+                }
+#else
                 for (int y = 0; y < c.extent[1]; y++) {
                     for (int x = 0; x < c.extent[0]; x++) {
                         uint64_t off = x * c.stride[0] + y * c.stride[1] + z * c.stride[2] + w * c.stride[3];
@@ -655,6 +712,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         }
                     }
                 }
+#endif
             }
         }
         clFinish(ctx.cmd_queue);
