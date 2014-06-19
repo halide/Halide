@@ -598,7 +598,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                 size_t offset[3] = { off, 0, 0 };
                 size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
-                DEBUG_PRINTF( user_context, "    clEnqueueWriteBufferRect ((%p -> %p) + %i, %ix%ix%i bytes, %ix%i)\n",
+                DEBUG_PRINTF( user_context, "    clEnqueueWriteBufferRect ((%d, %d), (%p -> %p) + %d, %dx%dx%d bytes, %dx%d)\n",
+                              z, w,
                               (void *)c.src, c.dst, (int)off,
                               (int)region[0], (int)region[1], (int)region[2],
                               (int)c.stride[0], (int)c.stride[1]);
@@ -677,7 +678,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                 size_t offset[3] = { off, 0, 0 };
                 size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
-                DEBUG_PRINTF( user_context, "    clEnqueueReadBufferRect ((%p -> %p) + %i, %ix%ix%i bytes, %ix%i)\n",
+                DEBUG_PRINTF( user_context, "    clEnqueueReadBufferRect ((%d, %d), (%p -> %p) + %d, %dx%dx%d bytes, %dx%d)\n",
+                              z, w,
                               (void *)c.src, c.dst, (int)off,
                               (int)region[0], (int)region[1], (int)region[2],
                               (int)c.stride[0], (int)c.stride[1]);
