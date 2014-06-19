@@ -32,7 +32,7 @@ static void __simplify_dev_copy(__dev_copy *c) {
         // Look for a stride that matches the chunk_size
         bool did_something = false;
         for (int i = 0; i < MAX_COPY_DIMS; i++) {
-            if (c->stride[i] == c->chunk_size) {
+            if (c->stride[i] && c->stride[i] == c->chunk_size) {
                 did_something = true;
                 // Remove that dimension and make the chunk_size larger instead.
                 c->chunk_size *= c->extent[i];
