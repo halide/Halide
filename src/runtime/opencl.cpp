@@ -14,8 +14,8 @@
 #define DEBUG_PRINTF halide_printf
 #else
 // This ensures that DEBUG and non-DEBUG have the same semicolon eating behavior.
-static void __noop_printf(void *, const char *, ...) { }
-#define DEBUG_PRINTF __noop_printf
+static void _noop_printf(void *, const char *, ...) { }
+#define DEBUG_PRINTF _noop_printf
 #endif
 
 extern "C" {
@@ -518,7 +518,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
-    size_t size = __buf_size(user_context, buf);
+    size_t size = _buf_size(user_context, buf);
     if (buf->dev) {
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
         return 0;
@@ -586,7 +586,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->host && buf->dev);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
 
-        __dev_copy c = __make_host_to_dev_copy(buf);
+        _dev_copy c = _make_host_to_dev_copy(buf);
 
         for (int w = 0; w < c.extent[3]; w++) {
             for (int z = 0; z < c.extent[2]; z++) {
@@ -666,7 +666,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         halide_assert(user_context, buf->dev && buf->dev);
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
 
-        __dev_copy c = __make_dev_to_host_copy(buf);
+        _dev_copy c = _make_dev_to_host_copy(buf);
 
         for (int w = 0; w < c.extent[3]; w++) {
             for (int z = 0; z < c.extent[2]; z++) {

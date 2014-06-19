@@ -1,6 +1,6 @@
 extern "C" {
 
-static size_t __buf_size(void *user_context, buffer_t *buf) {
+static size_t _buf_size(void *user_context, buffer_t *buf) {
     size_t size = 0;
     for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
         size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
@@ -16,7 +16,7 @@ static size_t __buf_size(void *user_context, buffer_t *buf) {
 // each task starts at a different offset and copies some contiguous
 // number of bytes. This struct is quite similar to a buffer_t.
 #define MAX_COPY_DIMS 4
-struct __dev_copy {
+struct _dev_copy {
     uint64_t src, dst;
     // How many contiguous bytes to copy per task
     uint64_t chunk_size;
@@ -26,8 +26,8 @@ struct __dev_copy {
     uint64_t stride[MAX_COPY_DIMS];
 };
 
-// Rewrite a __dev_copy to do fewer, larger contiguous copies if possible.
-static void __simplify_dev_copy(__dev_copy *c) {
+// Rewrite a _dev_copy to do fewer, larger contiguous copies if possible.
+static void _simplify_dev_copy(_dev_copy *c) {
     while (1) {
         // Look for a stride that matches the chunk_size
         bool did_something = false;
@@ -50,8 +50,8 @@ static void __simplify_dev_copy(__dev_copy *c) {
     }
 }
 
-static __dev_copy __make_host_to_dev_copy(const buffer_t *buf) {
-    __dev_copy c;
+static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
+    _dev_copy c;
     c.src = (uint64_t)buf->host;
     c.dst = buf->dev;
     c.chunk_size = buf->elem_size;
@@ -65,13 +65,13 @@ static __dev_copy __make_host_to_dev_copy(const buffer_t *buf) {
         c.extent[i] = buf->extent[i];
         c.stride[i] = buf->stride[i] * buf->elem_size;
     };
-    __simplify_dev_copy(&c);
+    _simplify_dev_copy(&c);
     return c;
 }
 
-static __dev_copy __make_dev_to_host_copy(const buffer_t *buf) {
+static _dev_copy _make_dev_to_host_copy(const buffer_t *buf) {
     // Just make a host to dev copy and swap src and dst
-    __dev_copy c = __make_host_to_dev_copy(buf);
+    _dev_copy c = _make_host_to_dev_copy(buf);
     uint64_t tmp = c.src;
     c.src = c.dst;
     c.dst = tmp;
