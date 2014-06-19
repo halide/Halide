@@ -300,18 +300,20 @@ void CodeGen_GLSL::compile(Stmt stmt,
 
     stream << header.str();
 
-    // TODO: we probably need a better way to switch between GL and GL ES
-    bool opengl_es = target.os == Target::Android ||
-        target.os == Target::IOS;
+    // TODO: we need a better way to switch between the different OpenGL
+    // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
+    // Target.
+    bool opengl_es = (target.os == Target::Android ||
+                      target.os == Target::IOS);
 
     // Specify default float precision when compiling for OpenGL ES.
+    // TODO: emit correct #version
     if (opengl_es) {
         stream << "precision highp float;\n";
     }
     stream << "#define sin_f32 sin\n";
     stream << "#define cos_f32 cos\n";
     stream << "#define sqrt_f32 sqrt\n";
-//    stream << "#version 120\n";
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
