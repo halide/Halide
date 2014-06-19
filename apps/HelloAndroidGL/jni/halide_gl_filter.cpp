@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
 
     std::vector<Argument> args;
     args.push_back(time);
-    result.compile_to_file("halide", args);
+    result.compile_to_file("halide_gl_filter", args);
 
     return 0;
 }
