@@ -11,19 +11,18 @@ import android.graphics.Canvas;
 import android.graphics.ImageFormat;
 
 /** A basic Camera preview class */
-public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback, Camera.PreviewCallback {
+public class CameraPreview extends SurfaceView
+    implements SurfaceHolder.Callback, Camera.PreviewCallback {
     private static final String TAG = "CameraPreview";
 
-    private SurfaceHolder mHolder;
     private Camera mCamera;
     private SurfaceView mFiltered;
     private byte[] previewData;
-    private int[] filteredData;
 
+    // Link to native Halide code
     static {
         System.loadLibrary("native");
     }
-
     private static native void processFrame(byte[] src, int w, int h, Surface dst);
 
     public CameraPreview(Context context, SurfaceView filtered) {
@@ -35,9 +34,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
 
         // Install a SurfaceHolder.Callback so we get notified when the
         // underlying surface is created and destroyed.
-        mHolder = getHolder();
-        mHolder.addCallback(this);
-
+        getHolder().addCallback(this);
     }
 
     public void onPreviewFrame(byte[] data, Camera camera) {
@@ -86,7 +83,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         // If your preview can change or rotate, take care of those events here.
         // Make sure to stop the preview before resizing or reformatting it.
 
-        if (mHolder.getSurface() == null){
+        if (getHolder().getSurface() == null){
           // preview surface does not exist
           return;
         }
@@ -113,9 +110,7 @@ public class CameraPreview extends SurfaceView implements SurfaceHolder.Callback
         }
         mCamera = c;
         if (mCamera != null) {
-            configureCamera(mHolder);
+            configureCamera(getHolder());
         }
     }
-
-
 }

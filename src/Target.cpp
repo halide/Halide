@@ -367,6 +367,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
+DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(cuda_debug)
@@ -586,6 +587,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
             modules.push_back(get_initmod_linux_opengl_context(c, bits_64));
         } else if (t.os == Target::OSX) {
             modules.push_back(get_initmod_osx_opengl_context(c, bits_64));
+        } else if (t.os == Target::Android) {
+            modules.push_back(get_initmod_android_opengl_context(c, bits_64));
         } else {
             // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
         }
