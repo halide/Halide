@@ -5,16 +5,16 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Var x, y, z, w;
-    Image<int> full(800, 600, 10, 10);
+    Image<int> full(80, 60, 10, 10);
 
     buffer_t cropped = *full.raw_buffer();
-    cropped.host = (uint8_t *)&(full(40, 80, 2, 4));
+    cropped.host = (uint8_t *)&(full(4, 8, 2, 4));
     cropped.min[0] = 0;
     cropped.min[1] = 0;
     cropped.min[2] = 0;
     cropped.min[3] = 0;
-    cropped.extent[0] = 128;
-    cropped.extent[1] = 96;
+    cropped.extent[0] = 16;
+    cropped.extent[1] = 16;
     cropped.extent[2] = 3;
     cropped.extent[3] = 3;
     cropped.stride[0] *= 2;
@@ -44,8 +44,8 @@ int main(int argc, char **argv) {
 
                     int w_ = (w - 4)/2;
                     int z_ = (z - 2)/2;
-                    int y_ = (y - 80)/2;
-                    int x_ = (x - 40)/2;
+                    int y_ = (y - 8)/2;
+                    int x_ = (x - 4)/2;
 
                     if (cropped.min[3] <= w_ && w_ < cropped.min[3] + cropped.extent[3] &&
                         cropped.min[2] <= z_ && z_ < cropped.min[2] + cropped.extent[2] &&
