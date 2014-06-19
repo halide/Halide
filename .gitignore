@@ -85,7 +85,9 @@ apps/HelloAndroid*/bin
 apps/HelloAndroid*/gen
 apps/HelloAndroid*/obj
 apps/HelloAndroid*/libs
-apps/HelloAndroid/*/*.d
+apps/HelloAndroidGL/jni/halide_gl_filter.h
+apps/HelloAndroidGL/local.properties
+apps/HelloAndroidGL/proguard-project.txt
 
 # test intermediates
 log.txt

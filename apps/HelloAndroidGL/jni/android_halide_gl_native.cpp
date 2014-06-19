@@ -6,7 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "halide.h"
+#include "halide_gl_filter.h"
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
@@ -32,7 +32,7 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     dstBuf.dev = dst;
 
     static float time = 0.0f;
-    if (int err = halide(time, &dstBuf)) {
+    if (int err = halide_gl_filter(time, &dstBuf)) {
         LOGD("Halide filter failed with error code %d\n", err);
     }
     time += 1.0f/16.0f;

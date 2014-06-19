@@ -19,7 +19,7 @@ import java.nio.ByteOrder;
 
 class HalideGLView extends GLSurfaceView {
     static {
-        System.loadLibrary("native");
+        System.loadLibrary("android_halide_gl_native");
     }
     private static native void processTextureHalide(int dst, int width, int height);
 
