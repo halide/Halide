@@ -232,7 +232,9 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
         halide_error_varargs(user_context, "CUDA: cuCtxCreate failed (%d)", err);
         return err;
     } else {
-        DEBUG_PRINTF( user_context, "%p\n", *ctx );
+        unsigned int version = 0;
+        cuCtxGetApiVersion(*ctx, &version);
+        DEBUG_PRINTF( user_context, "%p (%d)\n", *ctx, version);
     }
 
     return CUDA_SUCCESS;
@@ -342,6 +344,9 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
         return 0;
     }
+
+    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
+                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
     DEBUG_PRINTF(user_context, "    allocating buffer of %lld bytes, "
                  "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
