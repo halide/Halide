@@ -63,11 +63,6 @@ extern "C" int halide_opengl_create_context(void *user_context);
     GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
     GLFUNC(PFNGLREADPIXELS, ReadPixels)
 
-
-//    GLFUNC(PFNGLGETTEXIMAGEPROC, GetTexImage);                        \
-//    GLFUNC(PFNGLDRAWBUFFERSPROC, DrawBuffers);                        \
-//    GLFUNC(PFNGLGETTEXLEVELPARAMETERIVPROC, GetTexLevelParameteriv);  \
-
 // ---------- Types ----------
 
 enum ArgumentKind {
