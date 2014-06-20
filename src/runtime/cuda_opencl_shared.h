@@ -57,6 +57,12 @@ static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
         c.stride_bytes[i] = 0;
     }
 
+    if (buf->elem_size == 0) {
+        // This buffer apparently represents no memory. Return a zero'd copy task.
+        _dev_copy zero = {0};
+        return zero;
+    }
+
     // Now expand it to copy all the pixels (one at a time) by taking
     // the extents and strides from the buffer_t.
     for (int i = 0; i < 4 && buf->extent[i]; i++) {
@@ -72,7 +78,7 @@ static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
         // into a single larger copy.
         bool did_something = false;
         for (int i = 0; i < MAX_COPY_DIMS; i++) {
-            if (c.stride_bytes[i] && c.stride_bytes[i] == c.chunk_size) {
+            if (c.stride_bytes[i] == c.chunk_size) {
                 did_something = true;
 
                 // Fold that dimension's extent into the chunk_size.
