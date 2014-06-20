@@ -409,7 +409,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
             for (int z = 0; z < c.extent[2]; z++) {
                 for (int y = 0; y < c.extent[1]; y++) {
                     for (int x = 0; x < c.extent[0]; x++) {
-                        uint64_t off = x * c.stride[0] + y * c.stride[1] + z * c.stride[2] + w * c.stride[3];
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
                         void *src = (void *)(c.src + off);
                         CUdeviceptr dst = (CUdeviceptr)(c.dst + off);
                         uint64_t size = c.chunk_size;
@@ -458,7 +461,10 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
             for (int z = 0; z < c.extent[2]; z++) {
                 for (int y = 0; y < c.extent[1]; y++) {
                     for (int x = 0; x < c.extent[0]; x++) {
-                        uint64_t off = x * c.stride[0] + y * c.stride[1] + z * c.stride[2] + w * c.stride[3];
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
                         CUdeviceptr src = (CUdeviceptr)(c.src + off);
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;

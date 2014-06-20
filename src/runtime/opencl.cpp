@@ -593,7 +593,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 #ifdef ENABLE_OPENCL_11
                 // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
                 // can deal with the 2 innermost strides with OpenCL.
-                uint64_t off = z * c.stride[2] + w * c.stride[3];
+                uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
 
                 size_t offset[3] = { off, 0, 0 };
                 size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
@@ -602,12 +602,12 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                               z, w,
                               (void *)c.src, c.dst, (int)off,
                               (int)region[0], (int)region[1], (int)region[2],
-                              (int)c.stride[0], (int)c.stride[1]);
+                              (int)c.stride_bytes[0], (int)c.stride_bytes[1]);
 
                 cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
                                                       offset, offset, region,
-                                                      c.stride[0], c.stride[1],
-                                                      c.stride[0], c.stride[1],
+                                                      c.stride_bytes[0], c.stride_bytes[1],
+                                                      c.stride_bytes[0], c.stride_bytes[1],
                                                       (void *)c.src,
                                                       0, NULL, NULL);
 
@@ -618,7 +618,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 #else
                 for (int y = 0; y < c.extent[1]; y++) {
                     for (int x = 0; x < c.extent[0]; x++) {
-                        uint64_t off = x * c.stride[0] + y * c.stride[1] + z * c.stride[2] + w * c.stride[3];
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
                         void *src = (void *)(c.src + off);
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
@@ -673,7 +676,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 #ifdef ENABLE_OPENCL_11
                 // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
                 // can deal with the 2 innermost strides with OpenCL.
-                uint64_t off = z * c.stride[2] + w * c.stride[3];
+                uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
 
                 size_t offset[3] = { off, 0, 0 };
                 size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
@@ -682,12 +685,12 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                               z, w,
                               (void *)c.src, c.dst, (int)off,
                               (int)region[0], (int)region[1], (int)region[2],
-                              (int)c.stride[0], (int)c.stride[1]);
+                              (int)c.stride_bytes[0], (int)c.stride_bytes[1]);
 
                 cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
                                                      offset, offset, region,
-                                                     c.stride[0], c.stride[1],
-                                                     c.stride[0], c.stride[1],
+                                                     c.stride_bytes[0], c.stride_bytes[1],
+                                                     c.stride_bytes[0], c.stride_bytes[1],
                                                      (void *)c.dst,
                                                      0, NULL, NULL);
 
@@ -698,7 +701,10 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 #else
                 for (int y = 0; y < c.extent[1]; y++) {
                     for (int x = 0; x < c.extent[0]; x++) {
-                        uint64_t off = x * c.stride[0] + y * c.stride[1] + z * c.stride[2] + w * c.stride[3];
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
                         void *src = (void *)(c.src + off);
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
