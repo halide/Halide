@@ -74,6 +74,7 @@ set(RUNTIME_CPP
   opengl
   osx_opengl_context
   linux_opengl_context
+  android_opengl_context
   posix_allocator
   posix_clock
   osx_clock
