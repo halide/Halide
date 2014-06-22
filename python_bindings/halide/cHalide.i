@@ -19,6 +19,7 @@
 %ignore halide_shutdown_trace;
 %ignore halide_set_random_seed;
 %ignore halide_printf;
+%ignore halide_print;
 %ignore get_scalar;
 %ignore set_scalar;
 %ignore get;
