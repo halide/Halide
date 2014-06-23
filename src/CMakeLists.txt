@@ -26,7 +26,10 @@ link_directories ("${LLVM_LIB}")
 if(WIN32)
   file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --ldflags --libs OUTPUT_VARIABLE LIBS)
+  #file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/libLLVM*.a")
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
+  string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
 message("${LLVM_LIB} ${LIBS}")
@@ -350,9 +353,9 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
 target_link_libraries(Halide InitialModules ${LIBS})
 # if this is a DLL, don't link dependencies to this set of libs.
-if (HALIDE_SHARED_LIBRARY)
-  set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
-endif()
+#if (HALIDE_SHARED_LIBRARY)
+#  set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
+#endif()
 
 add_dependencies(Halide
   InitialModules
