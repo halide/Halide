@@ -72,7 +72,9 @@ static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
         // Insert the dimension sorted into the buffer copy.
         int insert;
         for (insert = 0; insert < i; insert++) {
-            if (stride_bytes < c.stride_bytes[insert]) {
+            // If the stride is 0, we put it at the end because it can't be
+            // folded.
+            if (stride_bytes < c.stride_bytes[insert] && stride_bytes != 0) {
                 break;
             }
         }
@@ -80,7 +82,8 @@ static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
             c.extent[j] = c.extent[j - 1];
             c.stride_bytes[j] = c.stride_bytes[j - 1];
         }
-        c.extent[insert] = buf->extent[i];
+        // If the stride is 0, only copy it once.
+        c.extent[insert] = stride_bytes != 0 ? buf->extent[i] : 1;
         c.stride_bytes[insert] = stride_bytes;
     };
 
@@ -88,7 +91,7 @@ static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
     // dimensions are sorted by stride, and the strides must be greater than
     // or equal to the chunk size, this means we can just delete the innermost
     // dimension as long as its stride is equal to the chunk size.
-    while(c.chunk_size == c.stride_bytes[0] && c.extent[0] != 1) {
+    while(c.chunk_size == c.stride_bytes[0]) {
         // Fold the innermost dimension's extent into the chunk_size.
         c.chunk_size *= c.extent[0];
 
