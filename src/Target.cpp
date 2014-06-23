@@ -367,6 +367,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
+DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(cuda_debug)
@@ -402,6 +403,7 @@ DECLARE_CPP_INITMOD(posix_print)
 DECLARE_LL_INITMOD(arm)
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
+DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
 #if WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
@@ -495,6 +497,50 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
 namespace Internal {
 
+/** When JIT-compiling on 32-bit windows, we need to rewrite calls 
+	to name-mangled win32 api calls to non-name-mangled versions. */
+void undo_win32_name_mangling(llvm::Module *m) {
+	llvm::IRBuilder<> builder(m->getContext());
+	// For every function prototype...
+	for (llvm::Module::iterator iter = m->begin();
+         iter != m->end(); ++iter) {
+		llvm::Function *f = (llvm::Function *)(iter);
+		string n = f->getName();
+		// if it's a __stdcall call that starts with \01_, then we're making a win32 api call
+		if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
+			n.size() > 2 && n[0] == 1 && n[1] == '_') {
+			
+			// Unmangle the name.
+			string unmangled_name = n.substr(2);
+			size_t at = unmangled_name.rfind('@');
+			unmangled_name = unmangled_name.substr(0, at);
+
+			// Extern declare the unmangled version.
+			llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
+			unmangled->setCallingConv(f->getCallingConv());
+			
+			// Add a body to the mangled version that calls the unmangled version.
+			llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
+			builder.SetInsertPoint(block);
+
+			vector<llvm::Value *> args;
+			for (llvm::Function::arg_iterator iter = f->arg_begin();
+				iter != f->arg_end(); ++iter) {
+				args.push_back(iter);
+			}
+				
+			llvm::CallInst *c = builder.CreateCall(unmangled, args);
+			c->setCallingConv(f->getCallingConv());
+
+			if (f->getReturnType()->isVoidTy()) {
+				builder.CreateRetVoid();
+			} else {
+				builder.CreateRet(c);
+			}
+		}
+    }
+}
+
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
@@ -537,14 +583,17 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_ssp(c, bits_64));
     }
 
-    // These modules are always used
-    modules.push_back(get_initmod_posix_math(c, bits_64));
-
-    if (t.arch == Target::PNaCl) {
+    // Math intrinsics vary slightly across platforms
+    if (t.os == Target::Windows && t.bits == 32) {
+        modules.push_back(get_initmod_win32_math_ll(c));
+    } else if (t.arch == Target::PNaCl) {
         modules.push_back(get_initmod_pnacl_math_ll(c));
     } else {
         modules.push_back(get_initmod_posix_math_ll(c));
     }
+
+    // These modules are always used
+    modules.push_back(get_initmod_posix_math(c, bits_64));
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));
@@ -586,6 +635,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
             modules.push_back(get_initmod_linux_opengl_context(c, bits_64));
         } else if (t.os == Target::OSX) {
             modules.push_back(get_initmod_osx_opengl_context(c, bits_64));
+        } else if (t.os == Target::Android) {
+            modules.push_back(get_initmod_android_opengl_context(c, bits_64));
         } else {
             // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
         }
@@ -594,6 +645,12 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
 
     link_modules(modules);
+
+    if (t.os == Target::Windows &&
+        t.bits == 32 &&
+        (t.features & Target::JIT)) {
+        undo_win32_name_mangling(modules[0]);
+    }
 
     return modules[0];
 }

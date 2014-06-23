@@ -4,13 +4,24 @@
 
 using namespace Halide;
 
-HalideExtern_2(float, powf, float, float);
+// 32-bit windows defines powf as a macro, which won't work for us.
+#ifdef WIN32
+extern "C" __declspec(dllexport) float pow_ref(float x, float y) {
+    return pow(x, y);
+}
+#else
+extern "C" float pow_ref(float x, float y) {
+    return powf(x, y);
+}
+#endif
+
+HalideExtern_2(float, pow_ref, float, float);
 
 int main(int argc, char **argv) {
     Func f, g, h;
     Var x, y;
 
-    f(x, y) = powf((x+1)/512.0f, (y+1)/512.0f);
+    f(x, y) = pow_ref((x+1)/512.0f, (y+1)/512.0f);
     g(x, y) = pow((x+1)/512.0f, (y+1)/512.0f);
     h(x, y) = fast_pow((x+1)/512.0f, (y+1)/512.0f);
     f.vectorize(x, 8);
@@ -20,9 +31,6 @@ int main(int argc, char **argv) {
     f.compile_jit();
     g.compile_jit();
     h.compile_jit();
-
-    g.compile_to_assembly("g.s", std::vector<Argument>(), "g");
-    h.compile_to_assembly("h.s", std::vector<Argument>(), "h");
 
     Image<float> correct_result(2048, 768);
     Image<float> fast_result(2048, 768);
