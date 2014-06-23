@@ -45,8 +45,10 @@ int do_indirect_int_cast(Type t, int x) {
 
 class Simplify : public IRMutator {
 public:
-    Simplify(bool r) : remove_dead_lets(r) {}
-
+    Simplify(bool r, const Scope<Interval> &bi, const Scope<ModulusRemainder> &ai) :
+        remove_dead_lets(r),
+        bounds_info(bi),
+        alignment_info(ai) {}
 private:
     bool remove_dead_lets;
 
@@ -56,8 +58,8 @@ private:
     };
 
     Scope<VarInfo> var_info;
-    Scope<ModulusRemainder> alignment_info;
     Scope<Interval> bounds_info;
+    Scope<ModulusRemainder> alignment_info;
 
     using IRMutator::visit;
 
@@ -1188,14 +1190,39 @@ private:
 
         int ia = 0, ib = 0;
 
+        if (is_zero(delta)) {
+            expr = const_true(op->type.width);
+            return;
+        } else if (a.type() == Int(32) && !is_const(delta)) {
+            // Attempt to disprove using modulus remainder analysis
+            ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
+            if (mod_rem.remainder) {
+                expr = const_false();
+                return;
+            }
+
+            // Attempt to disprove using bounds analysis
+            Interval i = bounds_of_expr_in_scope(delta, bounds_info);
+            if (i.min.defined() && i.max.defined()) {
+                i.min = mutate(i.min);
+                i.max = mutate(i.max);
+                if (is_positive_const(i.min)) {
+                    expr = const_false();
+                    return;
+                }
+                if (is_negative_const(i.max)) {
+                    expr = const_false();
+                    return;
+                }
+            }
+        }
+
         if (const_castint(a, &ia) && const_castint(b, &ib)) {
             if (a.type().is_uint()) {
                 expr = make_bool(((unsigned int) ia) == ((unsigned int) ib), op->type.width);
             } else {
                 expr = make_bool(ia == ib, op->type.width);
             }
-        } else if (is_zero(delta)) {
-            expr = const_true(op->type.width);
         } else if (is_simple_const(delta) && ((!ramp_a && !ramp_b) || (ramp_a && ramp_b))) {
             expr = const_false(op->type.width);
         } else if (is_simple_const(a) && !is_simple_const(b)) {
@@ -1925,12 +1952,16 @@ private:
     }
 };
 
-Expr simplify(Expr e, bool remove_dead_lets) {
-    return Simplify(remove_dead_lets).mutate(e);
+Expr simplify(Expr e, bool remove_dead_lets,
+              const Scope<Interval> &bounds,
+              const Scope<ModulusRemainder> &alignment) {
+    return Simplify(remove_dead_lets, bounds, alignment).mutate(e);
 }
 
-Stmt simplify(Stmt s, bool remove_dead_lets) {
-    return Simplify(remove_dead_lets).mutate(s);
+Stmt simplify(Stmt s, bool remove_dead_lets,
+              const Scope<Interval> &bounds,
+              const Scope<ModulusRemainder> &alignment) {
+    return Simplify(remove_dead_lets, bounds, alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {

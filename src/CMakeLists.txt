@@ -255,6 +255,7 @@ set(HEADER_FILES
   Qualify.h
   ExprUsesVar.h
   Random.h
+  ParallelRVar.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -343,6 +344,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   InjectHostDevBufferCopies.cpp
   Schedule.cpp
   FuseGPUThreadLoops.cpp
+  ParallelRVar.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

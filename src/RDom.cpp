@@ -13,7 +13,7 @@ RVar::operator Expr() const {
         user_error << "Use of undefined RDom dimension: " <<
             (name().empty() ? "<unknown>" : name()) << "\n";
     }
-    return Internal::Variable::make(Int(32), name(), domain);
+    return Internal::Variable::make(Int(32), name(), domain());
 }
 
 Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
