@@ -19,20 +19,22 @@ namespace Halide {
 class RVar {
     std::string _name;
     Expr _min, _extent;
-    Internal::ReductionDomain domain;
+    Internal::ReductionDomain _domain;
 public:
-    /** An empty reduction variable. This constructor only exists so
-     * we can make vectors of RVars */
-    RVar() {}
+    /** An empty reduction variable. */
+    RVar() : _name(Internal::make_entity_name(this, "Halide::RVar", 'r')) {}
 
-    /** A named but undefined reduction variable. This constructor only exists
-     * to improve error messages when an undefined RVar is used */
-    explicit RVar(const std::string _name) : _name(_name) {}
+    /** Construct an RVar with the given name */
+    explicit RVar(const std::string &n) : _name(n) {
+        // Make sure we don't get a unique name with the same name as
+        // this later:
+        Internal::unique_name(n, false);
+    }
 
     /** Construct a reduction variable with the given name and
      * bounds. Must be a member of the given reduction domain. */
-    RVar(std::string name, Expr min, Expr extent, Internal::ReductionDomain _domain) :
-        _name(name), _min(min), _extent(extent), domain(_domain) {}
+    RVar(std::string name, Expr min, Expr extent, Internal::ReductionDomain domain) :
+        _name(name), _min(min), _extent(extent), _domain(domain) {}
 
     /** The minimum value that this variable will take on */
     Expr min() const {return _min;}
@@ -40,6 +42,9 @@ public:
     /** The number that this variable will take on. The maximum value
      * of this variable will be min() + extent() - 1 */
     Expr extent() const {return _extent;}
+
+    /** The reduction domain this is associated with. */
+    Internal::ReductionDomain domain() const {return _domain;}
 
     /** The name of this reduction variable */
     const std::string &name() const {return _name;}

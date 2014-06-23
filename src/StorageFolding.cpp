@@ -124,9 +124,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                              << "max extent = " << max_extent << "\n";
                 }
             } else {
-                    debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                             << "min = " << min << "\n"
-                             << "max = " << max << "\n";
+                debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                         << "min = " << min << "\n"
+                         << "max = " << max << "\n";
             }
         }
 

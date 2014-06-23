@@ -4,7 +4,7 @@ extern "C" {
 // represent a given buffer (using the same strides as the host
 // allocation).
 static size_t _buf_size(void *user_context, buffer_t *buf) {
-    size_t size = 0;
+    size_t size = buf->elem_size;
     for (size_t i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
         size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
         if (total_dim_size > size) {
