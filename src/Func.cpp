@@ -379,8 +379,11 @@ void ScheduleHandle::set_dim_type(VarOrRVar var, For::ForType t) {
                     << " condition resulting in incorrect output."
                     << " It is possible to override this error using"
                     << " the allow_race_conditions() method. Use this"
-                    << " with great caution, and only when you can prove"
-                    << " to yourself that no race condition exists.\n";
+                    << " with great caution, and only when you are willing"
+                    << " to accept non-deterministic output, or you can prove"
+                    << " that any race conditions in this code do not change"
+                    << " the output, or you can prove that there are actually"
+                    << " no race conditions, and that Halide is being too cautious.\n";
             }
 
         } else if (t == For::Vectorized) {
