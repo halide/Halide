@@ -640,6 +640,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 #endif
             }
         }
+        // The writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't write
+        // to the buffer while the above writes are still running.
+        clFinish(ctx.cmd_queue);
 
         #ifdef DEBUG
         uint64_t t_after = halide_current_time_ns(user_context);
