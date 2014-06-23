@@ -1,5 +1,6 @@
 #include <Halide.h>
 #include <stdio.h>
+#include <algorithm>
 
 using namespace Halide;
 
@@ -14,9 +15,11 @@ int main(int argc, char **argv) {
         f(x) = 0;
         f(r/2) = r/2;
 
-        // If we parallelize over r, multiple threads hammer the same
-        // memory, but it's OK, because they're all trying to store the
-        // same value. Halide's not smart enough to understand this.
+        // If we parallelize over r, two threads store to each memory
+        // location in parallel (r = 2*k and r = 2*k + 1 both store to
+        // k). However this is fine, because they're both trying to
+        // store the same value (k), so it doesn't matter who wins the
+        // race.  Halide's not smart enough to understand this.
         f.update().allow_race_conditions().parallel(r);
 
         Image<int> out = f.realize(100);
@@ -51,10 +54,15 @@ int main(int argc, char **argv) {
         f.update().allow_race_conditions().vectorize(r, 4).parallel(r);
 
         Image<int> out = f.realize(256);
-        // If we did indeed have a permutation, then there should be no -1's left.
+
+        // Sort the output.
+        std::sort(&out(0), &out(256));
+
+        // If we did indeed have a permutation, then the values should
+        // now equal the indices.
         for (int i = 0; i < 256; i++) {
-            if (out(i) == -1) {
-                printf("Error: -1 found in output.\n");
+            if (out(i) != i) {
+                printf("Error: after sorting, out(%d) was %d instead of %d\n", i, out(i), i);
                 return -1;
             }
         }
