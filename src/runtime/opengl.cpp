@@ -429,7 +429,9 @@ EXPORT int halide_opengl_init(void *user_context) {
 EXPORT void halide_opengl_release(void *user_context) {
     if (!ST.initialized) return;
 
+#ifdef DEBUG
     halide_printf(user_context, "halide_opengl_release\n");
+#endif
     ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
