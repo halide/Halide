@@ -26,6 +26,7 @@ extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
 extern char *getenv(const char *);
 extern const char * strstr(const char *, const char *);
+extern int atoi(const char *);
 
 }
 
@@ -211,7 +212,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     cl_platform_id platform = NULL;
 
     // Find the requested platform, or the first if none specified.
-    const char * name = getenv("HL_OCL_PLATFORM");
+    const char * name = getenv("HL_OCL_PLATFORM_NAME");
     if (name != NULL) {
         for (cl_uint i = 0; i < platformCount; ++i) {
             const cl_uint maxPlatformName = 256;
@@ -247,9 +248,9 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     }
     #endif
 
+    // Get the types of devices requested.
     cl_device_type device_type = 0;
-    // Find the device types requested.
-    const char * dev_type = getenv("HL_OCL_DEVICE");
+    const char * dev_type = getenv("HL_OCL_DEVICE_TYPE");
     if (dev_type != NULL) {
         if (strstr("cpu", dev_type)) {
             device_type |= CL_DEVICE_TYPE_CPU;
@@ -258,12 +259,13 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
             device_type |= CL_DEVICE_TYPE_GPU;
         }
     }
-    // If no devices are specified yet, just use all.
+    // If no device types are specified, use all the available
+    // devices.
     if (device_type == 0) {
         device_type = CL_DEVICE_TYPE_ALL;
     }
 
-    // Make sure we have a device
+    // Get all the devices of the specified type.
     const cl_uint maxDevices = 4;
     cl_device_id devices[maxDevices];
     cl_uint deviceCount = 0;
@@ -272,12 +274,22 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         halide_error_varargs(user_context, "CL: clGetDeviceIDs failed (%d)\n", err);
         return err;
     }
-    if (deviceCount == 0) {
-        halide_error(user_context, "CL: Failed to get device\n");
+
+    // If the user indicated a specific device index to use, use
+    // that. Note that this is an index within the set of devices
+    // specified by the device type.
+    char *device_str = getenv("HL_GPU_DEVICE");
+    cl_uint device = deviceCount - 1;
+    if (device_str) {
+        device = atoi(device_str);
+    }
+
+    if (device < 0 || device >= deviceCount) {
+        halide_error_varargs(user_context, "CL: Failed to get device %i\n", device);
         return CL_DEVICE_NOT_FOUND;
     }
 
-    cl_device_id dev = devices[deviceCount-1];
+    cl_device_id dev = devices[device];
 
     #ifdef DEBUG
     const cl_uint maxDeviceName = 256;
