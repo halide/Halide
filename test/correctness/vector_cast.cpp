@@ -39,13 +39,16 @@ bool test(int vec_width) {
 
     f.vectorize(x, vec_width);
 
-    Image<B> output = f.realize(W, H);
+    Image<B> output(W, H);
+    f.realize(output);
 
+    /*
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-          //printf("%d %d -> %d %d\n", x, y, (int)(input(x, y)), (int)(output(x, y)));
+	    printf("%d %d -> %d %d\n", x, y, (int)(input(x, y)), (int)(output(x, y)));
         }
     }
+    */
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -85,8 +88,16 @@ bool test_all(int vec_width) {
 
 int main(int argc, char **argv) {
 
-    bool ok = true;
+    // We don't test this on windows, because float-to-int conversions
+    // on windows use _ftol2, which has its own unique calling
+    // convention, and older LLVMs (e.g. pnacl) don't do it right so
+    // you get clobbered registers.
+    #ifdef WIN32
+    printf("Not testing on windows\n");
+    return 0;
+    #endif
 
+    bool ok = true;
 
     // We only support power-of-two vector widths for now
     for (int vec_width = 2; vec_width < 32; vec_width*=2) {

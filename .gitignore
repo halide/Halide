@@ -81,6 +81,13 @@ apps/wavelet/inverse_haar_x.h
 apps/wavelet/wavelet
 apps/local_laplacian/ispc/process
 apps/local_laplacian/process
+apps/HelloAndroid*/bin
+apps/HelloAndroid*/gen
+apps/HelloAndroid*/obj
+apps/HelloAndroid*/libs
+apps/HelloAndroidGL/jni/halide_gl_filter.h
+apps/HelloAndroidGL/local.properties
+apps/HelloAndroidGL/proguard-project.txt
 
 # test intermediates
 log.txt

@@ -47,14 +47,14 @@ class DebugToFile : public IRMutator {
                 if (i < 4) {
                     args.push_back(op->bounds[i].extent);
                 } else {
-                    args[args.size()-1] = (args[args.size()-1] *
-                                           op->bounds[i].extent);
+                    args.back() *= op->bounds[i].extent;
                 }
             }
-            while (args.size() < 7) args.push_back(1);
+            // Fill the remaining args with ones.
+            args.resize(7, 1);
 
             int type_code = 0;
-            Type t = f.values()[0].type();
+            Type t = op->types[0];
             if (t == Float(32)) {
                 type_code = 0;
             } else if (t == Float(64)) {
