@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("No gpu target enabled. Skipping test.\n");
+        return 0;
+    }
+
     Var x, y, z, w;
     Image<int> full(80, 60, 10, 10);
 
@@ -45,7 +50,6 @@ int main(int argc, char **argv) {
     f.gpu_tile(x, y, 16, 16);
     f.output_buffer().set_stride(0, Expr());
     f.realize(out);
-
 
     // Put some data in the full host buffer, avoiding the region
     // being evaluated above.
