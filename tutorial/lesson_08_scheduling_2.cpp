@@ -179,6 +179,10 @@ int main(int argc, char **argv) {
         // of the consumer:
         producer.compute_at(consumer, y);
 
+        // This places the code that computes the producer just
+        // *inside* the consumer's for loop over y, as in the
+        // equivalent C below.
+
         // Turn on tracing.
         producer.trace_stores();
         consumer.trace_stores();
