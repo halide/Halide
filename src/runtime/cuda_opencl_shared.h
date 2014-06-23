@@ -58,48 +58,52 @@ static _dev_copy _make_host_to_dev_copy(const buffer_t *buf) {
     }
 
     if (buf->elem_size == 0) {
-        // This buffer apparently represents no memory. Return a zero'd copy task.
+        // This buffer apparently represents no memory. Return a zero'd copy
+        // task.
         _dev_copy zero = {0};
         return zero;
     }
 
     // Now expand it to copy all the pixels (one at a time) by taking
-    // the extents and strides from the buffer_t.
+    // the extents and strides from the buffer_t. Dimensions are added
+    // to the copy by inserting it s.t. the stride is in ascending order.
     for (int i = 0; i < 4 && buf->extent[i]; i++) {
-        c.extent[i] = buf->extent[i];
-        c.stride_bytes[i] = buf->stride[i] * buf->elem_size;
-    };
-
-    // Now attempt to coalesce the many small copies into fewer larger copies.
-    while (1) {
-        // Look for a stride that matches the current chunk_size. This
-        // means that the copy tasks along that dimension are abutting
-        // in memory, so that whole dimension can actually be folded
-        // into a single larger copy.
-        bool did_something = false;
-        for (int i = 0; i < MAX_COPY_DIMS; i++) {
-            if (c.stride_bytes[i] == c.chunk_size) {
-                did_something = true;
-
-                // Fold that dimension's extent into the chunk_size.
-                c.chunk_size *= c.extent[i];
-
-                // Erase the dimension from the list of dimensions to iterate over.
-                for (int j = i+1; j < MAX_COPY_DIMS; j++) {
-                    c.extent[j-1] = c.extent[j];
-                    c.stride_bytes[j-1] = c.stride_bytes[j];
-                }
-                c.extent[MAX_COPY_DIMS-1] = 1;
-                c.stride_bytes[MAX_COPY_DIMS-1] = 0;
+        int stride_bytes = buf->stride[i] * buf->elem_size;
+        // Insert the dimension sorted into the buffer copy.
+        int insert;
+        for (insert = 0; insert < i; insert++) {
+            // If the stride is 0, we put it at the end because it can't be
+            // folded.
+            if (stride_bytes < c.stride_bytes[insert] && stride_bytes != 0) {
+                break;
             }
         }
-        if (!did_something) {
-            // No further way to combine copy tasks was found, so we're done.
-            return c;
+        for (int j = i; j > insert; j--) {
+            c.extent[j] = c.extent[j - 1];
+            c.stride_bytes[j] = c.stride_bytes[j - 1];
         }
-    }
+        // If the stride is 0, only copy it once.
+        c.extent[insert] = stride_bytes != 0 ? buf->extent[i] : 1;
+        c.stride_bytes[insert] = stride_bytes;
+    };
 
-    // Unreachable.
+    // Attempt to fold contiguous dimensions into the chunk size. Since the
+    // dimensions are sorted by stride, and the strides must be greater than
+    // or equal to the chunk size, this means we can just delete the innermost
+    // dimension as long as its stride is equal to the chunk size.
+    while(c.chunk_size == c.stride_bytes[0]) {
+        // Fold the innermost dimension's extent into the chunk_size.
+        c.chunk_size *= c.extent[0];
+
+        // Erase the innermost dimension from the list of dimensions to
+        // iterate over.
+        for (int j = 1; j < MAX_COPY_DIMS; j++) {
+            c.extent[j-1] = c.extent[j];
+            c.stride_bytes[j-1] = c.stride_bytes[j];
+        }
+        c.extent[MAX_COPY_DIMS-1] = 1;
+        c.stride_bytes[MAX_COPY_DIMS-1] = 0;
+    }
     return c;
 }
 
