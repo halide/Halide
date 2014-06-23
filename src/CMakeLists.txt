@@ -100,11 +100,11 @@ set(RUNTIME_CPP
 set (RUNTIME_LL
   arm
   posix_math
-  pnacl_math
   ptx_dev
   x86_avx
   x86
   x86_sse41
+  win32_math
   pnacl_math)
 set (RUNTIME_BC
   compute_20
