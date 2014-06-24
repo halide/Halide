@@ -177,7 +177,7 @@ for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     elif [[ "$LLVM" == trunk ]]; then
-        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx opencl opengl"
+        TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx opencl"
     else
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx"
     fi
