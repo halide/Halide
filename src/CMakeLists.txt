@@ -98,6 +98,10 @@ set(RUNTIME_CPP
   cuda_debug
   opencl_debug
   opengl_debug
+  windows_cuda
+  windows_opencl
+  windows_cuda_debug
+  windows_opencl_debug
   windows_io
   posix_print)
 set (RUNTIME_LL

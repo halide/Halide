@@ -1,9 +1,11 @@
 #ifndef HALIDE_MINI_CUDA_H
 #define HALIDE_MINI_CUDA_H
 
-// TODO: On windows this needs __stdcall
-//#define CUDAAPI __stdcall
+#if defined(WINDOWS) && defined(BITS_32)
+#define CUDAAPI __stdcall
+#else
 #define CUDAAPI
+#endif
 
 // API version > 3020
 #define cuCtxCreate                         cuCtxCreate_v2

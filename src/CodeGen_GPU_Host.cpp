@@ -12,14 +12,19 @@
 #include "Bounds.h"
 #include "Simplify.h"
 
-#ifdef _MSC_VER
-// TODO: This is untested
+#ifdef _WIN32
 #define NOMINMAX
+#ifdef _WIN64
+#define GPU_LIB_CC
+#else
+#define GPU_LIB_CC __stdcall
+#endif
 #include <windows.h>
 static bool have_symbol(const char *s) {
     return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
 }
 #else
+#define GPU_LIB_CC
 #include <dlfcn.h>
 static bool have_symbol(const char *s) {
     return dlsym(NULL, s) != NULL;
@@ -32,7 +37,8 @@ namespace Internal {
 extern "C" { typedef struct CUctx_st *CUcontext; }
 
 // A single global cuda context to share between jitted functions
-int (*cuCtxDestroy)(CUctx_st *) = 0;
+int (GPU_LIB_CC *cuCtxDestroy)(CUctx_st *) = 0;
+
 struct SharedCudaContext {
     CUctx_st *ptr;
     volatile int lock;
@@ -43,11 +49,14 @@ struct SharedCudaContext {
 
     // Freed on program exit
     ~SharedCudaContext() {
+        // Skip it on windows, because global destructors can't necessarily rely on things from dlls.
+        #ifndef _WIN32
         if (ptr && cuCtxDestroy) {
             debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
-            (*cuCtxDestroy)(ptr);
+            cuCtxDestroy(ptr);
             ptr = 0;
         }
+        #endif
     }
 } cuda_ctx;
 
@@ -56,8 +65,8 @@ extern "C" {
     typedef struct cl_command_queue_st *cl_command_queue;
 }
 
-int (*clReleaseContext)(cl_context);
-int (*clReleaseCommandQueue)(cl_command_queue);
+int (GPU_LIB_CC *clReleaseContext)(cl_context);
+int (GPU_LIB_CC *clReleaseCommandQueue)(cl_command_queue);
 
 // A single global OpenCL context and command queue to share between jitted functions.
 struct SharedOpenCLContext {
@@ -68,8 +77,10 @@ struct SharedOpenCLContext {
     SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
     }
 
-    // Release context and command queue on exit.
+    // Release context and command queue on program exit.
     ~SharedOpenCLContext() {
+        // Skip it on windows. It hangs.
+        #ifndef _WIN32
         if (command_queue && clReleaseCommandQueue) {
             debug(1) << "Cleaning up OpenCL command queue: " << command_queue << " , " << clReleaseCommandQueue << "\n";
             clReleaseCommandQueue(command_queue);
@@ -78,8 +89,10 @@ struct SharedOpenCLContext {
         if (context && clReleaseContext) {
             debug(1) << "Cleaning up OpenCL context: " << context << " , " << clReleaseContext << "\n";
             clReleaseContext(context);
+	        debug(1) << "Back from clReleaseContext\n";
             context = NULL;
         }
+        #endif
     }
 } cl_ctx;
 
@@ -376,7 +389,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
         void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
         internal_assert(ptr) << "Could not find cuCtxDestroy_v2 in cuda library\n";
 
-        cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
+        cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
 
     } else if (target.features & Target::OpenCL) {
         // First check if libOpenCL has already been linked
@@ -403,12 +416,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
         void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
         internal_assert(ptr) << "Could not find clReleaseContext\n";
 
-        clReleaseContext = reinterpret_bits<int (*)(cl_context)>(ptr);
+        clReleaseContext = reinterpret_bits<int (GPU_LIB_CC *)(cl_context)>(ptr);
 
         ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
         internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
 
-        clReleaseCommandQueue = reinterpret_bits<int (*)(cl_command_queue)>(ptr);
+        clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
 
     } else if (target.features & Target::OpenGL) {
         if (target.os == Target::Linux) {
