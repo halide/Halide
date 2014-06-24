@@ -24,18 +24,14 @@
 #ifndef __OPENCL_CL_H
 #define __OPENCL_CL_H
 
-#ifdef BITS_64
-#define CL_API_ENTRY
-#define CL_API_CALL
-#define CL_CALLBACK
+#if defined(WINDOWS) && defined(BITS_32)
+#define CL_API_CALL     __stdcall
+#define CL_CALLBACK     __stdcall
 #else
-#define CL_API_ENTRY
-// TODO: turn these on for windows
-//#define CL_API_CALL     __stdcall
-//#define CL_CALLBACK     __stdcall
 #define CL_API_CALL
 #define CL_CALLBACK
 #endif
+#define CL_API_ENTRY
 #define CL_API_SUFFIX__VERSION_1_0
 #define CL_API_SUFFIX__VERSION_1_1
 #define CL_API_SUFFIX__VERSION_1_2

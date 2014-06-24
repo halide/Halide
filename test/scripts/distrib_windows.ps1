@@ -140,6 +140,26 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
 #      exit $LastExitCode
     }
   }
+  
+  # GPU tests
+  if ($d.EndsWith("trunk")) {
+    Get-ChildItem . -filter correctness*.exe | ForEach { 
+      echo ""
+      echo $_.Fullname
+      $env:HL_JIT_TARGET = "cuda"
+      &$_.Fullname
+      if ($LastExitCode) {
+        echo "Test failed with cuda!"
+        exit $LastExitCode
+      }
+      $env:HL_JIT_TARGET = "opencl"
+      &$_.Fullname
+      if ($LastExitCode) {
+        echo "Test failed with opencl!"
+        exit $LastExitCode
+      }
+    }
+  }
 
   cd $ROOT
   cd distrib

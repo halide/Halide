@@ -371,6 +371,8 @@ DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(cuda_debug)
+DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(windows_cuda_debug)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
 DECLARE_CPP_INITMOD(linux_clock)
@@ -380,6 +382,8 @@ DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opencl_debug)
+DECLARE_CPP_INITMOD(windows_opencl)
+DECLARE_CPP_INITMOD(windows_opencl_debug)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(opengl_debug)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
@@ -614,17 +618,33 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_x86_avx_ll(c));
     }
     if (t.features & Target::CUDA) {
-        if (t.features & Target::GPUDebug) {
-            modules.push_back(get_initmod_cuda_debug(c, bits_64));
+        if (t.os == Target::Windows) {
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_windows_cuda_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_windows_cuda(c, bits_64));
+            }
         } else {
-            modules.push_back(get_initmod_cuda(c, bits_64));
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_cuda_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_cuda(c, bits_64));
+            }
         }
     } else if (t.features & Target::OpenCL) {
-        if (t.features & Target::GPUDebug) {
-            modules.push_back(get_initmod_opencl_debug(c, bits_64));
+        if (t.os == Target::Windows) {
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_windows_opencl_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_windows_opencl(c, bits_64));
+            }
         } else {
-            modules.push_back(get_initmod_opencl(c, bits_64));
-        }
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_opencl_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_opencl(c, bits_64));
+            }
+	}
     } else if (t.features & Target::OpenGL) {
         if (t.features & Target::GPUDebug) {
             modules.push_back(get_initmod_opengl_debug(c, bits_64));
