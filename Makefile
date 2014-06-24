@@ -385,7 +385,9 @@ tmp/images/%.png: tutorial/images/%.png
 	cp $< tmp/images/
 
 tutorial_%: $(BIN_DIR)/tutorial_% tmp/images/rgb.png tmp/images/gray.png
-	cd tmp ; $(LD_PATH_SETUP) ../$<
+	@ if [[ $@ != *_generate ]]; then \
+	cd tmp ; $(LD_PATH_SETUP) ../$< ; \
+	fi
 	@-echo
 
 .PHONY: test_apps
