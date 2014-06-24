@@ -270,7 +270,7 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
-TUTORIALS = $(shell ls tutorial/*.cpp)
+TUTORIALS = $(filter-out *_generate.cpp, $(shell ls tutorial/*.cpp))
 
 STATIC_TEST_CXX ?= $(CXX)
 
@@ -385,9 +385,8 @@ tmp/images/%.png: tutorial/images/%.png
 	cp $< tmp/images/
 
 tutorial_%: $(BIN_DIR)/tutorial_% tmp/images/rgb.png tmp/images/gray.png
-	@ if [[ $@ != *_generate ]]; then \
-	cd tmp ; $(LD_PATH_SETUP) ../$< ; \
-	fi
+	@-mkdir -p tmp
+	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
 .PHONY: test_apps
