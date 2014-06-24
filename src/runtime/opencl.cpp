@@ -284,7 +284,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         device = atoi(device_str);
     }
 
-    if (device < 0 || device >= deviceCount) {
+    if (device >= deviceCount) {
         halide_error_varargs(user_context, "CL: Failed to get device %i\n", device);
         return CL_DEVICE_NOT_FOUND;
     }
