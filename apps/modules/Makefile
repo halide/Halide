@@ -45,7 +45,7 @@ pipeline.a: pipeline.o my_library_impl.a
 
 # A binary that runs the output pipeline on an image
 run_pipeline: run_pipeline.cpp pipeline.a
-	$(CXX) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpthread $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS)
+	$(CXX) run_pipeline.cpp pipeline.a -o run_pipeline -I ../support -lpthread $(PNGFLAGS) $(CUDA_LDFLAGS) $(OPENCL_LDFLAGS) $(OPENGL_LDFLAGS)
 
 out.png: run_pipeline
 	./run_pipeline ../images/gray.png out.png

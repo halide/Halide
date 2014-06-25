@@ -20,7 +20,8 @@ int main(int argc, char **argv) {
 
     f(x, y, z) = g(x, y) + g(x+1, y);
 
-    g.compute_at(f, y);
+    RVar rxo, rxi;
+    g.compute_at(f, y).update().split(r.x, rxo, rxi, 2).unroll(rxi);
     f.unroll(z, 2);
 
     Image<float> im = f.realize(64, 64, 4);

@@ -5,12 +5,17 @@
 
 #include "mini_cl.h"
 
+#include "cuda_opencl_shared.h"
+
+// Allow OpenCL 1.1 features to be used.
+#define ENABLE_OPENCL_11
+
 #ifdef DEBUG
 #define DEBUG_PRINTF halide_printf
 #else
 // This ensures that DEBUG and non-DEBUG have the same semicolon eating behavior.
-static void __noop_printf(void *, const char *, ...) { }
-#define DEBUG_PRINTF __noop_printf
+static void _noop_printf(void *, const char *, ...) { }
+#define DEBUG_PRINTF _noop_printf
 #endif
 
 extern "C" {
@@ -21,6 +26,7 @@ extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
 extern char *getenv(const char *);
 extern const char * strstr(const char *, const char *);
+extern int atoi(const char *);
 
 }
 
@@ -206,7 +212,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     cl_platform_id platform = NULL;
 
     // Find the requested platform, or the first if none specified.
-    const char * name = getenv("HL_OCL_PLATFORM");
+    const char * name = getenv("HL_OCL_PLATFORM_NAME");
     if (name != NULL) {
         for (cl_uint i = 0; i < platformCount; ++i) {
             const cl_uint maxPlatformName = 256;
@@ -242,9 +248,9 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     }
     #endif
 
+    // Get the types of devices requested.
     cl_device_type device_type = 0;
-    // Find the device types requested.
-    const char * dev_type = getenv("HL_OCL_DEVICE");
+    const char * dev_type = getenv("HL_OCL_DEVICE_TYPE");
     if (dev_type != NULL) {
         if (strstr("cpu", dev_type)) {
             device_type |= CL_DEVICE_TYPE_CPU;
@@ -253,12 +259,13 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
             device_type |= CL_DEVICE_TYPE_GPU;
         }
     }
-    // If no devices are specified yet, just use all.
+    // If no device types are specified, use all the available
+    // devices.
     if (device_type == 0) {
         device_type = CL_DEVICE_TYPE_ALL;
     }
 
-    // Make sure we have a device
+    // Get all the devices of the specified type.
     const cl_uint maxDevices = 4;
     cl_device_id devices[maxDevices];
     cl_uint deviceCount = 0;
@@ -267,12 +274,22 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
         halide_error_varargs(user_context, "CL: clGetDeviceIDs failed (%d)\n", err);
         return err;
     }
-    if (deviceCount == 0) {
-        halide_error(user_context, "CL: Failed to get device\n");
+
+    // If the user indicated a specific device index to use, use
+    // that. Note that this is an index within the set of devices
+    // specified by the device type.
+    char *device_str = getenv("HL_GPU_DEVICE");
+    cl_uint device = deviceCount - 1;
+    if (device_str) {
+        device = atoi(device_str);
+    }
+
+    if (device >= deviceCount) {
+        halide_error_varargs(user_context, "CL: Failed to get device %i\n", device);
         return CL_DEVICE_NOT_FOUND;
     }
 
-    cl_device_id dev = devices[deviceCount-1];
+    cl_device_id dev = devices[device];
 
     #ifdef DEBUG
     const cl_uint maxDeviceName = 256;
@@ -388,7 +405,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         }
         (*state)->program = program;
 
-        DEBUG_PRINTF( user_context, "    clBuildProgram %p\n", program );
+        DEBUG_PRINTF( user_context, "    clBuildProgram %p %s\n", program, options );
         err = clBuildProgram(program, 1, devices, options, NULL, NULL );
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clBuildProgram failed (%d)\n", err);
@@ -505,17 +522,6 @@ WEAK void halide_release(void *user_context) {
     halide_release_cl_context(user_context);
 }
 
-static size_t __buf_size(void *user_context, buffer_t* buf) {
-    size_t size = 0;
-    for (int i = 0; i < sizeof(buf->stride) / sizeof(buf->stride[0]); i++) {
-        size_t total_dim_size = buf->elem_size * buf->extent[i] * buf->stride[i];
-        if (total_dim_size > size)
-            size = total_dim_size;
-    }
-    halide_assert(user_context, size);
-    return size;
-}
-
 WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     DEBUG_PRINTF( user_context, "CL: halide_dev_malloc (user_context: %p, buf: %p)\n", user_context, buf );
 
@@ -524,11 +530,14 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
-    size_t size = __buf_size(user_context, buf);
+    size_t size = _buf_size(user_context, buf);
     if (buf->dev) {
         halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
         return 0;
     }
+
+    halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
+                                buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
     DEBUG_PRINTF(user_context, "    Allocating buffer of %lld bytes, "
                  "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
@@ -587,16 +596,66 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         #endif
 
         halide_assert(user_context, buf->host && buf->dev);
-        size_t size = __buf_size(user_context, buf);
-        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
-        DEBUG_PRINTF( user_context, "    clEnqueueWriteBuffer (%lld bytes, %p -> %p)\n",
-                      (long long)size, buf->host, (void *)buf->dev );
-        cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)((void*)buf->dev),
-                                          CL_TRUE, 0, size, buf->host, 0, NULL, NULL);
-        if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clEnqueueWriteBuffer failed (%d)\n", err);
-            return err;
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
+
+        _dev_copy c = _make_host_to_dev_copy(buf);
+
+        for (int w = 0; w < c.extent[3]; w++) {
+            for (int z = 0; z < c.extent[2]; z++) {
+#ifdef ENABLE_OPENCL_11
+                // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+                // can deal with the 2 innermost strides with OpenCL.
+                uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
+
+                size_t offset[3] = { off, 0, 0 };
+                size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+
+                DEBUG_PRINTF( user_context, "    clEnqueueWriteBufferRect ((%d, %d), (%p -> %p) + %d, %dx%dx%d bytes, %dx%d)\n",
+                              z, w,
+                              (void *)c.src, c.dst, (int)off,
+                              (int)region[0], (int)region[1], (int)region[2],
+                              (int)c.stride_bytes[0], (int)c.stride_bytes[1]);
+
+                cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
+                                                      offset, offset, region,
+                                                      c.stride_bytes[0], c.stride_bytes[1],
+                                                      c.stride_bytes[0], c.stride_bytes[1],
+                                                      (void *)c.src,
+                                                      0, NULL, NULL);
+
+                if (err != CL_SUCCESS) {
+                    halide_error_varargs(user_context, "CL: clEnqueueWriteBufferRect failed (%d)\n", err);
+                    return err;
+                }
+#else
+                for (int y = 0; y < c.extent[1]; y++) {
+                    for (int x = 0; x < c.extent[0]; x++) {
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
+                        void *src = (void *)(c.src + off);
+                        void *dst = (void *)(c.dst + off);
+                        uint64_t size = c.chunk_size;
+
+                        DEBUG_PRINTF( user_context, "    clEnqueueWriteBuffer ((%d, %d, %d, %d), %lld bytes, %p -> %p)\n",
+                                      x, y, z, w,
+                                      (long long)size, src, (void *)dst );
+                        cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
+                                                          CL_FALSE, off, size, src, 0, NULL, NULL);
+                        if (err != CL_SUCCESS) {
+                            halide_error_varargs(user_context, "CL: clEnqueueWriteBuffer failed (%d)\n", err);
+                            return err;
+                        }
+                    }
+                }
+#endif
+            }
         }
+        // The writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't write
+        // to the buffer while the above writes are still running.
+        clFinish(ctx.cmd_queue);
 
         #ifdef DEBUG
         uint64_t t_after = halide_current_time_ns(user_context);
@@ -623,18 +682,68 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         uint64_t t_before = halide_current_time_ns(user_context);
         #endif
 
-        halide_assert(user_context, buf->host && buf->dev);
-        size_t size = __buf_size(user_context, buf);
-        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf, size));
-        DEBUG_PRINTF( user_context, "    clEnqueueReadBuffer (%lld bytes, %p -> %p)\n",
-                      (long long)size, (void *)buf->dev, buf );
+        halide_assert(user_context, buf->dev && buf->dev);
+        halide_assert(user_context, halide_validate_dev_pointer(user_context, buf));
 
-        cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)((void*)buf->dev),
-                                         CL_TRUE, 0, size, buf->host, 0, NULL, NULL);
-        if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%d)\n", err);
-            return err;
+        _dev_copy c = _make_dev_to_host_copy(buf);
+
+        for (int w = 0; w < c.extent[3]; w++) {
+            for (int z = 0; z < c.extent[2]; z++) {
+#ifdef ENABLE_OPENCL_11
+                // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+                // can deal with the 2 innermost strides with OpenCL.
+                uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
+
+                size_t offset[3] = { off, 0, 0 };
+                size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+
+                DEBUG_PRINTF( user_context, "    clEnqueueReadBufferRect ((%d, %d), (%p -> %p) + %d, %dx%dx%d bytes, %dx%d)\n",
+                              z, w,
+                              (void *)c.src, c.dst, (int)off,
+                              (int)region[0], (int)region[1], (int)region[2],
+                              (int)c.stride_bytes[0], (int)c.stride_bytes[1]);
+
+                cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
+                                                     offset, offset, region,
+                                                     c.stride_bytes[0], c.stride_bytes[1],
+                                                     c.stride_bytes[0], c.stride_bytes[1],
+                                                     (void *)c.dst,
+                                                     0, NULL, NULL);
+
+                if (err != CL_SUCCESS) {
+                    halide_error_varargs(user_context, "CL: clEnqueueReadBufferRect failed (%d)\n", err);
+                    return err;
+                }
+#else
+                for (int y = 0; y < c.extent[1]; y++) {
+                    for (int x = 0; x < c.extent[0]; x++) {
+                        uint64_t off = (x * c.stride_bytes[0] +
+                                        y * c.stride_bytes[1] +
+                                        z * c.stride_bytes[2] +
+                                        w * c.stride_bytes[3]);
+                        void *src = (void *)(c.src + off);
+                        void *dst = (void *)(c.dst + off);
+                        uint64_t size = c.chunk_size;
+
+                        DEBUG_PRINTF( user_context, "    clEnqueueReadBuffer ((%d, %d, %d, %d), %lld bytes, %p -> %p)\n",
+                                      x, y, z, w,
+                                      (long long)size, (void *)src, dst );
+
+                        cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
+                                                         CL_FALSE, off, size, dst, 0, NULL, NULL);
+                        if (err != CL_SUCCESS) {
+                            halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%d)\n", err);
+                            return err;
+                        }
+                    }
+                }
+#endif
+            }
         }
+        // The writes above are all non-blocking, so empty the command
+        // queue before we proceed so that other host code won't read
+        // bad data.
+        clFinish(ctx.cmd_queue);
 
         #ifdef DEBUG
         uint64_t t_after = halide_current_time_ns(user_context);

@@ -55,7 +55,7 @@ typedef void (*PFNGLDELETETEXTURESPROC)(GLsizei n, const GLuint *textures);
 typedef void (*PFNGLDRAWBUFFERSPROC) (GLsizei n, const GLenum *bufs);
 typedef void (*PFNGLDRAWELEMENTSPROC)(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices );
 typedef void (*PFNGLGENTEXTURESPROC)(GLsizei n, GLuint *textures);
-typedef GLenum (*PFNGLGETERRORPROC)();
+typedef GLenum (*PFNGLGETERRORPROC)(void);
 typedef void (*PFNGLGETTEXIMAGEPROC)(GLenum target, GLint level,
                                      GLenum format, GLenum type,
                                      GLvoid *pixels);
@@ -80,6 +80,10 @@ typedef void (*PFNGLTEXSUBIMAGE2DPROC)(GLenum target, GLint level,
                                        GLenum format, GLenum type,
                                        const GLvoid *data);
 typedef void (*PFNGLVIEWPORTPROC)(GLint x, GLint y, GLsizei width, GLsizei height);
+typedef void (*PFNGLREADPIXELS)(GLint x, GLint y,
+                                GLsizei width, GLsizei height,
+                                GLenum format, GLenum type,
+                                GLvoid *pixels);
 
 // ---------- OpenGL 1.5 ----------
 

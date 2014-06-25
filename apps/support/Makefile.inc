@@ -25,6 +25,11 @@ ifeq ($(UNAME), Darwin)
 PLATFORM_CUDA_LDFLAGS=-F/Library/Frameworks -framework CUDA
 endif
 
+PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
+ifeq ($(UNAME), Darwin)
+PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
+endif
+
 UNAME = $(shell uname)
 
 PLATFORM_OPENCL_LDFLAGS=-lOpenCL
@@ -41,9 +46,6 @@ endif
 ifneq (, $(findstring opencl,$(HL_TARGET)))
   OPENCL_LDFLAGS=$(PLATFORM_OPENCL_LDFLAGS)
 endif
-ifneq (, $(findstring spir,$(HL_TARGET)))
-  OPENCL_LDFLAGS=$(PLATFORM_OPENCL_LDFLAGS)
-endif
-ifneq (, $(findstring spir64,$(HL_TARGET)))
-  OPENCL_LDFLAGS=$(PLATFORM_OPENCL_LDFLAGS)
+ifneq (, $(findstring opengl,$(HL_TARGET)))
+  OPENGL_LDFLAGS=$(PLATFORM_OPENGL_LDFLAGS)
 endif
