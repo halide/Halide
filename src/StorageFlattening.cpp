@@ -140,7 +140,7 @@ private:
                                  stmt);
 
             // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, stmt);
+            stmt = Allocate::make(buffer_name, t, extents, const_true(), stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {

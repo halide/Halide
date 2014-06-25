@@ -1172,9 +1172,9 @@ void CodeGen_C::test() {
     Stmt s = Store::make("buf", e, x);
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), s);
+    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), s);
+    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
 
     ostringstream source;
     CodeGen_C cg(source);
