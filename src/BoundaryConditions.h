@@ -64,6 +64,9 @@ void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
  *  everywhere outside the boundary. Generally the expression will be a
  *  constant, though the code currently allows accessing the arguments
  *  of source.
+ *
+ * (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER
+ *  and putting value in the border of the texture.)
  */
 // @{
 Func constant_exterior(const Func &source, const Expr &value,
@@ -154,6 +157,8 @@ Func constant_exterior(const Func &source, const Expr &value,
 
 /** Impose a boundary condition such that the nearest edge sample is returned
  *  everywhere outside the given region.
+ *
+ * (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_EDGE.)
  */
 // @{
 Func repeat_edge(const Func &source,
@@ -242,6 +247,8 @@ Func repeat_edge(const Func &source,
 
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other.
+ *
+ * (This is similar to setting GL_TEXTURE_WRAP_* to GL_REPEAT.)
  */
 // @{
 Func repeat_image(const Func &source,
@@ -330,6 +337,8 @@ Func repeat_image(const Func &source,
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other, but mirror
  *  them such that adjacent edges are the same.
+ *
+ * (This is similar to setting GL_TEXTURE_WRAP_* to GL_MIRRORED_REPEAT.)
  */
 // @{
 Func mirror_image(const Func &source,
@@ -421,6 +430,8 @@ Func mirror_image(const Func &source,
  *  them such that adjacent edges are the same and then overlap the edges.
  *
  *  This produces an error if any extent is 1 or less. (TODO: check this.)
+ *
+ * (I do not believ there is a direct GL_TEXTURE_WRAP_* equivalent for this.)
  */
 // @{
 Func mirror_interior(const Func &source,
