@@ -2,11 +2,13 @@
 
 namespace Halide {
 
-Func boundary_constant_exterior(const Func &source, const Expr &value,
-                                const std::vector<std::pair<Expr, Expr> > &bounds) {
+namespace BoundaryConditions {
+
+Func constant_exterior(const Func &source, const Expr &value,
+                       const std::vector<std::pair<Expr, Expr> > &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
-        "boundary_constant_exterior called with more bounds (" << bounds.size() <<
+        "constant_exterior called with more bounds (" << bounds.size() <<
         ") than dimensions (" << source.args().size() << ") Func " <<
         source.name() << "has.\n";
 
@@ -31,11 +33,11 @@ Func boundary_constant_exterior(const Func &source, const Expr &value,
     return bounded;
 }
 
-Func boundary_repeat_edge(const Func &source,
-                          const std::vector<std::pair<Expr, Expr> > &bounds) {
+Func repeat_edge(const Func &source,
+                 const std::vector<std::pair<Expr, Expr> > &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
-        "boundary_repeat_edge called with more bounds (" << bounds.size() <<
+        "repeat_edge called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
         source.name() << "has.\n";
 
@@ -55,11 +57,11 @@ Func boundary_repeat_edge(const Func &source,
     return bounded;
 }
 
-Func boundary_repeat_image(const Func &source,
-                              const std::vector<std::pair<Expr, Expr> > &bounds) {
+Func repeat_image(const Func &source,
+                  const std::vector<std::pair<Expr, Expr> > &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
-        "boundary_repeat_image called with more bounds (" << bounds.size() <<
+        "repeat_image called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
         source.name() << "has.\n";
 
@@ -88,11 +90,11 @@ Func boundary_repeat_image(const Func &source,
     return bounded;
 }
 
-Func boundary_mirror_image(const Func &source,
-                              const std::vector<std::pair<Expr, Expr> > &bounds) {
+Func mirror_image(const Func &source,
+                  const std::vector<std::pair<Expr, Expr> > &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
-        "boundary_mirror_image called with more bounds (" << bounds.size() <<
+        "mirror_image called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
         source.name() << "has.\n";
 
@@ -122,11 +124,11 @@ Func boundary_mirror_image(const Func &source,
     return bounded;
 }
 
-Func boundary_mirror_interior(const Func &source,
-                              const std::vector<std::pair<Expr, Expr> > &bounds) {
+Func mirror_interior(const Func &source,
+                     const std::vector<std::pair<Expr, Expr> > &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<
-        "boundary_mirror_interior called with more bounds (" << bounds.size() <<
+        "mirror_interior called with more bounds (" << bounds.size() <<
         ") than dimensions (" << args.size() << ") Func " <<
         source.name() << "has.\n";
 
@@ -155,6 +157,8 @@ Func boundary_mirror_interior(const Func &source,
 
     bounded(args) = source(actuals);
     return bounded;
+}
+
 }
 
 }

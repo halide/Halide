@@ -13,145 +13,133 @@
 
 namespace Halide {
 
-Func boundary_constant_exterior(const Func &source, const Expr &value,
-                                const std::vector<std::pair<Expr, Expr> > &bounds);
+/** namespace to hold functions for imposing boundary conditions on
+ *  Halide Funcs.
+ *
+ *  All functions in this namespace transform a source Func to a
+ *  result Func where the result produces the values of the source
+ *  within a given region and a different set of values outside the
+ *  given region. A region is an N dimensional box specified by
+ *  mins and extents.
+ *
+ *  Three areas are defined:
+ *      The image is the entire set of values in the region.
+ *      The edge is the set of pixels in the image but adjacent
+ *          to coordinates that are not
+ *      The interior is the image minus the edge (and is undefined
+ *          if the extent of any region is 1 or less).
+ *
+ *  If the source Func has more dimensions than are specified, the extra ones
+ *  are unmodified.
+ *
+ *  Numerous options for specifing the outside area are provided,
+ *  including replacement with an expression, repeating the edge
+ *  samples, mirroring over the edge, and repeating or mirroring the
+ *  entire image.
+ *
+ *  TODO: Add support for passing Image<T> and ImageParam, and
+ *  possibly other types directly to this functions.
+ */
+namespace BoundaryConditions {
 
-Func boundary_repeat_edge(const Func &source,
-                          const std::vector<std::pair<Expr, Expr> > &bounds);
-
-Func boundary_repeat_image(const Func &source,
-                           const std::vector<std::pair<Expr, Expr> > &bounds);
-
-
-Func boundary_mirror_image(const Func &source,
-                           const std::vector<std::pair<Expr, Expr> > &bounds);
-
-Func boundary_mirror_interior(const Func &source,
-                              const std::vector<std::pair<Expr, Expr> > &bounds);
-
-#if __cplusplus > 199711L
-
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
 namespace Internal {
 
-void collect_boundary_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
-                             const Expr &min, const Expr &extent) {
+void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
+                    const Expr &min, const Expr &extent) {
     collected_bounds.push_back(std::make_pair(min, extent));
 }
 
 template <typename ...Bounds>
-void collect_boundary_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
-                             const Expr &min, const Expr &extent, Bounds... bounds) {
+void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
+                    const Expr &min, const Expr &extent, Bounds... bounds) {
     collected_bounds.push_back(std::make_pair(min, extent));
-    collect_boundary_bounds(collected_bounds, bounds...);
+    collect_bounds(collected_bounds, bounds...);
 }
 
 }
+#endif // C++11 support.
 
+/** Impose a boundary condition such that a given expression is returned
+ *  everywhere outside the boundary. Generally the expression will be a
+ *  constant, though the code currently allows accessing the arguments
+ *  of source.
+ */
+// @{
+Func constant_exterior(const Func &source, const Expr &value,
+                       const std::vector<std::pair<Expr, Expr> > &bounds);
+
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename ...Bounds>
-Func boundary_constant_exterior(const Func &source, const Expr &value, Bounds... bounds) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_boundary_bounds(collected_bounds, bounds...);
-    return boundary_constant_exterior(source, value, collected_bounds);
+    Internal::collect_bounds(collected_bounds, bounds...);
+    return constant_exterior(source, value, collected_bounds);
 }
-
-template <typename ...Bounds>
-Func boundary_repeat_edge(const Func &source, Bounds... bounds) {
-    std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_boundary_bounds(collected_bounds, bounds...);
-    return boundary_repeat_edge(source, collected_bounds);
-}
-
-template <typename ...Bounds>
-Func boundary_repeat_image(const Func &source, Bounds... bounds) {
-    std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_boundary_bounds(collected_bounds, bounds...);
-    return boundary_repeat_image(source, collected_bounds);
-}
-
-template <typename ...Bounds>
-Func boundary_mirror_image(const Func &source, Bounds... bounds) {
-    std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_boundary_bounds(collected_bounds, bounds...);
-    return boundary_mirror_image(source, collected_bounds);
-}
-
-template <typename ...Bounds>
-Func boundary_mirror_interior(const Func &source, Bounds... bounds) {
-    std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_boundary_bounds(collected_bounds, bounds...);
-    return boundary_mirror_interior(source, collected_bounds);
-}
-
 #else
-
-Func boundary_constant_exterior(const Func &source,
-                                const Expr &value,
-                                const Expr &min0, const Expr &extent0) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       const Expr &min0, const Expr &extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
-    return boundary_constant_exterior(source, value, bounds);
+    return constant_exterior(source, value, bounds);
 }
 
-Func boundary_constant_exterior(const Func &source,
-                                const Expr &value,
-                                const Expr &min0, const Expr &extent0,
-                                const Expr &min1, const Expr &extent1) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       const Expr &min0, const Expr &extent0,
+                       const Expr &min1, const Expr &extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
-    return boundary_constant_exterior(source, value, bounds);
+    return constant_exterior(source, value, bounds);
 }
 
-Func boundary_constant_exterior(const Func &source,
-                                const Expr &value,
-                                const Expr &min0, const Expr &extent0,
-                                const Expr &min1, const Expr &extent1,
-                                const Expr &min2, const Expr &extent2) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       const Expr &min0, const Expr &extent0,
+                       const Expr &min1, const Expr &extent1,
+                       const Expr &min2, const Expr &extent2) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
-    return boundary_constant_exterior(source, value, bounds);
+    return constant_exterior(source, value, bounds);
 }
 
-Func boundary_constant_exterior(const Func &source,
-                                const Expr &value,
-                                const Expr &min0, const Expr &extent0,
-                                const Expr &min1, const Expr &extent1,
-                                const Expr &min2, const Expr &extent2,
-                                const Expr &min3, const Expr &extent3) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       const Expr &min0, const Expr &extent0,
+                       const Expr &min1, const Expr &extent1,
+                       const Expr &min2, const Expr &extent2,
+                       const Expr &min3, const Expr &extent3) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
-    return boundary_constant_exterior(source, value, bounds);
+    return constant_exterior(source, value, bounds);
 }
 
-Func boundary_constant_exterior(const Func &source,
-                                const Expr &value,
-                                const Expr &min0, const Expr &extent0,
-                                const Expr &min1, const Expr &extent1,
-                                const Expr &min2, const Expr &extent2,
-                                const Expr &min3, const Expr &extent3,
-                                const Expr &min4, const Expr &extent4) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       const Expr &min0, const Expr &extent0,
+                       const Expr &min1, const Expr &extent1,
+                       const Expr &min2, const Expr &extent2,
+                       const Expr &min3, const Expr &extent3,
+                       const Expr &min4, const Expr &extent4) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
-    return boundary_constant_exterior(source, value, bounds);
+    return constant_exterior(source, value, bounds);
 }
 
-Func boundary_constant_exterior(const Func &source,
-                                const Expr &value,
-                                const Expr &min0, const Expr &extent0,
-                                const Expr &min1, const Expr &extent1,
-                                const Expr &min2, const Expr &extent2,
-                                const Expr &min3, const Expr &extent3,
-                                const Expr &min4, const Expr &extent4,
-                                const Expr &min5, const Expr &extent5) {
+Func constant_exterior(const Func &source, const Expr &value,
+                       const Expr &min0, const Expr &extent0,
+                       const Expr &min1, const Expr &extent1,
+                       const Expr &min2, const Expr &extent2,
+                       const Expr &min3, const Expr &extent3,
+                       const Expr &min4, const Expr &extent4,
+                       const Expr &min5, const Expr &extent5) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -159,298 +147,367 @@ Func boundary_constant_exterior(const Func &source,
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
     bounds.push_back(std::make_pair(min5, extent5));
-    return boundary_constant_exterior(source, value, bounds);
+    return constant_exterior(source, value, bounds);
 }
-
-Func boundary_repeat_edge(const Func &source,
-                          const Expr &min0, const Expr &extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return boundary_repeat_edge(source, bounds);
-}
-
-Func boundary_repeat_edge(const Func &source,
-                          const Expr &min0, const Expr &extent0,
-                          const Expr &min1, const Expr &extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return boundary_repeat_edge(source, bounds);
-}
-
-Func boundary_repeat_edge(const Func &source,
-                          const Expr &min0, const Expr &extent0,
-                          const Expr &min1, const Expr &extent1,
-                          const Expr &min2, const Expr &extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return boundary_repeat_edge(source, bounds);
-}
-
-Func boundary_repeat_edge(const Func &source,
-                          const Expr &min0, const Expr &extent0,
-                          const Expr &min1, const Expr &extent1,
-                          const Expr &min2, const Expr &extent2,
-                          const Expr &min3, const Expr &extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return boundary_repeat_edge(source, bounds);
-}
-
-Func boundary_repeat_edge(const Func &source,
-                          const Expr &min0, const Expr &extent0,
-                          const Expr &min1, const Expr &extent1,
-                          const Expr &min2, const Expr &extent2,
-                          const Expr &min3, const Expr &extent3,
-                          const Expr &min4, const Expr &extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return boundary_repeat_edge(source, bounds);
-}
-
-Func boundary_repeat_edge(const Func &source,
-                          const Expr &min0, const Expr &extent0,
-                          const Expr &min1, const Expr &extent1,
-                          const Expr &min2, const Expr &extent2,
-                          const Expr &min3, const Expr &extent3,
-                          const Expr &min4, const Expr &extent4,
-                          const Expr &min5, const Expr &extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return boundary_repeat_edge(source, bounds);
-}
-
-Func boundary_repeat_image(const Func &source,
-                           const Expr &min0, const Expr &extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return boundary_repeat_image(source, bounds);
-}
-
-Func boundary_repeat_image(const Func &source,
-                           const Expr &min0, const Expr &extent0,
-                           const Expr &min1, const Expr &extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return boundary_repeat_image(source, bounds);
-}
-
-Func boundary_repeat_image(const Func &source,
-                           const Expr &min0, const Expr &extent0,
-                           const Expr &min1, const Expr &extent1,
-                           const Expr &min2, const Expr &extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return boundary_repeat_image(source, bounds);
-}
-
-Func boundary_repeat_image(const Func &source,
-                           const Expr &min0, const Expr &extent0,
-                           const Expr &min1, const Expr &extent1,
-                           const Expr &min2, const Expr &extent2,
-                           const Expr &min3, const Expr &extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return boundary_repeat_image(source, bounds);
-}
-
-Func boundary_repeat_image(const Func &source,
-                           const Expr &min0, const Expr &extent0,
-                           const Expr &min1, const Expr &extent1,
-                           const Expr &min2, const Expr &extent2,
-                           const Expr &min3, const Expr &extent3,
-                           const Expr &min4, const Expr &extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return boundary_repeat_image(source, bounds);
-}
-
-Func boundary_repeat_image(const Func &source,
-                           const Expr &min0, const Expr &extent0,
-                           const Expr &min1, const Expr &extent1,
-                           const Expr &min2, const Expr &extent2,
-                           const Expr &min3, const Expr &extent3,
-                           const Expr &min4, const Expr &extent4,
-                           const Expr &min5, const Expr &extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return boundary_repeat_image(source, bounds);
-}
-
-Func boundary_mirror_image(const Func &source,
-                              const Expr &min0, const Expr &extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return boundary_mirror_image(source, bounds);
-}
-
-Func boundary_mirror_image(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return boundary_mirror_image(source, bounds);
-}
-
-Func boundary_mirror_image(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return boundary_mirror_image(source, bounds);
-}
-
-Func boundary_mirror_image(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2,
-                              const Expr &min3, const Expr &extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return boundary_mirror_image(source, bounds);
-}
-
-Func boundary_mirror_image(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2,
-                              const Expr &min3, const Expr &extent3,
-                              const Expr &min4, const Expr &extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return boundary_mirror_image(source, bounds);
-}
-
-Func boundary_mirror_image(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2,
-                              const Expr &min3, const Expr &extent3,
-                              const Expr &min4, const Expr &extent4,
-                              const Expr &min5, const Expr &extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return boundary_mirror_image(source, bounds);
-}
-
-Func boundary_mirror_interior(const Func &source,
-                              const Expr &min0, const Expr &extent0) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    return boundary_mirror_interior(source, bounds);
-}
-
-Func boundary_mirror_interior(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    return boundary_mirror_interior(source, bounds);
-}
-
-Func boundary_mirror_interior(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    return boundary_mirror_interior(source, bounds);
-}
-
-Func boundary_mirror_interior(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2,
-                              const Expr &min3, const Expr &extent3) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    return boundary_mirror_interior(source, bounds);
-}
-
-Func boundary_mirror_interior(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2,
-                              const Expr &min3, const Expr &extent3,
-                              const Expr &min4, const Expr &extent4) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    return boundary_mirror_interior(source, bounds);
-}
-
-Func boundary_mirror_interior(const Func &source,
-                              const Expr &min0, const Expr &extent0,
-                              const Expr &min1, const Expr &extent1,
-                              const Expr &min2, const Expr &extent2,
-                              const Expr &min3, const Expr &extent3,
-                              const Expr &min4, const Expr &extent4,
-                              const Expr &min5, const Expr &extent5) {
-    std::vector<std::pair<Expr, Expr> > bounds;
-    bounds.push_back(std::make_pair(min0, extent0));
-    bounds.push_back(std::make_pair(min1, extent1));
-    bounds.push_back(std::make_pair(min2, extent2));
-    bounds.push_back(std::make_pair(min3, extent3));
-    bounds.push_back(std::make_pair(min4, extent4));
-    bounds.push_back(std::make_pair(min5, extent5));
-    return boundary_mirror_interior(source, bounds);
-}
-
 #endif
+// @}
+
+/** Impose a boundary condition such that the nearest edge sample is returned
+ *  everywhere outside the given region.
+ */
+// @{
+Func repeat_edge(const Func &source,
+                 const std::vector<std::pair<Expr, Expr> > &bounds);
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+template <typename ...Bounds>
+Func repeat_edge(const Func &source, Bounds... bounds) {
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_bounds(collected_bounds, bounds...);
+    return repeat_edge(source, collected_bounds);
+}
+#else
+Func repeat_edge(const Func &source,
+                 const Expr &min0, const Expr &extent0) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    return repeat_edge(source, bounds);
+}
+
+Func repeat_edge(const Func &source,
+                 const Expr &min0, const Expr &extent0,
+                 const Expr &min1, const Expr &extent1) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    return repeat_edge(source, bounds);
+}
+
+Func repeat_edge(const Func &source,
+                 const Expr &min0, const Expr &extent0,
+                 const Expr &min1, const Expr &extent1,
+                 const Expr &min2, const Expr &extent2) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    return repeat_edge(source, bounds);
+}
+
+Func repeat_edge(const Func &source,
+                 const Expr &min0, const Expr &extent0,
+                 const Expr &min1, const Expr &extent1,
+                 const Expr &min2, const Expr &extent2,
+                 const Expr &min3, const Expr &extent3) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    return repeat_edge(source, bounds);
+}
+
+Func repeat_edge(const Func &source,
+                 const Expr &min0, const Expr &extent0,
+                 const Expr &min1, const Expr &extent1,
+                 const Expr &min2, const Expr &extent2,
+                 const Expr &min3, const Expr &extent3,
+                 const Expr &min4, const Expr &extent4) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    return repeat_edge(source, bounds);
+}
+
+Func repeat_edge(const Func &source,
+                 const Expr &min0, const Expr &extent0,
+                 const Expr &min1, const Expr &extent1,
+                 const Expr &min2, const Expr &extent2,
+                 const Expr &min3, const Expr &extent3,
+                 const Expr &min4, const Expr &extent4,
+                 const Expr &min5, const Expr &extent5) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    bounds.push_back(std::make_pair(min5, extent5));
+    return repeat_edge(source, bounds);
+}
+#endif
+// @}
+
+/** Impose a boundary condition such that the entire coordinate space is
+ *  tiled with copies of the image abutted against each other.
+ */
+// @{
+Func repeat_image(const Func &source,
+                           const std::vector<std::pair<Expr, Expr> > &bounds);
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+template <typename ...Bounds>
+Func repeat_image(const Func &source, Bounds... bounds) {
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_bounds(collected_bounds, bounds...);
+    return repeat_image(source, collected_bounds);
+}
+#else
+Func repeat_image(const Func &source,
+                  const Expr &min0, const Expr &extent0) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    return repeat_image(source, bounds);
+}
+
+Func repeat_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    return repeat_image(source, bounds);
+}
+
+Func repeat_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    return repeat_image(source, bounds);
+}
+
+Func repeat_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2,
+                  const Expr &min3, const Expr &extent3) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    return repeat_image(source, bounds);
+}
+
+Func repeat_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2,
+                  const Expr &min3, const Expr &extent3,
+                  const Expr &min4, const Expr &extent4) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    return repeat_image(source, bounds);
+}
+
+Func repeat_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2,
+                  const Expr &min3, const Expr &extent3,
+                  const Expr &min4, const Expr &extent4,
+                  const Expr &min5, const Expr &extent5) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    bounds.push_back(std::make_pair(min5, extent5));
+    return repeat_image(source, bounds);
+}
+#endif
+
+/** Impose a boundary condition such that the entire coordinate space is
+ *  tiled with copies of the image abutted against each other, but mirror
+ *  them such that adjacent edges are the same.
+ */
+// @{
+Func mirror_image(const Func &source,
+                           const std::vector<std::pair<Expr, Expr> > &bounds);
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+template <typename ...Bounds>
+Func mirror_image(const Func &source, Bounds... bounds) {
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_bounds(collected_bounds, bounds...);
+    return mirror_image(source, collected_bounds);
+}
+#else
+Func mirror_image(const Func &source,
+                  const Expr &min0, const Expr &extent0) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    return mirror_image(source, bounds);
+}
+
+Func mirror_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    return mirror_image(source, bounds);
+}
+
+Func mirror_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    return mirror_image(source, bounds);
+}
+
+Func mirror_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2,
+                  const Expr &min3, const Expr &extent3) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    return mirror_image(source, bounds);
+}
+
+Func mirror_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2,
+                  const Expr &min3, const Expr &extent3,
+                  const Expr &min4, const Expr &extent4) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    return mirror_image(source, bounds);
+}
+
+Func mirror_image(const Func &source,
+                  const Expr &min0, const Expr &extent0,
+                  const Expr &min1, const Expr &extent1,
+                  const Expr &min2, const Expr &extent2,
+                  const Expr &min3, const Expr &extent3,
+                  const Expr &min4, const Expr &extent4,
+                  const Expr &min5, const Expr &extent5) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    bounds.push_back(std::make_pair(min5, extent5));
+    return mirror_image(source, bounds);
+}
+#endif
+// @}
+
+/** Impose a boundary condition such that the entire coordinate space is
+ *  tiled with copies of the image abutted against each other, but mirror
+ *  them such that adjacent edges are the same and then overlap the edges.
+ *
+ *  This produces an error if any extent is 1 or less. (TODO: check this.)
+ */
+// @{
+Func mirror_interior(const Func &source,
+                              const std::vector<std::pair<Expr, Expr> > &bounds);
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+template <typename ...Bounds>
+Func mirror_interior(const Func &source, Bounds... bounds) {
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_bounds(collected_bounds, bounds...);
+    return mirror_interior(source, collected_bounds);
+}
+#else
+Func mirror_interior(const Func &source,
+                     const Expr &min0, const Expr &extent0) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    return mirror_interior(source, bounds);
+}
+
+Func mirror_interior(const Func &source,
+                     const Expr &min0, const Expr &extent0,
+                     const Expr &min1, const Expr &extent1) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    return mirror_interior(source, bounds);
+}
+
+Func mirror_interior(const Func &source,
+                     const Expr &min0, const Expr &extent0,
+                     const Expr &min1, const Expr &extent1,
+                     const Expr &min2, const Expr &extent2) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    return mirror_interior(source, bounds);
+}
+
+Func mirror_interior(const Func &source,
+                     const Expr &min0, const Expr &extent0,
+                     const Expr &min1, const Expr &extent1,
+                     const Expr &min2, const Expr &extent2,
+                     const Expr &min3, const Expr &extent3) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    return mirror_interior(source, bounds);
+}
+
+Func mirror_interior(const Func &source,
+                     const Expr &min0, const Expr &extent0,
+                     const Expr &min1, const Expr &extent1,
+                     const Expr &min2, const Expr &extent2,
+                     const Expr &min3, const Expr &extent3,
+                     const Expr &min4, const Expr &extent4) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    return mirror_interior(source, bounds);
+}
+
+Func mirror_interior(const Func &source,
+                     const Expr &min0, const Expr &extent0,
+                     const Expr &min1, const Expr &extent1,
+                     const Expr &min2, const Expr &extent2,
+                     const Expr &min3, const Expr &extent3,
+                     const Expr &min4, const Expr &extent4,
+                     const Expr &min5, const Expr &extent5) {
+    std::vector<std::pair<Expr, Expr> > bounds;
+    bounds.push_back(std::make_pair(min0, extent0));
+    bounds.push_back(std::make_pair(min1, extent1));
+    bounds.push_back(std::make_pair(min2, extent2));
+    bounds.push_back(std::make_pair(min3, extent3));
+    bounds.push_back(std::make_pair(min4, extent4));
+    bounds.push_back(std::make_pair(min5, extent5));
+    return mirror_interior(source, bounds);
+}
+#endif
+// @}
+
+}
 
 }
 

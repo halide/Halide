@@ -3,6 +3,7 @@
 #include <Halide.h>
 
 using namespace Halide;
+using namespace Halide::BoundaryConditions;
 
 int main(int argc, char **argv) {
 
@@ -21,11 +22,11 @@ int main(int argc, char **argv) {
 
     Func f("f"), g("g"), h("h"), m("m"), n("n");
 
-    f(x, y) = boundary_constant_exterior(input_f, 42, 0, 10, 0, 10)(x, y);
-    g(x, y) = boundary_repeat_edge(input_f, 0, 10, 0, 10)(x, y);
-    h(x, y) = boundary_repeat_image(input_f, 0, 10, 0, 10)(x, y);
-    m(x, y) = boundary_mirror_image(input_f, 0, 10, 0, 10)(x, y);
-    n(x, y) = boundary_mirror_interior(input_f, 0, 10, 0, 10)(x, y);
+    f(x, y) = constant_exterior(input_f, 42, 0, 10, 0, 10)(x, y);
+    g(x, y) = repeat_edge(input_f, 0, 10, 0, 10)(x, y);
+    h(x, y) = repeat_image(input_f, 0, 10, 0, 10)(x, y);
+    m(x, y) = mirror_image(input_f, 0, 10, 0, 10)(x, y);
+    n(x, y) = mirror_interior(input_f, 0, 10, 0, 10)(x, y);
 
     const int32_t test_min = -25;
     const int32_t test_extent = 50;
