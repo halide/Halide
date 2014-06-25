@@ -173,7 +173,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         llvm_size = codegen_allocation_size(name, type, extents);
     }
 
-    // Only allocate memory if the condition is true.
+    // Only allocate memory if the condition is true, otherwise 0.
     if (llvm_size != NULL) {
         Value *llvm_condition = codegen(condition);
         llvm_size = builder->CreateSelect(llvm_condition,
@@ -189,7 +189,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         // stack pointer, but this makes llvm generate streams of
         // spill/reloads.
         Value *ptr = create_alloca_at_entry(i32x8, allocation.stack_size/32, name);
-        ;        allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
+        allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
 
     } else {
         // call malloc

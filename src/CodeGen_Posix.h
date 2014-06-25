@@ -63,10 +63,6 @@ protected:
     struct Allocation {
         llvm::Value *ptr;
 
-        /** If there is a create_buffer_t associated with this
-         * allocation, this remembers the call expression. */
-        Expr create_buffer_t_call;
-
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
         int stack_size;
