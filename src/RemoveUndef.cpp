@@ -344,7 +344,7 @@ private:
     }
 
     void visit(const Allocate *op) {
-      std::vector<Expr> new_extents;
+        std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
@@ -359,7 +359,7 @@ private:
         if (all_extents_unmodified && body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body);
         }
     }
 

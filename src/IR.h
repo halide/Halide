@@ -809,9 +809,11 @@ struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
     std::vector<Expr> extents;
+    Expr condition;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents, Stmt body) {
+    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
+                     Expr condition, Stmt body) {
         for (size_t i = 0; i < extents.size(); i++) {
             internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
             internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -822,6 +824,7 @@ struct Allocate : public StmtNode<Allocate> {
         node->name = name;
         node->type = type;
         node->extents = extents;
+        node->condition = condition;
 
         node->body = body;
         return node;

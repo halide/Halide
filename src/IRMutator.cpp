@@ -240,15 +240,21 @@ void IRMutator::visit(const Provide *op) {
 }
 
 void IRMutator::visit(const Allocate *op) {
-  std::vector<Expr> new_extents;
+    std::vector<Expr> new_extents;
     bool all_extents_unmodified = true;
     for (size_t i = 0; i < op->extents.size(); i++) {
         new_extents.push_back(mutate(op->extents[i]));
         all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
     }
     Stmt body = mutate(op->body);
-    if (all_extents_unmodified && body.same_as(op->body)) stmt = op;
-    else stmt = Allocate::make(op->name, op->type, new_extents, body);
+    Expr condition = mutate(op->condition);
+    if (all_extents_unmodified &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
+        stmt = op;
+    } else {
+        stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
+    }
 }
 
 void IRMutator::visit(const Free *op) {
