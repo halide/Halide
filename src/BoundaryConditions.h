@@ -32,6 +32,7 @@ Func boundary_mirror_interior(const Func &source,
 #if __cplusplus > 199711L
 
 namespace Internal {
+
 void collect_boundary_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
                              const Expr &min, const Expr &extent) {
     collected_bounds.push_back(std::make_pair(min, extent));
@@ -48,27 +49,37 @@ void collect_boundary_bounds(std::vector<std::pair<Expr, Expr> > &collected_boun
 
 template <typename ...Bounds>
 Func boundary_constant_exterior(const Func &source, const Expr &value, Bounds... bounds) {
-    return boundary_constant_exterior(source, value, collect_boundary_bounds(bounds...));
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_boundary_bounds(collected_bounds, bounds...);
+    return boundary_constant_exterior(source, value, collected_bounds);
 }
 
 template <typename ...Bounds>
 Func boundary_repeat_edge(const Func &source, Bounds... bounds) {
-    return boundary_repeat_edge(source, collect_boundary_bounds(bounds...));
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_boundary_bounds(collected_bounds, bounds...);
+    return boundary_repeat_edge(source, collected_bounds);
 }
 
 template <typename ...Bounds>
 Func boundary_repeat_image(const Func &source, Bounds... bounds) {
-    return boundary_repeat_image(source, collect_boundary_bounds(bounds...));
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_boundary_bounds(collected_bounds, bounds...);
+    return boundary_repeat_image(source, collected_bounds);
 }
 
 template <typename ...Bounds>
 Func boundary_mirror_image(const Func &source, Bounds... bounds) {
-    return boundary_mirror_image(source, collect_boundary_bounds(bounds...));
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_boundary_bounds(collected_bounds, bounds...);
+    return boundary_mirror_image(source, collected_bounds);
 }
 
 template <typename ...Bounds>
 Func boundary_mirror_interior(const Func &source, Bounds... bounds) {
-    return boundary_mirror_interior(source, collect_boundary_bounds(bounds...));
+    std::vector<std::pair<Expr, Expr> > collected_bounds;
+    Internal::collect_boundary_bounds(collected_bounds, bounds...);
+    return boundary_mirror_interior(source, collected_bounds);
 }
 
 #else
