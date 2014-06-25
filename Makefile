@@ -335,7 +335,7 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@; \
 	else \
 		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
+		-Iinclude -L$(BIN_DIR) -lHalide $(STATIC_TEST_LIBS) $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
 test_%: $(BIN_DIR)/test_%
