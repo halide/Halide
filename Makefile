@@ -136,7 +136,7 @@ endif
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+STATIC_TEST_LIBS ?= -L/usr/local/cuda/lib -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -framework OpenCL
