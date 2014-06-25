@@ -43,8 +43,10 @@ struct Target {
                    NoBoundsQuery = 1 << 9, ///< Disable the bounds querying functionality.
                    ARMv7s    = 1 << 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
                    AArch64Backend = 1 << 11, ///< Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
-                   CLDoubles = 1 << 12 ///< Enable double support on OpenCL targets
-
+                   CLDoubles = 1 << 12, ///< Enable double support on OpenCL targets
+                   FMA       = 1 << 13, /// Enable x86 FMA instruction
+                   FMA4      = 1 << 14, /// Enable x86 (AMD) FMA4 instruction set
+                   F16C      = 1 << 15  /// Enable x86 16-bit float support
     };
 
     /** A bitmask that stores the active features. */

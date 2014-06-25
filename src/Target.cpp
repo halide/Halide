@@ -73,8 +73,9 @@ Target get_host_target() {
     bool have_sse41 = info[2] & (1 << 19);
     bool have_sse2 = info[3] & (1 << 26);
     bool have_avx = info[2] & (1 << 28);
-    bool have_f16 = info[2] & (1 << 29);
+    bool have_f16c = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
+    bool have_fma = info[2] & (1 << 12);
 
     user_assert(have_sse2)
         << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
@@ -88,8 +89,10 @@ Target get_host_target() {
     uint64_t features = 0;
     if (have_sse41) features |= Target::SSE41;
     if (have_avx)   features |= Target::AVX;
+    if (have_f16c)  features |= Target::F16C;
+    if (have_fma)   features |= Target::FMA;
 
-    if (use_64_bits && have_avx && have_f16 && have_rdrand) {
+    if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2?
         // Call cpuid with eax=7, ecx=0
         int info2[4];
@@ -269,6 +272,12 @@ bool Target::merge_string(const std::string &target) {
             features |= Target::NoBoundsQuery;
         } else if (tok == "cl_doubles") {
             features |= Target::CLDoubles;
+        } else if (tok == "fma") {
+            features |= (Target::FMA | Target::SSE41 | Target::AVX);
+        } else if (tok == "fma4") {
+            features |= (Target::FMA4 | Target::SSE41 | Target::AVX);
+        } else if (tok == "f16c") {
+            features |= (Target::F16C | Target::SSE41 | Target::AVX);
         } else {
             return false;
         }
@@ -311,7 +320,8 @@ std::string Target::to_string() const {
   };
   const char* const feature_names[] = {
     "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
-    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles"
+    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles",
+    "fma", "fma4", "f16c"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
