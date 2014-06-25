@@ -676,7 +676,22 @@ string CodeGen_X86::mcpu() const {
 }
 
 string CodeGen_X86::mattrs() const {
-    return "";
+    std::string features;
+    std::string separator;
+    if (target.features & Target::FMA) {
+        features += "+fma";
+        separator = " ";
+    }
+    if (target.features & Target::FMA4) {
+        features += separator + "+fma4";
+        separator = " ";
+    }
+    if (target.features & Target::F16C) {
+        features += separator + "+f16c";
+        separator = " ";
+    }
+
+    return features;
 }
 
 bool CodeGen_X86::use_soft_float_abi() const {
