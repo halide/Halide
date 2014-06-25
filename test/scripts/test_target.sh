@@ -61,6 +61,7 @@ else
     make test_errors -j8 &&
     make test_static -j8 &&
     make test_tutorials -j8 &&
+    make test_opengl &&
     make test_performance &&
     make test_apps &&
     echo "All tests pass"

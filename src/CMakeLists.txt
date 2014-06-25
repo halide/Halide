@@ -26,7 +26,10 @@ link_directories ("${LLVM_LIB}")
 if(WIN32)
   file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
 else()
-  execute_process(COMMAND "${LLVM_CONFIG}" --ldflags --libs OUTPUT_VARIABLE LIBS)
+  #file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/libLLVM*.a")
+  execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS_UNSTRIPPED)
+  string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
+  string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
 message("${LLVM_LIB} ${LIBS}")
@@ -74,6 +77,7 @@ set(RUNTIME_CPP
   opengl
   osx_opengl_context
   linux_opengl_context
+  android_opengl_context
   posix_allocator
   posix_clock
   osx_clock
@@ -94,16 +98,20 @@ set(RUNTIME_CPP
   cuda_debug
   opencl_debug
   opengl_debug
+  windows_cuda
+  windows_opencl
+  windows_cuda_debug
+  windows_opencl_debug
   windows_io
   posix_print)
 set (RUNTIME_LL
   arm
   posix_math
-  pnacl_math
   ptx_dev
   x86_avx
   x86
   x86_sse41
+  win32_math
   pnacl_math)
 set (RUNTIME_BC
   compute_20
@@ -254,6 +262,7 @@ set(HEADER_FILES
   Qualify.h
   ExprUsesVar.h
   Random.h
+  ParallelRVar.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -342,14 +351,15 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   InjectHostDevBufferCopies.cpp
   Schedule.cpp
   FuseGPUThreadLoops.cpp
+  ParallelRVar.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
 target_link_libraries(Halide InitialModules ${LIBS})
 # if this is a DLL, don't link dependencies to this set of libs.
-if (HALIDE_SHARED_LIBRARY)
-  set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
-endif()
+#if (HALIDE_SHARED_LIBRARY)
+#  set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
+#endif()
 
 add_dependencies(Halide
   InitialModules

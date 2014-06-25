@@ -35,11 +35,11 @@ struct LoopLevel {
     /** root is a special LoopLevel value which represents the
      * location outside of all for loops */
     static LoopLevel root() {
-        return LoopLevel("", "<root>");
+        return LoopLevel("", "__root");
     }
     /** Test if a loop level is 'root', which describes the site
      * outside of all for loops */
-    bool is_root() const {return var == "<root>";}
+    bool is_root() const {return var == "__root";}
 
     /** Compare this loop level against the variable name of a for
      * loop, to see if this loop level refers to the site
@@ -65,6 +65,7 @@ struct LoopLevel {
 struct Split {
     std::string old_var, outer, inner;
     Expr factor;
+    bool exact; // Is it required that the factor divides the extent of the old var. True for splits of RVars.
 
     enum SplitType {SplitVar = 0, RenameVar, FuseVars};
 
@@ -86,6 +87,7 @@ struct Split {
 struct Dim {
     std::string var;
     For::ForType for_type;
+    bool pure;
 };
 
 struct Bound {
@@ -99,6 +101,8 @@ struct Specialization {
     Expr condition;
     IntrusivePtr<ScheduleContents> schedule;
 };
+
+class ReductionDomain;
 
 /** A schedule for a single stage of a Halide pipeline. Right now this
  * interface is basically a struct, offering mutable access to its
@@ -141,6 +145,12 @@ public:
     std::vector<Dim> &dims();
     // @}
 
+    /** Any reduction domain associated with this schedule. */
+    // @{
+    const ReductionDomain &reduction_domain() const;
+    void set_reduction_domain(const ReductionDomain &d);
+    // @}
+
     /** The list and order of dimensions used to store this
      * function. The first dimension in the vector corresponds to the
      * innermost dimension for storage (i.e. which dimension is
@@ -176,6 +186,12 @@ public:
     const LoopLevel &compute_level() const;
     LoopLevel &store_level();
     LoopLevel &compute_level();
+    // @}
+
+    /** Are race conditions permitted? */
+    // @{
+    bool allow_race_conditions() const;
+    bool &allow_race_conditions();
     // @}
 
 };

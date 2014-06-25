@@ -9,6 +9,8 @@
 #include "Introspection.h"
 #include "IRPrinter.h"
 #include "IRMutator.h"
+#include "ParallelRVar.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -210,9 +212,15 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], For::Serial};
+        Dim d = {args[i], For::Serial, true};
         contents.ptr->schedule.dims().push_back(d);
         contents.ptr->schedule.storage_dims().push_back(args[i]);
+    }
+
+    // Add the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), For::Serial, true};
+        contents.ptr->schedule.dims().push_back(d);
     }
 
     for (size_t i = 0; i < values.size(); i++) {
@@ -346,6 +354,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     r.args = args;
     r.values = values;
     r.domain = check.reduction_domain;
+    r.schedule.set_reduction_domain(r.domain);
 
     // The reduction value and args probably refer back to the
     // function itself, introducing circular references and hence
@@ -369,7 +378,15 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // First add any reduction domain
     if (r.domain.defined()) {
         for (size_t i = 0; i < r.domain.domain().size(); i++) {
-            Dim d = {r.domain.domain()[i].var, For::Serial};
+            // Is this RVar actually pure (safe to parallelize and
+            // reorder)? It's pure if one value of the RVar can never
+            // access from the same memory that another RVar is
+            // writing to.
+            const string &v = r.domain.domain()[i].var;
+
+            bool pure = can_parallelize_rvar(v, name(), r);
+
+            Dim d = {v, For::Serial, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -377,9 +394,15 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], For::Serial};
+            Dim d = {pure_args[i], For::Serial, true};
             r.schedule.dims().push_back(d);
         }
+    }
+
+    // Then the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), For::Serial, true};
+        r.schedule.dims().push_back(d);
     }
 
     // If there's no recursive reference, no reduction domain, and all
