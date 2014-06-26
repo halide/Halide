@@ -863,9 +863,10 @@ struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
     Region bounds;
+    Expr condition;
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
             internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
@@ -879,6 +880,7 @@ struct Realize : public StmtNode<Realize> {
         node->name = name;
         node->types = types;
         node->bounds = bounds;
+        node->condition = condition;
         node->body = body;
         return node;
     }

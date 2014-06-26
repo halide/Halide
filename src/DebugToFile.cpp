@@ -88,7 +88,7 @@ class DebugToFile : public IRMutator {
                                          vector<Expr>());
             body = Block::make(mutate(op->body), body);
 
-            stmt = Realize::make(op->name, op->types, op->bounds, body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
 
         } else {
             IRMutator::visit(op);
@@ -109,7 +109,7 @@ Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
         Expr extent = Variable::make(Int(32), output + ".extent." + dim);
         output_bounds.push_back(Range(min, extent));
     }
-    s = Realize::make(output, out.output_types(), output_bounds, s);
+    s = Realize::make(output, out.output_types(), output_bounds, const_true(), s);
     s = DebugToFile(env).mutate(s);
 
     // Remove the realize node we wrapped around the output

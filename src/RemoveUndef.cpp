@@ -356,10 +356,16 @@ private:
         }
         Stmt body = mutate(op->body);
         if (!stmt.defined()) return;
-        if (all_extents_unmodified && body.same_as(op->body)) {
+
+        Expr condition = mutate(op->condition);
+        if (!expr.defined()) return;
+
+        if (all_extents_unmodified &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
         }
     }
 
@@ -392,10 +398,16 @@ private:
 
         Stmt body = mutate(op->body);
         if (!stmt.defined()) return;
-        if (!bounds_changed && body.same_as(op->body)) {
+
+        Expr condition = mutate(op->condition);
+        if (!expr.defined()) return;
+
+        if (!bounds_changed &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition)) {
             stmt = op;
         } else {
-            stmt = Realize::make(op->name, op->types, new_bounds, body);
+            stmt = Realize::make(op->name, op->types, new_bounds, condition, body);
         }
     }
 
