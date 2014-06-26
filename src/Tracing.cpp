@@ -130,8 +130,6 @@ private:
             args.push_back(op->name);
             args.push_back(halide_trace_begin_realization); // event type for begin realization
             args.push_back(0); // realization id
-            //TODO: args.push_back(op->condition);
-
             args.push_back(0); // value index
             args.push_back(0); // value
 
