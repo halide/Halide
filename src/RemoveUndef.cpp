@@ -355,10 +355,10 @@ private:
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
 
         Expr condition = mutate(op->condition);
-        if (!expr.defined()) return;
+        if (!condition.defined()) return;
 
         if (all_extents_unmodified &&
             body.same_as(op->body) &&
@@ -397,10 +397,10 @@ private:
         }
 
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
+        if (!body.defined()) return;
 
         Expr condition = mutate(op->condition);
-        if (!expr.defined()) return;
+        if (!condition.defined()) return;
 
         if (!bounds_changed &&
             body.same_as(op->body) &&
