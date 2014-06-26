@@ -363,7 +363,7 @@ class VectorizeLoops : public IRMutator {
             internal_allocations.push(op->name, 0);
             Stmt body = mutate(op->body);
             internal_allocations.pop(op->name);
-            stmt = Allocate::make(op->name, op->type, new_extents, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, op->condition, body);
         }
 
         Stmt scalarize(Stmt s) {
