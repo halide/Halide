@@ -279,12 +279,8 @@ private:
                 ProductionGuarder g(op->name, compute_predicate);
                 Stmt body = g.mutate(op->body);
 
-                Region bounds = op->bounds;
-                if (!is_one(alloc_predicate) && bounds.size()) {
-                    // We can maybe skip the realize too.
-                    bounds.back().extent = select(alloc_predicate, bounds.back().extent, 0);
-                }
-                stmt = Realize::make(op->name, op->types, bounds, body);
+                stmt = Realize::make(op->name, op->types, op->bounds,
+                                     alloc_predicate, body);
             } else {
                 IRMutator::visit(op);
             }

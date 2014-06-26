@@ -499,7 +499,12 @@ void IRPrinter::visit(const Realize *op) {
         stream << "]";
         if (i < op->bounds.size() - 1) stream << ", ";
     }
-    stream << ") {\n";
+    stream << ")";
+    if (!is_one(op->condition)) {
+        stream << " if ";
+        print(op->condition);
+    }
+    stream << " {\n";
 
     indent += 2;
     print(op->body);

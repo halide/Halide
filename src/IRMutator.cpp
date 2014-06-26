@@ -277,10 +277,14 @@ void IRMutator::visit(const Realize *op) {
     }
 
     Stmt body = mutate(op->body);
-    if (!bounds_changed && body.same_as(op->body)) {
+    Expr condition = mutate(op->condition);
+    if (!bounds_changed &&
+        body.same_as(op->body) &&
+        condition.same_as(op->condition)) {
         stmt = op;
     } else {
-        stmt = Realize::make(op->name, op->types, new_bounds, body);
+        stmt = Realize::make(op->name, op->types, new_bounds,
+                             condition, body);
     }
 }
 
