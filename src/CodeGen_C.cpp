@@ -10,6 +10,7 @@
 #include "Param.h"
 #include "Var.h"
 #include "Lerp.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -1055,14 +1056,19 @@ void CodeGen_C::visit(const Allocate *op) {
             }
         }
     } else {
-        internal_assert(op->extents.size() > 0); // Otherwise allocation is constant and zero sized.
+        std::vector<Expr> extents(op->extents);
+        // Check that the allocation is not scalar (if it were scalar
+        // it would have constant size).
+        internal_assert(extents.size() > 1);
 
-        size_id = print_assignment(Int(64), print_expr(op->extents[0]));
+        extents.push_back(simplify(Select::make(op->condition, 1, 0)));
 
-        for (size_t i = 1; i < op->extents.size(); i++) {
+        size_id = print_assignment(Int(64), print_expr(extents[0]));
+
+        for (size_t i = 1; i < extents.size(); i++) {
             // Make the code a little less cluttered for two-dimensional case
             string new_size_id_rhs;
-            string next_extent = print_expr(op->extents[i]);
+            string next_extent = print_expr(extents[i]);
             if (i > 1) {
                 new_size_id_rhs =  "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
             } else {
@@ -1215,31 +1221,32 @@ void CodeGen_C::test() {
         "{\n"
         " int64_t _0 = 43;\n"
         " int64_t _1 = _0 * _beta;\n"
-        " if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
+        " int64_t _2 = (_1 > ((int64_t(1) << 31) - 1)) ? _1 : (_1 * 1);\n"
+        " if ((_2 > ((int64_t(1) << 31) - 1)) || ((_2 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
         "  halide_printf(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
         " } // overflow test tmp.heap\n"
-        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_1);\n"
+        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
         " {\n"
         "  int32_t _tmp_stack[127];\n"
-        "  int32_t _2 = _beta + 1;\n"
-        "  int32_t _3;\n"
-        "  bool _4 = _2 < 1;\n"
-        "  if (_4)\n"
+        "  int32_t _3 = _beta + 1;\n"
+        "  int32_t _4;\n"
+        "  bool _5 = _3 < 1;\n"
+        "  if (_5)\n"
         "  {\n"
-        "   int64_t _5 = (int64_t)(3);\n"
-        "   int32_t _6 = halide_printf(__user_context_, \"%lld \\n\", _5);\n"
-        "   int32_t _7 = (_6, 3);\n"
-        "   _3 = _7;\n"
-        "  } // if _4\n"
+        "   int64_t _6 = (int64_t)(3);\n"
+        "   int32_t _7 = halide_printf(__user_context_, \"%lld \\n\", _6);\n"
+        "   int32_t _8 = (_7, 3);\n"
+        "   _4 = _8;\n"
+        "  } // if _5\n"
         "  else\n"
         "  {\n"
-        "   _3 = 3;\n"
-        "  } // if _4 else\n"
-        "  int32_t _8 = _3;\n"
-        "  bool _9 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t _10 = (int32_t)(_9 ? _8 : 2);\n"
-        "  _buf[_2] = _10;\n"
+        "   _4 = 3;\n"
+        "  } // if _5 else\n"
+        "  int32_t _9 = _4;\n"
+        "  bool _10 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  int32_t _11 = (int32_t)(_10 ? _9 : 2);\n"
+        "  _buf[_3] = _11;\n"
         " } // alloc _tmp_stack\n"
         " halide_free(__user_context_, _tmp_heap);\n"
         "} // alloc _tmp_heap\n"

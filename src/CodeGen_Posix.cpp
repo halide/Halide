@@ -177,8 +177,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     if (llvm_size != NULL) {
         Value *llvm_condition = codegen(condition);
         llvm_size = builder->CreateSelect(llvm_condition,
-                                      llvm_size,
-                                      ConstantInt::get(llvm_size->getType(), 0));
+                                          llvm_size,
+                                          ConstantInt::get(llvm_size->getType(), 0));
     }
 
     llvm::Type *llvm_type = llvm_type_of(type);
