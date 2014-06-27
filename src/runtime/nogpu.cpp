@@ -21,3 +21,6 @@ extern "C" WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
 extern "C" WEAK int halide_dev_free(void *user_context, buffer_t *buf) {
     return 0;
 }
+
+extern "C" WEAK void halide_release(void *user_context) {
+}

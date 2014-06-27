@@ -12,7 +12,21 @@ using std::ostringstream;
 using std::string;
 using std::vector;
 
-CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev() {
+namespace {
+std::string replace_all(std::string &str,
+                        const std::string &find,
+                        const std::string &replace) {
+    size_t pos = 0;
+    while ((pos = str.find(find, pos)) != std::string::npos) {
+        str.replace(pos, find.length(), replace);
+        pos += replace.length();
+    }
+    return str;
+}
+}
+
+CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
+    : target(target) {
     debug(1) << "Creating GLSL codegen\n";
     glc = new CodeGen_GLSL(src_stream);
 }
@@ -21,10 +35,11 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
     delete glc;
 }
 
-void CodeGen_OpenGL_Dev::add_kernel(Stmt s, string name,
-                                    const vector<Argument> &args) {
+void CodeGen_OpenGL_Dev::add_kernel(Stmt s,
+                                    string name,
+                                    const vector<GPU_Argument> &args) {
     cur_kernel_name = name;
-    glc->compile(s, name, args);
+    glc->compile(s, name, args, target);
 }
 
 void CodeGen_OpenGL_Dev::init_module() {
@@ -90,6 +105,13 @@ string CodeGen_GLSL::print_type(Type type) {
     return oss.str();
 }
 
+// Identifiers containing double underscores '__' are reserved in GLSL, so we
+// have to use a different name mangling scheme than in the C code generator.
+std::string CodeGen_GLSL::print_name(const std::string &name) {
+    std::string mangled = CodeGen_C::print_name(name);
+    return replace_all(mangled, "__", "XX");
+}
+
 void CodeGen_GLSL::visit(const FloatImm *op) {
     // TODO(dheck): use something like dtoa to avoid precision loss in
     // float->decimal conversion
@@ -121,6 +143,29 @@ void CodeGen_GLSL::visit(const For *loop) {
         user_assert(loop->for_type != For::Parallel) << "Parallel loops aren't allowed inside GLSL\n";
         CodeGen_C::visit(loop);
     }
+}
+
+void CodeGen_GLSL::visit(const Select *op) {
+    string cond = print_expr(op->condition);
+
+    string id_value = unique_name('_');
+    do_indent();
+    stream << print_type(op->type) << " " << id_value << ";\n";
+    do_indent();
+    stream << "if (" << cond << ")\n";
+    open_scope(); {
+        string true_val = print_expr(op->true_value);
+        stream << id_value << " = " << true_val << ";\n";
+    } close_scope("");
+    do_indent();
+    stream << "else\n";
+    open_scope(); {
+        string false_val = print_expr(op->false_value);
+        stream << id_value << " = " << false_val<< ";\n";
+        do_indent();
+    } close_scope("");
+
+    id = id_value;
 }
 
 void CodeGen_GLSL::visit(const Max *op) {
@@ -223,8 +268,10 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
     print_assignment(op->type, rhs.str());
 }
 
-void CodeGen_GLSL::compile(Stmt stmt, string name,
-                           const vector<Argument> &args) {
+void CodeGen_GLSL::compile(Stmt stmt,
+                           string name,
+                           const vector<GPU_Argument> &args,
+                           const Target &target) {
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
     // generator to the runtime, and the information Halide passes to the
@@ -251,8 +298,22 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         }
     }
 
-    stream << "#version 120\n";
     stream << header.str();
+
+    // TODO: we need a better way to switch between the different OpenGL
+    // versions (desktop GL, GLES2, GLES3, ...), probably by making it part of
+    // Target.
+    bool opengl_es = (target.os == Target::Android ||
+                      target.os == Target::IOS);
+
+    // Specify default float precision when compiling for OpenGL ES.
+    // TODO: emit correct #version
+    if (opengl_es) {
+        stream << "precision highp float;\n";
+    }
+    stream << "#define sin_f32 sin\n";
+    stream << "#define cos_f32 cos\n";
+    stream << "#define sqrt_f32 sqrt\n";
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {

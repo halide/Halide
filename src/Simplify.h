@@ -6,6 +6,8 @@
  */
 
 #include "IR.h"
+#include "Bounds.h"
+#include "ModulusRemainder.h"
 #include <cmath>
 
 namespace Halide {
@@ -18,8 +20,12 @@ namespace Internal {
  * repeated variable names.
  */
 // @{
-Stmt simplify(Stmt, bool remove_dead_lets = true);
-EXPORT Expr simplify(Expr, bool remove_dead_lets = true);
+EXPORT Stmt simplify(Stmt, bool remove_dead_lets = true,
+                     const Scope<Interval> &bounds = Scope<Interval>(),
+                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>());
+EXPORT Expr simplify(Expr, bool remove_dead_lets = true,
+                     const Scope<Interval> &bounds = Scope<Interval>(),
+                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>());
 // @}
 
 /** Simplify expressions found in a statement, but don't simplify

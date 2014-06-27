@@ -47,14 +47,14 @@ class DebugToFile : public IRMutator {
                 if (i < 4) {
                     args.push_back(op->bounds[i].extent);
                 } else {
-                    args[args.size()-1] = (args[args.size()-1] *
-                                           op->bounds[i].extent);
+                    args.back() *= op->bounds[i].extent;
                 }
             }
-            while (args.size() < 7) args.push_back(1);
+            // Fill the remaining args with ones.
+            args.resize(7, 1);
 
             int type_code = 0;
-            Type t = f.values()[0].type();
+            Type t = op->types[0];
             if (t == Float(32)) {
                 type_code = 0;
             } else if (t == Float(64)) {
@@ -88,7 +88,7 @@ class DebugToFile : public IRMutator {
                                          vector<Expr>());
             body = Block::make(mutate(op->body), body);
 
-            stmt = Realize::make(op->name, op->types, op->bounds, body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
 
         } else {
             IRMutator::visit(op);
@@ -109,7 +109,7 @@ Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
         Expr extent = Variable::make(Int(32), output + ".extent." + dim);
         output_bounds.push_back(Range(min, extent));
     }
-    s = Realize::make(output, out.output_types(), output_bounds, s);
+    s = Realize::make(output, out.output_types(), output_bounds, const_true(), s);
     s = DebugToFile(env).mutate(s);
 
     // Remove the realize node we wrapped around the output

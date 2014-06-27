@@ -4,14 +4,12 @@
 
 extern "C" {
 
-extern int __android_log_vprint(int, const char *, const char *, __builtin_va_list);
+#define ANDROID_LOG_INFO 4
 
-WEAK int halide_printf(void *user_context, const char * fmt, ...) {
-    __builtin_va_list args;
-    __builtin_va_start(args,fmt);
-    int result = __android_log_vprint(7, "halide", fmt, args);
-    __builtin_va_end(args);
-    return result;
+extern int __android_log_print(int, const char *, const char *, ...);
+
+WEAK void __halide_print(void *user_context, const char * str) {
+    __android_log_print(ANDROID_LOG_INFO, "halide", "%s", str);
 }
 
 }

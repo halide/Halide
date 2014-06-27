@@ -1,7 +1,9 @@
-- reductions (histogram, cdf)
 - static compilation
+- cross-compilation
 - parameters
 - debug_to_file
+- print, print_when
+- using the gpu
 - the bounds query interface
 - tuples
 - overriding the runtime
@@ -9,3 +11,6 @@
   useful tricks, e.g., `Image<float> image_buf = lambda(x, y, (sin(x+y)+1)/2).realize(10 * tile_size, 10 * tile_size);`
 - extern functions and extern stages
 - common scheduling patterns
+- specialize
+- parallel reductions (pending parallel_rvar merge)
+- constraints

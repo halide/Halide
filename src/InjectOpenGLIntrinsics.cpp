@@ -3,6 +3,7 @@
 #include "IROperator.h"
 #include "CodeGen_GPU_Dev.h"
 #include "Substitute.h"
+#include "FuseGPUThreadLoops.h"
 
 namespace Halide {
 namespace Internal {
@@ -43,7 +44,8 @@ private:
     }
 
     void visit(const Call *call) {
-        if (!inside_kernel_loop || call->call_type == Call::Intrinsic) {
+        if (!inside_kernel_loop ||
+            call->call_type == Call::Intrinsic || call->call_type == Call::Extern) {
             IRMutator::visit(call);
             return;
         }
@@ -111,25 +113,8 @@ private:
     }
 };
 
-// Rewrite all GPU loops to have a min of zero
-class ZeroGPULoopMins : public IRMutator {
-    using IRMutator::visit;
-
-    void visit(const For *op) {
-        IRMutator::visit(op);
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
-            op = stmt.as<For>();
-            internal_assert(op);
-            Expr adjusted = Variable::make(Int(32), op->name) + op->min;
-            Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, op->extent, op->for_type, body);
-        }
-    }
-};
-
 Stmt inject_opengl_intrinsics(Stmt s) {
-    ZeroGPULoopMins z;
-    s = z.mutate(s);
+    s = zero_gpu_loop_mins(s);
     InjectOpenGLIntrinsics gl;
     return gl.mutate(s);
 }

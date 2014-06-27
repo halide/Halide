@@ -22,18 +22,18 @@ extern "C" int halide_dev_malloc(void *, buffer_t *);
 extern "C" int halide_dev_free(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
-    LOGE(msg);
+    LOGE("%s", msg);
 }
 
 extern "C" {
-JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(JNIEnv * env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jobject surf) {
+JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
+    JNIEnv *env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jobject surf) {
 
     const int w = j_w, h = j_h;
 
     halide_set_error_handler(handler);
 
     unsigned char *src = (unsigned char *)env->GetByteArrayElements(jSrc, NULL);
-
     if (!src) {
         LOGD("src is null\n");
         return;
@@ -56,7 +56,8 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     ANativeWindow_Buffer buf;
     ARect rect = {0, 0, w, h};
 
-    if (ANativeWindow_lock(win, &buf, &rect)) {
+    if (int err = ANativeWindow_lock(win, &buf, NULL)) {
+        LOGD("ANativeWindow_lock failed with error code %d\n", err);
         return;
     }
 

@@ -12,14 +12,19 @@
 #include "Bounds.h"
 #include "Simplify.h"
 
-#ifdef _MSC_VER
-// TODO: This is untested
+#ifdef _WIN32
 #define NOMINMAX
+#ifdef _WIN64
+#define GPU_LIB_CC
+#else
+#define GPU_LIB_CC __stdcall
+#endif
 #include <windows.h>
 static bool have_symbol(const char *s) {
     return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
 }
 #else
+#define GPU_LIB_CC
 #include <dlfcn.h>
 static bool have_symbol(const char *s) {
     return dlsym(NULL, s) != NULL;
@@ -32,7 +37,8 @@ namespace Internal {
 extern "C" { typedef struct CUctx_st *CUcontext; }
 
 // A single global cuda context to share between jitted functions
-int (*cuCtxDestroy)(CUctx_st *) = 0;
+int (GPU_LIB_CC *cuCtxDestroy)(CUctx_st *) = 0;
+
 struct SharedCudaContext {
     CUctx_st *ptr;
     volatile int lock;
@@ -43,11 +49,14 @@ struct SharedCudaContext {
 
     // Freed on program exit
     ~SharedCudaContext() {
+        // Skip it on windows, because global destructors can't necessarily rely on things from dlls.
+        #ifndef _WIN32
         if (ptr && cuCtxDestroy) {
             debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
-            (*cuCtxDestroy)(ptr);
+            cuCtxDestroy(ptr);
             ptr = 0;
         }
+        #endif
     }
 } cuda_ctx;
 
@@ -56,8 +65,8 @@ extern "C" {
     typedef struct cl_command_queue_st *cl_command_queue;
 }
 
-int (*clReleaseContext)(cl_context);
-int (*clReleaseCommandQueue)(cl_command_queue);
+int (GPU_LIB_CC *clReleaseContext)(cl_context);
+int (GPU_LIB_CC *clReleaseCommandQueue)(cl_command_queue);
 
 // A single global OpenCL context and command queue to share between jitted functions.
 struct SharedOpenCLContext {
@@ -68,8 +77,10 @@ struct SharedOpenCLContext {
     SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
     }
 
-    // Release context and command queue on exit.
+    // Release context and command queue on program exit.
     ~SharedOpenCLContext() {
+        // Skip it on windows. It hangs.
+        #ifndef _WIN32
         if (command_queue && clReleaseCommandQueue) {
             debug(1) << "Cleaning up OpenCL command queue: " << command_queue << " , " << clReleaseCommandQueue << "\n";
             clReleaseCommandQueue(command_queue);
@@ -78,8 +89,10 @@ struct SharedOpenCLContext {
         if (context && clReleaseContext) {
             debug(1) << "Cleaning up OpenCL context: " << context << " , " << clReleaseContext << "\n";
             clReleaseContext(context);
+	        debug(1) << "Back from clReleaseContext\n";
             context = NULL;
         }
+        #endif
     }
 } cl_ctx;
 
@@ -178,7 +191,7 @@ public:
         return c;
     }
 
-    vector<Argument> arguments();
+    vector<GPU_Argument> arguments();
 
 protected:
     using Internal::Closure::visit;
@@ -215,19 +228,19 @@ protected:
     bool skip_gpu_loops;
 };
 
-vector<Argument> GPU_Host_Closure::arguments() {
-    vector<Argument> res;
+vector<GPU_Argument> GPU_Host_Closure::arguments() {
+    vector<GPU_Argument> res;
     for (map<string, Type>::const_iterator iter = vars.begin(); iter != vars.end(); ++iter) {
         debug(2) << "var: " << iter->first << "\n";
-        res.push_back(Argument(iter->first, false, iter->second));
+        res.push_back(GPU_Argument(iter->first, false, iter->second));
     }
     for (map<string, BufferRef>::const_iterator iter = buffers.begin(); iter != buffers.end(); ++iter) {
-        debug(2) << "buffer: " << iter->first;
+        debug(2) << "buffer: " << iter->first << " " << iter->second.size;
         if (iter->second.read) debug(2) << " (read)";
         if (iter->second.write) debug(2) << " (write)";
         debug(2) << "\n";
 
-        Argument arg(iter->first, true, iter->second.type);
+        GPU_Argument arg(iter->first, true, iter->second.type, iter->second.size);
         arg.read = iter->second.read;
         arg.write = iter->second.write;
         res.push_back(arg);
@@ -265,7 +278,7 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
         return new CodeGen_OpenCL_Dev(t);
     } else if (t.features & Target::OpenGL) {
         debug(1) << "Constructing OpenGL device codegen\n";
-        return new CodeGen_OpenGL_Dev();
+        return new CodeGen_OpenGL_Dev(t);
     } else {
         internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
         return NULL;
@@ -302,7 +315,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
-
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
 
@@ -317,16 +329,25 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src");
 
-    // Jump to the start of the function and insert a call to halide_init_kernels
-    builder->SetInsertPoint(function->getEntryBlock().getFirstInsertionPt());
+    // Remember the entry block so we can branch to it upon init success.
+    BasicBlock *entry = &function->getEntryBlock();
+
+    // Insert a new block to run initialization at the beginning of the function.
+    BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
+                                                     function, entry);
+    builder->SetInsertPoint(init_kernels_bb);
     Value *user_context = get_user_context();
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
     Value *init = module->getFunction("halide_init_kernels");
     internal_assert(init) << "Could not find function halide_init_kernels in initial module\n";
-    Value *state = builder->CreateCall4(init, user_context,
-                                        builder->CreateLoad(get_module_state()),
-                                        kernel_src_ptr, kernel_size);
-    builder->CreateStore(state, get_module_state());
+    Value *result = builder->CreateCall4(init, user_context,
+                                         get_module_state(),
+                                         kernel_src_ptr, kernel_size);
+    Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+    CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_init_kernels");
+
+    // Upon success, jump to the original entry.
+    builder->CreateBr(entry);
 
     // Optimize the module
     CodeGen::optimize_module();
@@ -368,7 +389,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
         void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
         internal_assert(ptr) << "Could not find cuCtxDestroy_v2 in cuda library\n";
 
-        cuCtxDestroy = reinterpret_bits<int (*)(CUctx_st *)>(ptr);
+        cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
 
     } else if (target.features & Target::OpenCL) {
         // First check if libOpenCL has already been linked
@@ -395,12 +416,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
         void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
         internal_assert(ptr) << "Could not find clReleaseContext\n";
 
-        clReleaseContext = reinterpret_bits<int (*)(cl_context)>(ptr);
+        clReleaseContext = reinterpret_bits<int (GPU_LIB_CC *)(cl_context)>(ptr);
 
         ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
         internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
 
-        clReleaseCommandQueue = reinterpret_bits<int (*)(cl_command_queue)>(ptr);
+        clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
 
     } else if (target.features & Target::OpenGL) {
         if (target.os == Target::Linux) {
@@ -495,7 +516,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
-        cgdev->add_kernel(loop, kernel_name, c.arguments());
+
+        vector<GPU_Argument> closure_args = c.arguments();
+        for (size_t i = 0; i < closure_args.size(); i++) {
+            if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
+                closure_args[i].size = allocations.get(closure_args[i].name).stack_size;
+            }
+        }
+
+        cgdev->add_kernel(loop, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop
         kernel_name = cgdev->get_current_kernel_name();
@@ -505,7 +534,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
 
         // build the kernel arguments array
-        vector<Argument> closure_args = c.arguments();
         llvm::PointerType *arg_t = i8->getPointerTo(); // void*
         int num_args = (int)closure_args.size();
 

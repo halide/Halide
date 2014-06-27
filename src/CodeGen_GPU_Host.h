@@ -12,6 +12,7 @@ namespace Halide {
 namespace Internal {
 
 struct CodeGen_GPU_Dev;
+struct GPU_Argument;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>
@@ -71,6 +72,7 @@ protected:
     using CodeGen_CPU::i32;
     using CodeGen_CPU::i64;
     using CodeGen_CPU::buffer_t_type;
+    using CodeGen_CPU::allocations;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{

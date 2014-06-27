@@ -9,6 +9,8 @@
 #include "Introspection.h"
 #include "IRPrinter.h"
 #include "IRMutator.h"
+#include "ParallelRVar.h"
+#include "Var.h"
 
 namespace Halide {
 namespace Internal {
@@ -113,12 +115,32 @@ struct CountSelfReferences : public IRMutator {
     }
 };
 
+// Mark all functions found in an expr as frozen.
+class FreezeFunctions : public IRGraphVisitor {
+    using IRGraphVisitor::visit;
+
+    const string &func;
+
+    void visit(const Call *op) {
+        IRGraphVisitor::visit(op);
+        if (op->call_type == Call::Halide && op->name != func) {
+            Function f = op->func;
+            f.freeze();
+        }
+    }
+public:
+    FreezeFunctions(const string &f) : func(f) {}
+};
+
 // A counter to use in tagging random variables
 namespace {
 static int rand_counter = 0;
 }
 
 void Function::define(const vector<string> &args, vector<Expr> values) {
+    user_assert(!frozen())
+        << "Func " << name() << " cannot be given a new pure definition, "
+        << "because it has already been realized or used in the definition of another Func.\n";
     user_assert(!has_extern_definition())
         << "In pure definition of Func \"" << name() << "\":\n"
         << "Func with extern definition cannot be given a pure definition.\n";
@@ -135,6 +157,12 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     check.pure_args = args;
     for (size_t i = 0; i < values.size(); i++) {
         values[i].accept(&check);
+    }
+
+    // Freeze all called functions
+    FreezeFunctions freezer(name());
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&freezer);
     }
 
     // Make sure all the vars in the args have unique non-empty names
@@ -184,9 +212,15 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
     }
 
     for (size_t i = 0; i < args.size(); i++) {
-        Dim d = {args[i], For::Serial};
+        Dim d = {args[i], For::Serial, true};
         contents.ptr->schedule.dims().push_back(d);
         contents.ptr->schedule.storage_dims().push_back(args[i]);
+    }
+
+    // Add the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), For::Serial, true};
+        contents.ptr->schedule.dims().push_back(d);
     }
 
     for (size_t i = 0; i < values.size(); i++) {
@@ -204,6 +238,9 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     user_assert(has_pure_definition())
         << "In update definition of Func \"" << name() << "\":\n"
         << "Can't add a update definition without a pure definition first.\n";
+    user_assert(!frozen())
+        << "Func " << name() << " cannot be given a new update definition, "
+        << "because it has already been realized or used in the definition of another Func.\n";
 
     for (size_t i = 0; i < values.size(); i++) {
         user_assert(values[i].defined())
@@ -283,6 +320,15 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
         values[i].accept(&check);
     }
 
+    // Freeze all called functions
+    FreezeFunctions freezer(name());
+    for (size_t i = 0; i < args.size(); i++) {
+        args[i].accept(&freezer);
+    }
+    for (size_t i = 0; i < values.size(); i++) {
+        values[i].accept(&freezer);
+    }
+
     // Tag calls to random() with the free vars
     vector<string> free_vars;
     for (size_t i = 0; i < pure_args.size(); i++) {
@@ -308,6 +354,7 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     r.args = args;
     r.values = values;
     r.domain = check.reduction_domain;
+    r.schedule.set_reduction_domain(r.domain);
 
     // The reduction value and args probably refer back to the
     // function itself, introducing circular references and hence
@@ -331,7 +378,15 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // First add any reduction domain
     if (r.domain.defined()) {
         for (size_t i = 0; i < r.domain.domain().size(); i++) {
-            Dim d = {r.domain.domain()[i].var, For::Serial};
+            // Is this RVar actually pure (safe to parallelize and
+            // reorder)? It's pure if one value of the RVar can never
+            // access from the same memory that another RVar is
+            // writing to.
+            const string &v = r.domain.domain()[i].var;
+
+            bool pure = can_parallelize_rvar(v, name(), r);
+
+            Dim d = {v, For::Serial, pure};
             r.schedule.dims().push_back(d);
         }
     }
@@ -339,9 +394,15 @@ void Function::define_reduction(const vector<Expr> &_args, vector<Expr> values) 
     // Then add the pure args outside of that
     for (size_t i = 0; i < pure_args.size(); i++) {
         if (!pure_args[i].empty()) {
-            Dim d = {pure_args[i], For::Serial};
+            Dim d = {pure_args[i], For::Serial, true};
             r.schedule.dims().push_back(d);
         }
+    }
+
+    // Then the dummy outermost dim
+    {
+        Dim d = {Var::outermost().name(), For::Serial, true};
+        r.schedule.dims().push_back(d);
     }
 
     // If there's no recursive reference, no reduction domain, and all

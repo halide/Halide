@@ -31,20 +31,22 @@ struct Target {
     int bits;
 
     /** Optional features a target can have. */
-    enum Features {JIT       = 1 << 0,  /// Generate code that will run immediately inside the calling process.
-                   SSE41     = 1 << 1,  /// Use SSE 4.1 and earlier instructions. Only relevant on x86.
-                   AVX       = 1 << 2,  /// Use AVX 1 instructions. Only relevant on x86.
-                   AVX2      = 1 << 3,  /// Use AVX 2 instructions. Only relevant on x86.
-                   CUDA      = 1 << 4,  /// Enable the CUDA runtime.
-                   OpenCL    = 1 << 5,  /// Enable the OpenCL runtime.
-                   OpenGL    = 1 << 6,  /// Enable the OpenGL runtime.
-                   GPUDebug  = 1 << 7,  /// Increase the level of checking and the verbosity of the gpu runtimes.
-                   NoAsserts = 1 << 8,  /// Disable all runtime checks, for slightly tighter code.
-                   NoBoundsQuery = 1 << 9, /// Disable the bounds querying functionality.
-                   ARMv7s    = 1 << 10,  /// Generate code for ARMv7s. Only relevant for 32-bit ARM.
-                   AArch64Backend = 1 << 11, /// Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
-                   CLDoubles = 1 << 12 /// Enable double support on OpenCL targets
-
+    enum Features {JIT       = 1 << 0,  ///< Generate code that will run immediately inside the calling process.
+                   SSE41     = 1 << 1,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+                   AVX       = 1 << 2,  ///< Use AVX 1 instructions. Only relevant on x86.
+                   AVX2      = 1 << 3,  ///< Use AVX 2 instructions. Only relevant on x86.
+                   CUDA      = 1 << 4,  ///< Enable the CUDA runtime.
+                   OpenCL    = 1 << 5,  ///< Enable the OpenCL runtime.
+                   OpenGL    = 1 << 6,  ///< Enable the OpenGL runtime.
+                   GPUDebug  = 1 << 7,  ///< Increase the level of checking and the verbosity of the gpu runtimes.
+                   NoAsserts = 1 << 8,  ///< Disable all runtime checks, for slightly tighter code.
+                   NoBoundsQuery = 1 << 9, ///< Disable the bounds querying functionality.
+                   ARMv7s    = 1 << 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+                   AArch64Backend = 1 << 11, ///< Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
+                   CLDoubles = 1 << 12, ///< Enable double support on OpenCL targets
+                   FMA       = 1 << 13, /// Enable x86 FMA instruction
+                   FMA4      = 1 << 14, /// Enable x86 (AMD) FMA4 instruction set
+                   F16C      = 1 << 15  /// Enable x86 16-bit float support
     };
 
     /** A bitmask that stores the active features. */

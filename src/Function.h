@@ -75,7 +75,9 @@ struct FunctionContents {
 
     bool trace_loads, trace_stores, trace_realizations;
 
-    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false) {}
+    bool frozen;
+
+    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -261,6 +263,17 @@ public:
     }
     // @}
 
+    /** Mark function as frozen, which means it cannot accept new
+     * definitions. */
+    void freeze() {
+        contents.ptr->frozen = true;
+    }
+
+    /** Check if a function has been frozen. If so, it is an error to
+     * add new definitions. */
+    bool frozen() const {
+        return contents.ptr->frozen;
+    }
 };
 
 }}
