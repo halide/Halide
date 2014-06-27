@@ -384,7 +384,7 @@ private:
             Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);
             Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, buffer_name), mutated_pipeline);
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), cache_lookup);
-            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), generate_key);
+            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), true, generate_key);
 
             stmt = cache_key_alloc;
         } else {

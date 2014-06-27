@@ -162,10 +162,12 @@ int main(int argc, char **argv) {
         f(x, y) = count_calls(x, y) + count_calls(x, y);
         count_calls.compute_cached();
 
+#if 0
         f.compile_to_lowered_stmt("/tmp/compute_cached.stmt");
         std::vector<Argument> args;
         args.push_back(val);
         f.compile_to_assembly("/tmp/compute_cached.s", args, "foon");
+#endif
 
         val.set(23.0f);
         Image<uint8_t> out1 = f.realize(256, 256);
@@ -204,6 +206,49 @@ int main(int argc, char **argv) {
             for (int32_t j = 0; j < 256; j++) {
                 assert(out1(i, j) == (23 + 23));
                 assert(out2(i, j) == (23 + 23));
+            }
+        }
+        assert(call_count_with_arg == 1);
+    }
+
+    {
+        // Case with bounds computed not equal to bounds realized.
+        Param<float> val;
+
+	printf("Interesting part\n");
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg",
+                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
+                                  UInt(8), 2);
+
+        Func f;
+        Var x, y, xi, yi;
+        f(x, y) = count_calls(x, y) + cast<uint8_t>(x);
+        count_calls.compute_cached();
+
+        Func g;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
+
+        Func h;
+        h(x, y) = g(x, y) + g(x - 1, y) + g(x + 1, y);
+
+	f.tile(x, y, xi, yi, 8, 8).compute_root();
+	g.tile(x, y, xi, yi, 16, 16).compute_root();
+	h.tile(x, y, xi, yi, 8, 8).compute_root();
+
+	std::vector<Argument> args;
+	args.push_back(val);
+	h.compile_to_lowered_stmt("/tmp/h.stmt");
+	h.compile_to_assembly("/tmp/h.s", args);
+
+	printf("calling g\n");
+        val.set(23.0f);
+        Image<uint8_t> out1 = h.realize(128, 128);
+
+        for (int32_t i = 0; i < 100; i++) {
+            for (int32_t j = 0; j < 100; j++) {
+	      //	      assert(out1(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
             }
         }
         assert(call_count_with_arg == 1);
