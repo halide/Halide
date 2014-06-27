@@ -106,6 +106,13 @@ Stmt build_provide_loop_nest(Function f,
     for (size_t i = 0; i < s.bounds().size(); i++) {
         known_size_dims[s.bounds()[i].var] = s.bounds()[i].extent;
     }
+    // Then use any reduction domain.
+    const ReductionDomain &rdom = s.reduction_domain();
+    if (rdom.defined()) {
+        for (size_t i = 0; i < rdom.domain().size(); i++) {
+            known_size_dims[rdom.domain()[i].var] = rdom.domain()[i].extent;
+        }
+    }
 
     vector<Split> splits = s.splits();
 
@@ -149,6 +156,8 @@ Stmt build_provide_loop_nest(Function f,
                     // The name Xo went away, because it was legal for it to
                     // be X before, but not after.
 
+                    first.exact |= second.exact;
+                    second.exact = first.exact;
                     second.old_var = unique_name('s');
                     first.outer   = second.outer;
                     second.outer  = second.inner;
@@ -187,6 +196,15 @@ Stmt build_provide_loop_nest(Function f,
                 // We have proved that the split factor divides the
                 // old extent. No need to adjust the base.
                 known_size_dims[split.outer] = iter->second / split.factor;
+            } else if (split.exact) {
+                // It's an exact split but we failed to prove that the
+                // extent divides the factor. This is a problem.
+                user_error << "When splitting " << split.old_var << " into "
+                           << split.outer << " and " << split.inner << ", "
+                           << "could not prove the split factor (" << split.factor << ") "
+                           << "divides the extent of " << split.old_var
+                           << " (" << iter->second << "). This is required when "
+                           << "the split originates from an RVar.\n";
             } else if (!is_update) {
                 // Adjust the base downwards to not compute off the
                 // end of the realization.
@@ -300,6 +318,14 @@ Stmt build_provide_loop_nest(Function f,
             stmt = LetStmt::make(prefix + split.outer + ".loop_max", old_var_max, stmt);
             stmt = LetStmt::make(prefix + split.outer + ".loop_extent", old_var_extent, stmt);
         }
+    }
+
+    // Define the bounds on the outermost dummy dimension.
+    {
+        string o = prefix + Var::outermost().name();
+        stmt = LetStmt::make(o + ".loop_min", 0, stmt);
+        stmt = LetStmt::make(o + ".loop_max", 1, stmt);
+        stmt = LetStmt::make(o + ".loop_extent", 1, stmt);
     }
 
     // Define the loop mins and extents in terms of the mins and maxs produced by bounds inference
@@ -637,7 +663,7 @@ private:
             bounds.push_back(Range(min, extent));
         }
 
-        s = Realize::make(name, func.output_types(), bounds, s);
+        s = Realize::make(name, func.output_types(), bounds, const_true(), s);
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
@@ -996,43 +1022,6 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
         }
     }
 
-    // Check the rvars haven't been illegally reordered
-    for (size_t i = 0; i < f.reductions().size(); i++) {
-        const ReductionDefinition &r = f.reductions()[i];
-
-        if (!r.domain.defined()) {
-            // No reduction domain
-            continue;
-        }
-
-        const vector<ReductionVariable> &rvars = r.domain.domain();
-        const vector<Dim> &dims = r.schedule.dims();
-
-        // Look for the rvars in order
-        size_t next = 0;
-        for (size_t j = 0; j < dims.size() && next < rvars.size(); j++) {
-            if (rvars[next].var == dims[j].var) {
-                next++;
-            }
-        }
-
-        if (next != rvars.size()) {
-            std::ostringstream err;
-            err << "In function " << f.name() << " stage " << i
-                << ", the reduction variables have been illegally reordered.\n"
-                << "Correct order:";
-            for (size_t j = 0; j < rvars.size(); j++) {
-                err << " " << rvars[j].var;
-            }
-            err << "\nOrder specified by schedule:";
-            for (size_t j = 0; j < dims.size(); j++) {
-                err << " " << dims[j].var;
-            }
-            err << "\n";
-            user_error << err.str();
-        }
-    }
-
     LoopLevel store_at = f.schedule().store_level();
     LoopLevel compute_at = f.schedule().compute_level();
     // Inlining is always allowed
@@ -1098,6 +1087,18 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
     }
 }
 
+class RemoveLoopsOverOutermost : public IRMutator {
+    using IRMutator::visit;
+
+    void visit(const For *op) {
+        if (ends_with(op->name, ".__outermost")) {
+            stmt = op->body;
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+};
+
 Stmt schedule_functions(Stmt s, const vector<string> &order,
                         const map<string, Function> &env,
                         const map<string, set<string> > &graph, const Target &t) {
@@ -1131,8 +1132,13 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
     // We can remove the loop over root now
     const For *root_loop = s.as<For>();
     internal_assert(root_loop);
+    s = root_loop->body;
 
-    return root_loop->body;
+    // We can also remove all the loops over __outermost now.
+    RemoveLoopsOverOutermost r;
+    s = r.mutate(s);
+
+    return s;
 }
 
 // Insert checks to make sure that parameters are within their
@@ -1631,7 +1637,6 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 }
 
 Stmt lower(Function f, const Target &t) {
-
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
 

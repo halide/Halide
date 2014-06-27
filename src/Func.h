@@ -30,6 +30,7 @@ class FuncRefExpr;
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
 struct VarOrRVar {
+    VarOrRVar(const std::string &n, bool r) : var(n), rvar(n), is_rvar(r) {}
     VarOrRVar(const Var &v) : var(v), is_rvar(false) {}
     VarOrRVar(const RVar &r) : rvar(r), is_rvar(true) {}
     VarOrRVar(const RDom &r) : rvar(RVar(r)), is_rvar(true) {}
@@ -201,7 +202,8 @@ enum GPUAPI {
 /** A temporary wrapper around a schedule used for common schedule manipulations */
 class ScheduleHandle {
     Internal::Schedule schedule;
-    void set_dim_type(Var var, Internal::For::ForType t);
+    void set_dim_type(VarOrRVar var, Internal::For::ForType t);
+    void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string dump_argument_list();
 public:
     ScheduleHandle(Internal::Schedule s) : schedule(s) {s.touched();}
@@ -210,17 +212,22 @@ public:
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
-    EXPORT ScheduleHandle &split(Var old, Var outer, Var inner, Expr factor);
-    EXPORT ScheduleHandle &fuse(Var inner, Var outer, Var fused);
-    EXPORT ScheduleHandle &serial(Var var);
-    EXPORT ScheduleHandle &parallel(Var var);
-    EXPORT ScheduleHandle &vectorize(Var var);
-    EXPORT ScheduleHandle &unroll(Var var);
-    EXPORT ScheduleHandle &parallel(Var var, Expr task_size);
-    EXPORT ScheduleHandle &vectorize(Var var, int factor);
-    EXPORT ScheduleHandle &unroll(Var var, int factor);
-    EXPORT ScheduleHandle &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
-    EXPORT ScheduleHandle &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT ScheduleHandle &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
+    EXPORT ScheduleHandle &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
+    EXPORT ScheduleHandle &serial(VarOrRVar var);
+    EXPORT ScheduleHandle &parallel(VarOrRVar var);
+    EXPORT ScheduleHandle &vectorize(VarOrRVar var);
+    EXPORT ScheduleHandle &unroll(VarOrRVar var);
+    EXPORT ScheduleHandle &parallel(VarOrRVar var, Expr task_size);
+    EXPORT ScheduleHandle &vectorize(VarOrRVar var, int factor);
+    EXPORT ScheduleHandle &unroll(VarOrRVar var, int factor);
+    EXPORT ScheduleHandle &tile(VarOrRVar x, VarOrRVar y,
+                                VarOrRVar xo, VarOrRVar yo,
+                                VarOrRVar xi, VarOrRVar yi, Expr
+                                xfactor, Expr yfactor);
+    EXPORT ScheduleHandle &tile(VarOrRVar x, VarOrRVar y,
+                                VarOrRVar xi, VarOrRVar yi,
+                                Expr xfactor, Expr yfactor);
     EXPORT ScheduleHandle &reorder(const std::vector<VarOrRVar> &vars);
     EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y);
     EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
@@ -243,70 +250,73 @@ public:
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
-    EXPORT ScheduleHandle &rename(Var old_name, Var new_name);
+    EXPORT ScheduleHandle &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT ScheduleHandle specialize(Expr condition);
 
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu(Var block_x, Var thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu(Var block_x, Var block_y,
-                               Var thread_x, Var thread_y,
+    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y,
+                               VarOrRVar thread_x, VarOrRVar thread_y,
 			       GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu(Var block_x, Var block_y, Var block_z,
-                               Var thread_x, Var thread_y, Var thread_z,
+    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                               VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
 			       GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Expr x_size, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Expr x_size, Expr y_size,
+    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
 				    GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(Var x, Var y, Var z,
+    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
+
+    EXPORT ScheduleHandle &allow_race_conditions();
     // @}
 
     // These calls are for legacy compatibility only.
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x) {
+    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x) {
         return gpu_threads(thread_x);
     }
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y) {
+    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu_threads(thread_x, thread_y);
     }
-    EXPORT ScheduleHandle &cuda_threads(Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu_threads(thread_x, thread_y, thread_z);
     }
 
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x) {
+    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x) {
         return gpu_blocks(block_x);
     }
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y) {
+    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
         return gpu_blocks(block_x, block_y);
     }
-    EXPORT ScheduleHandle &cuda_blocks(Var block_x, Var block_y, Var block_z) {
+    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
         return gpu_blocks(block_x, block_y, block_z);
     }
 
-    EXPORT ScheduleHandle &cuda(Var block_x, Var thread_x) {
+    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
         return gpu(block_x, thread_x);
     }
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y,
-                                Var thread_x, Var thread_y) {
+    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar block_y,
+                                VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu(block_x, thread_x, block_y, thread_y);
     }
-    EXPORT ScheduleHandle &cuda(Var block_x, Var block_y, Var block_z,
-                                Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
     }
-    EXPORT ScheduleHandle &cuda_tile(Var x, int x_size) {
+    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, int x_size) {
         return gpu_tile(x, x_size);
     }
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, int x_size, int y_size) {
+    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
         return gpu_tile(x, y, x_size, y_size);
     }
-    EXPORT ScheduleHandle &cuda_tile(Var x, Var y, Var z,
+    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
@@ -336,9 +346,15 @@ class Func {
      * re-lowering */
     Internal::Stmt lowered;
 
+    /** Lower the func if it hasn't been already. */
+    void lower(const Target &t);
+
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
     Internal::JITCompiledModule compiled_module;
+
+    /** Invalidate the cached lowered stmt and compiled module. */
+    void invalidate_cache();
 
     /** The current error handler used for realizing this
      * function. May be NULL. Only relevant when jitting. */
@@ -366,6 +382,10 @@ class Func {
     int32_t (*custom_trace)(void *, const halide_trace_event *);
 
     // @}
+
+    /** The current print function used for realizing this
+     * function. May be NULL. Only relevant when jitting. */
+    void (*custom_print)(void *user_context, const char *);
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
@@ -528,12 +548,16 @@ public:
      * useful for providing fallback code paths that will compile on
      * many platforms. Vectorization will fail, and parallelization
      * will produce serial code. */
-    EXPORT void compile_to_c(const std::string &filename, std::vector<Argument>, const std::string &fn_name = "");
+    EXPORT void compile_to_c(const std::string &filename,
+                             std::vector<Argument>,
+                             const std::string &fn_name = "",
+                             const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Canonical extension is
      * .stmt, which must be supplied in filename. */
-    EXPORT void compile_to_lowered_stmt(const std::string &filename);
+    EXPORT void compile_to_lowered_stmt(const std::string &filename,
+                                        const Target &target = get_target_from_environment());
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
@@ -651,6 +675,16 @@ public:
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
     EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
+
+    /** Set the function called to print messages from the runtime.
+     * If you are compiling statically, you can also just define your
+     * own function with signature
+     \code
+     extern "C" void halide_print(void *user_context, const char *);
+     \endcode
+     * This will clobber Halide's version.
+     */
+    EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
@@ -795,19 +829,18 @@ public:
      * factor-1. The inner and outer subdimensions can then be dealt
      * with using the other scheduling calls. It's ok to reuse the old
      * variable name as either the inner or outer variable. */
-    EXPORT Func &split(Var old, Var outer, Var inner, Expr factor);
+    EXPORT Func &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
 
     /** Join two dimensions into a single fused dimenion. The fused
      * dimension covers the product of the extents of the inner and
      * outer dimensions given. */
-    EXPORT Func &fuse(Var inner, Var outer, Var fused);
-
+    EXPORT Func &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
 
     /** Mark a dimension to be traversed serially. This is the default. */
-    EXPORT Func &serial(Var var);
+    EXPORT Func &serial(VarOrRVar var);
 
     /** Mark a dimension to be traversed in parallel */
-    EXPORT Func &parallel(Var var);
+    EXPORT Func &parallel(VarOrRVar var);
 
     /** Split a dimension by the given task_size, and the parallelize the
      * outer dimension. This creates parallel tasks that have size
@@ -815,7 +848,7 @@ public:
      * the split. The inner dimension has a new anonymous name. If you
      * wish to mutate it, or schedule with respect to it, do the split
      * manually. */
-    EXPORT Func &parallel(Var var, Expr task_size);
+    EXPORT Func &parallel(VarOrRVar var, Expr task_size);
 
     /** Mark a dimension to be computed all-at-once as a single
      * vector. The dimension should have constant extent -
@@ -823,26 +856,26 @@ public:
      * constant factor. For most uses of vectorize you want the two
      * argument form. The variable to be vectorized should be the
      * innermost one. */
-    EXPORT Func &vectorize(Var var);
+    EXPORT Func &vectorize(VarOrRVar var);
 
     /** Mark a dimension to be completely unrolled. The dimension
      * should have constant extent - e.g. because it is the inner
      * dimension following a split by a constant factor. For most uses
      * of unroll you want the two-argument form. */
-    EXPORT Func &unroll(Var var);
+    EXPORT Func &unroll(VarOrRVar var);
 
     /** Split a dimension by the given factor, then vectorize the
      * inner dimension. This is how you vectorize a loop of unknown
      * size. The variable to be vectorized should be the innermost
      * one. After this call, var refers to the outer dimension of the
      * split. */
-    EXPORT Func &vectorize(Var var, int factor);
+    EXPORT Func &vectorize(VarOrRVar var, int factor);
 
     /** Split a dimension by the given factor, then unroll the inner
      * dimension. This is how you unroll a loop of unknown size by
      * some constant factor. After this call, var refers to the outer
      * dimension of the split. */
-    EXPORT Func &unroll(Var var, int factor);
+    EXPORT Func &unroll(VarOrRVar var, int factor);
 
     /** Statically declare that the range over which a function should
      * be evaluated is given by the second and third arguments. This
@@ -857,11 +890,16 @@ public:
     /** Split two dimensions at once by the given factors, and then
      * reorder the resulting dimensions to be xi, yi, xo, yo from
      * innermost outwards. This gives a tiled traversal. */
-    EXPORT Func &tile(Var x, Var y, Var xo, Var yo, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT Func &tile(VarOrRVar x, VarOrRVar y,
+                      VarOrRVar xo, VarOrRVar yo,
+                      VarOrRVar xi, VarOrRVar yi,
+                      Expr xfactor, Expr yfactor);
 
     /** A shorter form of tile, which reuses the old variable names as
      * the new outer dimensions */
-    EXPORT Func &tile(Var x, Var y, Var xi, Var yi, Expr xfactor, Expr yfactor);
+    EXPORT Func &tile(VarOrRVar x, VarOrRVar y,
+                      VarOrRVar xi, VarOrRVar yi,
+                      Expr xfactor, Expr yfactor);
 
     /** Reorder variables to have the given nesting order, from
      * innermost out */
@@ -919,7 +957,16 @@ public:
                          VarOrRVar t6);
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
-    EXPORT Func &rename(Var old_name, Var new_name);
+    EXPORT Func &rename(VarOrRVar old_name, VarOrRVar new_name);
+
+    /** Specify that race conditions are permitted for this Func,
+     * which enables parallelizing over RVars even when Halide cannot
+     * prove that it is safe to do so. Use this with great caution,
+     * and only if you can prove to yourself that this is safe, as it
+     * may result in a non-deterministic routine that returns
+     * different values at different times or on different machines. */
+    EXPORT Func &allow_race_conditions();
+
 
     /** Specialize a Func. This creates a special-case version of the
      * Func where the given condition is true. The most effective
@@ -1094,20 +1141,26 @@ public:
      * threads. If the selected target is not an appropriate GPU, this
      * just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_threads(Var thread_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_threads(Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
     // @}
+
+    /** Tell Halide to run this stage using a single gpu thread and
+     * block. This is not an efficient use of your GPU, but it can be
+     * useful to avoid copy-back for intermediate update stages that
+     * touch a very small part of your Func. */
+    EXPORT Func &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
 
     /** \deprecated Old name for #gpu_threads. */
     // @{
-    EXPORT Func &cuda_threads(Var thread_x) {
+    EXPORT Func &cuda_threads(VarOrRVar thread_x) {
         return gpu_threads(thread_x);
     }
-    EXPORT Func &cuda_threads(Var thread_x, Var thread_y) {
+    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu_threads(thread_x, thread_y);
     }
-    EXPORT Func &cuda_threads(Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT Func &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu_threads(thread_x, thread_y, thread_z);
     }
     // @}
@@ -1117,20 +1170,20 @@ public:
      * run serially within each GPU block. If the selected target is
      * not ptx, this just marks those dimensions as parallel. */
     // @{
-    EXPORT Func &gpu_blocks(Var block_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_blocks(Var block_x, Var block_y, Var block_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_blocks. */
     // @{
-    EXPORT Func &cuda_blocks(Var block_x) {
+    EXPORT Func &cuda_blocks(VarOrRVar block_x) {
         return gpu_blocks(block_x);
     }
-    EXPORT Func &cuda_blocks(Var block_x, Var block_y) {
+    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
         return gpu_blocks(block_x, block_y);
     }
-    EXPORT Func &cuda_blocks(Var block_x, Var block_y, Var block_z) {
+    EXPORT Func &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
         return gpu_blocks(block_x, block_y, block_z);
     }
     // @}
@@ -1141,24 +1194,24 @@ public:
      * dimensions are consumed by this call, so do all other
      * unrolling, reordering, etc first. */
     // @{
-    EXPORT Func &gpu(Var block_x, Var thread_x, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu(Var block_x, Var block_y,
-		     Var thread_x, Var thread_y, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu(Var block_x, Var block_y, Var block_z,
-                     Var thread_x, Var thread_y, Var thread_z, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
+		     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                     VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu. */
     // @{
-    EXPORT Func &cuda(Var block_x, Var thread_x) {
+    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
         return gpu(block_x, thread_x);
     }
-    EXPORT Func &cuda(Var block_x, Var block_y,
-                      Var thread_x, Var thread_y) {
+    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y,
+                      VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu(block_x, thread_x, block_y, thread_y);
     }
-    EXPORT Func &cuda(Var block_x, Var block_y, Var block_z,
-                      Var thread_x, Var thread_y, Var thread_z) {
+    EXPORT Func &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
     }
     // @}
@@ -1168,21 +1221,21 @@ public:
      * GPU thread indices. Consumes the variables given, so do all
      * other scheduling first. */
     // @{
-    EXPORT Func &gpu_tile(Var x, int x_size, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_tile(Var x, Var y, int x_size, int y_size, GPUAPI gpuapi = GPU_Default);
-    EXPORT Func &gpu_tile(Var x, Var y, Var z,
-                          int x_size, int y_size, int z_size, GPUAPI gpuapi = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Func &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+                          int x_size, int y_size, int z_size, GPUAPI gpu_api = GPU_Default);
     // @}
 
     /** \deprecated Old name for #gpu_tile. */
     // @{
-    EXPORT Func &cuda_tile(Var x, int x_size) {
+    EXPORT Func &cuda_tile(VarOrRVar x, int x_size) {
         return gpu_tile(x, x_size);
     }
-    EXPORT Func &cuda_tile(Var x, Var y, int x_size, int y_size) {
+    EXPORT Func &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
         return gpu_tile(x, y, x_size, y_size);
     }
-    EXPORT Func &cuda_tile(Var x, Var y, Var z,
+    EXPORT Func &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                            int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
@@ -1532,7 +1585,7 @@ NO_INLINE T evaluate(Expr e) {
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
     Func f;
-    f(_) = e;
+    f() = e;
     Image<T> im = f.realize();
     return im(0);
 }
@@ -1551,7 +1604,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b) {
         << " as a scalar of type " << type_of<B>() << "\n";
 
     Func f;
-    f(_) = t;
+    f() = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1573,7 +1626,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c) {
         << " as a scalar of type " << type_of<C>() << "\n";
 
     Func f;
-    f(_) = t;
+    f() = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1600,7 +1653,7 @@ NO_INLINE void evaluate(Tuple t, A *a, B *b, C *c, D *d) {
         << " as a scalar of type " << type_of<D>() << "\n";
 
     Func f;
-    f(_) = t;
+    f() = t;
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);
     *b = Image<B>(r[1])(0);
@@ -1621,20 +1674,13 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
         << "Can't evaluate expression "
         << e << " of type " << e.type()
         << " as a scalar of type " << type_of<T>() << "\n";
-    Image<T> im;
+    bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = e;
-
-    if (get_jit_target_from_environment().has_gpu_feature()) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	im = g.realize(1);
-	im.copy_to_host();
-    } else {
-	im = f.realize();
+    f() = e;
+    if (has_gpu_feature) {
+	f.gpu_single_thread();
     }
+    Image<T> im = f.realize();
     return im(0);
 }
 
@@ -1654,23 +1700,13 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
 
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = t;
-    Image<A> result_a(has_gpu_feature ? 1 : 0);
-    Image<B> result_b(has_gpu_feature ? 1 : 0);
-    Realization r(result_a, result_b);
+    f() = t;
     if (has_gpu_feature) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	g.realize(r);
-	result_a.copy_to_host();
-	result_b.copy_to_host();
-    } else {
-	f.realize(r);
+	f.gpu_single_thread();
     }
-    *a = result_a(0);
-    *b = result_b(0);
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
 }
 
 template<typename A, typename B, typename C>
@@ -1689,26 +1725,14 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c) {
         << " as a scalar of type " << type_of<C>() << "\n";
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = t;
-    Image<A> result_a(has_gpu_feature ? 1 : 0);
-    Image<B> result_b(has_gpu_feature ? 1 : 0);
-    Image<C> result_c(has_gpu_feature ? 1 : 0);
-    Realization r(result_a, result_b, result_c);
+    f() = t;
     if (has_gpu_feature) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	g.realize(r);
-	result_a.copy_to_host();
-	result_b.copy_to_host();
-	result_c.copy_to_host();
-    } else {
-	f.realize(r);
+        f.gpu_single_thread();
     }
-    *a = result_a(0);
-    *b = result_b(0);
-    *c = result_c(0);
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
 }
 
 template<typename A, typename B, typename C, typename D>
@@ -1732,29 +1756,15 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b, C *c, D *d) {
 
     bool has_gpu_feature = get_jit_target_from_environment().has_gpu_feature();
     Func f;
-    f(_) = t;
-    Image<A> result_a(has_gpu_feature ? 1 : 0);
-    Image<B> result_b(has_gpu_feature ? 1 : 0);
-    Image<C> result_c(has_gpu_feature ? 1 : 0);
-    Image<D> result_d(has_gpu_feature ? 1 : 0);
-    Realization r(result_a, result_b, result_c, result_d);
+    f() = t;
     if (has_gpu_feature) {
-        Func g;
-	Var x;
-	g(x, _) = f(_);
-	g.gpu_tile(x, 1);
-	g.realize(r);
-	result_a.copy_to_host();
-	result_b.copy_to_host();
-	result_c.copy_to_host();
-	result_d.copy_to_host();
-    } else {
-	f.realize(r);
+        f.gpu_single_thread();
     }
-    *a = result_a(0);
-    *b = result_b(0);
-    *c = result_c(0);
-    *d = result_d(0);
+    Realization r = f.realize();
+    *a = Image<A>(r[0])(0);
+    *b = Image<B>(r[1])(0);
+    *c = Image<C>(r[2])(0);
+    *d = Image<D>(r[3])(0);
 }
 // @}
 

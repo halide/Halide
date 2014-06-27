@@ -21,7 +21,9 @@ public:
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
-    void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void add_kernel(Stmt stmt,
+                    std::string name,
+                    const std::vector<GPU_Argument> &args);
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
      * since a GPU device module will often have many kernels compiled into it
@@ -39,7 +41,9 @@ protected:
     class CodeGen_OpenCL_C : public CodeGen_C {
     public:
         CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
-        void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
+        void add_kernel(Stmt stmt,
+                        std::string name,
+                        const std::vector<GPU_Argument> &args);
 
     protected:
         using CodeGen_C::visit;
@@ -56,12 +60,6 @@ protected:
         void visit(const Cast *op);
         void visit(const Allocate *op);
         void visit(const Free *op);
-
-        /** Maintains the kernel arguments that are in scope. */
-        Scope<Type> kernel_arguments;
-
-        /** Tracks per-thread allocations. */
-        Scope<int> internal_allocations;
     };
 
     std::ostringstream src_stream;

@@ -45,7 +45,10 @@ int do_indirect_int_cast(Type t, int x) {
 
 class Simplify : public IRMutator {
 public:
-    Simplify(bool r) : remove_dead_lets(r) {}
+    Simplify(bool r, const Scope<Interval> &bi, const Scope<ModulusRemainder> &ai) :
+        remove_dead_lets(r),
+        bounds_info(bi),
+        alignment_info(ai) {}
 private:
     bool remove_dead_lets;
 
@@ -55,18 +58,10 @@ private:
     };
 
     Scope<VarInfo> var_info;
-    Scope<ModulusRemainder> alignment_info;
     Scope<Interval> bounds_info;
+    Scope<ModulusRemainder> alignment_info;
 
     using IRMutator::visit;
-
-    void visit(const IntImm *op) {
-        IRMutator::visit(op);
-    }
-
-    void visit(const FloatImm *op) {
-        IRMutator::visit(op);
-    }
 
     bool const_float(Expr e, float *f) {
         if (!e.defined()) {
@@ -311,7 +306,12 @@ private:
         } else if (sub_b && equal(a, sub_b->b)) {
             // a + (b - a)
             expr = sub_b->a;
-
+        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->a)) {
+            // (a - b) + (b - c) -> a - c
+            expr = mutate(sub_a->a - sub_b->b);
+        } else if (sub_a && sub_b && equal(sub_a->a, sub_b->b)) {
+            // (a - b) + (c - a) -> c - b
+            expr = mutate(sub_b->a - sub_a->b);
         } else if (cast_a && cast_b &&
                    cast_a->value.type() == cast_b->value.type() &&
                    (op->type.is_int() || op->type.is_uint()) &&
@@ -471,15 +471,21 @@ private:
             expr = mutate(make_zero(add_b->a.type()) - add_b->b);
         } else if (add_a && is_simple_const(add_a->b)) {
             // In ternary expressions, pull constants outside
-            if (is_simple_const(b)) expr = mutate(add_a->a + (add_a->b - b));
-            else expr = mutate((add_a->a - b) + add_a->b);
+            if (is_simple_const(b)) {
+                expr = mutate(add_a->a + (add_a->b - b));
+            } else {
+                expr = mutate((add_a->a - b) + add_a->b);
+            }
+        } else if (sub_a && sub_b && is_const(sub_a->a) && is_const(sub_b->a)) {
+            // (c1 - a) - (c2 - b) -> (b - a) + (c1 - c2)
+            expr = mutate((sub_b->b - sub_a->b) + (sub_a->a - sub_b->a));
+        } else if (sub_b) {
+            // a - (b - c) -> a + (c - b)
+            expr = mutate(a + (sub_b->b - sub_b->a));
         } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a - add_b->a) - add_b->b);
         } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
             expr = mutate((sub_a->a - b) - sub_a->b);
-        } else if (sub_b && is_simple_const(sub_b->b)) {
-            if (is_simple_const(a)) expr = mutate((a + sub_b->b) - sub_b->a);
-            expr = mutate((a - sub_b->a) + sub_b->b);
         } else if (mul_a && mul_b && equal(mul_a->a, mul_b->a)) {
             // Pull out common factors a*x + b*x
             expr = mutate(mul_a->a * (mul_a->b - mul_b->b));
@@ -502,12 +508,6 @@ private:
         } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
             // (b + a) - (a + c) -> b - c
             expr = mutate(add_a->a - add_b->b);
-        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
-            // (a - b) - (c - b) -> a - c
-            expr = mutate(sub_a->a - sub_b->a);
-        } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
-            // (b - a) - (b - c) -> c - a
-            expr = mutate(sub_b->b - sub_a->b);
         } else if (min_b && add_b_a && equal(a, add_b_a->a)) {
             // Quaternary expressions involving mins where a term
             // cancels. These are important for bounds inference
@@ -848,7 +848,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1021,23 +1021,6 @@ private:
         const Min *min_a_a = max_a ? max_a->a.as<Min>() : NULL;
         const Min *min_b_a = max_b ? max_b->a.as<Min>() : NULL;
 
-        //const Add *add_a_a = div_a ? div_a->a.as<Add>() : NULL;
-        //const Add *add_b_a = div_b ? div_b->a.as<Add>() : NULL;
-        if (op->type == Int(32) && is_simple_const(b) && !is_simple_const(a)) {
-            Expr delta = mutate(a - b);
-            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
-            id.min = mutate(id.min);
-            id.max = mutate(id.max);
-            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
-                expr = a;
-                return;
-            }
-            if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
-                expr = b;
-                return;
-            }
-        }
-
         if (equal(a, b)) {
             expr = a;
             return;
@@ -1065,15 +1048,17 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && const_int(b, &ib)) {
-            Interval ia = bounds_of_expr_in_scope(a, bounds_info);
-            int max_a, min_a;
-            if (const_int(ia.min, &min_a) && const_int(ia.max, &max_a)) {
-                if (max_a <= ib) {
-                    expr = b;
-                } else if (ib <= min_a) {
-                    expr = a;
-                }
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
+            Expr delta = mutate(a - b);
+            Interval id = bounds_of_expr_in_scope(delta, bounds_info);
+            id.min = mutate(id.min);
+            id.max = mutate(id.max);
+            if (id.min.defined() && (is_zero(id.min) || is_positive_const(id.min))) {
+                expr = a;
+                return;
+            }
+            if (id.max.defined() && (is_zero(id.max) || is_negative_const(id.max))) {
+                expr = b;
                 return;
             }
         }
@@ -1194,83 +1179,69 @@ private:
     }
 
     void visit(const EQ *op) {
-        Expr a = mutate(op->a), b = mutate(op->b);
-        Expr delta = mutate(a - b);
+        Expr delta = mutate(op->a - op->b);
 
-        const Ramp *ramp_a = a.as<Ramp>();
-        const Ramp *ramp_b = b.as<Ramp>();
-        const Broadcast *broadcast_a = a.as<Broadcast>();
-        const Broadcast *broadcast_b = b.as<Broadcast>();
-        const Add *add_a = a.as<Add>();
-        const Add *add_b = b.as<Add>();
-        const Sub *sub_a = a.as<Sub>();
-        const Sub *sub_b = b.as<Sub>();
-        const Mul *mul_a = a.as<Mul>();
-        const Mul *mul_b = b.as<Mul>();
+        const Ramp *ramp = delta.as<Ramp>();
+        const Broadcast *broadcast = delta.as<Broadcast>();
+        const Add *add = delta.as<Add>();
+        const Sub *sub = delta.as<Sub>();
+        const Mul *mul = delta.as<Mul>();
 
-        int ia = 0, ib = 0;
+        Expr zero = make_zero(delta.type());
 
-        if (const_castint(a, &ia) && const_castint(b, &ib)) {
-            if (a.type().is_uint()) {
-                expr = make_bool(((unsigned int) ia) == ((unsigned int) ib), op->type.width);
-            } else {
-                expr = make_bool(ia == ib, op->type.width);
-            }
-        } else if (is_zero(delta)) {
+        if (is_zero(delta)) {
             expr = const_true(op->type.width);
-        } else if (is_simple_const(delta) && ((!ramp_a && !ramp_b) || (ramp_a && ramp_b))) {
+            return;
+        } else if (delta.type() == Int(32) && !is_const(delta)) {
+            // Attempt to disprove using modulus remainder analysis
+            ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
+            if (mod_rem.remainder) {
+                expr = const_false();
+                return;
+            }
+
+            // Attempt to disprove using bounds analysis
+            Interval i = bounds_of_expr_in_scope(delta, bounds_info);
+            if (i.min.defined() && i.max.defined()) {
+                i.min = mutate(i.min);
+                i.max = mutate(i.max);
+                if (is_positive_const(i.min)) {
+                    expr = const_false();
+                    return;
+                }
+                if (is_negative_const(i.max)) {
+                    expr = const_false();
+                    return;
+                }
+            }
+        }
+
+        if (is_const(delta) && !ramp) {
+            // We checked for zero already
             expr = const_false(op->type.width);
-        } else if (is_simple_const(a) && !is_simple_const(b)) {
-            // Move constants to the right
-            expr = mutate(b == a);
-        } else if (broadcast_a && broadcast_b) {
+        } else if (broadcast) {
             // Push broadcasts outwards
-            expr = mutate(Broadcast::make(broadcast_a->value == broadcast_b->value, broadcast_a->width));
-        } else if (ramp_a && ramp_b && equal(ramp_a->stride, ramp_b->stride)) {
-            // Ramps with matching stride
-            Expr bases_match = (ramp_a->base == ramp_b->base);
-            expr = mutate(Broadcast::make(bases_match, ramp_a->width));
-        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
-            // Subtract a term from both sides
-            expr = mutate(add_a->b == add_b->b);
-        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
-            expr = mutate(add_a->b == add_b->a);
-        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
-            expr = mutate(add_a->a == add_b->b);
-        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
-            expr = mutate(add_a->a == add_b->a);
-        } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
-            // Add a term to both sides
-            expr = mutate(sub_a->b == sub_b->b);
-        } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
-            expr = mutate(sub_a->a == sub_b->a);
-        } else if (add_a) {
-            // Rearrange so that all adds and subs are on the rhs to cut down on further cases
-            expr = mutate(add_a->a == (b - add_a->b));
-        } else if (sub_a) {
-            expr = mutate(sub_a->a == (b + sub_a->b));
-        } else if (add_b && equal(add_b->a, a)) {
-            // Subtract a term from both sides
-            expr = mutate(make_zero(add_b->b.type()) == add_b->b);
-        } else if (add_b && equal(add_b->b, a)) {
-            expr = mutate(make_zero(add_b->a.type()) == add_b->a);
-        } else if (sub_b && equal(sub_b->a, a)) {
-            // Add a term to both sides
-            expr = mutate(make_zero(sub_b->b.type()) == sub_b->b);
-        } else if (mul_a && mul_b && is_simple_const(mul_a->b) && is_simple_const(mul_b->b) && equal(mul_a->b, mul_b->b)) {
-            // Divide both sides by a constant
-            internal_assert(!is_zero(mul_a->b)) << "Multiplication by zero survived constant folding\n";
-            expr = mutate(mul_a->a == mul_b->a);
-        } else if (a.type().is_bool() && is_one(b)) {
-            // a == true -> a
-            expr = a;
-        } else if (a.type().is_bool() && is_zero(b)) {
-            // a == false -> not(a)
-            expr = mutate(Not::make(a));
-        } else if (a.same_as(op->a) && b.same_as(op->b)) {
-            expr = op;
+            expr = Broadcast::make(mutate(broadcast->value ==
+                                          make_zero(broadcast->value.type())),
+                                   broadcast->width);
+        } else if (add && is_const(add->b)) {
+            // x + const = 0 -> x = -const
+            expr = (add->a == mutate(make_zero(delta.type()) - add->b));
+        } else if (sub) {
+            if (is_const(sub->a)) {
+                // const - x == 0 -> x == const
+                expr = sub->b == sub->a;
+            } else if (sub->a.same_as(op->a) && sub->b.same_as(op->b)) {
+                expr = op;
+            } else {
+                // x - y == 0 -> x == y
+                expr = (sub->a == sub->b);
+            }
+        } else if (mul && mul->type == Int(32)) {
+            // Restrict to int32, because, e.g. 64 * 4 == 0 as a uint8.
+            expr = mutate(mul->a == zero || mul->b == zero);
         } else {
-            expr = EQ::make(a, b);
+            expr = (delta == make_zero(delta.type()));
         }
     }
 
@@ -1664,14 +1635,6 @@ private:
         }
     }
 
-    void visit(const Ramp *op) {
-        IRMutator::visit(op);
-    }
-
-    void visit(const Broadcast *op) {
-        IRMutator::visit(op);
-    }
-
     void visit(const Call *op) {
         // Calls implicitly depend on mins and strides of the buffer referenced
         if (op->call_type == Call::Image || op->call_type == Call::Halide) {
@@ -1862,9 +1825,6 @@ private:
         }
     }
 
-    void visit(const Pipeline *op) {
-        IRMutator::visit(op);
-    }
 
     void visit(const For *op) {
         Expr new_min = mutate(op->min);
@@ -1893,10 +1853,6 @@ private:
         }
     }
 
-    void visit(const Store *op) {
-        IRMutator::visit(op);
-    }
-
     void visit(const Provide *op) {
         // Provides implicitly depend on mins and strides of the buffer referenced
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -1918,14 +1874,6 @@ private:
             }
         }
 
-        IRMutator::visit(op);
-    }
-
-    void visit(const Allocate *op) {
-        IRMutator::visit(op);
-    }
-
-    void visit(const Realize *op) {
         IRMutator::visit(op);
     }
 
@@ -1970,12 +1918,16 @@ private:
     }
 };
 
-Expr simplify(Expr e, bool remove_dead_lets) {
-    return Simplify(remove_dead_lets).mutate(e);
+Expr simplify(Expr e, bool remove_dead_lets,
+              const Scope<Interval> &bounds,
+              const Scope<ModulusRemainder> &alignment) {
+    return Simplify(remove_dead_lets, bounds, alignment).mutate(e);
 }
 
-Stmt simplify(Stmt s, bool remove_dead_lets) {
-    return Simplify(remove_dead_lets).mutate(s);
+Stmt simplify(Stmt s, bool remove_dead_lets,
+              const Scope<Interval> &bounds,
+              const Scope<ModulusRemainder> &alignment) {
+    return Simplify(remove_dead_lets, bounds, alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {
@@ -2202,7 +2154,7 @@ void simplify_test() {
     Expr t = const_true(), f = const_false();
     check(x == x, t);
     check(x == (x+1), f);
-    check(x-2 == y+3, x == y+5);
+    check(x-2 == y+3, (x-y) == 5);
     check(x+y == y+z, x == z);
     check(y+x == y+z, x == z);
     check(x+y == z+y, x == z);
@@ -2211,6 +2163,7 @@ void simplify_test() {
     check(x*0 == y*0, t);
     check(x == x+y, y == 0);
     check(x+y == x, y == 0);
+    check(100 - x == 99 - y, (y-x) == -1);
 
     check(x < x, f);
     check(x < (x+1), t);
@@ -2336,7 +2289,7 @@ void simplify_test() {
           clamp(x, max(y, v), max(z, w)));
 
     check(Ramp::make(0, 1, 4) == Broadcast::make(2, 4),
-          Ramp::make(0, 1, 4) == Broadcast::make(2, 4));
+          Ramp::make(-2, 1, 4) == Broadcast::make(0, 4));
 
     check(min(x/4, y/4), min(x, y)/4);
     check(max(x/4, y/4), max(x, y)/4);

@@ -183,7 +183,7 @@ class InjectEarlyFrees : public IRMutator {
             inject_marker.last_use = last_use.last_use;
             stmt = inject_marker.mutate(stmt);
         } else {
-            stmt = Allocate::make(alloc->name, alloc->type, alloc->extents,
+            stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
                                 Block::make(alloc->body, Free::make(alloc->name)));
         }
 

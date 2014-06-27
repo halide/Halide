@@ -3,7 +3,7 @@
 // This lesson demonstrates how schedule multi-stage pipelines.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -o lesson_08
+// g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
 // LD_LIBRARY_PATH=../bin ./lesson_08
 
 // On os x:
@@ -178,6 +178,10 @@ int main(int argc, char **argv) {
         // Tell Halide to evaluate producer as needed per y coordinate
         // of the consumer:
         producer.compute_at(consumer, y);
+
+        // This places the code that computes the producer just
+        // *inside* the consumer's for loop over y, as in the
+        // equivalent C below.
 
         // Turn on tracing.
         producer.trace_stores();

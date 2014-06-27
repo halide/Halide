@@ -4,6 +4,11 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("No gpu target enabled. Skipping test.\n");
+        return 0;
+    }
+
     Func f, g, h;
     Var x, y;
 

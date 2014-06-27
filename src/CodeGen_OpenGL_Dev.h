@@ -7,6 +7,7 @@
 
 #include "CodeGen_C.h"
 #include "CodeGen_GPU_Dev.h"
+#include "Target.h"
 
 #include <sstream>
 
@@ -17,11 +18,13 @@ class CodeGen_GLSL;
 
 class CodeGen_OpenGL_Dev : public CodeGen_GPU_Dev {
 public:
-    CodeGen_OpenGL_Dev();
+    CodeGen_OpenGL_Dev(const Target &target);
     ~CodeGen_OpenGL_Dev();
 
     // CodeGen_GPU_Dev interface
-    void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void add_kernel(Stmt stmt,
+                    std::string name,
+                    const std::vector<GPU_Argument> &args);
     void init_module();
     std::vector<char> compile_to_src();
     std::string get_current_kernel_name();
@@ -31,6 +34,7 @@ private:
     CodeGen_GLSL *glc;
     std::ostringstream src_stream;
     std::string cur_kernel_name;
+    Target target;
 };
 
 
@@ -38,16 +42,21 @@ private:
 class CodeGen_GLSL : public CodeGen_C {
 public:
     CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {}
-    void compile(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void compile(Stmt stmt,
+                 std::string name,
+                 const std::vector<GPU_Argument> &args,
+                 const Target &target);
 
 protected:
     using CodeGen_C::visit;
     std::string print_type(Type type);
+    std::string print_name(const std::string &);
 
     void visit(const FloatImm *op);
 
     void visit(const Cast *);
     void visit(const For *);
+    void visit(const Select *);
 
     void visit(const Max *);
     void visit(const Min *);

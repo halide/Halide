@@ -361,7 +361,7 @@ class InjectBufferCopies : public IRMutator {
 
         // If this buffer is only ever touched on gpu, nuke the host-side allocation.
         if (!state[buf_name].host_touched) {
-            stmt = Allocate::make(op->name, op->type, vector<Expr>(), op->body);
+            stmt = Allocate::make(op->name, op->type, op->extents, const_false(), op->body);
         }
 
         state.erase(buf_name);

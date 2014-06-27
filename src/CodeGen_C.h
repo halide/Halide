@@ -64,7 +64,7 @@ protected:
     virtual std::string print_reinterpret(Type, Expr);
 
     /** Emit a version of a string that is a valid identifier in C (. is replaced with _) */
-    std::string print_name(const std::string &);
+    virtual std::string print_name(const std::string &);
 
     /** Emit an SSA-style assignment, and set id to the freshly generated name. Return id. */
     std::string print_assignment(Type t, const std::string &rhs);

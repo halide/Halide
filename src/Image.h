@@ -196,25 +196,25 @@ public:
 
     /** Assuming this image is one-dimensional, get the value of the
      * element at position x */
-    T operator()(int x) const {
+    const T &operator()(int x) const {
         return ((T *)origin)[x*stride_0];
     }
 
     /** Assuming this image is two-dimensional, get the value of the
      * element at position (x, y) */
-    T operator()(int x, int y) const {
+    const T &operator()(int x, int y) const {
         return ((T *)origin)[x*stride_0 + y*stride_1];
     }
 
     /** Assuming this image is three-dimensional, get the value of the
      * element at position (x, y, z) */
-    T operator()(int x, int y, int z) const {
+    const T &operator()(int x, int y, int z) const {
         return ((T *)origin)[x*stride_0 + y*stride_1 + z*stride_2];
     }
 
     /** Assuming this image is four-dimensional, get the value of the
      * element at position (x, y, z, w) */
-    T operator()(int x, int y, int z, int w) const {
+    const T &operator()(int x, int y, int z, int w) const {
         return ((T *)origin)[x*stride_0 + y*stride_1 + z*stride_2 + w*stride_3];
     }
 

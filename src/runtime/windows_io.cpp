@@ -12,16 +12,12 @@ extern "C" {
 #endif
 
 extern uint8_t *__iob_func();
-extern int vfprintf(void *stream, const char *format, __builtin_va_list ap);
+extern int fprintf(void *stream, const char *format, ...);
 
-WEAK int halide_printf(void *user_context, const char * fmt, ...) {
+WEAK void __halide_print(void *user_context, const char *str) {
     uint8_t *stdout = __iob_func() + FILE_SIZE;
     //uint8_t *stderr = __iob_func() + FILE_SIZE*2;
-    __builtin_va_list args;
-    __builtin_va_start(args,fmt);
-    int ret = vfprintf(stdout, fmt, args);
-    __builtin_va_end(args);
-    return ret;
+    fprintf(stdout, "%s", str);
 }
 
 extern int _vsnprintf(char *str, size_t size, const char *, __builtin_va_list ap);
@@ -35,4 +31,7 @@ WEAK int snprintf(char *str, size_t size, const char *fmt, ...) {
     return ret;
 }
 
+WEAK int vsnprintf(char *str, size_t size, const char *fmt, __builtin_va_list ap) {
+    return _vsnprintf(str, size, fmt, ap);
+}
 }
