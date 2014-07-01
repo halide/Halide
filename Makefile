@@ -294,8 +294,7 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
-	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
-	$(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
+	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
