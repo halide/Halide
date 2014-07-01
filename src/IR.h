@@ -809,9 +809,11 @@ struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
     std::vector<Expr> extents;
+    Expr condition;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents, Stmt body) {
+    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
+                     Expr condition, Stmt body) {
         for (size_t i = 0; i < extents.size(); i++) {
             internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
             internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -822,6 +824,7 @@ struct Allocate : public StmtNode<Allocate> {
         node->name = name;
         node->type = type;
         node->extents = extents;
+        node->condition = condition;
 
         node->body = body;
         return node;
@@ -860,9 +863,10 @@ struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
     Region bounds;
+    Expr condition;
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
             internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
             internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
@@ -876,6 +880,7 @@ struct Realize : public StmtNode<Realize> {
         node->name = name;
         node->types = types;
         node->bounds = bounds;
+        node->condition = condition;
         node->body = body;
         return node;
     }

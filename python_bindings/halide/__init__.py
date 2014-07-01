@@ -36,6 +36,11 @@ VarOrRVarType = VarOrRVar
 ArgumentType = Argument
 ScheduleHandleType = ScheduleHandle
 
+GPU_Default = 0
+GPU_CUDA = 1
+GPU_OpenCL = 2
+GPU_GLSL = 3
+
 # ----------------------------------------------------
 # Expr
 # ----------------------------------------------------
@@ -161,13 +166,19 @@ for C in [VarType, FuncRefExpr, FuncRefVar]:
 def raise_error(e):
     raise e
 
-#_reset0 = Func.reset     # Reset schedule has been removed (could be reimplemented in C++ layer as a walk over all Funcs)
-_split0 = FuncType.split
-_tile0 = FuncType.tile
-_reorder0 = FuncType.reorder
-_bound0 = FuncType.bound
-_parallel0 = FuncType.parallel
+def wrap_func_arg(a, useInt=True):
+#    print a
+    if isinstance(a, VarOrRVarType):
+        return a
+    elif isinstance(a, RVarType):
+        return VarOrRVar(a)
+    elif isinstance(a, VarType):
+        return VarOrRVar(a)
+    elif useInt and isinstance(a, (int,long)):
+        return a
+    return wrap(a)
 
+#_reset0 = Func.reset     # Reset schedule has been removed (could be reimplemented in C++ layer as a walk over all Funcs)
 _generic_getitem_var_or_expr = lambda x, key: call(x, *wrap_func_args(key)) if isinstance(key,tuple) else call(x, wrap(key) if not isinstance(key,VarType) else key)
 _generic_getitem_expr = lambda x, key: call(x, *[wrap(y) for y in key]) if isinstance(key,tuple) else call(x, wrap(key))
 _generic_set = lambda x, y: set(x, wrap(y))
@@ -181,18 +192,54 @@ def wrap_func_args(args):
     return [wrap(y) for y in args]
 
 def wrap_gpu_args(args):
-    return [y if isinstance(y, VarType) else wrap(y) for y in args]
+    return [wrap_func_arg(y, False) for y in args]
+
+def wrap_gpu_args_int(args):
+    return [wrap_func_arg(y) for y in args]
 
 FuncType.__setitem__ = lambda x, key, value: set(call(x, *wrap_func_args(key)), wrap(value)) if isinstance(key,tuple) else set(call(x, wrap(key) if not isinstance(key,VarType) else key), wrap(value))
 FuncType.__getitem__ = _generic_getitem_var_or_expr
 FuncType.set = _generic_set
 
+_allow_race_conditions0 = FuncType.allow_race_conditions
+_gpu0 = FuncType.gpu
+_gpu_blocks0 = FuncType.gpu_blocks
+_gpu_single_thread0 = FuncType.gpu_single_thread
+_gpu_threads0 = FuncType.gpu_threads
+_gpu_tile0 = FuncType.gpu_tile
+_serial0 = FuncType.serial
+_split0 = FuncType.split
+_fuse0 = FuncType.fuse
+_tile0 = FuncType.tile
+_reorder0 = FuncType.reorder
+_bound0 = FuncType.bound
+_parallel0 = FuncType.parallel
+_vectorize0 = FuncType.vectorize
+_unroll0 = FuncType.unroll
+
 #Func.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[0], ImageTypes)) else _realize(x,to_dynimage(a[0]))
-Func.split = lambda self, a, b, c, d: _split0(self, a, b, c, wrap(d))
-Func.tile = lambda self, *a: _tile0(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-Func.reorder = lambda self, *a: _reorder0(self, *[VarOrRVar(v) for v in a])
+Func.allow_race_conditions = lambda self: _allow_race_conditions0(self)
+
+Func.gpu_blocks = lambda self, *a: _gpu_blocks0(self, *wrap_gpu_args_int(a))
+Func.gpu_single_thread = lambda self, *a: _gpu_single_thread0(self, *wrap_gpu_args_int(a))
+Func.gpu_threads = lambda self, *a: _gpu_threads0(self, *wrap_gpu_args_int(a))
+Func.gpu_tile = lambda self, *a: _gpu_tile0(self, *wrap_gpu_args_int(a))
+
+Func.serial = lambda self, *a: _serial0(self, *wrap_gpu_args(a))
+Func.fuse = lambda self, *a: _fuse0(self, *wrap_gpu_args(a))
+Func.split = lambda self, *a: _split0(self, *wrap_gpu_args(a))
+Func.tile = lambda self, *a: _tile0(self, *wrap_gpu_args(a))
+Func.reorder = lambda self, *a: _reorder0(self, *wrap_gpu_args(a))
 Func.bound = lambda self, a, b, c: _bound0(self, a, wrap(b), wrap(c))
 Func.parallel = lambda self, *a: _parallel0(self, *wrap_gpu_args(a))
+Func.vectorize = lambda self, *a: _vectorize0(self, *wrap_gpu_args_int(a))
+Func.unroll = lambda self, *a: _unroll0(self, *wrap_gpu_args_int(a))
+
+#Deprecated
+Func.cuda_blocks = lambda self, *a: _gpu_blocks0(self, *wrap_gpu_args_int(a))
+Func.cuda_single_thread = lambda self, *a: _gpu_single_thread0(self, *wrap_gpu_args_int(a))
+Func.cuda_threads = lambda self, *a: _gpu_threads0(self, *wrap_gpu_args_int(a))
+Func.cuda_tile = lambda self, *a: _gpu_tile0(self, *wrap_gpu_args_int(a))
 
 class Func(object):
     """
@@ -216,6 +263,16 @@ class Func(object):
     def set(self, y):
         """
         Typically one uses f[x, y] = expr to assign to a function. However f.set(expr) can be used also.
+        """
+
+    def allow_race_conditions(self):
+        """
+        Specify that race conditions are permitted for this Func,
+        which enables parallelizing over RVars even when Halide cannot
+        prove that it is safe to do so. Use this with great caution,
+        and only if you can prove to yourself that this is safe, as it
+        may result in a non-deterministic routine that returns
+        different values at different times or on different machines. */
         """
 
     def realize(self, x_size=0, y_size=0, z_size=0, w_size=0):
@@ -393,6 +450,14 @@ class Func(object):
         those dimensions as parallel.
         """
 
+    def gpu_single_thread(self, *args):
+        """
+        Tell Halide to run this stage using a single gpu thread and
+        block. This is not an efficient use of your GPU, but it can be
+        useful to avoid copy-back for intermediate update stages that
+        touch a very small part of your Func.
+        """
+
     def gpu_blocks(self, *args):
         """
         Tell Halide that the following dimensions correspond to cuda
@@ -538,15 +603,44 @@ class Func(object):
 # ScheduleHandle
 # ----------------------------------------------------
 
+_allow_race_conditions1 = ScheduleHandleType.allow_race_conditions
+_gpu1 = ScheduleHandleType.gpu
+_gpu_blocks1 = ScheduleHandleType.gpu_blocks
+_gpu_single_thread1 = ScheduleHandleType.gpu_single_thread
+_gpu_threads1 = ScheduleHandleType.gpu_threads
+_gpu_tile1 = ScheduleHandleType.gpu_tile
+_serial1 = ScheduleHandleType.serial
 _split1 = ScheduleHandleType.split
+_fuse1 = ScheduleHandleType.fuse
 _tile1 = ScheduleHandleType.tile
 _reorder1 = ScheduleHandleType.reorder
-_gpu_tile1 = ScheduleHandleType.gpu_tile
+_parallel1 = ScheduleHandleType.parallel
+_vectorize1 = ScheduleHandleType.vectorize
+_unroll1 = ScheduleHandleType.unroll
 
-ScheduleHandle.split = lambda self, a, b, c, d: _split1(self, a, b, c, wrap(d))
-ScheduleHandle.tile = lambda self, *a: _tile1(self, *[a[i] if i < len(a)-2 else wrap(a[i]) for i in range(len(a))])
-ScheduleHandle.reorder = lambda self, *a: _reorder1(self, *[VarOrRVar(v) for v in a])
+#ScheduleHandle.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[1], ImageTypes)) else _realize(x,to_dynimage(a[1]))
+ScheduleHandle.allow_race_conditions = lambda self: _allow_race_conditions1(self)
+
+ScheduleHandle.gpu_blocks = lambda self, *a: _gpu_blocks1(self, *wrap_gpu_args_int(a))
+ScheduleHandle.gpu_single_thread = lambda self, *a: _gpu_single_thread1(self, *wrap_gpu_args_int(a))
+ScheduleHandle.gpu_threads = lambda self, *a: _gpu_threads1(self, *wrap_gpu_args_int(a))
 ScheduleHandle.gpu_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
+
+ScheduleHandle.serial = lambda self, *a: _serial1(self, *wrap_gpu_args(a))
+ScheduleHandle.fuse = lambda self, *a: _fuse1(self, *wrap_gpu_args(a))
+ScheduleHandle.split = lambda self, *a: _split1(self, *wrap_gpu_args(a))
+ScheduleHandle.tile = lambda self, *a: _tile1(self, *wrap_gpu_args(a))
+ScheduleHandle.reorder = lambda self, *a: _reorder1(self, *wrap_gpu_args(a))
+ScheduleHandle.parallel = lambda self, *a: _parallel1(self, *wrap_gpu_args(a))
+ScheduleHandle.vectorize = lambda self, *a: _vectorize1(self, *wrap_gpu_args_int(a))
+ScheduleHandle.unroll = lambda self, *a: _unroll1(self, *wrap_gpu_args_int(a))
+
+# Deprecated
+ScheduleHandle.cuda_blocks = lambda self, *a: _gpu_blocks1(self, *wrap_gpu_args_int(a))
+ScheduleHandle.cuda_single_thread = lambda self, *a: _gpu_single_thread1(self, *wrap_gpu_args_int(a))
+ScheduleHandle.cuda_threads = lambda self, *a: _gpu_threads1(self, *wrap_gpu_args_int(a))
+ScheduleHandle.cuda_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
+
 
 
 class ScheduleHandle(object):
@@ -558,6 +652,17 @@ class ScheduleHandle(object):
     of little functions, rather than storing things in Exprs.
 
     """
+
+    def allow_race_conditions(self):
+        """
+        Specify that race conditions are permitted for this Func,
+        which enables parallelizing over RVars even when Halide cannot
+        prove that it is safe to do so. Use this with great caution,
+        and only if you can prove to yourself that this is safe, as it
+        may result in a non-deterministic routine that returns
+        different values at different times or on different machines. */
+        """
+
     def split(self, old, outer, inner, factor):
         """
         Split a dimension into inner and outer subdimensions with the
@@ -632,6 +737,14 @@ class ScheduleHandle(object):
         want to control how that function's dimensions map to cuda
         threads. If the selected target is not ptx, this just marks
         those dimensions as parallel.
+        """
+
+    def gpu_single_thread(self, *args):
+        """
+        Tell Halide to run this stage using a single gpu thread and
+        block. This is not an efficient use of your GPU, but it can be
+        useful to avoid copy-back for intermediate update stages that
+        touch a very small part of your Func.
         """
 
     def gpu_blocks(self, *args):
@@ -1716,43 +1829,37 @@ def test_segfault():
     # TODO: Implement a test that segfaults...
 
 def test_examples():
-    import examples
-    in_grayscale = 'lena_crop_grayscale.png'
-    in_color = 'lena_crop.png'
+    import apps
+    in_grayscale = '../../apps/images/gray.png'
+    in_color = '../../apps/images/rgb.png'
 
     names = []
     do_filter = True
 
 #    for example_name in ['interpolate']: #
-    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
+    for example_name in 'interpolate blur dilate local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian snake'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
-        example = getattr(examples, example_name)
+        example = getattr(apps, example_name)
         first = True
-#    for example in [examples.boxblur_cumsum]:
+#    for example in [apps.boxblur_cumsum]:
         for input_image0 in [in_grayscale, in_color]:
             for dtype in [UInt(8), UInt(16), UInt(32), Float(32), Float(64)]:
                 input_image = input_image0
 #            for dtype in [UInt(16)]:
 #            for dtype in [UInt(8), UInt(16)]:
-                if example is examples.boxblur_sat or example is examples.boxblur_cumsum:
-                    if dtype == UInt(32):
-                        continue
-                if example is examples.local_laplacian:
+                if example is apps.local_laplacian:
                     if input_image == in_color and (dtype == UInt(8) or dtype == UInt(16)):
                         pass
                     else:
                         continue
-                if example is examples.snake:
-                    if dtype != UInt(8) or input_image != in_color:
-                        continue
                 #print dtype.isFloat(), dtype.bits
-                if example is examples.interpolate:
+                if example is apps.interpolate:
                     if not dtype.isFloat() or input_image != in_color:
                         continue
-                    input_image = 'interpolate_in.png'
-        #        (in_func, out_func) = examples.blur_color(dtype)
-    #            (in_func, out_func) = examples.blur(dtype)
+                    input_image = '../../apps/images/rgba.png'
+        #        (in_func, out_func) = apps.blur_color(dtype)
+    #            (in_func, out_func) = apps.blur(dtype)
                 (in_func, out_func, eval_func, scope) = example(dtype)
                 if first:
                     first = False

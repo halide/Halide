@@ -149,7 +149,8 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
     return llvm_size;
 }
 
-CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type, const std::vector<Expr> &extents) {
+CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
+                                                           const std::vector<Expr> &extents, Expr condition) {
 
     Allocation allocation;
     Value *llvm_size = NULL;
@@ -170,6 +171,14 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     } else {
         allocation.stack_size = 0;
         llvm_size = codegen_allocation_size(name, type, extents);
+    }
+
+    // Only allocate memory if the condition is true, otherwise 0.
+    if (llvm_size != NULL) {
+        Value *llvm_condition = codegen(condition);
+        llvm_size = builder->CreateSelect(llvm_condition,
+                                          llvm_size,
+                                          ConstantInt::get(llvm_size->getType(), 0));
     }
 
     llvm::Type *llvm_type = llvm_type_of(type);
@@ -248,7 +257,8 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
                    << alloc->name << "\n";
     }
 
-    Allocation allocation = create_allocation(alloc->name, alloc->type, alloc->extents);
+    Allocation allocation = create_allocation(alloc->name, alloc->type,
+                                              alloc->extents, alloc->condition);
     sym_push(alloc->name + ".host", allocation.ptr);
 
     codegen(alloc->body);
