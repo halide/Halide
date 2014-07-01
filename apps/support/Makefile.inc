@@ -20,17 +20,17 @@ endif
 LIBPNG_LIBS ?= $(LIBPNG_LIBS_DEFAULT)
 PNGFLAGS=$(LIBPNG_LIBS) $(LIBPNG_CXX_FLAGS)
 
+UNAME = $(shell uname)
+
 PLATFORM_CUDA_LDFLAGS=-L/usr/lib/nvidia-current -lcuda
 ifeq ($(UNAME), Darwin)
-PLATFORM_CUDA_LDFLAGS=-F/Library/Frameworks -framework CUDA
+PLATFORM_CUDA_LDFLAGS=-L/usr/local/cuda/lib -lcuda
 endif
 
 PLATFORM_OPENGL_LDFLAGS=-lGL -lX11
 ifeq ($(UNAME), Darwin)
 PLATFORM_OPENGL_LDFLAGS=-framework OpenGL
 endif
-
-UNAME = $(shell uname)
 
 PLATFORM_OPENCL_LDFLAGS=-lOpenCL
 ifeq ($(UNAME), Darwin)

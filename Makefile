@@ -136,7 +136,7 @@ endif
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+STATIC_TEST_LIBS ?= -L/usr/local/cuda/lib -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -framework OpenCL
@@ -331,10 +331,10 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@; \
+		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) $(STATIC_TEST_LIBS) -o $@; \
 	else \
 		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
+		-Iinclude -L$(BIN_DIR) -lHalide $(STATIC_TEST_LIBS) $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\
 	fi
 
 test_%: $(BIN_DIR)/test_%

@@ -34,6 +34,6 @@ int main(int argc, char **argv) {
 
     int64_t time = (t2.tv_usec - t1.tv_usec) / 1000;
     time += (t2.tv_sec - t1.tv_sec) * 1000;
-    printf("Success (%lld ms)!\n", time);
+    printf("Success (%lld ms)!\n", (long long)time);
     return 0;
 }
