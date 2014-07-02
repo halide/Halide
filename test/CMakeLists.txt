@@ -52,12 +52,21 @@ if (WITH_TEST_STATIC)
     set(SCRATCH_DIR "${NATIVE_INT_DIR}scratch_${GENERATOR}")
     file(MAKE_DIRECTORY "${SCRATCH_DIR}")
 
+    if (WIN32)
     add_custom_command(OUTPUT "${STATIC_LIB}"
       DEPENDS "${GENERATOR}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/${GENERATOR}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/Release/${GENERATOR}${CMAKE_EXECUTABLE_SUFFIX}"
+      COMMAND "lib.exe" "/OUT:${STATIC_LIB}" "${SCRATCH_DIR}/*.o"
+      WORKING_DIRECTORY "${SCRATCH_DIR}"
+      )
+    else()
+    add_custom_command(OUTPUT "${STATIC_LIB}"
+      DEPENDS "${GENERATOR}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${GENERATOR}${CMAKE_EXECUTABLE_SUFFIX}"
       COMMAND "${CMAKE_AR}" q "${STATIC_LIB}" "${SCRATCH_DIR}/*.o"
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
+    endif()
 
     # Use a custom target to force it to run the generator before the
     # object file for the runner.
@@ -68,10 +77,11 @@ if (WITH_TEST_STATIC)
     add_dependencies("${RUNNER}" "run_generator_${GENERATOR}")
     target_include_directories("${RUNNER}" PRIVATE "${SCRATCH_DIR}")
     target_include_directories("${RUNNER}" PRIVATE "${CMAKE_SOURCE_DIR}/apps/support")
-    target_link_libraries("${RUNNER}" "${STATIC_LIB}")
+    target_link_libraries("${RUNNER}" "${SCRATCH_DIR}/${STATIC_LIB}")
     set_target_properties("${RUNNER}" PROPERTIES FOLDER "static")
     if (WIN32)
-      set_target_properties("${RUNNER}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
+      # /FORCE:multiple allows clobbering the halide runtime symbols in the lib
+      set_target_properties("${RUNNER}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576 /FORCE:multiple")
     else()
       set_target_properties("${RUNNER}" PROPERTIES LINK_FLAGS "-ldl -lpthread -lz -L ${SCRATCH_DIR}")
     endif()
