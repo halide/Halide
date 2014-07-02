@@ -130,11 +130,7 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     if (t.bits == 32) {
         user_assert(llvm_ARM_enabled) << "llvm build not configured with ARM target enabled\n.";
     } else {
-        if (t.features & Target::AArch64Backend) {
-            user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
-        } else {
-            user_assert(llvm_ARM64_enabled) << "llvm build not configured with ARM64 target enabled.\n";
-        }
+        user_assert(llvm_AArch64_enabled) << "llvm build not configured with AArch64 target enabled.\n";
     }
 
     #if !(WITH_NATIVE_CLIENT)
@@ -341,19 +337,11 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         }
     } else {
         user_assert(target.bits == 64) << "Target bits must be 32 or 64\n";
-        if (target.features & Target::AArch64Backend) {
-            #if (WITH_AARCH64)
-            triple.setArch(llvm::Triple::aarch64);
-            #else
-            user_error << "AArch64 llvm target not enabled in this build of Halide\n";
-            #endif
-        } else {
-            #if (WITH_ARM64)
-            triple.setArch(llvm::Triple::arm64);
-            #else
-            user_error << "ARM64 llvm target not enabled in this build of Halide\n";
-            #endif
-        }
+        #if (WITH_AARCH64)
+        triple.setArch(llvm::Triple::aarch64);
+        #else
+        user_error << "AArch64 llvm target not enabled in this build of Halide\n";
+        #endif
     }
 
     if (target.os == Target::Android) {

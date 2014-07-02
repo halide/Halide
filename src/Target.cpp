@@ -173,8 +173,8 @@ Target parse_target_string(const std::string &target) {
                    << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
                    << "and os is linux, windows, osx, nacl, ios, or android. "
                    << "If arch or os are omitted, they default to the host. "
-                   << "Features include sse41, avx, avx2, armv7s, aarch64, cuda, "
-                   << "opencl, spir, spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
+                   << "Features include sse41, avx, avx2, armv7s, cuda, "
+                   << "opencl, no_asserts, no_bounds_query, and gpu_debug.\n"
                    << "HL_TARGET can also begin with \"host\", which sets the "
                    << "host's architecture, os, and feature set, with the "
                    << "exception of the GPU runtimes, which default to off.\n"
@@ -256,8 +256,6 @@ bool Target::merge_string(const std::string &target) {
             features |= (Target::SSE41 | Target::AVX | Target::AVX2);
         } else if (tok == "armv7s") {
             features |= Target::ARMv7s;
-        } else if (tok == "aarch64") {
-            features |= Target::AArch64Backend;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
         } else if (tok == "opencl") {
@@ -320,7 +318,7 @@ std::string Target::to_string() const {
   };
   const char* const feature_names[] = {
     "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
-    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles",
+    "no_asserts", "no_bounds_query", "armv7s", "cl_doubles",
     "fma", "fma4", "f16c"
   };
   string result = string(arch_names[arch])
@@ -511,7 +509,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
 namespace Internal {
 
-/** When JIT-compiling on 32-bit windows, we need to rewrite calls 
+/** When JIT-compiling on 32-bit windows, we need to rewrite calls
 	to name-mangled win32 api calls to non-name-mangled versions. */
 void undo_win32_name_mangling(llvm::Module *m) {
 	llvm::IRBuilder<> builder(m->getContext());
@@ -523,7 +521,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
 		// if it's a __stdcall call that starts with \01_, then we're making a win32 api call
 		if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
 			n.size() > 2 && n[0] == 1 && n[1] == '_') {
-			
+
 			// Unmangle the name.
 			string unmangled_name = n.substr(2);
 			size_t at = unmangled_name.rfind('@');
@@ -532,7 +530,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
 			// Extern declare the unmangled version.
 			llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
 			unmangled->setCallingConv(f->getCallingConv());
-			
+
 			// Add a body to the mangled version that calls the unmangled version.
 			llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
 			builder.SetInsertPoint(block);
@@ -542,7 +540,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
 				iter != f->arg_end(); ++iter) {
 				args.push_back(iter);
 			}
-				
+
 			llvm::CallInst *c = builder.CreateCall(unmangled, args);
 			c->setCallingConv(f->getCallingConv());
 
