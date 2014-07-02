@@ -58,10 +58,6 @@ if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL=1")
 endif()
 
-if (TARGET_ARM64)
-  add_definitions("-DWITH_ARM64=1")
-endif()
-
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
