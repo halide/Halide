@@ -21,6 +21,7 @@ const int W = 256, H = 256;
 cl_context cl_ctx = NULL;
 cl_command_queue cl_q = NULL;
 
+// Create the global context. This is just a helper function not called by Halide.
 int init_context() {
     cl_int err = 0;
 
@@ -116,6 +117,9 @@ void destroy_context() {
     cl_ctx = NULL;
 }
 
+// These functions replace the acquire/release implementation in src/runtime/opencl.cpp. 
+// Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
+// in our implementation of these functions.
 extern "C" int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
     printf("Acquired CL context %p\n", cl_ctx);
     *ctx = cl_ctx;
@@ -125,7 +129,6 @@ extern "C" int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl
 
 extern "C" int halide_release_cl_context(void *user_context) {
     printf("Releasing CL context %p\n", cl_ctx);
-    // We don't need to implement serialization because we don't parallelize GPU operations.
     return 0;
 }
 #elif defined(TEST_PTX)
@@ -193,6 +196,9 @@ void destroy_context() {
     cuda_ctx = NULL;
 }
 
+// These functions replace the acquire/release implementation in src/runtime/cuda.cpp. 
+// Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
+// in our implementation of these functions.
 extern "C" int halide_acquire_cuda_context(void *user_context, CUcontext *ctx) {
     printf("Acquired CUDA context %p\n", cuda_ctx);
     *ctx = cuda_ctx;
@@ -201,7 +207,6 @@ extern "C" int halide_acquire_cuda_context(void *user_context, CUcontext *ctx) {
 
 extern "C" int halide_release_cuda_context(void *user_context) {
     printf("Releasing CUDA context %p\n", cuda_ctx);
-    // We don't need to implement serialization because we don't parallelize GPU operations.
     return 0;
 }
 #else
@@ -221,6 +226,9 @@ int main(int argc, char **argv) {
         return ret;
     }
 
+    // Everything else is a normal Halide program. The GPU runtime will call
+    // the above acquire/release functions to get the context instead of using
+    // its own internal context.
     Image<float> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
