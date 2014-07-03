@@ -177,7 +177,7 @@ class StorageFolding : public IRMutator {
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             }
         } else {
             debug(3) << "Attempting to fold " << op->name << "\n";
@@ -186,7 +186,7 @@ class StorageFolding : public IRMutator {
             if (new_body.same_as(op->body)) {
                 stmt = op;
             } else if (new_body.same_as(body)) {
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             } else {
                 Region bounds = op->bounds;
 
@@ -195,7 +195,7 @@ class StorageFolding : public IRMutator {
 
                 bounds[folder.dim_folded] = Range(0, folder.fold_factor);
 
-                stmt = Realize::make(op->name, op->types, bounds, new_body);
+                stmt = Realize::make(op->name, op->types, bounds, op->condition, new_body);
             }
         }
     }

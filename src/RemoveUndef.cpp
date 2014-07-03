@@ -344,7 +344,7 @@ private:
     }
 
     void visit(const Allocate *op) {
-      std::vector<Expr> new_extents;
+        std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
@@ -355,11 +355,17 @@ private:
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
-        if (all_extents_unmodified && body.same_as(op->body)) {
+        if (!body.defined()) return;
+
+        Expr condition = mutate(op->condition);
+        if (!condition.defined()) return;
+
+        if (all_extents_unmodified &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
         }
     }
 
@@ -391,11 +397,17 @@ private:
         }
 
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
-        if (!bounds_changed && body.same_as(op->body)) {
+        if (!body.defined()) return;
+
+        Expr condition = mutate(op->condition);
+        if (!condition.defined()) return;
+
+        if (!bounds_changed &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition)) {
             stmt = op;
         } else {
-            stmt = Realize::make(op->name, op->types, new_bounds, body);
+            stmt = Realize::make(op->name, op->types, new_bounds, condition, body);
         }
     }
 

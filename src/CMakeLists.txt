@@ -58,10 +58,6 @@ if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL=1")
 endif()
 
-if (TARGET_ARM64)
-  add_definitions("-DWITH_ARM64=1")
-endif()
-
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
@@ -271,6 +267,8 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   COMMAND build_halide_h ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h ${HEADER_FILES})
+
+file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 

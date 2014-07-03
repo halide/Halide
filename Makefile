@@ -31,7 +31,6 @@ LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
-WITH_ARM64 ?= $(findstring arm64, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= 1
 WITH_OPENGL ?= 1
@@ -66,9 +65,6 @@ OPENCL_LLVM_CONFIG_LIB=$(if $(WITH_OPENCL), , )
 
 OPENGL_CXX_FLAGS=$(if $(WITH_OPENGL), -DWITH_OPENGL=1, )
 
-ARM64_CXX_FLAGS=$(if $(WITH_ARM64), -DWITH_ARM64=1, )
-ARM64_LLVM_CONFIG_LIB=$(if $(WITH_ARM64), arm64, )
-
 AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
@@ -81,13 +77,12 @@ CXX_FLAGS += $(NATIVE_CLIENT_CXX_FLAGS)
 CXX_FLAGS += $(PTX_CXX_FLAGS)
 CXX_FLAGS += $(ARM_CXX_FLAGS)
 CXX_FLAGS += $(AARCH64_CXX_FLAGS)
-CXX_FLAGS += $(ARM64_CXX_FLAGS)
 CXX_FLAGS += $(X86_CXX_FLAGS)
 CXX_FLAGS += $(OPENCL_CXX_FLAGS)
 CXX_FLAGS += $(OPENGL_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
-LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(ARM64_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB))
+LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit jit $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB))
 
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 
@@ -136,7 +131,7 @@ endif
 ifeq ($(UNAME), Darwin)
 # Someone with an osx box with cuda installed please fix the line below
 ifneq ($(TEST_PTX), )
-STATIC_TEST_LIBS ?= -F/Library/Frameworks -framework CUDA
+STATIC_TEST_LIBS ?= -L/usr/local/cuda/lib -lcuda
 endif
 ifneq ($(TEST_OPENCL), )
 STATIC_TEST_LIBS ?= -framework OpenCL
@@ -294,8 +289,7 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
-	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
-	$(TUTORIALS:tutorial/%.cpp=$(BIN_DIR)/tutorial_%)
+	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
@@ -332,7 +326,7 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 		export LESSON=`echo $${TUTORIAL} | cut -b1-9`; \
 		make tutorial_$${TUTORIAL/run/generate}; \
 		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
-		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@; \
+		-Itmp tmp/$${LESSON}_*.o -lpthread -ldl -lz $(LIBPNG_LIBS) $(STATIC_TEST_LIBS) -o $@; \
 	else \
 		$(CXX) $(TEST_CXX_FLAGS) $(LIBPNG_CXX_FLAGS) $(OPTIMIZE) $< \
 		-Iinclude -L$(BIN_DIR) -lHalide $(STATIC_TEST_LIBS) $(LLVM_LDFLAGS) -lpthread -ldl -lz $(LIBPNG_LIBS) -o $@;\

@@ -578,8 +578,8 @@ void CodeGen_X86::test() {
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), Block::make(loop, Free::make("tmp_stack")));
-    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), Block::make(loop, Free::make("tmp_heap")));
+    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), const_true(), Block::make(loop, Free::make("tmp_stack")));
+    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), Block::make(loop, Free::make("tmp_heap")));
     loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);
@@ -676,7 +676,22 @@ string CodeGen_X86::mcpu() const {
 }
 
 string CodeGen_X86::mattrs() const {
-    return "";
+    std::string features;
+    std::string separator;
+    if (target.features & Target::FMA) {
+        features += "+fma";
+        separator = " ";
+    }
+    if (target.features & Target::FMA4) {
+        features += separator + "+fma4";
+        separator = " ";
+    }
+    if (target.features & Target::F16C) {
+        features += separator + "+f16c";
+        separator = " ";
+    }
+
+    return features;
 }
 
 bool CodeGen_X86::use_soft_float_abi() const {
