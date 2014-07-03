@@ -31,7 +31,6 @@ class AllocationInference : public IRMutator {
         Function f = iter->second;
 
         Box b = box_touched(op->body, op->name, Scope<Interval>(), func_bounds);
-
         if (touched_by_extern.count(f.name())) {
             // The region touched is at least the region required at this
             // loop level of the first stage (this is important for inputs
@@ -48,7 +47,7 @@ class AllocationInference : public IRMutator {
 
         Stmt new_body = mutate(op->body);
 
-        stmt = Realize::make(op->name, op->types, op->bounds, new_body);
+        stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
 
         internal_assert(b.size() == op->bounds.size());
         for (size_t i = 0; i < b.size(); i++) {

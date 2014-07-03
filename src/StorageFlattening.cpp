@@ -76,6 +76,7 @@ private:
           extents.push_back(realize->bounds[i].extent);
           extents[i] = mutate(extents[i]);
         }
+        Expr condition = mutate(realize->condition);
 
         vector<int> storage_permutation;
         {
@@ -140,7 +141,7 @@ private:
                                  stmt);
 
             // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, stmt);
+            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {

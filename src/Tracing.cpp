@@ -130,7 +130,6 @@ private:
             args.push_back(op->name);
             args.push_back(halide_trace_begin_realization); // event type for begin realization
             args.push_back(0); // realization id
-
             args.push_back(0); // value index
             args.push_back(0); // value
 
@@ -148,12 +147,12 @@ private:
             Stmt new_body = op->body;
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
-            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
             new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
-            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         }
 
 
@@ -225,7 +224,7 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
         Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
         output_region.push_back(Range(min, extent));
     }
-    s = Realize::make(output.name(), output.output_types(), output_region, s);
+    s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
 
     // Inject tracing calls
     s = tracing.mutate(s);

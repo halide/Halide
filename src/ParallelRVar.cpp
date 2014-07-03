@@ -43,6 +43,8 @@ class RenameFreeVars : public IRMutator {
     void visit(const Variable *op) {
         if (!op->param.defined() && !op->image.defined()) {
             expr = Variable::make(op->type, get_new_name(op->name));
+        } else {
+            expr = op;
         }
     }
 

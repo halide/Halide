@@ -10,6 +10,7 @@
 #include "Param.h"
 #include "Var.h"
 #include "Lerp.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -156,7 +157,7 @@ const string preamble =
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "\n"
     + buffer_t_definition +
-    "bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
+    "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
     "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
     "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
     "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
@@ -1055,7 +1056,9 @@ void CodeGen_C::visit(const Allocate *op) {
             }
         }
     } else {
-        internal_assert(op->extents.size() > 0); // Otherwise allocation is constant and zero sized.
+        // Check that the allocation is not scalar (if it were scalar
+        // it would have constant size).
+        internal_assert(op->extents.size() > 0);
 
         size_id = print_assignment(Int(64), print_expr(op->extents[0]));
 
@@ -1080,6 +1083,18 @@ void CodeGen_C::visit(const Allocate *op) {
                << ", \"32-bit signed overflow computing size of allocation "
                << op->name << "\\n\");\n";
         close_scope("overflow test " + op->name);
+    }
+
+    // Check the condition to see if this allocation should actually be created.
+    // If the allocation is on the stack, the only condition we can respect is
+    // unconditional false (otherwise a non-constant-sized array declaration
+    // will be generated).
+    if (!on_stack || is_zero(op->condition)) {
+        Expr conditional_size = Select::make(op->condition,
+                                             Var(size_id),
+                                             Expr(static_cast<int32_t>(0)));
+        conditional_size = simplify(conditional_size);
+        size_id = print_assignment(Int(64), print_expr(conditional_size));
     }
 
     allocations.push(op->name, op->type);
@@ -1172,9 +1187,9 @@ void CodeGen_C::test() {
     Stmt s = Store::make("buf", e, x);
     s = LetStmt::make("x", beta+1, s);
     s = Block::make(s, Free::make("tmp.stack"));
-    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), s);
+    s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
-    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), s);
+    s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
 
     ostringstream source;
     CodeGen_C cg(source);
@@ -1219,27 +1234,28 @@ void CodeGen_C::test() {
         " {\n"
         "  halide_printf(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
         " } // overflow test tmp.heap\n"
-        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_1);\n"
+        " int64_t _2 = _1;\n"
+        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
         " {\n"
         "  int32_t _tmp_stack[127];\n"
-        "  int32_t _2 = _beta + 1;\n"
-        "  int32_t _3;\n"
-        "  bool _4 = _2 < 1;\n"
-        "  if (_4)\n"
+        "  int32_t _3 = _beta + 1;\n"
+        "  int32_t _4;\n"
+        "  bool _5 = _3 < 1;\n"
+        "  if (_5)\n"
         "  {\n"
-        "   int64_t _5 = (int64_t)(3);\n"
-        "   int32_t _6 = halide_printf(__user_context_, \"%lld \\n\", _5);\n"
-        "   int32_t _7 = (_6, 3);\n"
-        "   _3 = _7;\n"
-        "  } // if _4\n"
+        "   int64_t _6 = (int64_t)(3);\n"
+        "   int32_t _7 = halide_printf(__user_context_, \"%lld \\n\", _6);\n"
+        "   int32_t _8 = (_7, 3);\n"
+        "   _4 = _8;\n"
+        "  } // if _5\n"
         "  else\n"
         "  {\n"
-        "   _3 = 3;\n"
-        "  } // if _4 else\n"
-        "  int32_t _8 = _3;\n"
-        "  bool _9 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t _10 = (int32_t)(_9 ? _8 : 2);\n"
-        "  _buf[_2] = _10;\n"
+        "   _4 = 3;\n"
+        "  } // if _5 else\n"
+        "  int32_t _9 = _4;\n"
+        "  bool _10 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "  int32_t _11 = (int32_t)(_10 ? _9 : 2);\n"
+        "  _buf[_3] = _11;\n"
         " } // alloc _tmp_stack\n"
         " halide_free(__user_context_, _tmp_heap);\n"
         "} // alloc _tmp_heap\n"

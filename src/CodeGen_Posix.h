@@ -91,7 +91,9 @@ protected:
      *
      * When the allocation can be freed call 'free_allocation', and
      * when it goes out of scope call 'destroy_allocation'. */
-    Allocation create_allocation(const std::string &name, Type type, const std::vector<Expr> &extents);
+    Allocation create_allocation(const std::string &name, Type type,
+                                 const std::vector<Expr> &extents,
+                                 Expr condition);
 
     /** Free the memory backing an allocation and pop it from the
      * symbol table and the allocations map. For heap allocations it
