@@ -275,6 +275,8 @@ public:
     EXPORT Expr operator()(Expr x, Expr y) const;
     EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
     EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    EXPORT Expr operator()(std::vector<Expr>) const;
+    EXPORT Expr operator()(std::vector<Var>) const;
     // @}
 
     /** Treating the image parameter as an Expr is equivalent to call
