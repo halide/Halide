@@ -436,6 +436,11 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         #if LLVM_VERSION >= 35
         modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
         #endif
+        // This is a workaround to silence some linkage warnings during
+        // tests: normally all modules will have the same triple,
+        // but on 64-bit targets some may have "x86_64-unknown-unknown-unknown"
+        // as a workaround for -m64 requiring an explicit 64-bit target.
+        modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
