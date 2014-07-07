@@ -42,8 +42,9 @@ namespace Halide {
  */
 namespace BoundaryConditions {
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
 namespace Internal {
+
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
 
 void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
                     Expr min, Expr extent) {
@@ -57,47 +58,78 @@ void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
     collect_bounds(collected_bounds, bounds...);
 }
 
-}
 #endif // C++11 support.
+
+const Func &func_like_to_func(const Func &func) {
+    return func;
+}
+
+template <typename T>
+Func func_like_to_func(T func_like) {
+    // Default Var constructor gets a Var with a unique name.
+    std::vector<Var> args(func_like.dimensions());
+    Func func;
+    func(args) = func_like(args);
+    return func;
+}
+
+}
 
 /** Impose a boundary condition such that a given expression is returned
  *  everywhere outside the boundary. Generally the expression will be a
  *  constant, though the code currently allows accessing the arguments
  *  of source.
  *
- * (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER
- *  and putting value in the border of the texture.)
+ *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  is done and no bounds are given, the boundaries will be taken from the
+ *  min and extent methods of the passed object.
+ *
+ *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_BORDER
+ *   and putting value in the border of the texture.)
  */
 // @{
 Func constant_exterior(const Func &source, Expr value,
                        const std::vector<std::pair<Expr, Expr> > &bounds);
 
+template <typename T>
+Func constant_exterior(T func_like, Expr value) {
+    std::vector<std::pair<Expr, Expr> > object_bounds;
+    for (int i = 0; i < func_like.dimensions(); i++) {
+        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+    }
+
+    return constant_exterior(Internal::func_like_to_func(func_like), value, object_bounds);
+}
+
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
-template <typename ...Bounds>
-Func constant_exterior(const Func &source, Expr value,
+template <typename T, typename ...Bounds>
+Func constant_exterior(T func_like, Expr value,
                        Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     Internal::collect_bounds(collected_bounds, bounds...);
-    return constant_exterior(source, value, collected_bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
 #else
-Func constant_exterior(const Func &source, Expr value,
+template <typename T>
+Func constant_exterior(T func_like, Expr value,
                        Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
-    return constant_exterior(source, value, bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
 }
 
-Func constant_exterior(const Func &source, Expr value,
+template <typename T>
+Func constant_exterior(T func_like, Expr value,
                        Expr min0, Expr extent0,
                        Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
-    return constant_exterior(source, value, bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
 }
 
-Func constant_exterior(const Func &source, Expr value,
+template <typename T>
+Func constant_exterior(T func_like, Expr value,
                        Expr min0, Expr extent0,
                        Expr min1, Expr extent1,
                        Expr min2, Expr extent2) {
@@ -105,10 +137,11 @@ Func constant_exterior(const Func &source, Expr value,
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
-    return constant_exterior(source, value, bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
 }
 
-Func constant_exterior(const Func &source, Expr value,
+template <typename T>
+Func constant_exterior(T func_like, Expr value,
                        Expr min0, Expr extent0,
                        Expr min1, Expr extent1,
                        Expr min2, Expr extent2,
@@ -118,10 +151,11 @@ Func constant_exterior(const Func &source, Expr value,
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
-    return constant_exterior(source, value, bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
 }
 
-Func constant_exterior(const Func &source, Expr value,
+template <typename T>
+Func constant_exterior(T func_like, Expr value,
                        Expr min0, Expr extent0,
                        Expr min1, Expr extent1,
                        Expr min2, Expr extent2,
@@ -133,10 +167,11 @@ Func constant_exterior(const Func &source, Expr value,
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
-    return constant_exterior(source, value, bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
 }
 
-Func constant_exterior(const Func &source, Expr value,
+template <typename T>
+Func constant_exterior(T func_like, Expr value,
                        Expr min0, Expr extent0,
                        Expr min1, Expr extent1,
                        Expr min2, Expr extent2,
@@ -150,7 +185,7 @@ Func constant_exterior(const Func &source, Expr value,
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
     bounds.push_back(std::make_pair(min5, extent5));
-    return constant_exterior(source, value, bounds);
+    return constant_exterior(Internal::func_like_to_func(func_like), value, bounds);
 }
 #endif
 // @}
@@ -158,36 +193,55 @@ Func constant_exterior(const Func &source, Expr value,
 /** Impose a boundary condition such that the nearest edge sample is returned
  *  everywhere outside the given region.
  *
- * (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_EDGE.)
+ *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  is done and no bounds are given, the boundaries will be taken from the
+ *  min and extent methods of the passed object.
+ *
+ *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_EDGE.)
  */
 // @{
 Func repeat_edge(const Func &source,
                  const std::vector<std::pair<Expr, Expr> > &bounds);
+
+template <typename T>
+Func repeat_edge(T func_like) {
+    std::vector<std::pair<Expr, Expr> > object_bounds;
+    for (int i = 0; i < func_like.dimensions(); i++) {
+        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+    }
+
+    return repeat_edge(Internal::func_like_to_func(func_like), object_bounds);
+}
+
+
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
-template <typename ...Bounds>
-Func repeat_edge(const Func &source, Bounds... bounds) {
+template <typename T, typename ...Bounds>
+Func repeat_edge(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     Internal::collect_bounds(collected_bounds, bounds...);
-    return repeat_edge(source, collected_bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
-Func repeat_edge(const Func &source,
+template <typename T>
+Func repeat_edge(T func_like,
                  Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
-    return repeat_edge(source, bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_edge(const Func &source,
+template <typename T>
+Func repeat_edge(T func_like,
                  Expr min0, Expr extent0,
                  Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
-    return repeat_edge(source, bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_edge(const Func &source,
+template <typename T>
+Func repeat_edge(T func_like,
                  Expr min0, Expr extent0,
                  Expr min1, Expr extent1,
                  Expr min2, Expr extent2) {
@@ -195,10 +249,11 @@ Func repeat_edge(const Func &source,
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
-    return repeat_edge(source, bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_edge(const Func &source,
+template <typename T>
+Func repeat_edge(T func_like,
                  Expr min0, Expr extent0,
                  Expr min1, Expr extent1,
                  Expr min2, Expr extent2,
@@ -208,10 +263,11 @@ Func repeat_edge(const Func &source,
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
-    return repeat_edge(source, bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_edge(const Func &source,
+template <typename T>
+Func repeat_edge(T func_like,
                  Expr min0, Expr extent0,
                  Expr min1, Expr extent1,
                  Expr min2, Expr extent2,
@@ -223,10 +279,11 @@ Func repeat_edge(const Func &source,
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
-    return repeat_edge(source, bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_edge(const Func &source,
+template <typename T>
+Func repeat_edge(T func_like,
                  Expr min0, Expr extent0,
                  Expr min1, Expr extent1,
                  Expr min2, Expr extent2,
@@ -240,7 +297,7 @@ Func repeat_edge(const Func &source,
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
     bounds.push_back(std::make_pair(min5, extent5));
-    return repeat_edge(source, bounds);
+    return repeat_edge(Internal::func_like_to_func(func_like), bounds);
 }
 #endif
 // @}
@@ -248,36 +305,54 @@ Func repeat_edge(const Func &source,
 /** Impose a boundary condition such that the entire coordinate space is
  *  tiled with copies of the image abutted against each other.
  *
- * (This is similar to setting GL_TEXTURE_WRAP_* to GL_REPEAT.)
+ *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  is done and no bounds are given, the boundaries will be taken from the
+ *  min and extent methods of the passed object.
+ *
+ *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_REPEAT.)
  */
 // @{
 Func repeat_image(const Func &source,
-                           const std::vector<std::pair<Expr, Expr> > &bounds);
+                  const std::vector<std::pair<Expr, Expr> > &bounds);
+
+template <typename T>
+Func repeat_image(T func_like) {
+    std::vector<std::pair<Expr, Expr> > object_bounds;
+    for (int i = 0; i < func_like.dimensions(); i++) {
+        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+    }
+
+    return repeat_image(Internal::func_like_to_func(func_like), object_bounds);
+}
+
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
-template <typename ...Bounds>
-Func repeat_image(const Func &source, Bounds... bounds) {
+template <typename T, typename ...Bounds>
+Func repeat_image(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     Internal::collect_bounds(collected_bounds, bounds...);
-    return repeat_image(source, collected_bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
-Func repeat_image(const Func &source,
+template <typename T>
+Func repeat_image(T func_like,
                   Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
-    return repeat_image(source, bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_image(const Func &source,
+template <typename T>
+Func repeat_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
-    return repeat_image(source, bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_image(const Func &source,
+template <typename T>
+Func repeat_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2) {
@@ -285,10 +360,11 @@ Func repeat_image(const Func &source,
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
-    return repeat_image(source, bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_image(const Func &source,
+template <typename T>
+Func repeat_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2,
@@ -298,10 +374,11 @@ Func repeat_image(const Func &source,
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
-    return repeat_image(source, bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_image(const Func &source,
+template <typename T>
+Func repeat_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2,
@@ -313,10 +390,11 @@ Func repeat_image(const Func &source,
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
-    return repeat_image(source, bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func repeat_image(const Func &source,
+template <typename T>
+Func repeat_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2,
@@ -330,7 +408,7 @@ Func repeat_image(const Func &source,
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
     bounds.push_back(std::make_pair(min5, extent5));
-    return repeat_image(source, bounds);
+    return repeat_image(Internal::func_like_to_func(func_like), bounds);
 }
 #endif
 
@@ -338,36 +416,54 @@ Func repeat_image(const Func &source,
  *  tiled with copies of the image abutted against each other, but mirror
  *  them such that adjacent edges are the same.
  *
- * (This is similar to setting GL_TEXTURE_WRAP_* to GL_MIRRORED_REPEAT.)
+ *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  is done and no bounds are given, the boundaries will be taken from the
+ *  min and extent methods of the passed object.
+ *
+ *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_MIRRORED_REPEAT.)
  */
 // @{
 Func mirror_image(const Func &source,
-                           const std::vector<std::pair<Expr, Expr> > &bounds);
+                  const std::vector<std::pair<Expr, Expr> > &bounds);
+
+template <typename T>
+Func mirror_image(T func_like) {
+    std::vector<std::pair<Expr, Expr> > object_bounds;
+    for (int i = 0; i < func_like.dimensions(); i++) {
+        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+    }
+
+    return mirror_image(Internal::func_like_to_func(func_like), object_bounds);
+}
+
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
-template <typename ...Bounds>
-Func mirror_image(const Func &source, Bounds... bounds) {
+template <typename T, typename ...Bounds>
+Func mirror_image(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     Internal::collect_bounds(collected_bounds, bounds...);
-    return mirror_image(source, collected_bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
-Func mirror_image(const Func &source,
+template <typename T>
+Func mirror_image(T func_like,
                   Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
-    return mirror_image(source, bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_image(const Func &source,
+template <typename T>
+Func mirror_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
-    return mirror_image(source, bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_image(const Func &source,
+template <typename T>
+Func mirror_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2) {
@@ -375,10 +471,11 @@ Func mirror_image(const Func &source,
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
-    return mirror_image(source, bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_image(const Func &source,
+template <typename T>
+Func mirror_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2,
@@ -388,10 +485,11 @@ Func mirror_image(const Func &source,
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
-    return mirror_image(source, bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_image(const Func &source,
+template <typename T>
+Func mirror_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2,
@@ -403,10 +501,11 @@ Func mirror_image(const Func &source,
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
-    return mirror_image(source, bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_image(const Func &source,
+template <typename T>
+Func mirror_image(T func_like,
                   Expr min0, Expr extent0,
                   Expr min1, Expr extent1,
                   Expr min2, Expr extent2,
@@ -420,7 +519,7 @@ Func mirror_image(const Func &source,
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
     bounds.push_back(std::make_pair(min5, extent5));
-    return mirror_image(source, bounds);
+    return mirror_image(Internal::func_like_to_func(func_like), bounds);
 }
 #endif
 // @}
@@ -431,36 +530,54 @@ Func mirror_image(const Func &source,
  *
  *  This produces an error if any extent is 1 or less. (TODO: check this.)
  *
- * (I do not believ there is a direct GL_TEXTURE_WRAP_* equivalent for this.)
+ *  An ImageParam, Image<T>, or similar can be passed instead of a Func. If this
+ *  is done and no bounds are given, the boundaries will be taken from the
+ *  min and extent methods of the passed object.
+ *
+ *  (I do not believe there is a direct GL_TEXTURE_WRAP_* equivalent for this.)
  */
 // @{
 Func mirror_interior(const Func &source,
-                              const std::vector<std::pair<Expr, Expr> > &bounds);
+                     const std::vector<std::pair<Expr, Expr> > &bounds);
+
+template <typename T>
+Func mirror_interior(T func_like) {
+    std::vector<std::pair<Expr, Expr> > object_bounds;
+    for (int i = 0; i < func_like.dimensions(); i++) {
+        object_bounds.push_back(std::make_pair(Expr(func_like.min(i)), Expr(func_like.extent(i))));
+    }
+
+    return mirror_interior(Internal::func_like_to_func(func_like), object_bounds);
+}
+
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
-template <typename ...Bounds>
-Func mirror_interior(const Func &source, Bounds... bounds) {
+template <typename T, typename ...Bounds>
+Func mirror_interior(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     Internal::collect_bounds(collected_bounds, bounds...);
-    return mirror_interior(source, collected_bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
-Func mirror_interior(const Func &source,
+template <typename T>
+Func mirror_interior(T func_like,
                      Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
-    return mirror_interior(source, bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_interior(const Func &source,
+template <typename T>
+Func mirror_interior(T func_like,
                      Expr min0, Expr extent0,
                      Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
-    return mirror_interior(source, bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_interior(const Func &source,
+template <typename T>
+Func mirror_interior(T func_like,
                      Expr min0, Expr extent0,
                      Expr min1, Expr extent1,
                      Expr min2, Expr extent2) {
@@ -468,10 +585,11 @@ Func mirror_interior(const Func &source,
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
-    return mirror_interior(source, bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_interior(const Func &source,
+template <typename T>
+Func mirror_interior(T func_like,
                      Expr min0, Expr extent0,
                      Expr min1, Expr extent1,
                      Expr min2, Expr extent2,
@@ -481,10 +599,11 @@ Func mirror_interior(const Func &source,
     bounds.push_back(std::make_pair(min1, extent1));
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
-    return mirror_interior(source, bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_interior(const Func &source,
+template <typename T>
+Func mirror_interior(T func_like,
                      Expr min0, Expr extent0,
                      Expr min1, Expr extent1,
                      Expr min2, Expr extent2,
@@ -496,10 +615,11 @@ Func mirror_interior(const Func &source,
     bounds.push_back(std::make_pair(min2, extent2));
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
-    return mirror_interior(source, bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
 }
 
-Func mirror_interior(const Func &source,
+template <typename T>
+Func mirror_interior(T func_like,
                      Expr min0, Expr extent0,
                      Expr min1, Expr extent1,
                      Expr min2, Expr extent2,
@@ -513,7 +633,7 @@ Func mirror_interior(const Func &source,
     bounds.push_back(std::make_pair(min3, extent3));
     bounds.push_back(std::make_pair(min4, extent4));
     bounds.push_back(std::make_pair(min5, extent5));
-    return mirror_interior(source, bounds);
+    return mirror_interior(Internal::func_like_to_func(func_like), bounds);
 }
 #endif
 // @}
