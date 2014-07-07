@@ -46,13 +46,13 @@ namespace BoundaryConditions {
 namespace Internal {
 
 void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
-                    const Expr &min, const Expr &extent) {
+                    Expr min, Expr extent) {
     collected_bounds.push_back(std::make_pair(min, extent));
 }
 
 template <typename ...Bounds>
 void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
-                    const Expr &min, const Expr &extent, Bounds... bounds) {
+                    Expr min, Expr extent, Bounds... bounds) {
     collected_bounds.push_back(std::make_pair(min, extent));
     collect_bounds(collected_bounds, bounds...);
 }
@@ -69,38 +69,38 @@ void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
  *  and putting value in the border of the texture.)
  */
 // @{
-Func constant_exterior(const Func &source, const Expr &value,
+Func constant_exterior(const Func &source, Expr value,
                        const std::vector<std::pair<Expr, Expr> > &bounds);
 
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
 template <typename ...Bounds>
-Func constant_exterior(const Func &source, const Expr &value,
+Func constant_exterior(const Func &source, Expr value,
                        Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
     Internal::collect_bounds(collected_bounds, bounds...);
     return constant_exterior(source, value, collected_bounds);
 }
 #else
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Expr &min0, const Expr &extent0) {
+Func constant_exterior(const Func &source, Expr value,
+                       Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     return constant_exterior(source, value, bounds);
 }
 
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Expr &min0, const Expr &extent0,
-                       const Expr &min1, const Expr &extent1) {
+Func constant_exterior(const Func &source, Expr value,
+                       Expr min0, Expr extent0,
+                       Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
     return constant_exterior(source, value, bounds);
 }
 
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Expr &min0, const Expr &extent0,
-                       const Expr &min1, const Expr &extent1,
-                       const Expr &min2, const Expr &extent2) {
+Func constant_exterior(const Func &source, Expr value,
+                       Expr min0, Expr extent0,
+                       Expr min1, Expr extent1,
+                       Expr min2, Expr extent2) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -108,11 +108,11 @@ Func constant_exterior(const Func &source, const Expr &value,
     return constant_exterior(source, value, bounds);
 }
 
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Expr &min0, const Expr &extent0,
-                       const Expr &min1, const Expr &extent1,
-                       const Expr &min2, const Expr &extent2,
-                       const Expr &min3, const Expr &extent3) {
+Func constant_exterior(const Func &source, Expr value,
+                       Expr min0, Expr extent0,
+                       Expr min1, Expr extent1,
+                       Expr min2, Expr extent2,
+                       Expr min3, Expr extent3) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -121,12 +121,12 @@ Func constant_exterior(const Func &source, const Expr &value,
     return constant_exterior(source, value, bounds);
 }
 
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Expr &min0, const Expr &extent0,
-                       const Expr &min1, const Expr &extent1,
-                       const Expr &min2, const Expr &extent2,
-                       const Expr &min3, const Expr &extent3,
-                       const Expr &min4, const Expr &extent4) {
+Func constant_exterior(const Func &source, Expr value,
+                       Expr min0, Expr extent0,
+                       Expr min1, Expr extent1,
+                       Expr min2, Expr extent2,
+                       Expr min3, Expr extent3,
+                       Expr min4, Expr extent4) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -136,13 +136,13 @@ Func constant_exterior(const Func &source, const Expr &value,
     return constant_exterior(source, value, bounds);
 }
 
-Func constant_exterior(const Func &source, const Expr &value,
-                       const Expr &min0, const Expr &extent0,
-                       const Expr &min1, const Expr &extent1,
-                       const Expr &min2, const Expr &extent2,
-                       const Expr &min3, const Expr &extent3,
-                       const Expr &min4, const Expr &extent4,
-                       const Expr &min5, const Expr &extent5) {
+Func constant_exterior(const Func &source, Expr value,
+                       Expr min0, Expr extent0,
+                       Expr min1, Expr extent1,
+                       Expr min2, Expr extent2,
+                       Expr min3, Expr extent3,
+                       Expr min4, Expr extent4,
+                       Expr min5, Expr extent5) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -172,15 +172,15 @@ Func repeat_edge(const Func &source, Bounds... bounds) {
 }
 #else
 Func repeat_edge(const Func &source,
-                 const Expr &min0, const Expr &extent0) {
+                 Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     return repeat_edge(source, bounds);
 }
 
 Func repeat_edge(const Func &source,
-                 const Expr &min0, const Expr &extent0,
-                 const Expr &min1, const Expr &extent1) {
+                 Expr min0, Expr extent0,
+                 Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -188,9 +188,9 @@ Func repeat_edge(const Func &source,
 }
 
 Func repeat_edge(const Func &source,
-                 const Expr &min0, const Expr &extent0,
-                 const Expr &min1, const Expr &extent1,
-                 const Expr &min2, const Expr &extent2) {
+                 Expr min0, Expr extent0,
+                 Expr min1, Expr extent1,
+                 Expr min2, Expr extent2) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -199,10 +199,10 @@ Func repeat_edge(const Func &source,
 }
 
 Func repeat_edge(const Func &source,
-                 const Expr &min0, const Expr &extent0,
-                 const Expr &min1, const Expr &extent1,
-                 const Expr &min2, const Expr &extent2,
-                 const Expr &min3, const Expr &extent3) {
+                 Expr min0, Expr extent0,
+                 Expr min1, Expr extent1,
+                 Expr min2, Expr extent2,
+                 Expr min3, Expr extent3) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -212,11 +212,11 @@ Func repeat_edge(const Func &source,
 }
 
 Func repeat_edge(const Func &source,
-                 const Expr &min0, const Expr &extent0,
-                 const Expr &min1, const Expr &extent1,
-                 const Expr &min2, const Expr &extent2,
-                 const Expr &min3, const Expr &extent3,
-                 const Expr &min4, const Expr &extent4) {
+                 Expr min0, Expr extent0,
+                 Expr min1, Expr extent1,
+                 Expr min2, Expr extent2,
+                 Expr min3, Expr extent3,
+                 Expr min4, Expr extent4) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -227,12 +227,12 @@ Func repeat_edge(const Func &source,
 }
 
 Func repeat_edge(const Func &source,
-                 const Expr &min0, const Expr &extent0,
-                 const Expr &min1, const Expr &extent1,
-                 const Expr &min2, const Expr &extent2,
-                 const Expr &min3, const Expr &extent3,
-                 const Expr &min4, const Expr &extent4,
-                 const Expr &min5, const Expr &extent5) {
+                 Expr min0, Expr extent0,
+                 Expr min1, Expr extent1,
+                 Expr min2, Expr extent2,
+                 Expr min3, Expr extent3,
+                 Expr min4, Expr extent4,
+                 Expr min5, Expr extent5) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -262,15 +262,15 @@ Func repeat_image(const Func &source, Bounds... bounds) {
 }
 #else
 Func repeat_image(const Func &source,
-                  const Expr &min0, const Expr &extent0) {
+                  Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     return repeat_image(source, bounds);
 }
 
 Func repeat_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -278,9 +278,9 @@ Func repeat_image(const Func &source,
 }
 
 Func repeat_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -289,10 +289,10 @@ Func repeat_image(const Func &source,
 }
 
 Func repeat_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2,
-                  const Expr &min3, const Expr &extent3) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2,
+                  Expr min3, Expr extent3) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -302,11 +302,11 @@ Func repeat_image(const Func &source,
 }
 
 Func repeat_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2,
-                  const Expr &min3, const Expr &extent3,
-                  const Expr &min4, const Expr &extent4) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2,
+                  Expr min3, Expr extent3,
+                  Expr min4, Expr extent4) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -317,12 +317,12 @@ Func repeat_image(const Func &source,
 }
 
 Func repeat_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2,
-                  const Expr &min3, const Expr &extent3,
-                  const Expr &min4, const Expr &extent4,
-                  const Expr &min5, const Expr &extent5) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2,
+                  Expr min3, Expr extent3,
+                  Expr min4, Expr extent4,
+                  Expr min5, Expr extent5) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -352,15 +352,15 @@ Func mirror_image(const Func &source, Bounds... bounds) {
 }
 #else
 Func mirror_image(const Func &source,
-                  const Expr &min0, const Expr &extent0) {
+                  Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     return mirror_image(source, bounds);
 }
 
 Func mirror_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -368,9 +368,9 @@ Func mirror_image(const Func &source,
 }
 
 Func mirror_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -379,10 +379,10 @@ Func mirror_image(const Func &source,
 }
 
 Func mirror_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2,
-                  const Expr &min3, const Expr &extent3) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2,
+                  Expr min3, Expr extent3) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -392,11 +392,11 @@ Func mirror_image(const Func &source,
 }
 
 Func mirror_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2,
-                  const Expr &min3, const Expr &extent3,
-                  const Expr &min4, const Expr &extent4) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2,
+                  Expr min3, Expr extent3,
+                  Expr min4, Expr extent4) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -407,12 +407,12 @@ Func mirror_image(const Func &source,
 }
 
 Func mirror_image(const Func &source,
-                  const Expr &min0, const Expr &extent0,
-                  const Expr &min1, const Expr &extent1,
-                  const Expr &min2, const Expr &extent2,
-                  const Expr &min3, const Expr &extent3,
-                  const Expr &min4, const Expr &extent4,
-                  const Expr &min5, const Expr &extent5) {
+                  Expr min0, Expr extent0,
+                  Expr min1, Expr extent1,
+                  Expr min2, Expr extent2,
+                  Expr min3, Expr extent3,
+                  Expr min4, Expr extent4,
+                  Expr min5, Expr extent5) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -445,15 +445,15 @@ Func mirror_interior(const Func &source, Bounds... bounds) {
 }
 #else
 Func mirror_interior(const Func &source,
-                     const Expr &min0, const Expr &extent0) {
+                     Expr min0, Expr extent0) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     return mirror_interior(source, bounds);
 }
 
 Func mirror_interior(const Func &source,
-                     const Expr &min0, const Expr &extent0,
-                     const Expr &min1, const Expr &extent1) {
+                     Expr min0, Expr extent0,
+                     Expr min1, Expr extent1) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -461,9 +461,9 @@ Func mirror_interior(const Func &source,
 }
 
 Func mirror_interior(const Func &source,
-                     const Expr &min0, const Expr &extent0,
-                     const Expr &min1, const Expr &extent1,
-                     const Expr &min2, const Expr &extent2) {
+                     Expr min0, Expr extent0,
+                     Expr min1, Expr extent1,
+                     Expr min2, Expr extent2) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -472,10 +472,10 @@ Func mirror_interior(const Func &source,
 }
 
 Func mirror_interior(const Func &source,
-                     const Expr &min0, const Expr &extent0,
-                     const Expr &min1, const Expr &extent1,
-                     const Expr &min2, const Expr &extent2,
-                     const Expr &min3, const Expr &extent3) {
+                     Expr min0, Expr extent0,
+                     Expr min1, Expr extent1,
+                     Expr min2, Expr extent2,
+                     Expr min3, Expr extent3) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -485,11 +485,11 @@ Func mirror_interior(const Func &source,
 }
 
 Func mirror_interior(const Func &source,
-                     const Expr &min0, const Expr &extent0,
-                     const Expr &min1, const Expr &extent1,
-                     const Expr &min2, const Expr &extent2,
-                     const Expr &min3, const Expr &extent3,
-                     const Expr &min4, const Expr &extent4) {
+                     Expr min0, Expr extent0,
+                     Expr min1, Expr extent1,
+                     Expr min2, Expr extent2,
+                     Expr min3, Expr extent3,
+                     Expr min4, Expr extent4) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
@@ -500,12 +500,12 @@ Func mirror_interior(const Func &source,
 }
 
 Func mirror_interior(const Func &source,
-                     const Expr &min0, const Expr &extent0,
-                     const Expr &min1, const Expr &extent1,
-                     const Expr &min2, const Expr &extent2,
-                     const Expr &min3, const Expr &extent3,
-                     const Expr &min4, const Expr &extent4,
-                     const Expr &min5, const Expr &extent5) {
+                     Expr min0, Expr extent0,
+                     Expr min1, Expr extent1,
+                     Expr min2, Expr extent2,
+                     Expr min3, Expr extent3,
+                     Expr min4, Expr extent4,
+                     Expr min5, Expr extent5) {
     std::vector<std::pair<Expr, Expr> > bounds;
     bounds.push_back(std::make_pair(min0, extent0));
     bounds.push_back(std::make_pair(min1, extent1));
