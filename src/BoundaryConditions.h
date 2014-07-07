@@ -66,8 +66,10 @@ const Func &func_like_to_func(const Func &func) {
 
 template <typename T>
 Func func_like_to_func(T func_like) {
-    // Default Var constructor gets a Var with a unique name.
-    std::vector<Var> args(func_like.dimensions());
+    std::vector<Var> args;
+    for (int i = 0; i < func_like.dimensions(); i++) {
+        args.push_back(Var::implicit(i));
+    }
     Func func;
     func(args) = func_like(args);
     return func;
