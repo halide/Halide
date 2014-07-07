@@ -4,7 +4,7 @@ namespace Halide {
 
 namespace BoundaryConditions {
 
-Func constant_exterior(const Func &source, const Expr &value,
+Func constant_exterior(const Func &source, Expr value,
                        const std::vector<std::pair<Expr, Expr> > &bounds) {
     std::vector<Var> args(source.args());
     user_assert(args.size() >= bounds.size()) <<

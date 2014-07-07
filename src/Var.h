@@ -144,7 +144,7 @@ public:
     }
 
     /** A Var can be treated as an Expr of type Int(32) */
-    operator Expr() {
+    operator Expr() const {
         return Internal::Variable::make(Int(32), name());
     }
 
