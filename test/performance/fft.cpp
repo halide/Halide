@@ -62,20 +62,6 @@ Tuple selectz(Expr cond, Tuple t, Tuple f) {
     return Tuple(select(cond, re(t), re(f)), select(cond, im(t), im(f)));
 }
 
-Tuple selectz(Expr cond0, Tuple t0,
-              Expr cond1, Tuple t1,
-              Expr cond2, Tuple t2,
-              Tuple f) {
-    return Tuple(select(cond0, re(t0),
-                        cond1, re(t1),
-                        cond2, re(t2),
-                               re(f)),
-                 select(cond0, im(t0),
-                        cond1, im(t1),
-                        cond2, im(t2),
-                               im(f)));
-}
-
 // Compute the complex DFT of size N on dimension 0 of x.
 Func dft_dim0(Func x, int N, float sign) {
     Func ret("dft_dim0");
@@ -131,18 +117,18 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     for (int S = 1; S < N; S *= R) {
         Var i("i"), r("r");
 
-        std::stringstream stage;
+        std::stringstream stage_id;
         stage << "S" << S << "_R" << R;
 
         // Twiddle factors. compute_root is good, "compute_static"
         // would be better.
-        Func W("W_" + stage.str());
+        Func W("W_" + stage_id.str());
         W(r, i) = expj((sign*2*pi*i*r)/(S*R));
         W.compute_root();
 
         // Load the points from each subtransform and apply the
         // twiddle factors.
-        Func v("v_" + stage.str());
+        Func v("v_" + stage_id.str());
         v(r, i, n0, _) = mul(W(r, i%S), x(n0, i + r*(N/R), _));
 
         // Compute the R point DFT of the subtransform.
@@ -156,15 +142,15 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
         // Write the subtransform and use it as input to the next
         // pass.
-        Func temp("temp_" + stage.str());
+        Func exchange("exchange_" + stage_id.str());
         Expr r_ = (n1/S)%R;
         Expr i_ = S*(n1/(R*S)) + n1%S;
-        temp(n0, n1, _) = V(r_, i_, n0, _);
+        exchange(n0, n1, _) = V(r_, i_, n0, _);
 
         // Remember this stage for scheduling later.
-        stages.push_back(temp);
+        stages.push_back(exchange);
 
-        x = temp;
+        x = exchange;
     }
 
     // Split the tile into groups of DFTs, and vectorize within the
