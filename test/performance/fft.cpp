@@ -1,3 +1,8 @@
+// This FFT is an implementation of the algorithm described in
+// http://research.microsoft.com/pubs/131400/fftgpusc08.pdf
+// This algorithm is more well suited to Halide than in-place
+// algorithms.
+
 #include <stdio.h>
 #include <Halide.h>
 #include "clock.h"
@@ -5,6 +10,12 @@
 const float pi = 3.14159265f;
 
 using namespace Halide;
+
+// Find the best radix to use for an FFT of size N. Currently, this is
+// always 2.
+int find_radix(int N) {
+    return 2;
+}
 
 // Complex number arithmetic. Complex numbers are represented with
 // Halide Tuples.
@@ -66,72 +77,100 @@ Tuple selectz(Expr cond0, Tuple t0,
 }
 
 // Compute the complex DFT of size N on dimension 0 of x.
-Func dft_dim0(Func x, int N, int sign) {
-    Var n("n");
+Func dft_dim0(Func x, int N, float sign) {
     Func ret("dft_dim0");
-    switch (N) {
-    case 2:
-        ret(n, _) = selectz(n == 0, add(x(0, _), x(1, _)),
-                          /*n == 1*/sub(x(0, _), x(1, _)));
-        break;
-    default:
-        // For unknown N, use the naive DFT.
-        RDom k(0, N);
-        ret(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
-    }
+    Var n("n");
+    RDom k(0, N);
+    ret(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
     return ret;
 }
 
-// This FFT is an implementation of the algorithm described in
-// http://research.microsoft.com/pubs/131400/fftgpusc08.pdf
+// Specializations for some small DFTs.
+Func dft2_dim0(Func x, float sign) {
+    Var n("n");
+    Func ret("dft2_dim0");
+    ret(n, _) = selectz(n == 0, add(x(0, _), x(1, _)),
+                                sub(x(0, _), x(1, _)));
+    return ret;
+}
+
+Func dft4_dim0(Func x, float sign) {
+    Var nx("nx"), ny("ny");
+    Func s("dft4_dim0_s");
+    s(nx, ny, _) = x(ny*2 + nx, _);
+
+    Func s1("dft4_dim0_1");
+    s1(nx, ny, _) = selectz(ny == 0,
+                            add(s(nx, 0, _), s(nx, 1, _)),
+                            selectz(nx == 0, sub(s(nx, 0, _), s(nx, 1, _)), mul(sub(s(nx, 0, _), s(nx, 1, _)), Tuple(0.0f, sign))));
+    // The twiddle factor.
+    //s1(1, 1, _) = mul(s1(1, 1, _), Tuple(0.0f, sign));
+
+    Var n("n");
+    Func s2("dft4_dim0_2");
+    Expr nx_ = n/2;
+    Expr ny_ = n%2;
+    s2(n, _) = selectz(nx_ == 0,
+                           add(s1(0, ny_, _), s1(1, ny_, _)),
+                           sub(s1(0, ny_, _), s1(1, ny_, _)));
+
+    return s2;
+}
+
+Func dft8_dim0(Func x, float sign) {
+    return dft_dim0(x, 8, sign);
+}
 
 // Compute the N point DFT of dimension 1 (columns) of x using
 // radix R.
-Func fft_dim1(Func x, int N, int R, int sign) {
+Func fft_dim1(Func x, int N, int R, float sign) {
     Var n0("n0"), n1("n1");
 
     std::vector<Func> stages;
 
     for (int S = 1; S < N; S *= R) {
-        Var j("j"), r("r");
+        Var i("i"), r("r");
+
+        std::stringstream stage;
+        stage << "S" << S << "_R" << R;
 
         // Twiddle factors. compute_root is good, "compute_static"
         // would be better.
-        Func W("W");
-        W(r, j) = expj((sign*2*pi*j*r)/(S*R));
+        Func W("W_" + stage.str());
+        W(r, i) = expj((sign*2*pi*i*r)/(S*R));
         W.compute_root();
 
         // Load the points from each subtransform and apply the
         // twiddle factors.
-        Func v("v");
-        v(r, j, n0, _) = mul(W(r, j%S), x(n0, j + r*(N/R), _));
+        Func v("v_" + stage.str());
+        v(r, i, n0, _) = mul(W(r, i%S), x(n0, i + r*(N/R), _));
 
         // Compute the R point DFT of the subtransform.
-        Func V = dft_dim0(v, R, sign);
+        Func V;
+        switch (R) {
+        case 2: V = dft2_dim0(v, sign); break;
+        case 4: V = dft4_dim0(v, sign); break;
+        case 8: V = dft8_dim0(v, sign); break;
+        default: V = dft_dim0(v, R, sign); break;
+        }
 
         // Write the subtransform and use it as input to the next
         // pass.
-        Func temp("temp");
-#if 0
-        temp(x.args()) = Tuple(undef<float>(), undef<float>());
-        RDom rj(0, R, 0, N/R);
-        RVar r_ = rj.x;
-        RVar j_ = rj.y;
-        temp(n0, r_*S + (j_/S)*S*R + j_%S, _) = V(r_, j_, n0, _);
-#else
+        Func temp("temp_" + stage.str());
         Expr r_ = (n1/S)%R;
-        Expr j_ = S*(n1/(R*S)) + n1%S; //(n1 - r_*S)/R;
-        //r_ = print_when(n0 == 0, r_, j_, "n:", n1, "S:", S, "r");
-        temp(n0, n1, _) = V(r_, j_, n0, _);
-#endif
+        Expr i_ = S*(n1/(R*S)) + n1%S;
+        temp(n0, n1, _) = V(r_, i_, n0, _);
 
+        // Remember this stage for scheduling later.
         stages.push_back(temp);
 
         x = temp;
     }
 
-    Var n0i, n0o;
-    x.compute_root().split(n0, n0o, n0i, 16).reorder(n0i, n1, n0o).vectorize(n0i);
+    // Split the tile into groups of DFTs, and vectorize within the
+    // group.
+    Var n0o;
+    x.compute_root().split(n0, n0o, n0, 8).reorder(n0, n1, n0o).vectorize(n0);
     for (std::vector<Func>::iterator i = stages.begin(); i + 1 != stages.end(); ++i) {
         i->compute_at(x, n0o).vectorize(n0);
     }
@@ -142,14 +181,15 @@ Func fft_dim1(Func x, int N, int R, int sign) {
 Func transpose(Func x) {
     Var i("i"), j("j");
     Func xT;
-    xT(j, i, _) = x(i, j, _);
+    xT(i, j, _) = x(j, i, _);
+    //xT.compute_root();
     return xT;
 }
 
 // Compute the N0 x N1 2D complex DFT of x using radixes R0, R1.
 // sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
 // DFT.
-Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, int sign) {
+Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, float sign) {
     // Compute the DFT of dimension 1.
     Func dft1 = fft_dim1(x, N1, R1, sign);
 
@@ -163,11 +203,10 @@ Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, int sign) {
     return transpose(dftT);
 }
 
-// Compute the N0 x N1 2D complex DFT of x. N0, N1 must be a power of
-// 2. sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
-// DFT.
-Func fft2d_c2c(Func c, int N0, int N1, int sign) {
-    return fft2d_c2c(c, N0, 2, N1, 2, sign);
+// Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
+// forward DFT, sign = 1 indicates an inverse DFT.
+Func fft2d_c2c(Func c, int N0, int N1, float sign) {
+    return fft2d_c2c(c, N0, find_radix(N0), N1, find_radix(N1), sign);
 }
 
 // Compute the N0 x N1 2D real DFT of x using radixes R0, R1.
@@ -184,25 +223,26 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     // DFT down the columns first.
     Func dft1 = fft_dim1(zipped, N1, R1, -1);
 
+    // Transpose so we can FFT dimension 0 (by making it dimension 1).
+    Func dft1T = transpose(dft1);
+
     // Unzip the DFTs of the columns.
-    Func unzipped("unzipped");
+    Func unzippedT("unzippedT");
     // By linearity of the DFT, Z = X + j*Y, where X, Y, and Z are the
     // DFTs of x, y and z.
 
     // By the conjugate symmetry of real DFTs, computing Z_n +
     // conj(Z_(N-n)) and Z_n - conj(Z_(N-n)) gives 2*X_n and 2*j*Y_n,
     // respectively.
-    Tuple Z = dft1(n0/2, n1, _);
-    Tuple symZ = dft1(n0/2, (N1 - n1)%N1, _);
+    Tuple Z = dft1T(n1, n0/2, _);
+    Tuple symZ = dft1T((N1 - n1)%N1, n0/2, _);
     Tuple X = scale(0.5f, add(Z, conj(symZ)));
     Tuple Y = mul(Tuple(0, -0.5f), sub(Z, conj(symZ)));
-    unzipped(n0, n1, _) = selectz(n0%2 == 0, X, Y);
-
-    // Transpose so we can DFT dimension 0 (by making it dimension 1).
-    Func transposed = transpose(unzipped);
+    unzippedT(n1, n0, _) = selectz(n0%2 == 0, X, Y);
+    unzippedT.compute_root().vectorize(n1, 8);
 
     // DFT down the columns again (the rows of the original).
-    return fft_dim1(transposed, N0, R0, -1);
+    return fft_dim1(unzippedT, N0, R0, -1);
 }
 
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
@@ -228,6 +268,7 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
                       dft1(n0*2 + 1, clamp(n1, 0, N1/2), _),
                       conj(dft1(n0*2 + 1, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
+    zipped.compute_root().vectorize(n0, 8);
 
     // Take the inverse DFT of the columns again.
     Func dft = fft_dim1(zipped, N1, R1, 1);
@@ -237,16 +278,17 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
     unzipped(n0, n1, _) = select(n0%2 == 0,
                                  re(dft(n0/2, n1, _)),
                                  im(dft(n0/2, n1, _)));
+    unzipped.compute_root().vectorize(n0, 8);
 
     return unzipped;
 }
 
 // Compute N0 x N1 real DFTs.
 Func fft2d_r2cT(Func r, int N0, int N1) {
-    return fft2d_r2cT(r, N0, 2, N1, 2);
+    return fft2d_r2cT(r, N0, find_radix(N0), N1, find_radix(N1));
 }
 Func fft2d_cT2r(Func cT, int N0, int N1) {
-    return fft2d_cT2r(cT, N0, 2, N1, 2);
+    return fft2d_cT2r(cT, N0, find_radix(N0), N1, find_radix(N1));
 }
 
 
@@ -360,25 +402,32 @@ int main(int argc, char **argv) {
         }
     }
 
+    // For a description of the methodology used here, see
     // http://www.fftw.org/speed/method.html
-    const int reps = 1000;
+    Func bench_r2c = fft2d_r2cT(make_real(in), W, H);
+    Func bench_c2c = fft2d_c2c(make_complex(in), W, H, -1);
 
-    Realization R_r2c = filtered_r2c.realize(W, H, target);
-    Realization R_c2c = filtered_c2c.realize(W, H, target);
+    Realization R_r2c = bench_r2c.realize(H/2, W, target);
+    Realization R_c2c = bench_c2c.realize(W, H, target);
 
-    double t1 = current_time();
+    // Take the minimum time over many of iterations to minimize
+    // noise.
+    const int reps = 20;
+    double t = 1e6f;
     for (int i = 0; i < reps; i++) {
-        filtered_r2c.realize(R_r2c, target);
+        double t1 = current_time();
+        bench_r2c.realize(R_r2c, target);
+        t = std::min(current_time() - t1, t);
     }
-    double t = (current_time() - t1)/reps;
-    printf("r2c time: %f ms, %f GFLOP/s\n", t, 2*(2.5*W*H*(log2(W) + log2(H)))/t*1e3*1e-9);
+    printf("r2c time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
-    t1 = current_time();
+    t = 1e6f;
     for (int i = 0; i < reps; i++) {
-        filtered_c2c.realize(R_c2c, target);
+        double t1 = current_time();
+        bench_c2c.realize(R_c2c, target);
+        t = std::min(current_time() - t1, t);
     }
-    t = (current_time() - t1)/reps;
-    printf("c2c time: %f ms, %f GFLOP/s\n", t, 2*(5*W*H*(log2(W) + log2(H)))/t*1e3*1e-9);
+    printf("c2c time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
     return 0;
 }
