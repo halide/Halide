@@ -245,6 +245,32 @@ Expr ImageBase::operator()(Expr x, Expr y, Expr z, Expr w) const {
     return Internal::Call::make(buffer, args);
 }
 
+Expr ImageBase::operator()(std::vector<Expr> args_passed) const {
+    std::vector<Expr> args;
+    bool placeholder_seen = false;
+    for (size_t i = 0; i < args_passed.size(); i++) {
+        placeholder_seen |=
+            add_implicit_args_if_placeholder(args, args_passed[i],
+                                             args_passed.size(), placeholder_seen);
+    }
+
+    Internal::check_call_arg_types(buffer.name(), &args, dims);
+    return Internal::Call::make(buffer, args);
+}
+
+Expr ImageBase::operator()(std::vector<Var> args_passed) const {
+    std::vector<Expr> args;
+    bool placeholder_seen = false;
+    for (size_t i = 0; i < args_passed.size(); i++) {
+        placeholder_seen |=
+            add_implicit_args_if_placeholder(args, args_passed[i],
+                                             args_passed.size(), placeholder_seen);
+    }
+
+    Internal::check_call_arg_types(buffer.name(), &args, dims);
+    return Internal::Call::make(buffer, args);
+}
+
 buffer_t *ImageBase::raw_buffer() const {
     return buffer.raw_buffer();
 }

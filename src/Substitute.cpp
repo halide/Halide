@@ -1,6 +1,7 @@
 #include "Substitute.h"
 #include "Scope.h"
 #include "IRMutator.h"
+#include "IREquality.h"
 
 namespace Halide {
 namespace Internal {
@@ -103,6 +104,36 @@ Expr substitute(const map<string, Expr> &m, Expr expr) {
 
 Stmt substitute(const map<string, Expr> &m, Stmt stmt) {
     Substitute s(m);
+    return s.mutate(stmt);
+}
+
+
+class SubstituteExpr : public IRMutator {
+public:
+    Expr find, replacement;
+
+    using IRMutator::mutate;
+
+    Expr mutate(Expr e) {
+        if (equal(e, find)) {
+            return replacement;
+        } else {
+            return IRMutator::mutate(e);
+        }
+    }
+};
+
+Expr substitute(Expr find, Expr replacement, Expr expr) {
+    SubstituteExpr s;
+    s.find = find;
+    s.replacement = replacement;
+    return s.mutate(expr);
+}
+
+Stmt substitute(Expr find, Expr replacement, Stmt stmt) {
+    SubstituteExpr s;
+    s.find = find;
+    s.replacement = replacement;
     return s.mutate(stmt);
 }
 

@@ -31,6 +31,12 @@ Expr substitute(const std::map<std::string, Expr> &replacements, Expr expr);
 Stmt substitute(const std::map<std::string, Expr> &replacements, Stmt stmt);
 // @}
 
+/** Substitute expressions for other expressions. */
+// @{
+Expr substitute(Expr find, Expr replacement, Expr expr);
+Stmt substitute(Expr find, Expr replacement, Stmt stmt);
+// @}
+
 }
 }
 
