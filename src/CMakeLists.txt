@@ -259,6 +259,7 @@ set(HEADER_FILES
   ExprUsesVar.h
   Random.h
   ParallelRVar.h
+  BoundaryConditions.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -350,6 +351,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Schedule.cpp
   FuseGPUThreadLoops.cpp
   ParallelRVar.cpp
+  BoundaryConditions.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
