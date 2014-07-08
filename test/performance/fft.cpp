@@ -176,17 +176,17 @@ Func transpose(Func x) {
 // sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
 // DFT.
 Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, float sign) {
-    // Compute the DFT of dimension 1.
-    Func dft1 = fft_dim1(x, N1, R1, sign);
+    // Transpose the input to the FFT.
+    Func xT = transpose(x);
 
-    // Transpose.
-    Func dft1T = transpose(dft1);
-
-    // Compute the DFT of dimension 1 (was dimension 0).
-    Func dftT = fft_dim1(dft1T, N0, R0, sign);
+    // Compute the DFT of dimension 1 (originally dimension 0).
+    Func dft1T = fft_dim1(xT, N0, R0, sign);
 
     // Transpose back.
-    return transpose(dftT);
+    Func dft1 = transpose(dft1T);
+
+    // Compute the DFT of dimension 1.
+    return fft_dim1(dft1, N1, R1, sign);
 }
 
 // Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
@@ -201,10 +201,16 @@ Func fft2d_c2c(Func c, int N0, int N1, float sign) {
 Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     Var n0("n0"), n1("n1");
 
-    // Combine pairs of real columns x, y into complex columns z = x + j*y.
+    // Combine pairs of real columns x, y into complex columns
+    // z = x + j*y. This allows us to compute two real DFTs using
+    // one complex FFT.
+
+    // Grab columns from each half of the input data to improve
+    // coherency of the zip/unzip operations, which improves
+    // vectorization.
     Func zipped("zipped");
-    zipped(n0, n1, _) = Tuple(r(n0*2 + 0, n1, _),
-                              r(n0*2 + 1, n1, _));
+    zipped(n0, n1, _) = Tuple(r(n0, n1, _),
+                              r(n0 + N0/2, n1, _));
 
     // DFT down the columns first.
     Func dft1 = fft_dim1(zipped, N1, R1, -1);
@@ -220,12 +226,11 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     // By the conjugate symmetry of real DFTs, computing Z_n +
     // conj(Z_(N-n)) and Z_n - conj(Z_(N-n)) gives 2*X_n and 2*j*Y_n,
     // respectively.
-    Tuple Z = dft1T(n1, n0/2, _);
-    Tuple symZ = dft1T((N1 - n1)%N1, n0/2, _);
+    Tuple Z = dft1T(n1, n0%(N0/2), _);
+    Tuple symZ = dft1T((N1 - n1)%N1, n0%(N0/2), _);
     Tuple X = scale(0.5f, add(Z, conj(symZ)));
     Tuple Y = mul(Tuple(0, -0.5f), sub(Z, conj(symZ)));
-    unzippedT(n1, n0, _) = selectz(n0%2 == 0, X, Y);
-    unzippedT.compute_root().vectorize(n1, 8);
+    unzippedT(n1, n0, _) = selectz(n0 < N0/2, X, Y);
 
     // DFT down the columns again (the rows of the original).
     return fft_dim1(unzippedT, N0, R0, -1);
@@ -254,7 +259,7 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
                       dft1(n0*2 + 1, clamp(n1, 0, N1/2), _),
                       conj(dft1(n0*2 + 1, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
-    zipped.compute_root().vectorize(n0, 8);
+    //zipped.compute_root().vectorize(n0, 8);
 
     // Take the inverse DFT of the columns again.
     Func dft = fft_dim1(zipped, N1, R1, 1);
@@ -282,10 +287,7 @@ template <typename T>
 Func make_real(Image<T> &img) {
     Var x, y, z;
     Func ret;
-    switch (img.dimensions()) {
-    case 2: ret(x, y) = img(x, y); break;
-    case 3: ret(x, y, z) = img(x, y, z); break;
-    }
+    ret(x, y) = img(x, y);
     return ret;
 }
 
@@ -293,10 +295,7 @@ template <typename T>
 Func make_complex(Image<T> &img) {
     Var x, y, z;
     Func ret;
-    switch (img.dimensions()) {
-    case 2: ret(x, y) = Tuple(img(x, y), 0.0f); break;
-    case 3: ret(x, y, z) = Tuple(img(x, y, z), 0.0f); break;
-    }
+    ret(x, y) = Tuple(img(x, y), 0.0f);
     return ret;
 }
 
@@ -393,7 +392,7 @@ int main(int argc, char **argv) {
     Func bench_r2c = fft2d_r2cT(make_real(in), W, H);
     Func bench_c2c = fft2d_c2c(make_complex(in), W, H, -1);
 
-    Realization R_r2c = bench_r2c.realize(H/2, W, target);
+    Realization R_r2c = bench_r2c.realize(H/2 + 1, W, target);
     Realization R_c2c = bench_c2c.realize(W, H, target);
 
     // Take the minimum time over many of iterations to minimize
@@ -402,16 +401,20 @@ int main(int argc, char **argv) {
     double t = 1e6f;
     for (int i = 0; i < reps; i++) {
         double t1 = current_time();
-        bench_r2c.realize(R_r2c, target);
-        t = std::min(current_time() - t1, t);
+        for (int j = 0; j < 10; j++) {
+            bench_r2c.realize(R_r2c, target);
+        }
+        t = std::min((current_time() - t1)/10, t);
     }
     printf("r2c time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
     t = 1e6f;
     for (int i = 0; i < reps; i++) {
         double t1 = current_time();
-        bench_c2c.realize(R_c2c, target);
-        t = std::min(current_time() - t1, t);
+        for (int j = 0; j < 10; j++) {
+            bench_c2c.realize(R_c2c, target);
+        }
+        t = std::min((current_time() - t1)/10, t);
     }
     printf("c2c time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
