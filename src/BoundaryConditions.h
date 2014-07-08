@@ -61,7 +61,7 @@ inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr> > &collec
 
 #endif // C++11 support.
 
-inline NO_INLINE const Func &func_like_to_func(const Func &func) {
+inline const Func &func_like_to_func(const Func &func) {
     return func;
 }
 
