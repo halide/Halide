@@ -68,6 +68,47 @@ define weak_odr <2 x double> @sqrt_f64x2(<2 x double> %x) nounwind alwaysinline 
        ret <2 x double> %tmp
 }
 
+declare <4 x float> @llvm.arm.neon.vrecpe.v4f32(<4 x float> %x) nounwind readnone;
+declare <2 x float> @llvm.arm.neon.vrecpe.v2f32(<2 x float> %x) nounwind readnone;
+declare <4 x float> @llvm.arm.neon.vrsqrte.v4f32(<4 x float> %x) nounwind readnone;
+declare <2 x float> @llvm.arm.neon.vrsqrte.v2f32(<2 x float> %x) nounwind readnone;
+declare <4 x float> @llvm.arm.neon.vrecps.v4f32(<4 x float> %x, <4 x float> %y) nounwind readnone;
+declare <2 x float> @llvm.arm.neon.vrecps.v2f32(<2 x float> %x, <2 x float> %y) nounwind readnone;
+declare <4 x float> @llvm.arm.neon.vrsqrts.v4f32(<4 x float> %x, <4 x float> %y) nounwind readnone;
+declare <2 x float> @llvm.arm.neon.vrsqrts.v2f32(<2 x float> %x, <2 x float> %y) nounwind readnone;
+
+
+define weak_odr <4 x float> @inverse_f32x4(<4 x float> %x) nounwind alwaysinline {
+       %approx = tail call <4 x float> @llvm.arm.neon.vrecpe.v4f32(<4 x float> %x)
+       %correction = tail call <4 x float> @llvm.arm.neon.vrecps.v4f32(<4 x float> %approx, <4 x float> %x)
+       %result = fmul <4 x float> %approx, %correction
+       ret <4 x float> %result
+}
+
+define weak_odr <4 x float> @inverse_sqrt_f32x4(<4 x float> %x) nounwind alwaysinline {
+       %approx = tail call <4 x float> @llvm.arm.neon.vrecpe.v4f32(<4 x float> %x)
+       %approx2 = fmul <4 x float> %approx, %approx
+       %correction = tail call <4 x float> @llvm.arm.neon.vrecps.v4f32(<4 x float> %approx2, <4 x float> %x)
+       %result = fmul <4 x float> %approx, %correction
+       ret <4 x float> %result
+}
+
+define weak_odr <2 x float> @inverse_f32x2(<2 x float> %x) nounwind alwaysinline {
+       %approx = tail call <2 x float> @llvm.arm.neon.vrecpe.v2f32(<2 x float> %x)
+       %correction = tail call <2 x float> @llvm.arm.neon.vrecps.v2f32(<2 x float> %approx, <2 x float> %x)
+       %result = fmul <2 x float> %approx, %correction
+       ret <2 x float> %result
+}
+
+define weak_odr <2 x float> @inverse_sqrt_f32x2(<2 x float> %x) nounwind alwaysinline {
+       %approx = tail call <2 x float> @llvm.arm.neon.vrecpe.v2f32(<2 x float> %x)
+       %approx2 = fmul <2 x float> %approx, %approx
+       %correction = tail call <2 x float> @llvm.arm.neon.vrecps.v2f32(<2 x float> %approx2, <2 x float> %x)
+       %result = fmul <2 x float> %approx, %correction
+       ret <2 x float> %result
+}
+
+
 define weak_odr <8 x i8> @strided_load_i8x8(i8 * %ptr, i32 %stride) nounwind alwaysinline {
        %tmp = tail call {<8 x i8>, i8 *} asm "
        vld1.8 $0[0], [$1], $3
