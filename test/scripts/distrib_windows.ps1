@@ -26,6 +26,9 @@ svn up $ROOT\llvm\tools\clang -r 211000
 svn up $ROOT\llvm -r 211000
 git pull
 
+$COMMIT = git show HEAD | head -n1 | cut -b8-
+$DATE = date +%Y_%m_%d
+
 # Build latest llvm
 #cd $ROOT\llvm
 #if (! (Test-Path build-64)) {
