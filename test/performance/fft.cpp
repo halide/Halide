@@ -118,7 +118,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         Var i("i"), r("r");
 
         std::stringstream stage_id;
-        stage << "S" << S << "_R" << R;
+        stage_id << "S" << S << "_R" << R;
 
         // Twiddle factors. compute_root is good, "compute_static"
         // would be better.
