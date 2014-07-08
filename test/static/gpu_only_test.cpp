@@ -8,6 +8,7 @@
 const int W = 32, H = 32;
 
 int main(int argc, char **argv) {
+#if defined(TEST_OPENCL) || defined(TEST_CUDA)
     Image<int> input(W, H);
     for (int y = 0; y < input.height(); y++) {
         for (int x = 0; x < input.width(); x++) {
@@ -48,5 +49,8 @@ int main(int argc, char **argv) {
     }
 
     printf("Success!\n");
+#else
+    printf("No GPU target enabled, skipping...\n");
+#endif
     return 0;
 }
