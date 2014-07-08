@@ -278,6 +278,7 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     Tuple X = scale(0.5f, add(Z, conj(symZ)));
     Tuple Y = mul(Tuple(0, -0.5f), sub(Z, conj(symZ)));
     unzippedT(n1, n0, _) = selectz(n0 < N0/2, X, Y);
+    //unzippedT.compute_root().vectorize(n1, 8);
 
     // DFT down the columns again (the rows of the original).
     return fft_dim1(unzippedT, N0, R0, -1);
@@ -300,22 +301,22 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
     // Construct the whole DFT domain of X and Y via conjugate
     // symmetry.
     Tuple X = selectz(n1 < N1/2 + 1,
-                      dft1(n0*2 + 0, clamp(n1, 0, N1/2), _),
-                      conj(dft1(n0*2 + 0, clamp((N1 - n1)%N1, 0, N1/2), _)));
+                      dft1(n0, clamp(n1, 0, N1/2), _),
+                      conj(dft1(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
     Tuple Y = selectz(n1 < N1/2 + 1,
-                      dft1(n0*2 + 1, clamp(n1, 0, N1/2), _),
-                      conj(dft1(n0*2 + 1, clamp((N1 - n1)%N1, 0, N1/2), _)));
+                      dft1(n0 + N0/2, clamp(n1, 0, N1/2), _),
+                      conj(dft1(n0 + N0/2, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
-    //zipped.compute_root().vectorize(n0, 8);
+    zipped.compute_root().vectorize(n0, 8);
 
     // Take the inverse DFT of the columns again.
     Func dft = fft_dim1(zipped, N1, R1, 1);
 
     // Extract the real inverse DFTs.
     Func unzipped("unzipped");
-    unzipped(n0, n1, _) = select(n0%2 == 0,
-                                 re(dft(n0/2, n1, _)),
-                                 im(dft(n0/2, n1, _)));
+    unzipped(n0, n1, _) = select(n0 < N0/2,
+                                 re(dft(n0%(N0/2), n1, _)),
+                                 im(dft(n0%(N0/2), n1, _)));
     unzipped.compute_root().vectorize(n0, 8);
 
     return unzipped;
