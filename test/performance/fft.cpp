@@ -86,9 +86,10 @@ Func dft4_dim0(Func x, float sign) {
     s(nx, ny, _) = x(ny*2 + nx, _);
 
     Func s1("dft4_dim0_1");
+    Tuple W3 = selectz(nx == 0, Tuple(1.0f, 0.0f), Tuple(0.0f, sign));
     s1(nx, ny, _) = selectz(ny == 0,
                             add(s(nx, 0, _), s(nx, 1, _)),
-                            selectz(nx == 0, sub(s(nx, 0, _), s(nx, 1, _)), mul(sub(s(nx, 0, _), s(nx, 1, _)), Tuple(0.0f, sign))));
+                            mul(sub(s(nx, 0, _), s(nx, 1, _)), W3));
     // The twiddle factor.
     //s1(1, 1, _) = mul(s1(1, 1, _), Tuple(0.0f, sign));
 
@@ -97,14 +98,63 @@ Func dft4_dim0(Func x, float sign) {
     Expr nx_ = n/2;
     Expr ny_ = n%2;
     s2(n, _) = selectz(nx_ == 0,
-                           add(s1(0, ny_, _), s1(1, ny_, _)),
-                           sub(s1(0, ny_, _), s1(1, ny_, _)));
+                       add(s1(0, ny_, _), s1(1, ny_, _)),
+                       sub(s1(0, ny_, _), s1(1, ny_, _)));
 
     return s2;
 }
 
 Func dft8_dim0(Func x, float sign) {
     return dft_dim0(x, 8, sign);
+}
+
+struct TwiddleParams {
+    int R, S;
+    float sign;
+
+    bool operator < (const TwiddleParams &r) const {
+        if (R < r.R) {
+            return true;
+        } else if (R > r.R) {
+            return false;
+        } else if (S < r.S) {
+            return true;
+        } else if (S > r.S) {
+            return false;
+        } else {
+            return sign < r.sign;
+        }
+    }
+};
+
+// Return a function computing the twiddle factors.
+Func W(int R, int S, float sign) {
+    // Global cache of twiddle functions we've already computed.
+    static std::map<TwiddleParams, Func> twiddles;
+
+    // Check to see if this set of twiddle factors is already computed.
+    TwiddleParams TP = { R, S, sign };
+    std::map<TwiddleParams, Func>::iterator w = twiddles.find(TP);
+    if (w != twiddles.end()) {
+        return w->second;
+    }
+
+    Var i("i"), r("r");
+
+    Func W("W");
+    W(r, i) = expj((sign*2*pi*i*r)/(S*R));
+
+    Realization compute_static = W.realize(R, S);
+    Image<float> reW = compute_static[0];
+    Image<float> imW = compute_static[1];
+
+    Func ret;
+    ret(r, i) = Tuple(reW(r, i), imW(r, i));
+
+    // Cache this set of twiddle factors.
+    twiddles[TP] = ret;
+
+    return ret;
 }
 
 // Compute the N point DFT of dimension 1 (columns) of x using
@@ -120,16 +170,13 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
 
-        // Twiddle factors. compute_root is good, "compute_static"
-        // would be better.
-        Func W("W_" + stage_id.str());
-        W(r, i) = expj((sign*2*pi*i*r)/(S*R));
-        W.compute_root();
+        // Twiddle factors.
+        Func w = W(R, S, sign);
 
         // Load the points from each subtransform and apply the
         // twiddle factors.
         Func v("v_" + stage_id.str());
-        v(r, i, n0, _) = mul(W(r, i%S), x(n0, i + r*(N/R), _));
+        v(r, i, n0, _) = mul(w(r, i%S), x(n0, i + r*(N/R), _));
 
         // Compute the R point DFT of the subtransform.
         Func V;
