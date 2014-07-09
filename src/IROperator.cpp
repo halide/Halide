@@ -540,9 +540,9 @@ Expr print(const std::vector<Expr> &args) {
         if (args[i].type().is_float()) {
             sstr << "%f ";
             printf_args.push_back(cast(Float(64), args[i]));
-        } else if (const Internal::StringImm *s =
-                   args[i].as<Internal::StringImm>()) {
-            sstr << s->value << " ";
+        } else if (args[i].as<Internal::StringImm>() != NULL) {
+            sstr << "%s ";
+            printf_args.push_back(args[i]);
         } else if (args[i].type().is_handle()) {
             sstr << "%p ";
             printf_args.push_back(args[i]);
