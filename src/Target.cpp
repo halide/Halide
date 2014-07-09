@@ -356,7 +356,11 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
     }
 
 #define DECLARE_NO_INITMOD(mod)                                         \
-    llvm::Module *get_initmod_##mod(LLVMContext *context) {             \
+    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool) {             \
+        user_error << "Halide was compiled without support for this target\n"; \
+        return NULL;                                                    \
+    }                                                                   \
+    llvm::Module *get_initmod_##mod##_ll(llvm::LLVMContext *) {         \
         user_error << "Halide was compiled without support for this target\n"; \
         return NULL;                                                    \
     }
