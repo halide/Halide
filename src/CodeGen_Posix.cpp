@@ -181,16 +181,28 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                                           ConstantInt::get(llvm_size->getType(), 0));
     }
 
-    llvm::Type *llvm_type = llvm_type_of(type);
-
     if (allocation.stack_size) {
-
-        // We used to do the alloca locally and save and restore the
-        // stack pointer, but this makes llvm generate streams of
-        // spill/reloads.
-        Value *ptr = create_alloca_at_entry(i32x8, allocation.stack_size/32, name);
-        allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
-
+        // Try to find a free stack allocation we can use.
+        vector<Allocation>::iterator free = free_stack_allocs.end();
+        for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
+            if (((Instruction *)free->ptr)->getParent()->getParent() == builder->GetInsertBlock()->getParent() &&
+                free->stack_size >= allocation.stack_size) {
+                break;
+            }
+        }
+        if (free != free_stack_allocs.end()) {
+            debug(4) << "Reusing freed stack allocation of " << free->stack_size << " bytes for allocation " << name << " of " << allocation.stack_size << " bytes.\n";
+            // Use a free alloc we found.
+            allocation = *free;
+            // This allocation isn't free anymore.
+            free_stack_allocs.erase(free);
+        } else {
+            debug(4) << "Allocating " << allocation.stack_size << " bytes on the stack for " << name << "\n";
+            // We used to do the alloca locally and save and restore the
+            // stack pointer, but this makes llvm generate streams of
+            // spill/reloads.
+            allocation.ptr = create_alloca_at_entry(i32x8, allocation.stack_size/32, name);
+        }
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
@@ -233,7 +245,8 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
     if (alloc.stack_size) {
-        // Free is a no-op for stack allocations
+        // Remember this allocation so it can be re-used by a later allocation.
+        free_stack_allocs.push_back(alloc);
     } else if (allocated_in == current_func) { // Skip over allocations from outside this function.
         // Call free
         llvm::Function *free_fn = module->getFunction("halide_free");
@@ -301,6 +314,8 @@ void CodeGen_Posix::prepare_for_early_exit() {
             allocations.push(names[i], stash[j-1]);
         }
     }
+
+    free_stack_allocs.clear();
 }
 
 }}

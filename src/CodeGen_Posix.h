@@ -72,6 +72,11 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
+    /** Stack allocations that were freed, but haven't gone out of
+     * scope yet.  This allows us to re-use stack allocations when
+     * they aren't being used. */
+    std::vector<Allocation> free_stack_allocs;
+
     /** Generates code for computing the size of an allocation from a
      * list of its extents and its size. Fires a runtime assert
      * (halide_error) if the size overflows 2^31 -1, the maximum
