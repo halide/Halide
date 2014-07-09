@@ -11,20 +11,36 @@ $ErrorActionPreference = "Continue"
 #  Visual Studio express 2013
 #  .Net framework 4.5.1
 #  Microsoft Build Tools 2013
-#  llvm trunk checkout via svn in ROOT\llvm
-#  clang trunk checkout via svn in ROOT\llvm\tools\clang
 
 # Add the relevant tools to the path
 $env:PATH += ";C:\Program Files (x86)\Subversion\bin"
+$env:PATH += ";C:\Program Files (x86)\CMake\bin"
 $env:PATH += ";C:\Program Files (x86)\CMake 2.8\bin"
 $env:PATH += ";C:\Program Files (x86)\Git\bin"
 $env:PATH += ";C:\Program Files (x86)\7-Zip"
 $env:PATH += ";C:\Program Files (x86)\MSBuild\12.0\bin"
 
-# Update source
-svn up $ROOT\llvm\tools\clang -r 211000
-svn up $ROOT\llvm -r 211000
-git pull
+# Get llvm
+#svn co http://llvm.org/svn/llvm-project/llvm/trunk $ROOT\llvm
+#svn co http://llvm.org/svn/llvm-project/cfe/trunk $ROOT\llvm\tools\clang
+
+#git clone http://git.chromium.org/native_client/pnacl-llvm.git $ROOT\pnacl-llvm
+#git checkout 
+
+
+# Update source to known working versions
+#svn up $ROOT\llvm\tools\clang -r 211000
+#svn up $ROOT\llvm -r 211000
+#cd $ROOT\pnacl-llvm
+# This version of pnacl llvm doesn't really compile on windows. 
+# - Add '#include "llvm/Support/raw_ostream.h"' to IR/Module.cpp
+# - Comment out '#error unknown architecture' in ResolvePNaClIntrinsics.cpp
+# - Clang compiled with msvc won't work, so you need to manually get the nacl sdk, get pepper_33, and 
+#   copy the contents of the folder that contains clang.exe into pnacl-llvm/nacl-sdk-bin, and also copy
+#   the dlls from one of the folders that contains cygwin1.dll
+
+#git checkout 6adf51d12178215dbc3c87cd8b1caaad7a4571e6
+#cd $ROOT
 
 $COMMIT = git show HEAD | head -n1 | cut -b8-
 $DATE = date +%Y_%m_%d
@@ -45,7 +61,6 @@ $DATE = date +%Y_%m_%d
 #cd build-32
 #cmake -D LLVM_ENABLE_TERMINFO=OFF -D LLVM_TARGETS_TO_BUILD='X86;ARM;NVPTX;AArch64' -D LLVM_ENABLE_ASSERTIONS=ON -D CMAKE_BUILD_TYPE=Release -D LLVM_BUILD_32_BITS=ON -G "Visual Studio 12" ..
 #MSBuild.exe /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
-
 
 #cd $ROOT\pnacl-llvm
 #if (! (Test-Path build-64)) {
@@ -175,7 +190,11 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
   }
 
   cd $ROOT
+  if (! (Test-Path distrib)) {
+    mkdir distrib
+  }
   cd distrib
+
   rm Halide.h 
   rm Halide.lib 
   rm Halide.dll

@@ -91,8 +91,8 @@ inline NO_INLINE Func func_like_to_func(T func_like) {
  *   and putting value in the border of the texture.)
  */
 // @{
-Func constant_exterior(const Func &source, Expr value,
-                       const std::vector<std::pair<Expr, Expr> > &bounds);
+EXPORT Func constant_exterior(const Func &source, Expr value,
+                              const std::vector<std::pair<Expr, Expr> > &bounds);
 
 template <typename T>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
@@ -203,8 +203,8 @@ inline NO_INLINE Func constant_exterior(T func_like, Expr value,
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_CLAMP_TO_EDGE.)
  */
 // @{
-Func repeat_edge(const Func &source,
-                 const std::vector<std::pair<Expr, Expr> > &bounds);
+EXPORT Func repeat_edge(const Func &source,
+                        const std::vector<std::pair<Expr, Expr> > &bounds);
 
 template <typename T>
 inline NO_INLINE Func repeat_edge(T func_like) {
@@ -315,8 +315,8 @@ inline NO_INLINE Func repeat_edge(T func_like,
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_REPEAT.)
  */
 // @{
-Func repeat_image(const Func &source,
-                  const std::vector<std::pair<Expr, Expr> > &bounds);
+EXPORT Func repeat_image(const Func &source,
+                         const std::vector<std::pair<Expr, Expr> > &bounds);
 
 template <typename T>
 inline NO_INLINE Func repeat_image(T func_like) {
@@ -426,8 +426,8 @@ inline NO_INLINE Func repeat_image(T func_like,
  *  (This is similar to setting GL_TEXTURE_WRAP_* to GL_MIRRORED_REPEAT.)
  */
 // @{
-Func mirror_image(const Func &source,
-                  const std::vector<std::pair<Expr, Expr> > &bounds);
+EXPORT Func mirror_image(const Func &source,
+                         const std::vector<std::pair<Expr, Expr> > &bounds);
 
 template <typename T>
 inline NO_INLINE Func mirror_image(T func_like) {
@@ -540,8 +540,8 @@ inline NO_INLINE Func mirror_image(T func_like,
  *  (I do not believe there is a direct GL_TEXTURE_WRAP_* equivalent for this.)
  */
 // @{
-Func mirror_interior(const Func &source,
-                     const std::vector<std::pair<Expr, Expr> > &bounds);
+EXPORT Func mirror_interior(const Func &source,
+                            const std::vector<std::pair<Expr, Expr> > &bounds);
 
 template <typename T>
 inline NO_INLINE Func mirror_interior(T func_like) {
