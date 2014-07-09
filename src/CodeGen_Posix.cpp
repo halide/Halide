@@ -153,9 +153,8 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                                                            const std::vector<Expr> &extents, Expr condition) {
 
     Value *llvm_size = NULL;
-
-    int32_t constant_bytes;
     int64_t stack_bytes = 0;
+    int32_t constant_bytes;
     if (constant_allocation_size(extents, name, constant_bytes)) {
         constant_bytes *= type.bytes();
         stack_bytes = constant_bytes;
@@ -277,10 +276,6 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     allocations.pop(name);
 }
 
-void CodeGen_Posix::destroy_allocation(Allocation alloc) {
-    // Heap allocations have already been freed.
-}
-
 void CodeGen_Posix::visit(const Allocate *alloc) {
 
     if (sym_exists(alloc->name + ".host")) {
@@ -297,9 +292,6 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     // Should have been freed
     internal_assert(!sym_exists(alloc->name + ".host"));
     internal_assert(!allocations.contains(alloc->name));
-
-    debug(2) << "Destroying allocation " << alloc->name << "\n";
-    destroy_allocation(allocation);
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
