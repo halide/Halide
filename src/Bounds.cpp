@@ -348,6 +348,10 @@ private:
             Expr test2 = (cast<int>(min_a) * cast<int>(max_b) - cast<int>(min_a * max_b));
             Expr test3 = (cast<int>(max_a) * cast<int>(min_b) - cast<int>(max_a * min_b));
             Expr test4 = (cast<int>(max_a) * cast<int>(max_b) - cast<int>(max_a * max_b));
+            test1 = simplify(test1);
+            test2 = simplify(test2);
+            test3 = simplify(test3);
+            test4 = simplify(test4);
             if (!is_zero(test1) || !is_zero(test2) || !is_zero(test3) || !is_zero(test4)) {
                 bounds_of_type(op->type);
                 return;
