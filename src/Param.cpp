@@ -200,6 +200,30 @@ Expr ImageParam::operator()(Expr x, Expr y, Expr z, Expr w) const {
     return Internal::Call::make(param, args);
 }
 
+Expr ImageParam::operator()(std::vector<Expr> args_passed) const {
+    std::vector<Expr> args;
+    bool placeholder_seen = false;
+    for (size_t i = 0; i < args_passed.size(); i++) {
+        add_implicit_args_if_placeholder(args, args_passed[i],
+                                         args_passed.size(), &placeholder_seen);
+    }
+
+    Internal::check_call_arg_types(name(), &args, dims);
+    return Internal::Call::make(param, args);
+}
+
+Expr ImageParam::operator()(std::vector<Var> args_passed) const {
+    std::vector<Expr> args;
+    bool placeholder_seen = false;
+    for (size_t i = 0; i < args_passed.size(); i++) {
+        add_implicit_args_if_placeholder(args, args_passed[i],
+                                         args_passed.size(), &placeholder_seen);
+    }
+
+    Internal::check_call_arg_types(name(), &args, dims);
+    return Internal::Call::make(param, args);
+}
+
 }
 
 

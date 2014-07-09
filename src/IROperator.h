@@ -130,6 +130,7 @@ EXPORT void match_types(Expr &a, Expr &b);
 // @{
 EXPORT Expr halide_log(Expr a);
 EXPORT Expr halide_exp(Expr a);
+EXPORT Expr halide_erf(Expr a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
@@ -709,6 +710,15 @@ inline Expr pow(Expr x, Expr y) {
         y = cast<float>(y);
         return Internal::halide_exp(Internal::halide_log(x) * y);
     }
+}
+
+/** Evaluate the error function erf. Only available for
+ * Float(32). Accurate up to the last three bits of the
+ * mantissa. Vectorizes cleanly. */
+inline Expr erf(Expr x) {
+    user_assert(x.defined()) << "erf of undefined Expr\n";
+    user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
+    return Internal::halide_erf(x);
 }
 
 /** Fast approximate cleanly vectorizable log for Float(32). Returns

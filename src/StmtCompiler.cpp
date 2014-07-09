@@ -23,7 +23,7 @@ StmtCompiler::StmtCompiler(Target target) {
         if (target.arch == Target::X86) {
             contents = new CodeGen_GPU_Host<CodeGen_X86>(target);
         }
-#ifdef WITH_ARM
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
         else if (target.arch == Target::ARM) {
             contents = new CodeGen_GPU_Host<CodeGen_ARM>(target);
         }
