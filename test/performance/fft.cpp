@@ -207,9 +207,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     Var n0o;
     x.compute_root().split(n0, n0o, n0, 8).reorder(n0, n1, n0o).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
-        stages[i].compute_root();
-        //stages[i].compute_at(x, n0o);
-        stages[i].vectorize(n0, 8);
+        stages[i].compute_at(x, n0o).vectorize(n0);
     }
     return x;
 }
