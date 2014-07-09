@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <Halide.h>
+#include <vector>
 #include "clock.h"
 
 const float pi = 3.14159265f;
@@ -193,6 +194,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         Expr r_ = (n1/S)%R;
         Expr i_ = S*(n1/(R*S)) + n1%S;
         exchange(n0, n1, _) = V(r_, i_, n0, _);
+        exchange.bound(n1, 0, N);
 
         // Remember this stage for scheduling later.
         stages.push_back(exchange);
@@ -204,18 +206,18 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // group.
     Var n0o;
     x.compute_root().split(n0, n0o, n0, 8).reorder(n0, n1, n0o).vectorize(n0);
-    for (std::vector<Func>::iterator i = stages.begin(); i + 1 != stages.end(); ++i) {
-        i->compute_at(x, n0o).vectorize(n0);
+    for (size_t i = 0; i < stages.size() - 1; i++) {
+        stages[i].compute_at(x, n0o).vectorize(n0);
     }
     return x;
 }
 
 // Transpose the first two dimensions of x.
 Func transpose(Func x) {
-    Var i("i"), j("j");
+    std::vector<Var> argsT(x.args());
+    std::swap(argsT[0], argsT[1]);
     Func xT;
-    xT(i, j, _) = x(j, i, _);
-    //xT.compute_root();
+    xT(argsT) = x(x.args());
     return xT;
 }
 
@@ -233,7 +235,10 @@ Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, float sign) {
     Func dft1 = transpose(dft1T);
 
     // Compute the DFT of dimension 1.
-    return fft_dim1(dft1, N1, R1, sign);
+    Func dft = fft_dim1(dft1, N1, R1, sign);
+    dft.bound(dft.args()[0], 0, N0);
+    dft.bound(dft.args()[1], 0, N1);
+    return dft;
 }
 
 // Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
@@ -262,26 +267,29 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     // DFT down the columns first.
     Func dft1 = fft_dim1(zipped, N1, R1, -1);
 
-    // Transpose so we can FFT dimension 0 (by making it dimension 1).
-    Func dft1T = transpose(dft1);
-
     // Unzip the DFTs of the columns.
-    Func unzippedT("unzippedT");
+    Func unzipped("unzipped");
     // By linearity of the DFT, Z = X + j*Y, where X, Y, and Z are the
     // DFTs of x, y and z.
 
     // By the conjugate symmetry of real DFTs, computing Z_n +
     // conj(Z_(N-n)) and Z_n - conj(Z_(N-n)) gives 2*X_n and 2*j*Y_n,
     // respectively.
-    Tuple Z = dft1T(n1, n0%(N0/2), _);
-    Tuple symZ = dft1T((N1 - n1)%N1, n0%(N0/2), _);
+    Tuple Z = dft1(n0%(N0/2), n1, _);
+    Tuple symZ = dft1(n0%(N0/2), (N1 - n1)%N1, _);
     Tuple X = scale(0.5f, add(Z, conj(symZ)));
-    Tuple Y = mul(Tuple(0, -0.5f), sub(Z, conj(symZ)));
-    unzippedT(n1, n0, _) = selectz(n0 < N0/2, X, Y);
-    //unzippedT.compute_root().vectorize(n1, 8);
+    Tuple Y = mul(Tuple(0.0f, -0.5f), sub(Z, conj(symZ)));
+    unzipped(n0, n1, _) = selectz(n0 < N0/2, X, Y);
+    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
+
+    // Transpose so we can FFT dimension 0 (by making it dimension 1).
+    Func unzippedT = transpose(unzipped);
 
     // DFT down the columns again (the rows of the original).
-    return fft_dim1(unzippedT, N0, R0, -1);
+    Func dft = fft_dim1(unzippedT, N0, R0, -1);
+    dft.bound(dft.args()[0], 0, N1/2 + 1);
+    dft.bound(dft.args()[1], 0, N0);
+    return dft;
 }
 
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
@@ -318,7 +326,8 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
                                  re(dft(n0%(N0/2), n1, _)),
                                  im(dft(n0%(N0/2), n1, _)));
     unzipped.compute_root().vectorize(n0, 8);
-
+    unzipped.bound(n0, 0, N0);
+    unzipped.bound(n1, 0, N1);
     return unzipped;
 }
 
@@ -411,7 +420,8 @@ int main(int argc, char **argv) {
         filtered_c2c(x, y) = re(dft_out(x, y))/cast<float>(W*H);
     }
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
+
     Image<float> result_r2c = filtered_r2c.realize(W, H, target);
     Image<float> result_c2c = filtered_c2c.realize(W, H, target);
 
@@ -445,25 +455,26 @@ int main(int argc, char **argv) {
 
     // Take the minimum time over many of iterations to minimize
     // noise.
-    const int reps = 20;
+    const int samples = 10;
+    const int reps = 100;
     double t = 1e6f;
-    for (int i = 0; i < reps; i++) {
+    for (int i = 0; i < samples; i++) {
         double t1 = current_time();
-        for (int j = 0; j < 10; j++) {
+        for (int j = 0; j < reps; j++) {
             bench_r2c.realize(R_r2c, target);
         }
-        double dt = (current_time() - t1)/10;
+        double dt = (current_time() - t1)/reps;
         if (dt < t) t = dt;
     }
     printf("r2c time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
     t = 1e6f;
-    for (int i = 0; i < reps; i++) {
+    for (int i = 0; i < samples; i++) {
         double t1 = current_time();
-        for (int j = 0; j < 10; j++) {
+        for (int j = 0; j < reps; j++) {
             bench_c2c.realize(R_c2c, target);
         }
-        double dt = (current_time() - t1)/10;
+        double dt = (current_time() - t1)/reps;
         if (dt < t) t = dt;
     }
     printf("c2c time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);

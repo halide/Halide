@@ -63,14 +63,31 @@ protected:
     struct Allocation {
         llvm::Value *ptr;
 
+        /** How many bytes this allocation is, or 0 if not
+         * constant. */
+        int constant_bytes;
+
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
-        int stack_size;
+        int stack_bytes;
     };
 
     /** The allocations currently in scope. The stack gets pushed when
      * we enter a new function. */
     Scope<Allocation> allocations;
+
+    /** Free all heap allocations in scope. */
+    void prepare_for_early_exit();
+
+    /** Initialize the CodeGen internal state to compile a fresh module */
+    void init_module();
+
+private:
+
+    /** Stack allocations that were freed, but haven't gone out of
+     * scope yet.  This allows us to re-use stack allocations when
+     * they aren't being used. */
+    std::vector<Allocation> free_stack_allocs;
 
     /** Generates code for computing the size of an allocation from a
      * list of its extents and its size. Fires a runtime assert
@@ -100,18 +117,6 @@ protected:
      * calls halide_free in the runtime, for stack allocations it
      * marks the block as free so it can be reused. */
     void free_allocation(const std::string &name);
-
-    /** Call this when an allocation goes out of scope. Does nothing
-     * for heap allocations. For stack allocations, it restores the
-     * stack removes the entry from the free_stack_blocks list. */
-    void destroy_allocation(Allocation alloc);
-
-    /** Free all heap allocations in scope. */
-    void prepare_for_early_exit();
-
-    /** Initialize the CodeGen internal state to compile a fresh module */
-    void init_module();
-
 };
 
 }}
