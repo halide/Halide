@@ -76,6 +76,14 @@ protected:
      * we enter a new function. */
     Scope<Allocation> allocations;
 
+    /** Free all heap allocations in scope. */
+    void prepare_for_early_exit();
+
+    /** Initialize the CodeGen internal state to compile a fresh module */
+    void init_module();
+
+private:
+
     /** Stack allocations that were freed, but haven't gone out of
      * scope yet.  This allows us to re-use stack allocations when
      * they aren't being used. */
@@ -109,18 +117,6 @@ protected:
      * calls halide_free in the runtime, for stack allocations it
      * marks the block as free so it can be reused. */
     void free_allocation(const std::string &name);
-
-    /** Call this when an allocation goes out of scope. Does nothing
-     * for heap allocations. For stack allocations, it restores the
-     * stack removes the entry from the free_stack_blocks list. */
-    void destroy_allocation(Allocation alloc);
-
-    /** Free all heap allocations in scope. */
-    void prepare_for_early_exit();
-
-    /** Initialize the CodeGen internal state to compile a fresh module */
-    void init_module();
-
 };
 
 }}
