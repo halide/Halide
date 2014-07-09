@@ -91,8 +91,8 @@ inline NO_INLINE Func func_like_to_func(T func_like) {
  *   and putting value in the border of the texture.)
  */
 // @{
-Func constant_exterior(const Func &source, Expr value,
-                       const std::vector<std::pair<Expr, Expr> > &bounds);
+EXPORT Func constant_exterior(const Func &source, Expr value,
+                              const std::vector<std::pair<Expr, Expr> > &bounds);
 
 template <typename T>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value) {
