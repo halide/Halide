@@ -630,7 +630,7 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
 template class CodeGen_GPU_Host<CodeGen_X86>;
 #endif
 
-#ifdef WITH_ARM
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
 template class CodeGen_GPU_Host<CodeGen_ARM>;
 #endif
 

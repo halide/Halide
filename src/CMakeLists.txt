@@ -46,6 +46,10 @@ if (TARGET_ARM)
   add_definitions("-DWITH_ARM=1")
 endif()
 
+if (TARGET_AARCH64)
+  add_definitions("-DWITH_AARCH64=1")
+endif()
+
 if (TARGET_PTX)
   add_definitions("-DWITH_PTX=1")
 endif()
@@ -102,6 +106,7 @@ set(RUNTIME_CPP
   posix_print)
 set (RUNTIME_LL
   arm
+  aarch64
   posix_math
   ptx_dev
   x86_avx
