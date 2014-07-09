@@ -203,17 +203,17 @@ private:
         // Check for overflow for (u)int8 and (u)int16
         if (!op->type.is_float() && op->type.bits < 32) {
             if (max.defined()) {
-                Expr test = (cast<int>(max_a) + cast<int>(max_b) == cast<int>(max));
+                Expr test = (cast<int>(max_a) + cast<int>(max_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
             }
             if (min.defined()) {
-                Expr test = (cast<int>(min_a) + cast<int>(min_b) == cast<int>(min));
+                Expr test = (cast<int>(min_a) + cast<int>(min_b) - cast<int>(min));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
@@ -244,17 +244,17 @@ private:
         // Check for overflow for (u)int8 and (u)int16
         if (!op->type.is_float() && op->type.bits < 32) {
             if (max.defined()) {
-                Expr test = (cast<int>(max_a) - cast<int>(min_b) == cast<int>(max));
+                Expr test = (cast<int>(max_a) - cast<int>(min_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
             }
             if (min.defined()) {
-                Expr test = (cast<int>(min_a) - cast<int>(max_b) == cast<int>(min));
+                Expr test = (cast<int>(min_a) - cast<int>(max_b) - cast<int>(min));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
@@ -344,11 +344,15 @@ private:
 
         if (op->type.bits < 32 && !op->type.is_float()) {
             // Try to prove it can't overflow
-            Expr test1 = (cast<int>(min_a) * cast<int>(min_b) == cast<int>(min_a * min_b));
-            Expr test2 = (cast<int>(min_a) * cast<int>(max_b) == cast<int>(min_a * max_b));
-            Expr test3 = (cast<int>(max_a) * cast<int>(min_b) == cast<int>(max_a * min_b));
-            Expr test4 = (cast<int>(max_a) * cast<int>(max_b) == cast<int>(max_a * max_b));
-            if (!is_one(simplify(test1 && test2 && test3 && test4))) {
+            Expr test1 = (cast<int>(min_a) * cast<int>(min_b) - cast<int>(min_a * min_b));
+            Expr test2 = (cast<int>(min_a) * cast<int>(max_b) - cast<int>(min_a * max_b));
+            Expr test3 = (cast<int>(max_a) * cast<int>(min_b) - cast<int>(max_a * min_b));
+            Expr test4 = (cast<int>(max_a) * cast<int>(max_b) - cast<int>(max_a * max_b));
+            test1 = simplify(test1);
+            test2 = simplify(test2);
+            test3 = simplify(test3);
+            test4 = simplify(test4);
+            if (!is_zero(test1) || !is_zero(test2) || !is_zero(test3) || !is_zero(test4)) {
                 bounds_of_type(op->type);
                 return;
             }

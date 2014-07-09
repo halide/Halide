@@ -42,6 +42,9 @@ $env:PATH += ";C:\Program Files (x86)\MSBuild\12.0\bin"
 #git checkout 6adf51d12178215dbc3c87cd8b1caaad7a4571e6
 #cd $ROOT
 
+$COMMIT = git show HEAD | head -n1 | cut -b8-
+$DATE = date +%Y_%m_%d
+
 # Build latest llvm
 #cd $ROOT\llvm
 #if (! (Test-Path build-64)) {

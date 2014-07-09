@@ -1607,6 +1607,14 @@ private:
                 if (!and_chain) {
                     else_case = substitute(var->name, const_false(), else_case);
                 }
+            } else if (eq && is_const(eq->b)) {
+                // some_expr = const
+                if (!or_chain) {
+                    then_case = substitute(eq->a, eq->b, then_case);
+                }
+                if (!and_chain) {
+                    else_case = substitute(eq->a, eq->b, else_case);
+                }
             }
         }
 

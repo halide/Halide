@@ -140,6 +140,8 @@ public:
     EXPORT Expr operator()(Expr x, Expr y) const;
     EXPORT Expr operator()(Expr x, Expr y, Expr z) const;
     EXPORT Expr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    EXPORT Expr operator()(std::vector<Expr>) const;
+    EXPORT Expr operator()(std::vector<Var>) const;
     // @}
 
     /** Get a pointer to the raw buffer_t that this image holds */

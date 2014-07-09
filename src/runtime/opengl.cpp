@@ -135,7 +135,6 @@ struct HalideOpenGLState {
 WEAK HalideOpenGLState halide_opengl_state;
 
 static const char *vertex_shader_src =
-    "#version 120\n"
     "attribute vec2 position;\n"
     "varying vec2 pixcoord;\n"
     "uniform ivec2 output_min;\n"

@@ -54,5 +54,27 @@ define weak_odr <2 x double> @abs_f64x2(<2 x double> %x) nounwind uwtable readno
   ret <2 x double> %result
 }
 
+declare <4 x float> @llvm.x86.sse.rcp.ps(<4 x float>) nounwind readnone
+
+define weak_odr <4 x float> @inverse_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
+  %approx = tail call <4 x float> @llvm.x86.sse.rcp.ps(<4 x float> %x);
+  %prod = fmul <4 x float> %approx, %x
+  %diff = fsub <4 x float> <float 2.0, float 2.0, float 2.0, float 2.0>, %prod
+  %result = fmul <4 x float> %approx, %diff
+  ret <4 x float> %result
+}
+
+declare <4 x float> @llvm.x86.sse.rsqrt.ps(<4 x float>) nounwind readnone
+
+define weak_odr <4 x float> @inverse_sqrt_f32x4(<4 x float> %x) nounwind uwtable readnone alwaysinline {
+  %approx = tail call <4 x float> @llvm.x86.sse.rsqrt.ps(<4 x float> %x);
+  %prod = fmul <4 x float> %approx, %approx
+  %prod2 = fmul <4 x float> %prod, %x
+  %diff = fsub <4 x float> <float 3.0, float 3.0, float 3.0, float 3.0>, %prod2
+  %scale = fmul <4 x float> <float 0.5, float 0.5, float 0.5, float 0.5>, %diff
+  %result = fmul <4 x float> %approx, %scale
+  ret <4 x float> %result
+}
+
 
 
