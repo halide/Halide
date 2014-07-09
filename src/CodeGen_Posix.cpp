@@ -199,7 +199,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             }
         }
         if (free != free_stack_allocs.end()) {
-            debug(1) << "Reusing freed stack allocation of " << free->stack_bytes
+            debug(4) << "Reusing freed stack allocation of " << free->stack_bytes
                      << " bytes for allocation " << name
                      << " of " << stack_bytes << " bytes.\n";
             // Use a free alloc we found.
@@ -209,7 +209,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
             // This allocation isn't free anymore.
             free_stack_allocs.erase(free);
         } else {
-            debug(1) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
+            debug(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
             // We used to do the alloca locally and save and restore the
             // stack pointer, but this makes llvm generate streams of
             // spill/reloads.
@@ -226,12 +226,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         ++arg_iter;  // skip the user context *
         llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-        debug(1) << "Creating call to halide_malloc for allocation " << name
+        debug(4) << "Creating call to halide_malloc for allocation " << name
                  << " of size " << type.bytes();
         for (size_t i = 0; i < extents.size(); i++) {
-            debug(1) << " x " << extents[i];
+            debug(4) << " x " << extents[i];
         }
-        debug(1) << "\n";
+        debug(4) << "\n";
         Value *args[2] = { get_user_context(), llvm_size };
 
         CallInst *call = builder->CreateCall(malloc_fn, args);
