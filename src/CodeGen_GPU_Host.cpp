@@ -520,7 +520,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         vector<GPU_Argument> closure_args = c.arguments();
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
-                closure_args[i].size = allocations.get(closure_args[i].name).stack_size;
+                closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
             }
         }
 
