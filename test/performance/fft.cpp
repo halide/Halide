@@ -368,8 +368,8 @@ int main(int argc, char **argv) {
     Image<float> kernel(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            int u = std::min(x, W - x);
-            int v = std::min(y, H - y);
+            int u = x < (W - x) ? x : (W - x);
+            int v = y < (H - y) ? y : (H - y);
             kernel(x, y) = u <= box/2 && v <= box/2 ? 1.0f/(box*box) : 0.0f;
         }
     }
@@ -452,7 +452,8 @@ int main(int argc, char **argv) {
         for (int j = 0; j < 10; j++) {
             bench_r2c.realize(R_r2c, target);
         }
-        t = std::min((current_time() - t1)/10, t);
+        double dt = (current_time() - t1)/10;
+        if (dt < t) t = dt;
     }
     printf("r2c time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
@@ -462,7 +463,8 @@ int main(int argc, char **argv) {
         for (int j = 0; j < 10; j++) {
             bench_c2c.realize(R_c2c, target);
         }
-        t = std::min((current_time() - t1)/10, t);
+        double dt = (current_time() - t1)/10;
+        if (dt < t) t = dt;
     }
     printf("c2c time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
