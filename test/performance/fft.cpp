@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <Halide.h>
+#include <vector>
 #include "clock.h"
 
 const float pi = 3.14159265f;
@@ -215,10 +216,10 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
 // Transpose the first two dimensions of x.
 Func transpose(Func x) {
-    Var i("i"), j("j");
+    std::vector<Var> argsT(x.args());
+    std::swap(argsT[0], argsT[1]);
     Func xT;
-    xT(i, j, _) = x(j, i, _);
-    //xT.compute_root();
+    xT(argsT) = x(x.args());
     return xT;
 }
 
@@ -236,7 +237,10 @@ Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, float sign) {
     Func dft1 = transpose(dft1T);
 
     // Compute the DFT of dimension 1.
-    return fft_dim1(dft1, N1, R1, sign);
+    Func dft = fft_dim1(dft1, N1, R1, sign);
+    dft.bound(dft.args()[0], 0, N0);
+    dft.bound(dft.args()[1], 0, N1);
+    return dft;
 }
 
 // Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
@@ -284,7 +288,10 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     Func unzippedT = transpose(unzipped);
 
     // DFT down the columns again (the rows of the original).
-    return fft_dim1(unzippedT, N0, R0, -1);
+    Func dft = fft_dim1(unzippedT, N0, R0, -1);
+    dft.bound(dft.args()[0], 0, N1/2 + 1);
+    dft.bound(dft.args()[1], 0, N0);
+    return dft;
 }
 
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
@@ -321,7 +328,8 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
                                  re(dft(n0%(N0/2), n1, _)),
                                  im(dft(n0%(N0/2), n1, _)));
     unzipped.compute_root().vectorize(n0, 8);
-
+    unzipped.bound(n0, 0, N0);
+    unzipped.bound(n1, 0, N1);
     return unzipped;
 }
 
@@ -414,7 +422,7 @@ int main(int argc, char **argv) {
         filtered_c2c(x, y) = re(dft_out(x, y))/cast<float>(W*H);
     }
 
-    Target target = get_target_from_environment();
+    Target target = get_jit_target_from_environment();
 
     Image<float> result_r2c = filtered_r2c.realize(W, H, target);
     Image<float> result_c2c = filtered_c2c.realize(W, H, target);
