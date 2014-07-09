@@ -63,9 +63,13 @@ protected:
     struct Allocation {
         llvm::Value *ptr;
 
+        /** How many bytes this allocation is, or 0 if not
+         * constant. */
+        int constant_bytes;
+
         /** How many bytes of stack space used. 0 implies it was a
          * heap allocation. */
-        int stack_size;
+        int stack_bytes;
     };
 
     /** The allocations currently in scope. The stack gets pushed when
