@@ -555,6 +555,7 @@ private:
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
 
         if (is_zero(b)) {
@@ -581,6 +582,8 @@ private:
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
         } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
+        } else if (sub_a && ((const_castint(b, &ib) && ib == -1) || (const_float(b, &fb) && fb == -1.0f))) {
+            expr = mutate(Sub::make(sub_a->b, sub_a->a));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -727,7 +730,7 @@ private:
     void visit(const Mod *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        int ia = 0, ib = 0;
+        int ia = 0, ia2 = 0, ib = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
@@ -780,6 +783,12 @@ private:
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % ib, ramp_a->width));
+        } else if (ramp_a && const_int(ramp_a->base, &ia) &&
+                   const_int(ramp_a->stride, &ia2) &&
+                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+                   ia/ib == (ia + ramp_a->width*ia2)/ib) {
+            // ramp(x, y, w) % broadcast(z, w) = ramp(x % z, y, w) if x/z == (x + w*y)/z
+            expr = mutate(Ramp::make(ramp_a->base % ib, ramp_a->stride, ramp_a->width));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2106,6 +2115,8 @@ void simplify_test() {
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
+    check((x - y)*-1, y - x);
+    check((xf - yf)*-1.0f, yf - xf);
 
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
@@ -2116,6 +2127,9 @@ void simplify_test() {
     check(Expr(Ramp::make(x*4, 1, 3)) / 4, Broadcast::make(x, 3));
     check(Expr(Ramp::make(x*8, 2, 4)) / 8, Broadcast::make(x, 4));
     check(Expr(Ramp::make(x*8, 3, 3)) / 8, Broadcast::make(x, 3));
+    check(Expr(Ramp::make(0, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
+    check(Expr(Ramp::make(8, 1, 8)) % 16, Expr(Ramp::make(8, 1, 8) % 16));
+    check(Expr(Ramp::make(16, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
