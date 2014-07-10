@@ -59,40 +59,61 @@ Tuple sumz(Tuple z, const std::string &s = "sum") {
     return Tuple(sum(re(z), s + "_re"), sum(im(z), s + "_im"));
 }
 
-Tuple selectz(Expr cond, Tuple t, Tuple f) {
-    return Tuple(select(cond, re(t), re(f)), select(cond, im(t), im(f)));
+Tuple selectz(Expr c, Tuple t, Tuple f) {
+    return Tuple(select(c, re(t), re(f)), select(c, im(t), im(f)));
+}
+
+Tuple selectz(Expr c1, Tuple t1, Expr c2, Tuple t2, Expr c3, Tuple t3, Tuple f) {
+    return Tuple(select(c1, re(t1), c2, re(t2), c3, re(t3), re(f)),
+                 select(c1, im(t1), c2, im(t2), c3, im(t3), im(f)));
 }
 
 // Compute the complex DFT of size N on dimension 0 of x.
 Func dft_dim0(Func x, int N, float sign) {
-    Func ret("dft_dim0");
+    Func dft("dft_dim0");
     Var n("n");
     RDom k(0, N);
-    ret(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
-    return ret;
+    dft(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
+    return dft;
 }
+
+
 
 // Specializations for some small DFTs.
 Func dft2_dim0(Func x, float sign) {
     Var n("n");
-    Func ret("dft2_dim0");
+    Func dft("dft2_dim0");
 #if 0
-    ret(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n, _));
-    ret(0, _) = add(x(0, _), x(1, _));
-    ret(1, _) = sub(x(0, _), x(1, _));
-    ret.bound(n, 0, 2);
-    ret.bound(_0, 0, 32);
+    dft(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n, _));
+    dft(0, _) = add(x(0, _), x(1, _));
+    dft(1, _) = sub(x(0, _), x(1, _));
 #else
-    ret(n, _) = selectz(n == 0,
+    dft(n, _) = selectz(n == 0,
                         add(x(0, _), x(1, _)),
                         sub(x(0, _), x(1, _)));
 #endif
-    return ret;
+    return dft;
 }
 
 Func dft4_dim0(Func x, float sign) {
-    Func ret("dft4_dim0");
-    return ret;
+    const int t0 = 4, t1 = 5, t2 = 6, t3 = 7;
+    Var n("n");
+    Func dft("dft4_dim0");
+    dft(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n%4, _));
+
+    // Butterfly stage 1.
+    dft(t0, _) = add(x(0, _), x(2, _));
+    dft(t2, _) = sub(x(0, _), x(2, _));
+    dft(t1, _) = add(x(1, _), x(3, _));
+    dft(t3, _) = mul(sub(x(1, _), x(3, _)), Tuple(0.0f, sign)); // W = j*sign
+
+    // Butterfly stage 2.
+    dft(0, _) = add(dft(t0, _), dft(t1, _));
+    dft(1, _) = add(dft(t2, _), dft(t3, _));
+    dft(2, _) = sub(dft(t0, _), dft(t1, _));
+    dft(3, _) = sub(dft(t2, _), dft(t3, _));
+
+    return dft;
 
 /*
     Var nx("nx"), ny("ny");
@@ -127,43 +148,37 @@ Func dft8_dim0(Func x, float sign) {
     return dft_dim0(x, 8, sign);
 }
 
-struct TwiddleParams {
-    int R, S;
-    float sign;
-
-    bool operator < (const TwiddleParams &r) const {
-        if (R < r.R) {
-            return true;
-        } else if (R > r.R) {
-            return false;
-        } else if (S < r.S) {
-            return true;
-        } else if (S > r.S) {
-            return false;
-        } else {
-            return sign < r.sign;
-        }
-    }
-};
-
-typedef std::map<TwiddleParams, Func> TwiddleFactors;
-
-TwiddleFactors twiddles;
+std::map<int, Func> twiddles;
 
 // Return a function computing the twiddle factors.
-Func W(int R, int S, float sign) {
+Func W(int N, float sign) {
     // Check to see if this set of twiddle factors is already computed.
-    TwiddleParams TP = { R, S, sign };
-    Func &w = twiddles[TP];
+    Func &w = twiddles[N*(int)sign];
 
-    Var r("r"), i("i");
+    Var n("n");
     if (!w.defined()) {
         Func W("W");
-        W(r, i) = expj((sign*2*pi*i*r)/(S*R));
-        Realization compute_static = W.realize(R, S);
-        Image<float> reW = compute_static[0];
-        Image<float> imW = compute_static[1];
-        w(r, i) = Tuple(reW(r, i), imW(r, i));
+        // If N is small, we inline the twiddle factors because they
+        // contain a lot of zeros -> they simplify a lot.
+        switch (N) {
+        case 2:
+            // N = 2 -> n = 0.
+            w(n) = Tuple(1.0f, 0.0f);
+            break;
+        case 4:
+            w(n) = selectz(n%4 == 0, Tuple( 1.0f,  0.0f),
+                           n%4 == 1, Tuple( 0.0f,  sign),
+                           n%4 == 2, Tuple(-1.0f,  0.0f),
+                                     Tuple( 0.0f, -sign));
+            break;
+        default:
+            W(n) = expj((sign*2*pi*n)/N);
+            Realization compute_static = W.realize(N);
+            Image<float> reW = compute_static[0];
+            Image<float> imW = compute_static[1];
+            w(n) = Tuple(reW(n), imW(n));
+            break;
+        }
     }
 
     return w;
@@ -176,21 +191,21 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
     std::vector<Func> stages;
 
-    RDom ri(0, R, 0, N/R);
+    RDom rs(0, R, 0, N/R);
     for (int S = 1; S < N; S *= R) {
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
 
         Func exchange("exchange_" + stage_id.str());
-        Var i("i"), r("r");
+        Var r("r"), s("s");
 
         // Twiddle factors.
-        Func w = W(R, S, sign);
+        Func w = W(R*S, sign);
 
         // Load the points from each subtransform and apply the
         // twiddle factors.
         Func v("v_" + stage_id.str());
-        v(r, i, n0, _) = mul(w(r, i%S), x(n0, i + r*(N/R), _));
+        v(r, s, n0, _) = mul(w(r*(s%S)), x(n0, s + r*(N/R), _));
 
         // Compute the R point DFT of the subtransform.
         Func V;
@@ -203,10 +218,12 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
         // Write the subtransform and use it as input to the next
         // pass.
-        RVar r_ = ri.x;
-        RVar i_ = ri.y;
+        RVar r_ = rs.x;
+        RVar s_ = rs.y;
         exchange(n0, n1, _) = add(Tuple(undef<float>(), undef<float>()), x(n0, n1, _));
-        exchange(n0, (i_/S)*R*S + i_%S + r_*S, _) = V(r_, i_, n0, _);
+        exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
+
+        exchange.bound(n1, 0, N);
 
         // Remember this stage for scheduling later.
         stages.push_back(exchange);
@@ -217,7 +234,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var n0o;
-    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, ri.x, ri.y, n0o).vectorize(n0);
+    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, rs.x, rs.y, n0o).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
         //stages[i].compute_at(x, n0o).update().vectorize(n0);
         stages[i].compute_root().update().vectorize(n0, 8);
@@ -479,6 +496,8 @@ int main(int argc, char **argv) {
         if (dt < t) t = dt;
     }
     printf("c2c  time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+
+    return 0;
 
     Func bench_r2cT = fft2d_r2cT(make_real(in), W, H);
     Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, target);
