@@ -203,7 +203,7 @@ Expr lossless_cast(Type t, Expr e) {
     if (const IntImm *i = e.as<IntImm>()) {
         int x = int_cast_constant(t, i->value);
         if (x == i->value) {
-            return e;
+            return cast(t, e);
         } else {
             return Expr();
         }
