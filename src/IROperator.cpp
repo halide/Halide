@@ -538,8 +538,19 @@ Expr print(const std::vector<Expr> &args) {
     std::ostringstream sstr;
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].type().is_float()) {
-            sstr << "%f ";
-            printf_args.push_back(cast(Float(64), args[i]));
+            // %f in a halide_printf causes mysterious problems on
+            // windows due to calling convention disagreements between
+            // llvm and msvc. To avoid the issues, we hack in float
+            // printing using int printing. If you fix this, Andrew
+            // owes you a beer.
+            Expr integer_part = cast<int>(args[i]); // Should round towards zero.
+            Expr frac_part = abs(args[i]) - abs(integer_part);
+            frac_part *= 10000; // Use 5 decimal places.
+            frac_part = cast<int>(frac_part);
+            sstr << "%d.%05d "; // Pad the fractional part with zeros.
+            printf_args.push_back(integer_part); 
+            printf_args.push_back(frac_part); 
+            //printf_args.push_back(cast(Float(64), args[i]));
         } else if (args[i].as<Internal::StringImm>() != NULL) {
             sstr << "%s ";
             printf_args.push_back(args[i]);

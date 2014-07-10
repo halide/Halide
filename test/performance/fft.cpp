@@ -146,34 +146,27 @@ struct TwiddleParams {
     }
 };
 
+typedef std::map<TwiddleParams, Func> TwiddleFactors;
+
+TwiddleFactors twiddles;
+
 // Return a function computing the twiddle factors.
 Func W(int R, int S, float sign) {
-    // Global cache of twiddle functions we've already computed.
-    static std::map<TwiddleParams, Func> twiddles;
-
     // Check to see if this set of twiddle factors is already computed.
     TwiddleParams TP = { R, S, sign };
-    std::map<TwiddleParams, Func>::iterator w = twiddles.find(TP);
-    if (w != twiddles.end()) {
-        return w->second;
+    Func &w = twiddles[TP];
+
+    Var r("r"), i("i");
+    if (!w.defined()) {
+        Func W("W");
+        W(r, i) = expj((sign*2*pi*i*r)/(S*R));
+        Realization compute_static = W.realize(R, S);
+        Image<float> reW = compute_static[0];
+        Image<float> imW = compute_static[1];
+        w(r, i) = Tuple(reW(r, i), imW(r, i));
     }
 
-    Var i("i"), r("r");
-
-    Func W("W");
-    W(r, i) = expj((sign*2*pi*i*r)/(S*R));
-
-    Realization compute_static = W.realize(R, S);
-    Image<float> reW = compute_static[0];
-    Image<float> imW = compute_static[1];
-
-    Func ret;
-    ret(r, i) = Tuple(reW(r, i), imW(r, i));
-
-    // Cache this set of twiddle factors.
-    twiddles[TP] = ret;
-
-    return ret;
+    return w;
 }
 
 // Compute the N point DFT of dimension 1 (columns) of x using
@@ -514,6 +507,8 @@ int main(int argc, char **argv) {
         if (dt < t) t = dt;
     }
     printf("cT2r time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+
+    twiddles.clear();
 
     return 0;
 }
