@@ -192,6 +192,8 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     std::vector<Func> stages;
 
     RDom rs(0, R, 0, N/R);
+    RVar r_ = rs.x;
+    RVar s_ = rs.y;
     for (int S = 1; S < N; S *= R) {
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
@@ -218,8 +220,6 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
         // Write the subtransform and use it as input to the next
         // pass.
-        RVar r_ = rs.x;
-        RVar s_ = rs.y;
         exchange(n0, n1, _) = add(Tuple(undef<float>(), undef<float>()), x(n0, n1, _));
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
@@ -234,7 +234,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var n0o;
-    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, rs.x, rs.y, n0o).vectorize(n0);
+    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, r_, s_, n0o).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
         //stages[i].compute_at(x, n0o).update().vectorize(n0);
         stages[i].compute_root().update().vectorize(n0, 8);
@@ -355,7 +355,7 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
     unzipped(n0, n1, _) = select(n0 < N0/2,
                                  re(dft(n0%(N0/2), n1, _)),
                                  im(dft(n0%(N0/2), n1, _)));
-    unzipped.compute_root().vectorize(n0, 8);
+    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
     unzipped.bound(n0, 0, N0);
     unzipped.bound(n1, 0, N1);
     return unzipped;
@@ -496,8 +496,6 @@ int main(int argc, char **argv) {
         if (dt < t) t = dt;
     }
     printf("c2c  time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
-
-    return 0;
 
     Func bench_r2cT = fft2d_r2cT(make_real(in), W, H);
     Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, target);
