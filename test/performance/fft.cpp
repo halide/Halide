@@ -77,8 +77,6 @@ Func dft_dim0(Func x, int N, float sign) {
     return dft;
 }
 
-
-
 // Specializations for some small DFTs.
 Func dft2_dim0(Func x, float sign) {
     Var n("n");
@@ -222,7 +220,6 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         // pass.
         exchange(n0, n1, _) = add(Tuple(undef<float>(), undef<float>()), x(n0, n1, _));
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
-
         exchange.bound(n1, 0, N);
 
         // Remember this stage for scheduling later.
@@ -319,7 +316,10 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     Func dft = fft_dim1(unzippedT, N0, R0, -1);
     dft.bound(dft.args()[0], 0, N1/2 + 1);
     dft.bound(dft.args()[1], 0, N0);
-    return dft;
+
+    Func dft_clamped;
+    dft_clamped(n1, n0, _) = dft(clamp(n1, 0, N1/2), n0, _);
+    return dft_clamped;
 }
 
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
@@ -328,8 +328,11 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
 Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
     Var n0("n0"), n1("n1");
 
+    Func cT_clamped;
+    cT_clamped(n1, n0, _) = cT(clamp(n1, 0, N1/2), n0, _);
+
     // Take the inverse DFT of the columns (rows in the final result).
-    Func dft1T = fft_dim1(cT, N0, R0, 1);
+    Func dft1T = fft_dim1(cT_clamped, N0, R0, 1);
 
     // Transpose so we can take the DFT of the columns again.
     Func dft1 = transpose(dft1T);
@@ -413,6 +416,8 @@ int main(int argc, char **argv) {
         }
     }
 
+    Target target = get_jit_target_from_environment();
+
     Var x("x"), y("y");
 
     Func filtered_c2c;
@@ -441,6 +446,7 @@ int main(int argc, char **argv) {
         // Compute the convolution.
         Func dft_filtered("dft_filtered");
         dft_filtered(x, y) = mul(dft_in(x, y), dft_kernel(x, y));
+        //dft_filtered.compute_root().trace_realizations();
 
         // Compute the inverse DFT to get the result.
         filtered_r2c = fft2d_cT2r(dft_filtered, W, H);
@@ -449,8 +455,6 @@ int main(int argc, char **argv) {
         RDom xy(0, W, 0, H);
         filtered_r2c(xy.x, xy.y) /= cast<float>(W*H);
     }
-
-    Target target = get_jit_target_from_environment();
 
     Image<float> result_c2c = filtered_c2c.realize(W, H, target);
     Image<float> result_r2c = filtered_r2c.realize(W, H, target);
@@ -511,6 +515,8 @@ int main(int argc, char **argv) {
     }
     printf("r2cT time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
+    Image<float> cT(H/2 + 1, W);
+    memset(cT.data(), 0, cT.width()*cT.height()*sizeof(float));
     Func bench_cT2r = fft2d_cT2r(make_complex(in), W, H);
     Realization R_cT2r = bench_cT2r.realize(W, H, target);
 
