@@ -76,12 +76,25 @@ Func dft_dim0(Func x, int N, float sign) {
 Func dft2_dim0(Func x, float sign) {
     Var n("n");
     Func ret("dft2_dim0");
-    ret(n, _) = selectz(n == 0, add(x(0, _), x(1, _)),
-                                sub(x(0, _), x(1, _)));
+#if 0
+    ret(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n, _));
+    ret(0, _) = add(x(0, _), x(1, _));
+    ret(1, _) = sub(x(0, _), x(1, _));
+    ret.bound(n, 0, 2);
+    ret.bound(_0, 0, 32);
+#else
+    ret(n, _) = selectz(n == 0,
+                        add(x(0, _), x(1, _)),
+                        sub(x(0, _), x(1, _)));
+#endif
     return ret;
 }
 
 Func dft4_dim0(Func x, float sign) {
+    Func ret("dft4_dim0");
+    return ret;
+
+/*
     Var nx("nx"), ny("ny");
     Func s("dft4_dim0_s");
     s(nx, ny, _) = x(ny*2 + nx, _);
@@ -102,7 +115,12 @@ Func dft4_dim0(Func x, float sign) {
                        add(s1(0, ny_, _), s1(1, ny_, _)),
                        sub(s1(0, ny_, _), s1(1, ny_, _)));
 
+    s1.compute_at(at, atv);
+    s1.bound(ny, 0, 2);
+    s1.bound(_0, 0, 16);
+
     return s2;
+*/
 }
 
 Func dft8_dim0(Func x, float sign) {
@@ -165,11 +183,13 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
     std::vector<Func> stages;
 
+    RDom ri(0, R, 0, N/R);
     for (int S = 1; S < N; S *= R) {
-        Var i("i"), r("r");
-
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
+
+        Func exchange("exchange_" + stage_id.str());
+        Var i("i"), r("r");
 
         // Twiddle factors.
         Func w = W(R, S, sign);
@@ -190,11 +210,10 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
         // Write the subtransform and use it as input to the next
         // pass.
-        Func exchange("exchange_" + stage_id.str());
-        Expr r_ = (n1/S)%R;
-        Expr i_ = S*(n1/(R*S)) + n1%S;
-        exchange(n0, n1, _) = V(r_, i_, n0, _);
-        exchange.bound(n1, 0, N);
+        RVar r_ = ri.x;
+        RVar i_ = ri.y;
+        exchange(n0, n1, _) = add(Tuple(undef<float>(), undef<float>()), x(n0, n1, _));
+        exchange(n0, (i_/S)*R*S + i_%S + r_*S, _) = V(r_, i_, n0, _);
 
         // Remember this stage for scheduling later.
         stages.push_back(exchange);
@@ -205,9 +224,10 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var n0o;
-    x.compute_root().split(n0, n0o, n0, 8).reorder(n0, n1, n0o).vectorize(n0);
+    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, ri.x, ri.y, n0o).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
-        stages[i].compute_at(x, n0o).vectorize(n0);
+        //stages[i].compute_at(x, n0o).update().vectorize(n0);
+        stages[i].compute_root().update().vectorize(n0, 8);
     }
     return x;
 }
@@ -385,6 +405,23 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
+    Func filtered_c2c;
+    {
+        // Compute the DFT of the input and the kernel.
+        Func dft_in = fft2d_c2c(make_complex(in), W, H, -1);
+        Func dft_kernel = fft2d_c2c(make_complex(kernel), W, H, -1);
+
+        // Compute the convolution.
+        Func dft_filtered("dft_filtered");
+        dft_filtered(x, y) = mul(dft_in(x, y), dft_kernel(x, y));
+
+        // Compute the inverse DFT to get the result.
+        Func dft_out = fft2d_c2c(dft_filtered, W, H, 1);
+
+        // Extract the real component and normalize.
+        filtered_c2c(x, y) = re(dft_out(x, y))/cast<float>(W*H);
+    }
+
     Func filtered_r2c;
     {
         // Compute the DFT of the input and the kernel.
@@ -392,7 +429,7 @@ int main(int argc, char **argv) {
         Func dft_kernel = fft2d_r2cT(make_real(kernel), W, H);
 
         // Compute the convolution.
-        Func dft_filtered;
+        Func dft_filtered("dft_filtered");
         dft_filtered(x, y) = mul(dft_in(x, y), dft_kernel(x, y));
 
         // Compute the inverse DFT to get the result.
@@ -403,27 +440,10 @@ int main(int argc, char **argv) {
         filtered_r2c(xy.x, xy.y) /= cast<float>(W*H);
     }
 
-    Func filtered_c2c;
-    {
-        // Compute the DFT of the input and the kernel.
-        Func dft_in = fft2d_c2c(make_complex(in), W, H, -1);
-        Func dft_kernel = fft2d_c2c(make_complex(kernel), W, H, -1);
-
-        // Compute the convolution.
-        Func dft_filtered;
-        dft_filtered(x, y) = mul(dft_in(x, y), dft_kernel(x, y));
-
-        // Compute the inverse DFT to get the result.
-        Func dft_out = fft2d_c2c(dft_filtered, W, H, 1);
-
-        // Extract the real component and normalize.
-        filtered_c2c(x, y) = re(dft_out(x, y))/cast<float>(W*H);
-    }
-
     Target target = get_jit_target_from_environment();
 
-    Image<float> result_r2c = filtered_r2c.realize(W, H, target);
     Image<float> result_c2c = filtered_c2c.realize(W, H, target);
+    Image<float> result_r2c = filtered_r2c.realize(W, H, target);
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -434,12 +454,12 @@ int main(int argc, char **argv) {
                 }
             }
             correct /= box*box;
-            if (fabs(result_r2c(x, y) - correct) > 1e-6f) {
-                printf("result_r2c(%d, %d) = %f instead of %f\n", x, y, result_r2c(x, y), correct);
-                return -1;
-            }
             if (fabs(result_c2c(x, y) - correct) > 1e-6f) {
                 printf("result_c2c(%d, %d) = %f instead of %f\n", x, y, result_c2c(x, y), correct);
+                return -1;
+            }
+            if (fabs(result_r2c(x, y) - correct) > 1e-6f) {
+                printf("result_r2c(%d, %d) = %f instead of %f\n", x, y, result_r2c(x, y), correct);
                 return -1;
             }
         }
@@ -447,28 +467,16 @@ int main(int argc, char **argv) {
 
     // For a description of the methodology used here, see
     // http://www.fftw.org/speed/method.html
-    Func bench_r2c = fft2d_r2cT(make_real(in), W, H);
-    Func bench_c2c = fft2d_c2c(make_complex(in), W, H, -1);
-
-    Realization R_r2c = bench_r2c.realize(H/2 + 1, W, target);
-    Realization R_c2c = bench_c2c.realize(W, H, target);
 
     // Take the minimum time over many of iterations to minimize
     // noise.
     const int samples = 10;
     const int reps = 100;
     double t = 1e6f;
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        for (int j = 0; j < reps; j++) {
-            bench_r2c.realize(R_r2c, target);
-        }
-        double dt = (current_time() - t1)/reps;
-        if (dt < t) t = dt;
-    }
-    printf("r2c time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
-    t = 1e6f;
+    Func bench_c2c = fft2d_c2c(make_complex(in), W, H, -1);
+    Realization R_c2c = bench_c2c.realize(W, H, target);
+
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
         for (int j = 0; j < reps; j++) {
@@ -477,7 +485,35 @@ int main(int argc, char **argv) {
         double dt = (current_time() - t1)/reps;
         if (dt < t) t = dt;
     }
-    printf("c2c time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+    printf("c2c  time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+
+    Func bench_r2cT = fft2d_r2cT(make_real(in), W, H);
+    Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, target);
+
+    t = 1e6f;
+    for (int i = 0; i < samples; i++) {
+        double t1 = current_time();
+        for (int j = 0; j < reps; j++) {
+            bench_r2cT.realize(R_r2cT, target);
+        }
+        double dt = (current_time() - t1)/reps;
+        if (dt < t) t = dt;
+    }
+    printf("r2cT time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+
+    Func bench_cT2r = fft2d_cT2r(make_complex(in), W, H);
+    Realization R_cT2r = bench_cT2r.realize(W, H, target);
+
+    t = 1e6f;
+    for (int i = 0; i < samples; i++) {
+        double t1 = current_time();
+        for (int j = 0; j < reps; j++) {
+            bench_cT2r.realize(R_cT2r, target);
+        }
+        double dt = (current_time() - t1)/reps;
+        if (dt < t) t = dt;
+    }
+    printf("cT2r time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
 
     return 0;
 }
