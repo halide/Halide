@@ -15,7 +15,7 @@ using namespace Halide;
 // Find the best radix to use for an FFT of size N. Currently, this is
 // always 2.
 int find_radix(int N) {
-    return 2;
+    return 8;
 }
 
 // Complex number arithmetic. Complex numbers are represented with
@@ -80,70 +80,89 @@ Func dft_dim0(Func x, int N, float sign) {
 // Specializations for some small DFTs.
 Func dft2_dim0(Func x, float sign) {
     Var n("n");
-    Func dft("dft2_dim0");
-#if 0
-    dft(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n, _));
-    dft(0, _) = add(x(0, _), x(1, _));
-    dft(1, _) = sub(x(0, _), x(1, _));
-#else
-    dft(n, _) = selectz(n == 0,
-                        add(x(0, _), x(1, _)),
-                        sub(x(0, _), x(1, _)));
-#endif
-    return dft;
+    Func X("X2_dim0");
+    X(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n, _));
+
+    FuncRefExpr x0 = x(0, _), x1 = x(1, _);
+    FuncRefExpr X0 = X(0, _), X1 = X(1, _);
+
+    X0 = add(x0, x1);
+    X1 = sub(x0, x1);
+
+    return X;
 }
 
 Func dft4_dim0(Func x, float sign) {
-    const int t0 = 4, t1 = 5, t2 = 6, t3 = 7;
     Var n("n");
-    Func dft("dft4_dim0");
-    dft(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n%4, _));
+    Func X("X");
+    X(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n%4, _));
 
-    // Butterfly stage 1.
-    dft(t0, _) = add(x(0, _), x(2, _));
-    dft(t2, _) = sub(x(0, _), x(2, _));
-    dft(t1, _) = add(x(1, _), x(3, _));
-    dft(t3, _) = mul(sub(x(1, _), x(3, _)), Tuple(0.0f, sign)); // W = j*sign
+    FuncRefExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
+    FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
 
-    // Butterfly stage 2.
-    dft(0, _) = add(dft(t0, _), dft(t1, _));
-    dft(1, _) = add(dft(t2, _), dft(t3, _));
-    dft(2, _) = sub(dft(t0, _), dft(t1, _));
-    dft(3, _) = sub(dft(t2, _), dft(t3, _));
+    FuncRefExpr T0 = X(-1, _);
+    FuncRefExpr T2 = X(-2, _);
+    T0 = add(x0, x2);
+    T2 = add(x1, x3);
+    X0 = add(T0, T2);
+    X2 = sub(T0, T2);
 
-    return dft;
+    FuncRefExpr T1 = T0;
+    FuncRefExpr T3 = T2;
+    T1 = sub(x0, x2);
+    T3 = mul(sub(x1, x3), Tuple(0.0f, sign)); // W = j*sign
+    X1 = add(T1, T3);
+    X3 = sub(T1, T3);
 
-/*
-    Var nx("nx"), ny("ny");
-    Func s("dft4_dim0_s");
-    s(nx, ny, _) = x(ny*2 + nx, _);
-
-    Func s1("dft4_dim0_1");
-    Tuple W3 = selectz(nx == 0, Tuple(1.0f, 0.0f), Tuple(0.0f, sign));
-    s1(nx, ny, _) = selectz(ny == 0,
-                            add(s(nx, 0, _), s(nx, 1, _)),
-                            mul(sub(s(nx, 0, _), s(nx, 1, _)), W3));
-    // The twiddle factor.
-    //s1(1, 1, _) = mul(s1(1, 1, _), Tuple(0.0f, sign));
-
-    Var n("n");
-    Func s2("dft4_dim0_2");
-    Expr nx_ = n/2;
-    Expr ny_ = n%2;
-    s2(n, _) = selectz(nx_ == 0,
-                       add(s1(0, ny_, _), s1(1, ny_, _)),
-                       sub(s1(0, ny_, _), s1(1, ny_, _)));
-
-    s1.compute_at(at, atv);
-    s1.bound(ny, 0, 2);
-    s1.bound(_0, 0, 16);
-
-    return s2;
-*/
+    return X;
 }
 
 Func dft8_dim0(Func x, float sign) {
-    return dft_dim0(x, 8, sign);
+    const float cospi4 = 0.70710678f;
+
+    enum { t0 = 8, t1, t2, t3, t4, t5, t6, t7 = 7, };
+    Var n("n");
+    Func X("X");
+    X(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n%8, _));
+
+    FuncRefExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
+    FuncRefExpr x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);
+    FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
+    FuncRefExpr X4 = X(4, _), X5 = X(5, _), X6 = X(6, _), X7 = X(7, _);
+
+    FuncRefExpr T0 = X(-1, _), T1 = X(-2, _), T2 = X(-3, _), T3 = X(-4, _);
+    FuncRefExpr T4 = X(-5, _), T5 = X(-6, _), T6 = X(-7, _), T7 = X(-8, _);
+
+    X0 = add(x0, x4);
+    X2 = add(x2, x6);
+    T0 = add(X0, X2);
+    T2 = sub(X0, X2);
+
+    X1 = sub(x0, x4);
+    X3 = mul(sub(x2, x6), Tuple(0.0f, sign));
+    T1 = add(X1, X3);
+    T3 = sub(X1, X3);
+
+    X4 = add(x1, x5);
+    X6 = add(x3, x7);
+    T4 = add(X4, X6);
+    T6 = mul(sub(X4, X6), Tuple(0.0f, sign));
+
+    X5 = sub(x1, x5);
+    X7 = mul(sub(x3, x7), Tuple(0.0f, sign));
+    T5 = mul(add(X5, X7), Tuple(cospi4, sign*cospi4));
+    T7 = mul(sub(X5, X7), Tuple(-cospi4, sign*cospi4));
+
+    X0 = add(T0, T4);
+    X1 = add(T1, T5);
+    X2 = add(T2, T6);
+    X3 = add(T3, T7);
+    X4 = sub(T0, T4);
+    X5 = sub(T1, T5);
+    X6 = sub(T2, T6);
+    X7 = sub(T3, T7);
+
+    return X;
 }
 
 std::map<int, Func> twiddles;
@@ -222,6 +241,14 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
         exchange.bound(n1, 0, N);
 
+        V.compute_at(exchange, s_).reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
+        printf("%d\n", V.num_reduction_definitions());
+        for (int i = 0; i < V.num_reduction_definitions(); i++) {
+            V.update(i).vectorize(_1);
+        }
+        v.reorder_storage(n0, r, s);
+        v.compute_at(exchange, s_).unroll(r).vectorize(n0);
+
         // Remember this stage for scheduling later.
         stages.push_back(exchange);
 
@@ -231,10 +258,10 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var n0o;
-    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, r_, s_, n0o).vectorize(n0);
+    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, r_, s_, n0o).vectorize(n0).unroll(r_);
     for (size_t i = 0; i < stages.size() - 1; i++) {
         //stages[i].compute_at(x, n0o).update().vectorize(n0);
-        stages[i].compute_root().update().vectorize(n0, 8);
+        stages[i].compute_root().update().vectorize(n0, 8).unroll(r_);
     }
     return x;
 }
