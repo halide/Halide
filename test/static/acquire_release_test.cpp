@@ -37,44 +37,15 @@ int init_context() {
 
     cl_platform_id platform = NULL;
 
-    // Find the requested platform, or the first if none specified.
-    const char * name = getenv("HL_OCL_PLATFORM");
-    if (name != NULL) {
-        for (cl_uint i = 0; i < platformCount; ++i) {
-            const cl_uint maxPlatformName = 256;
-            char platformName[maxPlatformName];
-            err = clGetPlatformInfo( platforms[i], CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
-            if (err != CL_SUCCESS) continue;
-
-            // A platform matches the request if it is a substring of the platform name.
-            if (strstr(platformName, name)) {
-                platform = platforms[i];
-                break;
-            }
-        }
-    } else if (platformCount > 0) {
+    if (platformCount > 0) {
         platform = platforms[0];
     }
     if (platform == NULL){
-        printf("Failed to find platform\n");
+        printf("Failed to get platform\n");
         return CL_INVALID_PLATFORM;
     }
 
-    cl_device_type device_type = 0;
-    // Find the device types requested.
-    const char * dev_type = getenv("HL_OCL_DEVICE");
-    if (dev_type != NULL) {
-        if (strstr("cpu", dev_type)) {
-            device_type |= CL_DEVICE_TYPE_CPU;
-        }
-        if (strstr("gpu", dev_type)) {
-            device_type |= CL_DEVICE_TYPE_GPU;
-        }
-    }
-    // If no devices are specified yet, just use all.
-    if (device_type == 0) {
-        device_type = CL_DEVICE_TYPE_ALL;
-    }
+    cl_device_type device_type = CL_DEVICE_TYPE_ALL;
 
     // Make sure we have a device
     const cl_uint maxDevices = 4;
@@ -117,7 +88,7 @@ void destroy_context() {
     cl_ctx = NULL;
 }
 
-// These functions replace the acquire/release implementation in src/runtime/opencl.cpp. 
+// These functions replace the acquire/release implementation in src/runtime/opencl.cpp.
 // Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
 // in our implementation of these functions.
 extern "C" int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
@@ -157,23 +128,18 @@ int init_context() {
         return CUDA_ERROR_NO_DEVICE;
     }
 
-    char *device_str = getenv("HL_GPU_DEVICE");
-
     CUdevice dev;
     // Get device
     CUresult status;
-    if (device_str) {
-        status = cuDeviceGet(&dev, atoi(device_str));
-    } else {
-        // Try to get a device >0 first, since 0 should be our display device
-        // For now, don't try devices > 2 to maintain compatibility with previous behavior.
-        if (deviceCount > 2)
-            deviceCount = 2;
-        for (int id = deviceCount - 1; id >= 0; id--) {
-            status = cuDeviceGet(&dev, id);
-            if (status == CUDA_SUCCESS) break;
-        }
+    // Try to get a device >0 first, since 0 should be our display device
+    // For now, don't try devices > 2 to maintain compatibility with previous behavior.
+    if (deviceCount > 2)
+        deviceCount = 2;
+    for (int id = deviceCount - 1; id >= 0; id--) {
+        status = cuDeviceGet(&dev, id);
+        if (status == CUDA_SUCCESS) break;
     }
+
     if (status != CUDA_SUCCESS) {
         printf("Failed to get CUDA device\n");
         return status;
@@ -196,7 +162,7 @@ void destroy_context() {
     cuda_ctx = NULL;
 }
 
-// These functions replace the acquire/release implementation in src/runtime/cuda.cpp. 
+// These functions replace the acquire/release implementation in src/runtime/cuda.cpp.
 // Since we don't parallelize access to the GPU in the schedule, we don't need synchronization
 // in our implementation of these functions.
 extern "C" int halide_acquire_cuda_context(void *user_context, CUcontext *ctx) {
