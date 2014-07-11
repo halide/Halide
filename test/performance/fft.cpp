@@ -219,7 +219,6 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         // twiddle factors.
         Func v("v_" + stage_id.str());
         v(r, s, n0, _) = mul(selectz(r > 0, w(r*(s%S)), Tuple(1.0f, 0.0f)), x(n0, s + r*(N/R), _));
-        v.reorder_storage(n0, r, s);
 
         // Compute the R point DFT of the subtransform.
         Func V;
@@ -239,11 +238,15 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         std::copy(args.begin() + 2, args.end(), std::back_inserter(_));
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
-        V.compute_at(exchange, s_).reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
+        v.compute_at(exchange, s_).unroll(r).vectorize(n0);
+        v.reorder_storage(n0, r, s);
+
+        // The pure step for V is often undef, but not always.
+        V.compute_at(exchange, s_).unroll(r).vectorize(n0);
+        V.reorder_storage(n0, r, s);
         for (int i = 0; i < V.num_reduction_definitions(); i++) {
             V.update(i).vectorize(n0);
         }
-        v.compute_at(exchange, s_).unroll(r).vectorize(n0);
 
         // Remember this stage for scheduling later.
         stages.push_back(exchange);
@@ -262,12 +265,12 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 }
 
 // Transpose the first two dimensions of x.
-Func transpose(Func x) {
-    std::vector<Var> argsT(x.args());
+Func transpose(Func f) {
+    std::vector<Var> argsT(f.args());
     std::swap(argsT[0], argsT[1]);
-    Func xT;
-    xT(argsT) = x(x.args());
-    return xT;
+    Func fT;
+    fT(argsT) = f(f.args());
+    return fT;
 }
 
 // Compute the N0 x N1 2D complex DFT of x using radixes R0, R1.
