@@ -12,8 +12,7 @@ const float pi = 3.14159265f;
 
 using namespace Halide;
 
-// Find the best radix to use for an FFT of size N. Currently, this is
-// always 2.
+// Find the best radix to use for an FFT of size N.
 int find_radix(int N) {
     return 8;
 }
@@ -74,10 +73,12 @@ Func dft_dim0(Func x, int N, float sign) {
 
 // Specializations for some small DFTs.
 Func dft2_dim0(Func x, float sign) {
-    Var n("n");
     Func X("X2_dim0");
-    X(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n, _));
+    std::vector<Var> args(x.args());
+    X(args) = Tuple(undef<float>(), undef<float>());
 
+    std::vector<Expr> _;
+    std::copy(args.begin() + 1, args.end(), std::back_inserter(_));
     FuncRefExpr x0 = x(0, _), x1 = x(1, _);
     FuncRefExpr X0 = X(0, _), X1 = X(1, _);
 
@@ -88,10 +89,12 @@ Func dft2_dim0(Func x, float sign) {
 }
 
 Func dft4_dim0(Func x, float sign) {
-    Var n("n");
     Func X("X");
-    X(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n%4, _));
+    std::vector<Var> args(x.args());
+    X(args) = Tuple(undef<float>(), undef<float>());
 
+    std::vector<Expr> _;
+    std::copy(args.begin() + 1, args.end(), std::back_inserter(_));
     FuncRefExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
     FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
 
@@ -115,11 +118,12 @@ Func dft4_dim0(Func x, float sign) {
 Func dft8_dim0(Func x, float sign) {
     const float sqrt2_2 = 0.70710678f;
 
-    enum { t0 = 8, t1, t2, t3, t4, t5, t6, t7 = 7, };
-    Var n("n");
     Func X("X");
-    X(n, _) = add(Tuple(undef<float>(), undef<float>()), x(n%8, _));
+    std::vector<Var> args(x.args());
+    X(args) = Tuple(undef<float>(), undef<float>());
 
+    std::vector<Expr> _;
+    std::copy(args.begin() + 1, args.end(), std::back_inserter(_));
     FuncRefExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
     FuncRefExpr x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);
     FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
@@ -192,6 +196,10 @@ Func W(int N, float sign) {
 Func fft_dim1(Func x, int N, int R, float sign) {
     Var n0("n0"), n1("n1");
 
+    std::vector<Var> args(x.args());
+    args[0] = n0;
+    args[1] = n1;
+
     std::vector<Func> stages;
 
     RDom rs(0, R, 0, N/R);
@@ -224,14 +232,16 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
         // Write the subtransform and use it as input to the next
         // pass.
-        exchange(n0, n1, _) = add(Tuple(undef<float>(), undef<float>()), x(n0, n1, _));
+        exchange(args) = Tuple(undef<float>(), undef<float>());
         exchange.bound(n1, 0, N);
 
+        std::vector<Expr> _;
+        std::copy(args.begin() + 2, args.end(), std::back_inserter(_));
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
         V.compute_at(exchange, s_).reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
         for (int i = 0; i < V.num_reduction_definitions(); i++) {
-            V.update(i).vectorize(_1);
+            V.update(i).vectorize(n0);
         }
         v.compute_at(exchange, s_).unroll(r).vectorize(n0);
 
@@ -246,8 +256,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     Var group("g");
     x.compute_root().update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).vectorize(n0).unroll(r_);
     for (size_t i = 0; i < stages.size() - 1; i++) {
-        //stages[i].compute_at(x, group).update().vectorize(n0).unroll(r_);
-        stages[i].compute_root().update().vectorize(n0, 8).unroll(r_);
+        stages[i].compute_at(x, group).update().vectorize(n0).unroll(r_);
     }
     return x;
 }
