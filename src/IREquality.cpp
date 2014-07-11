@@ -418,7 +418,7 @@ public:
 
         if (!s->rest.defined() && op->rest.defined()) {
             result = -1;
-        } else if (s->rest.defined() && op->rest.defined()) {
+        } else if (s->rest.defined() && !op->rest.defined()) {
             result = 1;
         } else {
             stmt = s->first;
