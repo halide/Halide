@@ -226,6 +226,8 @@ void check_sse_all() {
     check("paddb", 16, u8_1 + u8_2);
     check("psubb", 16, u8_1 - u8_2);
     check("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
+    // Add a test with a constant as there was a bug on this.
+    check("paddsb", 16, i8(clamp(i16(i8_1) + i16(3), min_i8, max_i8)));
     check("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
     check("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
     check("psubusb", 16, u8(max(i16(u8_1) - i16(u8_2), 0)));
@@ -240,6 +242,14 @@ void check_sse_all() {
     check("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
     // Add a test with a constant as there was a bug on this.
     check("pmulhw", 8, i16((3 * i32(i16_2)) / (256*256)));
+
+    // A case that does not work yet due to CSE(?) creating Let
+    // bindings inside the expression.
+#if 0
+    check("pmulhw", 8, select(in_u8(0) == 0,
+                              i16((3 * i32(i16_2)) / (256*256)),
+                              i16((5 * i32(i16_2)) / (256*256))));
+#endif
     check("pmulhuw", 8, i16_1 / 15);
     check("pmullw", 8, i16_1 * i16_2);
 

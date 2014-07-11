@@ -176,18 +176,19 @@ namespace {
 
 // Attempt to cast an expression to a smaller type while provably not
 // losing information. If it can't be done, return an undefined Expr.
+
 Expr lossless_cast(Type t, Expr e) {
-    if (t.can_represent(e.type())) {
+    if (t == e.type()) {
         return e;
+    } else if (t.can_represent(e.type())) {
+        return cast(t, e);
     }
 
     if (const Cast *c = e.as<Cast>()) {
         if (t == c->value.type()) {
             return c->value;
-        } else if (t.can_represent(c->value.type())) {
-            return cast(t, c->value);
         } else {
-            return Expr();
+            return lossless_cast(t, c->value);
         }
     }
 
@@ -227,7 +228,7 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
-    Pattern patterns[] = {
+    static Pattern patterns[] = {
         {false, false, true, Int(8, 16), "sse2.padds.b",
          _i8(clamp(wild_i16x16 + wild_i16x16, -128, 127))},
         {false, false, true, Int(8, 16), "sse2.psubs.b",
