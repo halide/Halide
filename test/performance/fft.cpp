@@ -238,14 +238,20 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         std::copy(args.begin() + 2, args.end(), std::back_inserter(_));
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
-        v.compute_at(exchange, s_).unroll(r).vectorize(n0);
+        v.compute_at(exchange, s_).unroll(r);
         v.reorder_storage(n0, r, s);
 
         // The pure step for V is often undef, but not always.
-        V.compute_at(exchange, s_).unroll(r).vectorize(n0);
+        V.compute_at(exchange, s_).unroll(r);
         V.reorder_storage(n0, r, s);
-        for (int i = 0; i < V.num_reduction_definitions(); i++) {
-            V.update(i).vectorize(n0);
+
+        // TODO: Understand why these all vectorize in all but the last stage.
+        if (S == N/R) {
+            v.vectorize(n0);
+            V.vectorize(n0);
+            for (int i = 0; i < V.num_reduction_definitions(); i++) {
+                V.update(i).vectorize(n0);
+            }
         }
 
         // Remember this stage for scheduling later.
@@ -257,10 +263,11 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var group("g");
-    x.compute_root().update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).vectorize(n0).unroll(r_);
+    x.compute_root().update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).unroll(r_).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
-        stages[i].compute_at(x, group).update().vectorize(n0).unroll(r_);
+        stages[i].compute_at(x, group).update().unroll(r_).vectorize(n0);
     }
+
     return x;
 }
 
