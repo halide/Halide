@@ -224,7 +224,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         // Load the points from each subtransform and apply the
         // twiddle factors.
         Func v("v_" + stage_id.str());
-        v(r, s, n0, _) = mul(w(r*(s%S)), x(n0, s + r*(N/R), _));
+        v(r, s, n0, _) = mul(selectz(r > 0, w(r*(s%S)), Tuple(1.0f, 0.0f)), x(n0, s + r*(N/R), _));
 
         // Compute the R point DFT of the subtransform.
         Func V;
@@ -242,7 +242,6 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         exchange.bound(n1, 0, N);
 
         V.compute_at(exchange, s_).reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
-        printf("%d\n", V.num_reduction_definitions());
         for (int i = 0; i < V.num_reduction_definitions(); i++) {
             V.update(i).vectorize(_1);
         }
@@ -257,10 +256,10 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
-    Var n0o;
-    x.compute_root().update().split(n0, n0o, n0, 8).reorder(n0, r_, s_, n0o).vectorize(n0).unroll(r_);
+    Var group("g");
+    x.compute_root().update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).vectorize(n0).unroll(r_);
     for (size_t i = 0; i < stages.size() - 1; i++) {
-        //stages[i].compute_at(x, n0o).update().vectorize(n0);
+        //stages[i].compute_at(x, group).update().vectorize(n0).unroll(r_);
         stages[i].compute_root().update().vectorize(n0, 8).unroll(r_);
     }
     return x;
