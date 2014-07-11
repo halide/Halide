@@ -582,8 +582,10 @@ private:
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
         } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
-        } else if (sub_a && ((const_castint(b, &ib) && ib == -1) || (const_float(b, &fb) && fb == -1.0f))) {
-            expr = mutate(Sub::make(sub_a->b, sub_a->a));
+        } else if (sub_a && const_int(b, &ib) && ib < 0) {
+            expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -ib));
+        } else if (sub_a && const_float(b, &fb) && fb < 0.0f) {
+            expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -fb));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -1599,6 +1601,13 @@ private:
                 continue;
             }
 
+            if (!or_chain) {
+                then_case = substitute(next, const_true(), then_case);
+            }
+            if (!and_chain) {
+                else_case = substitute(next, const_false(), else_case);
+            }
+
             const EQ *eq = next.as<EQ>();
             const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
 
@@ -1608,13 +1617,6 @@ private:
                 }
                 if (!and_chain && eq->b.type().is_bool()) {
                     else_case = substitute(var->name, !eq->b, then_case);
-                }
-            } else if (var) {
-                if (!or_chain) {
-                    then_case = substitute(var->name, const_true(), then_case);
-                }
-                if (!and_chain) {
-                    else_case = substitute(var->name, const_false(), else_case);
                 }
             } else if (eq && is_const(eq->b)) {
                 // some_expr = const
@@ -1905,6 +1907,8 @@ private:
             // Check if both halves start with a let statement.
             const LetStmt *let_first = first.as<LetStmt>();
             const LetStmt *let_rest = rest.as<LetStmt>();
+            const IfThenElse *if_first = first.as<IfThenElse>();
+            const IfThenElse *if_rest = rest.as<IfThenElse>();
 
             // Check if first is a no-op.
             const AssertStmt *noop = first.as<AssertStmt>();
@@ -1925,6 +1929,10 @@ private:
                 }
 
                 stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+            } else if (if_first && if_rest && equal(if_first->condition, if_rest->condition)) {
+                stmt = IfThenElse::make(if_first->condition,
+                                        mutate(Block::make(if_first->then_case, if_rest->then_case)),
+                                        mutate(Block::make(if_first->else_case, if_rest->else_case)));
             } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
                 stmt = op;
             } else {
@@ -2370,6 +2378,20 @@ void simplify_test() {
           IfThenElse::make(b1,
                            Evaluate::make(3),
                            Evaluate::make(8)));
+
+    check(IfThenElse::make(x < y,
+                           IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(0)),
+                           Evaluate::make(0)),
+          IfThenElse::make(x < y,
+                           Evaluate::make(1),
+                           Evaluate::make(0)));
+
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(2)),
+                      IfThenElse::make(x < y, Evaluate::make(3), Evaluate::make(4))),
+          IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(1), Evaluate::make(3)),
+                           Block::make(Evaluate::make(2), Evaluate::make(4))));
+
 
 
     check(b1 || !b1, t);
