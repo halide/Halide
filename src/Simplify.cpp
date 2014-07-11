@@ -1696,6 +1696,7 @@ private:
             const Div *div = new_value.as<Div>();
             const Mod *mod = new_value.as<Mod>();
             const Ramp *ramp = new_value.as<Ramp>();
+            const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
             const Variable *var_b = NULL;
@@ -1738,6 +1739,10 @@ private:
                 new_var = Variable::make(new_value.type().element_of(), new_name);
                 replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
                 new_value = broadcast->value;
+            } else if (cast) {
+                new_var = Variable::make(cast->value.type(), new_name);
+                replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
+                new_value = cast->value;
             } else {
                 break;
             }
