@@ -63,18 +63,13 @@ Tuple selectz(Expr c, Tuple t, Tuple f) {
     return Tuple(select(c, re(t), re(f)), select(c, im(t), im(f)));
 }
 
-Tuple selectz(Expr c1, Tuple t1, Expr c2, Tuple t2, Expr c3, Tuple t3, Tuple f) {
-    return Tuple(select(c1, re(t1), c2, re(t2), c3, re(t3), re(f)),
-                 select(c1, im(t1), c2, im(t2), c3, im(t3), im(f)));
-}
-
 // Compute the complex DFT of size N on dimension 0 of x.
 Func dft_dim0(Func x, int N, float sign) {
-    Func dft("dft_dim0");
     Var n("n");
+    Func X("X");
     RDom k(0, N);
-    dft(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
-    return dft;
+    X(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
+    return X;
 }
 
 // Specializations for some small DFTs.
@@ -118,7 +113,7 @@ Func dft4_dim0(Func x, float sign) {
 }
 
 Func dft8_dim0(Func x, float sign) {
-    const float cospi4 = 0.70710678f;
+    const float sqrt2_2 = 0.70710678f;
 
     enum { t0 = 8, t1, t2, t3, t4, t5, t6, t7 = 7, };
     Var n("n");
@@ -150,8 +145,8 @@ Func dft8_dim0(Func x, float sign) {
 
     X5 = sub(x1, x5);
     X7 = mul(sub(x3, x7), Tuple(0.0f, sign));
-    T5 = mul(add(X5, X7), Tuple(cospi4, sign*cospi4));
-    T7 = mul(sub(X5, X7), Tuple(-cospi4, sign*cospi4));
+    T5 = mul(add(X5, X7), Tuple(sqrt2_2, sign*sqrt2_2));
+    T7 = mul(sub(X5, X7), Tuple(-sqrt2_2, sign*sqrt2_2));
 
     X0 = add(T0, T4);
     X1 = add(T1, T5);
@@ -177,24 +172,15 @@ Func W(int N, float sign) {
         Func W("W");
         // If N is small, we inline the twiddle factors because they
         // contain a lot of zeros -> they simplify a lot.
-        switch (N) {
-        case 2:
+        if (N == 2) {
             // N = 2 -> n = 0.
             w(n) = Tuple(1.0f, 0.0f);
-            break;
-        case 4:
-            w(n) = selectz(n%4 == 0, Tuple( 1.0f,  0.0f),
-                           n%4 == 1, Tuple( 0.0f,  sign),
-                           n%4 == 2, Tuple(-1.0f,  0.0f),
-                                     Tuple( 0.0f, -sign));
-            break;
-        default:
+        } else {
             W(n) = expj((sign*2*pi*n)/N);
             Realization compute_static = W.realize(N);
             Image<float> reW = compute_static[0];
             Image<float> imW = compute_static[1];
             w(n) = Tuple(reW(n), imW(n));
-            break;
         }
     }
 
@@ -225,6 +211,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         // twiddle factors.
         Func v("v_" + stage_id.str());
         v(r, s, n0, _) = mul(selectz(r > 0, w(r*(s%S)), Tuple(1.0f, 0.0f)), x(n0, s + r*(N/R), _));
+        v.reorder_storage(n0, r, s);
 
         // Compute the R point DFT of the subtransform.
         Func V;
@@ -238,14 +225,14 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         // Write the subtransform and use it as input to the next
         // pass.
         exchange(n0, n1, _) = add(Tuple(undef<float>(), undef<float>()), x(n0, n1, _));
-        exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
         exchange.bound(n1, 0, N);
+
+        exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
         V.compute_at(exchange, s_).reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
         for (int i = 0; i < V.num_reduction_definitions(); i++) {
             V.update(i).vectorize(_1);
         }
-        v.reorder_storage(n0, r, s);
         v.compute_at(exchange, s_).unroll(r).vectorize(n0);
 
         // Remember this stage for scheduling later.
