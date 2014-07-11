@@ -47,17 +47,10 @@ struct SharedCudaContext {
     SharedCudaContext() : ptr(0), lock(0) {
     }
 
-    // Freed on program exit
-    ~SharedCudaContext() {
-        // Skip it on windows, because global destructors can't necessarily rely on things from dlls.
-        #ifndef _WIN32
-        if (ptr && cuCtxDestroy) {
-            debug(1) << "Cleaning up cuda context: " << ptr << ", " << cuCtxDestroy << "\n";
-            cuCtxDestroy(ptr);
-            ptr = 0;
-        }
-        #endif
-    }
+    // Note that we never free the context, because static destructor
+    // order is unpredictable, and we can't free the context before
+    // all JITCompiledModules are freed. Users may be stashing Funcs
+    // or Images in globals, and these keep JITCompiledModules around.
 } cuda_ctx;
 
 extern "C" {
@@ -77,23 +70,7 @@ struct SharedOpenCLContext {
     SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
     }
 
-    // Release context and command queue on program exit.
-    ~SharedOpenCLContext() {
-        // Skip it on windows. It hangs.
-        #ifndef _WIN32
-        if (command_queue && clReleaseCommandQueue) {
-            debug(1) << "Cleaning up OpenCL command queue: " << command_queue << " , " << clReleaseCommandQueue << "\n";
-            clReleaseCommandQueue(command_queue);
-            command_queue = NULL;
-        }
-        if (context && clReleaseContext) {
-            debug(1) << "Cleaning up OpenCL context: " << context << " , " << clReleaseContext << "\n";
-            clReleaseContext(context);
-	        debug(1) << "Back from clReleaseContext\n";
-            context = NULL;
-        }
-        #endif
-    }
+    // We never free the context, for the same reason as above.
 } cl_ctx;
 
 using std::vector;
