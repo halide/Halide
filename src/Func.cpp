@@ -211,6 +211,11 @@ int Func::dimensions() const {
     return func.dimensions();
 }
 
+template <typename T>
+void flatten(std::vector<T> &vec, const std::vector<T> &x) {
+    std::copy(x.begin(), x.end(), std::back_inserter(vec));
+}
+
 FuncRefVar Func::operator()() const {
     // Bulk up the argument list using implicit vars
     vector<Var> args;
@@ -218,39 +223,45 @@ FuncRefVar Func::operator()() const {
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefVar Func::operator()(Var x) const {
+FuncRefVar Func::operator()(Var x, std::vector<Var> y) const {
     // Bulk up the argument list using implicit vars
     vector<Var> args = vec(x);
+    flatten(args, y);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefVar Func::operator()(Var x, Var y) const {
+FuncRefVar Func::operator()(Var x, Var y, std::vector<Var> z) const {
     vector<Var> args = vec(x, y);
+    flatten(args, z);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefVar Func::operator()(Var x, Var y, Var z) const{
+FuncRefVar Func::operator()(Var x, Var y, Var z, std::vector<Var> w) const{
     vector<Var> args = vec(x, y, z);
+    flatten(args, w);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w) const {
+FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, std::vector<Var> u) const {
     vector<Var> args = vec(x, y, z, w);
+    flatten(args, u);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u) const {
+FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, std::vector<Var> v) const {
     vector<Var> args = vec(x, y, z, w, u);
+    flatten(args, v);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
+FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v, std::vector<Var> t) const {
     vector<Var> args = vec(x, y, z, w, u, v);
+    flatten(args, t);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
@@ -260,38 +271,44 @@ FuncRefVar Func::operator()(vector<Var> args) const {
     return FuncRefVar(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(Expr x) const {
+FuncRefExpr Func::operator()(Expr x, std::vector<Expr> y) const {
     vector<Expr> args = vec(x);
+    flatten(args, y);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y) const {
+FuncRefExpr Func::operator()(Expr x, Expr y, std::vector<Expr> z) const {
     vector<Expr> args = vec(x, y);
+    flatten(args, z);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z) const {
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, std::vector<Expr> w) const {
     vector<Expr> args = vec(x, y, z);
+    flatten(args, w);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w) const {
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, std::vector<Expr> u) const {
     vector<Expr> args = vec(x, y, z, w);
+    flatten(args, u);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const {
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, std::vector<Expr> v) const {
     vector<Expr> args = vec(x, y, z, w, u);
+    flatten(args, v);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
 
-FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const {
+FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v, std::vector<Expr> t) const {
     vector<Expr> args = vec(x, y, z, w, u, v);
+    flatten(args, t);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
