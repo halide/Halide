@@ -71,15 +71,36 @@ Func dft_dim0(Func x, int N, float sign) {
     return X;
 }
 
+void add_implicit_args(std::vector<Var> &defined, Func implicit) {
+    // Add implicit args for each argument missing in defined from
+    // implicit's args.
+    for (int i = 0; defined.size() < implicit.dimensions(); i++) {
+        defined.push_back(Var::implicit(i));
+    }
+}
+
+std::vector<Var> add_implicit_args(Var x0, Func implicit) {
+    std::vector<Var> ret;
+    ret.push_back(x0);
+    add_implicit_args(ret, implicit);
+    return ret;
+}
+
+std::vector<Var> add_implicit_args(Var x0, Var x1, Func implicit) {
+    std::vector<Var> ret;
+    ret.push_back(x0);
+    ret.push_back(x1);
+    add_implicit_args(ret, implicit);
+    return ret;
+}
+
 // Specializations for some small DFTs.
 Func dft2_dim0(Func x, float sign) {
+    Var n("n");
     Func X("X2_dim0");
-    std::vector<Var> args(x.args());
-    X(args) = Tuple(undef<float>(), undef<float>());
+    X(add_implicit_args(n, x)) = Tuple(undef<float>(), undef<float>());
 
-    std::vector<Expr> _;
-    std::copy(args.begin() + 1, args.end(), std::back_inserter(_));
-    FuncRefExpr x0 = x(0, _), x1 = x(1, _);
+    Tuple x0 = x(0, _), x1 = x(1, _);
     FuncRefExpr X0 = X(0, _), X1 = X(1, _);
 
     X0 = add(x0, x1);
@@ -89,13 +110,11 @@ Func dft2_dim0(Func x, float sign) {
 }
 
 Func dft4_dim0(Func x, float sign) {
+    Var n("n");
     Func X("X");
-    std::vector<Var> args(x.args());
-    X(args) = Tuple(undef<float>(), undef<float>());
+    X(add_implicit_args(n, x)) = Tuple(undef<float>(), undef<float>());
 
-    std::vector<Expr> _;
-    std::copy(args.begin() + 1, args.end(), std::back_inserter(_));
-    FuncRefExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
+    Tuple x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
     FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
 
     FuncRefExpr T0 = X(-1, _);
@@ -118,14 +137,12 @@ Func dft4_dim0(Func x, float sign) {
 Func dft8_dim0(Func x, float sign) {
     const float sqrt2_2 = 0.70710678f;
 
+    Var n("n");
     Func X("X");
-    std::vector<Var> args(x.args());
-    X(args) = Tuple(undef<float>(), undef<float>());
+    X(add_implicit_args(n, x)) = Tuple(undef<float>(), undef<float>());
 
-    std::vector<Expr> _;
-    std::copy(args.begin() + 1, args.end(), std::back_inserter(_));
-    FuncRefExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
-    FuncRefExpr x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);
+    Tuple x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
+    Tuple x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);
     FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
     FuncRefExpr X4 = X(4, _), X5 = X(5, _), X6 = X(6, _), X7 = X(7, _);
 
@@ -196,10 +213,6 @@ Func W(int N, float sign) {
 Func fft_dim1(Func x, int N, int R, float sign) {
     Var n0("n0"), n1("n1");
 
-    std::vector<Var> args(x.args());
-    args[0] = n0;
-    args[1] = n1;
-
     std::vector<Func> stages;
 
     RDom rs(0, R, 0, N/R);
@@ -231,26 +244,23 @@ Func fft_dim1(Func x, int N, int R, float sign) {
 
         // Write the subtransform and use it as input to the next
         // pass.
-        exchange(args) = Tuple(undef<float>(), undef<float>());
+        exchange(add_implicit_args(n0, n1, x)) = Tuple(undef<float>(), undef<float>());
         exchange.bound(n1, 0, N);
 
-        std::vector<Expr> _;
-        std::copy(args.begin() + 2, args.end(), std::back_inserter(_));
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
         v.compute_at(exchange, s_).unroll(r);
         v.reorder_storage(n0, r, s);
 
-        // The pure step for V is often undef, but not always.
-        V.compute_at(exchange, s_).unroll(r);
-        V.reorder_storage(n0, r, s);
+        V.compute_at(exchange, s_);
+        V.reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
 
         // TODO: Understand why these all vectorize in all but the last stage.
         if (S == N/R) {
             v.vectorize(n0);
-            V.vectorize(n0);
+            V.vectorize(V.args()[2]);
             for (int i = 0; i < V.num_reduction_definitions(); i++) {
-                V.update(i).vectorize(n0);
+                V.update(i).vectorize(V.args()[2]);
             }
         }
 

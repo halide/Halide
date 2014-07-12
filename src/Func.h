@@ -799,12 +799,12 @@ public:
      * to make up the difference (see \ref Var::implicit) */
     // @{
     EXPORT FuncRefVar operator()() const;
-    EXPORT FuncRefVar operator()(Var x, std::vector<Var> y = std::vector<Var>()) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, std::vector<Var> z = std::vector<Var>()) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, std::vector<Var> w = std::vector<Var>()) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, std::vector<Var> u = std::vector<Var>()) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u, std::vector<Var> v = std::vector<Var>()) const;
-    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u, Var v, std::vector<Var> t = std::vector<Var>()) const;
+    EXPORT FuncRefVar operator()(Var x) const;
+    EXPORT FuncRefVar operator()(Var x, Var y) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u) const;
+    EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u, Var v) const;
     EXPORT FuncRefVar operator()(std::vector<Var>) const;
     // @}
 
@@ -815,12 +815,12 @@ public:
      * the end of the argument list to make up the difference. (see
      * \ref Var::implicit)*/
     // @{
-    EXPORT FuncRefExpr operator()(Expr x, std::vector<Expr> y = std::vector<Expr>()) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, std::vector<Expr> z = std::vector<Expr>()) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, std::vector<Expr> w = std::vector<Expr>()) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, std::vector<Expr> u = std::vector<Expr>()) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, std::vector<Expr> v = std::vector<Expr>()) const;
-    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v, std::vector<Expr> t = std::vector<Expr>()) const;
+    EXPORT FuncRefExpr operator()(Expr x) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const;
+    EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const;
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
     // @}
 
