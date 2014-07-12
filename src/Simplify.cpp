@@ -1618,6 +1618,13 @@ private:
                 if (!and_chain && eq->b.type().is_bool()) {
                     else_case = substitute(var->name, !eq->b, then_case);
                 }
+            } else if (var) {
+                if (!or_chain) {
+                    then_case = substitute(var->name, const_true(), then_case);
+                }
+                if (!and_chain) {
+                    else_case = substitute(var->name, const_false(), else_case);
+                }
             } else if (eq && is_const(eq->b)) {
                 // some_expr = const
                 if (!or_chain) {
