@@ -339,7 +339,6 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     Tuple X = scale(0.5f, add(Z, conj(symZ)));
     Tuple Y = mul(Tuple(0.0f, -0.5f), sub(Z, conj(symZ)));
     unzipped(n0, n1, _) = selectz(n0 < N0/2, X, Y);
-    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
 
     // Transpose so we can FFT dimension 0 (by making it dimension 1).
     Func unzippedT = transpose(unzipped);
@@ -380,7 +379,6 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
                       dft1(n0 + N0/2, clamp(n1, 0, N1/2), _),
                       conj(dft1(n0 + N0/2, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
-    zipped.compute_root().vectorize(n0, 8);
 
     // Take the inverse DFT of the columns again.
     Func dft = fft_dim1(zipped, N1, R1, 1);
