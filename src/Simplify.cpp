@@ -303,15 +303,26 @@ private:
             // Additions that cancel an inner term
             // (a - b) + b
             expr = sub_a->a;
+        } else if (sub_a && is_zero(sub_a->a)) {
+            expr = mutate(b - sub_a->b);
         } else if (sub_b && equal(a, sub_b->b)) {
             // a + (b - a)
             expr = sub_b->a;
+        } else if (sub_b && is_zero(sub_b->a)) {
+            // a + (0 - b)
+            expr = a - sub_b->b;
         } else if (sub_a && sub_b && equal(sub_a->b, sub_b->a)) {
             // (a - b) + (b - c) -> a - c
             expr = mutate(sub_a->a - sub_b->b);
         } else if (sub_a && sub_b && equal(sub_a->a, sub_b->b)) {
             // (a - b) + (c - a) -> c - b
             expr = mutate(sub_b->a - sub_a->b);
+        } else if (mul_b && is_negative_const(mul_b->b)) {
+            // a + b*-x -> a - b*x
+            expr = mutate(a - mul_b->a * (-mul_b->b));
+        } else if (mul_a && is_negative_const(mul_a->b)) {
+            // a*-x + b -> b - a*x
+            expr = mutate(b - mul_a->a * (-mul_a->b));
         } else if (cast_a && cast_b &&
                    cast_a->value.type() == cast_b->value.type() &&
                    (op->type.is_int() || op->type.is_uint()) &&
@@ -482,6 +493,9 @@ private:
         } else if (sub_b) {
             // a - (b - c) -> a + (c - b)
             expr = mutate(a + (sub_b->b - sub_b->a));
+        } else if (mul_b && is_negative_const(mul_b->b)) {
+            // a - b*-x -> a + b*x
+            expr = mutate(a + mul_b->a * (-mul_b->b));
         } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a - add_b->a) - add_b->b);
         } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
@@ -582,10 +596,8 @@ private:
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
         } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
-        } else if (sub_a && const_int(b, &ib) && ib < 0) {
-            expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -ib));
-        } else if (sub_a && const_float(b, &fb) && fb < 0.0f) {
-            expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -fb));
+        } else if (sub_a && is_negative_const(b)) {
+            expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -b));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -2099,10 +2111,19 @@ void simplify_test() {
     check((x - 3) - y, (x - y) + (-3));
     check(x - (y - 2), (x - y) + 2);
     check(3 - (y - 2), 5 - y);
+    check(x - (0 - y), x + y);
+    check(x + (0 - y), x - y);
+    check((0 - x) + y, y - x);
     check(x*y - x*z, x*(y-z));
     check(x*y - z*x, x*(y-z));
     check(y*x - x*z, x*(y-z));
     check(y*x - z*x, x*(y-z));
+    check(x - y*-2, x + y*2);
+    check(x + y*-2, x - y*2);
+    check(x*-2 + y, y - x*2);
+    check(xf - yf*-2.0f, xf + y*2.0f);
+    check(xf + yf*-2.0f, xf - y*2.0f);
+    check(xf*-2.0f + yf, yf - x*2.0f);
 
     check(x*0, 0);
     check(0*x, 0);
@@ -2130,8 +2151,8 @@ void simplify_test() {
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
-    check((x - y)*-1, y - x);
-    check((xf - yf)*-1.0f, yf - xf);
+    check((x - y)*-2, (y - x)*2);
+    check((xf - yf)*-2.0f, (yf - xf)*2.0f);
 
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
@@ -2145,6 +2166,7 @@ void simplify_test() {
     check(Expr(Ramp::make(0, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
     check(Expr(Ramp::make(8, 1, 8)) % 16, Expr(Ramp::make(8, 1, 8) % 16));
     check(Expr(Ramp::make(16, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
+    check(Expr(Ramp::make(0, 1, 8)) % 8, Expr(Ramp::make(0, 1, 8) % 8));
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
