@@ -94,6 +94,17 @@ std::vector<Var> add_implicit_args(Var x0, Var x1, Func implicit) {
     return ret;
 }
 
+// Find the first argument of f that is a placeholder, or outermost if
+// no placeholders are found.
+Var outermost(Func f) {
+    for (size_t i = 0; i < f.dimensions(); i++) {
+        if (f.args()[i].is_implicit()) {
+            return f.args()[i];
+        }
+    }
+    return Var::outermost();
+}
+
 // Specializations for some small DFTs.
 Func dft2_dim0(Func x, float sign) {
     Var n("n");
@@ -191,18 +202,11 @@ Func W(int N, float sign) {
     Var n("n");
     if (!w.defined()) {
         Func W("W");
-        // If N is small, we inline the twiddle factors because they
-        // contain a lot of zeros -> they simplify a lot.
-        if (N == 2) {
-            // N = 2 -> n = 0.
-            w(n) = Tuple(1.0f, 0.0f);
-        } else {
-            W(n) = expj((sign*2*pi*n)/N);
-            Realization compute_static = W.realize(N);
-            Image<float> reW = compute_static[0];
-            Image<float> imW = compute_static[1];
-            w(n) = Tuple(reW(n), imW(n));
-        }
+        W(n) = expj((sign*2*pi*n)/N);
+        Realization compute_static = W.realize(N);
+        Image<float> reW = compute_static[0];
+        Image<float> imW = compute_static[1];
+        w(n) = Tuple(reW(n), imW(n));
     }
 
     return w;
@@ -222,16 +226,21 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
 
-        Func exchange("exchange_" + stage_id.str());
+        Func exchange("x_" + stage_id.str());
         Var r("r"), s("s");
 
         // Twiddle factors.
-        Func w = W(R*S, sign);
+        Func W_RS = W(R*S, sign);
 
         // Load the points from each subtransform and apply the
-        // twiddle factors.
+        // twiddle factors. Twiddle factors for S = 1 are all expj(0) = 1.
         Func v("v_" + stage_id.str());
-        v(r, s, n0, _) = mul(selectz(r > 0, w(r*(s%S)), Tuple(1.0f, 0.0f)), x(n0, s + r*(N/R), _));
+        Tuple x_rs = x(n0, s + r*(N/R), _);
+        if (S > 1) {
+            v(r, s, n0, _) = mul(selectz(r > 0, W_RS(r*(s%S)), Tuple(1.0f, 0.0f)), x_rs);
+        } else {
+            v(r, s, n0, _) = x_rs;
+        }
 
         // Compute the R point DFT of the subtransform.
         Func V;
@@ -273,7 +282,7 @@ Func fft_dim1(Func x, int N, int R, float sign) {
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var group("g");
-    x.compute_root().update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).unroll(r_).vectorize(n0);
+    x.update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).unroll(r_).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
         stages[i].compute_at(x, group).update().unroll(r_).vectorize(n0);
     }
@@ -307,6 +316,9 @@ Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, float sign) {
     Func dft = fft_dim1(dft1, N1, R1, sign);
     dft.bound(dft.args()[0], 0, N0);
     dft.bound(dft.args()[1], 0, N1);
+
+    dft1T.compute_at(dft, outermost(dft));
+    dft.compute_root();
     return dft;
 }
 
@@ -346,9 +358,9 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     // respectively.
     Tuple Z = dft1(n0%(N0/2), n1, _);
     Tuple symZ = dft1(n0%(N0/2), (N1 - n1)%N1, _);
-    Tuple X = scale(0.5f, add(Z, conj(symZ)));
-    Tuple Y = mul(Tuple(0.0f, -0.5f), sub(Z, conj(symZ)));
-    unzipped(n0, n1, _) = selectz(n0 < N0/2, X, Y);
+    Tuple X = add(Z, conj(symZ));
+    Tuple Y = mul(Tuple(0.0f, -1.0f), sub(Z, conj(symZ)));
+    unzipped(n0, n1, _) = scale(0.5f, selectz(n0 < N0/2, X, Y));
 
     // Transpose so we can FFT dimension 0 (by making it dimension 1).
     Func unzippedT = transpose(unzipped);
@@ -358,9 +370,11 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     dft.bound(dft.args()[0], 0, N1/2 + 1);
     dft.bound(dft.args()[1], 0, N0);
 
-    Func dft_clamped;
-    dft_clamped(n1, n0, _) = dft(clamp(n1, 0, N1/2), n0, _);
-    return dft_clamped;
+    unzipped.compute_at(dft, Var("g")).vectorize(n0, 8).unroll(n0, 8);
+    dft1.compute_at(dft, outermost(dft));
+    dft.compute_root();
+
+    return dft;
 }
 
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
@@ -373,21 +387,21 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
     cT_clamped(n1, n0, _) = cT(clamp(n1, 0, N1/2), n0, _);
 
     // Take the inverse DFT of the columns (rows in the final result).
-    Func dft1T = fft_dim1(cT_clamped, N0, R0, 1);
+    Func dft0T = fft_dim1(cT_clamped, N0, R0, 1);
 
     // Transpose so we can take the DFT of the columns again.
-    Func dft1 = transpose(dft1T);
+    Func dft0 = transpose(dft0T);
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j*Y
     Func zipped("zipped");
     // Construct the whole DFT domain of X and Y via conjugate
     // symmetry.
     Tuple X = selectz(n1 < N1/2 + 1,
-                      dft1(n0, clamp(n1, 0, N1/2), _),
-                      conj(dft1(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
+                      dft0(n0, clamp(n1, 0, N1/2), _),
+                      conj(dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
     Tuple Y = selectz(n1 < N1/2 + 1,
-                      dft1(n0 + N0/2, clamp(n1, 0, N1/2), _),
-                      conj(dft1(n0 + N0/2, clamp((N1 - n1)%N1, 0, N1/2), _)));
+                      dft0(n0 + N0/2, clamp(n1, 0, N1/2), _),
+                      conj(dft0(n0 + N0/2, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
 
     // Take the inverse DFT of the columns again.
@@ -398,9 +412,14 @@ Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
     unzipped(n0, n1, _) = select(n0 < N0/2,
                                  re(dft(n0%(N0/2), n1, _)),
                                  im(dft(n0%(N0/2), n1, _)));
-    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
     unzipped.bound(n0, 0, N0);
     unzipped.bound(n1, 0, N1);
+
+    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], 8).unroll(dft0.args()[0], 8);
+    dft0T.compute_at(dft, outermost(dft));
+    dft.compute_at(unzipped, outermost(unzipped));
+
+    unzipped.compute_root().vectorize(n0, 8).unroll(n0, 8);
     return unzipped;
 }
 
@@ -414,18 +433,18 @@ Func fft2d_cT2r(Func cT, int N0, int N1) {
 
 
 template <typename T>
-Func make_real(Image<T> &img) {
-    Var x, y, z;
+Func make_real(Image<T> &re) {
+    Var x, y;
     Func ret;
-    ret(x, y) = img(x, y);
+    ret(x, y) = re(x, y);
     return ret;
 }
 
 template <typename T>
-Func make_complex(Image<T> &img) {
-    Var x, y, z;
+Func make_complex(Image<T> &re) {
+    Var x, y;
     Func ret;
-    ret(x, y) = Tuple(img(x, y), 0.0f);
+    ret(x, y) = Tuple(re(x, y), 0.0f);
     return ret;
 }
 
@@ -524,52 +543,62 @@ int main(int argc, char **argv) {
 
     // Take the minimum time over many of iterations to minimize
     // noise.
-    const int samples = 10;
+    const int samples = 100;
     const int reps = 100;
     double t = 1e6f;
 
-    Func bench_c2c = fft2d_c2c(make_complex(in), W, H, -1);
-    Realization R_c2c = bench_c2c.realize(W, H, target);
+    Var rep("rep");
+
+    Func c2c_in;
+    c2c_in(x, y, rep) = Tuple(in(x, y), 0.0f);
+    Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
+    Realization R_c2c = bench_c2c.realize(W, H, reps, target);
 
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
-        for (int j = 0; j < reps; j++) {
-            bench_c2c.realize(R_c2c, target);
-        }
-        double dt = (current_time() - t1)/reps;
+        bench_c2c.realize(R_c2c, target);
+        double dt = (current_time() - t1)*1e3/reps;
         if (dt < t) t = dt;
     }
-    printf("c2c  time: %f ms, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+    printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
-    Func bench_r2cT = fft2d_r2cT(make_real(in), W, H);
-    Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, target);
+    Func r2cT_in;
+    r2cT_in(x, y, rep) = in(x, y);
+    Func bench_r2cT = fft2d_r2cT(r2cT_in, W, H);
+    // Due to padding for vectorization, this has asserts that fail,
+    // but are harmless (padding is overwritten, but no more).
+    if ((target.features & Target::NoAsserts) == 0) {
+        Func clamp_r2cT;
+        clamp_r2cT(x, y, rep) = bench_r2cT(clamp(x, 0, H/2), y, rep);
+        clamp_r2cT.compute_root().vectorize(x, 8);
+        bench_r2cT = clamp_r2cT;
+    }
+    Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, reps, target);
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
-        for (int j = 0; j < reps; j++) {
-            bench_r2cT.realize(R_r2cT, target);
-        }
-        double dt = (current_time() - t1)/reps;
+        bench_r2cT.realize(R_r2cT, target);
+        double dt = (current_time() - t1)*1e3/reps;
         if (dt < t) t = dt;
     }
-    printf("r2cT time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+    printf("r2cT time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     Image<float> cT(H/2 + 1, W);
     memset(cT.data(), 0, cT.width()*cT.height()*sizeof(float));
-    Func bench_cT2r = fft2d_cT2r(make_complex(in), W, H);
-    Realization R_cT2r = bench_cT2r.realize(W, H, target);
+    Func cT2r_in;
+    cT2r_in(x, y, rep) = Tuple(cT(x, y), cT(x, y));
+    Func bench_cT2r = fft2d_cT2r(cT2r_in, W, H);
+    Realization R_cT2r = bench_cT2r.realize(W, H, reps, target);
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
-        for (int j = 0; j < reps; j++) {
-            bench_cT2r.realize(R_cT2r, target);
-        }
-        double dt = (current_time() - t1)/reps;
+        bench_cT2r.realize(R_cT2r, target);
+        double dt = (current_time() - t1)*1e3/reps;
         if (dt < t) t = dt;
     }
-    printf("cT2r time: %f ms, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t*1e3*1e-6);
+    printf("cT2r time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     twiddles.clear();
 
