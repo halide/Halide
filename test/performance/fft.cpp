@@ -246,14 +246,12 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
         Func exchange("x_" + stage_id.str());
         Var r("r"), s("s");
 
-        // Twiddle factors.
-        Func W_RS = W(R*S, sign);
-
         // Load the points from each subtransform and apply the
         // twiddle factors. Twiddle factors for S = 1 are all expj(0) = 1.
         Func v("v_" + stage_id.str());
         Tuple x_rs = x(n0, s + r*(N/R), _);
         if (S > 1) {
+            Func W_RS = W(R*S, sign);
             v(r, s, n0, _) = mul(selectz(r > 0, W_RS(r*(s%S)), Tuple(1.0f, 0.0f)), x_rs);
         } else {
             v(r, s, n0, _) = x_rs;
