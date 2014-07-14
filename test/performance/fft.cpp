@@ -12,11 +12,6 @@ const float pi = 3.14159265f;
 
 using namespace Halide;
 
-// Find the best radix to use for an FFT of size N.
-int find_radix(int N) {
-    return 8;
-}
-
 // Complex number arithmetic. Complex numbers are represented with
 // Halide Tuples.
 Expr re(Tuple z) {
@@ -62,13 +57,13 @@ Tuple selectz(Expr c, Tuple t, Tuple f) {
     return Tuple(select(c, re(t), re(f)), select(c, im(t), im(f)));
 }
 
-// Compute the complex DFT of size N on dimension 0 of x.
-Func dft_dim0(Func x, int N, float sign) {
-    Var n("n");
-    Func X("X");
-    RDom k(0, N);
-    X(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
-    return X;
+// Compute the product of the integers in R.
+int product(const std::vector<int> &R) {
+    int p = 1;
+    for (size_t i = 0; i < R.size(); i++) {
+        p *= R[i];
+    }
+    return p;
 }
 
 void add_implicit_args(std::vector<Var> &defined, Func implicit) {
@@ -103,6 +98,26 @@ Var outermost(Func f) {
         }
     }
     return Var::outermost();
+}
+
+// Compute the complex DFT of size N on dimension 0 of x.
+Func dft_dim0(Func x, int N, float sign) {
+    Var n("n");
+    Func X("X");
+    if (N < 10) {
+        // If N is small, unroll the loop.
+        Tuple dft = x(0, _);
+        for (int k = 1; k < N; k++) {
+            dft = add(dft, mul(expj((sign*2*pi*k*n)/N), x(k, _)));
+        }
+        X(n, _) = dft;
+    } else {
+        // If N is larger, we really shouldn't be using this algorithm for the DFT anyways.
+        RDom k(0, N);
+        X(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
+    }
+    X.unroll(n);
+    return X;
 }
 
 // Specializations for some small DFTs.
@@ -214,15 +229,17 @@ Func W(int N, float sign) {
 
 // Compute the N point DFT of dimension 1 (columns) of x using
 // radix R.
-Func fft_dim1(Func x, int N, int R, float sign) {
+Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8) {
+    int N = product(NR);
     Var n0("n0"), n1("n1");
 
     std::vector<Func> stages;
 
-    RDom rs(0, R, 0, N/R);
-    RVar r_ = rs.x;
-    RVar s_ = rs.y;
-    for (int S = 1; S < N; S *= R) {
+    RVar r_, s_;
+    int S = 1;
+    for (size_t i = 0; i < NR.size(); i++) {
+        int R = NR[i];
+
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
 
@@ -256,6 +273,9 @@ Func fft_dim1(Func x, int N, int R, float sign) {
         exchange(add_implicit_args(n0, n1, x)) = Tuple(undef<float>(), undef<float>());
         exchange.bound(n1, 0, N);
 
+        RDom rs(0, R, 0, N/R);
+        r_ = rs.x;
+        s_ = rs.y;
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
         v.compute_at(exchange, s_).unroll(r);
@@ -273,18 +293,20 @@ Func fft_dim1(Func x, int N, int R, float sign) {
             }
         }
 
+        exchange.update().unroll(r_);
         // Remember this stage for scheduling later.
         stages.push_back(exchange);
 
         x = exchange;
+        S *= R;
     }
 
     // Split the tile into groups of DFTs, and vectorize within the
     // group.
     Var group("g");
-    x.update().split(n0, group, n0, 8).reorder(n0, r_, s_, group).unroll(r_).vectorize(n0);
+    x.update().split(n0, group, n0, group_size).reorder(n0, r_, s_, group).vectorize(n0);
     for (size_t i = 0; i < stages.size() - 1; i++) {
-        stages[i].compute_at(x, group).update().unroll(r_).vectorize(n0);
+        stages[i].compute_at(x, group).update().vectorize(n0);
     }
 
     return x;
@@ -302,36 +324,35 @@ Func transpose(Func f) {
 // Compute the N0 x N1 2D complex DFT of x using radixes R0, R1.
 // sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
 // DFT.
-Func fft2d_c2c(Func x, int N0, int R0, int N1, int R1, float sign) {
+Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, float sign) {
     // Transpose the input to the FFT.
     Func xT = transpose(x);
 
     // Compute the DFT of dimension 1 (originally dimension 0).
-    Func dft1T = fft_dim1(xT, N0, R0, sign);
+    Func dft1T = fft_dim1(xT, R0, sign);
 
     // Transpose back.
     Func dft1 = transpose(dft1T);
 
     // Compute the DFT of dimension 1.
-    Func dft = fft_dim1(dft1, N1, R1, sign);
-    dft.bound(dft.args()[0], 0, N0);
-    dft.bound(dft.args()[1], 0, N1);
+    Func dft = fft_dim1(dft1, R1, sign);
+    dft.bound(dft.args()[0], 0, product(R0));
+    dft.bound(dft.args()[1], 0, product(R1));
 
     dft1T.compute_at(dft, outermost(dft));
     dft.compute_root();
     return dft;
 }
 
-// Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
-// forward DFT, sign = 1 indicates an inverse DFT.
-Func fft2d_c2c(Func c, int N0, int N1, float sign) {
-    return fft2d_c2c(c, N0, find_radix(N0), N1, find_radix(N1), sign);
-}
-
 // Compute the N0 x N1 2D real DFT of x using radixes R0, R1.
 // Note that the transform domain is transposed and has dimensions
 // N1/2+1 x N0 due to the conjugate symmetry of real DFTs.
-Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
+Func fft2d_r2cT(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
+    const int group = 8;
+
+    int N0 = product(R0);
+    int N1 = product(R1);
+
     Var n0("n0"), n1("n1");
 
     // Combine pairs of real columns x, y into complex columns
@@ -341,12 +362,13 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     // Grab columns from each half of the input data to improve
     // coherency of the zip/unzip operations, which improves
     // vectorization.
+    int zip_n = ((N0/2 - 1) | (group - 1)) + 1;
     Func zipped("zipped");
     zipped(n0, n1, _) = Tuple(r(n0, n1, _),
-                              r(n0 + N0/2, n1, _));
+                              r(clamp(n0 + zip_n, 0, N0 - 1), n1, _));
 
     // DFT down the columns first.
-    Func dft1 = fft_dim1(zipped, N1, R1, -1);
+    Func dft1 = fft_dim1(zipped, R1, -1.0f, group);
 
     // Unzip the DFTs of the columns.
     Func unzipped("unzipped");
@@ -356,21 +378,21 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
     // By the conjugate symmetry of real DFTs, computing Z_n +
     // conj(Z_(N-n)) and Z_n - conj(Z_(N-n)) gives 2*X_n and 2*j*Y_n,
     // respectively.
-    Tuple Z = dft1(n0%(N0/2), n1, _);
-    Tuple symZ = dft1(n0%(N0/2), (N1 - n1)%N1, _);
+    Tuple Z = dft1(n0%zip_n, n1, _);
+    Tuple symZ = dft1(n0%zip_n, (N1 - n1)%N1, _);
     Tuple X = add(Z, conj(symZ));
     Tuple Y = mul(Tuple(0.0f, -1.0f), sub(Z, conj(symZ)));
-    unzipped(n0, n1, _) = scale(0.5f, selectz(n0 < N0/2, X, Y));
+    unzipped(n0, n1, _) = scale(0.5f, selectz(n0 < zip_n, X, Y));
 
     // Transpose so we can FFT dimension 0 (by making it dimension 1).
     Func unzippedT = transpose(unzipped);
 
     // DFT down the columns again (the rows of the original).
-    Func dft = fft_dim1(unzippedT, N0, R0, -1);
-    dft.bound(dft.args()[0], 0, N1/2 + 1);
+    Func dft = fft_dim1(unzippedT, R0, -1.0f, group);
+    dft.bound(dft.args()[0], 0, (N1 + 1)/2 + 1);
     dft.bound(dft.args()[1], 0, N0);
 
-    unzipped.compute_at(dft, Var("g")).vectorize(n0, 8).unroll(n0, 8);
+    unzipped.compute_at(dft, Var("g")).vectorize(n0, 8).unroll(n0);
     dft1.compute_at(dft, outermost(dft));
     dft.compute_root();
 
@@ -380,55 +402,89 @@ Func fft2d_r2cT(Func r, int N0, int R0, int N1, int R1) {
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
 // Note that the input domain is transposed and should have dimensions
 // N1/2+1 x N0 due to the conjugate symmetry of real FFTs.
-Func fft2d_cT2r(Func cT, int N0, int R0, int N1, int R1) {
+Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1) {
+    const int group = 8;
+
+    int N0 = product(R0);
+    int N1 = product(R1);
+
     Var n0("n0"), n1("n1");
 
-    Func cT_clamped;
-    cT_clamped(n1, n0, _) = cT(clamp(n1, 0, N1/2), n0, _);
-
     // Take the inverse DFT of the columns (rows in the final result).
-    Func dft0T = fft_dim1(cT_clamped, N0, R0, 1);
+    Func dft0T = fft_dim1(cT, R0, 1.0f, group);
 
     // Transpose so we can take the DFT of the columns again.
     Func dft0 = transpose(dft0T);
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j*Y
+    int zip_n = ((N0/2 - 1) | (group - 1)) + 1;
     Func zipped("zipped");
     // Construct the whole DFT domain of X and Y via conjugate
     // symmetry.
     Tuple X = selectz(n1 < N1/2 + 1,
                       dft0(n0, clamp(n1, 0, N1/2), _),
                       conj(dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
+
+    // TODO: I think Halide should be able to simplify this clamp away
+    // when it isn't necessary, but it currently doesn't do this.
+    Expr n0_Y = n0 + zip_n;
+    if (zip_n*2 != N0) {
+        n0_Y = clamp(n0_Y, 0, N0 - 1);
+    }
     Tuple Y = selectz(n1 < N1/2 + 1,
-                      dft0(n0 + N0/2, clamp(n1, 0, N1/2), _),
-                      conj(dft0(n0 + N0/2, clamp((N1 - n1)%N1, 0, N1/2), _)));
+                      dft0(n0_Y, clamp(n1, 0, N1/2), _),
+                      conj(dft0(n0_Y, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
 
     // Take the inverse DFT of the columns again.
-    Func dft = fft_dim1(zipped, N1, R1, 1);
+    Func dft = fft_dim1(zipped, R1, 1.0f, group);
 
     // Extract the real inverse DFTs.
     Func unzipped("unzipped");
-    unzipped(n0, n1, _) = select(n0 < N0/2,
-                                 re(dft(n0%(N0/2), n1, _)),
-                                 im(dft(n0%(N0/2), n1, _)));
+    unzipped(n0, n1, _) = select(n0 < zip_n,
+                                 re(dft(n0%zip_n, n1, _)),
+                                 im(dft(n0%zip_n, n1, _)));
     unzipped.bound(n0, 0, N0);
     unzipped.bound(n1, 0, N1);
 
-    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], 8).unroll(dft0.args()[0], 8);
+    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], 8).unroll(dft0.args()[0]);
     dft0T.compute_at(dft, outermost(dft));
     dft.compute_at(unzipped, outermost(unzipped));
 
-    unzipped.compute_root().vectorize(n0, 8).unroll(n0, 8);
+    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
     return unzipped;
 }
 
-// Compute N0 x N1 real DFTs.
+// Compute an integer factorization of N made up of composite numbers
+std::vector<int> radix_factor(int N) {
+    const int radices[] = { 8, 5, 4, 3, 2 };
+
+    std::vector<int> R;
+    for (int i = 0; i < sizeof(radices)/sizeof(radices[0]); i++) {
+        while (N % radices[i] == 0) {
+            R.push_back(radices[i]);
+            N /= radices[i];
+        }
+    }
+    if (N != 1 || R.empty()) {
+        R.push_back(N);
+    }
+
+    return R;
+}
+
+// Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
+// forward DFT, sign = 1 indicates an inverse DFT.
+Func fft2d_c2c(Func c, int N0, int N1, float sign) {
+    return fft2d_c2c(c, radix_factor(N0), radix_factor(N1), sign);
+}
+
+// Compute N0 x N1 real DFTs. The DFT is transposed.
 Func fft2d_r2cT(Func r, int N0, int N1) {
-    return fft2d_r2cT(r, N0, find_radix(N0), N1, find_radix(N1));
+    return fft2d_r2cT(r, radix_factor(N0), radix_factor(N1));
 }
 Func fft2d_cT2r(Func cT, int N0, int N1) {
-    return fft2d_cT2r(cT, N0, find_radix(N0), N1, find_radix(N1));
+    return fft2d_cT2r(cT, radix_factor(N0), radix_factor(N1));
 }
 
 
@@ -453,10 +509,9 @@ double log2(double x) {
 }
 
 int main(int argc, char **argv) {
+    const int W = 32, H = 32;
 
     // Generate a random image to convolve with.
-    const int W = 64, H = 64;
-
     Image<float> in(W, H);
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -543,8 +598,8 @@ int main(int argc, char **argv) {
 
     // Take the minimum time over many of iterations to minimize
     // noise.
-    const int samples = 100;
-    const int reps = 100;
+    const int samples = 10;
+    const int reps = 1000;
     double t = 1e6f;
 
     Var rep("rep");
@@ -553,6 +608,10 @@ int main(int argc, char **argv) {
     c2c_in(x, y, rep) = Tuple(in(x, y), 0.0f);
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
+    // Zero the strides of the rep variable to benchmark pure FFT
+    // performance (as if input/output buffers were cached).
+    R_c2c[0].raw_buffer()->stride[2] = 0;
+    R_c2c[1].raw_buffer()->stride[2] = 0;
 
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
@@ -574,6 +633,8 @@ int main(int argc, char **argv) {
         bench_r2cT = clamp_r2cT;
     }
     Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, reps, target);
+    R_r2cT[0].raw_buffer()->stride[2] = 0;
+    R_r2cT[1].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
@@ -590,6 +651,7 @@ int main(int argc, char **argv) {
     cT2r_in(x, y, rep) = Tuple(cT(x, y), cT(x, y));
     Func bench_cT2r = fft2d_cT2r(cT2r_in, W, H);
     Realization R_cT2r = bench_cT2r.realize(W, H, reps, target);
+    R_cT2r[0].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
