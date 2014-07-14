@@ -109,7 +109,7 @@ EXPORT void destroy<BufferContents>(const BufferContents *p) {
     // Free any device-side allocation
     if (p->source_module.free_dev_buffer) {
         int error = p->source_module.free_dev_buffer(NULL, const_cast<buffer_t *>(&p->buf));
-        user_assert(!error);
+        user_assert(!error) << "Failed to free device buffer\n";
     }
     free(p->allocation);
 
