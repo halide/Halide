@@ -346,6 +346,8 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
 // Note that the transform domain is transposed and has dimensions
 // N1/2+1 x N0 due to the conjugate symmetry of real DFTs.
 Func fft2d_r2cT(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
+    // How many columns to group together in one FFT. This is the
+    // vectorization width.
     const int group = 8;
 
     int N0 = product(R0);
@@ -360,6 +362,7 @@ Func fft2d_r2cT(Func r, const std::vector<int> &R0, const std::vector<int> &R1) 
     // Grab columns from each half of the input data to improve
     // coherency of the zip/unzip operations, which improves
     // vectorization.
+    // The zip location is aligned to the nearest group.
     int zip_n = ((N0/2 - 1) | (group - 1)) + 1;
     Func zipped("zipped");
     zipped(n0, n1, _) = Tuple(r(n0, n1, _),
@@ -401,6 +404,8 @@ Func fft2d_r2cT(Func r, const std::vector<int> &R0, const std::vector<int> &R1) 
 // Note that the input domain is transposed and should have dimensions
 // N1/2+1 x N0 due to the conjugate symmetry of real FFTs.
 Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1) {
+    // How many columns to group together in one FFT. This is the
+    // vectorization width.
     const int group = 8;
 
     int N0 = product(R0);
@@ -415,7 +420,6 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
     Func dft0 = transpose(dft0T);
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j*Y
-    int zip_n = ((N0/2 - 1) | (group - 1)) + 1;
     Func zipped("zipped");
     // Construct the whole DFT domain of X and Y via conjugate
     // symmetry.
@@ -423,10 +427,14 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
                       dft0(n0, clamp(n1, 0, N1/2), _),
                       conj(dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
 
-    // TODO: I think Halide should be able to simplify this clamp away
-    // when it isn't necessary, but it currently doesn't do this.
+    // The zip point is roughly half of the domain, aligned up to the
+    // nearest group.
+    int zip_n = ((N0/2 - 1) | (group - 1)) + 1;
+
     Expr n0_Y = n0 + zip_n;
     if (zip_n*2 != N0) {
+        // When the group-aligned zip location isn't exactly half of
+        // the domain, we need to clamp excess accesses.
         n0_Y = clamp(n0_Y, 0, N0 - 1);
     }
     Tuple Y = selectz(n1 < N1/2 + 1,
