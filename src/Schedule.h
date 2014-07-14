@@ -126,8 +126,7 @@ public:
     // @}
 
     /** The traversal of the domain of a function can have some of its
-     * dimensions split into sub-dimensions. See
-     * \ref ScheduleHandle::split */
+     * dimensions split into sub-dimensions. See ScheduleHandle::split */
     // @{
     const std::vector<Split> &splits() const;
     std::vector<Split> &splits();
