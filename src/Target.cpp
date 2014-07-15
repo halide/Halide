@@ -258,6 +258,12 @@ bool Target::merge_string(const std::string &target) {
             features |= Target::ARMv7s;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
+        } else if (tok == "cuda30") {
+            features |= Target::CUDA | Target::CUDA30;
+        } else if (tok == "cuda35") {
+            features |= Target::CUDA | Target::CUDA30 | Target::CUDA35;
+        } else if (tok == "cuda50") {
+            features |= Target::CUDA | Target::CUDA30 | Target::CUDA35 | Target::CUDA50;
         } else if (tok == "opencl") {
             features |= Target::OpenCL;
         } else if (tok == "gpu_debug") {
@@ -311,15 +317,16 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
   const char* const arch_names[] = {
-    "arch_unknown", "x86", "arm", "pnacl"
+      "arch_unknown", "x86", "arm", "pnacl"
   };
   const char* const os_names[] = {
-    "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
+      "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
   const char* const feature_names[] = {
-    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
-    "no_asserts", "no_bounds_query", "armv7s", "cl_doubles",
-    "fma", "fma4", "f16c"
+      "jit", "sse41", "avx", "avx2", "cuda",
+      "opencl", "opengl", "gpu_debug", "no_asserts", "no_bounds_query",
+      "armv7s", "cl_doubles", "fma", "fma4", "f16c",
+      "cuda30", "cuda35", "cuda50"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
@@ -706,13 +713,21 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 }
 
 #if WITH_PTX
-llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
+llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    // TODO: select this based on sm_ version flag in Target when
-    // we add target specific flags.
-    llvm::Module *module = get_initmod_ptx_compute_20_ll(c);
+
+    llvm::Module *module;
+
+    if (target.features & (Target::CUDA50 | Target::CUDA35)) {
+        // the cuda 6.0 sdk only comes with libdevice up to 3.5.
+        module = get_initmod_ptx_compute_35_ll(c);
+    } else if (target.features & Target::CUDA30) {
+        module = get_initmod_ptx_compute_30_ll(c);
+    } else {
+        module = get_initmod_ptx_compute_20_ll(c);
+    }
     modules.push_back(module);
 
     link_modules(modules);

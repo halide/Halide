@@ -127,7 +127,7 @@ void CodeGen_PTX_Dev::init_module() {
     CodeGen::init_module();
 
     #if WITH_PTX
-    module = get_initial_module_for_ptx_device(context);
+    module = get_initial_module_for_ptx_device(target, context);
     #endif
 
     owns_module = true;
@@ -210,7 +210,15 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    return "sm_20";
+    if (target.features & Target::CUDA50) {
+        return "sm_50";
+    } else if (target.features & Target::CUDA35) {
+        return "sm_35";
+    } else if (target.features & Target::CUDA30) {
+        return "sm_30";
+    } else {
+        return "sm_20";
+    }
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
