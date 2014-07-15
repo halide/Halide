@@ -16,6 +16,9 @@ extern void dispatch_apply_f(size_t iterations, dispatch_queue_t queue,
 WEAK void halide_shutdown_thread_pool() {
 }
 
+WEAK void halide_set_num_threads(int) {
+}
+
 WEAK int (*halide_custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
                                   int, uint8_t *);
 

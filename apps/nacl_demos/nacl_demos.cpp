@@ -37,6 +37,8 @@
 #include <string.h>
 #include <sstream>
 
+#include <HalideRuntime.h>
+
 #include "game_of_life_init.h"
 #include "game_of_life_update.h"
 #include "game_of_life_render.h"
@@ -80,12 +82,10 @@ buffer_t ImageToBuffer(const ImageData &im) {
     return buf;
 }
 
-extern "C" void halide_shutdown_thread_pool();
-
 bool pipeline_barfed = false;
 static Instance *inst = NULL;
 // TODO: use user context instead of globals above...
-extern "C" void halide_error(void */* user_context */, char *msg) {
+extern "C" void halide_error(void */* user_context */, const char *msg) {
     if (inst) {
         inst->PostMessage(msg);
         pipeline_barfed = true;
@@ -193,11 +193,8 @@ public:
             if (threads < 1) threads = 1;
             if (threads > 32) threads = 32;
             if (threads > 0 && threads <= 32 && thread_pool_size != threads) {
-                halide_shutdown_thread_pool();
                 thread_pool_size = threads;
-                char buf[256];
-                snprintf(buf, 256, "%d", threads);
-                setenv("HL_NUMTHREADS", buf, 1);
+                halide_set_num_threads(thread_pool_size);
                 halide_last_t = 0;
                 halide_time_weight = 0;
             }
@@ -207,7 +204,7 @@ public:
         static bool first_run = true;
         if (first_run) {
             first_run = false;
-            setenv("HL_NUMTHREADS", "8", 1);
+            halide_set_num_threads(thread_pool_size);
         }
 
         // Initialize the input
