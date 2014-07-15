@@ -589,19 +589,6 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
-    #ifdef _WIN32
-    {
-        char buf[32];
-        size_t read;
-        getenv_s(&read, buf, "HL_NUMTHREADS");
-        if (read == 0) putenv("HL_NUMTHREADS=4");
-    }
-    #else
-    if (!getenv("HL_NUMTHREADS")) {
-        setenv("HL_NUMTHREADS", "4", 1);
-    }
-    #endif
-
     debug(2) << "Compiling to function pointers \n";
     JITCompiledModule m = cg.compile_to_function_pointers();
 
