@@ -202,8 +202,8 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
     }
 
     int device = halide_get_gpu_device(user_context);
-    if (device < 0) {
-        device += deviceCount;
+    if (device == -1) {
+        device = deviceCount - 1;
     }
 
     // Get device
