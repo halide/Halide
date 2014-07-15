@@ -210,11 +210,13 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.features & Target::CUDA50) {
+    if (target.features & Target::CUDACapability50) {
         return "sm_50";
-    } else if (target.features & Target::CUDA35) {
+    } else if (target.features & Target::CUDACapability35) {
         return "sm_35";
-    } else if (target.features & Target::CUDA30) {
+    } else if (target.features & Target::CUDACapability32) {
+        return "sm_32";
+    } else if (target.features & Target::CUDACapability30) {
         return "sm_30";
     } else {
         return "sm_20";
