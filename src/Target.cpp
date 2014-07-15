@@ -415,6 +415,7 @@ DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_CPP_INITMOD(posix_print)
+DECLARE_CPP_INITMOD(gpu_device_selection)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -491,6 +492,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_opengl_create_context",
                        "halide_set_custom_print",
                        "halide_print",
+                       "halide_set_gpu_device",
+                       "halide_set_ocl_platform_name",
+                       "halide_set_ocl_device_type",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -625,6 +629,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
 
     // These modules are always used
+    modules.push_back(get_initmod_gpu_device_selection(c, bits_64));
     modules.push_back(get_initmod_posix_math(c, bits_64));
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
