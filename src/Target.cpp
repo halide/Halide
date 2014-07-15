@@ -258,12 +258,14 @@ bool Target::merge_string(const std::string &target) {
             features |= Target::ARMv7s;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
-        } else if (tok == "cuda30") {
-            features |= Target::CUDA | Target::CUDA30;
-        } else if (tok == "cuda35") {
-            features |= Target::CUDA | Target::CUDA30 | Target::CUDA35;
-        } else if (tok == "cuda50") {
-            features |= Target::CUDA | Target::CUDA30 | Target::CUDA35 | Target::CUDA50;
+        } else if (tok == "cuda_capability_30") {
+            features |= Target::CUDA | Target::CUDACapability30;
+        } else if (tok == "cuda_capability_32") {
+            features |= Target::CUDA | Target::CUDACapability32;
+        } else if (tok == "cuda_capability_35") {
+            features |= Target::CUDA | Target::CUDACapability35;
+        } else if (tok == "cuda_capability_50") {
+            features |= Target::CUDA | Target::CUDACapability50;
         } else if (tok == "opencl") {
             features |= Target::OpenCL;
         } else if (tok == "gpu_debug") {
@@ -326,7 +328,7 @@ std::string Target::to_string() const {
       "jit", "sse41", "avx", "avx2", "cuda",
       "opencl", "opengl", "gpu_debug", "no_asserts", "no_bounds_query",
       "armv7s", "cl_doubles", "fma", "fma4", "f16c",
-      "cuda30", "cuda35", "cuda50"
+      "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
@@ -717,13 +719,17 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-
     llvm::Module *module;
 
-    if (target.features & (Target::CUDA50 | Target::CUDA35)) {
+    // This table is based on the guidance at:
+    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
+    if (target.features & (Target::CUDACapability50 | Target::CUDACapability35)) {
         // the cuda 6.0 sdk only comes with libdevice up to 3.5.
         module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features & Target::CUDA30) {
+    } else if (target.features & Target::CUDACapability32) {
+        // For some reason sm_32 uses libdevice 20
+        module = get_initmod_ptx_compute_20_ll(c);
+    } else if (target.features & Target::CUDACapability30) {
         module = get_initmod_ptx_compute_30_ll(c);
     } else {
         module = get_initmod_ptx_compute_20_ll(c);

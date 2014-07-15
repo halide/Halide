@@ -46,9 +46,10 @@ struct Target {
                    FMA       = 1 << 12, ///< Enable x86 FMA instruction
                    FMA4      = 1 << 13, ///< Enable x86 (AMD) FMA4 instruction set
                    F16C      = 1 << 14, ///< Enable x86 16-bit float support
-                   CUDA30    = 1 << 15, ///< Enable CUDA compute capability 3.0 (Kepler)
-                   CUDA35    = 1 << 16, ///< Enable CUDA compute capability 3.5 (Kepler)
-                   CUDA50    = 1 << 17  ///< Enable CUDA compute capability 5.0 (Maxwell)
+                   CUDACapability30    = 1 << 15, ///< Enable CUDA compute capability 3.0 (Kepler)
+                   CUDACapability32    = 1 << 16, ///< Enable CUDA compute capability 3.2 (Tegra K1)
+                   CUDACapability35    = 1 << 17, ///< Enable CUDA compute capability 3.5 (Kepler)
+                   CUDACapability50    = 1 << 18  ///< Enable CUDA compute capability 5.0 (Maxwell)
     };
 
     /** A bitmask that stores the active features. */
