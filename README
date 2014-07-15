@@ -29,8 +29,8 @@ HL_JIT_TARGET=... will set Halide's JIT compilation target.
 HL_DEBUG_CODEGEN=1 will print out pseudocode for what Halide is
 compiling. Higher numbers will print more detail.
 
-HL_NUMTHREADS=... specifies the size of the thread pool. This has no
-effect on OS X, where we just use grand central dispatch.
+HL_NUM_THREADS=... specifies the size of the thread pool. This has no
+effect on OS X or iOS, where we just use grand central dispatch.
 
 HL_TRACE=1 injects print statements into compiled Halide code that
 will describe what the program is doing at runtime. Higher values

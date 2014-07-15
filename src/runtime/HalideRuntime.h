@@ -90,6 +90,11 @@ extern int halide_do_par_for(void *user_context,
 extern void halide_shutdown_thread_pool();
 //@}
 
+/** Set the number of threads used by Halide's thread pool. No effect
+ * on OS X or iOS. If changed after the first use of a parallel Halide
+ * routine, shuts down and then reinitializes the thread pool. */
+extern void halide_set_num_threads(int n);
+
 /** Define halide_malloc and halide_free to replace the default memory
  * allocator.  See Func::set_custom_allocator. (Specifically note that
  * halide_malloc must return a 32-byte aligned pointer, and it must be
