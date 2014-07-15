@@ -165,15 +165,26 @@ struct halide_trace_event {
  */
 extern int32_t halide_trace(void *user_context, const halide_trace_event *event);
 
+/** Set the file descriptor that Halide should write binary trace
+ * events to. If called with 0 as the argument, Halide outputs trace
+ * information to stdout in a human-readable format. If never called,
+ * Halide checks the for existence of an environment variable called
+ * HL_TRACE_FILE and opens that file. If HL_TRACE_FILE is not defined,
+ * it outputs trace information to stdout in a human-readable
+ * format. */
+extern void halide_set_trace_file(int fd);
+
+/** Halide calls this to retrieve the file descriptor to write binary
+ * trace events to. The default implementation returns the value set
+ * by halide_set_trace_file. Implement it yourself if you wish to use
+ * a custom file descriptor per user_context. Return zero from your
+ * implementation to tell Halide to print human-readable trace
+ * information to stdout. */
+extern int halide_get_trace_file(void *user_context);
+
 /** If tracing is writing to a file. This call closes that file
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
-
-/** Set the seed for the random number generator used by
- * random_float. Also clears all other internal state for the random
- * number generator. */
-extern void halide_set_random_seed(uint32_t seed);
-
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
