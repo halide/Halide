@@ -208,8 +208,16 @@ extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_dev_sync(void *user_context);
 
+/** Allocate device memory to back a buffer_t. */
 extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
+
+/** Free any device memory associated with a buffer_t. */
 extern int halide_dev_free(void *user_context, struct buffer_t *buf);
+
+/** These are forward declared here to ensure they have the same
+ * signature across different Halide gpu backends. Do not call
+ * them. */
+// @{
 extern int halide_init_kernels(void *user_context, void **state_ptr,
                                const char *src, int size);
 extern int halide_dev_run(void *user_context,
@@ -220,6 +228,7 @@ extern int halide_dev_run(void *user_context,
                           int shared_mem_bytes,
                           size_t arg_sizes[],
                           void *args[]);
+// @}
 
 #ifdef __cplusplus
 } // End extern "C"
