@@ -230,6 +230,47 @@ extern int halide_dev_run(void *user_context,
                           void *args[]);
 // @}
 
+/** Set the platform name for OpenCL to use (e.g. "Intel" or
+ * "NVIDIA"). The argument is copied internally. The opencl runtime
+ * will select a platform that includes this as a substring. If never
+ * called, Halide uses the environment variable HL_OCL_PLATFORM_NAME,
+ * or defaults to the first available platform. */
+extern void halide_set_ocl_platform_name(const char *n);
+
+/** Halide calls this to get the desired OpenCL platform
+ * name. Implement this yourself to use a different platform per
+ * user_context. The default implementation returns the value set by
+ * halide_set_ocl_platform_name, or the value of the environment
+ * variable HL_OCL_PLATFORM_NAME. The output is valid until the next
+ * call to halide_set_ocl_platform_name. */
+extern const char *halide_get_ocl_platform_name(void *user_context);
+
+/** Set the device type for OpenCL to use. The argument is copied
+ * internally. It must be "cpu" or "gpu". If never called, Halide uses
+ * the environment variable HL_OCL_DEVICE_TYPE. */
+extern void halide_set_ocl_device_type(const char *n);
+
+/** Halide calls this to gets the desired OpenCL device
+ * type. Implement this yourself to use a different device type per
+ * user_context. The default implementation returns the value set by
+ * halide_set_ocl_device_type, or the environment variable
+ * HL_OCL_DEVICE_TYPE. The result is valid until the next call to
+ * halide_set_ocl_device_type. */
+extern const char *halide_get_ocl_device_type(void *user_context);
+
+/** Selects which gpu device to use. 0 is usually the display
+ * device. If never called, Halide uses the environment variable
+ * HL_GPU_DEVICE. If that variable is unset, Halide uses the last
+ * device. Set this to -1 to use the last device. */
+extern void halide_set_gpu_device(int n);
+
+/** Halide calls this to get the desired halide gpu device
+ * setting. Implement this yourself to use a different gpu device per
+ * user_context. The default implementation returns the value set by
+ * halide_set_gpu_device, or the environment variable
+ * HL_GPU_DEVICE. */
+extern int halide_get_gpu_device(void *user_context);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

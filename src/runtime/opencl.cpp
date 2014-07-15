@@ -24,7 +24,6 @@ extern int64_t halide_current_time_ns(void *user_context);
 extern void free(void *);
 extern void *malloc(size_t);
 extern int snprintf(char *, size_t, const char *, ...);
-extern char *getenv(const char *);
 extern const char * strstr(const char *, const char *);
 extern int atoi(const char *);
 
@@ -216,7 +215,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     cl_platform_id platform = NULL;
 
     // Find the requested platform, or the first if none specified.
-    const char * name = getenv("HL_OCL_PLATFORM_NAME");
+    const char * name = halide_get_ocl_platform_name(user_context);
     if (name != NULL) {
         for (cl_uint i = 0; i < platformCount; ++i) {
             const cl_uint maxPlatformName = 256;
@@ -254,7 +253,7 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
 
     // Get the types of devices requested.
     cl_device_type device_type = 0;
-    const char * dev_type = getenv("HL_OCL_DEVICE_TYPE");
+    const char * dev_type = halide_get_ocl_device_type(user_context);
     if (dev_type != NULL) {
         if (strstr("cpu", dev_type)) {
             device_type |= CL_DEVICE_TYPE_CPU;
@@ -281,15 +280,14 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
 
     // If the user indicated a specific device index to use, use
     // that. Note that this is an index within the set of devices
-    // specified by the device type.
-    char *device_str = getenv("HL_GPU_DEVICE");
-    cl_uint device = deviceCount - 1;
-    if (device_str) {
-        device = atoi(device_str);
+    // specified by the device type. -1 means the last device.
+    int device = halide_get_gpu_device(user_context);
+    if (device == -1) {
+        device = deviceCount - 1;
     }
 
-    if (device >= deviceCount) {
-        halide_error_varargs(user_context, "CL: Failed to get device %i\n", device);
+    if (device < 0 || device >= deviceCount) {
+        halide_error_varargs(user_context, "CL: Failed to get device %d\n", device);
         return CL_DEVICE_NOT_FOUND;
     }
 

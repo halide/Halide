@@ -201,23 +201,14 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
         return CUDA_ERROR_NO_DEVICE;
     }
 
-    char *device_str = getenv("HL_GPU_DEVICE");
-
-    CUdevice dev;
-    // Get device
-    CUresult status;
-    if (device_str) {
-        status = cuDeviceGet(&dev, atoi(device_str));
-    } else {
-        // Try to get a device >0 first, since 0 should be our display device
-        // For now, don't try devices > 2 to maintain compatibility with previous behavior.
-        if (deviceCount > 2)
-            deviceCount = 2;
-        for (int id = deviceCount - 1; id >= 0; id--) {
-            status = cuDeviceGet(&dev, id);
-            if (status == CUDA_SUCCESS) break;
-        }
+    int device = halide_get_gpu_device(user_context);
+    if (device == -1) {
+        device = deviceCount - 1;
     }
+
+    // Get device
+    CUdevice dev;
+    CUresult status = cuDeviceGet(&dev, device);
     if (status != CUDA_SUCCESS) {
         halide_error(user_context, "CUDA: Failed to get device\n");
         return status;
