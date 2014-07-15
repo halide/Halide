@@ -125,23 +125,38 @@ public:
      * declared variables at some point. We should likely prevent
      * user Var declarations from making names of this form.
      */
+    //{
     static bool is_implicit(const std::string &name) {
         return Internal::starts_with(name, "_") &&
             name.find_first_not_of("0123456789", 1) == std::string::npos;
     }
+    bool is_implicit() const {
+        return is_implicit(name());
+    }
+    //}
 
     /** Return the argument index for a placeholder argument given its
      *  name. Returns 0 for \ref _0, 1 for \ref _1, etc. Returns -1 if
      *  the variable is not of implicit form.
      */
+    //{
     static int implicit_index(const std::string &name) {
         return is_implicit(name) ? atoi(name.c_str() + 1) : -1;
     }
+    int implicit_index() const {
+        return implicit_index(name());
+    }
+    //}
 
     /** Test if a var is the placeholder variable \ref _ */
+    //{
     static bool is_placeholder(const std::string &name) {
         return name == "_";
     }
+    bool is_placeholder() const {
+        return is_placeholder(name());
+    }
+    //}
 
     /** A Var can be treated as an Expr of type Int(32) */
     operator Expr() const {
