@@ -282,12 +282,12 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     // that. Note that this is an index within the set of devices
     // specified by the device type. -1 means the last device.
     int device = halide_get_gpu_device(user_context);
-    if (device < 0) {
-        device += deviceCount;
+    if (device == -1) {
+        device = deviceCount - 1;
     }
 
-    if (device >= deviceCount) {
-        halide_error_varargs(user_context, "CL: Failed to get device %i\n", device);
+    if (device < 0 || device >= deviceCount) {
+        halide_error_varargs(user_context, "CL: Failed to get device %d\n", device);
         return CL_DEVICE_NOT_FOUND;
     }
 
