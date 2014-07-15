@@ -65,7 +65,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
     uint8_t *dst = (uint8_t *)buf.bits;
 
     // If we're using opencl, use the gpu backend for it.
-    setenv("HL_OCL_DEVICE", "gpu", 1);
+    halide_set_ocl_device_type("gpu");
 
     // Make these static so that we can reuse device allocations across frames.
     static buffer_t srcBuf = {0};
