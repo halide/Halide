@@ -773,7 +773,73 @@ Region region_union(const Region &a, const Region &b) {
     return result;
 }
 
+Expr simple_min(Expr a, Expr b) {
+    // Take a min, doing a little bit of eager simplification
+    if (equal(a, b)) {
+        return a;
+    }
 
+    const IntImm *ia = a.as<IntImm>();
+    const IntImm *ib = b.as<IntImm>();
+    const Min *ma = a.as<Min>();
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    if (ia && ib) {
+        if (ia->value < ib->value) {
+            // min(3, 4) -> 3
+            return ia;
+        } else {
+            // min(4, 3) -> 3
+            return ib;
+        }
+    } else if (imab && ib) {
+        if (imab->value < ib->value) {
+            // min(min(a, 3), 4) -> min(a, 3)
+            return a;
+        } else {
+            // min(min(a, 4), 3) -> min(a, 3)
+            return min(ma->a, b);
+        }
+    } else if (ia) {
+        // min(3, b) -> min(b, 3)
+        return min(b, a);
+    } else {
+        return min(a, b);
+    }
+}
+
+Expr simple_max(Expr a, Expr b) {
+    // Take a max, doing a little bit of eager simplification
+    if (equal(a, b)) {
+        return a;
+    }
+
+    const IntImm *ia = a.as<IntImm>();
+    const IntImm *ib = b.as<IntImm>();
+    const Max *ma = a.as<Max>();
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    if (ia && ib) {
+        if (ia->value > ib->value) {
+            // max(4, 3) -> 4
+            return ia;
+        } else {
+            // max(3, 4) -> 4
+            return ib;
+        }
+    } else if (imab && ib) {
+        if (imab->value > ib->value) {
+            // max(max(a, 4), 3) -> max(a, 4)
+            return a;
+        } else {
+            // max(max(a, 3), 4) -> max(a, 4)
+            return max(ma->a, b);
+        }
+    } else if (ia) {
+        // max(3, b) -> max(b, 3)
+        return max(b, a);
+    } else {
+        return max(a, b);
+    }
+}
 
 void merge_boxes(Box &a, const Box &b) {
     if (b.empty()) {
@@ -794,16 +860,16 @@ void merge_boxes(Box &a, const Box &b) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].min = select(a.used, a[i].min, b[i].min);
                     } else {
-                        a[i].min = select(a.used && b.used, min(a[i].min, b[i].min),
+                        a[i].min = select(a.used && b.used, simple_min(a[i].min, b[i].min),
                                           a.used, a[i].min,
                                           b[i].min);
                     }
                 } else if (a.used.defined()) {
-                    a[i].min = select(a.used, min(a[i].min, b[i].min), b[i].min);
+                    a[i].min = select(a.used, simple_min(a[i].min, b[i].min), b[i].min);
                 } else if (b.used.defined()) {
-                    a[i].min = select(b.used, min(a[i].min, b[i].min), a[i].min);
+                    a[i].min = select(b.used, simple_min(a[i].min, b[i].min), a[i].min);
                 } else {
-                    a[i].min = min(a[i].min, b[i].min);
+                    a[i].min = simple_min(a[i].min, b[i].min);
                 }
             } else {
                 a[i].min = Expr();
@@ -815,16 +881,16 @@ void merge_boxes(Box &a, const Box &b) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].max = select(a.used, a[i].max, b[i].max);
                     } else {
-                        a[i].max = select(a.used && b.used, max(a[i].max, b[i].max),
+                        a[i].max = select(a.used && b.used, simple_max(a[i].max, b[i].max),
                                           a.used, a[i].max,
                                           b[i].max);
                     }
                 } else if (a.used.defined()) {
-                    a[i].max = select(a.used, max(a[i].max, b[i].max), b[i].max);
+                    a[i].max = select(a.used, simple_max(a[i].max, b[i].max), b[i].max);
                 } else if (b.used.defined()) {
-                    a[i].max = select(b.used, max(a[i].max, b[i].max), a[i].max);
+                    a[i].max = select(b.used, simple_max(a[i].max, b[i].max), a[i].max);
                 } else {
-                    a[i].max = max(a[i].max, b[i].max);
+                    a[i].max = simple_max(a[i].max, b[i].max);
                 }
             } else {
                 a[i].max = Expr();
