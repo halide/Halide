@@ -32,6 +32,17 @@
 %ignore halide_dev_run;
 %ignore halide_dev_malloc;
 %ignore halide_dev_free;
+%ignore halide_get_trace_file;
+%ignore halide_set_trace_file;
+
+%ignore halide_set_num_threads;
+
+%ignore halide_get_ocl_platform_name;
+%ignore halide_set_ocl_platform_name;
+%ignore halide_get_ocl_device_type;
+%ignore halide_set_ocl_device_type;
+%ignore halide_get_gpu_device;
+%ignore halide_set_gpu_device;
 
 #define BUILDING_PYTHON 1
 
