@@ -17,7 +17,7 @@ using std::sort;
 static ostringstream nil;
 
 CodeGen_OpenCL_Dev::CodeGen_OpenCL_Dev(Target t) :
-    clc(CodeGen_OpenCL_C(src_stream)), target(t) {
+    clc(src_stream), target(t) {
 }
 
 string CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::print_type(Type type) {

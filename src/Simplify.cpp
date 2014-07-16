@@ -45,10 +45,11 @@ int do_indirect_int_cast(Type t, int x) {
 
 class Simplify : public IRMutator {
 public:
-    Simplify(bool r, const Scope<Interval> &bi, const Scope<ModulusRemainder> &ai) :
-        remove_dead_lets(r),
-        bounds_info(bi),
-        alignment_info(ai) {}
+    Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
+        remove_dead_lets(r) {
+        alignment_info.set_containing_scope(ai);
+        bounds_info.set_containing_scope(bi);
+    }
 private:
     bool remove_dead_lets;
 
@@ -1970,13 +1971,13 @@ private:
 Expr simplify(Expr e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, bounds, alignment).mutate(e);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e);
 }
 
 Stmt simplify(Stmt s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, bounds, alignment).mutate(s);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {

@@ -2032,7 +2032,7 @@ void CodeGen::visit(const For *op) {
 
         // Find every symbol that the body of this loop refers to
         // and dump it into a closure
-        Closure closure = Closure::make(op->body, op->name, buffer_t_type);
+        Closure closure(op->body, op->name, buffer_t_type);
 
         // Allocate a closure
         StructType *closure_t = closure.build_type(context);
@@ -2059,7 +2059,7 @@ void CodeGen::visit(const For *op) {
 
         // Make a new scope to use
         Scope<Value *> saved_symbol_table;
-        std::swap(symbol_table, saved_symbol_table);
+        symbol_table.swap(saved_symbol_table);
 
         // Get the function arguments
 
@@ -2101,7 +2101,7 @@ void CodeGen::visit(const For *op) {
         debug(3) << "Leaving parallel for loop over " << op->name << "\n";
 
         // Now restore the scope
-        std::swap(symbol_table, saved_symbol_table);
+        symbol_table.swap(saved_symbol_table);
         function = containing_function;
 
         // Check for success
