@@ -160,12 +160,9 @@ private:
 
 class GPU_Host_Closure : public Halide::Internal::Closure {
 public:
-    static GPU_Host_Closure make(Stmt s, const std::string &lv, bool skip_gpu_loops=false) {
-        GPU_Host_Closure c;
-        c.skip_gpu_loops = skip_gpu_loops;
-        c.ignore.push(lv, 0);
-        s.accept(&c);
-        return c;
+    GPU_Host_Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : skip_gpu_loops(skip_gpu_loops) {
+        ignore.push(lv, 0);
+        s.accept(this);
     }
 
     vector<GPU_Argument> arguments();
@@ -484,7 +481,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                  << bounds.num_blocks[3] << ") blocks\n";
 
         // compute a closure over the state passed into the kernel
-        GPU_Host_Closure c = GPU_Host_Closure::make(loop, loop->name);
+        GPU_Host_Closure c(loop, loop->name);
 
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name, false);

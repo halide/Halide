@@ -75,10 +75,16 @@ public:
             for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
                  iter != bounds.end(); ++iter) {
                 string func_name = iter->first.first;
+                bool same_func = (func_name == func.name());
                 string stage_name = func_name + ".s" + int_to_string(iter->first.second);
                 if (stage_name == producing_stage ||
                     inner_productions.count(func_name)) {
-                    merge_boxes(b, iter->second);
+                    Box used_box = iter->second;
+                    if (same_func) {
+                        merge_boxes(b, used_box);
+                    } else {
+                        merge_boxes(b, used_box);
+                    }
                 }
             }
 
@@ -282,8 +288,8 @@ public:
         }
 
         // A scope giving the bounds for variables used by this stage
-        Scope<Interval> scope() {
-            Scope<Interval> result;
+        void populate_scope(Scope<Interval> &result) {
+
             for (size_t d = 0; d < func.args().size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
                 result.push(func.args()[d],
@@ -309,8 +315,6 @@ public:
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }
             */
-
-            return result;
         }
 
     };
@@ -399,7 +403,8 @@ public:
 
             // Set up symbols representing the bounds over which this
             // stage will be computed.
-            Scope<Interval> scope = consumer.scope();
+            Scope<Interval> scope;
+            consumer.populate_scope(scope);
 
             // Compute all the boxes of the producers this consumer
             // uses.

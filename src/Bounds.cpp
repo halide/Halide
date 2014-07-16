@@ -24,12 +24,13 @@ using std::pair;
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
-    const Scope<Interval> &scope;
-    Scope<Interval> inner_scope;
+    Scope<Interval> scope;
     const FuncValueBounds &func_bounds;
 
-    Bounds(const Scope<Interval> &s, const FuncValueBounds &fb) :
-        scope(s), func_bounds(fb) {}
+    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb) :
+        func_bounds(fb) {
+        scope.set_containing_scope(s);
+    }
 private:
 
     // Compute the intrinsic bounds of a function.
@@ -167,10 +168,6 @@ private:
     void visit(const Variable *op) {
         if (scope.contains(op->name)) {
             Interval bounds = scope.get(op->name);
-            min = bounds.min;
-            max = bounds.max;
-        } else if (inner_scope.contains(op->name)) {
-            Interval bounds = inner_scope.get(op->name);
             min = bounds.min;
             max = bounds.max;
         } else {
@@ -703,9 +700,9 @@ private:
 
     void visit(const Let *op) {
         op->value.accept(this);
-        inner_scope.push(op->name, Interval(min, max));
+        scope.push(op->name, Interval(min, max));
         op->body.accept(this);
-        inner_scope.pop(op->name);
+        scope.pop(op->name);
     }
 
     void visit(const LetStmt *) {
@@ -747,7 +744,7 @@ private:
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
-    Bounds b(scope, fb);
+    Bounds b(&scope, fb);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
     return Interval(b.min, b.max);
@@ -851,8 +848,10 @@ void merge_boxes(Box &a, const Box &b) {
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> &s, const FuncValueBounds &fb) :
-        func(fn), consider_calls(calls), consider_provides(provides), scope(s), func_bounds(fb) {}
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb) :
+        func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+        scope.set_containing_scope(s);
+    }
 
     map<string, Box> boxes;
 
@@ -1082,7 +1081,7 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    BoxesTouched b(consider_calls, consider_provides, fn, scope, fb);
+    BoxesTouched b(consider_calls, consider_provides, fn, &scope, fb);
     if (e.defined()) {
         e.accept(&b);
     }
