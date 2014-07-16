@@ -43,6 +43,20 @@ int do_indirect_int_cast(Type t, int x) {
     }
 }
 
+// Checks if an integer is in the range of a type.
+bool in_range_of_type(int i, Type t) {
+  if (t.is_uint()) {
+    uint ui = (uint)i;
+    if (ui < (uint)t.imin() || (uint)t.imax() < ui)
+      return false;
+  } else if (t.is_int()) {
+    if (i < t.imin() || t.imax() < i)
+      return false;
+  }
+
+  return true;
+}
+
 class Simplify : public IRMutator {
 public:
     Simplify(bool r, const Scope<Interval> &bi, const Scope<ModulusRemainder> &ai) :
@@ -1694,7 +1708,33 @@ private:
                     }
                 }
             }
+        } else if (op->call_type == Call::Intrinsic &&
+                   (op->name == Call::shift_left ||
+                    op->name == Call::shift_right)) {
+          Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+          int ib = 0;
+
+          if (const_castint(b, &ib)) {
+            Type t = op->type;
+            ib = 1 << ib;
+
+            if (!in_range_of_type(ib, t)) {
+              user_warning << "Cannot replace bit shift with arithmetic "
+                           << "operator (integer overflow).\n";
+            } else {
+              b = make_const(t, ib);
+
+              if (op->name == Call::shift_left) {
+                expr = mutate(Mul::make(a, b));
+              } else {
+                expr = mutate(Div::make(a, b));
+              }
+
+              return;
+            }
+          }
         }
+
         IRMutator::visit(op);
     }
 
