@@ -46,8 +46,8 @@ class UniquifyVariableNames : public IRMutator {
         Stmt body = mutate(op->body);
         pop_name(op->name);
 
-        if (new_name == op->name && 
-            body.same_as(op->body) && 
+        if (new_name == op->name &&
+            body.same_as(op->body) &&
             value.same_as(op->value)) {
             stmt = op;
         } else {
@@ -63,8 +63,8 @@ class UniquifyVariableNames : public IRMutator {
         Expr body = mutate(op->body);
         pop_name(op->name);
 
-        if (new_name == op->name && 
-            body.same_as(op->body) && 
+        if (new_name == op->name &&
+            body.same_as(op->body) &&
             value.same_as(op->value)) {
             expr = op;
         } else {
@@ -81,14 +81,14 @@ class UniquifyVariableNames : public IRMutator {
         Stmt body = mutate(op->body);
         pop_name(op->name);
 
-        if (new_name == op->name && 
-            body.same_as(op->body) && 
-            min.same_as(op->min) && 
+        if (new_name == op->name &&
+            body.same_as(op->body) &&
+            min.same_as(op->min) &&
             extent.same_as(op->extent)) {
             stmt = op;
         } else {
             stmt = For::make(new_name, min, extent, op->for_type, body);
-        }        
+        }
     }
 
     void visit(const Variable *op) {
