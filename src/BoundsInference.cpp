@@ -70,25 +70,50 @@ public:
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
+
             // Merge all the relevant boxes.
             Box b;
+
             for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
                  iter != bounds.end(); ++iter) {
                 string func_name = iter->first.first;
-                bool same_func = (func_name == func.name());
                 string stage_name = func_name + ".s" + int_to_string(iter->first.second);
                 if (stage_name == producing_stage ||
                     inner_productions.count(func_name)) {
-                    Box used_box = iter->second;
-                    if (same_func) {
-                        merge_boxes(b, used_box);
-                    } else {
-                        merge_boxes(b, used_box);
-                    }
+                    merge_boxes(b, iter->second);
                 }
             }
 
+
             internal_assert(b.empty() || b.size() == func.args().size());
+
+            // Optimization: If a dimension is pure in every update
+            // step of a func, then there exists a single bound for
+            // that dimension, instead of one bound per stage. Let's
+            // figure out what those dimensions are, and just have all
+            // stages but the last use the bounds for the last stage.
+            vector<bool> always_pure_dims(func.args().size(), true);
+            const std::vector<ReductionDefinition> &reductions = func.reductions();
+            for (size_t i = 0; i < reductions.size(); i++) {
+                for (size_t j = 0; j < always_pure_dims.size(); j++) {
+                    const Variable *v = reductions[i].args[j].as<Variable>();
+                    if (!v || v->name != func.args()[j]) {
+                        always_pure_dims[j] = false;
+                    }
+                }
+            }
+            if (stage < (int)func.reductions().size()) {
+                size_t stages = func.reductions().size();
+                string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
+                for (size_t i = 0; i < always_pure_dims.size(); i++) {
+                    if (always_pure_dims[i]) {
+                        const string &dim = func.args()[i];
+                        Expr min = Variable::make(Int(32), last_stage + dim + ".min");
+                        Expr max = Variable::make(Int(32), last_stage + dim + ".max");
+                        b[i] = Interval(min, max);
+                    }
+                }
+            }
 
             if (func.has_extern_definition()) {
                 // After we define our bounds required, we need to
@@ -174,6 +199,7 @@ public:
 
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
+
                 if (b[d].min.same_as(b[d].max)) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
                 } else {
