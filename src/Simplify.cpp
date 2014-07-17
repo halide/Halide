@@ -46,12 +46,12 @@ int do_indirect_int_cast(Type t, int x) {
 class Simplify : public IRMutator {
 public:
     Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
-        remove_dead_lets(r) {
+        simplify_lets(r) {
         alignment_info.set_containing_scope(ai);
         bounds_info.set_containing_scope(bi);
     }
 private:
-    bool remove_dead_lets;
+    bool simplify_lets;
 
     struct VarInfo {
         Expr replacement;
@@ -1831,7 +1831,7 @@ private:
             result = T::make(new_name, new_value, result);
         }
 
-        if (info.old_uses > 0 || !remove_dead_lets) {
+        if (info.old_uses > 0) {
             // The old name is still in use. We'd better keep it as well.
             result = T::make(op->name, value, result);
         }
@@ -1852,11 +1852,19 @@ private:
 
 
     void visit(const Let *op) {
-        expr = simplify_let<Let, Expr>(op);
+        if (simplify_lets) {
+            expr = simplify_let<Let, Expr>(op);
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
     void visit(const LetStmt *op) {
-        stmt = simplify_let<LetStmt, Stmt>(op);
+        if (simplify_lets) {
+            stmt = simplify_let<LetStmt, Stmt>(op);
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
     void visit(const AssertStmt *op) {
@@ -1968,16 +1976,16 @@ private:
     }
 };
 
-Expr simplify(Expr e, bool remove_dead_lets,
+Expr simplify(Expr e, bool simplify_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e);
+    return Simplify(simplify_lets, &bounds, &alignment).mutate(e);
 }
 
-Stmt simplify(Stmt s, bool remove_dead_lets,
+Stmt simplify(Stmt s, bool simplify_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
+    return Simplify(simplify_lets, &bounds, &alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {
