@@ -14,6 +14,11 @@ extern "C" void halide_print(void *user_context, const char *message) {
 
 
 int main(int argc, char **argv) {
+    #ifdef _WIN32
+    printf("Skipping test because use of varags on windows under older llvms (e.g. pnacl) crashes.");
+    return 0;
+    #endif
+
     Var x("x");
     Func f("f"), g("g");
 

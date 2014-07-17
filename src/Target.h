@@ -58,8 +58,12 @@ struct Target {
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}
     Target(OS o, Arch a, int b, uint64_t f) : os(o), arch(a), bits(b), features(f) {}
 
+    /** Is OpenCL or CUDA enabled in this target? I.e. is
+     * Func::gpu_tile and similar going to work? We do not include
+     * OpenGL, because it is not capable of gpgpu, and is not
+     * scheduled via Func::gpu_tile. */
     bool has_gpu_feature() const {
-        return (features & (CUDA|OpenCL));
+        return (features & (CUDA|OpenCL)) != 0;
     }
 
     bool operator==(const Target &other) const {

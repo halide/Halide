@@ -75,6 +75,7 @@ set(RUNTIME_CPP
   nogpu
   opencl
   opengl
+  gpu_device_selection
   osx_opengl_context
   linux_opengl_context
   android_opengl_context

@@ -12,6 +12,7 @@ typedef unsigned int       uint32_t;
 typedef long long int           int64_t;
 typedef unsigned long long int  uint64_t;
 typedef uint64_t size_t;
+typedef int64_t ssize_t;
 typedef int64_t intptr_t;
 typedef int64_t ptrdiff_t;
 #define INT64_C(c)	c ## L
@@ -22,6 +23,7 @@ typedef int64_t ptrdiff_t;
 __extension__ typedef long long int          int64_t;
 __extension__ typedef unsigned long long int uint64_t;
 typedef uint32_t size_t;
+typedef int32_t ssize_t;
 typedef int32_t intptr_t;
 typedef int32_t ptrdiff_t;
 #define INT64_C(c)	c ## LL

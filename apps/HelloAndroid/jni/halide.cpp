@@ -50,7 +50,7 @@ int main(int argc, char **argv) {
 
     std::vector<Argument> args;
     args.push_back(input);
-    result.compile_to_file("halide", args);
+    result.compile_to_file("halide_generated", args);
 
     return 0;
 }
