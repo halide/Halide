@@ -21,11 +21,11 @@ namespace Internal {
  */
 // @{
 EXPORT Stmt simplify(Stmt, bool remove_dead_lets = true,
-                     const Scope<Interval> &bounds = Scope<Interval>(),
-                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>());
+                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 EXPORT Expr simplify(Expr, bool remove_dead_lets = true,
-                     const Scope<Interval> &bounds = Scope<Interval>(),
-                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>());
+                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
 
 /** Simplify expressions found in a statement, but don't simplify
