@@ -1935,6 +1935,10 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert failed: " + message, function);
     BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded: " + message, function);
 
+    // We expect the condition to be true.
+    Value *expect = Intrinsic::getDeclaration(module, Intrinsic::expect, vec(i1));
+    cond = builder->CreateCall2(expect, cond, ConstantInt::get(i1, 1));
+
     // If the condition fails, enter the assert body, otherwise, enter the block after
     builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
 
