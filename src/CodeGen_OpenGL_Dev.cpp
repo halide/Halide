@@ -331,7 +331,7 @@ void CodeGen_GLSL::compile(Stmt stmt,
     if (opengl_es) {
         stream << "precision highp float;\n";
     }
-    stream << "#define sdiv(a, b) ((a - mod(a, b))/b)\n"
+    stream << "#define sdiv(a, b) ((a - (int)mod((float)a, (float)b))/b)\n"
            << "#define sqrt_f32 sqrt\n"
            << "#define sin_f32 sin\n"
            << "#define cos_f32 cos\n"
