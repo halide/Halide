@@ -60,6 +60,9 @@ protected:
 
     void visit(const Max *);
     void visit(const Min *);
+    void visit(const Div *op);
+    void visit(const Mod *op);
+
     void visit(const Load *);
     void visit(const Store *);
 

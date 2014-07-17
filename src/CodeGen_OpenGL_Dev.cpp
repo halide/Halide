@@ -204,6 +204,19 @@ void CodeGen_GLSL::visit(const Min *op) {
     }
 }
 
+void CodeGen_GLSL::visit(const Div *op) {
+    if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b), Call::Extern));
+    } else {
+        visit_binop(op->type, op->a, op->b, "/");
+    }
+}
+
+void CodeGen_GLSL::visit(const Mod *op) {
+    print_expr(Call::make(op->type, "mod", vec(op->a, op->b), Call::Extern));
+}
+
+
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     std::vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
@@ -234,26 +247,32 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
-    if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_load) {
-        internal_assert(op->args.size() == 5);
-        internal_assert(op->args[0].as<StringImm>());
-        string buffername = op->args[0].as<StringImm>()->value;
-        ostringstream rhs;
-        internal_assert(op->type == UInt(8) || op->type == UInt(16));
-        rhs << "texture2D(" << print_name(buffername) << ", vec2("
-            << print_expr(op->args[2]) << ", "
-            << print_expr(op->args[3]) << "))"
-            << get_vector_suffix(op->args[4])
-            << " * " << op->type.imax() << ".0";
-        print_assignment(op->type, rhs.str());
-        return;
-    } else if (op->call_type == Call::Intrinsic && op->name == Call::glsl_texture_store) {
-        internal_assert(op->args.size() == 6);
-        std::string sval = print_expr(op->args[5]);
-        internal_assert(op->args[5].type() == UInt(8) || op->args[5].type() == UInt(16));
-        do_indent();
-        stream << "gl_FragColor" << get_vector_suffix(op->args[4])
-               << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
+    if (op->call_type == Call::Intrinsic) {
+        if (op->name == Call::glsl_texture_load) {
+            internal_assert(op->args.size() == 5);
+            internal_assert(op->args[0].as<StringImm>());
+            string buffername = op->args[0].as<StringImm>()->value;
+            ostringstream rhs;
+            internal_assert(op->type == UInt(8) || op->type == UInt(16));
+            rhs << "texture2D(" << print_name(buffername) << ", vec2("
+                << print_expr(op->args[2]) << ", "
+                << print_expr(op->args[3]) << "))"
+                << get_vector_suffix(op->args[4])
+                << " * " << op->type.imax() << ".0";
+            print_assignment(op->type, rhs.str());
+        } else if (op->name == Call::glsl_texture_store) {
+            internal_assert(op->args.size() == 6);
+            std::string sval = print_expr(op->args[5]);
+            internal_assert(op->args[5].type() == UInt(8) || op->args[5].type() == UInt(16));
+            do_indent();
+            stream << "gl_FragColor" << get_vector_suffix(op->args[4])
+                   << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
+        } else if (op->name == Call::lerp) {
+            print_expr(Call::make(op->type, "mix", vec(op->args[0], op->args[1], op->args[2]),
+                                  Call::Extern));
+        } else {
+            CodeGen_C::visit(op);
+        }
     } else {
         CodeGen_C::visit(op);
     }
@@ -312,9 +331,22 @@ void CodeGen_GLSL::compile(Stmt stmt,
     if (opengl_es) {
         stream << "precision highp float;\n";
     }
-    stream << "#define sin_f32 sin\n";
-    stream << "#define cos_f32 cos\n";
-    stream << "#define sqrt_f32 sqrt\n";
+    stream << "#define sdiv(a, b) ((a - mod(a, b))/b)\n"
+           << "#define sqrt_f32 sqrt\n"
+           << "#define sin_f32 sin\n"
+           << "#define cos_f32 cos\n"
+           << "#define exp_f32 exp\n"
+           << "#define log_f32 log\n"
+           << "#define abs_f32 abs\n"
+           << "#define floor_f32 floor\n"
+           << "#define ceil_f32 ceil\n"
+           << "#define pow_f32 pow\n"
+           << "#define asin_f32 asin\n"
+           << "#define acos_f32 acos\n"
+           << "#define tan_f32 tan\n"
+           << "#define atan_f32 atan\n"
+           << "#define atan2_f32 atan\n";
+
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
