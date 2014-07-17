@@ -124,6 +124,9 @@ extern "C" {
 CUresult CUDAAPI cuInit(unsigned int Flags);
 CUresult CUDAAPI cuDeviceGetCount(int *count);
 CUresult CUDAAPI cuDeviceGet(CUdevice *device, int ordinal);
+CUresult CUDAAPI cuDeviceGetAttribute(int *, int attrib, CUdevice dev);
+CUresult CUDAAPI cuDeviceGetName(char *, int len, CUdevice dev);
+CUresult CUDAAPI cuDeviceTotalMem(size_t *, CUdevice dev);
 CUresult CUDAAPI cuCtxCreate(CUcontext *pctx, unsigned int flags, CUdevice dev);
 CUresult CUDAAPI cuCtxDestroy(CUcontext pctx);
 CUresult CUDAAPI cuCtxGetApiVersion(CUcontext ctx, unsigned int *version);
