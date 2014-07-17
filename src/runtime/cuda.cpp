@@ -216,6 +216,77 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
 
     DEBUG_PRINTF( user_context, "    Got device %d\n", dev );
 
+    // Dump device attributes
+    #ifdef DEBUG
+    {
+        char name[256];
+        name[0] = 0;
+        err = cuDeviceGetName(name, 256, dev);
+        DEBUG_PRINTF(user_context, "      %s\n", name);
+
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuDeviceGetName failed (%d)", err);
+            return err;
+        }
+
+        size_t memory = 0;
+        err = cuDeviceTotalMem(&memory, dev);
+        DEBUG_PRINTF(user_context, "      total memory: %d MB\n", (int)(memory >> 20));
+
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuDeviceTotalMem failed (%d)", err);
+            return err;
+        }
+
+        int max_threads_per_block = 0;
+        err = cuDeviceGetAttribute(&max_threads_per_block, 1, dev);
+        DEBUG_PRINTF(user_context, "      max threads per block: %d\n", max_threads_per_block);
+
+        int warp_size = 0;
+        if (!err) err = cuDeviceGetAttribute(&warp_size, 10, dev);
+        DEBUG_PRINTF(user_context, "      warp size: %d\n", warp_size);
+
+        int max_block_size[] = {0, 0, 0};
+        if (!err) err = cuDeviceGetAttribute(&max_block_size[0], 2, dev);
+        if (!err) err = cuDeviceGetAttribute(&max_block_size[1], 3, dev);
+        if (!err) err = cuDeviceGetAttribute(&max_block_size[2], 4, dev);
+        DEBUG_PRINTF(user_context, "      max block size: %d %d %d\n",
+                     max_block_size[0], max_block_size[1], max_block_size[2]);
+
+        int max_grid_size[] = {0, 0, 0};
+        if (!err) err = cuDeviceGetAttribute(&max_grid_size[0], 5, dev);
+        if (!err) err = cuDeviceGetAttribute(&max_grid_size[1], 6, dev);
+        if (!err) err = cuDeviceGetAttribute(&max_grid_size[2], 7, dev);
+        DEBUG_PRINTF(user_context, "      max grid size: %d %d %d\n",
+                     max_grid_size[0], max_grid_size[1], max_grid_size[2]);
+
+        int max_shared_mem, max_constant_mem;
+        if (!err) err = cuDeviceGetAttribute(&max_shared_mem, 8, dev);
+        if (!err) err = cuDeviceGetAttribute(&max_constant_mem, 9, dev);
+        DEBUG_PRINTF(user_context, "      max shared memory per block: %d\n", max_shared_mem);
+        DEBUG_PRINTF(user_context, "      max constant memory per block: %d\n", max_constant_mem);
+
+        int cc_major = 0, cc_minor = 0;
+        if (!err) err = cuDeviceGetAttribute(&cc_major, 75, dev);
+        if (!err) err = cuDeviceGetAttribute(&cc_minor, 76, dev);
+        DEBUG_PRINTF(user_context, "      compute capability %d.%d\n", cc_major, cc_minor);
+
+        int num_cores = 0, threads_per_core = 0;
+        if (!err) err = cuDeviceGetAttribute(&num_cores, 16, dev);
+        threads_per_core = (cc_major == 1 ? 8 :
+                            cc_major == 2 ? (cc_minor == 0 ? 32 : 48) :
+                            cc_major == 3 ? 192 :
+                            cc_major == 5 ? 128 : 0);
+        DEBUG_PRINTF(user_context, "      cuda cores: %d x %d = %d\n",
+                     num_cores, threads_per_core, num_cores * threads_per_core);
+
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuDeviceGetAttribute failed (%d)", err);
+            return err;
+        }
+    }
+    #endif
+
     // Create context
     DEBUG_PRINTF( user_context, "    cuCtxCreate %d -> ", dev );
     err = cuCtxCreate(ctx, 0, dev);
