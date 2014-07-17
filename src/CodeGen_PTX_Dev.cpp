@@ -224,7 +224,15 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    return "";
+    if (target.features & (Target::CUDACapability32 |
+                           Target::CUDACapability50)) {
+        // Need ptx isa 4.0
+        return "+ptx40";
+    } else {
+        // Default to ptx isa 3.2
+        return "+ptx32";
+    }
+
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -284,7 +292,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
-    const std::string FeaturesStr = "";
+    const std::string FeaturesStr = mattrs();
     std::auto_ptr<TargetMachine>
         target(TheTarget->createTargetMachine(TheTriple.getTriple(),
                                               MCPU, FeaturesStr, Options,
