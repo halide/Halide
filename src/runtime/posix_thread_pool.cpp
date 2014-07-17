@@ -80,7 +80,7 @@ WEAK struct {
 
 } halide_work_queue;
 
-WEAK int halide_threads;
+WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;
 
 WEAK void halide_shutdown_thread_pool() {
@@ -94,7 +94,7 @@ WEAK void halide_shutdown_thread_pool() {
     pthread_mutex_unlock(&halide_work_queue.mutex);
 
     // Wait until they leave
-    for (int i = 0; i < halide_threads-1; i++) {
+    for (int i = 0; i < halide_num_threads-1; i++) {
         //fprintf(stderr, "Waiting for thread %d to exit\n", i);
         void *retval;
         pthread_join(halide_work_queue.threads[i], &retval);
@@ -108,6 +108,18 @@ WEAK void halide_shutdown_thread_pool() {
     halide_work_queue.mutex = uninitialized_mutex;
     pthread_cond_destroy(&halide_work_queue.state_change);
     halide_thread_pool_initialized = false;
+}
+
+WEAK void halide_set_num_threads(int n) {
+    if (halide_num_threads == n) {
+        return;
+    }
+
+    if (halide_thread_pool_initialized) {
+        halide_shutdown_thread_pool();
+    }
+
+    halide_num_threads = n;
 }
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
@@ -214,19 +226,25 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
         pthread_cond_init(&halide_work_queue.state_change, NULL);
         halide_work_queue.jobs = NULL;
 
-        char *threadStr = getenv("HL_NUMTHREADS");
-        if (threadStr) {
-            halide_threads = atoi(threadStr);
-        } else {
-            halide_threads = halide_host_cpu_count();
-            // halide_printf(user_context, "HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
+        if (!halide_num_threads) {
+            char *threads_str = getenv("HL_NUM_THREADS");
+            if (!threads_str) {
+                // Legacy name for HL_NUM_THREADS
+                threads_str = getenv("HL_NUMTHREADS");
+            }
+            if (threads_str) {
+                halide_num_threads = atoi(threads_str);
+            } else {
+                halide_num_threads = halide_host_cpu_count();
+                // halide_printf(user_context, "HL_NUM_THREADS not defined. Defaulting to %d threads.\n", halide_num_threads);
+            }
         }
-        if (halide_threads > MAX_THREADS) {
-            halide_threads = MAX_THREADS;
-        } else if (halide_threads < 1) {
-            halide_threads = 1;
+        if (halide_num_threads > MAX_THREADS) {
+            halide_num_threads = MAX_THREADS;
+        } else if (halide_num_threads < 1) {
+            halide_num_threads = 1;
         }
-        for (int i = 0; i < halide_threads-1; i++) {
+        for (int i = 0; i < halide_num_threads-1; i++) {
             //fprintf(stderr, "Creating thread %d\n", i);
             pthread_create(halide_work_queue.threads + i, NULL, halide_worker_thread, NULL);
         }

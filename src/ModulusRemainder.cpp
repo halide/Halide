@@ -14,6 +14,10 @@ public:
     int modulus, remainder;
     Scope<ModulusRemainder> scope;
 
+    ComputeModulusRemainder(const Scope<ModulusRemainder> *s) {
+        scope.set_containing_scope(s);
+    }
+
     void visit(const IntImm *);
     void visit(const FloatImm *);
     void visit(const StringImm *);
@@ -56,13 +60,12 @@ public:
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
-    ComputeModulusRemainder mr;
+    ComputeModulusRemainder mr(NULL);
     return mr.analyze(e);
 }
 
 ModulusRemainder modulus_remainder(Expr e, const Scope<ModulusRemainder> &scope) {
-    ComputeModulusRemainder mr;
-    mr.scope = scope;
+    ComputeModulusRemainder mr(&scope);
     return mr.analyze(e);
 }
 

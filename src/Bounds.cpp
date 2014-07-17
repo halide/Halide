@@ -24,12 +24,13 @@ using std::pair;
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
-    const Scope<Interval> &scope;
-    Scope<Interval> inner_scope;
+    Scope<Interval> scope;
     const FuncValueBounds &func_bounds;
 
-    Bounds(const Scope<Interval> &s, const FuncValueBounds &fb) :
-        scope(s), func_bounds(fb) {}
+    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb) :
+        func_bounds(fb) {
+        scope.set_containing_scope(s);
+    }
 private:
 
     // Compute the intrinsic bounds of a function.
@@ -167,10 +168,6 @@ private:
     void visit(const Variable *op) {
         if (scope.contains(op->name)) {
             Interval bounds = scope.get(op->name);
-            min = bounds.min;
-            max = bounds.max;
-        } else if (inner_scope.contains(op->name)) {
-            Interval bounds = inner_scope.get(op->name);
             min = bounds.min;
             max = bounds.max;
         } else {
@@ -703,9 +700,9 @@ private:
 
     void visit(const Let *op) {
         op->value.accept(this);
-        inner_scope.push(op->name, Interval(min, max));
+        scope.push(op->name, Interval(min, max));
         op->body.accept(this);
-        inner_scope.pop(op->name);
+        scope.pop(op->name);
     }
 
     void visit(const LetStmt *) {
@@ -747,7 +744,7 @@ private:
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
-    Bounds b(scope, fb);
+    Bounds b(&scope, fb);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
     return Interval(b.min, b.max);
@@ -776,7 +773,73 @@ Region region_union(const Region &a, const Region &b) {
     return result;
 }
 
+Expr simple_min(Expr a, Expr b) {
+    // Take a min, doing a little bit of eager simplification
+    if (equal(a, b)) {
+        return a;
+    }
 
+    const IntImm *ia = a.as<IntImm>();
+    const IntImm *ib = b.as<IntImm>();
+    const Min *ma = a.as<Min>();
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    if (ia && ib) {
+        if (ia->value < ib->value) {
+            // min(3, 4) -> 3
+            return ia;
+        } else {
+            // min(4, 3) -> 3
+            return ib;
+        }
+    } else if (imab && ib) {
+        if (imab->value < ib->value) {
+            // min(min(a, 3), 4) -> min(a, 3)
+            return a;
+        } else {
+            // min(min(a, 4), 3) -> min(a, 3)
+            return min(ma->a, b);
+        }
+    } else if (ia) {
+        // min(3, b) -> min(b, 3)
+        return min(b, a);
+    } else {
+        return min(a, b);
+    }
+}
+
+Expr simple_max(Expr a, Expr b) {
+    // Take a max, doing a little bit of eager simplification
+    if (equal(a, b)) {
+        return a;
+    }
+
+    const IntImm *ia = a.as<IntImm>();
+    const IntImm *ib = b.as<IntImm>();
+    const Max *ma = a.as<Max>();
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    if (ia && ib) {
+        if (ia->value > ib->value) {
+            // max(4, 3) -> 4
+            return ia;
+        } else {
+            // max(3, 4) -> 4
+            return ib;
+        }
+    } else if (imab && ib) {
+        if (imab->value > ib->value) {
+            // max(max(a, 4), 3) -> max(a, 4)
+            return a;
+        } else {
+            // max(max(a, 3), 4) -> max(a, 4)
+            return max(ma->a, b);
+        }
+    } else if (ia) {
+        // max(3, b) -> max(b, 3)
+        return max(b, a);
+    } else {
+        return max(a, b);
+    }
+}
 
 void merge_boxes(Box &a, const Box &b) {
     if (b.empty()) {
@@ -797,16 +860,16 @@ void merge_boxes(Box &a, const Box &b) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].min = select(a.used, a[i].min, b[i].min);
                     } else {
-                        a[i].min = select(a.used && b.used, min(a[i].min, b[i].min),
+                        a[i].min = select(a.used && b.used, simple_min(a[i].min, b[i].min),
                                           a.used, a[i].min,
                                           b[i].min);
                     }
                 } else if (a.used.defined()) {
-                    a[i].min = select(a.used, min(a[i].min, b[i].min), b[i].min);
+                    a[i].min = select(a.used, simple_min(a[i].min, b[i].min), b[i].min);
                 } else if (b.used.defined()) {
-                    a[i].min = select(b.used, min(a[i].min, b[i].min), a[i].min);
+                    a[i].min = select(b.used, simple_min(a[i].min, b[i].min), a[i].min);
                 } else {
-                    a[i].min = min(a[i].min, b[i].min);
+                    a[i].min = simple_min(a[i].min, b[i].min);
                 }
             } else {
                 a[i].min = Expr();
@@ -818,16 +881,16 @@ void merge_boxes(Box &a, const Box &b) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].max = select(a.used, a[i].max, b[i].max);
                     } else {
-                        a[i].max = select(a.used && b.used, max(a[i].max, b[i].max),
+                        a[i].max = select(a.used && b.used, simple_max(a[i].max, b[i].max),
                                           a.used, a[i].max,
                                           b[i].max);
                     }
                 } else if (a.used.defined()) {
-                    a[i].max = select(a.used, max(a[i].max, b[i].max), b[i].max);
+                    a[i].max = select(a.used, simple_max(a[i].max, b[i].max), b[i].max);
                 } else if (b.used.defined()) {
-                    a[i].max = select(b.used, max(a[i].max, b[i].max), a[i].max);
+                    a[i].max = select(b.used, simple_max(a[i].max, b[i].max), a[i].max);
                 } else {
-                    a[i].max = max(a[i].max, b[i].max);
+                    a[i].max = simple_max(a[i].max, b[i].max);
                 }
             } else {
                 a[i].max = Expr();
@@ -851,8 +914,10 @@ void merge_boxes(Box &a, const Box &b) {
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> &s, const FuncValueBounds &fb) :
-        func(fn), consider_calls(calls), consider_provides(provides), scope(s), func_bounds(fb) {}
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb) :
+        func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+        scope.set_containing_scope(s);
+    }
 
     map<string, Box> boxes;
 
@@ -1082,7 +1147,7 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    BoxesTouched b(consider_calls, consider_provides, fn, scope, fb);
+    BoxesTouched b(consider_calls, consider_provides, fn, &scope, fb);
     if (e.defined()) {
         e.accept(&b);
     }

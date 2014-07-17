@@ -81,7 +81,7 @@ WEAK bool WIN32API InitOnceCallback(InitOnce *, void *, void **) {
     return true;
 }
 
-WEAK int halide_threads;
+WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;
 
 WEAK void halide_shutdown_thread_pool() {
@@ -95,7 +95,7 @@ WEAK void halide_shutdown_thread_pool() {
     LeaveCriticalSection(&halide_work_queue.mutex);
 
     // Wait until they leave
-    for (int i = 0; i < halide_threads-1; i++) {
+    for (int i = 0; i < halide_num_threads-1; i++) {
         //fprintf(stderr, "Waiting for thread %d to exit\n", i);
         WaitForSingleObject(halide_work_queue.threads[i], -1);
     }
@@ -106,6 +106,18 @@ WEAK void halide_shutdown_thread_pool() {
     halide_work_queue.init_once = 0;
     //DestroyConditionVariable(&halide_work_queue.state_change);
     halide_thread_pool_initialized = false;
+}
+
+WEAK void halide_set_num_threads(int n) {
+    if (halide_num_threads == n) {
+        return;
+    }
+
+    if (halide_thread_pool_initialized) {
+        halide_shutdown_thread_pool();
+    }
+
+    halide_num_threads = n;
 }
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
@@ -225,22 +237,28 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
         InitializeConditionVariable(&halide_work_queue.state_change);
         halide_work_queue.jobs = NULL;
 
-        char *threadStr = getenv("HL_NUMTHREADS");
-        if (!threadStr) {
-            threadStr = getenv("NUMBER_OF_PROCESSORS"); // Apparently a standard windows environment variable
+        if (!halide_num_threads) {
+            char *threadStr = getenv("HL_NUM_THREADS");
+            if (!threadStr) {
+                // Legacy name
+                threadStr = getenv("HL_NUMTHREADS");
+            }
+            if (!threadStr) {
+                threadStr = getenv("NUMBER_OF_PROCESSORS"); // Apparently a standard windows environment variable
+            }
+            if (threadStr) {
+                halide_num_threads = atoi(threadStr);
+            } else {
+                halide_num_threads = 8;
+                // halide_printf(user_context, "HL_NUM_THREADS not defined. Defaulting to %d threads.\n", halide_num_threads);
+            }
         }
-        if (threadStr) {
-            halide_threads = atoi(threadStr);
-        } else {
-            halide_threads = 8;
-            // halide_printf(user_context, "HL_NUMTHREADS not defined. Defaulting to %d threads.\n", halide_threads);
+        if (halide_num_threads > MAX_THREADS) {
+            halide_num_threads = MAX_THREADS;
+        } else if (halide_num_threads < 1) {
+            halide_num_threads = 1;
         }
-        if (halide_threads > MAX_THREADS) {
-            halide_threads = MAX_THREADS;
-        } else if (halide_threads < 1) {
-            halide_threads = 1;
-        }
-        for (int i = 0; i < halide_threads-1; i++) {
+        for (int i = 0; i < halide_num_threads-1; i++) {
             // halide_printf(user_context, "Creating thread %d\n", i);
             halide_work_queue.threads[i] = CreateThread(NULL, 0, halide_worker_thread, NULL, 0, NULL);
         }

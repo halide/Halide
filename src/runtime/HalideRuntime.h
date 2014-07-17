@@ -90,6 +90,11 @@ extern int halide_do_par_for(void *user_context,
 extern void halide_shutdown_thread_pool();
 //@}
 
+/** Set the number of threads used by Halide's thread pool. No effect
+ * on OS X or iOS. If changed after the first use of a parallel Halide
+ * routine, shuts down and then reinitializes the thread pool. */
+extern void halide_set_num_threads(int n);
+
 /** Define halide_malloc and halide_free to replace the default memory
  * allocator.  See Func::set_custom_allocator. (Specifically note that
  * halide_malloc must return a 32-byte aligned pointer, and it must be
@@ -165,15 +170,26 @@ struct halide_trace_event {
  */
 extern int32_t halide_trace(void *user_context, const halide_trace_event *event);
 
+/** Set the file descriptor that Halide should write binary trace
+ * events to. If called with 0 as the argument, Halide outputs trace
+ * information to stdout in a human-readable format. If never called,
+ * Halide checks the for existence of an environment variable called
+ * HL_TRACE_FILE and opens that file. If HL_TRACE_FILE is not defined,
+ * it outputs trace information to stdout in a human-readable
+ * format. */
+extern void halide_set_trace_file(int fd);
+
+/** Halide calls this to retrieve the file descriptor to write binary
+ * trace events to. The default implementation returns the value set
+ * by halide_set_trace_file. Implement it yourself if you wish to use
+ * a custom file descriptor per user_context. Return zero from your
+ * implementation to tell Halide to print human-readable trace
+ * information to stdout. */
+extern int halide_get_trace_file(void *user_context);
+
 /** If tracing is writing to a file. This call closes that file
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
-
-/** Set the seed for the random number generator used by
- * random_float. Also clears all other internal state for the random
- * number generator. */
-extern void halide_set_random_seed(uint32_t seed);
-
 
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
@@ -192,8 +208,16 @@ extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
  * should rarely be necessary, except maybe for profiling. */
 extern int halide_dev_sync(void *user_context);
 
+/** Allocate device memory to back a buffer_t. */
 extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
+
+/** Free any device memory associated with a buffer_t. */
 extern int halide_dev_free(void *user_context, struct buffer_t *buf);
+
+/** These are forward declared here to ensure they have the same
+ * signature across different Halide gpu backends. Do not call
+ * them. */
+// @{
 extern int halide_init_kernels(void *user_context, void **state_ptr,
                                const char *src, int size);
 extern int halide_dev_run(void *user_context,
@@ -204,6 +228,48 @@ extern int halide_dev_run(void *user_context,
                           int shared_mem_bytes,
                           size_t arg_sizes[],
                           void *args[]);
+// @}
+
+/** Set the platform name for OpenCL to use (e.g. "Intel" or
+ * "NVIDIA"). The argument is copied internally. The opencl runtime
+ * will select a platform that includes this as a substring. If never
+ * called, Halide uses the environment variable HL_OCL_PLATFORM_NAME,
+ * or defaults to the first available platform. */
+extern void halide_set_ocl_platform_name(const char *n);
+
+/** Halide calls this to get the desired OpenCL platform
+ * name. Implement this yourself to use a different platform per
+ * user_context. The default implementation returns the value set by
+ * halide_set_ocl_platform_name, or the value of the environment
+ * variable HL_OCL_PLATFORM_NAME. The output is valid until the next
+ * call to halide_set_ocl_platform_name. */
+extern const char *halide_get_ocl_platform_name(void *user_context);
+
+/** Set the device type for OpenCL to use. The argument is copied
+ * internally. It must be "cpu" or "gpu". If never called, Halide uses
+ * the environment variable HL_OCL_DEVICE_TYPE. */
+extern void halide_set_ocl_device_type(const char *n);
+
+/** Halide calls this to gets the desired OpenCL device
+ * type. Implement this yourself to use a different device type per
+ * user_context. The default implementation returns the value set by
+ * halide_set_ocl_device_type, or the environment variable
+ * HL_OCL_DEVICE_TYPE. The result is valid until the next call to
+ * halide_set_ocl_device_type. */
+extern const char *halide_get_ocl_device_type(void *user_context);
+
+/** Selects which gpu device to use. 0 is usually the display
+ * device. If never called, Halide uses the environment variable
+ * HL_GPU_DEVICE. If that variable is unset, Halide uses the last
+ * device. Set this to -1 to use the last device. */
+extern void halide_set_gpu_device(int n);
+
+/** Halide calls this to get the desired halide gpu device
+ * setting. Implement this yourself to use a different gpu device per
+ * user_context. The default implementation returns the value set by
+ * halide_set_gpu_device, or the environment variable
+ * HL_GPU_DEVICE. */
+extern int halide_get_gpu_device(void *user_context);
 
 #ifdef __cplusplus
 } // End extern "C"

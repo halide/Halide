@@ -1,4 +1,4 @@
-/apps/HelloAndroid/jni/halide.h
+/apps/HelloAndroid/jni/halide_generated.h
 /apps/HelloNaCl/.lib32_linked
 /apps/HelloNaCl/.lib64_linked
 /apps/HelloNaCl/hello_nacl.zip

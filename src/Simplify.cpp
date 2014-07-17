@@ -45,10 +45,11 @@ int do_indirect_int_cast(Type t, int x) {
 
 class Simplify : public IRMutator {
 public:
-    Simplify(bool r, const Scope<Interval> &bi, const Scope<ModulusRemainder> &ai) :
-        remove_dead_lets(r),
-        bounds_info(bi),
-        alignment_info(ai) {}
+    Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
+        remove_dead_lets(r) {
+        alignment_info.set_containing_scope(ai);
+        bounds_info.set_containing_scope(bi);
+    }
 private:
     bool remove_dead_lets;
 
@@ -1726,6 +1727,7 @@ private:
             const Div *div = new_value.as<Div>();
             const Mod *mod = new_value.as<Mod>();
             const Ramp *ramp = new_value.as<Ramp>();
+            const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
             const Variable *var_b = NULL;
@@ -1768,6 +1770,10 @@ private:
                 new_var = Variable::make(new_value.type().element_of(), new_name);
                 replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
                 new_value = broadcast->value;
+            } else if (cast) {
+                new_var = Variable::make(cast->value.type(), new_name);
+                replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
+                new_value = cast->value;
             } else {
                 break;
             }
@@ -1965,13 +1971,13 @@ private:
 Expr simplify(Expr e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, bounds, alignment).mutate(e);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e);
 }
 
 Stmt simplify(Stmt s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, bounds, alignment).mutate(s);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {
