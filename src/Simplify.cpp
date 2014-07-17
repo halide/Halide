@@ -1715,22 +1715,24 @@ private:
           int ib = 0;
 
           if (const_castint(b, &ib)) {
-            Type t = op->type;
-            ib = 1 << ib;
+            if (0 <= ib && ib <= sizeof(int) * 8) {
+              Type t = op->type;
+              ib = 1 << ib;
 
-            if (!in_range_of_type(ib, t)) {
-              user_warning << "Cannot replace bit shift with arithmetic "
-                           << "operator (integer overflow).\n";
-            } else {
-              b = make_const(t, ib);
-
-              if (op->name == Call::shift_left) {
-                expr = mutate(Mul::make(a, b));
+              if (!in_range_of_type(ib, t)) {
+                user_warning << "Cannot replace bit shift with arithmetic "
+                             << "operator (integer overflow).\n";
               } else {
-                expr = mutate(Div::make(a, b));
-              }
+                b = make_const(t, ib);
 
-              return;
+                if (op->name == Call::shift_left) {
+                  expr = mutate(Mul::make(a, b));
+                } else {
+                  expr = mutate(Div::make(a, b));
+                }
+
+                return;
+              }
             }
           }
         }
