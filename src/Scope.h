@@ -78,11 +78,23 @@ private:
 
     const Scope<T> *containing_scope;
 
+
 public:
     Scope() : containing_scope(NULL) {}
 
+    /** Set the parent scope. If lookups fail in this scope, they
+     * check the containing scope before returning an error. Caller is
+     * responsible for managing the memory of the containing scope. */
     void set_containing_scope(const Scope<T> *s) {
         containing_scope = s;
+    }
+
+    /** A const ref to an empty scope. Useful for default function
+     * arguments, which would otherwise require a copy constructor
+     * (with llvm in c++98 mode) */
+    static const Scope<T> &empty_scope() {
+        static Scope<T> _empty_scope;
+        return _empty_scope;        
     }
 
     /** Retrieve the value referred to by a name */

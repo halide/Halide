@@ -63,10 +63,10 @@ void merge_boxes(Box &a, const Box &b);
  * to evaluate. */
 // @{
 std::map<std::string, Box> boxes_required(Expr e,
-                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = FuncValueBounds());
 std::map<std::string, Box> boxes_required(Stmt s,
-                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
@@ -75,10 +75,10 @@ std::map<std::string, Box> boxes_required(Stmt s,
  * or expression. */
 // @{
 std::map<std::string, Box> boxes_provided(Expr e,
-                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = FuncValueBounds());
 std::map<std::string, Box> boxes_provided(Stmt s,
-                                          const Scope<Interval> &scope = Scope<Interval>(),
+                                          const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                           const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
@@ -87,34 +87,34 @@ std::map<std::string, Box> boxes_provided(Stmt s,
  * statement or expression. */
 // @{
 std::map<std::string, Box> boxes_touched(Expr e,
-                                         const Scope<Interval> &scope = Scope<Interval>(),
+                                         const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                          const FuncValueBounds &func_bounds = FuncValueBounds());
 std::map<std::string, Box> boxes_touched(Stmt s,
-                                         const Scope<Interval> &scope = Scope<Interval>(),
+                                         const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                                          const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
 /** Variants of the above that are only concerned with a single function. */
 // @{
 Box box_required(Expr e, std::string fn,
-                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = FuncValueBounds());
 Box box_required(Stmt s, std::string fn,
-                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = FuncValueBounds());
 
 Box box_provided(Expr e, std::string fn,
-                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = FuncValueBounds());
 Box box_provided(Stmt s, std::string fn,
-                 const Scope<Interval> &scope = Scope<Interval>(),
+                 const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                  const FuncValueBounds &func_bounds = FuncValueBounds());
 
 Box box_touched(Expr e, std::string fn,
-                const Scope<Interval> &scope = Scope<Interval>(),
+                const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = FuncValueBounds());
 Box box_touched(Stmt s, std::string fn,
-                const Scope<Interval> &scope = Scope<Interval>(),
+                const Scope<Interval> &scope = Scope<Interval>::empty_scope(),
                 const FuncValueBounds &func_bounds = FuncValueBounds());
 // @}
 
