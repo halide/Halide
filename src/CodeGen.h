@@ -23,6 +23,7 @@ class ExecutionEngine;
 class AllocaInst;
 class Constant;
 class Triple;
+class MDNode;
 }
 
 #include <map>
@@ -120,6 +121,7 @@ protected:
     llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
+    llvm::MDNode *very_likely_branch;
     //@}
 
     /** The target we're generating code for */

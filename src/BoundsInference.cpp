@@ -586,7 +586,8 @@ public:
         // Figure out how much of it we're producing
         Box box;
         if (producing >= 0) {
-            box = box_provided(body, stages[producing].name, Scope<Interval>(), func_bounds);
+            Scope<Interval> empty_scope;
+            box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());
         }
 

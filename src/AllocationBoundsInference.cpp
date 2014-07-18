@@ -30,7 +30,8 @@ class AllocationInference : public IRMutator {
         internal_assert(iter != env.end());
         Function f = iter->second;
 
-        Box b = box_touched(op->body, op->name, Scope<Interval>(), func_bounds);
+        Scope<Interval> empty_scope;
+        Box b = box_touched(op->body, op->name, empty_scope, func_bounds);
         if (touched_by_extern.count(f.name())) {
             // The region touched is at least the region required at this
             // loop level of the first stage (this is important for inputs
