@@ -226,11 +226,17 @@ string CodeGen_PTX_Dev::mcpu() const {
 string CodeGen_PTX_Dev::mattrs() const {
     if (target.features & (Target::CUDACapability32 |
                            Target::CUDACapability50)) {
-        // Need ptx isa 4.0
+        // Need ptx isa 4.0. llvm < 3.5 doesn't support it.
+        #if LLVM_VERSION < 35
+        user_error << "This version of Halide was linked against llvm 3.4 or earlier, "
+                   << "which does not support cuda compute capability 3.2 or 5.0\n";
+        return "";
+        #else
         return "+ptx40";
+        #endif
     } else {
-        // Default to ptx isa 3.2
-        return "+ptx32";
+        // Use the default. For llvm 3.5 it's ptx 3.2.
+        return "";
     }
 
 }
