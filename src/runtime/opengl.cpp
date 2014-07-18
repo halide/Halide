@@ -827,14 +827,20 @@ EXPORT int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     GLint width = buf->extent[0];
     GLint height = buf->extent[1];
 
-    bool is_interleaved =
-        (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
-    if (is_interleaved) {
-        ST.PixelStorei(GL_UNPACK_ROW_LENGTH, buf->extent[1]);
+    // To use TexSubImage2D directly, the colors must be stored interleaved
+    // and rows must be stored consecutively.
+    bool is_interleaved = (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
+    bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
+    if (is_interleaved && is_packed) {
         ST.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        uint8_t *host_ptr = buf->host + buf->elem_size *
+            (buf->min[0] * buf->stride[0] +
+             buf->min[1] * buf->stride[1] +
+             buf->min[2] * buf->stride[2] +
+             buf->min[3] * buf->stride[3]);
         ST.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
-                         format, type, buf->host);
+                         format, type, host_ptr);
         CHECK_GLERROR(1);
     } else {
         #ifdef DEBUG
@@ -871,13 +877,6 @@ EXPORT int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
 
 // Copy pixel data from a texture to a CPU buffer.
 static int GetPixels(void *user_context, buffer_t *buf, GLint format, GLint type, void *dest) {
-#if 0
-    // glGetImage isn't supported in OpenGL ES, so this path is currently
-    // commented out.
-    ST.BindTexture(GL_TEXTURE_2D, tex);
-    ST.GetTexImage(GL_TEXTURE_2D, 0, format, type, dest);
-    ST.BindTexture(GL_TEXTURE_2D, 0);
-#else
     GLuint tex = get_texture_id(buf);
     ST.BindFramebuffer(GL_FRAMEBUFFER, ST.framebuffer_id);
     ST.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -893,7 +892,6 @@ static int GetPixels(void *user_context, buffer_t *buf, GLint format, GLint type
     }
     ST.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
     ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
-#endif
     return 0;
 }
 
@@ -924,18 +922,27 @@ EXPORT int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         return 1;
     }
     GLint width = buf->extent[0], height = buf->extent[1];
+
+    // To download the texture directly, the colors must be stored interleaved
+    // and rows must be stored consecutively.
     bool is_interleaved = (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
-    if (is_interleaved) {
-        // TODO: GL_UNPACK_ROW_LENGTH
-        ST.PixelStorei(GL_PACK_ROW_LENGTH, buf->extent[1]);
+    bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
+    if (is_interleaved && is_packed) {
         ST.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        GetPixels(user_context, buf, format, type, buf->host);
+        uint8_t *host_ptr = buf->host + buf->elem_size *
+            (buf->min[0] * buf->stride[0] +
+             buf->min[1] * buf->stride[1] +
+             buf->min[2] * buf->stride[2] +
+             buf->min[3] * buf->stride[3]);
+        GetPixels(user_context, buf, format, type, host_ptr);
     } else {
         #ifdef DEBUG
-        halide_printf(user_context, "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
+        halide_printf(user_context,
+                      "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
         #endif
 
-        size_t size = width * height * buf->extent[2] * buf->elem_size;
+        size_t stride = width * buf->extent[2] * buf->elem_size;
+        size_t size = height * stride;
         uint8_t *tmp = (uint8_t*)halide_malloc(user_context, size);
         if (!tmp) {
             halide_error(user_context, "halide_malloc failed inside copy_to_host\n");
