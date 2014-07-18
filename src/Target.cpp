@@ -474,6 +474,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_opengl_create_context",
                        "halide_set_custom_print",
                        "halide_print",
+                       "halide_set_cache_size",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -513,46 +514,46 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 namespace Internal {
 
 /** When JIT-compiling on 32-bit windows, we need to rewrite calls 
-	to name-mangled win32 api calls to non-name-mangled versions. */
+        to name-mangled win32 api calls to non-name-mangled versions. */
 void undo_win32_name_mangling(llvm::Module *m) {
-	llvm::IRBuilder<> builder(m->getContext());
-	// For every function prototype...
-	for (llvm::Module::iterator iter = m->begin();
+        llvm::IRBuilder<> builder(m->getContext());
+        // For every function prototype...
+        for (llvm::Module::iterator iter = m->begin();
          iter != m->end(); ++iter) {
-		llvm::Function *f = (llvm::Function *)(iter);
-		string n = f->getName();
-		// if it's a __stdcall call that starts with \01_, then we're making a win32 api call
-		if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
-			n.size() > 2 && n[0] == 1 && n[1] == '_') {
-			
-			// Unmangle the name.
-			string unmangled_name = n.substr(2);
-			size_t at = unmangled_name.rfind('@');
-			unmangled_name = unmangled_name.substr(0, at);
+                llvm::Function *f = (llvm::Function *)(iter);
+                string n = f->getName();
+                // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
+                if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
+                        n.size() > 2 && n[0] == 1 && n[1] == '_') {
+                        
+                        // Unmangle the name.
+                        string unmangled_name = n.substr(2);
+                        size_t at = unmangled_name.rfind('@');
+                        unmangled_name = unmangled_name.substr(0, at);
 
-			// Extern declare the unmangled version.
-			llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
-			unmangled->setCallingConv(f->getCallingConv());
-			
-			// Add a body to the mangled version that calls the unmangled version.
-			llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
-			builder.SetInsertPoint(block);
+                        // Extern declare the unmangled version.
+                        llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
+                        unmangled->setCallingConv(f->getCallingConv());
+                        
+                        // Add a body to the mangled version that calls the unmangled version.
+                        llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
+                        builder.SetInsertPoint(block);
 
-			vector<llvm::Value *> args;
-			for (llvm::Function::arg_iterator iter = f->arg_begin();
-				iter != f->arg_end(); ++iter) {
-				args.push_back(iter);
-			}
-				
-			llvm::CallInst *c = builder.CreateCall(unmangled, args);
-			c->setCallingConv(f->getCallingConv());
+                        vector<llvm::Value *> args;
+                        for (llvm::Function::arg_iterator iter = f->arg_begin();
+                                iter != f->arg_end(); ++iter) {
+                                args.push_back(iter);
+                        }
+                                
+                        llvm::CallInst *c = builder.CreateCall(unmangled, args);
+                        c->setCallingConv(f->getCallingConv());
 
-			if (f->getReturnType()->isVoidTy()) {
-				builder.CreateRetVoid();
-			} else {
-				builder.CreateRet(c);
-			}
-		}
+                        if (f->getReturnType()->isVoidTy()) {
+                                builder.CreateRetVoid();
+                        } else {
+                                builder.CreateRet(c);
+                        }
+                }
     }
 }
 
@@ -657,7 +658,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64));
             }
-	}
+        }
     } else if (t.features & Target::OpenGL) {
         if (t.features & Target::GPUDebug) {
             modules.push_back(get_initmod_opengl_debug(c, bits_64));
