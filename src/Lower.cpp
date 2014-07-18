@@ -1233,7 +1233,8 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         }
     }
 
-    map<string, Box> boxes = boxes_touched(s, Scope<Interval>(), fb);
+    Scope<Interval> empty_scope;
+    map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
