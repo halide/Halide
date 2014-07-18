@@ -23,6 +23,7 @@ class ExecutionEngine;
 class AllocaInst;
 class Constant;
 class Triple;
+class MDNode;
 }
 
 #include <map>
@@ -111,7 +112,6 @@ protected:
     static bool llvm_initialized;
     static bool llvm_X86_enabled;
     static bool llvm_ARM_enabled;
-    static bool llvm_ARM64_enabled;
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
 
@@ -121,6 +121,7 @@ protected:
     llvm::LLVMContext *context;
     llvm::IRBuilder<true, llvm::ConstantFolder, llvm::IRBuilderDefaultInserter<true> > *builder;
     llvm::Value *value;
+    llvm::MDNode *very_likely_branch;
     //@}
 
     /** The target we're generating code for */

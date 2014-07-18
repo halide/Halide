@@ -1235,7 +1235,8 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         }
     }
 
-    map<string, Box> boxes = boxes_touched(s, Scope<Interval>(), fb);
+    Scope<Interval> empty_scope;
+    map<string, Box> boxes = boxes_touched(s, empty_scope, fb);
 
     // Now iterate through all the buffers, creating a list of lets
     // and a list of asserts.
@@ -1707,7 +1708,7 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
-    s = simplify(s, false);
+    s = simplify_exprs(s);
     debug(2) << "Simplified: \n" << s << "\n\n";
 
     debug(1) << "Dynamically skipping stages...\n";

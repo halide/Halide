@@ -152,24 +152,23 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition) {
 
-    Allocation allocation;
     Value *llvm_size = NULL;
-
-    int32_t constant_size;
-    if (constant_allocation_size(extents, name, constant_size)) {
-        int64_t stack_bytes = constant_size * type.bytes();
+    int64_t stack_bytes = 0;
+    int32_t constant_bytes = 0;
+    if (constant_allocation_size(extents, name, constant_bytes)) {
+        constant_bytes *= type.bytes();
+        stack_bytes = constant_bytes;
 
         if (stack_bytes > ((int64_t(1) << 31) - 1)) {
             user_error << "Total size for allocation " << name << " is constant but exceeds 2^31 - 1.";
-        } else if (stack_bytes <= 1024 * 8) {
+        } else if (stack_bytes <= 1024 * 16) {
             // Round up to nearest multiple of 32.
-            allocation.stack_size = static_cast<int32_t>(((stack_bytes + 31)/32)*32);
+            stack_bytes = ((stack_bytes + 31)/32)*32;
         } else {
-            allocation.stack_size = 0;
-            llvm_size = codegen(Expr(static_cast<int32_t>(stack_bytes)));
+            stack_bytes = 0;
+            llvm_size = codegen(Expr(static_cast<int32_t>(constant_bytes)));
         }
     } else {
-        allocation.stack_size = 0;
         llvm_size = codegen_allocation_size(name, type, extents);
     }
 
@@ -181,16 +180,41 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
                                           ConstantInt::get(llvm_size->getType(), 0));
     }
 
-    llvm::Type *llvm_type = llvm_type_of(type);
+    Allocation allocation;
+    allocation.constant_bytes = constant_bytes;
+    allocation.stack_bytes = stack_bytes;
+    allocation.ptr = NULL;
+    if (stack_bytes != 0) {
+        // Try to find a free stack allocation we can use.
+        vector<Allocation>::iterator free = free_stack_allocs.end();
+        for (free = free_stack_allocs.begin(); free != free_stack_allocs.end(); ++free) {
+            AllocaInst *alloca_inst = dyn_cast<AllocaInst>(free->ptr);
+            llvm::Function *allocated_in = alloca_inst ? alloca_inst->getParent()->getParent() : NULL;
+            llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
-    if (allocation.stack_size) {
+            if (allocated_in == current_func &&
+                free->stack_bytes >= stack_bytes) {
+                break;
+            }
+        }
+        if (free != free_stack_allocs.end()) {
+            debug(4) << "Reusing freed stack allocation of " << free->stack_bytes
+                     << " bytes for allocation " << name
+                     << " of " << stack_bytes << " bytes.\n";
+            // Use a free alloc we found.
+            allocation.ptr = free->ptr;
+            allocation.stack_bytes = free->stack_bytes;
 
-        // We used to do the alloca locally and save and restore the
-        // stack pointer, but this makes llvm generate streams of
-        // spill/reloads.
-        Value *ptr = create_alloca_at_entry(i32x8, allocation.stack_size/32, name);
-        allocation.ptr = builder->CreatePointerCast(ptr, llvm_type->getPointerTo());
-
+            // This allocation isn't free anymore.
+            free_stack_allocs.erase(free);
+        } else {
+            debug(4) << "Allocating " << stack_bytes << " bytes on the stack for " << name << "\n";
+            // We used to do the alloca locally and save and restore the
+            // stack pointer, but this makes llvm generate streams of
+            // spill/reloads.
+            allocation.ptr = create_alloca_at_entry(i32x8, stack_bytes/32, name);
+            allocation.stack_bytes = stack_bytes;
+        }
     } else {
         // call malloc
         llvm::Function *malloc_fn = module->getFunction("halide_malloc");
@@ -201,7 +225,12 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
         ++arg_iter;  // skip the user context *
         llvm_size = builder->CreateIntCast(llvm_size, arg_iter->getType(), false);
 
-        debug(4) << "Creating call to halide_malloc\n";
+        debug(4) << "Creating call to halide_malloc for allocation " << name
+                 << " of size " << type.bytes();
+        for (size_t i = 0; i < extents.size(); i++) {
+            debug(4) << " x " << extents[i];
+        }
+        debug(4) << "\n";
         Value *args[2] = { get_user_context(), llvm_size };
 
         CallInst *call = builder->CreateCall(malloc_fn, args);
@@ -232,8 +261,9 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     llvm::Function *allocated_in = call_inst ? call_inst->getParent()->getParent() : NULL;
     llvm::Function *current_func = builder->GetInsertBlock()->getParent();
 
-    if (alloc.stack_size) {
-        // Free is a no-op for stack allocations
+    if (alloc.stack_bytes) {
+        // Remember this allocation so it can be re-used by a later allocation.
+        free_stack_allocs.push_back(alloc);
     } else if (allocated_in == current_func) { // Skip over allocations from outside this function.
         // Call free
         llvm::Function *free_fn = module->getFunction("halide_free");
@@ -244,10 +274,6 @@ void CodeGen_Posix::free_allocation(const std::string &name) {
     }
 
     allocations.pop(name);
-}
-
-void CodeGen_Posix::destroy_allocation(Allocation alloc) {
-    // Heap allocations have already been freed.
 }
 
 void CodeGen_Posix::visit(const Allocate *alloc) {
@@ -266,9 +292,6 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     // Should have been freed
     internal_assert(!sym_exists(alloc->name + ".host"));
     internal_assert(!allocations.contains(alloc->name));
-
-    debug(2) << "Destroying allocation " << alloc->name << "\n";
-    destroy_allocation(allocation);
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
@@ -301,6 +324,8 @@ void CodeGen_Posix::prepare_for_early_exit() {
             allocations.push(names[i], stash[j-1]);
         }
     }
+
+    free_stack_allocs.clear();
 }
 
 }}

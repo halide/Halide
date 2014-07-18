@@ -144,17 +144,18 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
 }
 
 WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+    // halide_dev_free, at present, can be exposed to clients and they
+    // should be allowed to call halide_dev_free on any buffer_t
+    // including ones that have never been used with a GPU.
+    if (buf->dev == 0) {
+        return 0;
+    }
+
     DEBUG_PRINTF( user_context, "CUDA: halide_dev_free (user_context: %p, buf: %p)\n", user_context, buf );
 
     CudaContext ctx(user_context);
     if (ctx.error != CUDA_SUCCESS)
         return ctx.error;
-
-    // halide_dev_free, at present, can be exposed to clients and they
-    // should be allowed to call halide_dev_free on any buffer_t
-    // including ones that have never been used with a GPU.
-    if (buf->dev == 0)
-        return 0;
 
     #ifdef DEBUG
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -200,23 +201,14 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
         return CUDA_ERROR_NO_DEVICE;
     }
 
-    char *device_str = getenv("HL_GPU_DEVICE");
-
-    CUdevice dev;
-    // Get device
-    CUresult status;
-    if (device_str) {
-        status = cuDeviceGet(&dev, atoi(device_str));
-    } else {
-        // Try to get a device >0 first, since 0 should be our display device
-        // For now, don't try devices > 2 to maintain compatibility with previous behavior.
-        if (deviceCount > 2)
-            deviceCount = 2;
-        for (int id = deviceCount - 1; id >= 0; id--) {
-            status = cuDeviceGet(&dev, id);
-            if (status == CUDA_SUCCESS) break;
-        }
+    int device = halide_get_gpu_device(user_context);
+    if (device == -1) {
+        device = deviceCount - 1;
     }
+
+    // Get device
+    CUdevice dev;
+    CUresult status = cuDeviceGet(&dev, device);
     if (status != CUDA_SUCCESS) {
         halide_error(user_context, "CUDA: Failed to get device\n");
         return status;
@@ -440,6 +432,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 }
 
 WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
+    if (!buf->dev_dirty) {
+        return 0;
+    }
+
     DEBUG_PRINTF( user_context, "CUDA: halide_copy_to_host (user_context: %p, buf: %p)\n", user_context, buf );
 
     CudaContext ctx(user_context);
@@ -447,6 +443,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
+    // Need to check dev_dirty again, in case another thread did the
+    // copy_to_host before the serialization point above.
     if (buf->dev_dirty) {
         #ifdef DEBUG
         uint64_t t_before = halide_current_time_ns(user_context);

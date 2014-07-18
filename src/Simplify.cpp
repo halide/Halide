@@ -45,10 +45,11 @@ int do_indirect_int_cast(Type t, int x) {
 
 class Simplify : public IRMutator {
 public:
-    Simplify(bool r, const Scope<Interval> &bi, const Scope<ModulusRemainder> &ai) :
-        remove_dead_lets(r),
-        bounds_info(bi),
-        alignment_info(ai) {}
+    Simplify(bool r, const Scope<Interval> *bi, const Scope<ModulusRemainder> *ai) :
+        remove_dead_lets(r) {
+        alignment_info.set_containing_scope(ai);
+        bounds_info.set_containing_scope(bi);
+    }
 private:
     bool remove_dead_lets;
 
@@ -303,15 +304,26 @@ private:
             // Additions that cancel an inner term
             // (a - b) + b
             expr = sub_a->a;
+        } else if (sub_a && is_zero(sub_a->a)) {
+            expr = mutate(b - sub_a->b);
         } else if (sub_b && equal(a, sub_b->b)) {
             // a + (b - a)
             expr = sub_b->a;
+        } else if (sub_b && is_zero(sub_b->a)) {
+            // a + (0 - b)
+            expr = a - sub_b->b;
         } else if (sub_a && sub_b && equal(sub_a->b, sub_b->a)) {
             // (a - b) + (b - c) -> a - c
             expr = mutate(sub_a->a - sub_b->b);
         } else if (sub_a && sub_b && equal(sub_a->a, sub_b->b)) {
             // (a - b) + (c - a) -> c - b
             expr = mutate(sub_b->a - sub_a->b);
+        } else if (mul_b && is_negative_const(mul_b->b)) {
+            // a + b*-x -> a - b*x
+            expr = mutate(a - mul_b->a * (-mul_b->b));
+        } else if (mul_a && is_negative_const(mul_a->b)) {
+            // a*-x + b -> b - a*x
+            expr = mutate(b - mul_a->a * (-mul_a->b));
         } else if (cast_a && cast_b &&
                    cast_a->value.type() == cast_b->value.type() &&
                    (op->type.is_int() || op->type.is_uint()) &&
@@ -482,6 +494,9 @@ private:
         } else if (sub_b) {
             // a - (b - c) -> a + (c - b)
             expr = mutate(a + (sub_b->b - sub_b->a));
+        } else if (mul_b && is_negative_const(mul_b->b)) {
+            // a - b*-x -> a + b*x
+            expr = mutate(a + mul_b->a * (-mul_b->b));
         } else if (add_b && is_simple_const(add_b->b)) {
             expr = mutate((a - add_b->a) - add_b->b);
         } else if (sub_a && is_simple_const(sub_a->a) && is_simple_const(b)) {
@@ -555,6 +570,7 @@ private:
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
+        const Sub *sub_a = a.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
 
         if (is_zero(b)) {
@@ -581,6 +597,8 @@ private:
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
         } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
+        } else if (sub_a && is_negative_const(b)) {
+            expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -b));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
@@ -727,7 +745,7 @@ private:
     void visit(const Mod *op) {
         Expr a = mutate(op->a), b = mutate(op->b);
 
-        int ia = 0, ib = 0;
+        int ia = 0, ia2 = 0, ib = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
@@ -780,6 +798,12 @@ private:
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % ib, ramp_a->width));
+        } else if (ramp_a && const_int(ramp_a->base, &ia) &&
+                   const_int(ramp_a->stride, &ia2) &&
+                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+                   ia/ib == (ia + ramp_a->width*ia2)/ib) {
+            // ramp(x, y, w) % broadcast(z, w) = ramp(x % z, y, w) if x/z == (x + w*y)/z
+            expr = mutate(Ramp::make(ramp_a->base % ib, ramp_a->stride, ramp_a->width));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1590,6 +1614,13 @@ private:
                 continue;
             }
 
+            if (!or_chain) {
+                then_case = substitute(next, const_true(), then_case);
+            }
+            if (!and_chain) {
+                else_case = substitute(next, const_false(), else_case);
+            }
+
             const EQ *eq = next.as<EQ>();
             const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
 
@@ -1606,6 +1637,14 @@ private:
                 }
                 if (!and_chain) {
                     else_case = substitute(var->name, const_false(), else_case);
+                }
+            } else if (eq && is_const(eq->b)) {
+                // some_expr = const
+                if (!or_chain) {
+                    then_case = substitute(eq->a, eq->b, then_case);
+                }
+                if (!and_chain) {
+                    else_case = substitute(eq->a, eq->b, else_case);
                 }
             }
         }
@@ -1688,6 +1727,7 @@ private:
             const Div *div = new_value.as<Div>();
             const Mod *mod = new_value.as<Mod>();
             const Ramp *ramp = new_value.as<Ramp>();
+            const Cast *cast = new_value.as<Cast>();
             const Broadcast *broadcast = new_value.as<Broadcast>();
 
             const Variable *var_b = NULL;
@@ -1730,6 +1770,10 @@ private:
                 new_var = Variable::make(new_value.type().element_of(), new_name);
                 replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
                 new_value = broadcast->value;
+            } else if (cast) {
+                new_var = Variable::make(cast->value.type(), new_name);
+                replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
+                new_value = cast->value;
             } else {
                 break;
             }
@@ -1888,6 +1932,8 @@ private:
             // Check if both halves start with a let statement.
             const LetStmt *let_first = first.as<LetStmt>();
             const LetStmt *let_rest = rest.as<LetStmt>();
+            const IfThenElse *if_first = first.as<IfThenElse>();
+            const IfThenElse *if_rest = rest.as<IfThenElse>();
 
             // Check if first is a no-op.
             const AssertStmt *noop = first.as<AssertStmt>();
@@ -1908,6 +1954,10 @@ private:
                 }
 
                 stmt = LetStmt::make(let_first->name, let_first->value, new_block);
+            } else if (if_first && if_rest && equal(if_first->condition, if_rest->condition)) {
+                stmt = IfThenElse::make(if_first->condition,
+                                        mutate(Block::make(if_first->then_case, if_rest->then_case)),
+                                        mutate(Block::make(if_first->else_case, if_rest->else_case)));
             } else if (op->first.same_as(first) && op->rest.same_as(rest)) {
                 stmt = op;
             } else {
@@ -1921,13 +1971,13 @@ private:
 Expr simplify(Expr e, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, bounds, alignment).mutate(e);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(e);
 }
 
 Stmt simplify(Stmt s, bool remove_dead_lets,
               const Scope<Interval> &bounds,
               const Scope<ModulusRemainder> &alignment) {
-    return Simplify(remove_dead_lets, bounds, alignment).mutate(s);
+    return Simplify(remove_dead_lets, &bounds, &alignment).mutate(s);
 }
 
 class SimplifyExprs : public IRMutator {
@@ -2067,10 +2117,19 @@ void simplify_test() {
     check((x - 3) - y, (x - y) + (-3));
     check(x - (y - 2), (x - y) + 2);
     check(3 - (y - 2), 5 - y);
+    check(x - (0 - y), x + y);
+    check(x + (0 - y), x - y);
+    check((0 - x) + y, y - x);
     check(x*y - x*z, x*(y-z));
     check(x*y - z*x, x*(y-z));
     check(y*x - x*z, x*(y-z));
     check(y*x - z*x, x*(y-z));
+    check(x - y*-2, x + y*2);
+    check(x + y*-2, x - y*2);
+    check(x*-2 + y, y - x*2);
+    check(xf - yf*-2.0f, xf + y*2.0f);
+    check(xf + yf*-2.0f, xf - y*2.0f);
+    check(xf*-2.0f + yf, yf - x*2.0f);
 
     check(x*0, 0);
     check(0*x, 0);
@@ -2098,6 +2157,8 @@ void simplify_test() {
     check((y - x*4)/2, y/2 - x*2);
     check((x + 3)/2 + 7, (x + 17)/2);
     check((x/2 + 3)/5, (x + 6)/10);
+    check((x - y)*-2, (y - x)*2);
+    check((xf - yf)*-2.0f, (yf - xf)*2.0f);
 
     check(xf / 4.0f, xf * 0.25f);
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
@@ -2108,6 +2169,10 @@ void simplify_test() {
     check(Expr(Ramp::make(x*4, 1, 3)) / 4, Broadcast::make(x, 3));
     check(Expr(Ramp::make(x*8, 2, 4)) / 8, Broadcast::make(x, 4));
     check(Expr(Ramp::make(x*8, 3, 3)) / 8, Broadcast::make(x, 3));
+    check(Expr(Ramp::make(0, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
+    check(Expr(Ramp::make(8, 1, 8)) % 16, Expr(Ramp::make(8, 1, 8) % 16));
+    check(Expr(Ramp::make(16, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
+    check(Expr(Ramp::make(0, 1, 8)) % 8, Expr(Ramp::make(0, 1, 8) % 8));
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
@@ -2348,6 +2413,20 @@ void simplify_test() {
           IfThenElse::make(b1,
                            Evaluate::make(3),
                            Evaluate::make(8)));
+
+    check(IfThenElse::make(x < y,
+                           IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(0)),
+                           Evaluate::make(0)),
+          IfThenElse::make(x < y,
+                           Evaluate::make(1),
+                           Evaluate::make(0)));
+
+    check(Block::make(IfThenElse::make(x < y, Evaluate::make(1), Evaluate::make(2)),
+                      IfThenElse::make(x < y, Evaluate::make(3), Evaluate::make(4))),
+          IfThenElse::make(x < y,
+                           Block::make(Evaluate::make(1), Evaluate::make(3)),
+                           Block::make(Evaluate::make(2), Evaluate::make(4))));
+
 
 
     check(b1 || !b1, t);

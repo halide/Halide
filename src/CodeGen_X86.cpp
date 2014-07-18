@@ -176,18 +176,19 @@ namespace {
 
 // Attempt to cast an expression to a smaller type while provably not
 // losing information. If it can't be done, return an undefined Expr.
+
 Expr lossless_cast(Type t, Expr e) {
-    if (t.can_represent(e.type())) {
+    if (t == e.type()) {
         return e;
+    } else if (t.can_represent(e.type())) {
+        return cast(t, e);
     }
 
     if (const Cast *c = e.as<Cast>()) {
         if (t == c->value.type()) {
             return c->value;
-        } else if (t.can_represent(c->value.type())) {
-            return cast(t, c->value);
         } else {
-            return Expr();
+            return lossless_cast(t, c->value);
         }
     }
 
@@ -203,7 +204,7 @@ Expr lossless_cast(Type t, Expr e) {
     if (const IntImm *i = e.as<IntImm>()) {
         int x = int_cast_constant(t, i->value);
         if (x == i->value) {
-            return e;
+            return cast(t, e);
         } else {
             return Expr();
         }
@@ -227,7 +228,7 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
-    Pattern patterns[] = {
+    static Pattern patterns[] = {
         {false, false, true, Int(8, 16), "sse2.padds.b",
          _i8(clamp(wild_i16x16 + wild_i16x16, -128, 127))},
         {false, false, true, Int(8, 16), "sse2.psubs.b",
@@ -334,19 +335,16 @@ void CodeGen_X86::visit(const Div *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;
-    if (op->type == Float(32, 4) && is_one(op->a)) {
+    if (is_one(op->a) &&
+        (op->type == Float(32, 4) ||
+         ((target.features & Target::AVX) &&
+          op->type == Float(32, 8)))) {
         // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {
-            value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
+        Expr w = Variable::make(op->type, "*");
+        if (expr_match(Call::make(op->type, "sqrt_f32", vec(w), Call::Extern), op->b, matches)) {
+            value = codegen(Call::make(op->type, "inverse_sqrt_f32", matches, Call::Extern));
         } else {
-            value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
-        }
-    } else if ((target.features & Target::AVX) && op->type == Float(32, 8) && is_one(op->a)) {
-        // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8), Call::Extern), op->b, matches)) {
-            value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
-        } else {
-            value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
+            value = codegen(Call::make(op->type, "inverse_f32", vec(op->b), Call::Extern));
         }
     } else if (power_of_two && op->type.is_int()) {
         Value *numerator = codegen(op->a);
@@ -591,19 +589,6 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
-    #ifdef _WIN32
-    {
-        char buf[32];
-        size_t read;
-        getenv_s(&read, buf, "HL_NUMTHREADS");
-        if (read == 0) putenv("HL_NUMTHREADS=4");
-    }
-    #else
-    if (!getenv("HL_NUMTHREADS")) {
-        setenv("HL_NUMTHREADS", "4", 1);
-    }
-    #endif
-
     debug(2) << "Compiling to function pointers \n";
     JITCompiledModule m = cg.compile_to_function_pointers();
 
@@ -678,6 +663,8 @@ string CodeGen_X86::mcpu() const {
 string CodeGen_X86::mattrs() const {
     std::string features;
     std::string separator;
+    #if LLVM_VERSION >= 35
+    // These attrs only exist in llvm 3.5+
     if (target.features & Target::FMA) {
         features += "+fma";
         separator = " ";
@@ -690,7 +677,7 @@ string CodeGen_X86::mattrs() const {
         features += separator + "+f16c";
         separator = " ";
     }
-
+    #endif
     return features;
 }
 

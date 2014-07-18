@@ -173,8 +173,8 @@ Target parse_target_string(const std::string &target) {
                    << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
                    << "and os is linux, windows, osx, nacl, ios, or android. "
                    << "If arch or os are omitted, they default to the host. "
-                   << "Features include sse41, avx, avx2, armv7s, aarch64, cuda, "
-                   << "opencl, spir, spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
+                   << "Features include sse41, avx, avx2, armv7s, cuda, "
+                   << "opencl, no_asserts, no_bounds_query, and gpu_debug.\n"
                    << "HL_TARGET can also begin with \"host\", which sets the "
                    << "host's architecture, os, and feature set, with the "
                    << "exception of the GPU runtimes, which default to off.\n"
@@ -256,8 +256,6 @@ bool Target::merge_string(const std::string &target) {
             features |= (Target::SSE41 | Target::AVX | Target::AVX2);
         } else if (tok == "armv7s") {
             features |= Target::ARMv7s;
-        } else if (tok == "aarch64") {
-            features |= Target::AArch64Backend;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
         } else if (tok == "opencl") {
@@ -320,7 +318,7 @@ std::string Target::to_string() const {
   };
   const char* const feature_names[] = {
     "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
-    "no_asserts", "no_bounds_query", "armv7s", "aarch64", "cl_doubles",
+    "no_asserts", "no_bounds_query", "armv7s", "cl_doubles",
     "fma", "fma4", "f16c"
   };
   string result = string(arch_names[arch])
@@ -358,7 +356,11 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
     }
 
 #define DECLARE_NO_INITMOD(mod)                                         \
-    llvm::Module *get_initmod_##mod(LLVMContext *context) {             \
+    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool) {             \
+        user_error << "Halide was compiled without support for this target\n"; \
+        return NULL;                                                    \
+    }                                                                   \
+    llvm::Module *get_initmod_##mod##_ll(llvm::LLVMContext *) {         \
         user_error << "Halide was compiled without support for this target\n"; \
         return NULL;                                                    \
     }
@@ -413,9 +415,19 @@ DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_CPP_INITMOD(posix_print)
+DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 
+#ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
+#else
+DECLARE_NO_INITMOD(arm)
+#endif
+#ifdef WITH_AARCH64
+DECLARE_LL_INITMOD(aarch64)
+#else
+DECLARE_NO_INITMOD(aarch64)
+#endif
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
@@ -439,6 +451,11 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         #if LLVM_VERSION >= 35
         modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
         #endif
+        // This is a workaround to silence some linkage warnings during
+        // tests: normally all modules will have the same triple,
+        // but on 64-bit targets some may have "x86_64-unknown-unknown-unknown"
+        // as a workaround for -m64 requiring an explicit 64-bit target.
+        modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
@@ -464,17 +481,24 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_set_custom_do_task",
                        "halide_shutdown_thread_pool",
                        "halide_shutdown_trace",
+                       "halide_set_trace_file",
                        "halide_set_cuda_context",
                        "halide_set_cl_context",
                        "halide_dev_sync",
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",
+                       "halide_set_num_threads",
                        "halide_opengl_get_proc_address",
                        "halide_opengl_create_context",
                        "halide_set_custom_print",
                        "halide_print",
-                       "halide_set_cache_size",
+                       "halide_set_gpu_device",
+                       "halide_set_ocl_platform_name",
+                       "halide_set_ocl_device_type",
+                       "halide_memoization_cache_set_size",
+                       "halide_memoization_cache_lookup",
+                       "halide_memoization_cache_store",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -516,44 +540,43 @@ namespace Internal {
 /** When JIT-compiling on 32-bit windows, we need to rewrite calls 
         to name-mangled win32 api calls to non-name-mangled versions. */
 void undo_win32_name_mangling(llvm::Module *m) {
-        llvm::IRBuilder<> builder(m->getContext());
-        // For every function prototype...
-        for (llvm::Module::iterator iter = m->begin();
-         iter != m->end(); ++iter) {
-                llvm::Function *f = (llvm::Function *)(iter);
-                string n = f->getName();
-                // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
-                if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
-                        n.size() > 2 && n[0] == 1 && n[1] == '_') {
-                        
-                        // Unmangle the name.
-                        string unmangled_name = n.substr(2);
-                        size_t at = unmangled_name.rfind('@');
-                        unmangled_name = unmangled_name.substr(0, at);
+    llvm::IRBuilder<> builder(m->getContext());
+    // For every function prototype...
+    for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
+        llvm::Function *f = (llvm::Function *)(iter);
+        string n = f->getName();
+        // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
+        if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
+            n.size() > 2 && n[0] == 1 && n[1] == '_') {
 
-                        // Extern declare the unmangled version.
-                        llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
-                        unmangled->setCallingConv(f->getCallingConv());
-                        
-                        // Add a body to the mangled version that calls the unmangled version.
-                        llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
-                        builder.SetInsertPoint(block);
+            // Unmangle the name.
+            string unmangled_name = n.substr(2);
+            size_t at = unmangled_name.rfind('@');
+            unmangled_name = unmangled_name.substr(0, at);
 
-                        vector<llvm::Value *> args;
-                        for (llvm::Function::arg_iterator iter = f->arg_begin();
-                                iter != f->arg_end(); ++iter) {
-                                args.push_back(iter);
-                        }
-                                
-                        llvm::CallInst *c = builder.CreateCall(unmangled, args);
-                        c->setCallingConv(f->getCallingConv());
+            // Extern declare the unmangled version.
+            llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
+            unmangled->setCallingConv(f->getCallingConv());
 
-                        if (f->getReturnType()->isVoidTy()) {
-                                builder.CreateRetVoid();
-                        } else {
-                                builder.CreateRet(c);
-                        }
-                }
+            // Add a body to the mangled version that calls the unmangled version.
+            llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
+            builder.SetInsertPoint(block);
+
+            vector<llvm::Value *> args;
+            for (llvm::Function::arg_iterator iter = f->arg_begin();
+                 iter != f->arg_end(); ++iter) {
+                args.push_back(iter);
+            }
+
+            llvm::CallInst *c = builder.CreateCall(unmangled, args);
+            c->setCallingConv(f->getCallingConv());
+
+            if (f->getReturnType()->isVoidTy()) {
+                builder.CreateRetVoid();
+            } else {
+                builder.CreateRet(c);
+            }
+        }
     }
 }
 
@@ -609,6 +632,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
 
     // These modules are always used
+    modules.push_back(get_initmod_gpu_device_selection(c, bits_64));
     modules.push_back(get_initmod_posix_math(c, bits_64));
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
@@ -623,7 +647,11 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_x86_ll(c));
     }
     if (t.arch == Target::ARM) {
-        modules.push_back(get_initmod_arm_ll(c));
+        if (t.bits == 64) {
+          modules.push_back(get_initmod_aarch64_ll(c));
+        } else {
+          modules.push_back(get_initmod_arm_ll(c));
+        }
     }
     if (t.features & Target::SSE41) {
         modules.push_back(get_initmod_x86_sse41_ll(c));

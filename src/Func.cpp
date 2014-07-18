@@ -609,8 +609,8 @@ ScheduleHandle &ScheduleHandle::allow_race_conditions() {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::set_cached() {
-    schedule.cached() = true;
+ScheduleHandle &ScheduleHandle::memoize() {
+    schedule.memoized() = true;
     return *this;
 }
 
@@ -941,6 +941,12 @@ Func &Func::allow_race_conditions() {
     return *this;
 }
 
+Func &Func::memoize() {
+    invalidate_cache();
+    ScheduleHandle(func.schedule()).memoize();
+    return *this;
+}
+
 ScheduleHandle Func::specialize(Expr c) {
     invalidate_cache();
     return ScheduleHandle(func.schedule()).specialize(c);
@@ -1261,18 +1267,6 @@ Func &Func::compute_root() {
     if (func.schedule().store_level().is_inline()) {
         func.schedule().store_level() = LoopLevel::root();
     }
-    return *this;
-}
-
-Func &Func::compute_cached() {
-    invalidate_cache();
-    if (func.schedule().compute_level().is_inline()) {
-        func.schedule().compute_level() = LoopLevel::root();
-    }
-    if (func.schedule().store_level().is_inline()) {
-        func.schedule().store_level() = LoopLevel::root();
-    }
-    func.schedule().cached() = true;
     return *this;
 }
 
@@ -2039,10 +2033,10 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     }
 }
 
-void Func::set_cache_size(uint64_t size) {
+void Func::memoization_cache_set_size(uint64_t size) {
     cache_size = size;
-    if (compiled_module.set_cache_size) {
-        compiled_module.set_cache_size(size);
+    if (compiled_module.memoization_cache_set_size) {
+        compiled_module.memoization_cache_set_size(size);
     }
 }
 
@@ -2137,7 +2131,7 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
     compiled_module.set_custom_print(custom_print);
-    compiled_module.set_cache_size(cache_size);
+    compiled_module.memoization_cache_set_size(cache_size);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2218,7 +2212,7 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_cache_size(cache_size);
+    compiled_module.memoization_cache_set_size(cache_size);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {

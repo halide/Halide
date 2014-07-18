@@ -17,7 +17,7 @@ public class CameraPreview extends SurfaceView
 
     private Camera mCamera;
     private SurfaceView mFiltered;
-    private byte[] previewData;
+    private byte[] mPreviewData;
 
     // Link to native Halide code
     static {
@@ -29,8 +29,7 @@ public class CameraPreview extends SurfaceView
         super(context);
         mFiltered = filtered;
         mFiltered.getHolder().setFormat(ImageFormat.YV12);
-
-        previewData = null;
+        mPreviewData = null;
 
         // Install a SurfaceHolder.Callback so we get notified when the
         // underlying surface is created and destroyed.
@@ -39,69 +38,77 @@ public class CameraPreview extends SurfaceView
 
     public void onPreviewFrame(byte[] data, Camera camera) {
         if (camera != mCamera) {
+            Log.d(TAG, "Unknown Camera!");
             return;
         }
         if (mFiltered.getHolder().getSurface().isValid()) {
             Camera.Size s = camera.getParameters().getPreviewSize();
             processFrame(data, s.width, s.height, mFiltered.getHolder().getSurface());
+        } else {
+            Log.d(TAG, "Invalid Surface!");
         }
 
         // re-enqueue this buffer
         camera.addCallbackBuffer(data);
     }
 
-    private void configureCamera(SurfaceHolder holder) {
+    private void startPreview(SurfaceHolder holder) {
+        if (mCamera == null) {
+            return;
+        }
         try {
-            Camera.Parameters p = mCamera.getParameters();
-            Camera.Size s = p.getPreviewSize();
-            p.setPreviewFormat(ImageFormat.YV12);
-            if (previewData == null) {
-                previewData = new byte[(s.width * s.height * 3) / 2];
-            }
-            mCamera.addCallbackBuffer(previewData);
-            mCamera.setParameters(p);
+            configureCamera();
             mCamera.setPreviewCallbackWithBuffer(this);
             mCamera.setPreviewDisplay(holder);
             mCamera.startPreview();
-        } catch (IOException e) {
-            Log.d(TAG, "Error setting camera preview: " + e.getMessage());
+        } catch (Exception e){
+            Log.d(TAG, "Error starting camera preview: " + e.getMessage());
         }
+    }
+
+    private void stopPreview() {
+        if (mCamera == null) {
+            return;
+        }
+        try {
+              mCamera.stopPreview();
+        } catch (Exception e){
+              // ignore: tried to stop a non-existent preview
+              Log.d(TAG, "tried to stop a non-existent preview");
+        }
+    }
+    private void configureCamera() {
+        Camera.Parameters p = mCamera.getParameters();
+        Camera.Size s = p.getPreviewSize();
+        Log.d(TAG, "Camera Preview Size: " + s.width + "x" + s.height);
+        p.setPreviewFormat(ImageFormat.YV12);
+        if (mPreviewData == null) {
+            int stride = ((s.width + 15) / 16) * 16;
+            int y_size = stride * s.height;
+            int c_stride = ((stride/2 + 15) / 16) * 16;
+            int c_size = c_stride * s.height/2;
+            int size = y_size + c_size * 2;
+            mPreviewData = new byte[size];
+        }
+        mCamera.addCallbackBuffer(mPreviewData);
+        mCamera.setParameters(p);
     }
 
     public void surfaceCreated(SurfaceHolder holder) {
-        // The Surface has been created, now tell the camera where to draw the preview.
-        if (mCamera != null) {
-            configureCamera(holder);
-        }
+        Log.d(TAG, "surfaceCreated");
+        startPreview(holder);
     }
 
     public void surfaceDestroyed(SurfaceHolder holder) {
-        // empty. Take care of releasing the Camera preview in your activity.
+        Log.d(TAG, "surfaceDestroyed");
+        stopPreview();
     }
 
     public void surfaceChanged(SurfaceHolder holder, int format, int w, int h) {
-        // If your preview can change or rotate, take care of those events here.
-        // Make sure to stop the preview before resizing or reformatting it.
-
-        if (getHolder().getSurface() == null){
-          // preview surface does not exist
-          return;
-        }
-
-        // stop preview before making changes
-        try {
-            mCamera.stopPreview();
-        } catch (Exception e){
-          // ignore: tried to stop a non-existent preview
-        }
-
-        // set preview size and make any resize, rotate or
-        // reformatting changes here
-
-        // start preview with new settings
-        if (mCamera != null) {
-            configureCamera(holder);
-        }
+        Log.d(TAG, "surfaceChanged");
+        stopPreview();
+        configureCamera();
+        startPreview(holder);
     }
 
     public void setCamera(Camera c) {
@@ -110,7 +117,7 @@ public class CameraPreview extends SurfaceView
         }
         mCamera = c;
         if (mCamera != null) {
-            configureCamera(getHolder());
+            startPreview(getHolder());
         }
     }
 }

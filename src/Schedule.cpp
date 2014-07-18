@@ -18,11 +18,11 @@ struct ScheduleContents {
     std::vector<Bound> bounds;
     std::vector<Specialization> specializations;
     ReductionDomain reduction_domain;
-    bool cached;
+    bool memoized;
     bool touched;
     bool allow_race_conditions;
 
-    ScheduleContents() : cached(false), touched(false), allow_race_conditions(false) {};
+    ScheduleContents() : memoized(false), touched(false), allow_race_conditions(false) {};
 };
 
 
@@ -38,12 +38,12 @@ EXPORT void destroy<ScheduleContents>(const ScheduleContents *p) {
 
 Schedule::Schedule() : contents(new ScheduleContents) {}
 
-bool &Schedule::cached() {
-    return contents.ptr->cached;
+bool &Schedule::memoized() {
+    return contents.ptr->memoized;
 }
 
-bool Schedule::cached() const {
-    return contents.ptr->cached;
+bool Schedule::memoized() const {
+    return contents.ptr->memoized;
 }
 
 bool &Schedule::touched() {

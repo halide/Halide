@@ -115,10 +115,10 @@ public:
     Schedule(const Schedule &other) : contents(other.contents) {}
     EXPORT Schedule();
 
-    /** This flag is set to true if the schedule is set to compute_cached. */
+    /** This flag is set to true if the schedule is memoized. */
     // @{
-    bool &cached();
-    bool cached() const;
+    bool &memoized();
+    bool memoized() const;
     // @}
 
     /** This flag is set to true if the dims list has been manipulated
@@ -132,8 +132,7 @@ public:
     // @}
 
     /** The traversal of the domain of a function can have some of its
-     * dimensions split into sub-dimensions. See
-     * \ref ScheduleHandle::split */
+     * dimensions split into sub-dimensions. See ScheduleHandle::split */
     // @{
     const std::vector<Split> &splits() const;
     std::vector<Split> &splits();

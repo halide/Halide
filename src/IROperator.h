@@ -130,6 +130,7 @@ EXPORT void match_types(Expr &a, Expr &b);
 // @{
 EXPORT Expr halide_log(Expr a);
 EXPORT Expr halide_exp(Expr a);
+EXPORT Expr halide_erf(Expr a);
 // @}
 
 /** Raise an expression to an integer power by repeatedly multiplying
@@ -711,6 +712,15 @@ inline Expr pow(Expr x, Expr y) {
     }
 }
 
+/** Evaluate the error function erf. Only available for
+ * Float(32). Accurate up to the last three bits of the
+ * mantissa. Vectorizes cleanly. */
+inline Expr erf(Expr x) {
+    user_assert(x.defined()) << "erf of undefined Expr\n";
+    user_assert(x.type() == Float(32)) << "erf only takes float arguments\n";
+    return Internal::halide_erf(x);
+}
+
 /** Fast approximate cleanly vectorizable log for Float(32). Returns
  * nonsense for x <= 0.0f. Accurate up to the last 5 bits of the
  * mantissa. Vectorizes cleanly. */
@@ -1178,12 +1188,12 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
-/** Control the values used in the cache key for
- * compute_cached. Normally parameters and other external dependencies
- * are automatically inferred and added to the cache key. The
- * cache_tag operator allows computing one expression and using either
- * the computed value, or one or more other expressions in the cache
- * key instead of the parameter dependencies of the computation. The
+/** Control the values used in the memoization cache key for memoize.
+ * Normally parameters and other external dependencies are
+ * automatically inferred and added to the cache key. The memoize_tag
+ * operator allows computing one expression and using either the
+ * computed value, or one or more other expressions in the cache key
+ * instead of the parameter dependencies of the computation. The
  * single argument version is completely safe in that the cache key
  * will use the actual computed value -- it is difficult or imposible
  * to produce erroneous caching this way. The more-than-one argumetn
@@ -1192,7 +1202,7 @@ inline Expr undef() {
  *
  * A potential use for the single argument version is to handle a
  * floating-point parameter that is quantized to a small
- * integer. Mutlipel values of the float will produce the same integer
+ * integer. Mutliple values of the float will produce the same integer
  * and moving the caching to using the integer for the key is more
  * efficient.
  *
@@ -1200,38 +1210,38 @@ inline Expr undef() {
  * cache key information for Handles and ImageParams, which otherwise
  * are not allowed inside compute_cached operations. E.g. when passing
  * a group of parameters to an external array function via a Handle,
- * cache_tag can be used to isolate the actual values used by that
+ * memoize_tag can be used to isolate the actual values used by that
  * computation. If an ImageParam is a constant image with a persistent
- * digest, cache_tag can be used to key computations using that image
+ * digest, memoize_tag can be used to key computations using that image
  * on the digest. */
 // @{
-EXPORT Expr cache_tag(Expr result, const std::vector<Expr> &cache_key_values);
-inline Expr cache_tag(Expr result) {
-    return cache_tag(result, std::vector<Expr>());
+EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
+inline Expr memoize_tag(Expr result) {
+    return memoize_tag(result, std::vector<Expr>());
 }
-inline Expr cache_tag(Expr result, Expr a) {
-    return cache_tag(result, Internal::vec<Expr>(a));
+inline Expr memoize_tag(Expr result, Expr a) {
+    return memoize_tag(result, Internal::vec<Expr>(a));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b) {
-    return cache_tag(result, Internal::vec<Expr>(a, b));
+inline Expr memoize_tag(Expr result, Expr a, Expr b) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b, Expr c) {
-    return cache_tag(result, Internal::vec<Expr>(a, b, c));
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b, Expr c, Expr d) {
-    return cache_tag(result, Internal::vec<Expr>(a, b, c, d));
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e) {
-    return cache_tag(result, Internal::vec<Expr>(a, b, c, d, e));
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f) {
-    return cache_tag(result, Internal::vec<Expr>(a, b, c, d, e, f));
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f, Expr g) {
-    return cache_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g));
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f, Expr g) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g));
 }
-inline Expr cache_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f, Expr g, Expr h) {
-    return cache_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g, h));
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f, Expr g, Expr h) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g, h));
 }
 // @}
 

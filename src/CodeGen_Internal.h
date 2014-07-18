@@ -58,6 +58,8 @@ public:
     };
 
 public:
+    Closure() : buffer_t(NULL) {}
+
     /** Traverse a statement and find all references to external
      * symbols.
      *
@@ -65,7 +67,7 @@ public:
      * assumes that the host pointer is found in the symbol table as
      * 'foo.host', and any buffer_t pointer is found under
      * 'foo.buffer'. */
-    static Closure make(Stmt s, const std::string &loop_variable, llvm::StructType *buffer_t);
+    Closure(Stmt s, const std::string &loop_variable, llvm::StructType *buffer_t);
 
     /** External variables referenced. */
     std::map<std::string, Type> vars;

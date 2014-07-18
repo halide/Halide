@@ -46,6 +46,10 @@ if (TARGET_ARM)
   add_definitions("-DWITH_ARM=1")
 endif()
 
+if (TARGET_AARCH64)
+  add_definitions("-DWITH_AARCH64=1")
+endif()
+
 if (TARGET_PTX)
   add_definitions("-DWITH_PTX=1")
 endif()
@@ -56,10 +60,6 @@ endif()
 
 if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL=1")
-endif()
-
-if (TARGET_ARM64)
-  add_definitions("-DWITH_ARM64=1")
 endif()
 
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
@@ -75,6 +75,7 @@ set(RUNTIME_CPP
   nogpu
   opencl
   opengl
+  gpu_device_selection
   osx_opengl_context
   linux_opengl_context
   android_opengl_context
@@ -106,6 +107,7 @@ set(RUNTIME_CPP
   posix_print)
 set (RUNTIME_LL
   arm
+  aarch64
   posix_math
   ptx_dev
   x86_avx
@@ -263,6 +265,7 @@ set(HEADER_FILES
   ExprUsesVar.h
   Random.h
   ParallelRVar.h
+  BoundaryConditions.h
   UnifyDuplicateLets.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -271,6 +274,8 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   COMMAND build_halide_h ${HEADER_FILES} > "${NATIVE_INCLUDE_PATH}Halide.h"
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
   DEPENDS build_halide_h ${HEADER_FILES})
+
+file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
@@ -352,6 +357,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Schedule.cpp
   FuseGPUThreadLoops.cpp
   ParallelRVar.cpp
+  BoundaryConditions.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

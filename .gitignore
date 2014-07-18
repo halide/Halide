@@ -1,4 +1,4 @@
-/apps/HelloAndroid/jni/halide.h
+/apps/HelloAndroid/jni/halide_generated.h
 /apps/HelloNaCl/.lib32_linked
 /apps/HelloNaCl/.lib64_linked
 /apps/HelloNaCl/hello_nacl.zip
@@ -120,8 +120,8 @@ apps/HelloAndroid*/gen
 apps/HelloAndroid*/obj
 apps/HelloAndroid*/libs
 apps/HelloAndroidGL/jni/halide_gl_filter.h
-apps/HelloAndroidGL/local.properties
-apps/HelloAndroidGL/proguard-project.txt
+apps/HelloAndroid*/local.properties
+apps/HelloAndroid*/proguard-project.txt
 
 # test intermediates
 log.txt

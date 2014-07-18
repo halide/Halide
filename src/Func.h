@@ -320,7 +320,7 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
-    EXPORT ScheduleHandle &set_cached();
+    EXPORT ScheduleHandle &memoize();
 };
 
 /** A halide function. This class represents one stage in a Halide
@@ -689,11 +689,11 @@ public:
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
 
-    /** Set the maximum number of bytes used by compute_cached caching.
+    /** Set the maximum number of bytes used by memoization caching.
      * If you are compiling statically, you should include HalideRuntime.h
-     * and call halide_set_cache_size() instead.
+     * and call halide_memoization_cache_set_size() instead.
      */
-    EXPORT void set_cache_size(uint64_t size);
+    EXPORT void memoization_cache_set_size(uint64_t size);
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
@@ -1387,11 +1387,11 @@ public:
      */
     EXPORT Func &compute_root();
 
-    /** Use the halide_cache_... interface to maintain a computed version
-     * of this function across invocations of a filter. Bounds are the same
-     * as if compute_root were called.
+    /** Use the halide_memoization_cache_... interface to store a
+     *  computed version of this function across invocations of the
+     *  Func.
      */
-    EXPORT Func &compute_cached();
+    EXPORT Func &memoize();
 
 
     /** Allocate storage for this function within f's loop over

@@ -28,10 +28,9 @@ private:
         }
 
         internal_assert(provide->values.size() == 1) << "GLSL currently only supports single-valued stores.\n";
-        user_assert(provide->args.size() == 3) << "GLSL stores requires three coordinates.\n";
+        user_assert(provide->args.size() == 3) << "GLSL stores require three coordinates.\n";
 
-        // Create glsl_texture_store(name, name.buffer, x, y, c, value)
-        // intrinsic.
+        // Create glsl_texture_store(name, name.buffer, x, y, c, value) intrinsic.
         vector<Expr> args(6);
         args[0] = provide->name;
         args[1] = Variable::make(Handle(), provide->name + ".buffer");
@@ -55,7 +54,7 @@ private:
             name = name + '.' + int_to_string(call->value_index);
         }
 
-        user_assert(call->args.size() == 3) << "GLSL loads requires three coordinates.\n";
+        user_assert(call->args.size() == 3) << "GLSL loads require three coordinates.\n";
 
         // Create glsl_texture_load(name, name.buffer, x, y, c) intrinsic.
         vector<Expr> args(5);
@@ -77,10 +76,25 @@ private:
             Expr min = Variable::make(Int(32), min_name);
             Expr extent = Variable::make(Int(32), extent_name);
 
-            // Normalize the two spatial coordinates x,y
-            args[i + 2] = (i < 2)
-                ? (Cast::make(Float(32), call->args[i] - min) + 0.5f) / extent
-                : call->args[i] - min;
+            // Remind users to explicitly specify the 'min' values of
+            // ImageParams accessed by GLSL filters.
+            if (i == 2 && call->param.defined()) {
+                bool const_min_constraint = call->param.min_constraint(i).defined() &&
+                    is_const(call->param.min_constraint(i));
+                if (!const_min_constraint) {
+                    user_warning
+                        << "GLSL: Assuming min[2]==0 for ImageParam '" << name << "'. "
+                        << "Call set_min(2, min) or set_bounds(2, min, extent) to override.\n";
+                    min = Expr(0);
+                }
+            }
+
+            if (i < 2) {
+                // Convert spatial coordinates x,y into texture coordinates by normalization.
+                args[i + 2] = (Cast::make(Float(32), call->args[i] - min) + 0.5f) / extent;
+            } else {
+                args[i + 2] = call->args[i] - min;
+            }
         }
 
         expr = Call::make(call->type, Call::glsl_texture_load,
