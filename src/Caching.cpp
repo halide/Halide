@@ -54,7 +54,7 @@ public:
                 function.extern_arguments();
             for (size_t i = 0; i < extern_args.size(); i++) {
                 if (extern_args[i].is_func()) {
-		  visit_function(extern_args[i].func);
+                  visit_function(extern_args[i].func);
                 } else if (extern_args[i].is_expr()) {
                     extern_args[i].expr.accept(this);
                 } else if (extern_args[i].is_buffer()) {
@@ -71,17 +71,17 @@ public:
         const std::vector<Parameter> &output_buffers =
             function.output_buffers();
         for (size_t i = 0; i < output_buffers.size(); i++) {
-	    for (int j = 0; j < std::min(function.dimensions(), 4); j++) {
-		if (output_buffers[i].min_constraint(i).defined()) {
-		    output_buffers[i].min_constraint(i).accept(this);
-		}
-		if (output_buffers[i].stride_constraint(i).defined()) {
-		    output_buffers[i].stride_constraint(i).accept(this);
-		}
-		if (output_buffers[i].extent_constraint(i).defined()) {
-		    output_buffers[i].extent_constraint(i).accept(this);
-		}
-	    }
+            for (int j = 0; j < std::min(function.dimensions(), 4); j++) {
+                if (output_buffers[i].min_constraint(i).defined()) {
+                    output_buffers[i].min_constraint(i).accept(this);
+                }
+                if (output_buffers[i].stride_constraint(i).defined()) {
+                    output_buffers[i].stride_constraint(i).accept(this);
+                }
+                if (output_buffers[i].extent_constraint(i).defined()) {
+                    output_buffers[i].extent_constraint(i).accept(this);
+                }
+            }
         }
     }
 
@@ -92,7 +92,7 @@ public:
             record(call->param);
         }
 
-        if (call->call_type == Call::Intrinsic && call->name == Call::cache_expr) {
+        if (call->call_type == Call::Intrinsic && call->name == Call::memoize_expr) {
             internal_assert(call->args.size() > 0);
             if (call->args.size() == 1) {
                 record(call->args[0]);
@@ -102,8 +102,8 @@ public:
                 }
             }
         } else {
-            // Do not look at anything inside a cache_expr bracket.
-	    visit_function(call->func);
+            // Do not look at anything inside a memoize_expr bracket.
+            visit_function(call->func);
             IRGraphVisitor::visit(call);
         }
     }
@@ -133,13 +133,13 @@ public:
                 " encountered in computed_cached computation.\n" <<
                 "Computations which depend on buffer parameters " <<
                 "cannot be scheduled compute_cached.\n" <<
-                "Use cache_tag to provide cache key information for buffer.\n";
+                "Use memoize_tag to provide cache key information for buffer.\n";
         } else if (info.type.is_handle()) {
             internal_error << "Handle parameter " << parameter.name() <<
                 " encountered in computed_cached computation.\n" <<
                 "Computations which depend on buffer parameters " <<
                 "cannot be scheduled compute_cached.\n" <<
-                "Use cache_tag to provide cache key information for buffer.\n";
+                "Use memoize_tag to provide cache key information for buffer.\n";
         } else {
             info.size_expr = info.type.bytes();
             info.value_expr = Internal::Variable::make(info.type, parameter.name(), parameter);
@@ -153,7 +153,7 @@ public:
         info.type = expr.type();
         info.size_expr = info.type.bytes();
         info.value_expr = expr;
-        dependency_info[DependencyKey(info.type.bytes(), unique_name("cache_tag", false))] = info;
+        dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag", false))] = info;
     }
 
 #if 0
@@ -320,40 +320,40 @@ public:
     // or false, in which case it will be assumed the buffer was populated
     // by the code in this call.
   Expr generate_lookup(std::string key_allocation_name, std::string realized_bounds_name,
-		       int32_t tuple_count, std::string storage_base_name) {
+                       int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name + ".host"));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), realized_bounds_name));
-	args.push_back(tuple_count);
-	if (tuple_count == 1) {
-	    args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
-	} else {
-  	    for (int32_t i = 0; i < tuple_count; i++) {
-	        args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
-	    }
-	}
-        return Call::make(Bool(1), "halide_cache_lookup", args, Call::Extern);
+        args.push_back(tuple_count);
+        if (tuple_count == 1) {
+            args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+        } else {
+            for (int32_t i = 0; i < tuple_count; i++) {
+                args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+            }
+        }
+        return Call::make(Bool(1), "halide_memoization_cache_lookup", args, Call::Extern);
     }
 
     // Returns a statement which will store the result of a computation under this key
   Stmt store_computation(std::string key_allocation_name, std::string realized_bounds_name,
-			 int32_t tuple_count, std::string storage_base_name) {
+                         int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Variable::make(type_of<uint8_t *>(), key_allocation_name + ".host"));
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), realized_bounds_name));
-	args.push_back(tuple_count);
-	if (tuple_count == 1) {
-	    args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
-	} else {
-  	    for (int32_t i = 0; i < tuple_count; i++) {
-	        args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
-	    }
-	}
+        args.push_back(tuple_count);
+        if (tuple_count == 1) {
+            args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+        } else {
+            for (int32_t i = 0; i < tuple_count; i++) {
+                args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+            }
+        }
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff. */
-        return Evaluate::make(Call::make(Bool(1), "halide_cache_store", args, Call::Extern));
+        return Evaluate::make(Call::make(Bool(1), "halide_memoization_cache_store", args, Call::Extern));
     }
 };
 
@@ -374,7 +374,7 @@ private:
     void visit(const Pipeline *op) {
         std::map<std::string, Function>::const_iterator iter = env.find(op->name);
         if (iter != env.end() &&
-            iter->second.schedule().cached()) {
+            iter->second.schedule().memoized()) {
 
             const Function f(iter->second);
 
@@ -382,50 +382,50 @@ private:
             Stmt update = mutate(op->update);
             Stmt consume = mutate(op->consume);
 
-	    KeyInfo key_info(f, top_level_name);
+            KeyInfo key_info(f, top_level_name);
 
-	    std::string cache_key_name = op->name + ".cache_key";
-	    std::string cache_miss_name = op->name + ".cache_miss";
-	    std::string realized_bounds_name = op->name + ".realized_bounds.buffer";
+            std::string cache_key_name = op->name + ".cache_key";
+            std::string cache_miss_name = op->name + ".cache_miss";
+            std::string realized_bounds_name = op->name + ".realized_bounds.buffer";
 
-	    Expr cache_miss = Variable::make(UInt(1), cache_miss_name);
-	    Stmt mutated_produce =
-		produce.defined() ? IfThenElse::make(cache_miss, produce) :
-					produce;
-	    Stmt mutated_update =
-		update.defined() ? IfThenElse::make(cache_miss, update) :
-				       update;
-	    Stmt cache_store_back =
-	      IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, realized_bounds_name, f.outputs(), op->name)); 
-	    Stmt mutated_consume = 
-		consume.defined() ? Block::make(cache_store_back, consume) :
-					cache_store_back;
+            Expr cache_miss = Variable::make(UInt(1), cache_miss_name);
+            Stmt mutated_produce =
+                produce.defined() ? IfThenElse::make(cache_miss, produce) :
+                                        produce;
+            Stmt mutated_update =
+                update.defined() ? IfThenElse::make(cache_miss, update) :
+                                       update;
+            Stmt cache_store_back =
+              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, realized_bounds_name, f.outputs(), op->name)); 
+            Stmt mutated_consume = 
+                consume.defined() ? Block::make(cache_store_back, consume) :
+                                        cache_store_back;
 
-	    Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);
-	    Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, realized_bounds_name, f.outputs(), op->name), mutated_pipeline);
+            Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);
+            Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, realized_bounds_name, f.outputs(), op->name), mutated_pipeline);
 
-	    std::vector<Expr> realized_bounds_args;
-	    Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
-	    realized_bounds_args.push_back(null_handle);
-	    realized_bounds_args.push_back(f.output_types()[0].bytes());
-	    std::string max_stage_num = int_to_string(f.reductions().size());
-	    for (int32_t i = 0; i < f.dimensions(); i++) {
-		Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
-		Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");
-		realized_bounds_args.push_back(min);
-		realized_bounds_args.push_back(max - min);
-		realized_bounds_args.push_back(0); // TODO: Verify there is no use for the stride.
-	    }
+            std::vector<Expr> realized_bounds_args;
+            Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
+            realized_bounds_args.push_back(null_handle);
+            realized_bounds_args.push_back(f.output_types()[0].bytes());
+            std::string max_stage_num = int_to_string(f.reductions().size());
+            for (int32_t i = 0; i < f.dimensions(); i++) {
+                Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
+                Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");
+                realized_bounds_args.push_back(min);
+                realized_bounds_args.push_back(max - min);
+                realized_bounds_args.push_back(0); // TODO: Verify there is no use for the stride.
+            }
 
-	    Expr realized_bounds = Call::make(Handle(), Call::create_buffer_t,
-					      realized_bounds_args,
-					      Call::Intrinsic);
-	    Stmt realized_bounds_let = LetStmt::make(realized_bounds_name, realized_bounds, cache_lookup);
+            Expr realized_bounds = Call::make(Handle(), Call::create_buffer_t,
+                                              realized_bounds_args,
+                                              Call::Intrinsic);
+            Stmt realized_bounds_let = LetStmt::make(realized_bounds_name, realized_bounds, cache_lookup);
 
-	    Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), realized_bounds_let);
-	    Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), true, generate_key);
+            Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), realized_bounds_let);
+            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), true, generate_key);
 
-	    stmt = cache_key_alloc;
+            stmt = cache_key_alloc;
         } else {
             IRMutator::visit(op);
         }

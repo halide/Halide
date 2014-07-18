@@ -6,7 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "halide.h"
+#include "halide_generated.h"
+#include <HalideRuntime.h>
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
@@ -64,7 +65,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
     uint8_t *dst = (uint8_t *)buf.bits;
 
     // If we're using opencl, use the gpu backend for it.
-    setenv("HL_OCL_DEVICE", "gpu", 1);
+    halide_set_ocl_device_type("gpu");
 
     // Make these static so that we can reuse device allocations across frames.
     static buffer_t srcBuf = {0};
@@ -98,7 +99,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
         memcpy(dst + w*h, src + w*h, (w*h)/2);
 
         int64_t t1 = halide_current_time_ns();
-        halide(&srcBuf, &dstBuf);
+        halide_generated(&srcBuf, &dstBuf);
 
         if (dstBuf.dev) {
             halide_copy_to_host(NULL, &dstBuf);

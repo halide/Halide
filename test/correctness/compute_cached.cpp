@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <Halide.h>
+#include <HalideRuntime.h>
 
 using namespace Halide;
 
@@ -12,8 +13,6 @@ using namespace Halide;
 #endif
 
 int call_count = 0;
-
-extern "C" void halide_set_cache_size(int64_t size);
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int count_calls(buffer_t *out) {
@@ -54,7 +53,7 @@ int main(int argc, char **argv) {
         Func f;
         Var x, y;
         f(x, y) = count_calls(x, y) + count_calls(x, y);
-        count_calls.compute_cached();
+        count_calls.compute_root().memoize();
 
         Image<uint8_t> out1 = f.realize(256, 256);
         Image<uint8_t> out2 = f.realize(256, 256);
@@ -84,8 +83,8 @@ int main(int argc, char **argv) {
         Func f;
         Var x, y;
         f(x, y) = count_calls_23(x, y) + count_calls_42(x, y);
-        count_calls_23.compute_cached();
-        count_calls_42.compute_cached();
+        count_calls_23.compute_root().memoize();
+        count_calls_42.compute_root().memoize();
 
         Image<uint8_t> out1 = f.realize(256, 256);
         Image<uint8_t> out2 = f.realize(256, 256);
@@ -117,8 +116,8 @@ int main(int argc, char **argv) {
         Func f;
         Var x, y;
         f(x, y) = count_calls_val1(x, y) + count_calls_val2(x, y);
-        count_calls_val1.compute_cached();
-        count_calls_val2.compute_cached();
+        count_calls_val1.compute_root().memoize();
+        count_calls_val2.compute_root().memoize();
 
         val1.set(23);
         val2.set(42);
@@ -164,7 +163,7 @@ int main(int argc, char **argv) {
         Func f;
         Var x, y;
         f(x, y) = count_calls(x, y) + count_calls(x, y);
-        count_calls.compute_cached();
+        count_calls.compute_root().memoize();
 
         val.set(23.0f);
         Image<uint8_t> out1 = f.realize(256, 256);
@@ -186,13 +185,13 @@ int main(int argc, char **argv) {
         call_count_with_arg = 0;
         Func count_calls;
         count_calls.define_extern("count_calls_with_arg",
-                                  Internal::vec(ExternFuncArgument(cache_tag(cast<uint8_t>(val)))),
+                                  Internal::vec(ExternFuncArgument(memoize_tag(cast<uint8_t>(val)))),
                                   UInt(8), 2);
 
         Func f;
         Var x, y;
         f(x, y) = count_calls(x, y) + count_calls(x, y);
-        count_calls.compute_cached();
+        count_calls.compute_root().memoize();
 
         val.set(23.0f);
         Image<uint8_t> out1 = f.realize(256, 256);
@@ -225,7 +224,7 @@ int main(int argc, char **argv) {
         g(x) = f(x);
         h(x) = g(4) + g(index);
 
-        f.compute_cached();
+        f.compute_root().memoize();
         g.vectorize(x, 8).compute_at(h, x);
         
         val.set(23.0f);
@@ -255,8 +254,8 @@ int main(int argc, char **argv) {
         Func f;
         Var x, y, xi, yi;
         f(x, y) = Tuple(count_calls(x, y) + cast<uint8_t>(x), x);
-        count_calls.compute_cached();
-        f.compute_cached();
+        count_calls.compute_root().memoize();
+        f.compute_root().memoize();
 
         Func g;
         g(x, y) = Tuple(f(x, y)[0] + f(x - 1, y)[0] + f(x + 1, y)[0], f(x, y)[1]);
@@ -300,11 +299,11 @@ int main(int argc, char **argv) {
         Func f;
         Var x, y, xi, yi;
         f(x, y) = count_calls(x, y) + cast<uint8_t>(x);
-        count_calls.compute_cached();
+        count_calls.compute_root().memoize();
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
-        g.set_cache_size(1000000);
+        g.memoization_cache_set_size(1000000);
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;

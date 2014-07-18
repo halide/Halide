@@ -157,7 +157,7 @@ const string preamble =
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "\n"
     + buffer_t_definition +
-    "bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
+    "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
     "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
     "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
     "                           int32_t min2, int32_t extent2, int32_t stride2,\n"
@@ -852,7 +852,7 @@ void CodeGen_C::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
             rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
-        } else if (op->name == Call::cache_expr) {
+        } else if (op->name == Call::memoize_expr) {
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
             rhs << "(" << arg << ")";

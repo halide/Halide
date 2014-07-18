@@ -68,7 +68,7 @@ public:
 };
 
 // Perform all the substitutions in a scope
-Expr expand_expr(Expr e, Scope<Expr> scope) {
+Expr expand_expr(Expr e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
     Expr result = ee.mutate(e);
     debug(3) << "Expanded " << e << " into " << result << "\n";
@@ -325,6 +325,14 @@ class SlidingWindow : public IRMutator {
         // If it's not in the environment it's some anonymous
         // realization that we should skip (e.g. an inlined reduction)
         if (iter == env.end()) {
+            IRMutator::visit(op);
+            return;
+        }
+
+        // If the Function in question has the same compute_at level
+        // as its store_at level, skip it.
+        const Schedule &sched = iter->second.schedule();
+        if (sched.compute_level() == sched.store_level()) {
             IRMutator::visit(op);
             return;
         }

@@ -258,7 +258,7 @@ void prune_cache() {
 
 extern "C" {
 
-WEAK void halide_set_cache_size(int64_t size) {
+WEAK void halide_memoization_cache_set_size(int64_t size) {
     int64_t old_size = max_cache_size;
     if (size == 0) {
         size = kDefaultCacheSize;
@@ -267,9 +267,10 @@ WEAK void halide_set_cache_size(int64_t size) {
     prune_cache();
 }
 
-WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *realized_bounds, int32_t tuple_count, ...) {
+WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
+                                          buffer_t *realized_bounds, int32_t tuple_count, ...) {
 #if CACHE_DEBUGGING
-    debug_print_key(user_context, "halide_cache_lookup", cache_key, size);
+    debug_print_key(user_context, "halide_memoization_cache_lookup", cache_key, size);
 
     debug_print_buffer(user_context, "realized_bounds", *realized_bounds);
 
@@ -348,9 +349,10 @@ WEAK bool halide_cache_lookup(void *user_context, const uint8_t *cache_key, int3
     return true;
 }
 
-WEAK void halide_cache_store(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *realized_bounds, int32_t tuple_count, ...) {
+WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
+                                         buffer_t *realized_bounds, int32_t tuple_count, ...) {
 #if CACHE_DEBUGGING
-    debug_print_key(user_context, "halide_cache_store", cache_key, size);
+    debug_print_key(user_context, "halide_memoization_cache_store", cache_key, size);
 
     debug_print_buffer(user_context, "realized_bounds", *realized_bounds);
 
@@ -431,7 +433,7 @@ WEAK void halide_cache_store(void *user_context, const uint8_t *cache_key, int32
 }
 
 #if 0
-WEAK void halide_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *buf, buffer_t *realized_bounds) {
+  WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *realized_bounds, int32_t tuple_count, ...) {
 }
 
 }

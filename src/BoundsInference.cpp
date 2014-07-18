@@ -70,8 +70,10 @@ public:
                            const Scope<int> &in_stages,
                            const set<string> &in_pipeline,
                            const set<string> inner_productions) {
+
             // Merge all the relevant boxes.
             Box b;
+
             for (map<pair<string, int>, Box>::iterator iter = bounds.begin();
                  iter != bounds.end(); ++iter) {
                 string func_name = iter->first.first;
@@ -82,7 +84,36 @@ public:
                 }
             }
 
+
             internal_assert(b.empty() || b.size() == func.args().size());
+
+            // Optimization: If a dimension is pure in every update
+            // step of a func, then there exists a single bound for
+            // that dimension, instead of one bound per stage. Let's
+            // figure out what those dimensions are, and just have all
+            // stages but the last use the bounds for the last stage.
+            vector<bool> always_pure_dims(func.args().size(), true);
+            const std::vector<ReductionDefinition> &reductions = func.reductions();
+            for (size_t i = 0; i < reductions.size(); i++) {
+                for (size_t j = 0; j < always_pure_dims.size(); j++) {
+                    const Variable *v = reductions[i].args[j].as<Variable>();
+                    if (!v || v->name != func.args()[j]) {
+                        always_pure_dims[j] = false;
+                    }
+                }
+            }
+            if (stage < (int)func.reductions().size()) {
+                size_t stages = func.reductions().size();
+                string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
+                for (size_t i = 0; i < always_pure_dims.size(); i++) {
+                    if (always_pure_dims[i]) {
+                        const string &dim = func.args()[i];
+                        Expr min = Variable::make(Int(32), last_stage + dim + ".min");
+                        Expr max = Variable::make(Int(32), last_stage + dim + ".max");
+                        b[i] = Interval(min, max);
+                    }
+                }
+            }
 
             if (func.has_extern_definition()) {
                 // After we define our bounds required, we need to
@@ -168,6 +199,7 @@ public:
 
             for (size_t d = 0; d < b.size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
+
                 if (b[d].min.same_as(b[d].max)) {
                     s = LetStmt::make(arg + ".min", Variable::make(Int(32), arg + ".max"), s);
                 } else {
@@ -282,8 +314,8 @@ public:
         }
 
         // A scope giving the bounds for variables used by this stage
-        Scope<Interval> scope() {
-            Scope<Interval> result;
+        void populate_scope(Scope<Interval> &result) {
+
             for (size_t d = 0; d < func.args().size(); d++) {
                 string arg = name + ".s" + int_to_string(stage) + "." + func.args()[d];
                 result.push(func.args()[d],
@@ -309,8 +341,6 @@ public:
                 result.push(b.var, Interval(b.min, (b.min + b.extent) - 1));
             }
             */
-
-            return result;
         }
 
     };
@@ -399,7 +429,8 @@ public:
 
             // Set up symbols representing the bounds over which this
             // stage will be computed.
-            Scope<Interval> scope = consumer.scope();
+            Scope<Interval> scope;
+            consumer.populate_scope(scope);
 
             // Compute all the boxes of the producers this consumer
             // uses.
@@ -555,7 +586,8 @@ public:
         // Figure out how much of it we're producing
         Box box;
         if (producing >= 0) {
-            box = box_provided(body, stages[producing].name, Scope<Interval>(), func_bounds);
+            Scope<Interval> empty_scope;
+            box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());
         }
 

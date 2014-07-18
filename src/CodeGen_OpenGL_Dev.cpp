@@ -215,7 +215,8 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         char suffix[] = "rgba";
         return std::string(".") + suffix[i];
     } else {
-        internal_error << "Color index '" << e << "' not supported\n";
+        user_error << "Color index '" << e << "' isn't constant.\n"
+                   << "Call .bound() or .set_bounds() to specify the range of the color index.\n";
     }
     return "";
 }

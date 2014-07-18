@@ -42,11 +42,10 @@ struct Target {
                    NoAsserts = 1 << 8,  ///< Disable all runtime checks, for slightly tighter code.
                    NoBoundsQuery = 1 << 9, ///< Disable the bounds querying functionality.
                    ARMv7s    = 1 << 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-                   AArch64Backend = 1 << 11, ///< Use AArch64 LLVM target rather than ARM64. Only relevant for 64-bit ARM.
-                   CLDoubles = 1 << 12, ///< Enable double support on OpenCL targets
-                   FMA       = 1 << 13, /// Enable x86 FMA instruction
-                   FMA4      = 1 << 14, /// Enable x86 (AMD) FMA4 instruction set
-                   F16C      = 1 << 15  /// Enable x86 16-bit float support
+                   CLDoubles = 1 << 11, ///< Enable double support on OpenCL targets
+                   FMA       = 1 << 12, /// Enable x86 FMA instruction
+                   FMA4      = 1 << 13, /// Enable x86 (AMD) FMA4 instruction set
+                   F16C      = 1 << 14  /// Enable x86 16-bit float support
     };
 
     /** A bitmask that stores the active features. */
@@ -55,8 +54,12 @@ struct Target {
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}
     Target(OS o, Arch a, int b, uint64_t f) : os(o), arch(a), bits(b), features(f) {}
 
+    /** Is OpenCL or CUDA enabled in this target? I.e. is
+     * Func::gpu_tile and similar going to work? We do not include
+     * OpenGL, because it is not capable of gpgpu, and is not
+     * scheduled via Func::gpu_tile. */
     bool has_gpu_feature() const {
-        return (features & (CUDA|OpenCL));
+        return (features & (CUDA|OpenCL)) != 0;
     }
 
     bool operator==(const Target &other) const {
