@@ -13,6 +13,7 @@ using std::string;
 using std::vector;
 
 namespace {
+
 std::string replace_all(std::string &str,
                         const std::string &find,
                         const std::string &replace) {
@@ -23,6 +24,40 @@ std::string replace_all(std::string &str,
     }
     return str;
 }
+
+// Maps Halide types to appropriate GLSL types or emit error if no equivalent
+// type is available.
+static Type map_type(const Type &type) {
+    Type result = type;
+    if (type.is_scalar()) {
+        if (type.is_float()) {
+            user_assert(type.bits <= 32)
+                << "GLSL: Can't represent a float with " << type.bits << " bits.\n";
+            result = Float(32);
+        } else if (type.bits == 1) {
+            result = Bool();
+        } else if (type == Int(32)) {
+            // Keep unchanged
+        } else if (type.bits <= 16) {
+            // Embed all other ints in a GLSL float. Probably not actually
+            // valid for uint16 on systems with low float precision.
+            result = Float(32);
+        } else {
+            user_error << "GLSL: Can't represent type '"<< type << "'.\n";
+        }
+    } else {
+        user_assert(type.width <= 4)
+            << "GLSL: vector types wider than 4 aren't supported\n";
+        user_assert(type.is_bool() || type.is_int() || type.is_float())
+            << "GLSL: Can't represent vector type '"<< type << "'.\n";
+        Type scalar_type = type;
+        scalar_type.width = 1;
+        result = map_type(scalar_type);
+        result.width = type.width;
+    }
+    return result;
+}
+
 }
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
@@ -35,8 +70,7 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
     delete glc;
 }
 
-void CodeGen_OpenGL_Dev::add_kernel(Stmt s,
-                                    string name,
+void CodeGen_OpenGL_Dev::add_kernel(Stmt s, string name,
                                     const vector<GPU_Argument> &args) {
     cur_kernel_name = name;
     glc->compile(s, name, args, target);
@@ -67,40 +101,31 @@ void CodeGen_OpenGL_Dev::dump() {
 //
 // CodeGen_GLSL
 //
+
 string CodeGen_GLSL::print_type(Type type) {
     ostringstream oss;
+    type = map_type(type);
     if (type.is_scalar()) {
         if (type.is_float()) {
-            if (type.bits == 32) {
-                oss << "float";
-            } else {
-                user_error << "Can't represent a float with " << type.bits << " bits in GLSL\n";
-            }
-        } else if (type.bits == 1) {
-            oss << "bool";
-        } else if (type == Int(32)) {
-            oss << "int";
-        } else if (type.bits <= 16) {
-            // Embed all other ints in a glsl float. Probably not
-            // actually valid for uint16 on systems with low float
-            // precision.
             oss << "float";
+        } else if (type.is_bool()) {
+            oss << "bool";
+        } else if (type.is_int()) {
+            oss << "int";
         } else {
-            user_error << "Can't represent type '"<< type << "' in GLSL\n";
+            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
-    } else if (type.width <= 4) {
-        if (type.is_bool()) {
+    } else {
+        if (type.is_float()) {
+            // no prefix for float vectors
+        } else if (type.is_bool()) {
             oss << "b";
         } else if (type.is_int()) {
             oss << "i";
-        } else if (type.is_float()) {
-            // no prefix for float vectors
         } else {
-            user_error << "Can't represent type '"<< type << "' in GLSL\n";
+            internal_error << "GLSL: invalid type '" << type << "' encountered.\n";
         }
         oss << "vec" << type.width;
-    } else {
-        user_error << "Vector types wider than 4 aren't supported in GLSL\n";
     }
     return oss.str();
 }
@@ -121,8 +146,25 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {
-    print_assignment(op->type,
-                     print_type(op->type) + "(" + print_expr(op->value) + ")");
+    Type target_type = map_type(op->type);
+    Type value_type = op->value.type();
+    Expr value = op->value;
+    if (target_type == map_type(value_type)) {
+        // Skip unneeded casts
+        op->value.accept(this);
+        return;
+    } else if (target_type == Float(32)) {
+        // Casts to float are common in GLSL; simplify them if possible
+        if (const IntImm *imm = op->value.as<IntImm>()) {
+            value = FloatImm::make(static_cast<float>(imm->value));
+            value.accept(this);
+            return;
+        }
+    }
+
+    // Casts expressions are simple enough that we return them directly
+    // instead of calling print_assignment.
+    id = print_type(target_type) + "(" + print_expr(value) + ")";
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
