@@ -310,8 +310,33 @@ void CodeGen_GLSL::visit(const Call *op) {
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                    << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
         } else if (op->name == Call::lerp) {
-            print_expr(Call::make(op->type, "mix", vec(op->args[0], op->args[1], op->args[2]),
-                                  Call::Extern));
+            // Implement lerp using GLSL's mix() function, which always uses
+            // floating point arithmetic.
+            Expr zero_val = op->args[0];
+            Expr one_val = op->args[1];
+            Expr weight = op->args[2];
+
+            // If weight is an integer, convert it to float and normalize to
+            // the [0.0f, 1.0f] range.
+            if (weight.type().is_uint()) {
+                weight = Div::make(Cast::make(Float(32), weight),
+                                   Cast::make(Float(32), weight.type().imax()));
+            }
+
+            // If zero_val and one_val are integers, add appropriate type casts.
+            // Lerp guarantees that op->type == zero_val.type() == one_val.type().
+            if (zero_val.type().is_float()) {
+                print_expr(Call::make(op->type, "mix",
+                                      vec(zero_val, one_val, weight),
+                                      Call::Extern));
+            } else {
+                zero_val = Cast::make(Float(32), zero_val);
+                one_val = Cast::make(Float(32), one_val);
+                print_expr(Cast::make(op->type,
+                                      Call::make(Float(32), "mix",
+                                                 vec(zero_val, one_val, weight),
+                                                 Call::Extern)));
+            }
         } else {
             CodeGen_C::visit(op);
         }
