@@ -58,7 +58,7 @@
 #include <llvm/IRBuilder.h>
 #include <llvm/Intrinsics.h>
 #include <llvm/TargetTransformInfo.h>
-
+#include <llvm/MDBuilder.h>
 #else
 
 // Equivalent LLVM 3.3 includes
@@ -69,7 +69,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
-
+#include <llvm/IR/MDBuilder.h>
 #endif
 
 // No msvc warnings from llvm headers please
