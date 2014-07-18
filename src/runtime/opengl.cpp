@@ -287,25 +287,25 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
 
     #ifdef DEBUG
     {
-      // Android logcat output clips at ~1000 character chunks by default;
-      // to avoid clipping the interesting stuff, emit a line at a time.
-      // This is less efficient, but it's DEBUG-only.
-      halide_printf(user_context, "Compiling GLSL kernel (size=%d):\n", size);
-      const int kBufSize = 255;
-      char buf[kBufSize + 1];
-      const char* s = src;
-      int d = 0;
-      while (s < src + size) {
-        while (*s != '\n' && *s != '\0' && d < kBufSize) {
-          buf[d++] = *s++;
+        // Android logcat output clips at ~1000 character chunks by default;
+        // to avoid clipping the interesting stuff, emit a line at a time.
+        // This is less efficient, but it's DEBUG-only.
+        halide_printf(user_context, "Compiling GLSL kernel (size=%d):\n", size);
+        const int kBufSize = 255;
+        char buf[kBufSize + 1];
+        const char* s = src;
+        int d = 0;
+        while (s < src + size) {
+            while (*s != '\n' && *s != '\0' && d < kBufSize) {
+                buf[d++] = *s++;
+            }
+            buf[d++] = '\0';
+            halide_printf(user_context, "%s\n", buf);
+            d = 0;
+            while (*s == '\n' || *s == '\0') {
+                s++;
+            }
         }
-        buf[d++] = '\0';
-        halide_printf(user_context, "%s\n", buf);
-        d = 0;
-        while (*s == '\n' || *s == '\0') {
-          s++;
-        }
-      }
     }
     #endif
 
