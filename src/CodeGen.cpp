@@ -84,6 +84,7 @@ CodeGen::CodeGen(Target t) :
     function(NULL), context(NULL),
     builder(NULL),
     value(NULL),
+    very_likely_branch(NULL),
     target(t),
     void_t(NULL), i1(NULL), i8(NULL), i16(NULL), i32(NULL), i64(NULL),
     f16(NULL), f32(NULL), f64(NULL),
@@ -127,6 +128,10 @@ void CodeGen::init_module() {
 
     context = new LLVMContext();
     builder = new IRBuilder<>(*context);
+
+    // Branch weights for very likely branches
+    llvm::MDBuilder md_builder(*context);
+    very_likely_branch = md_builder.createBranchWeights(1 << 30, 0);
 
     // Define some types
     void_t = llvm::Type::getVoidTy(*context);
@@ -1936,7 +1941,7 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded: " + message, function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
-    builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb);
+    builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb, very_likely_branch);
 
     // Build the failure case
     builder->SetInsertPoint(assert_fails_bb);
@@ -1999,7 +2004,7 @@ void CodeGen::visit(const For *op) {
 
         // If min < max, fall through to the loop bb
         Value *enter_condition = builder->CreateICmpSLT(min, max);
-        builder->CreateCondBr(enter_condition, loop_bb, after_bb);
+        builder->CreateCondBr(enter_condition, loop_bb, after_bb, very_likely_branch);
         builder->SetInsertPoint(loop_bb);
 
         // Make our phi node.
