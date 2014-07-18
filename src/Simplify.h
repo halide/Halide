@@ -20,10 +20,10 @@ namespace Internal {
  * repeated variable names.
  */
 // @{
-EXPORT Stmt simplify(Stmt, bool remove_dead_lets = true,
+EXPORT Stmt simplify(Stmt, bool simplify_lets = true,
                      const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
                      const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
-EXPORT Expr simplify(Expr, bool remove_dead_lets = true,
+EXPORT Expr simplify(Expr, bool simplify_lets = true,
                      const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
                      const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}

@@ -216,6 +216,86 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
 
     DEBUG_PRINTF( user_context, "    Got device %d\n", dev );
 
+    // Dump device attributes
+    #ifdef DEBUG
+    {
+        char name[256];
+        name[0] = 0;
+        err = cuDeviceGetName(name, 256, dev);
+        DEBUG_PRINTF(user_context, "      %s\n", name);
+
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuDeviceGetName failed (%d)", err);
+            return err;
+        }
+
+        size_t memory = 0;
+        err = cuDeviceTotalMem(&memory, dev);
+        DEBUG_PRINTF(user_context, "      total memory: %d MB\n", (int)(memory >> 20));
+
+        if (err != CUDA_SUCCESS) {
+            halide_error_varargs(user_context, "CUDA: cuDeviceTotalMem failed (%d)", err);
+            return err;
+        }
+
+        // Declare variables for other state we want to query.
+        int max_threads_per_block = 0, warp_size = 0, num_cores = 0;
+        int max_block_size[] = {0, 0, 0};
+        int max_grid_size[] = {0, 0, 0};
+        int max_shared_mem = 0, max_constant_mem = 0;
+        int cc_major = 0, cc_minor = 0;
+
+        struct {int *dst; CUdevice_attribute attr;} attrs[] = {
+            {&max_threads_per_block, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK},
+            {&warp_size,             CU_DEVICE_ATTRIBUTE_WARP_SIZE},
+            {&num_cores,             CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT},
+            {&max_block_size[0],     CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_X},
+            {&max_block_size[1],     CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Y},
+            {&max_block_size[2],     CU_DEVICE_ATTRIBUTE_MAX_BLOCK_DIM_Z},
+            {&max_grid_size[0],      CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_X},
+            {&max_grid_size[1],      CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Y},
+            {&max_grid_size[2],      CU_DEVICE_ATTRIBUTE_MAX_GRID_DIM_Z},
+            {&max_shared_mem,        CU_DEVICE_ATTRIBUTE_SHARED_MEMORY_PER_BLOCK},
+            {&max_constant_mem,      CU_DEVICE_ATTRIBUTE_TOTAL_CONSTANT_MEMORY},
+            {&cc_major,              CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR},
+            {&cc_minor,              CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR},
+            {NULL,                   CU_DEVICE_ATTRIBUTE_MAX}};
+
+        // Do all the queries.
+        for (int i = 0; attrs[i].dst; i++) {
+            err = cuDeviceGetAttribute(attrs[i].dst, attrs[i].attr, dev);
+            if (err != CUDA_SUCCESS) {
+                halide_error_varargs(user_context,
+                                     "CUDA: cuDeviceGetAttribute failed (%d) for attribute %d",
+                                     err, (int)attrs[i].attr);
+                return err;
+            }
+        }
+
+        // threads per core is a function of the compute capability
+        int threads_per_core = (cc_major == 1 ? 8 :
+                                cc_major == 2 ? (cc_minor == 0 ? 32 : 48) :
+                                cc_major == 3 ? 192 :
+                                cc_major == 5 ? 128 : 0);
+
+        DEBUG_PRINTF(user_context,
+                     "      max threads per block: %d\n"
+                     "      warp size: %d\n"
+                     "      max block size: %d %d %d\n"
+                     "      max grid size: %d %d %d\n"
+                     "      max shared memory per block: %d\n"
+                     "      max constant memory per block: %d\n"
+                     "      compute capability %d.%d\n"
+                     "      cuda cores: %d x %d = %d\n",
+                     max_threads_per_block, warp_size,
+                     max_block_size[0], max_block_size[1], max_block_size[2],
+                     max_grid_size[0], max_grid_size[1], max_grid_size[2],
+                     max_shared_mem, max_constant_mem,
+                     cc_major, cc_minor,
+                     num_cores, threads_per_core, num_cores * threads_per_core);
+    }
+    #endif
+
     // Create context
     DEBUG_PRINTF( user_context, "    cuCtxCreate %d -> ", dev );
     err = cuCtxCreate(ctx, 0, dev);
