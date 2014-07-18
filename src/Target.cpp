@@ -730,7 +730,7 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
 
     // This table is based on the guidance at:
     // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
-    if (target.features Target::CUDACapability35) {
+    if (target.features & Target::CUDACapability35) {
         module = get_initmod_ptx_compute_35_ll(c);
     } else if (target.features & (Target::CUDACapability32 | Target::CUDACapability50)) {
         // For some reason sm_32 and sm_50 use libdevice 20
