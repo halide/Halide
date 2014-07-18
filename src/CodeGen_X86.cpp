@@ -663,6 +663,8 @@ string CodeGen_X86::mcpu() const {
 string CodeGen_X86::mattrs() const {
     std::string features;
     std::string separator;
+    #if LLVM_VERSION >= 35
+    // These attrs only exist in llvm 3.5+
     if (target.features & Target::FMA) {
         features += "+fma";
         separator = " ";
@@ -675,7 +677,7 @@ string CodeGen_X86::mattrs() const {
         features += separator + "+f16c";
         separator = " ";
     }
-
+    #endif
     return features;
 }
 
