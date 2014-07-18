@@ -376,11 +376,11 @@ void CodeGen_GLSL::compile(Stmt stmt,
             user_assert(t == UInt(8) || t == UInt(16)) <<
                 "Buffer " << args[i].name << " has invalid type " << t << ".\n";
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
-                   << (t == UInt(8) ? "uint8 " : "uint16 ")
+                   << (t == UInt(8) ? "uint8_t " : "uint16_t ")
                    << print_name(args[i].name) << "\n";
         } else {
             header << "/// VAR "
-                   << print_type(args[i].type) << " "
+                   << CodeGen_C::print_type(args[i].type) << " "
                    << print_name(args[i].name) << "\n";
         }
     }
