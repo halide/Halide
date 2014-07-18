@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <Halide.h>
 
 using namespace Halide;
@@ -11,6 +12,8 @@ using namespace Halide;
 #endif
 
 int call_count = 0;
+
+extern "C" void halide_set_cache_size(int64_t size);
 
 // Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int count_calls(buffer_t *out) {
@@ -41,6 +44,7 @@ extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, buffer_t *out) {
 }
 
 int main(int argc, char **argv) {
+
     {
         Func count_calls;
         count_calls.define_extern("count_calls",
@@ -162,13 +166,6 @@ int main(int argc, char **argv) {
         f(x, y) = count_calls(x, y) + count_calls(x, y);
         count_calls.compute_cached();
 
-#if 0
-        f.compile_to_lowered_stmt("/tmp/compute_cached.stmt");
-        std::vector<Argument> args;
-        args.push_back(val);
-        f.compile_to_assembly("/tmp/compute_cached.s", args, "foon");
-#endif
-
         val.set(23.0f);
         Image<uint8_t> out1 = f.realize(256, 256);
         val.set(23.4f);
@@ -214,8 +211,86 @@ int main(int argc, char **argv) {
     {
         // Case with bounds computed not equal to bounds realized.
         Param<float> val;
+        Param<int32_t> index;
 
-	printf("Interesting part\n");
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg",
+                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
+                                  UInt(8), 2);
+        Func f, g, h;
+        Var x;
+
+        f(x) = count_calls(x, 0) + cast<uint8_t>(x);
+        g(x) = f(x);
+        h(x) = g(4) + g(index);
+
+        f.compute_cached();
+        g.vectorize(x, 8).compute_at(h, x);
+        
+        val.set(23.0f);
+        index.set(2);
+        Image<uint8_t> out1 = h.realize(1);
+
+        assert(out1(0) == (uint8_t)(2 * 23 + 4 + 2));
+        assert(call_count_with_arg == 3);
+
+        index.set(4);
+        out1 = h.realize(1);
+
+        assert(out1(0) == (uint8_t)(2 * 23 + 4 + 4));
+        assert(call_count_with_arg == 4);
+    }
+
+    {
+        // Test Tuple case
+        Param<float> val;
+
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg",
+                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
+                                  UInt(8), 2);
+
+        Func f;
+        Var x, y, xi, yi;
+        f(x, y) = Tuple(count_calls(x, y) + cast<uint8_t>(x), x);
+        count_calls.compute_cached();
+        f.compute_cached();
+
+        Func g;
+        g(x, y) = Tuple(f(x, y)[0] + f(x - 1, y)[0] + f(x + 1, y)[0], f(x, y)[1]);
+
+        val.set(23.0f);
+        Realization out = g.realize(128, 128);
+        Image<uint8_t> out0 = out[0];
+        Image<int32_t> out1 = out[1];
+
+
+        for (int32_t i = 0; i < 100; i++) {
+            for (int32_t j = 0; j < 100; j++) {
+                assert(out0(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
+                assert(out1(i, j) == i);
+            }
+        }
+        out = g.realize(128, 128);
+        out0 = out[0];
+        out1 = out[1];
+
+
+        for (int32_t i = 0; i < 100; i++) {
+            for (int32_t j = 0; j < 100; j++) {
+                assert(out0(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
+                assert(out1(i, j) == i);
+            }
+        }
+        assert(call_count_with_arg == 1);
+    }
+
+    {
+        // Test cache eviction
+        Param<float> val;
+
         call_count_with_arg = 0;
         Func count_calls;
         count_calls.define_extern("count_calls_with_arg",
@@ -229,29 +304,20 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
+        g.set_cache_size(1000000);
 
-        Func h;
-        h(x, y) = g(x, y) + g(x - 1, y) + g(x + 1, y);
+        for (int v = 0; v < 1000; v++) {
+            int r = rand() % 256;
+            val.set((float)r);
+            Image<uint8_t> out1 = g.realize(128, 128);
 
-	f.tile(x, y, xi, yi, 8, 8).compute_root();
-	g.tile(x, y, xi, yi, 16, 16).compute_root();
-	h.tile(x, y, xi, yi, 8, 8).compute_root();
-
-	std::vector<Argument> args;
-	args.push_back(val);
-	h.compile_to_lowered_stmt("/tmp/h.stmt");
-	h.compile_to_assembly("/tmp/h.s", args);
-
-	printf("calling g\n");
-        val.set(23.0f);
-        Image<uint8_t> out1 = h.realize(128, 128);
-
-        for (int32_t i = 0; i < 100; i++) {
-            for (int32_t j = 0; j < 100; j++) {
-	      //	      assert(out1(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
+            for (int32_t i = 0; i < 100; i++) {
+                for (int32_t j = 0; j < 100; j++) {
+                    assert(out1(i, j) == (uint8_t)(3 * r + i + (i - 1) + (i + 1)));
+                }
             }
         }
-        assert(call_count_with_arg == 1);
+        printf("Call count is %d.\n", call_count_with_arg);
     }
 
     printf("Success!\n");
