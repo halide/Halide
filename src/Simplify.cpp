@@ -1703,7 +1703,13 @@ private:
           if (const_castint(b, &ib)) {
             Type t = op->type;
 
-            if (0 <= ib && ib <= t.bits) {
+            bool shift_left = op->name == Call::shift_left;
+            if (ib < 0) {
+              shift_left = !shift_left;
+              ib = -ib;
+            }
+
+            if (ib < std::min(t.bits, 32)) {
               ib = 1 << ib;
               b = make_const(t, ib);
 
