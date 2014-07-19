@@ -690,6 +690,9 @@ private:
             // loop to check perfect nesting.
             min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
             max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::memoize_expr) {
+            assert(op->args.size() >= 1);
+            op->args[0].accept(this);
         } else if (op->func.has_pure_definition()) {
             bounds_of_func(op->func, op->value_index);
         } else {

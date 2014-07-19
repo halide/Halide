@@ -1,9 +1,12 @@
-// This is temporary code. In particular, the hash table is stupid and currently not thredsafe.
-// It is mainly intended to get the interface right, then we'll figure out the right way to
-// implement something better. (Ultimately, it is not clear how many use cases this can really
-// cover and thus it is easily replaceable by the application.)
+// This is temporary code. In particular, the hash table is stupid and
+// currently thredsafety is accomplished via large granularity spin
+// locks. It is mainly intended to prove the programming model and
+// runtime interface for memoization. We'll improve the implementation
+// later. In the meantime, on some platforms it can be replaced by a
+// platform specific LRU cache such as libcache from Apple.
 
 #include "mini_stdint.h"
+#include "scoped_spin_lock.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
@@ -97,7 +100,7 @@ struct CacheEntry {
     uint8_t *key;
     uint32_t hash;
     uint32_t tuple_count;
-    buffer_t realized_bounds;
+    buffer_t computed_bounds;
     buffer_t buf;
     // ADDITIONAL buffer_t STRUCTS HERE
 
@@ -112,7 +115,7 @@ struct CacheEntry {
 #endif
 
     CacheEntry(void *context, const uint8_t *cache_key, size_t cache_key_size,
-               uint32_t key_hash, const buffer_t &realized_buf,
+               uint32_t key_hash, const buffer_t &computed_buf,
                int32_t tuples, __builtin_va_list tuple_buffers) :
         user_context(context),
         next(NULL),
@@ -123,9 +126,9 @@ struct CacheEntry {
         tuple_count(tuples) {
         // TODO: ERROR RETURN
         key = (uint8_t *)halide_malloc(user_context, key_size);
-        realized_bounds = realized_buf;
-        realized_bounds.host = NULL;
-        realized_bounds.dev = 0;
+        computed_bounds = computed_buf;
+        computed_bounds.host = NULL;
+        computed_bounds.dev = 0;
         for (size_t i = 0; i < key_size; i++) {
             key[i] = cache_key[i];
         }
@@ -159,6 +162,8 @@ uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
     }
     return h;
 }
+
+volatile int memoization_lock = 0;
 
 const size_t kHashTableSize = 256;
 
@@ -263,16 +268,19 @@ WEAK void halide_memoization_cache_set_size(int64_t size) {
     if (size == 0) {
         size = kDefaultCacheSize;
     }
+    
+    ScopedSpinLock lock(&memoization_lock);
+
     max_cache_size = size;
     prune_cache();
 }
 
 WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                          buffer_t *realized_bounds, int32_t tuple_count, ...) {
+                                          buffer_t *computed_bounds, int32_t tuple_count, ...) {
 #if CACHE_DEBUGGING
     debug_print_key(user_context, "halide_memoization_cache_lookup", cache_key, size);
 
-    debug_print_buffer(user_context, "realized_bounds", *realized_bounds);
+    debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
     {
         __builtin_va_list tuple_buffers;
@@ -289,11 +297,13 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
+    ScopedSpinLock lock(&memoization_lock);
+
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == size &&
             keys_equal(entry->key, cache_key, size) && 
-            bounds_equal(entry->realized_bounds, *realized_bounds) &&
+            bounds_equal(entry->computed_bounds, *computed_bounds) &&
             entry->tuple_count == tuple_count) {
             
             bool all_bounds_equal = true;
@@ -350,11 +360,11 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
 }
 
 WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                         buffer_t *realized_bounds, int32_t tuple_count, ...) {
+                                         buffer_t *computed_bounds, int32_t tuple_count, ...) {
 #if CACHE_DEBUGGING
     debug_print_key(user_context, "halide_memoization_cache_store", cache_key, size);
 
-    debug_print_buffer(user_context, "realized_bounds", *realized_bounds);
+    debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
     {
         __builtin_va_list tuple_buffers;
@@ -371,11 +381,13 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
+    ScopedSpinLock lock(&memoization_lock);
+
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == size &&
             keys_equal(entry->key, cache_key, size) && 
-            bounds_equal(entry->realized_bounds, *realized_bounds) &&
+            bounds_equal(entry->computed_bounds, *computed_bounds) &&
             entry->tuple_count == tuple_count) {
             
             bool all_bounds_equal = true;
@@ -413,7 +425,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     void *entry_storage = halide_malloc(user_context, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
     __builtin_va_list tuple_buffers;
     __builtin_va_start(tuple_buffers, tuple_count);
-    CacheEntry *new_entry = new (entry_storage) CacheEntry(user_context, cache_key, size, h, *realized_bounds, tuple_count, tuple_buffers);
+    CacheEntry *new_entry = new (entry_storage) CacheEntry(user_context, cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
     __builtin_va_end(tuple_buffers);
 
     new_entry->next = cache_entries[index];
@@ -433,7 +445,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 }
 
 #if 0
-  WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *realized_bounds, int32_t tuple_count, ...) {
+WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, ...) {
 }
 
 }

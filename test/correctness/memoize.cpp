@@ -29,10 +29,23 @@ extern "C" DLLEXPORT int count_calls(buffer_t *out) {
 
 int call_count_with_arg = 0;
 
-// Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int count_calls_with_arg(uint8_t val, buffer_t *out) {
     if (out->host) {
         call_count_with_arg++;
+        for (int32_t i = 0; i < out->extent[0]; i++) {
+            for (int32_t j = 0; j < out->extent[1]; j++) {
+                out->host[i * out->stride[0] + j * out->stride[1]] = val;
+            }
+        }
+    }
+    return 0;
+}
+
+int call_count_with_arg_parallel[8];
+
+extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *out) {
+    if (out->host) {
+        call_count_with_arg_parallel[out->min[2]]++;
         for (int32_t i = 0; i < out->extent[0]; i++) {
             for (int32_t j = 0; j < out->extent[1]; j++) {
                 out->host[i * out->stride[0] + j * out->stride[1]] = val;
@@ -316,7 +329,45 @@ int main(int argc, char **argv) {
                 }
             }
         }
+        // TODO work out an assertion on call count here.
         printf("Call count is %d.\n", call_count_with_arg);
+    }
+
+    {
+        // Test parallel cache access
+        Param<float> val;
+
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg_parallel",
+                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
+                                  UInt(8), 3);
+
+        Func f;
+        Var x, y;
+        // Ensure that all calls map to the same cache key, but pass a thread ID
+        // through to avoid having to do locking or an atomic add
+        f(x, y) = count_calls(x, y % 4, memoize_tag(y / 1, 0)) + cast<uint8_t>(x);
+
+        Func g;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
+        count_calls.compute_at(f, y).memoize();
+        f.compute_at(g, y).memoize();
+        g.parallel(y, 16);
+
+        val.set(23.0f);
+        g.memoization_cache_set_size(1000000);
+        Image<uint8_t> out = g.realize(128, 128);
+
+        for (int32_t i = 0; i < 128; i++) {
+            for (int32_t j = 0; j < 128; j++) {
+                assert(out(i, j) == (uint8_t)(3 * 23 + i + (i - 1) + (i + 1)));
+            }
+        }
+
+        // TODO work out an assertion on call counts here.
+        for (int i = 0; i < 8; i++) {
+          printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+        }
     }
 
     printf("Success!\n");
