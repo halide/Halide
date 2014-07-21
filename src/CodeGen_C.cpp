@@ -853,7 +853,7 @@ void CodeGen_C::visit(const Call *op) {
             string arg = print_expr(op->args[0]);
             rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
         } else if (op->name == Call::memoize_expr) {
-            internal_assert(op->args.size() == 1);
+            internal_assert(op->args.size() >= 1);
             string arg = print_expr(op->args[0]);
             rhs << "(" << arg << ")";
         } else if (op->name == Call::copy_memory) {
