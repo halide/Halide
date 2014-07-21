@@ -127,7 +127,7 @@ void CodeGen_PTX_Dev::init_module() {
     CodeGen::init_module();
 
     #if WITH_PTX
-    module = get_initial_module_for_ptx_device(context);
+    module = get_initial_module_for_ptx_device(target, context);
     #endif
 
     owns_module = true;
@@ -210,11 +210,35 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    return "sm_20";
+    if (target.features & Target::CUDACapability50) {
+        return "sm_50";
+    } else if (target.features & Target::CUDACapability35) {
+        return "sm_35";
+    } else if (target.features & Target::CUDACapability32) {
+        return "sm_32";
+    } else if (target.features & Target::CUDACapability30) {
+        return "sm_30";
+    } else {
+        return "sm_20";
+    }
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    return "";
+    if (target.features & (Target::CUDACapability32 |
+                           Target::CUDACapability50)) {
+        // Need ptx isa 4.0. llvm < 3.5 doesn't support it.
+        #if LLVM_VERSION < 35
+        user_error << "This version of Halide was linked against llvm 3.4 or earlier, "
+                   << "which does not support cuda compute capability 3.2 or 5.0\n";
+        return "";
+        #else
+        return "+ptx40";
+        #endif
+    } else {
+        // Use the default. For llvm 3.5 it's ptx 3.2.
+        return "";
+    }
+
 }
 
 bool CodeGen_PTX_Dev::use_soft_float_abi() const {
@@ -274,7 +298,7 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     CodeGenOpt::Level OLvl = CodeGenOpt::Aggressive;
 
-    const std::string FeaturesStr = "";
+    const std::string FeaturesStr = mattrs();
     std::auto_ptr<TargetMachine>
         target(TheTarget->createTargetMachine(TheTriple.getTriple(),
                                               MCPU, FeaturesStr, Options,
