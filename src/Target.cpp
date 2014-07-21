@@ -258,6 +258,14 @@ bool Target::merge_string(const std::string &target) {
             features |= Target::ARMv7s;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
+        } else if (tok == "cuda_capability_30") {
+            features |= Target::CUDA | Target::CUDACapability30;
+        } else if (tok == "cuda_capability_32") {
+            features |= Target::CUDA | Target::CUDACapability32;
+        } else if (tok == "cuda_capability_35") {
+            features |= Target::CUDA | Target::CUDACapability35;
+        } else if (tok == "cuda_capability_50") {
+            features |= Target::CUDA | Target::CUDACapability50;
         } else if (tok == "opencl") {
             features |= Target::OpenCL;
         } else if (tok == "gpu_debug") {
@@ -311,15 +319,16 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
   const char* const arch_names[] = {
-    "arch_unknown", "x86", "arm", "pnacl"
+      "arch_unknown", "x86", "arm", "pnacl"
   };
   const char* const os_names[] = {
-    "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
+      "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
   const char* const feature_names[] = {
-    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "opengl", "gpu_debug",
-    "no_asserts", "no_bounds_query", "armv7s", "cl_doubles",
-    "fma", "fma4", "f16c"
+      "jit", "sse41", "avx", "avx2", "cuda",
+      "opencl", "opengl", "gpu_debug", "no_asserts", "no_bounds_query",
+      "armv7s", "cl_doubles", "fma", "fma4", "f16c",
+      "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
@@ -718,13 +727,24 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 }
 
 #if WITH_PTX
-llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
+llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    // TODO: select this based on sm_ version flag in Target when
-    // we add target specific flags.
-    llvm::Module *module = get_initmod_ptx_compute_20_ll(c);
+    llvm::Module *module;
+
+    // This table is based on the guidance at:
+    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
+    if (target.features & Target::CUDACapability35) {
+        module = get_initmod_ptx_compute_35_ll(c);
+    } else if (target.features & (Target::CUDACapability32 | Target::CUDACapability50)) {
+        // For some reason sm_32 and sm_50 use libdevice 20
+        module = get_initmod_ptx_compute_20_ll(c);
+    } else if (target.features & Target::CUDACapability30) {
+        module = get_initmod_ptx_compute_30_ll(c);
+    } else {
+        module = get_initmod_ptx_compute_20_ll(c);
+    }
     modules.push_back(module);
 
     link_modules(modules);
