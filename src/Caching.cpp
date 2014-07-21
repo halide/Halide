@@ -156,11 +156,6 @@ public:
         dependency_info[DependencyKey(info.type.bytes(), unique_name("memoize_tag", false))] = info;
     }
 
-#if 0
-    void record(const Argument &) {
-    }
-#endif
-
     // Used to make sure larger parameters come before smaller ones
     // for alignment reasons.
     struct DependencyKey {
@@ -319,8 +314,8 @@ public:
     // in which case the Allocation named by storage will be computed,
     // or false, in which case it will be assumed the buffer was populated
     // by the code in this call.
-  Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
-                       int32_t tuple_count, std::string storage_base_name) {
+    Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
+                         int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
@@ -339,8 +334,8 @@ public:
     }
 
     // Returns a statement which will store the result of a computation under this key
-  Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
-                         int32_t tuple_count, std::string storage_base_name) {
+    Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
+                           int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
@@ -356,8 +351,8 @@ public:
             }
         }
 
-        // This is actually a void call. How to indicate that? Look at Extern_ stuff. */
-        return Evaluate::make(Call::make(Bool(1), "halide_memoization_cache_store", args, Call::Extern));
+        // This is actually a void call. How to indicate that? Look at Extern_ stuff.
+        return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_store", args, Call::Extern));
     }
 };
 
@@ -403,7 +398,7 @@ private:
             std::string cache_miss_name = op->name + ".cache_miss";
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
-            Expr cache_miss = Variable::make(UInt(1), cache_miss_name);
+            Expr cache_miss = Variable::make(Bool(), cache_miss_name);
             Stmt mutated_produce =
                 produce.defined() ? IfThenElse::make(cache_miss, produce) :
                                         produce;

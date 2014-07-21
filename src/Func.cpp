@@ -2212,6 +2212,7 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_do_par_for(custom_do_par_for);
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
+    compiled_module.set_custom_print(custom_print);
     compiled_module.memoization_cache_set_size(cache_size);
 
     // Update the address of the buffers we're realizing into
