@@ -6,6 +6,7 @@
 // platform specific LRU cache such as libcache from Apple.
 
 #include "mini_stdint.h"
+#include "mini_string.h"
 #include "scoped_spin_lock.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
@@ -38,7 +39,7 @@ void debug_print_key(void *user_context, const char *msg, const uint8_t *cache_k
 #endif
 
 size_t full_extent(const buffer_t &buf) {
-    size_t result = 0;
+    size_t result = 1;
     for (int i = 0; i < 4; i++) {
         if ((buf.extent[i] * buf.stride[i]) > result) {
             result = buf.extent[i] * buf.stride[i];
@@ -54,10 +55,7 @@ void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);
         halide_assert(user_context, from.stride[i] == to.stride[i]);
     }
-    // TODO: fix cheesy memcpy replacement.
-    for (size_t i = 0; i < buffer_size * from.elem_size; i++) {
-      to.host[i] = from.host[i];
-    }
+    memcpy(to.host, from.host, buffer_size * from.elem_size);
 }
 
 buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
@@ -71,11 +69,7 @@ buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
 
 bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
     size_t i = 0;
-    while (i < key_size &&
-           key1[i] == key2[i]) {
-        i++;
-    }
-    return i == key_size;
+    return memcmp(key1, key2, key_size) == 0;
 }
 
 bool bounds_equal(const buffer_t &buf1, const buffer_t &buf2) {
