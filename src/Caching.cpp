@@ -382,6 +382,17 @@ private:
 
             const Function f(iter->second);
 
+            // There are currently problems with the cache key
+            // construction getting moved above the scope of use if
+            // the the compute and store levels are different. It also
+            // has implications for the cache compute/allocated bounds
+            // logic. And it isn't clear it is useful for
+            // anything. Hence this is currently an error.
+            if (!f.schedule().compute_level().match(f.schedule().store_level())) {
+                user_error << "Function " << f.name() << " cannot be memoized because "
+                           << "it has compute and storage scheduled at different loop levels.\n";
+            }
+
             Stmt produce = mutate(op->produce);
             Stmt update = mutate(op->update);
             Stmt consume = mutate(op->consume);
