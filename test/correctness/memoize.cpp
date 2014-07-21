@@ -59,6 +59,67 @@ extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *ou
 int main(int argc, char **argv) {
 
     {
+        call_count = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls",
+                                  std::vector<ExternFuncArgument>(),
+                                  UInt(8), 2);
+
+        Func f;
+        f() = count_calls(0, 0);
+        f.compute_root().memoize();
+
+        Image<uint8_t> result1 = f.realize();
+        Image<uint8_t> result2 = f.realize();
+
+        assert(result1(0) == 42);
+        assert(result2(0) == 42);
+
+        assert(call_count == 1);
+    }
+
+    {
+        call_count = 0;
+        Param<int32_t> coord;
+        Func count_calls;
+        count_calls.define_extern("count_calls",
+                                  std::vector<ExternFuncArgument>(),
+                                  UInt(8), 2);
+
+        Func f, g;
+	Var x, y;
+        f() = count_calls(coord, coord);
+        f.compute_root().memoize();
+
+	g(x, y) = f();
+
+	coord.set(0);
+        Image<uint8_t> out1 = g.realize(256, 256);
+        Image<uint8_t> out2 = g.realize(256, 256);
+
+        for (int32_t i = 0; i < 256; i++) {
+            for (int32_t j = 0; j < 256; j++) {
+                assert(out1(i, j) == 42);
+                assert(out2(i, j) == 42);
+            }
+        }
+        assert(call_count == 1);
+
+	coord.set(1);
+        Image<uint8_t> out3 = g.realize(256, 256);
+        Image<uint8_t> out4 = g.realize(256, 256);
+
+        for (int32_t i = 0; i < 256; i++) {
+            for (int32_t j = 0; j < 256; j++) {
+                assert(out3(i, j) == 42);
+                assert(out4(i, j) == 42);
+            }
+        }
+        assert(call_count == 2);
+    }
+
+    {
+        call_count = 0;
         Func count_calls;
         count_calls.define_extern("count_calls",
                                   std::vector<ExternFuncArgument>(),
