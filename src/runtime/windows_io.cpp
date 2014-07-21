@@ -4,6 +4,14 @@
 
 extern "C" {
 
+// The tracing module needs open, write, close
+extern ssize_t _write(int fd, const void *buf, size_t count);
+extern int _close(int fd);
+extern int _open(const char *filename, int opts, int mode);
+ssize_t write(int fd, const void *buf, size_t count) {return _write(fd, buf, count);}
+int close(int fd) {return _close(fd);}
+int open(const char *filename, int opts, int mode) {return _open(filename, opts, mode);}
+
 // To get at stdout/stderr, we need to know sizeof(FILE) on windows.
 #ifdef BITS_64
 #define FILE_SIZE 48
