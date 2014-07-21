@@ -1196,7 +1196,7 @@ inline Expr undef() {
  * instead of the parameter dependencies of the computation. The
  * single argument version is completely safe in that the cache key
  * will use the actual computed value -- it is difficult or imposible
- * to produce erroneous caching this way. The more-than-one argumetn
+ * to produce erroneous caching this way. The more-than-one argument
  * version allows generating cache keys that do not uniquely identify
  * the computation and thus can result in caching errors.
  *

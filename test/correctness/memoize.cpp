@@ -12,9 +12,10 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
+// External functions to track whether the cache is working.
+
 int call_count = 0;
 
-// Imagine that this loads from a file, or tiled storage. Here we'll just fill in the data using sinf.
 extern "C" DLLEXPORT int count_calls(buffer_t *out) {
     if (out->host) {
         call_count++;
