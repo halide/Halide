@@ -210,40 +210,25 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
+static Expr CallBinaryFloatOperator(const Type &result_type,
+                                    const std::string &op,
+                                    Expr a, Expr b) {
+    if (!a.type().is_float()) {
+        a = Cast::make(Float(32), a);
+    }
+    if (!b.type().is_float()) {
+        b = Cast::make(Float(32), b);
+    }
+    Expr val = Call::make(Float(32), op, vec(a, b), Call::Extern);
+    return (result_type.is_float()) ? val : Cast::make(result_type, val);
+}
+
 void CodeGen_GLSL::visit(const Max *op) {
-    // version 120 only supports min of floats, so we have to cast back and forth
-    Expr a = op->a;
-    if (!(op->a.type().is_float())){
-        a = Cast::make(Float(a.type().bits), a);
-    }
-    Expr b = op->b;
-    if (!b.type().is_float()){
-        b = Cast::make(Float(b.type().bits), b);
-    }
-    Expr out = Call::make(Float(32), "max", vec(a, b), Call::Extern);
-    if (!op->type.is_float()) {
-        print_expr(Cast::make(op->type, out));
-    } else {
-        print_expr(out);
-    }
+    print_expr(CallBinaryFloatOperator(op->type, "max", op->a, op->b));
 }
 
 void CodeGen_GLSL::visit(const Min *op) {
-    // version 120 only supports min of floats, so we have to cast back and forth
-    Expr a = op->a;
-    if (!(op->a.type().is_float())){
-        a = Cast::make(Float(a.type().bits), a);
-    }
-    Expr b = op->b;
-    if (!b.type().is_float()){
-        b = Cast::make(Float(b.type().bits), b);
-    }
-    Expr out = Call::make(Float(32), "min", vec(a, b), Call::Extern);
-    if (!op->type.is_float()) {
-        print_expr(Cast::make(op->type, out));
-    } else {
-        print_expr(out);
-    }
+    print_expr(CallBinaryFloatOperator(op->type, "min", op->a, op->b));
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
@@ -255,9 +240,8 @@ void CodeGen_GLSL::visit(const Div *op) {
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
-    print_expr(Call::make(op->type, "mod", vec(op->a, op->b), Call::Extern));
+    print_expr(CallBinaryFloatOperator(op->type, "mod", op->a, op->b));
 }
-
 
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     std::vector<Expr> matches;
