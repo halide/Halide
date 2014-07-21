@@ -39,7 +39,7 @@
 #include "InjectOpenGLIntrinsics.h"
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
-#include "Caching.h"
+#include "Memoization.h"
 
 namespace Halide {
 namespace Internal {
@@ -1650,9 +1650,9 @@ Stmt lower(Function f, const Target &t) {
     s = schedule_functions(s, order, env, graph, t);
     debug(2) << "All realizations injected:\n" << s << '\n';
 
-    debug(2) << "Injecting caching...\n";
-    s = inject_caching(s, env, f.name());
-    debug(2) << "Caching injected:\n" << s << '\n';
+    debug(2) << "Injecting memoization...\n";
+    s = inject_memoization(s, env, f.name());
+    debug(2) << "Memoization injected:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, f);

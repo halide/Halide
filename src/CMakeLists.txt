@@ -268,7 +268,7 @@ set(HEADER_FILES
   ParallelRVar.h
   BoundaryConditions.h
   UnifyDuplicateLets.h
-  Caching.h)
+  Memoization.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -360,7 +360,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   FuseGPUThreadLoops.cpp
   ParallelRVar.cpp
   BoundaryConditions.cpp
-  Caching.cpp
+  Memoization.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

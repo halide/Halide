@@ -1,4 +1,4 @@
-#include "Caching.h"
+#include "Memoization.h"
 #include "Error.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -359,12 +359,12 @@ public:
 }
 
 // Inject caching structure around memoized realizations.
-class InjectCaching : public IRMutator {
+class InjectMemoization : public IRMutator {
 public:
   const std::map<std::string, Function> &env;
   const std::string &top_level_name;
 
-  InjectCaching(const std::map<std::string, Function> &e, const std::string &name) :
+  InjectMemoization(const std::map<std::string, Function> &e, const std::string &name) :
       env(e), top_level_name(name) {}
 private:
 
@@ -442,9 +442,9 @@ private:
     }
 };
 
-Stmt inject_caching(Stmt s, const std::map<std::string, Function> &env,
-                    const std::string &name) {
-    InjectCaching injector(env, name);
+Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
+			const std::string &name) {
+    InjectMemoization injector(env, name);
 
     return injector.mutate(s);
 }
