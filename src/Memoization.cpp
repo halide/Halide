@@ -399,17 +399,13 @@ private:
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
             Expr cache_miss = Variable::make(Bool(), cache_miss_name);
-            Stmt mutated_produce =
-                produce.defined() ? IfThenElse::make(cache_miss, produce) :
-                                        produce;
+            Stmt mutated_produce = IfThenElse::make(cache_miss, produce);
             Stmt mutated_update =
                 update.defined() ? IfThenElse::make(cache_miss, update) :
                                        update;
             Stmt cache_store_back =
               IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name)); 
-            Stmt mutated_consume = 
-                consume.defined() ? Block::make(cache_store_back, consume) :
-                                        cache_store_back;
+            Stmt mutated_consume = Block::make(cache_store_back, consume);
 
             Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);
             Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name), mutated_pipeline);
