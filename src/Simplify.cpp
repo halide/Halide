@@ -1713,7 +1713,7 @@ private:
               ib = 1 << ib;
               b = make_const(t, ib);
 
-              if (op->name == Call::shift_left) {
+              if (shift_left) {
                 expr = mutate(Mul::make(a, b));
               } else {
                 expr = mutate(Div::make(a, b));
@@ -2311,6 +2311,11 @@ void simplify_test() {
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
 
+    // Check bitshift operations
+    check(Cast::make(Int(16), x) << 10, Cast::make(Int(16), x) * 1024);
+    check(Cast::make(Int(16), x) >> 10, Cast::make(Int(16), x) / 1024);
+    check(Cast::make(Int(16), x) << -10, Cast::make(Int(16), x) / 1024);
+    check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
 
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
