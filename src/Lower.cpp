@@ -1708,7 +1708,7 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
-    s = simplify_exprs(s);
+    s = simplify(s, false);
     debug(2) << "Simplified: \n" << s << "\n\n";
 
     debug(1) << "Dynamically skipping stages...\n";
