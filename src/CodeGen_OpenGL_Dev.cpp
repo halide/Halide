@@ -70,7 +70,7 @@ CodeGen_OpenGL_Dev::~CodeGen_OpenGL_Dev() {
     delete glc;
 }
 
-void CodeGen_OpenGL_Dev::add_kernel(Stmt s, string name,
+void CodeGen_OpenGL_Dev::add_kernel(Stmt s, const string &name,
                                     const vector<GPU_Argument> &args) {
     cur_kernel_name = name;
     glc->compile(s, name, args, target);
