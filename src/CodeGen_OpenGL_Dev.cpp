@@ -243,7 +243,18 @@ void CodeGen_GLSL::visit(const Min *op) {
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
-    visit_binop(op->type, op->a, op->b, "/");
+    std::cerr << op->type;
+    if (op->type.is_int()) {
+        // Halide's integer division is defined to round down. Since the
+        // rounding behavior of GLSL's integer division is undefined, emulate
+        // the correct behavior using floating point arithmetic.
+        Expr val = Div::make(Cast::make(Float(32), op->a), Cast::make(Float(32), op->b));
+        print_expr(simplify(
+                       Cast::make(op->type,
+                                  Call::make(Float(32), "floor_f32", vec(val), Call::Extern))));
+    } else {
+        visit_binop(op->type, op->a, op->b, "/");
+    }
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
@@ -474,6 +485,9 @@ void CodeGen_GLSL::test() {
     e.push_back(abs(-2));
     e.push_back(Halide::print(3.0f));
 
+    // Test rounding behavior of integer division.
+    e.push_back(-2/Expr(3));
+
     ostringstream source;
     CodeGen_GLSL cg(source);
     for (size_t i = 0; i < e.size(); i++) {
@@ -496,6 +510,8 @@ void CodeGen_GLSL::test() {
         "int(_5)\n"
         "float _6 = 3.0000000;\n"
         "_6\n"
+        "float _7 = floor(-0.66666669);\n"
+        "int(_7)\n"
         ;
 
     if (src != correct_source) {
