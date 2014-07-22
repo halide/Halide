@@ -226,11 +226,7 @@ void CodeGen_GLSL::visit(const Min *op) {
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
-    if (op->type.is_int()) {
-        print_expr(Call::make(op->type, "sdiv", vec(op->a, op->b), Call::Extern));
-    } else {
-        visit_binop(op->type, op->a, op->b, "/");
-    }
+    visit_binop(op->type, op->a, op->b, "/");
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
