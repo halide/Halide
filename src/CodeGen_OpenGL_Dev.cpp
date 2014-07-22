@@ -1,6 +1,7 @@
 #include "CodeGen_OpenGL_Dev.h"
 #include "IRMatch.h"
 #include "IRMutator.h"
+#include "IROperator.h"
 #include "Debug.h"
 #include "Simplify.h"
 #include <iomanip>
@@ -153,13 +154,6 @@ void CodeGen_GLSL::visit(const Cast *op) {
         // Skip unneeded casts
         op->value.accept(this);
         return;
-    } else if (target_type == Float(32)) {
-        // Casts to float are common in GLSL; simplify them if possible
-        if (const IntImm *imm = op->value.as<IntImm>()) {
-            value = FloatImm::make(static_cast<float>(imm->value));
-            value.accept(this);
-            return;
-        }
     }
 
     // Casts expressions are simple enough that we return them directly
@@ -220,7 +214,7 @@ static Expr CallBinaryFloatOperator(const Type &result_type,
         b = Cast::make(Float(32), b);
     }
     Expr val = Call::make(Float(32), op, vec(a, b), Call::Extern);
-    return (result_type.is_float()) ? val : Cast::make(result_type, val);
+    return simplify(Cast::make(result_type, val));
 }
 
 void CodeGen_GLSL::visit(const Max *op) {
@@ -269,7 +263,9 @@ void CodeGen_GLSL::visit(const Store *op) {
 }
 
 void CodeGen_GLSL::visit(const Evaluate *op) {
-    op->value.accept(this);
+    string id = print_expr(op->value);
+    if (!id.empty())
+        stream << id << "\n";
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
@@ -293,6 +289,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                    << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
+            id = "";
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
             // floating point arithmetic.
@@ -309,18 +306,20 @@ void CodeGen_GLSL::visit(const Call *op) {
 
             // If zero_val and one_val are integers, add appropriate type casts.
             // Lerp guarantees that op->type == zero_val.type() == one_val.type().
+            Expr result;
             if (zero_val.type().is_float()) {
-                print_expr(Call::make(op->type, "mix",
-                                      vec(zero_val, one_val, weight),
-                                      Call::Extern));
+                result = Call::make(op->type, "mix",
+                                    vec(zero_val, one_val, weight),
+                                    Call::Extern);
             } else {
                 zero_val = Cast::make(Float(32), zero_val);
                 one_val = Cast::make(Float(32), one_val);
-                print_expr(Cast::make(op->type,
-                                      Call::make(Float(32), "mix",
-                                                 vec(zero_val, one_val, weight),
-                                                 Call::Extern)));
+                result = Cast::make(op->type,
+                                    Call::make(Float(32), "mix",
+                                               vec(zero_val, one_val, weight),
+                                               Call::Extern));
             }
+            print_expr(simplify(result));
         } else {
             CodeGen_C::visit(op);
         }
@@ -339,8 +338,7 @@ void CodeGen_GLSL::visit(const Broadcast *op) {
     print_assignment(op->type, rhs.str());
 }
 
-void CodeGen_GLSL::compile(Stmt stmt,
-                           string name,
+void CodeGen_GLSL::compile(Stmt stmt, string name,
                            const vector<GPU_Argument> &args,
                            const Target &target) {
     // Emit special header that declares the kernel name and its arguments.
@@ -398,7 +396,6 @@ void CodeGen_GLSL::compile(Stmt stmt,
            << "#define atan_f32 atan\n"
            << "#define atan2_f32 atan\n";
 
-
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer && args[i].read) {
@@ -418,5 +415,38 @@ void CodeGen_GLSL::compile(Stmt stmt,
     indent -= 2;
     stream << "}\n";
 }
+
+void CodeGen_GLSL::test() {
+    vector<Expr> e;
+
+    e.push_back(Min::make(Expr(1), Expr(5)));
+    e.push_back(Max::make(Expr(1), Expr(5)));
+    e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)));
+    e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f));
+
+    ostringstream source;
+    CodeGen_GLSL cg(source);
+    for (size_t i = 0; i < e.size(); i++) {
+        Evaluate::make(e[i]).accept(&cg);
+    }
+
+    std::string expected_source =
+        "float _0 = min(1.0000000, 5.0000000);\n"
+        "int(_0)\n"
+        "float _1 = max(1.0000000, 5.0000000);\n"
+        "int(_1)\n"
+        "float _2 = mix(0.0000000, 255.00000, 0.49803922);\n"
+        "_2\n"
+        "float _3 = mix(0.0000000, 255.00000, 0.30000001);\n"
+        "_3\n"
+        ;
+
+    if (source.str() != expected_source) {
+        internal_error << source.str();
+    }
+
+    std::cout << "CodeGen_GLSL test passed\n";
+}
+
 
 }}
