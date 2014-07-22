@@ -2324,7 +2324,8 @@ void simplify_test() {
     check(Cast::make(Int(16), x) << 10, Cast::make(Int(16), x) * 1024);
     check(Cast::make(Int(16), x) >> 10, Cast::make(Int(16), x) / 1024);
     check(Cast::make(Int(16), x) << -10, Cast::make(Int(16), x) / 1024);
-    check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
+    // Correctly triggers a warning:
+    //check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
 
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
