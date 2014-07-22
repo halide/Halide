@@ -31,7 +31,7 @@ struct CodeGen_GPU_Dev {
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     virtual void add_kernel(Stmt stmt,
-                            std::string name,
+                            const std::string &name,
                             const std::vector<GPU_Argument> &args) = 0;
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
