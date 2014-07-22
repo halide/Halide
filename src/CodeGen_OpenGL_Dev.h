@@ -22,8 +22,7 @@ public:
     ~CodeGen_OpenGL_Dev();
 
     // CodeGen_GPU_Dev interface
-    void add_kernel(Stmt stmt,
-                    std::string name,
+    void add_kernel(Stmt stmt, const std::string &name,
                     const std::vector<GPU_Argument> &args);
     void init_module();
     std::vector<char> compile_to_src();
@@ -47,6 +46,8 @@ public:
                  const std::vector<GPU_Argument> &args,
                  const Target &target);
 
+    static void test();
+
 protected:
     using CodeGen_C::visit;
     std::string print_type(Type type);
@@ -60,6 +61,9 @@ protected:
 
     void visit(const Max *);
     void visit(const Min *);
+    void visit(const Div *op);
+    void visit(const Mod *op);
+
     void visit(const Load *);
     void visit(const Store *);
 

@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
     Func g;
     g(x, y) = f(0, 0)+ f(9, 7);
 
-    g.gpu_tile(x, y, 16, 16);
+    g.gpu_tile(x, y, 16, 8);
     f.compute_at(g, Var::gpu_blocks());
 
     for (int i = 0; i < passes; i++) {

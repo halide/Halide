@@ -240,6 +240,8 @@ void check_sse_all() {
     check("paddd", 4, i32_1 + i32_2);
     check("psubd", 4, i32_1 - i32_2);
     check("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
+    check("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) >> 16));
+
     // Add a test with a constant as there was a bug on this.
     check("pmulhw", 8, i16((3 * i32(i16_2)) / (256*256)));
 
@@ -248,6 +250,7 @@ void check_sse_all() {
     check("pmulhw", 8, select(in_u8(0) == 0,
                               i16((3 * i32(i16_2)) / (256*256)),
                               i16((5 * i32(i16_2)) / (256*256))));
+
     check("pmulhuw", 8, i16_1 / 15);
     check("pmullw", 8, i16_1 * i16_2);
 
@@ -270,12 +273,15 @@ void check_sse_all() {
     check("maxps", 4, max(f32_1, f32_2));
     check("minps", 4, min(f32_1, f32_2));
     check("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
+    check("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)>>1));
     check("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+    check("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)>>1));
     check("pmaxsw", 8, max(i16_1, i16_2));
     check("pminsw", 8, min(i16_1, i16_2));
     check("pmaxub", 16, max(u8_1, u8_2));
     check("pminub", 16, min(u8_1, u8_2));
     check("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))/(256*256)));
+    check("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))>>16));
     check("pmulhuw", 8, u16_1 / 15);
 
     /* Not implemented yet in the front-end
@@ -448,6 +454,7 @@ void check_sse_all() {
         check("vpaddd", 8, i32_1 + i32_2);
         check("vpsubd", 8, i32_1 - i32_2);
         check("vpmulhw", 16, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
+        check("vpmulhw", 16, i16((i32(i16_1) * i32(i16_2)) >> 16));
         check("vpmullw", 16, i16_1 * i16_2);
 
         check("vpcmpeqb", 32, select(u8_1 == u8_2, u8(1), u8(2)));
@@ -464,6 +471,7 @@ void check_sse_all() {
         check("vpmaxub", 32, max(u8_1, u8_2));
         check("vpminub", 32, min(u8_1, u8_2));
         check("vpmulhuw", 16, i16((i32(i16_1) * i32(i16_2))/(256*256)));
+        check("vpmulhuw", 16, i16((i32(i16_1) * i32(i16_2))>>16));
 
         check("vpaddq", 8, i64_1 + i64_2);
         check("vpsubq", 8, i64_1 - i64_2);
