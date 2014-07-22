@@ -46,6 +46,8 @@ public:
                  const std::vector<GPU_Argument> &args,
                  const Target &target);
 
+    static void test();
+
 protected:
     using CodeGen_C::visit;
     std::string print_type(Type type);
