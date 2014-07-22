@@ -271,17 +271,45 @@ extern void halide_set_gpu_device(int n);
  * HL_GPU_DEVICE. */
 extern int halide_get_gpu_device(void *user_context);
 
-/** TODO: document.
+/** Set the soft maximum amount of memory, in bytes, that the LRU
+ *  cache will use to memoize Func results.  This is not a strict
+ *  maximum in that concurrency and simultaneous use of memoized
+ *  reults larger than the cache size can both cause it to
+ *  temporariliy be larger than the size specified here.
  */
 extern void halide_memoization_cache_set_size(int64_t size);
+
+/** Given a cache key for a memoized result, currently constructed
+ *  from the Func name and top-level Func name plus the arguments of
+ *  the computation, determine if the result is in the cache and
+ *  return it if so. (The internals of the cache key should be
+ *  considered opaque by this function.) If this routine returns true,
+ *  it is a cache miss. Otherwise, it will return false and the
+ *  buffers passed in will be filled, via copying, with memoized
+ *  data. The last argument is a list if buffer_t pointers which
+ *  represents the outputs of the memoized Func. If the Func does not
+ *  return a Tuple, there will only be one buffer_t in the list. The
+ *  tuple_count parameters determines the length of the list.
+ */
 extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                            buffer_t *realized_bounds, int32_t tuple_count, ...);
+                                            buffer_t *realized_bounds, int32_t tuple_count, ... /* list of buffer_t * */);
+
+/** Given a cache key for a memoized result, currently constructed
+ *  from the Func name and top-level Func name plus the arguments of
+ *  the computation, store the result in the cache for futre access by
+ *  halide_memoization_cache_lookup. (The internals of the cache key
+ *  should be considered opaque by this function.) Data is copied out
+ *  from the inputs and inputs are unmodified. The last argument is a
+ *  list if buffer_t pointers which represents the outputs of the
+ *  memoized Func. If the Func does not return a Tuple, there will
+ *  only be one buffer_t in the list. The tuple_count parameters
+ *  determines the length of the list.
+ */
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, ...);
+                                           buffer_t *realized_bounds, int32_t tuple_count, ... /* list of buffer_t * */);
 
 #ifdef __cplusplus
 } // End extern "C"
 #endif
 
 #endif // HALIDE_HALIDERUNTIME_H
-

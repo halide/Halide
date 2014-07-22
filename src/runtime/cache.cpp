@@ -41,8 +41,10 @@ void debug_print_key(void *user_context, const char *msg, const uint8_t *cache_k
 size_t full_extent(const buffer_t &buf) {
     size_t result = 1;
     for (int i = 0; i < 4; i++) {
-        if ((buf.extent[i] * buf.stride[i]) > result) {
-            result = buf.extent[i] * buf.stride[i];
+        int32_t stride = buf.stride[i];
+        if (stride < 0) stride = -stride;
+        if ((buf.extent[i] * stride) > result) {
+            result = buf.extent[i] * stride;
         }
     }
     return result;
