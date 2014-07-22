@@ -12,13 +12,13 @@ static void _noop_printf(void *, const char *, ...) { }
 #define DEBUG_PRINTF _noop_printf
 #endif
 
-static const char *get_error_name(CUresult error) {
+WEAK const char *_get_error_name(CUresult error) {
     const char *name = NULL;
     cuGetErrorName(error, &name);
     return name;
 }
 
-static const char *get_error_desc(CUresult error) {
+WEAK const char *_get_error_desc(CUresult error) {
     const char *desc = NULL;
     cuGetErrorString(error, &desc);
     return desc;
@@ -148,7 +148,7 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, buf->dev);
     if (result) {
         halide_printf(user_context, "Bad device pointer %p: cuPointerGetAttribute returned %s\n",
-                      (void *)buf->dev, get_error_name(result));
+                      (void *)buf->dev, _get_error_name(result));
         return false;
     }
     return true;
@@ -182,7 +182,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     buf->dev = 0;
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuMemFree failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
 
@@ -199,7 +199,7 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuInit failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
 
@@ -208,7 +208,7 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
     err = cuDeviceGetCount(&deviceCount);
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuGetDeviceCount failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
     if (deviceCount <= 0) {
@@ -241,7 +241,7 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
 
         if (err != CUDA_SUCCESS) {
             halide_error_varargs(user_context, "CUDA: cuDeviceGetName failed (%s: %s)",
-                                 get_error_name(err), get_error_desc(err));
+                                 _get_error_name(err), _get_error_desc(err));
             return err;
         }
 
@@ -251,7 +251,7 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
 
         if (err != CUDA_SUCCESS) {
             halide_error_varargs(user_context, "CUDA: cuDeviceTotalMem failed (%s: %s)",
-                                 get_error_name(err), get_error_desc(err));
+                                 _get_error_name(err), _get_error_desc(err));
             return err;
         }
 
@@ -284,7 +284,7 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
             if (err != CUDA_SUCCESS) {
                 halide_error_varargs(user_context,
                                      "CUDA: cuDeviceGetAttribute failed (%s) for attribute %d",
-                                     get_error_name(err), (int)attrs[i].attr);
+                                     _get_error_name(err), (int)attrs[i].attr);
                 return err;
             }
         }
@@ -317,9 +317,9 @@ static CUresult create_context(void *user_context, CUcontext *ctx) {
     DEBUG_PRINTF( user_context, "    cuCtxCreate %d -> ", dev );
     err = cuCtxCreate(ctx, 0, dev);
     if (err != CUDA_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%s: %s\n", get_error_name(err), get_error_desc(err) );
+        DEBUG_PRINTF( user_context, "%s: %s\n", _get_error_name(err), _get_error_desc(err) );
         halide_error_varargs(user_context, "CUDA: cuCtxCreate failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     } else {
         unsigned int version = 0;
@@ -361,9 +361,9 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
         CUmodule module;
         CUresult err = cuModuleLoadData(&(*state)->module, ptx_src);
         if (err != CUDA_SUCCESS) {
-            DEBUG_PRINTF( user_context, "%s: %s\n", get_error_name(err), get_error_desc(err) );
+            DEBUG_PRINTF( user_context, "%s: %s\n", _get_error_name(err), _get_error_desc(err) );
             halide_error_varargs(user_context, "CUDA: cuModuleLoadData failed (%s: %s)",
-                                 get_error_name(err), get_error_desc(err));
+                                 _get_error_name(err), _get_error_desc(err));
             return err;
         } else {
             DEBUG_PRINTF( user_context, "%p\n", module );
@@ -456,9 +456,9 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     DEBUG_PRINTF( user_context, "    cuMemAlloc %lld -> ", size );
     CUresult err = cuMemAlloc(&p, size);
     if (err != CUDA_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%s: %s\n", get_error_name(err), get_error_desc(err));
+        DEBUG_PRINTF( user_context, "%s: %s\n", _get_error_name(err), _get_error_desc(err));
         halide_error_varargs(user_context, "CUDA: cuMemAlloc failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     } else {
         DEBUG_PRINTF( user_context, "%p\n", p );
@@ -514,7 +514,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         CUresult err = cuMemcpyHtoD(dst, src, size);
                         if (err != CUDA_SUCCESS) {
                             halide_error_varargs(user_context, "CUDA: cuMemcpyHtoD failed (%s: %s)",
-                                                 get_error_name(err), get_error_desc(err));
+                                                 _get_error_name(err), _get_error_desc(err));
                             return err;
                         }
                     }
@@ -573,7 +573,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         CUresult err = cuMemcpyDtoH(dst, src, size);
                         if (err != CUDA_SUCCESS) {
                             halide_error_varargs(user_context, "CUDA: cuMemcpyDtoH failed (%s: %s)",
-                                                 get_error_name(err), get_error_desc(err));
+                                                 _get_error_name(err), _get_error_desc(err));
                             return err;
                         }
                     }
@@ -606,7 +606,7 @@ WEAK int halide_dev_sync(void *user_context) {
     CUresult err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuCtxSynchronize failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
 
@@ -649,7 +649,7 @@ WEAK int halide_dev_run(void *user_context,
     err = cuModuleGetFunction(&f, mod, entry_name);
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuModuleGetFunction failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
 
@@ -662,7 +662,7 @@ WEAK int halide_dev_run(void *user_context,
                          NULL);
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuLaunchKernel failed (%s: %s)",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
 
@@ -670,7 +670,7 @@ WEAK int halide_dev_run(void *user_context,
     err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuCtxSynchronize failed (%s: %s)\n",
-                             get_error_name(err), get_error_desc(err));
+                             _get_error_name(err), _get_error_desc(err));
         return err;
     }
     uint64_t t_after = halide_current_time_ns(user_context);
