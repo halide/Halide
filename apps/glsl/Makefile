@@ -17,7 +17,7 @@ ifeq ($(UNAME), Darwin)
 OPENGL_LIBS = -framework AGL
 endif
 
-HALIDE_LIBS = $(HALIDE_LIB) -ldl -lpthread
+HALIDE_LIBS = $(HALIDE_LIB) -ldl -lpthread -lcurses
 
 all: opengl_test
 
@@ -25,7 +25,7 @@ run: opengl_test
 	LD_LIBRARY_PATH=../../bin ./opengl_test
 
 opengl_test: blur.o ycc.o opengl_test.o
-	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin
+	$(CXX) $(CXXFLAGS) $^ -o $@ -ldl -lpthread -L$(TOP)/bin $(OPENGL_LIBS)
 
 blur.h blur.o: halide_blur
 	HL_TARGET=host-opengl-gpu_debug ./halide_blur
