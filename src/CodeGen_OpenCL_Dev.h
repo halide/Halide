@@ -22,7 +22,7 @@ public:
      * with different kernels, which will all be accumulated into a single
      * source module shared by a given Halide pipeline. */
     void add_kernel(Stmt stmt,
-                    std::string name,
+                    const std::string &name,
                     const std::vector<GPU_Argument> &args);
 
     /** (Re)initialize the GPU kernel module. This is separate from compile,
@@ -42,7 +42,7 @@ protected:
     public:
         CodeGen_OpenCL_C(std::ostream &s) : CodeGen_C(s) {}
         void add_kernel(Stmt stmt,
-                        std::string name,
+                        const std::string &name,
                         const std::vector<GPU_Argument> &args);
 
     protected:
