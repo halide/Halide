@@ -254,6 +254,8 @@ CUresult CUDAAPI cuEventDestroy(CUevent phEvent);
 CUresult CUDAAPI cuEventSynchronize(CUevent hEvent);
 CUresult CUDAAPI cuEventElapsedTime(float *pMilliseconds, CUevent hStart, CUevent hEnd);
 CUresult CUDAAPI cuPointerGetAttribute(void *result, int query, CUdeviceptr ptr);
+CUresult CUDAAPI cuGetErrorName(CUresult error, const char **str);
+CUresult CUDAAPI cuGetErrorString(CUresult error, const char **str);
 
 }
 
