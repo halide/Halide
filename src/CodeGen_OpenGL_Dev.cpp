@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "Simplify.h"
 #include <iomanip>
+#include <map>
 
 namespace Halide {
 namespace Internal {
@@ -12,6 +13,7 @@ namespace Internal {
 using std::ostringstream;
 using std::string;
 using std::vector;
+using std::map;
 
 namespace {
 
@@ -39,6 +41,9 @@ static Type map_type(const Type &type) {
             result = Bool();
         } else if (type == Int(32)) {
             // Keep unchanged
+        } else if (type == UInt(32)) {
+            // GLSL doesn't have unsigned types, simply use int.
+            result = Int(32);
         } else if (type.bits <= 16) {
             // Embed all other ints in a GLSL float. Probably not actually
             // valid for uint16 on systems with low float precision.
@@ -204,25 +209,37 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
-static Expr CallBinaryFloatOperator(const Type &result_type,
-                                    const std::string &op,
-                                    Expr a, Expr b) {
+// Most GLSL builtins are only defined for float arguments, so we may have to
+// introduce type casts around the arguments and the entire function call.
+static Expr CallBuiltin(const Type &result_type,
+                        const std::string &func,
+                        Expr a) {
+    if (!a.type().is_float()) {
+        a = Cast::make(Float(32), a);
+    }
+    Expr val = Call::make(Float(32), func, vec(a), Call::Extern);
+    return simplify(Cast::make(result_type, val));
+}
+
+static Expr CallBuiltin(const Type &result_type,
+                        const std::string &func,
+                        Expr a, Expr b) {
     if (!a.type().is_float()) {
         a = Cast::make(Float(32), a);
     }
     if (!b.type().is_float()) {
         b = Cast::make(Float(32), b);
     }
-    Expr val = Call::make(Float(32), op, vec(a, b), Call::Extern);
+    Expr val = Call::make(Float(32), func, vec(a, b), Call::Extern);
     return simplify(Cast::make(result_type, val));
 }
 
 void CodeGen_GLSL::visit(const Max *op) {
-    print_expr(CallBinaryFloatOperator(op->type, "max", op->a, op->b));
+    print_expr(CallBuiltin(op->type, "max", op->a, op->b));
 }
 
 void CodeGen_GLSL::visit(const Min *op) {
-    print_expr(CallBinaryFloatOperator(op->type, "min", op->a, op->b));
+    print_expr(CallBuiltin(op->type, "min", op->a, op->b));
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
@@ -230,7 +247,7 @@ void CodeGen_GLSL::visit(const Div *op) {
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
-    print_expr(CallBinaryFloatOperator(op->type, "mod", op->a, op->b));
+    print_expr(CallBuiltin(op->type, "mod", op->a, op->b));
 }
 
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
@@ -265,19 +282,18 @@ void CodeGen_GLSL::visit(const Evaluate *op) {
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
+    ostringstream rhs;
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::glsl_texture_load) {
             internal_assert(op->args.size() == 5);
             internal_assert(op->args[0].as<StringImm>());
             string buffername = op->args[0].as<StringImm>()->value;
-            ostringstream rhs;
             internal_assert(op->type == UInt(8) || op->type == UInt(16));
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr(op->args[2]) << ", "
                 << print_expr(op->args[3]) << "))"
                 << get_vector_suffix(op->args[4])
                 << " * " << op->type.imax() << ".0";
-            print_assignment(op->type, rhs.str());
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
@@ -285,7 +301,11 @@ void CodeGen_GLSL::visit(const Call *op) {
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                    << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
+
+            // glsl_texture_store is called only for its side effect; there is
+            // no return value.
             id = "";
+            return;
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
             // floating point arithmetic.
@@ -316,16 +336,62 @@ void CodeGen_GLSL::visit(const Call *op) {
                                                Call::Extern));
             }
             print_expr(simplify(result));
+            return;
+        } else if (op->name == Call::abs) {
+            print_expr(simplify(CallBuiltin(op->type, op->name, op->args[0])));
+            return;
+        } else if (op->name == Call::return_second) {
+            internal_assert(op->args.size() == 2);
+            // Simply discard the first argument, which is generally a call to
+            // 'halide_printf'.
+            rhs << print_expr(op->args[1]);
         } else {
-            CodeGen_C::visit(op);
+            user_error << "GLSL: intrinsic '" << op->name << "' isn't supported\n";
+            return;
         }
     } else {
-        CodeGen_C::visit(op);
+        map<string, string> builtin;
+        builtin["sin_f32"] = "sin";
+        builtin["sqrt_f32"] = "sqrt";
+        builtin["cos_f32"] = "cos";
+        builtin["exp_f32"] = "exp";
+        builtin["log_f32"] = "log";
+        builtin["abs_f32"] = "abs";
+        builtin["floor_f32"] = "floor";
+        builtin["ceil_f32"] = "ceil";
+        builtin["pow_f32"] = "pow";
+        builtin["asin_f32"] = "asin";
+        builtin["acos_f32"] = "acos";
+        builtin["tan_f32"] = "tan";
+        builtin["atan_f32"] = "atan";
+        builtin["atan2_f32"] = "atan"; // also called atan in GLSL
+        builtin["min"] = "min";
+        builtin["max"] = "max";
+        builtin["mix"] = "mix";
+        builtin["mod"] = "mod";
+        builtin["abs"] = "abs";
+
+        if (builtin.count(op->name) == 0) {
+            user_error << "GLSL: encountered unknown function '" << op->name << "'\n";
+        }
+
+        string name = builtin[op->name];
+        vector<string> args(op->args.size());
+        for (size_t i = 0; i < op->args.size(); i++) {
+            args[i] = print_expr(op->args[i]);
+        }
+        rhs << name << "(";
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) rhs << ", ";
+            rhs << args[i];
+        }
+        rhs << ")";
     }
+    print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_GLSL::visit(const AssertStmt *) {
-    internal_error << "Assertions should not be present in GLSL\n";
+    internal_error << "GLSL: Assertions should not be present\n";
 }
 
 void CodeGen_GLSL::visit(const Broadcast *op) {
@@ -376,21 +442,6 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     if (opengl_es) {
         stream << "precision highp float;\n";
     }
-    stream << "#define sdiv(a, b) ((a - (int)mod((float)a, (float)b))/b)\n"
-           << "#define sqrt_f32 sqrt\n"
-           << "#define sin_f32 sin\n"
-           << "#define cos_f32 cos\n"
-           << "#define exp_f32 exp\n"
-           << "#define log_f32 log\n"
-           << "#define abs_f32 abs\n"
-           << "#define floor_f32 floor\n"
-           << "#define ceil_f32 ceil\n"
-           << "#define pow_f32 pow\n"
-           << "#define asin_f32 asin\n"
-           << "#define acos_f32 acos\n"
-           << "#define tan_f32 tan\n"
-           << "#define atan_f32 atan\n"
-           << "#define atan2_f32 atan\n";
 
     // Declare input textures and variables
     for (size_t i = 0; i < args.size(); i++) {
@@ -419,6 +470,9 @@ void CodeGen_GLSL::test() {
     e.push_back(Max::make(Expr(1), Expr(5)));
     e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)));
     e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f));
+    e.push_back(sin(3.0f));
+    e.push_back(abs(-2));
+    e.push_back(Halide::print(3.0f));
 
     ostringstream source;
     CodeGen_GLSL cg(source);
@@ -426,7 +480,8 @@ void CodeGen_GLSL::test() {
         Evaluate::make(e[i]).accept(&cg);
     }
 
-    std::string expected_source =
+    string src = source.str();
+    std::string correct_source =
         "float _0 = min(1.0000000, 5.0000000);\n"
         "int(_0)\n"
         "float _1 = max(1.0000000, 5.0000000);\n"
@@ -435,10 +490,26 @@ void CodeGen_GLSL::test() {
         "_2\n"
         "float _3 = mix(0.0000000, 255.00000, 0.30000001);\n"
         "_3\n"
+        "float _4 = sin(3.0000000);\n"
+        "_4\n"
+        "float _5 = abs(-2.0000000);\n"
+        "int(_5)\n"
+        "float _6 = 3.0000000;\n"
+        "_6\n"
         ;
 
-    if (source.str() != expected_source) {
-        internal_error << source.str();
+    if (src != correct_source) {
+        int diff = 0;
+        while (src[diff] == correct_source[diff]) diff++;
+        int diff_end = diff + 1;
+        while (diff > 0 && src[diff] != '\n') diff--;
+        while (diff_end < (int)src.size() && src[diff_end] != '\n') diff_end++;
+
+        internal_error
+            << "Correct source code:\n" << correct_source
+            << "Actual source code:\n" << src
+            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n";
+
     }
 
     std::cout << "CodeGen_GLSL test passed\n";
