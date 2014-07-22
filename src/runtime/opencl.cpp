@@ -7,6 +7,8 @@
 
 #include "cuda_opencl_shared.h"
 
+static const char *get_error_str(cl_int err);
+
 // Allow OpenCL 1.1 features to be used.
 #define ENABLE_OPENCL_11
 
@@ -141,8 +143,8 @@ WEAK bool halide_validate_dev_pointer(void *user_context, buffer_t* buf, size_t 
     size_t real_size;
     cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
     if (result != CL_SUCCESS) {
-        halide_printf(user_context, "CL: Bad device pointer %p: clGetMemObjectInfo returned %d\n",
-                      (void *)buf->dev, result);
+        halide_printf(user_context, "CL: Bad device pointer %p: clGetMemObjectInfo returned %s\n",
+                      (void *)buf->dev, get_error_str(result));
         return false;
     }
 
@@ -180,7 +182,8 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     // we just end our reference to it regardless.
     buf->dev = 0;
     if (result != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clReleaseMemObject failed (%d)", result);
+        halide_error_varargs(user_context, "CL: clReleaseMemObject failed (%s)",
+                             get_error_str(result));
         return result;
     }
 
@@ -208,7 +211,8 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
 
     err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clGetPlatformIDs failed (%d)\n", err);
+        halide_error_varargs(user_context, "CL: clGetPlatformIDs failed (%s)\n",
+                             get_error_str(err));
         return err;
     }
 
@@ -242,7 +246,8 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     char platformName[maxPlatformName];
     err = clGetPlatformInfo( platform, CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
     if (err != CL_SUCCESS) {
-        halide_printf(user_context, "    clGetPlatformInfo(CL_PLATFORM_NAME) failed (%d)\n", err);
+        halide_printf(user_context, "    clGetPlatformInfo(CL_PLATFORM_NAME) failed (%s)\n",
+                      get_error_str(err));
         // This is just debug info, report the error but don't fail context creation due to it.
         //return err;
     } else {
@@ -274,7 +279,8 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     cl_uint deviceCount = 0;
     err = clGetDeviceIDs( platform, device_type, maxDevices, devices, &deviceCount );
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clGetDeviceIDs failed (%d)\n", err);
+        halide_error_varargs(user_context, "CL: clGetDeviceIDs failed (%s)\n",
+                             get_error_str(err));
         return err;
     }
 
@@ -294,16 +300,64 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     cl_device_id dev = devices[device];
 
     #ifdef DEBUG
-    const cl_uint maxDeviceName = 256;
-    char deviceName[maxDeviceName];
-    err = clGetDeviceInfo( dev, CL_DEVICE_NAME, maxDeviceName, deviceName, NULL );
-    if (err != CL_SUCCESS) {
-        halide_printf(user_context, "    clGetDeviceInfo(CL_DEVICE_NAME) failed (%d)\n", err);
-        // This is just debug info, report the error but don't fail context create if it fails.
-        //return err;
-    } else {
-        halide_printf(user_context, "    Got device '%s'\n", deviceName);
+    // Declare variables for other state we want to query.
+    char device_name[256] = "";
+    char device_vendor[256] = "";
+    char device_profile[256] = "";
+    char device_version[256] = "";
+    char driver_version[256] = "";
+    cl_ulong global_mem_size = 0;
+    cl_ulong max_mem_alloc_size = 0;
+    cl_ulong local_mem_size = 0;
+    cl_uint max_compute_units = 0;
+    size_t max_work_group_size = 0;
+    cl_uint max_work_item_dimensions = 0;
+    size_t max_work_item_sizes[4] = { 0, };
+
+
+    struct {void *dst; size_t sz; cl_device_info param;} infos[] = {
+        {&device_name[0], sizeof(device_name), CL_DEVICE_NAME},
+        {&device_vendor[0], sizeof(device_vendor), CL_DEVICE_VENDOR},
+        {&device_profile[0], sizeof(device_profile), CL_DEVICE_PROFILE},
+        {&device_version[0], sizeof(device_version), CL_DEVICE_VERSION},
+        {&driver_version[0], sizeof(driver_version), CL_DRIVER_VERSION},
+        {&global_mem_size, sizeof(global_mem_size), CL_DEVICE_GLOBAL_MEM_SIZE},
+        {&max_mem_alloc_size, sizeof(max_mem_alloc_size), CL_DEVICE_MAX_MEM_ALLOC_SIZE},
+        {&local_mem_size, sizeof(local_mem_size), CL_DEVICE_LOCAL_MEM_SIZE},
+        {&max_compute_units, sizeof(max_compute_units), CL_DEVICE_MAX_COMPUTE_UNITS},
+        {&max_work_group_size, sizeof(max_work_group_size), CL_DEVICE_MAX_WORK_GROUP_SIZE},
+        {&max_work_item_dimensions, sizeof(max_work_item_dimensions), CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS},
+        {&max_work_item_sizes[0], sizeof(max_work_item_sizes), CL_DEVICE_MAX_WORK_ITEM_SIZES},
+        {NULL}};
+
+    // Do all the queries.
+    for (int i = 0; infos[i].dst; i++) {
+        err = clGetDeviceInfo(dev, infos[i].param, infos[i].sz, infos[i].dst, NULL);
+        if (err != CL_SUCCESS) {
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo failed (%s)\n", get_error_str(err));
+            return err;
+        }
     }
+
+    halide_printf(user_context,
+                  "      device name: %s\n"
+                  "      device vendor: %s\n"
+                  "      device profile: %s\n"
+                  "      global mem size: %d MB\n"
+                  "      max mem alloc size: %d MB\n"
+                  "      local mem size: %lu\n"
+                  "      max compute units: %d\n"
+                  "      max workgroup size: %lu\n"
+                  "      max work item dimensions: %d\n"
+                  "      max work item sizes: %lux%lux%lux%lu\n",
+                  device_name, device_vendor, device_profile,
+                  (int)(global_mem_size/(1024*1024)),
+                  (int)(max_mem_alloc_size/(1024*1024)),
+                  local_mem_size,
+                  max_compute_units, (cl_ulong)max_work_group_size, max_work_item_dimensions,
+                  (cl_ulong)max_work_item_sizes[0], (cl_ulong)max_work_item_sizes[1],
+                  (cl_ulong)max_work_item_sizes[2], (cl_ulong)max_work_item_sizes[3]);
+
     #endif
 
 
@@ -312,8 +366,9 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     DEBUG_PRINTF( user_context, "    clCreateContext -> " );
     *ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%d", err);
-        halide_error_varargs(user_context, "CL: clCreateContext failed (%d)\n", err);
+        DEBUG_PRINTF( user_context, "%s", get_error_str(err) );
+        halide_error_varargs(user_context, "CL: clCreateContext failed (%s)\n",
+                             get_error_str(err));
         return err;
     } else {
         DEBUG_PRINTF( user_context, "%p\n", *ctx );
@@ -322,8 +377,9 @@ static int create_context(void *user_context, cl_context *ctx, cl_command_queue 
     DEBUG_PRINTF(user_context, "    clCreateCommandQueue ");
     *q = clCreateCommandQueue(*ctx, dev, 0, &err);
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%d", err );
-        halide_error_varargs(user_context, "CL: clCreateCommandQueue failed (%d)\n", err);
+        DEBUG_PRINTF( user_context, "%s", get_error_str(err) );
+        halide_error_varargs(user_context, "CL: clCreateCommandQueue failed (%d)\n",
+                             get_error_str(err));
         return err;
     } else {
         DEBUG_PRINTF( user_context, "%p\n", *q );
@@ -366,7 +422,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
 
         err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed (%d)\n", err);
+            halide_error_varargs(user_context, "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed (%s)\n",
+                                 get_error_str(err));
             return err;
         }
 
@@ -377,14 +434,16 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         cl_ulong max_constant_buffer_size = 0;
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed (%d)\n", err);
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed (%s)\n",
+                                 get_error_str(err));
             return err;
         }
         // Get the max number of constant arguments supported by this OpenCL implementation.
         cl_uint max_constant_args = 0;
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed (%d)\n", err);
+            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed (%s)\n",
+                                 get_error_str(err));
             return err;
         }
 
@@ -399,8 +458,9 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         DEBUG_PRINTF( user_context, "    clCreateProgramWithSource -> " );
         cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
         if (err != CL_SUCCESS) {
-            DEBUG_PRINTF( user_context, "%d\n", err );
-            halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%d)\n", err);
+            DEBUG_PRINTF( user_context, "%s\n", get_error_str(err) );
+            halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%s)\n",
+                                 get_error_str(err));
             return err;
         } else {
             DEBUG_PRINTF( user_context, "%p\n", program );
@@ -410,7 +470,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         DEBUG_PRINTF( user_context, "    clBuildProgram %p %s\n", program, options );
         err = clBuildProgram(program, 1, devices, options, NULL, NULL );
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clBuildProgram failed (%d)\n", err);
+            halide_error_varargs(user_context, "CL: clBuildProgram failed (%s)\n",
+                                 get_error_str(err));
 
             // Allocate an appropriately sized buffer for the build log.
             size_t len = 0;
@@ -464,7 +525,8 @@ WEAK int halide_dev_sync(void *user_context) {
 
     cl_int err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clFinish failed (%d)\n", err);
+        halide_error_varargs(user_context, "CL: clFinish failed (%s)\n",
+                             get_error_str(err));
         return err;
     }
 
@@ -558,8 +620,10 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     DEBUG_PRINTF( user_context, "    clCreateBuffer -> ", size );
     buf->dev = (uint64_t)clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
     if (err != CL_SUCCESS || buf->dev == 0) {
-        DEBUG_PRINTF( user_context, "%d\n", err);
-        halide_error_varargs(user_context, "CL: clCreateBuffer failed (%d)\n", err);
+        DEBUG_PRINTF( user_context, "%s\n",
+                      get_error_str(err));
+        halide_error_varargs(user_context, "CL: clCreateBuffer failed (%s)\n",
+                             get_error_str(err));
         return err;
     } else {
         DEBUG_PRINTF( user_context, "%p\n", (cl_mem)buf->dev );
@@ -626,7 +690,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                                                       0, NULL, NULL);
 
                 if (err != CL_SUCCESS) {
-                    halide_error_varargs(user_context, "CL: clEnqueueWriteBufferRect failed (%d)\n", err);
+                    halide_error_varargs(user_context, "CL: clEnqueueWriteBufferRect failed (%s)\n",
+                                         get_error_str(err));
                     return err;
                 }
 #else
@@ -646,7 +711,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
                                                           CL_FALSE, off, size, src, 0, NULL, NULL);
                         if (err != CL_SUCCESS) {
-                            halide_error_varargs(user_context, "CL: clEnqueueWriteBuffer failed (%d)\n", err);
+                            halide_error_varargs(user_context, "CL: clEnqueueWriteBuffer failed (%s)\n",
+                                                 get_error_str(err));
                             return err;
                         }
                     }
@@ -719,7 +785,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                                                      0, NULL, NULL);
 
                 if (err != CL_SUCCESS) {
-                    halide_error_varargs(user_context, "CL: clEnqueueReadBufferRect failed (%d)\n", err);
+                    halide_error_varargs(user_context, "CL: clEnqueueReadBufferRect failed (%s)\n",
+                                         get_error_str(err));
                     return err;
                 }
 #else
@@ -740,7 +807,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
                                                          CL_FALSE, off, size, dst, 0, NULL, NULL);
                         if (err != CL_SUCCESS) {
-                            halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%d)\n", err);
+                            halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%s)\n",
+                                                 get_error_str(err));
                             return err;
                         }
                     }
@@ -794,8 +862,9 @@ WEAK int halide_dev_run(void *user_context,
     DEBUG_PRINTF( user_context, "    clCreateKernel %s -> ", entry_name );
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%d\n", err );
-        halide_error_varargs(user_context, "CL: clCreateKernel (%s) failed (%d)\n", entry_name, err);
+        DEBUG_PRINTF( user_context, "%s\n", get_error_str(err) );
+        halide_error_varargs(user_context, "CL: clCreateKernel (%s) failed (%s)\n",
+                             entry_name, get_error_str(err));
         return err;
     } else {
         #ifdef DEBUG
@@ -815,7 +884,8 @@ WEAK int halide_dev_run(void *user_context,
         DEBUG_PRINTF(user_context, "    clSetKernelArg %i %i [0x%x ...]\n", i, arg_sizes[i], *(int *)args[i]);
         cl_int err = clSetKernelArg(f, i, arg_sizes[i], args[i]);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clSetKernelArg failed (%d)\n", err);
+            halide_error_varargs(user_context, "CL: clSetKernelArg failed (%s)\n",
+                                 get_error_str(err));
             return err;
         }
         i++;
@@ -825,7 +895,8 @@ WEAK int halide_dev_run(void *user_context,
     DEBUG_PRINTF(user_context, "    clSetKernelArg %i %i [NULL]\n", i, shared_mem_bytes);
     err = clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL);
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clSetKernelArg failed (%d)\n", err);
+        halide_error_varargs(user_context, "CL: clSetKernelArg failed (%s)\n",
+                             get_error_str(err));
         return err;
     }
 
@@ -838,12 +909,10 @@ WEAK int halide_dev_run(void *user_context,
                                  3, NULL, global_dim, local_dim,
                                  // Events
                                  0, NULL, NULL);
+    DEBUG_PRINTF( user_context, "%s\n", get_error_str(err) );
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%d\n", err );
-        halide_error_varargs(user_context, "CL: clEnqueueNDRangeKernel failed (%d)\n", err);
+        halide_error_varargs(user_context, "CL: clEnqueueNDRangeKernel failed (%s)\n", get_error_str(err));
         return err;
-    } else {
-        DEBUG_PRINTF ( user_context, "CL_SUCCESS\n" );
     }
 
     DEBUG_PRINTF( user_context, "    clReleaseKernel %p\n", f );
@@ -863,3 +932,55 @@ WEAK int halide_dev_run(void *user_context,
 
 } // extern "C" linkage
 
+static const char *get_error_str(cl_int err) {
+    switch (err) {
+    case CL_SUCCESS: return "CL_SUCCESS";
+    case CL_DEVICE_NOT_FOUND: return "CL_DEVICE_NOT_FOUND";
+    case CL_DEVICE_NOT_AVAILABLE: return "CL_DEVICE_NOT_AVAILABLE";
+    case CL_COMPILER_NOT_AVAILABLE: return "CL_COMPILER_NOT_AVAILABLE";
+    case CL_MEM_OBJECT_ALLOCATION_FAILURE: return "CL_MEM_OBJECT_ALLOCATION_FAILURE";
+    case CL_OUT_OF_RESOURCES: return "CL_OUT_OF_RESOURCES";
+    case CL_OUT_OF_HOST_MEMORY: return "CL_OUT_OF_HOST_MEMORY";
+    case CL_PROFILING_INFO_NOT_AVAILABLE: return "CL_PROFILING_INFO_NOT_AVAILABLE";
+    case CL_MEM_COPY_OVERLAP: return "CL_MEM_COPY_OVERLAP";
+    case CL_IMAGE_FORMAT_MISMATCH: return "CL_IMAGE_FORMAT_MISMATCH";
+    case CL_IMAGE_FORMAT_NOT_SUPPORTED: return "CL_IMAGE_FORMAT_NOT_SUPPORTED";
+    case CL_BUILD_PROGRAM_FAILURE: return "CL_BUILD_PROGRAM_FAILURE";
+    case CL_MAP_FAILURE: return "CL_MAP_FAILURE";
+    case CL_INVALID_VALUE: return "CL_INVALID_VALUE";
+    case CL_INVALID_DEVICE_TYPE: return "CL_INVALID_DEVICE_TYPE";
+    case CL_INVALID_PLATFORM: return "CL_INVALID_PLATFORM";
+    case CL_INVALID_DEVICE: return "CL_INVALID_DEVICE";
+    case CL_INVALID_CONTEXT: return "CL_INVALID_CONTEXT";
+    case CL_INVALID_QUEUE_PROPERTIES: return "CL_INVALID_QUEUE_PROPERTIES";
+    case CL_INVALID_COMMAND_QUEUE: return "CL_INVALID_COMMAND_QUEUE";
+    case CL_INVALID_HOST_PTR: return "CL_INVALID_HOST_PTR";
+    case CL_INVALID_MEM_OBJECT: return "CL_INVALID_MEM_OBJECT";
+    case CL_INVALID_IMAGE_FORMAT_DESCRIPTOR: return "CL_INVALID_IMAGE_FORMAT_DESCRIPTOR";
+    case CL_INVALID_IMAGE_SIZE: return "CL_INVALID_IMAGE_SIZE";
+    case CL_INVALID_SAMPLER: return "CL_INVALID_SAMPLER";
+    case CL_INVALID_BINARY: return "CL_INVALID_BINARY";
+    case CL_INVALID_BUILD_OPTIONS: return "CL_INVALID_BUILD_OPTIONS";
+    case CL_INVALID_PROGRAM: return "CL_INVALID_PROGRAM";
+    case CL_INVALID_PROGRAM_EXECUTABLE: return "CL_INVALID_PROGRAM_EXECUTABLE";
+    case CL_INVALID_KERNEL_NAME: return "CL_INVALID_KERNEL_NAME";
+    case CL_INVALID_KERNEL_DEFINITION: return "CL_INVALID_KERNEL_DEFINITION";
+    case CL_INVALID_KERNEL: return "CL_INVALID_KERNEL";
+    case CL_INVALID_ARG_INDEX: return "CL_INVALID_ARG_INDEX";
+    case CL_INVALID_ARG_VALUE: return "CL_INVALID_ARG_VALUE";
+    case CL_INVALID_ARG_SIZE: return "CL_INVALID_ARG_SIZE";
+    case CL_INVALID_KERNEL_ARGS: return "CL_INVALID_KERNEL_ARGS";
+    case CL_INVALID_WORK_DIMENSION: return "CL_INVALID_WORK_DIMENSION";
+    case CL_INVALID_WORK_GROUP_SIZE: return "CL_INVALID_WORK_GROUP_SIZE";
+    case CL_INVALID_WORK_ITEM_SIZE: return "CL_INVALID_WORK_ITEM_SIZE";
+    case CL_INVALID_GLOBAL_OFFSET: return "CL_INVALID_GLOBAL_OFFSET";
+    case CL_INVALID_EVENT_WAIT_LIST: return "CL_INVALID_EVENT_WAIT_LIST";
+    case CL_INVALID_EVENT: return "CL_INVALID_EVENT";
+    case CL_INVALID_OPERATION: return "CL_INVALID_OPERATION";
+    case CL_INVALID_GL_OBJECT: return "CL_INVALID_GL_OBJECT";
+    case CL_INVALID_BUFFER_SIZE: return "CL_INVALID_BUFFER_SIZE";
+    case CL_INVALID_MIP_LEVEL: return "CL_INVALID_MIP_LEVEL";
+    case CL_INVALID_GLOBAL_WORK_SIZE: return "CL_INVALID_GLOBAL_WORK_SIZE";
+    default: return "<Unknown error>";
+    }
+}
