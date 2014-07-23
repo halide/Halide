@@ -95,6 +95,7 @@ struct CacheEntry {
     size_t key_size;
     uint8_t *key;
     uint32_t hash;
+    uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
     uint32_t tuple_count;
     buffer_t computed_bounds;
     buffer_t buf;
@@ -119,6 +120,7 @@ struct CacheEntry {
         less_recent(NULL),
         key_size(cache_key_size),
         hash(key_hash),
+        in_use_count(0),
         tuple_count(tuples) {
         // TODO: ERROR RETURN
         key = (uint8_t *)halide_malloc(user_context, key_size);
@@ -219,36 +221,55 @@ void prune_cache() {
 #if CACHE_DEBUGGING
     validate_cache();
 #endif
+    CacheEntry *prune_candidate = least_recently_used;
     while (current_cache_size > max_cache_size &&
-           least_recently_used != NULL) { 
-        CacheEntry *lru_entry = least_recently_used;
-        uint32_t h = lru_entry->hash;
-        uint32_t index = h % kHashTableSize;
+           prune_candidate != NULL) {
+        CacheEntry *more_recent = prune_candidate->more_recent;
+	
+        if (prune_candidate->in_use_count == 0) {
+            uint32_t h = prune_candidate->hash;
+            uint32_t index = h % kHashTableSize;
 
-        CacheEntry *entry = cache_entries[index];
-        if (entry == lru_entry) {
-            cache_entries[index] = lru_entry->next;
-        } else {
-            while (entry != NULL && entry->next != lru_entry) {
-                entry = entry->next;
+	    // Remove from hash table
+            CacheEntry *prev_hash_entry = cache_entries[index];
+            if (prev_hash_entry == prune_candidate) {
+                cache_entries[index] = prune_candidate->next;
+            } else {
+                while (prev_hash_entry != NULL && prev_hash_entry->next != prune_candidate) {
+                    prev_hash_entry = prev_hash_entry->next;
+                }
+                halide_assert(NULL, prev_hash_entry != NULL);
+                prev_hash_entry->next = prune_candidate->next;
             }
-            halide_assert(NULL, entry != NULL);
-            entry->next = lru_entry->next;
-        }
-        least_recently_used = lru_entry->more_recent;
-        if (least_recently_used != NULL) {
-            least_recently_used->less_recent = NULL;
-        }
-        if (most_recently_used == lru_entry) {
-            most_recently_used = NULL;
-        }
-        for (int32_t i = 0; i < lru_entry->tuple_count; i++) {
-            current_cache_size -= full_extent(lru_entry->buffer(i));
-        }
-        // This code uses placement new, hence placement delete style.
-        // (This is because the cache entry has variable size.)
-        lru_entry->~CacheEntry();
-        halide_free(NULL, lru_entry);
+
+	    // Remove from less recent chain.
+	    if (least_recently_used == prune_candidate) {
+	        least_recently_used = more_recent;
+	    }
+            if (more_recent != NULL) {
+	        more_recent->less_recent = prune_candidate->less_recent;
+            }
+
+	    // Remove from more recent chain.
+            if (most_recently_used == prune_candidate) {
+                most_recently_used = prune_candidate->less_recent;
+            }
+	    if (prune_candidate->less_recent != NULL) {
+	        prune_candidate->less_recent = more_recent;
+	    }
+
+	    // Decrement cache used amount
+            for (int32_t i = 0; i < prune_candidate->tuple_count; i++) {
+                current_cache_size -= full_extent(prune_candidate->buffer(i));
+            }
+
+            // This code uses placement new, hence placement delete style.
+            // (This is because the cache entry has variable size.)
+            prune_candidate->~CacheEntry();
+            halide_free(NULL, prune_candidate);
+	}
+
+	prune_candidate = more_recent;
     }
 #if CACHE_DEBUGGING
     validate_cache();
@@ -287,13 +308,16 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
         }
         __builtin_va_end(tuple_buffers);
     }
-    validate_cache();
 #endif
 
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
     ScopedSpinLock lock(&memoization_lock);
+
+#if CACHE_DEBUGGING
+    validate_cache();
+#endif
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
@@ -371,13 +395,16 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
         }
         __builtin_va_end(tuple_buffers);
     }
-    validate_cache();
 #endif
 
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
     ScopedSpinLock lock(&memoization_lock);
+
+#if CACHE_DEBUGGING
+    validate_cache();
+#endif
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
@@ -440,12 +467,59 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 #endif
 }
 
-#if 0
 WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, ...) {
-}
+#if CACHE_DEBUGGING
+    debug_print_key(user_context, "halide_memoization_cache_store", cache_key, size);
 
-}
+    debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
+    {
+        __builtin_va_list tuple_buffers;
+        __builtin_va_start(tuple_buffers, tuple_count);
+        for (int32_t i = 0; i < tuple_count; i++) {
+            buffer_t *buf = __builtin_va_arg(tuple_buffers, buffer_t *);
+            debug_print_buffer(user_context, "Allocation bounds", *buf);
+        }
+        __builtin_va_end(tuple_buffers);
+    }
 #endif
+
+    uint32_t h = djb_hash(cache_key, size);
+    uint32_t index = h % kHashTableSize;
+
+    ScopedSpinLock lock(&memoization_lock);
+
+#if CACHE_DEBUGGING
+    validate_cache();
+#endif
+
+    CacheEntry *entry = cache_entries[index];
+    while (entry != NULL) {
+        if (entry->hash == h && entry->key_size == size &&
+            keys_equal(entry->key, cache_key, size) && 
+            bounds_equal(entry->computed_bounds, *computed_bounds) &&
+            entry->tuple_count == tuple_count) {
+            
+            bool all_bounds_equal = true;
+
+            {
+                __builtin_va_list tuple_buffers;
+                __builtin_va_start(tuple_buffers, tuple_count);
+                for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
+                    buffer_t *buf = __builtin_va_arg(tuple_buffers, buffer_t *);
+                    all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
+                }
+                __builtin_va_end(tuple_buffers);
+            }
+            if (all_bounds_equal) {
+	        halide_assert(user_context, entry->in_use_count > 0);
+		entry->in_use_count--;
+                return;
+            }
+        }
+        entry = entry->next;
+    }
+    halide_assert(user_context, false);
+}
 
 }

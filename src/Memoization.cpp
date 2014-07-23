@@ -354,6 +354,28 @@ public:
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_store", args, Call::Extern));
     }
+
+    // Returns a statement which will store the result of a computation under this key
+    Stmt release_cache_entry(std::string key_allocation_name, std::string computed_bounds_name,
+			     int32_t tuple_count, std::string storage_base_name) {
+        std::vector<Expr> args;
+        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
+                                  vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
+                                  Call::Intrinsic));
+        args.push_back(key_size());
+        args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
+        args.push_back(tuple_count);
+        if (tuple_count == 1) {
+            args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+        } else {
+            for (int32_t i = 0; i < tuple_count; i++) {
+                args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+            }
+        }
+
+        // This is actually a void call. How to indicate that? Look at Extern_ stuff.
+        return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_release", args, Call::Extern));
+    }
 };
 
 }
@@ -399,15 +421,20 @@ private:
             std::string computed_bounds_name = op->name + ".computed_bounds.buffer";
 
             Expr cache_miss = Variable::make(Bool(), cache_miss_name);
+
+            Stmt cache_store_back =
+              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
+	    Stmt cache_release = key_info.release_cache_entry(cache_key_name, computed_bounds_name, f.outputs(), op->name);
+
             Stmt mutated_produce = IfThenElse::make(cache_miss, produce);
             Stmt mutated_update =
                 update.defined() ? IfThenElse::make(cache_miss, update) :
                                        update;
-            Stmt cache_store_back =
-              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name)); 
-            Stmt mutated_consume = Block::make(cache_store_back, consume);
+            Stmt mutated_consume = Block::make(consume, cache_release);
+            mutated_consume = Block::make(cache_store_back, mutated_consume);
 
             Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);
+
             Stmt cache_lookup = LetStmt::make(cache_miss_name, key_info.generate_lookup(cache_key_name, computed_bounds_name, f.outputs(), op->name), mutated_pipeline);
 
             std::vector<Expr> computed_bounds_args;
@@ -429,7 +456,7 @@ private:
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
-            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), true, generate_key);
+            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), const_true(), generate_key);
 
             stmt = cache_key_alloc;
         } else {
