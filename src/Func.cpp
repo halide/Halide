@@ -22,6 +22,7 @@
 #include "Debug.h"
 #include "Target.h"
 #include "IREquality.h"
+#include "HumanReadableStmt.h"
 
 namespace Halide {
 
@@ -1930,6 +1931,70 @@ void Func::compile_to_lowered_stmt(const string &filename, const Target &target)
 
     ofstream stmt_output(filename.c_str());
     stmt_output << lowered;
+}
+
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, std::map<std::string, Expr> additional_replacements, const Target &t) {
+    _halide_user_assert(outputs() == 1) << "Handling multiple outputs is not yet supported by compile_to_simplified_lowered_stmt\n";
+    // i purposfully don't use f.lowered because i want a copy of the STMT since it will later get modified 
+    Stmt s = Internal::lower(function(), t);
+
+    s = human_readable_stmt(name(), s, (buffer_t *)dst[0].raw_buffer(), additional_replacements);
+
+    ofstream stmt_output(filename.c_str());
+    stmt_output << s;
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), t);
+}
+
+template<typename T>
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Image<T> dst, std::map<std::string, Expr> additional_replacements, const Target &target) {
+    return compile_to_simplified_lowered_stmt(filename, Realization(vec<Buffer>(Buffer(dst))), additional_replacements, target);
+}
+
+template<typename T> 
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Image<T> dst, const Target &target) {
+    return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), target);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size, int w_size, std::map<std::string, Expr> additional_replacements, const Target &t) {
+    _halide_user_assert(defined()) << "Can't realize undefined Func.\n";
+    std::vector<Buffer> _outputs(outputs());
+    for (size_t i = 0; i < _outputs.size(); i++) {
+        _outputs[i] = Buffer(output_types()[i], x_size, y_size, z_size, w_size);
+    }
+    Realization r(_outputs);
+    return compile_to_simplified_lowered_stmt(filename, r, additional_replacements, t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size, int w_size, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, w_size, std::map<std::string, Expr>(), t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size, std::map<std::string, Expr> additional_replacements, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0, additional_replacements, t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size,  const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, y_size, z_size, 0, std::map<std::string, Expr>(), t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, std::map<std::string, Expr> additional_replacements, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0, additional_replacements, t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, y_size, 0, 0, std::map<std::string, Expr>(), t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, std::map<std::string, Expr> additional_replacements, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0, additional_replacements, t);
+}
+
+void Func::compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, const Target &t) {
+    return compile_to_simplified_lowered_stmt(filename, x_size, 0, 0, 0, std::map<std::string, Expr>(), t);
 }
 
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
