@@ -1,6 +1,4 @@
-#include "mini_stdint.h"
-
-#define WEAK __attribute__((weak))
+#include "runtime_internal.h"
 
 typedef void *objc_id;
 typedef void *objc_sel;

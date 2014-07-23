@@ -217,11 +217,11 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 # -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -nobuiltininc -fno-blocks -fno-exceptions -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+	$(CLANG) -ffreestanding -fno-blocks -fno-exceptions -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE -DBITS_64 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) -nobuiltininc -fno-blocks -fno-exceptions -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+	$(CLANG) -ffreestanding -fno-blocks -fno-exceptions -m32 -DCOMPILING_HALIDE -DBITS_32 -emit-llvm -O3 -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
 	@-mkdir -p $(BUILD_DIR)

@@ -1,4 +1,4 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 #include "mini_cuda.h"
