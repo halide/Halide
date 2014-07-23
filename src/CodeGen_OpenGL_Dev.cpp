@@ -108,6 +108,28 @@ void CodeGen_OpenGL_Dev::dump() {
 // CodeGen_GLSL
 //
 
+CodeGen_GLSL::CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {
+    builtin["sin_f32"] = "sin";
+    builtin["sqrt_f32"] = "sqrt";
+    builtin["cos_f32"] = "cos";
+    builtin["exp_f32"] = "exp";
+    builtin["log_f32"] = "log";
+    builtin["abs_f32"] = "abs";
+    builtin["floor_f32"] = "floor";
+    builtin["ceil_f32"] = "ceil";
+    builtin["pow_f32"] = "pow";
+    builtin["asin_f32"] = "asin";
+    builtin["acos_f32"] = "acos";
+    builtin["tan_f32"] = "tan";
+    builtin["atan_f32"] = "atan";
+    builtin["atan2_f32"] = "atan"; // also called atan in GLSL
+    builtin["min"] = "min";
+    builtin["max"] = "max";
+    builtin["mix"] = "mix";
+    builtin["mod"] = "mod";
+    builtin["abs"] = "abs";
+}
+
 string CodeGen_GLSL::print_type(Type type) {
     ostringstream oss;
     type = map_type(type);
@@ -361,27 +383,6 @@ void CodeGen_GLSL::visit(const Call *op) {
             return;
         }
     } else {
-        map<string, string> builtin;
-        builtin["sin_f32"] = "sin";
-        builtin["sqrt_f32"] = "sqrt";
-        builtin["cos_f32"] = "cos";
-        builtin["exp_f32"] = "exp";
-        builtin["log_f32"] = "log";
-        builtin["abs_f32"] = "abs";
-        builtin["floor_f32"] = "floor";
-        builtin["ceil_f32"] = "ceil";
-        builtin["pow_f32"] = "pow";
-        builtin["asin_f32"] = "asin";
-        builtin["acos_f32"] = "acos";
-        builtin["tan_f32"] = "tan";
-        builtin["atan_f32"] = "atan";
-        builtin["atan2_f32"] = "atan"; // also called atan in GLSL
-        builtin["min"] = "min";
-        builtin["max"] = "max";
-        builtin["mix"] = "mix";
-        builtin["mod"] = "mod";
-        builtin["abs"] = "abs";
-
         if (builtin.count(op->name) == 0) {
             user_error << "GLSL: encountered unknown function '" << op->name << "'\n";
         }

@@ -10,6 +10,8 @@
 #include "Target.h"
 
 #include <sstream>
+#include <map>
+#include <string>
 
 namespace Halide {
 namespace Internal {
@@ -40,7 +42,7 @@ private:
 /** Compile one statement into GLSL. */
 class CodeGen_GLSL : public CodeGen_C {
 public:
-    CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {}
+    CodeGen_GLSL(std::ostream &s);
     void compile(Stmt stmt,
                  std::string name,
                  const std::vector<GPU_Argument> &args,
@@ -53,7 +55,7 @@ protected:
     std::string print_type(Type type);
     std::string print_name(const std::string &);
 
-    void visit(const FloatImm *op);
+    void visit(const FloatImm *);
 
     void visit(const Cast *);
     void visit(const For *);
@@ -61,8 +63,8 @@ protected:
 
     void visit(const Max *);
     void visit(const Min *);
-    void visit(const Div *op);
-    void visit(const Mod *op);
+    void visit(const Div *);
+    void visit(const Mod *);
 
     void visit(const Load *);
     void visit(const Store *);
@@ -71,11 +73,12 @@ protected:
     void visit(const AssertStmt *);
     void visit(const Broadcast *);
 
-    void visit(const Evaluate *op);
+    void visit(const Evaluate *);
 
 private:
     std::string get_vector_suffix(Expr e);
 
+    std::map<std::string, std::string> builtin;
 };
 
 }}
