@@ -244,7 +244,7 @@ static Expr CallBuiltin(const Type &result_type,
 }
 
 static Expr CallBuiltin(const Type &result_type,
-                        const std::string &func,
+                        const std::string &name,
                         Expr a, Expr b) {
     if (!a.type().is_float()) {
         a = Cast::make(Float(32), a);
@@ -252,7 +252,7 @@ static Expr CallBuiltin(const Type &result_type,
     if (!b.type().is_float()) {
         b = Cast::make(Float(32), b);
     }
-    Expr val = Call::make(Float(32), func, vec(a, b), Call::Extern);
+    Expr val = Call::make(Float(32), name, vec(a, b), Call::Extern);
     return simplify(Cast::make(result_type, val));
 }
 
@@ -265,7 +265,6 @@ void CodeGen_GLSL::visit(const Min *op) {
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
-    std::cerr << op->type;
     if (op->type.is_int()) {
         // Halide's integer division is defined to round down. Since the
         // rounding behavior of GLSL's integer division is undefined, emulate
@@ -452,7 +451,9 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     // Specify default float precision when compiling for OpenGL ES.
     // TODO: emit correct #version
     if (opengl_es) {
-        stream << "precision highp float;\n";
+        stream << "#ifdef GL_FRAGMENT_PRECISION_HIGH\n"
+               << "precision highp float;\n"
+               << "#endif\n";
     }
 
     // Declare input textures and variables
