@@ -71,7 +71,7 @@ public:
         const std::vector<Parameter> &output_buffers =
             function.output_buffers();
         for (size_t i = 0; i < output_buffers.size(); i++) {
-            for (int j = 0; j < std::min(function.dimensions(), 4); j++) {
+            for (int j = 0; j < function.dimensions() && j < 4; j++) {
                 if (output_buffers[i].min_constraint(i).defined()) {
                     output_buffers[i].min_constraint(i).accept(this);
                 }
@@ -199,14 +199,17 @@ class KeyInfo {
         for (iter = dependencies.dependency_info.begin();
              iter != dependencies.dependency_info.end();
              iter++) {
-            max_alignment = std::max(max_alignment, iter->second.type.bytes());
+            int alignment = iter->second.type.bytes();
+            if (alignment > max_alignment) {
+                max_alignment = alignment;
+            }
         }
         // Make sure max_alignment is a power of two and has maximum value of 32
         int i = 0;
         while (i < 4 && max_alignment > (1 << i)) {
             i = i + 1;
         }
-        return (1 << i);
+        return (size_t)(1 << i);
     }
 
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
