@@ -852,6 +852,16 @@ void CodeGen_C::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             string arg = print_expr(op->args[0]);
             rhs << "(" << arg << " > 0 ? " << arg << " : -" << arg << ")";
+        } else if (op->name == Call::memoize_expr) {
+            internal_assert(op->args.size() >= 1);
+            string arg = print_expr(op->args[0]);
+            rhs << "(" << arg << ")";
+        } else if (op->name == Call::copy_memory) {
+            internal_assert(op->args.size() == 3);
+            string dest = print_expr(op->args[0]);
+            string src = print_expr(op->args[1]);
+            string size = print_expr(op->args[2]);
+            rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
         } else {
             // TODO: other intrinsics
             internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';

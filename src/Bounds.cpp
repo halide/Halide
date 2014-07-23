@@ -690,6 +690,9 @@ private:
             // loop to check perfect nesting.
             min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
             max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::memoize_expr) {
+            assert(op->args.size() >= 1);
+            op->args[0].accept(this);
         } else if (op->func.has_pure_definition()) {
             bounds_of_func(op->func, op->value_index);
         } else {
@@ -949,10 +952,18 @@ private:
             // Visit the args of the inner call
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
-            internal_assert(c);
-            for (size_t i = 0; i < c->args.size(); i++) {
-                c->args[i].accept(this);
+            
+            if (c) {
+                for (size_t i = 0; i < c->args.size(); i++) {
+                    c->args[i].accept(this);
+                }
+            } else {
+                const Load *l = op->args[0].as<Load>();
+
+                internal_assert(l);
+                l->index.accept(this);
             }
+
             return;
         }
 

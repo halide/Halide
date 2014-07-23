@@ -265,13 +265,13 @@ public:
     EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y,
                                VarOrRVar thread_x, VarOrRVar thread_y,
-			       GPUAPI gpu_api = GPU_Default);
+                               GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
-			       GPUAPI gpu_api = GPU_Default);
+                               GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
-				    GPUAPI gpu_api = GPU_Default);
+                                    GPUAPI gpu_api = GPU_Default);
     EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
 
@@ -320,6 +320,7 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
+    EXPORT ScheduleHandle &memoize();
 };
 
 /** A halide function. This class represents one stage in a Halide
@@ -386,6 +387,8 @@ class Func {
     /** The current print function used for realizing this
      * function. May be NULL. Only relevant when jitting. */
     void (*custom_print)(void *user_context, const char *);
+
+    uint64_t cache_size;
 
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
@@ -685,6 +688,12 @@ public:
      * This will clobber Halide's version.
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
+
+    /** Set the maximum number of bytes used by memoization caching.
+     * If you are compiling statically, you should include HalideRuntime.h
+     * and call halide_memoization_cache_set_size() instead.
+     */
+    EXPORT void memoization_cache_set_size(uint64_t size);
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
@@ -1196,7 +1205,7 @@ public:
     // @{
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y,
-		     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+                     VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
     EXPORT Func &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                      VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
     // @}
@@ -1377,6 +1386,13 @@ public:
      * allocates lots of temporary memory to store g.
      */
     EXPORT Func &compute_root();
+
+    /** Use the halide_memoization_cache_... interface to store a
+     *  computed version of this function across invocations of the
+     *  Func.
+     */
+    EXPORT Func &memoize();
+
 
     /** Allocate storage for this function within f's loop over
      * var. Scheduling storage is optional, and can be used to
@@ -1671,7 +1687,7 @@ NO_INLINE T evaluate_may_gpu(Expr e) {
     Func f;
     f() = e;
     if (has_gpu_feature) {
-	f.gpu_single_thread();
+        f.gpu_single_thread();
     }
     Image<T> im = f.realize();
     return im(0);
@@ -1695,7 +1711,7 @@ NO_INLINE void evaluate_may_gpu(Tuple t, A *a, B *b) {
     Func f;
     f() = t;
     if (has_gpu_feature) {
-	f.gpu_single_thread();
+        f.gpu_single_thread();
     }
     Realization r = f.realize();
     *a = Image<A>(r[0])(0);

@@ -108,6 +108,8 @@ const string Call::return_second = "return_second";
 const string Call::if_then_else = "if_then_else";
 const string Call::glsl_texture_load = "glsl_texture_load";
 const string Call::glsl_texture_store = "glsl_texture_store";
+const string Call::memoize_expr = "memoize_expr";
+const string Call::copy_memory = "copy_memory";
 
 }
 }

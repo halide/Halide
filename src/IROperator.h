@@ -1188,7 +1188,63 @@ inline Expr undef() {
     return undef(type_of<T>());
 }
 
+/** Control the values used in the memoization cache key for memoize.
+ * Normally parameters and other external dependencies are
+ * automatically inferred and added to the cache key. The memoize_tag
+ * operator allows computing one expression and using either the
+ * computed value, or one or more other expressions in the cache key
+ * instead of the parameter dependencies of the computation. The
+ * single argument version is completely safe in that the cache key
+ * will use the actual computed value -- it is difficult or imposible
+ * to produce erroneous caching this way. The more-than-one argument
+ * version allows generating cache keys that do not uniquely identify
+ * the computation and thus can result in caching errors.
+ *
+ * A potential use for the single argument version is to handle a
+ * floating-point parameter that is quantized to a small
+ * integer. Mutliple values of the float will produce the same integer
+ * and moving the caching to using the integer for the key is more
+ * efficient.
+ *
+ * The main use for the more-than-one argument version is to provide
+ * cache key information for Handles and ImageParams, which otherwise
+ * are not allowed inside compute_cached operations. E.g. when passing
+ * a group of parameters to an external array function via a Handle,
+ * memoize_tag can be used to isolate the actual values used by that
+ * computation. If an ImageParam is a constant image with a persistent
+ * digest, memoize_tag can be used to key computations using that image
+ * on the digest. */
+// @{
+EXPORT Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values);
+inline Expr memoize_tag(Expr result) {
+    return memoize_tag(result, std::vector<Expr>());
 }
+inline Expr memoize_tag(Expr result, Expr a) {
+    return memoize_tag(result, Internal::vec<Expr>(a));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f, Expr g) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g));
+}
+inline Expr memoize_tag(Expr result, Expr a, Expr b, Expr c, Expr d, Expr e, Expr f, Expr g, Expr h) {
+    return memoize_tag(result, Internal::vec<Expr>(a, b, c, d, e, f, g, h));
+}
+// @}
 
+}
 
 #endif

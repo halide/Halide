@@ -43,6 +43,7 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_do_task(NULL),
                                  custom_trace(NULL),
                                  custom_print(NULL),
+                                 cache_size(0),
                                  random_seed(0),
                                  user_context(user_context_param()) {
 }
@@ -55,6 +56,7 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_do_task(NULL),
                custom_trace(NULL),
                custom_print(NULL),
+               cache_size(0),
                random_seed(0),
                user_context(user_context_param()) {
 }
@@ -67,6 +69,7 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_do_task(NULL),
                      custom_trace(NULL),
                      custom_print(NULL),
+                     cache_size(0),
                      random_seed(0),
                      user_context(user_context_param()) {
     (*this)(_) = e;
@@ -80,6 +83,7 @@ Func::Func(Function f) : func(f),
                          custom_do_task(NULL),
                          custom_trace(NULL),
                          custom_print(NULL),
+                         cache_size(0),
                          random_seed(0),
                          user_context(user_context_param()) {
 }
@@ -605,6 +609,11 @@ ScheduleHandle &ScheduleHandle::allow_race_conditions() {
     return *this;
 }
 
+ScheduleHandle &ScheduleHandle::memoize() {
+    schedule.memoized() = true;
+    return *this;
+}
+
 ScheduleHandle &ScheduleHandle::serial(VarOrRVar var) {
     set_dim_type(var, For::Serial);
     return *this;
@@ -851,7 +860,7 @@ ScheduleHandle &ScheduleHandle::gpu(VarOrRVar bx, VarOrRVar by,
 
 ScheduleHandle &ScheduleHandle::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz,
                                     VarOrRVar tx, VarOrRVar ty, VarOrRVar tz,
-				    GPUAPI /* gpu_api */) {
+                                    GPUAPI /* gpu_api */) {
     return gpu_blocks(bx, by, bz).gpu_threads(tx, ty, tz);
 }
 
@@ -867,7 +876,7 @@ ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, Expr x_size, GPUAPI /* gpu
 
 ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, VarOrRVar y,
                                          Expr x_size, Expr y_size,
-					 GPUAPI /* gpu_api */) {
+                                         GPUAPI /* gpu_api */) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         by("__block_id_y", x.is_rvar),
         tx("__thread_id_x", x.is_rvar),
@@ -882,7 +891,7 @@ ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, VarOrRVar y,
 
 ScheduleHandle &ScheduleHandle::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                          Expr x_size, Expr y_size, Expr z_size,
-					 GPUAPI /* gpu_api */) {
+                                         GPUAPI /* gpu_api */) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
         by("__block_id_y", x.is_rvar),
         bz("__block_id_z", x.is_rvar),
@@ -929,6 +938,12 @@ Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
 
 Func &Func::allow_race_conditions() {
     ScheduleHandle(func.schedule()).allow_race_conditions();
+    return *this;
+}
+
+Func &Func::memoize() {
+    invalidate_cache();
+    ScheduleHandle(func.schedule()).memoize();
     return *this;
 }
 
@@ -2018,6 +2033,13 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     }
 }
 
+void Func::memoization_cache_set_size(uint64_t size) {
+    cache_size = size;
+    if (compiled_module.memoization_cache_set_size) {
+        compiled_module.memoization_cache_set_size(size);
+    }
+}
+
 void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
@@ -2109,6 +2131,7 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
     compiled_module.set_custom_print(custom_print);
+    compiled_module.memoization_cache_set_size(cache_size);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2190,6 +2213,7 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_do_task(custom_do_task);
     compiled_module.set_custom_trace(custom_trace);
     compiled_module.set_custom_print(custom_print);
+    compiled_module.memoization_cache_set_size(cache_size);
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {

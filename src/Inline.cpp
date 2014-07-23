@@ -32,6 +32,11 @@ class Inliner : public IRMutator {
                        << "is meaningless for functions computed inline.\n";
         }
 
+        if (s.memoized()) {
+            user_error << "Cannot memoize function "
+                       << f.name() << " because the function is scheduled inline.\n";
+        }
+
         for (size_t i = 0; i < s.dims().size(); i++) {
             Dim d = s.dims()[i];
             if (d.for_type == For::Parallel) {

@@ -39,6 +39,7 @@
 #include "InjectOpenGLIntrinsics.h"
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
+#include "Memoization.h"
 
 namespace Halide {
 namespace Internal {
@@ -648,6 +649,7 @@ private:
 
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
+  
         return Pipeline::make(func.name(), realization.first, realization.second, s);
     }
 
@@ -1647,6 +1649,10 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Initial statement: " << '\n' << s << '\n';
     s = schedule_functions(s, order, env, graph, t);
     debug(2) << "All realizations injected:\n" << s << '\n';
+
+    debug(2) << "Injecting memoization...\n";
+    s = inject_memoization(s, env, f.name());
+    debug(2) << "Memoization injected:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, f);

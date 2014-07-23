@@ -583,4 +583,12 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::Intrinsic);
 }
 
+Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
+    std::vector<Expr> args;
+    args.push_back(result);
+    args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
+    return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
+                                args, Internal::Call::Intrinsic);
+}
+
 }
