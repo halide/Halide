@@ -30,7 +30,7 @@ std::string replace_all(std::string &str,
 
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
-static Type map_type(const Type &type) {
+Type map_type(const Type &type) {
     Type result = type;
     if (type.is_scalar()) {
         if (type.is_float()) {
@@ -62,6 +62,24 @@ static Type map_type(const Type &type) {
         result.width = type.width;
     }
     return result;
+}
+
+// Most GLSL builtins are only defined for float arguments, so we may have to
+// introduce type casts around the arguments and the entire function call.
+// TODO: handle vector types
+Expr call_builtin(const Type &result_type,
+                  const std::string &func,
+                  const std::vector<Expr> &args) {
+    std::vector<Expr> new_args(args.size());
+    for (size_t i = 0; i < args.size(); i++) {
+        if (!args[i].type().is_float()) {
+            new_args[i] = Cast::make(Float(32), args[i]);
+        } else {
+            new_args[i] = args[i];
+        }
+    }
+    Expr val = Call::make(Float(32), func, new_args, Call::Extern);
+    return simplify(Cast::make(result_type, val));
 }
 
 }
@@ -231,37 +249,12 @@ void CodeGen_GLSL::visit(const Select *op) {
     id = id_value;
 }
 
-// Most GLSL builtins are only defined for float arguments, so we may have to
-// introduce type casts around the arguments and the entire function call.
-static Expr CallBuiltin(const Type &result_type,
-                        const std::string &func,
-                        Expr a) {
-    if (!a.type().is_float()) {
-        a = Cast::make(Float(32), a);
-    }
-    Expr val = Call::make(Float(32), func, vec(a), Call::Extern);
-    return simplify(Cast::make(result_type, val));
-}
-
-static Expr CallBuiltin(const Type &result_type,
-                        const std::string &name,
-                        Expr a, Expr b) {
-    if (!a.type().is_float()) {
-        a = Cast::make(Float(32), a);
-    }
-    if (!b.type().is_float()) {
-        b = Cast::make(Float(32), b);
-    }
-    Expr val = Call::make(Float(32), name, vec(a, b), Call::Extern);
-    return simplify(Cast::make(result_type, val));
-}
-
 void CodeGen_GLSL::visit(const Max *op) {
-    print_expr(CallBuiltin(op->type, "max", op->a, op->b));
+    print_expr(call_builtin(op->type, "max", vec(op->a, op->b)));
 }
 
 void CodeGen_GLSL::visit(const Min *op) {
-    print_expr(CallBuiltin(op->type, "min", op->a, op->b));
+    print_expr(call_builtin(op->type, "min", vec(op->a, op->b)));
 }
 
 void CodeGen_GLSL::visit(const Div *op) {
@@ -270,16 +263,14 @@ void CodeGen_GLSL::visit(const Div *op) {
         // rounding behavior of GLSL's integer division is undefined, emulate
         // the correct behavior using floating point arithmetic.
         Expr val = Div::make(Cast::make(Float(32), op->a), Cast::make(Float(32), op->b));
-        print_expr(simplify(
-                       Cast::make(op->type,
-                                  Call::make(Float(32), "floor_f32", vec(val), Call::Extern))));
+        print_expr(call_builtin(op->type, "floor_f32", vec(val)));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
     }
 }
 
 void CodeGen_GLSL::visit(const Mod *op) {
-    print_expr(CallBuiltin(op->type, "mod", op->a, op->b));
+    print_expr(call_builtin(op->type, "mod", vec(op->a, op->b)));
 }
 
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
@@ -353,24 +344,10 @@ void CodeGen_GLSL::visit(const Call *op) {
             }
 
             // If zero_val and one_val are integers, add appropriate type casts.
-            // Lerp guarantees that op->type == zero_val.type() == one_val.type().
-            Expr result;
-            if (zero_val.type().is_float()) {
-                result = Call::make(op->type, "mix",
-                                    vec(zero_val, one_val, weight),
-                                    Call::Extern);
-            } else {
-                zero_val = Cast::make(Float(32), zero_val);
-                one_val = Cast::make(Float(32), one_val);
-                result = Cast::make(op->type,
-                                    Call::make(Float(32), "mix",
-                                               vec(zero_val, one_val, weight),
-                                               Call::Extern));
-            }
-            print_expr(simplify(result));
+            print_expr(call_builtin(op->type, "mix", vec(zero_val, one_val, weight)));
             return;
         } else if (op->name == Call::abs) {
-            print_expr(simplify(CallBuiltin(op->type, op->name, op->args[0])));
+            print_expr(call_builtin(op->type, op->name, op->args));
             return;
         } else if (op->name == Call::return_second) {
             internal_assert(op->args.size() == 2);
@@ -386,15 +363,10 @@ void CodeGen_GLSL::visit(const Call *op) {
             user_error << "GLSL: encountered unknown function '" << op->name << "'\n";
         }
 
-        string name = builtin[op->name];
-        vector<string> args(op->args.size());
-        for (size_t i = 0; i < op->args.size(); i++) {
-            args[i] = print_expr(op->args[i]);
-        }
-        rhs << name << "(";
+        rhs << builtin[op->name] << "(";
         for (size_t i = 0; i < op->args.size(); i++) {
             if (i > 0) rhs << ", ";
-            rhs << args[i];
+            rhs << print_expr(op->args[i]);
         }
         rhs << ")";
     }
@@ -481,14 +453,13 @@ void CodeGen_GLSL::test() {
 
     e.push_back(Min::make(Expr(1), Expr(5)));
     e.push_back(Max::make(Expr(1), Expr(5)));
+    // Lerp with both integer and float weight
     e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)));
     e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f));
     e.push_back(sin(3.0f));
     e.push_back(abs(-2));
     e.push_back(Halide::print(3.0f));
-
-    // Test rounding behavior of integer division.
-    e.push_back(-2/Expr(3));
+    e.push_back(-2/Expr(3));  // Test rounding behavior of integer division.
 
     ostringstream source;
     CodeGen_GLSL cg(source);
