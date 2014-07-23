@@ -101,15 +101,10 @@ struct CacheEntry {
     // ADDITIONAL buffer_t STRUCTS HERE
 
     // Allow placement new with constructor
-#ifdef BITS_32
     void *operator new(size_t size, void *storage) {
         return storage;
     }
-#else
-    void *operator new(unsigned long size, void *storage) {
-        return storage;
-    }
-#endif
+
 #if 0
     void operator delete(void *ptr) {
         halide_free(NULL, ptr);
