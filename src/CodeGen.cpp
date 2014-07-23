@@ -1297,7 +1297,8 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_start_clock",
         "halide_trace",
         "halide_memoization_cache_lookup",
-        "halide_memoization_cache_store"
+        "halide_memoization_cache_store",
+        "halide_memoization_cache_release"
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
