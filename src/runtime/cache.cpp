@@ -101,9 +101,15 @@ struct CacheEntry {
     // ADDITIONAL buffer_t STRUCTS HERE
 
     // Allow placement new with constructor
+#ifdef BITS_32
+    void *operator new(size_t size, void *storage) {
+        return storage;
+    }
+#else
     void *operator new(unsigned long size, void *storage) {
         return storage;
     }
+#endif
 #if 0
     void operator delete(void *ptr) {
         halide_free(NULL, ptr);
@@ -220,7 +226,7 @@ void prune_cache() {
     validate_cache();
 #endif
     while (current_cache_size > max_cache_size &&
-           least_recently_used != NULL) { 
+           least_recently_used != NULL) {
         CacheEntry *lru_entry = least_recently_used;
         uint32_t h = lru_entry->hash;
         uint32_t index = h % kHashTableSize;
@@ -264,7 +270,7 @@ WEAK void halide_memoization_cache_set_size(int64_t size) {
     if (size == 0) {
         size = kDefaultCacheSize;
     }
-    
+
     ScopedSpinLock lock(&memoization_lock);
 
     max_cache_size = size;
@@ -298,10 +304,10 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == size &&
-            keys_equal(entry->key, cache_key, size) && 
+            keys_equal(entry->key, cache_key, size) &&
             bounds_equal(entry->computed_bounds, *computed_bounds) &&
             entry->tuple_count == tuple_count) {
-            
+
             bool all_bounds_equal = true;
 
             {
@@ -382,10 +388,10 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
         if (entry->hash == h && entry->key_size == size &&
-            keys_equal(entry->key, cache_key, size) && 
+            keys_equal(entry->key, cache_key, size) &&
             bounds_equal(entry->computed_bounds, *computed_bounds) &&
             entry->tuple_count == tuple_count) {
-            
+
             bool all_bounds_equal = true;
 
             {
