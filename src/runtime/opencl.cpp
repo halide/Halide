@@ -1,4 +1,4 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "scoped_spin_lock.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"

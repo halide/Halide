@@ -1,6 +1,4 @@
-#include "mini_stdint.h"
-
-#define WEAK __attribute__((weak))
+#include "runtime_internal.h"
 
 extern "C" {
 

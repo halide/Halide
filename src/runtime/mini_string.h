@@ -1,7 +1,7 @@
 #ifndef MINI_STRING_H
 #define MINI_STRING_H
 
-#include "mini_stdint.h"
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {

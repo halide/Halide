@@ -1,6 +1,5 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "HalideRuntime.h"
-
 
 extern "C" void *fopen(const char *, const char *);
 extern "C" int fclose(void *);
@@ -115,83 +114,83 @@ WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *fil
     elts *= s1*s2*s3;
 
     if (has_tiff_extension(filename)) {
-	int32_t channels;
-	int32_t width = s0;
-	int32_t height = s1;
-	int32_t depth;
+        int32_t channels;
+        int32_t width = s0;
+        int32_t height = s1;
+        int32_t depth;
 
-	if ((s3 == 0 || s3 == 1) && (s2 < 5)) {
-	    channels = s2;
-	    depth = 1;
-	} else {
-	    channels = s3;
-	    depth = s2;
-	}
+        if ((s3 == 0 || s3 == 1) && (s2 < 5)) {
+            channels = s2;
+            depth = 1;
+        } else {
+            channels = s3;
+            depth = s2;
+        }
 
-	struct halide_tiff_header header;
+        struct halide_tiff_header header;
 
-	int32_t MMII = 0x4d4d4949;
-	// Select the appropriate two bytes signaling byte order automatically
+        int32_t MMII = 0x4d4d4949;
+        // Select the appropriate two bytes signaling byte order automatically
         const char *c = (const char *)&MMII;
         header.byte_order_marker = (c[0] << 8) | c[1];
 
-	header.version = 42;
-	header.ifd0_offset = __builtin_offsetof(halide_tiff_header, entry_count);
-	header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
+        header.version = 42;
+        header.ifd0_offset = __builtin_offsetof(halide_tiff_header, entry_count);
+        header.entry_count = sizeof(header.entries) / sizeof(header.entries[0]);
 
-	tiff_tag *tag = &header.entries[0];
-	tag++->assign32(256, 1, width);                             // Image width
-	tag++->assign32(257, 1, height);                         // Image height
-	tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // Bits per sample
-	tag++->assign16(259, 1, 1);                              // Compression -- none
-	tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
-	tag++->assign32(273, channels, sizeof(header));          // Rows per strip
-	tag++->assign16(277, 1, int16_t(channels));              // Samples per pixel
-	tag++->assign32(278, 1, s1);                             // Rows per strip
-	tag++->assign32(279, channels,
-			(channels == 1) ?
-			    elts * bytes_per_element :
-			    sizeof(header) +
-				channels * sizeof(int32_t));     // strip byte counts, bug if 32-bit truncation
-	tag++->assign32(282, 5, 1,
+        tiff_tag *tag = &header.entries[0];
+        tag++->assign32(256, 1, width);                             // Image width
+        tag++->assign32(257, 1, height);                         // Image height
+        tag++->assign16(258, 1, int16_t(bytes_per_element * 8)); // Bits per sample
+        tag++->assign16(259, 1, 1);                              // Compression -- none
+        tag++->assign16(262, 1, channels >= 3 ? 2 : 1);          // PhotometricInterpretation -- black is zero or RGB
+        tag++->assign32(273, channels, sizeof(header));          // Rows per strip
+        tag++->assign16(277, 1, int16_t(channels));              // Samples per pixel
+        tag++->assign32(278, 1, s1);                             // Rows per strip
+        tag++->assign32(279, channels,
+                        (channels == 1) ?
+                            elts * bytes_per_element :
+                            sizeof(header) +
+                                channels * sizeof(int32_t));     // strip byte counts, bug if 32-bit truncation
+        tag++->assign32(282, 5, 1,
                         __builtin_offsetof(halide_tiff_header, width_resolution));     // Width resolution
-	tag++->assign32(283, 5, 1,
+        tag++->assign32(283, 5, 1,
                         __builtin_offsetof(halide_tiff_header, height_resolution));    // Height resolution
-	tag++->assign16(284, 1, 2);                              // Planar configuration -- planar
-	tag++->assign16(296, 1, 1);                              // Resolution Unit -- none
-	tag++->assign16(339, 1,
-			pixel_type_to_tiff_sample_type[type_code]);        // Sample type
-	tag++->assign32(32997, 1, depth);                        // Image depth
+        tag++->assign16(284, 1, 2);                              // Planar configuration -- planar
+        tag++->assign16(296, 1, 1);                              // Resolution Unit -- none
+        tag++->assign16(339, 1,
+                        pixel_type_to_tiff_sample_type[type_code]);        // Sample type
+        tag++->assign32(32997, 1, depth);                        // Image depth
 
-	header.ifd0_end = 0;
-	header.width_resolution[0] = 1;
-	header.width_resolution[1] = 1;
-	header.height_resolution[0] = 1;
-	header.height_resolution[1] = 1;
+        header.ifd0_end = 0;
+        header.width_resolution[0] = 1;
+        header.width_resolution[1] = 1;
+        header.height_resolution[0] = 1;
+        header.height_resolution[1] = 1;
 
-	if (!fwrite((void *)(&header), sizeof(header), 1, f)) {
+        if (!fwrite((void *)(&header), sizeof(header), 1, f)) {
             fclose(f);
-	    return -2;
+            return -2;
         }
 
-	if (channels > 1) {
-	  int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
+        if (channels > 1) {
+          int32_t offset = sizeof(header) + channels * sizeof(int32_t) * 2;
 
-	  for (int32_t i = 0; i < channels; i++) {
+          for (int32_t i = 0; i < channels; i++) {
               if (!fwrite((void*)(&offset), 4, 1, f)) {
                   fclose(f);
                   return -2;
               }
               offset += s0 * s1 * depth * bytes_per_element;
-	  }
-	  int32_t count = s0 * s1 * depth;
-	  for (int32_t i = 0; i < channels; i++) {
+          }
+          int32_t count = s0 * s1 * depth;
+          for (int32_t i = 0; i < channels; i++) {
               if (!fwrite((void*)(&count), 4, 1, f)) {
                   fclose(f);
                   return -2;
               }
-	  }
-	}
+          }
+        }
     } else {
         int32_t header[] = {s0, s1, s2, s3, type_code};
         if (!fwrite((void *)(&header[0]), sizeof(header), 1, f)) {

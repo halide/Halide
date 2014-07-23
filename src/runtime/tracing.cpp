@@ -1,4 +1,4 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "HalideRuntime.h"
 #include "scoped_spin_lock.h"
 
@@ -9,6 +9,7 @@ extern int snprintf(char *str, size_t size, const char *format, ...);
 
 extern int open(const char *filename, int opts, int mode);
 extern int close(int fd);
+typedef ptrdiff_t ssize_t;
 extern ssize_t write(int fd, const void *buf, size_t bytes);
 
 typedef int32_t (*trace_fn)(void *, const halide_trace_event *);

@@ -1,13 +1,13 @@
-// Implementation note: all function that directly or indirectly access the
-// runtime state in halide_opengl_state must be declared as WEAK, otherwise
-// the behavior at runtime is undefined.
-
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
 #include "mini_string.h"
 #include "mini_opengl.h"
+
+// Implementation note: all function that directly or indirectly access the
+// runtime state in halide_opengl_state must be declared as WEAK, otherwise
+// the behavior at runtime is undefined.
 
 #define EXPORT extern "C" WEAK
 
@@ -161,10 +161,10 @@ static const char var_marker[] = "/// VAR ";
 
 // Ensure that OpenGL runtime is correctly initialized. Used in all public API
 // functions.
-#define CHECK_INITIALIZED(ERRORCODE)				\
-    if (!ST.initialized) {					\
-	halide_error(user_context, "OpenGL runtime not initialized.\n");	\
-	return ERRORCODE;					\
+#define CHECK_INITIALIZED(ERRORCODE)                            \
+    if (!ST.initialized) {                                      \
+        halide_error(user_context, "OpenGL runtime not initialized.\n");        \
+        return ERRORCODE;                                       \
     }
 
 // Macro for error checking.
@@ -269,9 +269,9 @@ static HalideOpenGLArgument *parse_argument(void *user_context, const char *src,
     } else if ((name = match_prefix(src, "uint8_t "))) {
         type = ARGTYPE_UINT8;
     } else if ((name = match_prefix(src, "uint16_t "))) {
-	type = ARGTYPE_UINT16;
+        type = ARGTYPE_UINT16;
     } else if ((name = match_prefix(src, "uint32_t "))) {
-	type = ARGTYPE_UINT32;
+        type = ARGTYPE_UINT32;
     }
     if (type == ARGTYPE_NONE) {
         halide_error(user_context, "Internal error: argument type not supported");
@@ -432,8 +432,8 @@ EXPORT int halide_opengl_init(void *user_context) {
     ST.vertex_shader_id = halide_opengl_make_shader(user_context,
         GL_VERTEX_SHADER, vertex_shader_src, NULL);
     if (ST.vertex_shader_id == 0) {
-	halide_error(user_context, "Failed to create vertex shader");
-	return 1;
+        halide_error(user_context, "Failed to create vertex shader");
+        return 1;
     }
 
     // Vertices and their order in a triangle strip for rendering a square
@@ -1133,8 +1133,8 @@ EXPORT int halide_opengl_dev_run(
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
             halide_error(user_context,
-			 "OpenGL ES 2.0 only supports one single output texture");
-	    return 1;
+                         "OpenGL ES 2.0 only supports one single output texture");
+            return 1;
         }
 
         GLuint tex = *((GLuint*)args[i]);
@@ -1147,10 +1147,10 @@ EXPORT int halide_opengl_dev_run(
         CHECK_GLERROR(1);
 
         HalideOpenGLTexture *texinfo = halide_opengl_find_texture(tex);
-	if (!texinfo) {
-	    halide_error(user_context, "Undefined output texture");
-	    return 1;
-	}
+        if (!texinfo) {
+            halide_error(user_context, "Undefined output texture");
+            return 1;
+        }
         output_min[0] = texinfo->min[0];
         output_min[1] = texinfo->min[1];
         output_extent[0] = texinfo->extent[0];
