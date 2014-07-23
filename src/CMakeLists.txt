@@ -104,7 +104,8 @@ set(RUNTIME_CPP
   windows_cuda_debug
   windows_opencl_debug
   windows_io
-  posix_print)
+  posix_print
+  cache)
 set (RUNTIME_LL
   arm
   aarch64
@@ -266,7 +267,8 @@ set(HEADER_FILES
   Random.h
   ParallelRVar.h
   BoundaryConditions.h
-  UnifyDuplicateLets.h)
+  UnifyDuplicateLets.h
+  Memoization.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -358,6 +360,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   FuseGPUThreadLoops.cpp
   ParallelRVar.cpp
   BoundaryConditions.cpp
+  Memoization.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

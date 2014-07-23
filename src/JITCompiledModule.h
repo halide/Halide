@@ -87,6 +87,9 @@ struct JITCompiledModule {
      * module is destroyed. */
     void (*shutdown_thread_pool)();
 
+    /** Set the maximum number of bytes occupied by the cache for compute_cached. */
+    void (*memoization_cache_set_size)(uint64_t size);
+
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
@@ -102,7 +105,8 @@ struct JITCompiledModule {
         set_custom_do_task(NULL),
         set_custom_trace(NULL),
         set_custom_print(NULL),
-        shutdown_thread_pool(NULL) {}
+        shutdown_thread_pool(NULL),
+        memoization_cache_set_size(NULL) {}
 
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */

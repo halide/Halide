@@ -176,6 +176,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(ee, m, "halide_set_custom_trace", true, &set_custom_trace);
     hook_up_function_pointer(ee, m, "halide_set_custom_print", true, &set_custom_print);
     hook_up_function_pointer(ee, m, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
+    hook_up_function_pointer(ee, m, "halide_memoization_cache_set_size", true, &memoization_cache_set_size);
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();

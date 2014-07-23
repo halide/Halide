@@ -56,7 +56,7 @@ private:
 
     void visit(const Variable *var) {
         if (starts_with(var->name, func + ".") &&
-            ends_with(var->name, ".buffer")) {
+            (ends_with(var->name, ".buffer") || ends_with(var->name, ".host"))) {
             last_use = containing_stmt;
         }
     }

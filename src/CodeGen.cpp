@@ -1295,7 +1295,9 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_profiling_timer",
         "halide_release",
         "halide_start_clock",
-        "halide_trace"
+        "halide_trace",
+        "halide_memoization_cache_lookup",
+        "halide_memoization_cache_store"
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
@@ -1711,6 +1713,16 @@ void CodeGen::visit(const Call *op) {
 
                 value = phi;
             }
+        } else if (op->name == Call::memoize_expr) {
+            // Used as an annotation for caching, should be invisible to
+            // codegen. Ignore arguments beyond the first as they are only
+            // used in the cache key.
+            internal_assert(op->args.size() > 0);
+            value = codegen(op->args[0]);
+        } else if (op->name == Call::copy_memory) {
+            value = builder->CreateMemCpy(codegen(op->args[0]),
+                                          codegen(op->args[1]),
+                                          codegen(op->args[2]), 0);
         } else {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
