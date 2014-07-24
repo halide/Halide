@@ -103,7 +103,7 @@
             }
             
             double t_before = CACurrentMediaTime();
-            reaction_diffusion_2_update(&buf1, tx, ty, cx, cy, &buf2);
+            reaction_diffusion_2_update(&buf1, tx, ty, cx, cy, i, &buf2);
             reaction_diffusion_2_render(&buf2, &pixel_buf);
             double t_elapsed = CACurrentMediaTime() - t_before;
             
