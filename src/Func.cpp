@@ -23,6 +23,7 @@
 #include "Target.h"
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
+#include "StmtToHtml.h"
 
 namespace Halide {
 
@@ -1929,8 +1930,12 @@ void Func::compile_to_c(const string &filename, vector<Argument> args,
 void Func::compile_to_lowered_stmt(const string &filename, const Target &target) {
     lower(target);
 
-    ofstream stmt_output(filename.c_str());
-    stmt_output << lowered;
+    if (filename.compare(filename.length()-5, 5, ".html") == 0) {
+        print_to_html(filename, lowered);
+    } else {
+        ofstream stmt_output(filename.c_str());
+        stmt_output << lowered;
+    }
 }
 
 
@@ -1941,8 +1946,12 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Reali
 
     s = human_readable_stmt(name(), s, (buffer_t *)dst[0].raw_buffer(), additional_replacements);
 
-    ofstream stmt_output(filename.c_str());
-    stmt_output << s;
+    if (filename.compare(filename.length()-5, 5, ".html") == 0) {
+        print_to_html(filename, s);
+    } else {
+        ofstream stmt_output(filename.c_str());
+        stmt_output << s;
+    }
 }
 
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, const Target &t) {

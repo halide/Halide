@@ -558,13 +558,15 @@ public:
 
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Canonical extension is
-     * .stmt, which must be supplied in filename. */
+     * .stmt, which must be supplied in filename. Emits HTML if the 
+     * filename ends in .html, plain text otherwise. */
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
                                         const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code as above
      * but simplified using the provided realization bounds and other 
-     * concrete parameter values. */
+     * concrete parameter values. Emits HTML if the filename ends in
+     * .html, plain text otherwise. */
     EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, std::map<std::string, Expr> additional_replacements, const Target &t = get_jit_target_from_environment());
 
     EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, const Target &t = get_jit_target_from_environment());

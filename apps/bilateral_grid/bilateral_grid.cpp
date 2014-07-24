@@ -89,17 +89,10 @@ int main(int argc, char **argv) {
     
     bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input, target);
 
-    bilateral_grid.compile_to_lowered_stmt("bilateral_grid.stmt");
-    
+    bilateral_grid.compile_to_lowered_stmt("bilateral_grid.html");
     std::map<std::string, Expr> subs;
     subs["r_sigma"] = 0.1f;
-    Internal::Stmt lowered = Halide::Internal::lower(bilateral_grid.function(), get_jit_target_from_environment());
-    buffer_t out;
-    out.extent[0] = 1536; out.extent[1] = 2560;
-    out.elem_size = sizeof(float);
-    out.stride[0] = 1; out.stride[1] = out.extent[0];
-    Internal::Stmt simplified = human_readable_stmt("bilateral_grid", lowered, &out, subs);
-    print_to_html("bilateral_grid.simple.html", simplified);
+    bilateral_grid.compile_to_simplified_lowered_stmt("bilateral_grid.simple.html", 1536, 2560, 0, 0, subs);
 
     return 0;
 }
