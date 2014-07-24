@@ -556,12 +556,14 @@ public:
                              const std::string &fn_name = "",
                              const Target &target = get_target_from_environment());
 
+    enum StmtOutputFormat { Text, HTML };  
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Canonical extension is
      * .stmt, which must be supplied in filename. Emits HTML if the 
      * filename ends in .html, plain text otherwise. */
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
-                                        const Target &target = get_target_from_environment());
+                                        const Target &target = get_target_from_environment(),
+                                        StmtOutputFormat fmt = Text);
 
     /** Write out an internal representation of lowered code as above
      * but simplified using the provided realization bounds and other 
