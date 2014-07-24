@@ -1,14 +1,16 @@
-#ifndef STMT_TO_HTML
-#define STMT_TO_HTML
+#include "StmtToHtml.h"
+#include "IROperator.h"
 
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <stdio.h>
-#include "Halide.h"
 
-using namespace Halide;
-using namespace Halide::Internal;
+
+
+namespace Halide {
+namespace Internal {
+
 using std::string;
 
 /*
@@ -16,13 +18,12 @@ using std::string;
     to use please include like so
 */
 
-namespace _patch {
-    template <typename T>
-    std::string to_string(T value) {
-        std::ostringstream os ;
-        os << value ;
-        return os.str() ;
-    }
+namespace {
+template <typename T>
+std::string to_string(T value) {
+    std::ostringstream os ;
+    os << value ;
+    return os.str() ;
 }
 
 class StmtToHtml : public IRVisitor {
@@ -37,7 +38,7 @@ private:
 
     string open_span(string cls, string data="") {
         id_count++;
-        return "<span class="+cls+" "+data+" id="+ _patch::to_string(id_count) +">";
+        return "<span class="+cls+" "+data+" id="+ to_string(id_count) +">";
     }
 
     string close_span() {
@@ -46,7 +47,7 @@ private:
 
     string open_div(string cls, string data="") {
         id_count++;
-        return "<div class="+cls+" "+data+" id="+ _patch::to_string(id_count) +">";
+        return "<div class="+cls+" "+data+" id="+ to_string(id_count) +">";
     }
 
     string close_div() {
@@ -408,7 +409,12 @@ public:
     }
     void visit(const For *op) {
         stream << open_div("For");
-        stream << op->for_type << " (";
+        if (op->for_type == 0) {
+            stream << "for";
+        } else {
+            stream << "parallel";
+        }
+        stream << " (";
         print(op->name);
         stream << ", ";
         print(op->min);
@@ -564,7 +570,7 @@ public:
         stream << "</head>\n <body>\n";
     }
 
-    void genereate(Stmt s){
+    void generate(Stmt s){
         print(s);
         stream << "</body>";
         stream.close();
@@ -601,14 +607,12 @@ unfold = function(select) { \n \
 foldClass = function(className) { fold($('.'+className)); }; \n \
 unfoldClass = function(className) { unfold($('.'+className)); }; \n \
 };";
-
-/*
-    All files will be stored in stmt_to_html 
-*/
-void print_to_html(string filename, Stmt s) {
-    StmtToHtml sth(filename);
-    sth.genereate(s);
 }
 
+void print_to_html(string filename, Stmt s) {
+    StmtToHtml sth(filename);
+    sth.generate(s);
+}
 
-#endif
+}
+}
