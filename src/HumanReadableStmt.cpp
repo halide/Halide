@@ -23,8 +23,7 @@ class HumanReadableStmt {
 
 
     public:
-        // since making true and false seems pretty roundabout 
-        // i'll just create static member variables people can use
+        // These are here for easy access. 
         static const Expr True, False;
         static const std::map<std::string, Expr> default_map;
 
@@ -43,7 +42,7 @@ class HumanReadableStmt {
 
         void add_replacements(std::map<std::string, Expr> m) {
             if (m.size() ==0) return;
-            for(it_type iterator = m.begin(); iterator != m.end(); iterator++) {
+            for (it_type iterator = m.begin(); iterator != m.end(); iterator++) {
                 replacements[iterator->first] = iterator->second;
             }   
         }
@@ -69,7 +68,7 @@ class HumanReadableStmt {
 
             temp[name+".elem_size"] = IntImm::make(buft->elem_size);
 
-            // this removes the annoying if null rewrite buffer stmt
+            // To remove if null rewrite buffer stmt uncomment the following line.
             // temp[name+".host_and_dev_are_null"] = False; 
 
             return temp;
@@ -94,10 +93,10 @@ Stmt human_readable_stmt(std::string name, Stmt s, buffer_t *buft) {
 
 Stmt human_readable_stmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements) {
     HumanReadableStmt hrs(name, s, buft, additional_replacements);
-    debug(3) << "Genererating Human Readable function " << name << " ...\n";
+    debug(3) << "Generating Human Readable function " << name << " ...\n";
     Stmt s_new = simplify(hrs.execute()); 
     debug(3) << s_new;
-    debug(3) << "Done ouputing Human Readable function " << name << "\n";
+    debug(3) << "Done outputting Human Readable function " << name << "\n";
 
     return s_new; 
 }
