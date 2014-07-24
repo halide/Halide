@@ -1941,8 +1941,13 @@ void Func::compile_to_lowered_stmt(const string &filename, const Target &target)
 
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, std::map<std::string, Expr> additional_replacements, const Target &t) {
     _halide_user_assert(outputs() == 1) << "Handling multiple outputs is not yet supported by compile_to_simplified_lowered_stmt\n";
-    // i purposfully don't use f.lowered because i want a copy of the STMT since it will later get modified 
-    Stmt s = Internal::lower(function(), t);
+    Stmt s;
+    if (lowered.defined()) {
+      s = func.lowered;
+    } else {
+      // If the Func.lower command was called you would not be able to modify the function anymore.
+      s = Internal::lower(function(), t);
+    }
 
     s = human_readable_stmt(name(), s, (buffer_t *)dst[0].raw_buffer(), additional_replacements);
 

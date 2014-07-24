@@ -14,8 +14,7 @@ namespace Internal {
 using std::string;
 
 /*
-    Please note you need to compile this file with the -fno-rtti flag. 
-    to use please include like so
+ * To compile correctly the -fno-rtti flag is required. 
 */
 
 namespace {
@@ -30,7 +29,7 @@ class StmtToHtml : public IRVisitor {
 
     static const std::string css, js;
 
-// use just so its easier to access individual elements 
+// This allows easier access to individual elements. 
 int id_count;
 
 private:
@@ -67,8 +66,6 @@ private:
     }
 
 public: 
-    // using IRVisitor::visit;
-
     void visit(const IntImm *op){
         stream <<  open_span("IntImm") << op->value << close_span();
     }
@@ -76,10 +73,10 @@ public:
         stream <<  open_span("FloatImm") << op->value << 'f' << close_span();
     }
     void visit(const StringImm *op){
-        //TODO sanitize the stirng so it doesn't mess with the html
+        //TODO Sanitize the stirng so it doesn't mess with the html
         // This would be the proper way to modify string imm
         // however this means that ever function name and varaible name would have 
-        // double quotes surrounding it which is kinda annoying
+        // double quotes surrounding it which is kinda annoying. 
         /*
         stream << open_span("StringImm");
           stream << '"';
@@ -115,7 +112,7 @@ public:
         stream << close_span(); 
         */
 
-        // so we'll do this instead, however the above is waaay safer
+        // This is a temporary solution. 
         stream << open_span("StringImm");
         stream << op->value;    
         stream << close_span(); 
@@ -127,7 +124,6 @@ public:
 
     void visit(const Cast *op){
         stream << open_span("Cast");
-        // , generate_data("type", op->type));
         stream << op->type << '(';
         print(op->value);
         stream << ')' << close_span();
@@ -405,6 +401,7 @@ public:
             stream << '}';
             stream << close_div();
         }
+        print(op->consume);
 
     }
     void visit(const For *op) {
@@ -550,7 +547,7 @@ public:
             break;
         }
     }
-     stream << close_div(); //closing ifthenelse div 
+     stream << close_div(); //Closing ifthenelse div. 
     }
 
     void visit(const Evaluate *op) {
@@ -581,8 +578,9 @@ public:
 
 const std::string StmtToHtml::css = "\
 div { padding-left: 5px; } \n \
-/*some divs types dont need extra padding*/ \n \
-div.Block { padding-left: 0px; }";
+/*Some divs types dont need extra padding.*/ \n \
+div.Block { padding-left: 0px; }\n \
+div.AllocateBody { padding-left: 0px; }";
 
 const std::string StmtToHtml::js = "\
 window.onload = function () { \n \

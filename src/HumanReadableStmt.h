@@ -2,7 +2,8 @@
 #define HALIDE_HUMAN_READABLE_STMT 1
 
 /** 
- * returns a statment, simplified given concrete output bounds and other parameters, in order to be as humanly readable as possible
+ * This class returns an statement with the bounds, any anyother given argument
+ * substituted and simpliefied. 
 */
 
 #include "IR.h"
@@ -13,7 +14,6 @@
 namespace Halide {
 namespace Internal {
 
-// please note this function modifies the given Stmt
 EXPORT Stmt human_readable_stmt(std::string name, Stmt s, buffer_t *buft);
 EXPORT Stmt human_readable_stmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements);
 
