@@ -1927,10 +1927,9 @@ void Func::compile_to_c(const string &filename, vector<Argument> args,
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
 }
 
-void Func::compile_to_lowered_stmt(const string &filename, const Target &target) {
+void Func::compile_to_lowered_stmt(const string &filename, const Target &target, StmtOutputFormat fmt) {
     lower(target);
-
-    if (filename.compare(filename.length()-5, 5, ".html") == 0) {
+    if (fmt == HTML) {
         print_to_html(filename, lowered);
     } else {
         ofstream stmt_output(filename.c_str());
@@ -1943,7 +1942,7 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename, Reali
     _halide_user_assert(outputs() == 1) << "Handling multiple outputs is not yet supported by compile_to_simplified_lowered_stmt\n";
     Stmt s;
     if (lowered.defined()) {
-      s = func.lowered;
+      s = lowered;
     } else {
       // If the Func.lower command was called you would not be able to modify the function anymore.
       s = Internal::lower(function(), t);
