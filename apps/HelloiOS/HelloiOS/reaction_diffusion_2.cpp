@@ -25,61 +25,63 @@ int main(int argc, char **argv) {
         ImageParam state(Float(32), 3);
         Param<int> mouse_x, mouse_y;
         Param<float> cx, cy;
+        Param<int> frame;
         
         Func clamped;
         clamped(x, y, c) = state(clamp(x, 0, state.width()-1), clamp(y, 0, state.height()-1), c);
+
+        Func blur_x, blur_y, blur;
+        blur_x(x, y, c) = (clamped(x-3, y, c) +
+                           clamped(x-1, y, c) +
+                           clamped(x, y, c) +
+                           clamped(x+1, y, c) +
+                           clamped(x+3, y, c));
+        blur_y(x, y, c) = (clamped(x, y-3, c) +
+                           clamped(x, y-1, c) +
+                           clamped(x, y, c) +
+                           clamped(x, y+1, c) +
+                           clamped(x, y+3, c));
+        blur(x, y, c) = (blur_x(x, y, c) + blur_y(x, y, c))/10;
         
-        RDom kernel(-1, 3);
-        Func g, gaussian;
-        g(x) = exp(-x*x*0.4f);
-        gaussian(x) = g(x) / sum(g(kernel));
-        gaussian.compute_root();
-
-        Func blur_x, blur_y;
-        blur_x(x, y, c) = sum(gaussian(kernel) * clamped(x + kernel, y, c));
-        blur_y(x, y, c) = sum(gaussian(kernel) * blur_x(x, y + kernel, c));
-
-        // Diffusion
-        Expr R = (blur_y(x, y, 0) + blur_y(x, y+1, 0))/2;
-        Expr G = blur_y(x, y, 1);
-        Expr B = (blur_y(x, y, 2) + blur_y(x, y-1, 2))/2;
-
+        Expr R = blur(x, y, 0);
+        Expr G = blur(x, y, 1);
+        Expr B = blur(x, y, 2);
+        
         // Push the colors outwards with a sigmoid
-        Expr s = 1.3f;
+        Expr s = 0.5f;
         R *= (1 - s) + s * R * (3 - 2 * R);
         G *= (1 - s) + s * G * (3 - 2 * G);
         B *= (1 - s) + s * B * (3 - 2 * B);
-
+        
         // Reaction
         Expr dR = B * (1 - R - G);
         Expr dG = (1 - B) * (R - G);
         Expr dB = 1 - B + 2 * G * R - R - G;
-
-        // Everything increases faster than it decays
-        dR = select(dR > 0, dR * 1.45f, dR);
-        dG = select(dG > 0, dG * 1.45f, dG);
-        dB = select(dB > 0, dB * 1.5f, dB);
-
-        Expr dx = (x - cx)/cx, dy = (y - cy)/cy;
-        Expr radius = dx * dx + dy*dy;
-        Expr t = 0.15f;
+        
+        Expr bump = (frame % 1024) / 1024.0f;
+        bump *= 1 - bump;
+        Expr alpha = lerp(0.3f, 0.7f, bump);
+        dR = select(dR > 0, dR*alpha, dR);
+        
+        Expr t = 0.1f;
         
         R += t * dR;
         G += t * dG;
         B += t * dB;
-
+        
         R = clamp(R, 0.0f, 1.0f);
         G = clamp(G, 0.0f, 1.0f);
         B = clamp(B, 0.0f, 1.0f);
+        
 
         Func new_state;
         new_state(x, y, c) = select(c == 0, R, select(c == 1, G, B));
 
         // Noise at the edges
-        new_state(x, state.top(), c) = random_float();
-        new_state(x, state.bottom(), c) = random_float();
-        new_state(state.left(), y, c) = random_float();
-        new_state(state.right(), y, c) = random_float();
+        new_state(x, state.top(), c) = random_float(frame)*0.2f;
+        new_state(x, state.bottom(), c) = random_float(frame)*0.2f;
+        new_state(state.left(), y, c) = random_float(frame)*0.2f;
+        new_state(state.right(), y, c) = random_float(frame)*0.2f;
 
         // Add some white where the mouse is
         Expr min_x = clamp(mouse_x - 20, 0, state.width()-1);
@@ -88,9 +90,9 @@ int main(int argc, char **argv) {
         Expr max_y = clamp(mouse_y + 20, 0, state.height()-1);
         RDom clobber(min_x, max_x - min_x + 1, min_y, max_y - min_y + 1);
 
-        dx = clobber.x - mouse_x;
-        dy = clobber.y - mouse_y;
-        radius = dx * dx + dy * dy;
+        Expr dx = clobber.x - mouse_x;
+        Expr dy = clobber.y - mouse_y;
+        Expr radius = dx * dx + dy * dy;
         new_state(clobber.x, clobber.y, c) = select(radius < 400.0f, 1.0f, new_state(clobber.x, clobber.y, c));
 
         new_state.reorder(c, x, y).bound(c, 0, 3).unroll(c);
@@ -98,27 +100,40 @@ int main(int argc, char **argv) {
         Var yi;
         new_state.split(y, y, yi, 64).parallel(y);
 
-        blur_x.store_at(new_state, y).compute_at(new_state, yi);
-        blur_y.store_at(new_state, y).compute_at(new_state, yi);
+        //blur_x.store_at(new_state, y).compute_at(new_state, yi);
+        blur.compute_at(new_state, yi);
         clamped.store_at(new_state, y).compute_at(new_state, yi);
 
         new_state.vectorize(x, 4);
-        blur_x.vectorize(x, 4);
-        blur_y.vectorize(x, 4);
-
-        new_state.compile_to_file("reaction_diffusion_2_update", state, mouse_x, mouse_y, cx, cy);
+        blur.vectorize(x, 4);
+        
+        std::vector<Argument> args(6);
+        args[0] = state;
+        args[1] = mouse_x;
+        args[2] = mouse_y;
+        args[3] = cx;
+        args[4] = cy;
+        args[5] = frame;
+        new_state.compile_to_file("reaction_diffusion_2_update", args);
     }
 
     // Now the function that converts the state into an argb image.
     {
         ImageParam state(Float(32), 3);
 
-        Expr R = state(x, y, 0), G = state(x, y, 1), B = state(x, y, 2);
+        Func contour;
+        contour(x, y, c) = pow(state(x, y, c) * (1 - state(x, y, c)) * 4, 8);
+        
+        Expr c0 = contour(x, y, 0), c1 = contour(x, y, 1), c2 = contour(x, y, 2);
 
+        Expr R = min(c0, max(c1, c2));
+        Expr G = (c0 + c1 + c2)/3;
+        Expr B = max(c0, max(c1, c2));
+        
         Expr alpha = 255 << 24;
-        Expr red = cast<int32_t>(R * 255) * (1 << 16);
+        Expr red = cast<int32_t>(R * 255) * (1 << 0);
         Expr green = cast<int32_t>(G * 255) * (1 << 8);
-        Expr blue = cast<int32_t>(B * 255);
+        Expr blue = cast<int32_t>(B * 255) * (1 << 16);
 
         Func render;
         render(x, y) = alpha + red + green + blue;
