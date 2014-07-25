@@ -7,7 +7,7 @@ namespace Halide {
 namespace Internal {
 
 /**
- * Dump an HTML-formatted print of an Stmt to filename.
+ * Dump an HTML-formatted print of a Stmt to filename.
  */
 EXPORT void print_to_html(std::string filename, Stmt s);
 
