@@ -562,38 +562,79 @@ public:
      * .stmt, which must be supplied in filename. Emits HTML if the 
      * filename ends in .html, plain text otherwise. */
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
-                                        const Target &target = get_target_from_environment(),
-                                        StmtOutputFormat fmt = Text);
+                                        StmtOutputFormat fmt = Text, 
+                                        const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code as above
      * but simplified using the provided realization bounds and other 
      * concrete parameter values. Emits HTML if the filename ends in
      * .html, plain text otherwise. */
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, std::map<std::string, Expr> additional_replacements, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           Realization dst, std::map<std::string, Expr> additional_replacements,
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, Realization dst, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           Realization dst, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
     template<typename T>
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, Image<T> dst, std::map<std::string, Expr> additional_replacements, const Target &target = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           Image<T> dst, 
+                           std::map<std::string, Expr> additional_replacements, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &target = get_target_from_environment());
 
     template<typename T> 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, Image<T> dst, const Target &target = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           Image<T> dst, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &target = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size, int w_size, std::map<std::string, Expr> additional_replacements, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, int y_size, int z_size, int w_size, 
+                           std::map<std::string, Expr> additional_replacements, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size, int w_size, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, int y_size, int z_size, int w_size, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size, std::map<std::string, Expr> additional_replacements, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, int y_size, int z_size, 
+                           std::map<std::string, Expr> additional_replacements, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, int z_size,  const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, int y_size, int z_size, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, std::map<std::string, Expr> additional_replacements, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, int y_size, 
+                           std::map<std::string, Expr> additional_replacements, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, int y_size, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, int y_size, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, std::map<std::string, Expr> additional_replacements, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, 
+                           std::map<std::string, Expr> additional_replacements, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
-    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, int x_size, const Target &t = get_target_from_environment());
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
+                           int x_size, 
+                           StmtOutputFormat fmt = Text, 
+                           const Target &t = get_target_from_environment());
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
