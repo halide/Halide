@@ -1,5 +1,5 @@
 #ifndef HALIDE_HUMAN_READABLE_STMT
-#define HALIDE_HUMAN_READABLE_STMT 1
+#define HALIDE_HUMAN_READABLE_STMT 
 
 /** 
  * This class returns an statement with the bounds, any anyother given argument

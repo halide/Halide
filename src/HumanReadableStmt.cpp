@@ -17,7 +17,7 @@ namespace {
 class HumanReadableStmt {
 
     std::map<std::string, Expr> replacements;
-    Stmt s;
+    Stmt stmt;
     std::string name;
     typedef std::map<std::string, Expr>::iterator it_type;
 
@@ -28,14 +28,14 @@ class HumanReadableStmt {
         static const std::map<std::string, Expr> default_map;
 
         HumanReadableStmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements = default_map) {
-            this->s = s;
+            this->stmt = s;
             this->name = name;
             add_replacements(generic_replacements(buft));
             add_replacements(additional_replacements);
         }
 
         HumanReadableStmt(std::string name, Stmt s, std::map<std::string, Expr> additional_replacements = default_map) {
-            this->s = s;
+            this->stmt = s;
             this->name = name;
             add_replacements(additional_replacements);
         }
@@ -54,12 +54,10 @@ class HumanReadableStmt {
             temp[name+".min.2"] = IntImm::make(buft->min[2]);
             temp[name+".min.3"] = IntImm::make(buft->min[3]);
 
-
             temp[name+".stride.0"] = IntImm::make(buft->stride[0]);
             temp[name+".stride.1"] = IntImm::make(buft->stride[1]);
             temp[name+".stride.2"] = IntImm::make(buft->stride[2]);
             temp[name+".stride.3"] = IntImm::make(buft->stride[3]);
-
 
             temp[name+".extent.0"] = IntImm::make(buft->extent[0]);
             temp[name+".extent.1"] = IntImm::make(buft->extent[1]);
@@ -75,8 +73,8 @@ class HumanReadableStmt {
         }
 
         Stmt execute() {
-            s = substitute(replacements, s);
-            return s;
+            stmt = substitute(replacements, stmt);
+            return stmt;
         }   
 };
 
