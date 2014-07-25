@@ -28,15 +28,15 @@ class HumanReadableStmt {
         static const std::map<std::string, Expr> default_map;
 
         HumanReadableStmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements = default_map) {
-            this->stmt = s;
-            this->name = name;
-            add_replacements(generic_replacements(buft));
+                          this->stmt = s;
+                          this->name = name;
+                          add_replacements(generic_replacements(buft));
             add_replacements(additional_replacements);
         }
 
         HumanReadableStmt(std::string name, Stmt s, std::map<std::string, Expr> additional_replacements = default_map) {
-            this->stmt = s;
-            this->name = name;
+                          this->stmt = s;
+                          this->name = name;
             add_replacements(additional_replacements);
         }
 
