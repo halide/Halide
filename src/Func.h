@@ -323,6 +323,11 @@ public:
     EXPORT ScheduleHandle &memoize();
 };
 
+enum StmtOutputFormat { 
+     Text, 
+     HTML 
+};  
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -556,7 +561,6 @@ public:
                              const std::string &fn_name = "",
                              const Target &target = get_target_from_environment());
 
-    enum StmtOutputFormat { Text, HTML };  
     /** Write out an internal representation of lowered code. Useful
      * for analyzing and debugging scheduling. Canonical extension is
      * .stmt, which must be supplied in filename. Emits HTML if the 
