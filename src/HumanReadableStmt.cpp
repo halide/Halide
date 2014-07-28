@@ -22,8 +22,6 @@ class HumanReadableStmt {
     typedef std::map<std::string, Expr>::iterator it_type;
 
 public:
-    // These are here for easy access. 
-    static const Expr True, False;
     static const std::map<std::string, Expr> default_map;
 
     HumanReadableStmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements = default_map) {
@@ -66,7 +64,7 @@ public:
         temp[name+".elem_size"] = IntImm::make(buft->elem_size);
 
         // To remove if null rewrite buffer stmt uncomment the following line.
-        // temp[name+".host_and_dev_are_null"] = False; 
+        // temp[name+".host_and_dev_are_null"] = const_false(); 
 
         return temp;
     }
@@ -77,8 +75,6 @@ public:
     }   
 };
 
-const Expr HumanReadableStmt::True  = Cast::make(Bool(1), IntImm::make(1));
-const Expr HumanReadableStmt::False = Cast::make(Bool(1), IntImm::make(0));
 const std::map<std::string, Expr> HumanReadableStmt::default_map;
 
 }

@@ -323,6 +323,9 @@ public:
     EXPORT ScheduleHandle &memoize();
 };
 
+/**
+ * Used to determine if the output printed to file should be as a normal string
+ * or as an HTML file which can be opened in a browerser and manipulated via JS and CSS.*/
 enum StmtOutputFormat { 
      Text, 
      HTML 
@@ -562,9 +565,8 @@ public:
                              const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
-     * for analyzing and debugging scheduling. Canonical extension is
-     * .stmt, which must be supplied in filename. Emits HTML if the 
-     * filename ends in .html, plain text otherwise. */
+     * for analyzing and debugging scheduling. Accepts an optional StmtOutputFormat
+     * to allow ouputing as text or as html file.*/
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
                                         StmtOutputFormat fmt = Text, 
                                         const Target &target = get_target_from_environment());
@@ -573,6 +575,8 @@ public:
      * but simplified using the provided realization bounds and other 
      * concrete parameter values. Emits HTML if the filename ends in
      * .html, plain text otherwise. */
+
+    //@{
     EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename, 
                            Realization dst, std::map<std::string, Expr> additional_replacements,
                            StmtOutputFormat fmt = Text, 
@@ -639,6 +643,7 @@ public:
                            int x_size, 
                            StmtOutputFormat fmt = Text, 
                            const Target &t = get_target_from_environment());
+    // @}
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first

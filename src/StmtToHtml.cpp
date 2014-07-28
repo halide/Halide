@@ -13,9 +13,6 @@ namespace Internal {
 
 using std::string;
 
-/*
- * To compile correctly the -fno-rtti flag is required. 
-*/
 
 namespace {
 template <typename T>
@@ -29,8 +26,8 @@ class StmtToHtml : public IRVisitor {
 
     static const std::string css, js;
 
-// This allows easier access to individual elements. 
-int id_count;
+    // This allows easier access to individual elements. 
+    int id_count;
 
 private:
     std::ofstream stream;
@@ -524,27 +521,27 @@ public:
         stream << "if (";   
         stream << open_span("IfStmt");
         while (1) {
-        print(op->condition);
-        stream << ")";
-        stream << close_span() << "{"; // close if (or else if) span
-        stream << open_div("ThenBody");
-        print(op->then_case);
-        stream << close_div(); // close thenbody div
+            print(op->condition);
+            stream << ")";
+            stream << close_span() << "{"; // close if (or else if) span
+            stream << open_div("ThenBody");
+            print(op->then_case);
+            stream << close_div(); // close thenbody div
 
-        if (!op->else_case.defined()) {
-            break;
-        }
+            if (!op->else_case.defined()) {
+                break;
+            }
 
-        if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
-            stream << "} else if (";
-            stream << open_span("ElseIfStmt");
-            op = nested_if;
-        } else {
-            stream << "} else {";
-            stream << open_div("ElseBody");
-            print(op->else_case);
-            stream << close_div();
-            break;
+            if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
+                stream << "} else if (";
+                stream << open_span("ElseIfStmt");
+                op = nested_if;
+            } else {
+                stream << "} else {";
+                stream << open_div("ElseBody");
+                print(op->else_case);
+                stream << close_div();
+                break;
         }
     }
      stream << close_div(); //Closing ifthenelse div. 
