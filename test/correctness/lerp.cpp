@@ -227,10 +227,13 @@ int main(int argc, char **argv) {
     lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
     Image<uint32_t> result = lerp_constants.realize();
 
-    uint32_t expected = (uint32_t)(1023 * .5f + .5f);
+    uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
     if (result(0) != expected)
         std::cerr << "Expected " << expected << " got " << result(0) << std::endl;
     assert(result(0) == expected);
+
+    // Add a little more coverage for uint32_t as this was failing
+    // without being detected for a long time.
 
     Image<uint8_t> input_a_img(16, 16);
     Image<uint8_t> input_b_img(16, 16);
