@@ -55,8 +55,8 @@ Expr lower_lerp(Expr zero_val, Expr one_val, Expr weight) {
                 if (computation_type.bits == 32) {
                     typed_weight =
                         Cast::make(computation_type,
-                                   Expr(65535.0f) * Expr(65537.0f) *
-                                   cast<double>(typed_weight));
+                                   cast<double>(Expr(65535.0f)) * cast<double>(Expr(65537.0f)) *
+                                   Cast::make(Float(64, typed_weight.type().width), typed_weight));
                 } else {
                     typed_weight =
                         Cast::make(computation_type,
