@@ -1802,7 +1802,11 @@ private:
                 new_var = Variable::make(new_value.type().element_of(), new_name);
                 replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
                 new_value = broadcast->value;
-            } else if (cast) {
+            } else if (cast && cast->type.bits > cast->value.type().bits) {
+                // Widening casts get pushed inwards, narrowing casts
+                // stay outside. This keeps the temporaries small, and
+                // helps with peephole optimizations in codegen that
+                // skip the widening entirely.
                 new_var = Variable::make(cast->value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
                 new_value = cast->value;
