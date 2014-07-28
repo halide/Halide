@@ -1969,23 +1969,6 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
     return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), fmt, t);
 }
 
-template<typename T>
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename, 
-                                              Image<T> dst, 
-                                              std::map<std::string, Expr> additional_replacements, 
-                                              StmtOutputFormat fmt, 
-                                              const Target &target) {
-    return compile_to_simplified_lowered_stmt(filename, Realization(vec<Buffer>(Buffer(dst))), additional_replacements, fmt, target);
-}
-
-template<typename T> 
-void Func::compile_to_simplified_lowered_stmt(const std::string &filename, 
-                                              Image<T> dst, 
-                                              StmtOutputFormat fmt, 
-                                              const Target &target) {
-    return compile_to_simplified_lowered_stmt(filename, dst, std::map<std::string, Expr>(), fmt, target);
-}
-
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename, 
                                               int x_size, int y_size, int z_size, int w_size, 
                                               std::map<std::string, Expr> additional_replacements, 
