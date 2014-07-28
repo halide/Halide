@@ -21,61 +21,60 @@ class HumanReadableStmt {
     std::string name;
     typedef std::map<std::string, Expr>::iterator it_type;
 
+public:
+    // These are here for easy access. 
+    static const Expr True, False;
+    static const std::map<std::string, Expr> default_map;
 
-    public:
-        // These are here for easy access. 
-        static const Expr True, False;
-        static const std::map<std::string, Expr> default_map;
+    HumanReadableStmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements = default_map) {
+        this->stmt = s;
+        this->name = name;
+        add_replacements(generic_replacements(buft));
+        add_replacements(additional_replacements);
+    }
 
-        HumanReadableStmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements = default_map) {
-                          this->stmt = s;
-                          this->name = name;
-                          add_replacements(generic_replacements(buft));
-            add_replacements(additional_replacements);
-        }
+    HumanReadableStmt(std::string name, Stmt s, std::map<std::string, Expr> additional_replacements = default_map) {
+        this->stmt = s;
+        this->name = name;
+        add_replacements(additional_replacements);
+    }
 
-        HumanReadableStmt(std::string name, Stmt s, std::map<std::string, Expr> additional_replacements = default_map) {
-                          this->stmt = s;
-                          this->name = name;
-            add_replacements(additional_replacements);
-        }
-
-        void add_replacements(std::map<std::string, Expr> m) {
-            if (m.size() ==0) return;
-            for (it_type iterator = m.begin(); iterator != m.end(); iterator++) {
-                replacements[iterator->first] = iterator->second;
-            }   
-        }
-
-        std::map<std::string, Expr> generic_replacements(buffer_t *buft) {
-            std::map<std::string, Expr>temp;
-            temp[name+".min.0"] = IntImm::make(buft->min[0]);
-            temp[name+".min.1"] = IntImm::make(buft->min[1]);
-            temp[name+".min.2"] = IntImm::make(buft->min[2]);
-            temp[name+".min.3"] = IntImm::make(buft->min[3]);
-
-            temp[name+".stride.0"] = IntImm::make(buft->stride[0]);
-            temp[name+".stride.1"] = IntImm::make(buft->stride[1]);
-            temp[name+".stride.2"] = IntImm::make(buft->stride[2]);
-            temp[name+".stride.3"] = IntImm::make(buft->stride[3]);
-
-            temp[name+".extent.0"] = IntImm::make(buft->extent[0]);
-            temp[name+".extent.1"] = IntImm::make(buft->extent[1]);
-            temp[name+".extent.2"] = IntImm::make(buft->extent[2]);
-            temp[name+".extent.3"] = IntImm::make(buft->extent[3]);
-
-            temp[name+".elem_size"] = IntImm::make(buft->elem_size);
-
-            // To remove if null rewrite buffer stmt uncomment the following line.
-            // temp[name+".host_and_dev_are_null"] = False; 
-
-            return temp;
-        }
-
-        Stmt execute() {
-            stmt = substitute(replacements, stmt);
-            return stmt;
+    void add_replacements(std::map<std::string, Expr> m) {
+        if (m.size() ==0) return;
+        for (it_type iterator = m.begin(); iterator != m.end(); iterator++) {
+            replacements[iterator->first] = iterator->second;
         }   
+    }
+
+    std::map<std::string, Expr> generic_replacements(buffer_t *buft) {
+        std::map<std::string, Expr>temp;
+        temp[name+".min.0"] = IntImm::make(buft->min[0]);
+        temp[name+".min.1"] = IntImm::make(buft->min[1]);
+        temp[name+".min.2"] = IntImm::make(buft->min[2]);
+        temp[name+".min.3"] = IntImm::make(buft->min[3]);
+
+        temp[name+".stride.0"] = IntImm::make(buft->stride[0]);
+        temp[name+".stride.1"] = IntImm::make(buft->stride[1]);
+        temp[name+".stride.2"] = IntImm::make(buft->stride[2]);
+        temp[name+".stride.3"] = IntImm::make(buft->stride[3]);
+
+        temp[name+".extent.0"] = IntImm::make(buft->extent[0]);
+        temp[name+".extent.1"] = IntImm::make(buft->extent[1]);
+        temp[name+".extent.2"] = IntImm::make(buft->extent[2]);
+        temp[name+".extent.3"] = IntImm::make(buft->extent[3]);
+
+        temp[name+".elem_size"] = IntImm::make(buft->elem_size);
+
+        // To remove if null rewrite buffer stmt uncomment the following line.
+        // temp[name+".host_and_dev_are_null"] = False; 
+
+        return temp;
+    }
+
+    Stmt execute() {
+        stmt = substitute(replacements, stmt);
+        return stmt;
+    }   
 };
 
 const Expr HumanReadableStmt::True  = Cast::make(Bool(1), IntImm::make(1));
