@@ -132,12 +132,12 @@ int main(int argc, char **argv) {
     } else {
         // cpu schedule
         Var yi;
-        output.parallel(y, 4).vectorize(x, 4);
-        gray.compute_root().parallel(y, 4).vectorize(x, 4);
+        output.parallel(y, 4).vectorize(x, 8);
+        gray.compute_root().parallel(y, 4).vectorize(x, 8);
         for (int j = 0; j < 4; j++) {
-            if (j > 0) inGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 4);
-            if (j > 0) gPyramid[j].compute_root().parallel(y, 4).vectorize(x, 4);
-            outGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 4);
+            if (j > 0) inGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
+            if (j > 0) gPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
+            outGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
         }
         for (int j = 4; j < J; j++) {
             inGPyramid[j].compute_root().parallel(y);
