@@ -251,7 +251,7 @@ int main(int argc, char **argv) {
     Var x, y;
     Func lerp_with_casts;
     Param<float> w;
-    lerp_with_casts(x, y) = lerp(cast<std::int32_t>(input_a(x, y)), cast<std::int32_t>(input_b(x, y)), w);
+    lerp_with_casts(x, y) = lerp(cast<int32_t>(input_a(x, y)), cast<int32_t>(input_b(x, y)), w);
     lerp_with_casts.vectorize(x, 4);
 
     input_a.set(input_a_img);
