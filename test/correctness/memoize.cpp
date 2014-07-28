@@ -408,7 +408,7 @@ int main(int argc, char **argv) {
         Var x, y;
         // Ensure that all calls map to the same cache key, but pass a thread ID
         // through to avoid having to do locking or an atomic add
-        f(x, y) = count_calls(x, y % 4, memoize_tag(y / 1, 0)) + cast<uint8_t>(x);
+        f(x, y) = count_calls(x, y % 4, memoize_tag(y / 16, 0)) + cast<uint8_t>(x);
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
