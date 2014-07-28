@@ -89,11 +89,6 @@ int main(int argc, char **argv) {
     
     bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input, target);
 
-    bilateral_grid.compile_to_lowered_stmt("bilateral_grid.html");
-    std::map<std::string, Expr> subs;
-    subs["r_sigma"] = 0.1f;
-    bilateral_grid.compile_to_simplified_lowered_stmt("bilateral_grid.simple.html", 1536, 2560, 0, 0, subs);
-
     return 0;
 }
 
