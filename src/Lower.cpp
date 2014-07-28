@@ -649,7 +649,7 @@ private:
 
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
-  
+
         return Pipeline::make(func.name(), realization.first, realization.second, s);
     }
 
@@ -1749,28 +1749,23 @@ Stmt lower(Function f, const Target &t) {
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
-    debug(2) << "Unrolled: \n" << s << "\n\n";
-
-    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    debug(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Unrolled: \n" << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s);
+    s = simplify(s);
     debug(2) << "Vectorized: \n" << s << "\n\n";
 
-    debug(1) << "Simplifying...\n";
+    debug(1) << "Detecting vector interleavings...\n";
+    s = rewrite_interleavings(s);
     s = simplify(s);
-    debug(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
 
     debug(1) << "Specializing clamped ramps...\n";
     s = specialize_clamped_ramps(s);
     s = simplify(s);
     debug(2) << "Specialized clamped ramps: \n" << s << "\n\n";
-
-    debug(1) << "Detecting vector interleavings...\n";
-    s = rewrite_interleavings(s);
-    debug(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
