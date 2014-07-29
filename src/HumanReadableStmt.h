@@ -1,8 +1,8 @@
 #ifndef HALIDE_HUMAN_READABLE_STMT
-#define HALIDE_HUMAN_READABLE_STMT 
+#define HALIDE_HUMAN_READABLE_STMT
 
-/** \file 
-* Defines a function which applies subsitutions based on the given inputs.
+/** \file
+* Defines methods for simplifying a stmt into a human-readable form.
 */
 
 #include "IR.h"
@@ -14,11 +14,13 @@ namespace Halide {
 namespace Internal {
 
 /**
-* Returns a Stmt with the substitiutions deduced by buffer_t and optionally
-* defined in string to Expr map.*/
+ * Returns a Stmt simplified using a concrete size of the output, and
+ * other optional values for parameters.
+ */
 // @{
-EXPORT Stmt human_readable_stmt(std::string name, Stmt s, buffer_t *buft);
-EXPORT Stmt human_readable_stmt(std::string name, Stmt s, buffer_t *buft, std::map<std::string, Expr> additional_replacements);
+EXPORT Stmt human_readable_stmt(Function f, Stmt s, Buffer buf);
+EXPORT Stmt human_readable_stmt(Function f, Stmt s, Buffer buf,
+                                std::map<std::string, Expr> additional_replacements);
 // @}
 
 }}
