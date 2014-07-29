@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
     }
 
     ImageParam input(Float(32), 2);
-    Param<float> r_sigma;
+    Param<float> r_sigma("r_sigma");
     int s_sigma = atoi(argv[1]);
     Var x("x"), y("y"), z("z"), c("c");
 
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
         blury.compute_root().reorder(c, x, y, z).parallel(z).vectorize(x, 4).unroll(c);
         bilateral_grid.compute_root().parallel(y).vectorize(x, 4);
     }
-
+    
     bilateral_grid.compile_to_file("bilateral_grid", r_sigma, input, target);
 
     return 0;
