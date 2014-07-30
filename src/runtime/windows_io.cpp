@@ -1,5 +1,4 @@
 #include "runtime_internal.h"
-#include <stdarg.h>
 
 extern "C" {
 

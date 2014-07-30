@@ -1,8 +1,6 @@
 #ifndef MINI_STRING_H
 #define MINI_STRING_H
 
-#include <stdint.h>
-
 #ifdef __cplusplus
 extern "C" {
 #endif

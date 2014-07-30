@@ -4,8 +4,6 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#include <stdarg.h>
-
 // This is temporary code. In particular, the hash table is stupid and
 // currently thredsafety is accomplished via large granularity spin
 // locks. It is mainly intended to prove the programming model and
