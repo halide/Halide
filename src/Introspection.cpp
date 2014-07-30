@@ -673,11 +673,6 @@ private:
                 iter->getContents(debug_line);
             } else if (name == prefix + "debug_ranges") {
                 iter->getContents(debug_ranges);
-            } else if (name.empty()) {
-                // Interpret empty string as a sentinel. This is
-                // necessary as LLVM ELF section iteration is broken
-                // as of 7/20/2014
-                break;
             }
         }
 
