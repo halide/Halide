@@ -25,7 +25,7 @@ public:
 
     Deinterleaver(const Scope<int> &lets) : external_lets(lets) {}
 private:
-    Scope<int> internal;
+    Scope<Expr> internal;
 
     using IRMutator::visit;
 
@@ -62,7 +62,7 @@ private:
             Type t = op->type;
             t.width = new_width;
             if (internal.contains(op->name)) {
-                expr = Variable::make(t, op->name, op->image, op->param, op->reduction_domain);
+                expr = internal.get(op->name);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 0 &&
                        lane_stride == 2) {
@@ -124,11 +124,23 @@ private:
     }
 
     void visit(const Let *op) {
-        Expr value = mutate(op->value);
-        internal.push(op->name, 0);
-        Expr body = mutate(op->body);
-        internal.pop(op->name);
-        expr = Let::make(op->name, value, body);
+        if (op->type.is_vector()) {
+            Expr new_value = mutate(op->value);
+            std::string new_name = unique_name('t');
+            Type new_type = new_value.type();
+            Expr new_var = Variable::make(new_type, new_name);
+            internal.push(op->name, new_var);
+            Expr body = mutate(op->body);
+            internal.pop(op->name);
+
+            // Define the new name.
+            expr = Let::make(new_name, new_value, body);
+
+            // Someone might still use the old name.
+            expr = Let::make(op->name, op->value, expr);
+        } else {
+            IRMutator::visit(op);
+        }
     }
 };
 
