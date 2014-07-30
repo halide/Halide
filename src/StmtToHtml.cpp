@@ -34,7 +34,7 @@ private:
 
     string open_span(string cls, string data="") {
         id_count++;
-        return "<span class="+cls+" "+data+" id="+ to_string(id_count) +">";
+        return "<span class=\""+cls+"\" \""+data+" id=\""+ to_string(id_count) +"\">";
     }
 
     string close_span() {
@@ -43,7 +43,7 @@ private:
 
     string open_div(string cls, string data="") {
         id_count++;
-        return "<div class="+cls+" "+data+" id="+ to_string(id_count) +">";
+        return "<div class=\""+cls+"\" \""+data+"\" id=\""+ to_string(id_count) +"\">";
     }
 
     string close_div() {
@@ -382,7 +382,7 @@ public:
         stream << "produce ";
         print(op->name);
         stream << " {";
-        stream << open_div("ProduceBody");
+        stream << open_div("ProduceBody Indent");
         print(op->produce);
         stream << close_div();
         stream << '}';
@@ -392,7 +392,7 @@ public:
             stream << "update ";
             print(op->name);
             stream << " {";
-            stream << open_div("UpdateBody");
+            stream << open_div("UpdateBody Indent");
             print(op->update);
             stream << close_div();
             stream << '}';
@@ -415,7 +415,7 @@ public:
         stream << ", ";
         print(op->extent);
         stream << ") {";
-        stream << open_div("ForBody");
+        stream << open_div("ForBody Indent");
         print(op->body);
         stream << close_div();
         stream << '}';
@@ -505,7 +505,7 @@ public:
             print(op->condition);
         }
         stream << " {";
-        stream << open_div("RealizeBody");
+        stream << open_div("RealizeBody Indent");
         print(op->body);
         stream << close_div();
         stream << close_div();
@@ -524,7 +524,7 @@ public:
             print(op->condition);
             stream << ")";
             stream << close_span() << "{"; // close if (or else if) span
-            stream << open_div("ThenBody");
+            stream << open_div("ThenBody Indent");
             print(op->then_case);
             stream << close_div(); // close thenbody div
 
@@ -538,7 +538,7 @@ public:
                 op = nested_if;
             } else {
                 stream << "} else {";
-                stream << open_div("ElseBody");
+                stream << open_div("ElseBody Indent");
                 print(op->else_case);
                 stream << close_div();
                 break;
@@ -573,13 +573,12 @@ public:
     ~StmtToHtml(){}
 };
 
-const std::string StmtToHtml::css = "\
-div { padding-left: 5px; } \n \
-/*Some divs types dont need extra padding.*/ \n \
-div.Block { padding-left: 0px; }\n \
-div.AllocateBody { padding-left: 0px; }";
+const std::string StmtToHtml::css = "\n \
+body { font-family: \"Courier New\" } \n \
+div.Indent { padding-left: 15px; }\n \
+";
 
-const std::string StmtToHtml::js = "\
+const std::string StmtToHtml::js = "\n \
 window.onload = function () { \n \
 // adding jquery \n \
 var script = document.createElement('script'); \n \
