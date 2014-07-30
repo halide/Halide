@@ -22,11 +22,15 @@ typedef __PTRDIFF_TYPE__ ptrdiff_t;
 #ifdef BITS_64
 #define INT64_C(c)  c ## L
 #define UINT64_C(c) c ## UL
+typedef uint64_t uintptr_t;
+typedef int64_t intptr_t;
 #endif
 
 #ifdef BITS_32
 #define INT64_C(c)  c ## LL
 #define UINT64_C(c) c ## ULL
+typedef uint32_t uintptr_t;
+typedef int32_t intptr_t;
 #endif
 
 typedef __builtin_va_list va_list;
