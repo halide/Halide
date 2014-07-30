@@ -113,6 +113,9 @@ private:
 
             // Vector calls are always parallel across the lanes, so we
             // can just deinterleave the args.
+
+            // TODO: beware of other intrinsics for which this is not true!
+
             std::vector<Expr> args(op->args.size());
             for (size_t i = 0; i < args.size(); i++) {
                 args[i] = mutate(op->args[i]);
