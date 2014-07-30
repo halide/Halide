@@ -546,8 +546,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
 namespace Internal {
 
-/** When JIT-compiling on 32-bit windows, we need to rewrite calls 
-        to name-mangled win32 api calls to non-name-mangled versions. */
+/** When JIT-compiling on 32-bit windows, we need to rewrite calls
+ *  to name-mangled win32 api calls to non-name-mangled versions.
+ */
 void undo_win32_name_mangling(llvm::Module *m) {
     llvm::IRBuilder<> builder(m->getContext());
     // For every function prototype...

@@ -952,7 +952,7 @@ private:
             // Visit the args of the inner call
             internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
-            
+
             if (c) {
                 for (size_t i = 0; i < c->args.size(); i++) {
                     c->args[i].accept(this);
