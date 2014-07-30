@@ -15,7 +15,7 @@
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 
-#ifndef COMPILING_HALIDE
+#ifndef COMPILING_HALIDE_RUNTIME
 #include <stdint.h>
 #endif
 
