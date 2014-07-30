@@ -301,7 +301,7 @@ int main(int argc, char **argv) {
 
         f.compute_root().memoize();
         g.vectorize(x, 8).compute_at(h, x);
-        
+
         val.set(23.0f);
         index.set(2);
         Image<uint8_t> out1 = h.realize(1);

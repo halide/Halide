@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     Image<int> input(5, 5);
     Func f;
-    f(x, y) = input(x, y) * 2; 
+    f(x, y) = input(x, y) * 2;
     Var xo, xi;
 
     Param<int> vector_size;

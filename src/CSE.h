@@ -11,9 +11,9 @@ namespace Internal {
 
 /** Replace each common sub-expression in the argument with a
  * variable, and wrap the resulting expr in a let statement giving a
- * value to that variable. 
- * 
-* This is important to do within Halide (instead of punting to llvm),
+ * value to that variable.
+ *
+ * This is important to do within Halide (instead of punting to llvm),
  * because exprs that come in from the front-end are small when
  * considered as a graph, but combinatorially large when considered as
  * a tree. For an example of a such a case, see

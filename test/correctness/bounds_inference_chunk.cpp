@@ -6,7 +6,7 @@ using namespace Halide;
 int main(int argc, char **argv) {
 
     Func f, g, h; Var x, y;
-    
+
     h(x, y) = x + y;
     g(x, y) = (h(x-1, y-1) + h(x+1, y+1))/2;
     f(x, y) = (g(x-1, y-1) + g(x+1, y+1))/2;

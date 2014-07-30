@@ -5,7 +5,6 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
-    
     ImageParam input(Float(32), 2);
 
     Var x, y, z;

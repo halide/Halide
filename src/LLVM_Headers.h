@@ -1,6 +1,9 @@
 #ifndef HALIDE_LLVM_HEADERS_H
 #define HALIDE_LLVM_HEADERS_H
 
+// This seems to be required by some LLVM header, which is likely an LLVM bug.
+#include <stddef.h>
+
 // No msvc warnings from llvm headers please
 #ifdef _WIN32
 #pragma warning(push, 0)

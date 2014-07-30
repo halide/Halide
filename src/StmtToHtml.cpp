@@ -26,7 +26,7 @@ class StmtToHtml : public IRVisitor {
 
     static const std::string css, js;
 
-    // This allows easier access to individual elements. 
+    // This allows easier access to individual elements.
     int id_count;
 
 private:
@@ -62,7 +62,7 @@ private:
         ir.accept(this);
     }
 
-public: 
+public:
     void visit(const IntImm *op){
         stream <<  open_span("IntImm") << op->value << close_span();
     }
@@ -72,8 +72,8 @@ public:
     void visit(const StringImm *op){
         //TODO Sanitize the stirng so it doesn't mess with the html
         // This would be the proper way to modify string imm
-        // however this means that ever function name and varaible name would have 
-        // double quotes surrounding it which is kinda annoying. 
+        // however this means that ever function name and varaible name would have
+        // double quotes surrounding it which is kinda annoying.
         /*
         stream << open_span("StringImm");
           stream << '"';
@@ -106,13 +106,13 @@ public:
             }
         }
         stream << '"';
-        stream << close_span(); 
+        stream << close_span();
         */
 
-        // This is a temporary solution. 
+        // This is a temporary solution.
         stream << open_span("StringImm");
-        stream << op->value;    
-        stream << close_span(); 
+        stream << op->value;
+        stream << close_span();
     }
 
     void visit(const Variable *op){
@@ -177,7 +177,7 @@ public:
         print(op->a);
         stream << ", ";
         print(op->b);
-        stream << ")";  
+        stream << ")";
         stream << close_span();
     }
     void visit(const Max *op) {
@@ -243,7 +243,7 @@ public:
         stream << ')';
         stream << close_span();
     }
-    
+
     void visit(const And *op) {
         stream << open_span("And");
         stream << '(';
@@ -383,7 +383,7 @@ public:
         print(op->name);
         stream << " {";
         stream << open_div("ProduceBody");
-        print(op->produce); 
+        print(op->produce);
         stream << close_div();
         stream << '}';
         stream << close_div();
@@ -462,7 +462,7 @@ public:
     void visit(const Allocate *op) {
         stream << open_div("Allocate");
         stream << "allocate ";
-        print(op->name); 
+        print(op->name);
         stream << "[" << op->type;
         for (size_t i = 0; i < op->extents.size(); i++) {
             stream  << " * ";
@@ -518,7 +518,7 @@ public:
     }
     void visit(const IfThenElse *op) {
         stream << open_div("IfThenElse");
-        stream << "if (";   
+        stream << "if (";
         stream << open_span("IfStmt");
         while (1) {
             print(op->condition);
@@ -544,7 +544,7 @@ public:
                 break;
         }
     }
-     stream << close_div(); //Closing ifthenelse div. 
+     stream << close_div(); // Closing ifthenelse div.
     }
 
     void visit(const Evaluate *op) {

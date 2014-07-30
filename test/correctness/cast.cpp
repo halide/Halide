@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     }
     float_expr = cast<float>(x);
     double_expr = cast<double>(x);
-    
+
     for (int i = 0; i < 4; i++) {
         for (int j = 0; j < i; j++) {
             assert((int_expr[i] + int_expr[j]).type() == int_expr[i].type());
