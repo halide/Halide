@@ -34,7 +34,7 @@ private:
 
     string open_span(string cls, string data="") {
         id_count++;
-        return "<span class=\""+cls+"\" \""+data+" id=\""+ to_string(id_count) +"\">";
+        return "<span class=\""+cls+"\" "+data+" id=\""+ to_string(id_count) +"\">";
     }
 
     string close_span() {
@@ -51,7 +51,11 @@ private:
     }
 
     string generate_data(string name, string content) {
-        return "data-"+name+"="+'"'+content+'"';
+        return "data-"+name+"=\""+content+'"';
+    }
+
+    string keyword(const char *k) {
+        return open_span("Keyword") + k + close_span();
     }
 
     void print(Expr ir) {
@@ -70,9 +74,9 @@ public:
         stream <<  open_span("FloatImm") << op->value << 'f' << close_span();
     }
     void visit(const StringImm *op){
-        //TODO Sanitize the stirng so it doesn't mess with the html
+        //TODO Sanitize the string so it doesn't mess with the html
         // This would be the proper way to modify string imm
-        // however this means that ever function name and varaible name would have
+        // however this means that every function name and varaible name would have
         // double quotes surrounding it which is kinda annoying.
         /*
         stream << open_span("StringImm");
@@ -126,51 +130,30 @@ public:
         stream << ')' << close_span();
     }
 
-    void visit(const Add *op) {
-        stream << open_span("Add");
+    void visit_binary_op(Expr a, Expr b, const char * op) {
+        stream << open_span("BinaryOp");
         stream << '(';
-        print(op->a);
-        stream << " + ";
-        print(op->b);
-        stream << ')';
-        stream << ')' << close_span();
-    }
-    void visit(const Sub *op) {
-        stream << open_span("Sub");
-        stream << '(';
-        print(op->a);
-        stream << " - ";
-        print(op->b);
+        print(a);
+        stream << " " << op << " ";
+        print(b);
         stream << ')';
         stream << close_span();
     }
-    void visit(const Mul *op) {
-        stream << open_span("Mul");
-        stream << '(';
-        print(op->a);
-        stream << "*";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const Div *op) {
-        stream << open_span("Div");
-        stream << '(';
-        print(op->a);
-        stream << "/";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const Mod *op) {
-        stream << open_span("Mod");
-        stream << '(';
-        print(op->a);
-        stream << " % ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
+
+    void visit(const Add *op) { visit_binary_op(op->a, op->b, "+"); }
+    void visit(const Sub *op) { visit_binary_op(op->a, op->b, "-"); }
+    void visit(const Mul *op) { visit_binary_op(op->a, op->b, "*"); }
+    void visit(const Div *op) { visit_binary_op(op->a, op->b, "/"); }
+    void visit(const Mod *op) { visit_binary_op(op->a, op->b, "%"); }
+    void visit(const And *op) { visit_binary_op(op->a, op->b, "&amp;&amp;"); }
+    void visit(const Or *op) { visit_binary_op(op->a, op->b, "||"); }
+    void visit(const NE *op) { visit_binary_op(op->a, op->b, "!="); }
+    void visit(const LT *op) { visit_binary_op(op->a, op->b, "&lt;"); }
+    void visit(const LE *op) { visit_binary_op(op->a, op->b, "&lt="); }
+    void visit(const GT *op) { visit_binary_op(op->a, op->b, "&gt;"); }
+    void visit(const GE *op) { visit_binary_op(op->a, op->b, "&gt;="); }
+    void visit(const EQ *op) { visit_binary_op(op->a, op->b, "=="); }
+
     void visit(const Min *op) {
         stream << open_span("Min");
         stream << "min(";
@@ -187,79 +170,6 @@ public:
         stream << ", ";
         print(op->b);
         stream << ")";
-        stream << close_span();
-    }
-    void visit(const EQ *op) {
-        stream << open_span("EQ");
-        stream << '(';
-        print(op->a);
-        stream << " == ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const NE *op) {
-        stream << open_span("NE");
-        stream << '(';
-        print(op->a);
-        stream << " != ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const LT *op) {
-        stream << open_span("LT");
-        stream << '(';
-        print(op->a);
-        stream << " &lt ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const LE *op) {
-        stream << open_span("LE");
-        stream << '(';
-        print(op->a);
-        stream << " &lt = ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const GT *op) {
-        stream << open_span("GT");
-        stream << '(';
-        print(op->a);
-        stream << " &gt ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const GE *op) {
-        stream << open_span("GE");
-        stream << '(';
-        print(op->a);
-        stream << " &gt= ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-
-    void visit(const And *op) {
-        stream << open_span("And");
-        stream << '(';
-        print(op->a);
-        stream << " &amp&amp ";
-        print(op->b);
-        stream << ')';
-        stream << close_span();
-    }
-    void visit(const Or *op) {
-        stream << open_span("Or");
-        stream << '(';
-        print(op->a);
-        stream << " || ";
-        print(op->b);
-        stream << ')';
         stream << close_span();
     }
     void visit(const Not *op) {
@@ -342,11 +252,11 @@ public:
     }
     void visit(const Let *op) {
         stream << open_span("Let");
-        stream << "(let ";
+        stream << "(" << keyword("let") << " ";
         print(op->name);
         stream << " = ";
         print(op->value);
-        stream << " in ";
+        stream << " " << keyword("in") << " ";
         print(op->body);
         stream << ")";
         stream << close_span();
@@ -355,7 +265,7 @@ public:
     // Divs
     void visit(const LetStmt *op) {
         stream << open_div("LetStmt");
-        stream << "let ";
+        stream << keyword("let") << " ";
         print(op->name);
         stream << " = ";
         print(op->value);
@@ -379,7 +289,7 @@ public:
     }
     void visit(const Pipeline *op) {
         stream << open_div("Produce");
-        stream << "produce ";
+        stream << keyword("produce") << " ";
         print(op->name);
         stream << " {";
         stream << open_div("ProduceBody Indent");
@@ -389,7 +299,7 @@ public:
         stream << close_div();
         if (op->update.defined()) {
             stream << open_div("Update");
-            stream << "update ";
+            stream << keyword("update") << " ";
             print(op->name);
             stream << " {";
             stream << open_div("UpdateBody Indent");
@@ -404,9 +314,9 @@ public:
     void visit(const For *op) {
         stream << open_div("For");
         if (op->for_type == 0) {
-            stream << "for";
+            stream << keyword("for");
         } else {
-            stream << "parallel";
+            stream << keyword("parallel");
         }
         stream << " (";
         print(op->name);
@@ -461,7 +371,7 @@ public:
     }
     void visit(const Allocate *op) {
         stream << open_div("Allocate");
-        stream << "allocate ";
+        stream << keyword("allocate") << " ";
         print(op->name);
         stream << "[" << op->type;
         for (size_t i = 0; i < op->extents.size(); i++) {
@@ -480,13 +390,13 @@ public:
     }
     void visit(const Free *op) {
         stream << open_div("Free");
-        stream << "free ";
+        stream << keyword("free") << " ";
         print(op->name);
         stream << close_div();
     }
     void visit(const Realize *op) {
         stream << open_div("Realize");
-        stream << "realize ";
+        stream << keyword("realize") << " ";
         print(op->name);
         stream << "(";
         stream << open_span("RealizeArgs");
@@ -501,7 +411,7 @@ public:
         stream << ")";
         stream << close_span();
         if (!is_one(op->condition)) {
-            stream << " if ";
+            stream << " " << keyword("if") << " ";
             print(op->condition);
         }
         stream << " {";
@@ -518,7 +428,7 @@ public:
     }
     void visit(const IfThenElse *op) {
         stream << open_div("IfThenElse");
-        stream << "if (";
+        stream << keyword("if") << " (";
         stream << open_span("IfStmt");
         while (1) {
             print(op->condition);
@@ -533,11 +443,11 @@ public:
             }
 
             if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
-                stream << "} else if (";
+                stream << "} " << keyword("else if") << " (";
                 stream << open_span("ElseIfStmt");
                 op = nested_if;
             } else {
-                stream << "} else {";
+                stream << "} " << keyword("else") << " {";
                 stream << open_div("ElseBody Indent");
                 print(op->else_case);
                 stream << close_div();
@@ -576,6 +486,7 @@ public:
 const std::string StmtToHtml::css = "\n \
 body { font-family: \"Courier New\" } \n \
 div.Indent { padding-left: 15px; }\n \
+span.Keyword { color: blue; font-weight: bold; }\n \
 ";
 
 const std::string StmtToHtml::js = "\n \
