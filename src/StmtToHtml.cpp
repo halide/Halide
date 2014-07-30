@@ -58,6 +58,10 @@ private:
         return open_span("Keyword") + k + close_span();
     }
 
+    string function(const char *f) {
+        return open_span("Function") + f + close_span();
+    }
+
     void print(Expr ir) {
         ir.accept(this);
     }
@@ -68,10 +72,10 @@ private:
 
 public:
     void visit(const IntImm *op){
-        stream <<  open_span("IntImm") << op->value << close_span();
+        stream <<  open_span("IntImm Imm") << op->value << close_span();
     }
     void visit(const FloatImm *op){
-        stream <<  open_span("FloatImm") << op->value << 'f' << close_span();
+        stream <<  open_span("FloatImm Imm") << op->value << 'f' << close_span();
     }
     void visit(const StringImm *op){
         //TODO Sanitize the string so it doesn't mess with the html
@@ -114,27 +118,31 @@ public:
         */
 
         // This is a temporary solution.
-        stream << open_span("StringImm");
+        stream << open_span("StringImm Imm");
         stream << op->value;
         stream << close_span();
     }
 
     void visit(const Variable *op){
-        stream << open_span("Variable") << op->name << close_span();
+        stream << open_span("Variable");
+        print(op->name);
+        stream << close_span();
     }
 
     void visit(const Cast *op){
         stream << open_span("Cast");
-        stream << op->type << '(';
+        stream << open_span("Keyword") << op->type << close_span();
+        stream << '(';
         print(op->value);
-        stream << ')' << close_span();
+        stream << ')';
+        stream << close_span();
     }
 
-    void visit_binary_op(Expr a, Expr b, const char * op) {
+    void visit_binary_op(Expr a, Expr b, const char *op) {
         stream << open_span("BinaryOp");
         stream << '(';
         print(a);
-        stream << " " << op << " ";
+        stream << " " << open_span("Operator") << op << close_span() << " ";
         print(b);
         stream << ')';
         stream << close_span();
@@ -156,7 +164,7 @@ public:
 
     void visit(const Min *op) {
         stream << open_span("Min");
-        stream << "min(";
+        stream << function("min") << "(";
         print(op->a);
         stream << ", ";
         print(op->b);
@@ -165,7 +173,7 @@ public:
     }
     void visit(const Max *op) {
         stream << open_span("Max");
-        stream << "max(";
+        stream << function("max") << "(";
         print(op->a);
         stream << ", ";
         print(op->b);
@@ -180,7 +188,7 @@ public:
     }
     void visit(const Select *op) {
         stream << open_span("Select");
-        stream << "select(";
+        stream << function("select") << "(";
         print(op->condition);
         stream << ", ";
         print(op->true_value);
@@ -199,22 +207,23 @@ public:
     }
     void visit(const Ramp *op) {
         stream << open_span("Ramp");
-        stream << "ramp(";
+        stream << function("ramp") << "<b>(</b>";
         print(op->base);
         stream << ", ";
         print(op->stride);
         stream << ", ";
         print(op->width);
-        stream << ")";
+        stream << "<b>)</b>";
         stream << close_span();
     }
     void visit(const Broadcast *op) {
         stream << open_span("Broadcast");
-        stream << "x";
-        print(op->width);
-        stream << "(";
+        stream << open_span("function");
+        stream << "x" << op->width;
+        stream << close_span();
+        stream << "<b>(</b>";
         print(op->value);
-        stream << ")";
+        stream << "<b>)</b>";
         stream << close_span();
     }
     void visit(const Call *op) {
@@ -236,9 +245,8 @@ public:
                 return;
             }
         }
-
-        print(op->name);
-        stream << "(";
+        stream << function(op->name.c_str());
+        stream << "<b>(</b>";
         stream << open_span("CallArgs");
         for (size_t i = 0; i < op->args.size(); i++) {
             print(op->args[i]);
@@ -247,7 +255,7 @@ public:
             }
         }
         stream << close_span();
-        stream << ")";
+        stream << "<b>)</b>";
         stream << close_span();
     }
     void visit(const Let *op) {
@@ -267,14 +275,14 @@ public:
         stream << open_div("LetStmt");
         stream << keyword("let") << " ";
         print(op->name);
-        stream << " = ";
+        stream << " " << open_span("Operator") << "=" << close_span() << " ";
         print(op->value);
-        stream << close_div();
         op->body.accept(this);
+        stream << close_div();
     }
     void visit(const AssertStmt *op) {
         stream << open_div("AssertStmt");
-        stream << "assert(";
+        stream << function("assert") << "<b>(</b>";
         print(op->condition);
         stream << ", ";
         stream << open_span("AssertMsg");
@@ -284,7 +292,7 @@ public:
             stream << ", ";
             print(op->args[i]);
         }
-        stream << ')';
+        stream << "<b>)</b>";
         stream << close_div();
     }
     void visit(const Pipeline *op) {
@@ -338,7 +346,7 @@ public:
         stream << open_span("StoreIndex");
         print(op->index);
         stream << close_span();
-        stream << "] = ";
+        stream << "] " << open_span("Operator") << "=" << close_span() << " ";
         stream << open_span("StoreValue");
         print(op->value);
         stream << close_span();
@@ -373,7 +381,8 @@ public:
         stream << open_div("Allocate");
         stream << keyword("allocate") << " ";
         print(op->name);
-        stream << "[" << op->type;
+        stream << "[";
+        stream << open_span("Keyword") << op->type << close_span();
         for (size_t i = 0; i < op->extents.size(); i++) {
             stream  << " * ";
             print(op->extents[i]);
@@ -486,7 +495,10 @@ public:
 const std::string StmtToHtml::css = "\n \
 body { font-family: \"Courier New\" } \n \
 div.Indent { padding-left: 15px; }\n \
-span.Keyword { color: blue; font-weight: bold; }\n \
+span.Keyword { color: blue; }\n \
+span.Function { font-weight: bold; }\n \
+span.Operator { color:red; font-weight: bold; }\n \
+span.Imm { color: dimgray; font-weight: bold; }\n \
 ";
 
 const std::string StmtToHtml::js = "\n \
