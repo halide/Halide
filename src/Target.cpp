@@ -426,6 +426,7 @@ DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
+DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -627,7 +628,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     } else if (t.os == Target::NaCl) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
         modules.push_back(get_initmod_nacl_io(c, bits_64));
-        modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
+        modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
         modules.push_back(get_initmod_ssp(c, bits_64));
     }
