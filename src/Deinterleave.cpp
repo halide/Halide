@@ -192,7 +192,7 @@ class Interleaver : public IRMutator {
 
     using IRMutator::visit;
 
-    bool should_deinterleave;
+    int should_deinterleave;
 
     Expr deinterleave_expr(Expr e) {
         if (e.type().width <= 2) {
@@ -201,6 +201,16 @@ class Interleaver : public IRMutator {
         } else {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
+
+            std::cout << "deinterleaving vectors: "
+                      << should_deinterleave << "\n";
+            if (--should_deinterleave) {
+                int old_deinterleave = should_deinterleave;
+                a = deinterleave_expr(a);
+                should_deinterleave = old_deinterleave;
+                b = deinterleave_expr(b);
+            }
+
             return Call::make(e.type(), Call::interleave_vectors,
                               vec(a, b), Call::Intrinsic);
         }
@@ -250,16 +260,18 @@ class Interleaver : public IRMutator {
 
     void visit(const Mod *op) {
         const Ramp *r = op->a.as<Ramp>();
-        if (r && is_two(op->b)) {
-            should_deinterleave = true;
+        int bits;
+        if (r && is_const_power_of_two(op->b, &bits)) {
+            should_deinterleave = bits;
         }
         IRMutator::visit(op);
     }
 
     void visit(const Div *op) {
         const Ramp *r = op->a.as<Ramp>();
-        if (r && is_two(op->b)) {
-            should_deinterleave = true;
+        int bits;
+        if (r && is_const_power_of_two(op->b, &bits)) {
+            should_deinterleave = bits;
         }
         IRMutator::visit(op);
     }
