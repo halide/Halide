@@ -289,10 +289,6 @@ public:
         stream << close_span();
     }
 
-    template <typename T>
-    void visit_let(const char *cls, const std::string &name, Expr value, T body) {
-    }
-
     void visit(const Let *op) {
         stream << open_span("Let");
         int id = unique_id();
