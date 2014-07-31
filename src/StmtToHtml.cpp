@@ -31,15 +31,15 @@ private:
 
     int unique_id() { return id_count++; }
 
+    string open_span(string cls, string id) {
+        return "<span class=\""+cls+"\" id=\""+id+"\">";
+    }
+
     string open_span(string cls, int id = -1) {
         if (id == -1) {
             id = unique_id();
         }
-        return "<span class=\""+cls+"\" id=\""+to_string(id)+"\">";
-    }
-
-    string open_span(string cls, string id) {
-        return "<span class=\""+cls+"\" id=\""+id+"\">";
+        return open_span(cls, to_string(id));
     }
 
     string close_span() {
@@ -68,10 +68,10 @@ private:
     std::vector<int> match_ids;
 
     string open(const string &c, int id) {
-        return open_span("Matched", to_string(id) + "_0") + c + close_span();
+        return open_span("Matched", to_string(id) + "_open") + c + close_span();
     }
     string close(const string &c, int id) {
-        return open_span("Matched", to_string(id) + "_1") + c + close_span();
+        return open_span("Matched", to_string(id) + "_close") + c + close_span();
     }
 
     string open(const char *c) {
@@ -107,7 +107,7 @@ private:
         stream << open(l, id);
         for (size_t i = 0; i < args.size(); i++) {
             if (i > 0) {
-                stream << open_span("Matched", to_string(id) + "_" + to_string(i + 2)) << "," << close_span() << " ";
+                stream << open_span("Matched", to_string(id) + "_" + to_string(i)) << "," << close_span() << " ";
             }
             print(args[i]);
         }
@@ -197,7 +197,7 @@ public:
         int id = unique_id();
         stream << open("(", id);
         print(a);
-        stream << " " << open_span("Operator Matched", to_string(id) + "_2") << op << close_span() << " ";
+        stream << " " << open_span("Operator Matched", to_string(id) + "_op") << op << close_span() << " ";
         print(b);
         stream << close(")", id);
         stream << close_span();
@@ -294,9 +294,9 @@ public:
         int id = unique_id();
         stream << open("(" + keyword("let"), id) << " ";
         print(op->name);
-        stream << " " << open_span("Operator Matched Assign", to_string(id) + "_2") << "=" << close_span() << " ";
+        stream << " " << open_span("Operator Matched Assign", to_string(id) + "_assign") << "=" << close_span() << " ";
         print(op->value);
-        stream << " " << open_span("Matched", to_string(id) + "_3") << keyword("in") << close_span() << " ";
+        stream << " " << open_span("Matched", to_string(id) + "_in") << keyword("in") << close_span() << " ";
         print(op->body);
         stream << close(")", id) << close_span();
     }
