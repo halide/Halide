@@ -310,12 +310,11 @@ public:
     }
     void visit(const AssertStmt *op) {
         stream << open_div("AssertStmt WrapLine");
-        stream << symbol("assert");
         std::vector<Expr> args;
         args.push_back(op->condition);
         args.push_back(op->message);
         std::copy(op->args.begin(), op->args.end(), std::back_inserter(args));
-        print_list("(", args, ")");
+        print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }
     void visit(const Pipeline *op) {
@@ -498,8 +497,8 @@ public:
         print(s);
         stream << "<script>\n"
                << "$( \".Matched\" ).each( function() {\n"
-               << "    this.onmouseover = function() { $(\"[id^=\" + this.id.split('-')[0] + \"]\").addClass(\"Highlight\"); }\n"
-               << "    this.onmouseout = function() { $(\"[id^=\" + this.id.split('-')[0] + \"]\").removeClass(\"Highlight\"); }\n"
+               << "    this.onmouseover = function() { $(\"[id^=\" + this.id.split('-')[0] + \"-]\").addClass(\"Highlight\"); }\n"
+               << "    this.onmouseout = function() { $(\"[id^=\" + this.id.split('-')[0] + \"-]\").removeClass(\"Highlight\"); }\n"
                << "} );\n"
                << "</script>\n";
         stream << "</body>";
