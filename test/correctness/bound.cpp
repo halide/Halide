@@ -9,9 +9,9 @@ int main(int argc, char **argv) {
 
     f(x, y) = max(x, y);
     g(x, y, c) = f(x, y) * c;
-    
+
     g.bound(c, 0, 3);
-    
+
     Image<int> imf = f.realize(32, 32);
     Image<int> img = g.realize(32, 32, 3);
 

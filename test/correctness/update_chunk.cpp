@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
 
     f.compute_at(g, r);
     g.realize(10, 10);
-    
+
     printf("Success!\n");
     return 0;
 }

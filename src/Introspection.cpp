@@ -628,7 +628,7 @@ private:
     llvm::object::ObjectFile *load_object_file(const std::string &binary) {
         // Open the object file in question
         #if LLVM_VERSION > 34
-        llvm::ErrorOr<llvm::object::ObjectFile *> maybe_obj =
+        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile> > maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
         if (!maybe_obj) {
@@ -636,7 +636,7 @@ private:
             return NULL;
         }
 
-        return maybe_obj.get();
+        return maybe_obj.get().release();
         #else
         return llvm::object::ObjectFile::createObjectFile(binary);
         #endif
@@ -673,11 +673,6 @@ private:
                 iter->getContents(debug_line);
             } else if (name == prefix + "debug_ranges") {
                 iter->getContents(debug_ranges);
-            } else if (name.empty()) {
-                // Interpret empty string as a sentinel. This is
-                // necessary as LLVM ELF section iteration is broken
-                // as of 7/20/2014
-                break;
             }
         }
 

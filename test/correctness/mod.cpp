@@ -8,7 +8,7 @@ bool test() {
     Var x;
     Func f;
     f(x) = cast<T>(x) % 2;
-    
+
     Image<T> im = f.realize(16);
 
     for (int i = 0; i < 16; i++) {

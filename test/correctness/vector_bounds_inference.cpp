@@ -5,9 +5,9 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
 
-    Func f("f"), g("g"), h("h"); 
+    Func f("f"), g("g"), h("h");
     Var x, y;
-   
+
     h(x) = x;
     g(x) = h(x-1) + h(x+1);
     f(x, y) = (g(x-1) + g(x+1)) + y;
