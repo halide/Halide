@@ -545,7 +545,7 @@ Expr print(const std::vector<Expr> &args) {
             // owes you a beer.
             Expr integer_part = cast<int>(args[i]); // Should round towards zero.
             Expr frac_part = abs(args[i]) - abs(integer_part);
-            frac_part *= 10000; // Use 5 decimal places.
+            frac_part *= 100000; // Use 5 decimal places.
             frac_part = cast<int>(frac_part);
             sstr << "%d.%05d "; // Pad the fractional part with zeros.
             printf_args.push_back(integer_part);
