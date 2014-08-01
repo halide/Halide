@@ -318,6 +318,7 @@ public:
 
         expr = s->value;
         op->value.accept(this);
+        if (result) return;
 
         expr = s->index;
         op->index.accept(this);
@@ -370,6 +371,9 @@ public:
 
         stmt = s->body;
         op->body.accept(this);
+
+        expr = s->condition;
+        op->condition.accept(this);
     }
 
     void visit(const Realize *op) {
@@ -401,6 +405,9 @@ public:
 
             stmt = s->body;
             op->body.accept(this);
+
+            expr = s->condition;
+            op->condition.accept(this);
         }
     }
 
@@ -411,7 +418,7 @@ public:
 
         if (!s->rest.defined() && op->rest.defined()) {
             result = -1;
-        } else if (s->rest.defined() && op->rest.defined()) {
+        } else if (s->rest.defined() && !op->rest.defined()) {
             result = 1;
         } else {
             stmt = s->first;
@@ -439,7 +446,7 @@ public:
 
         if (!s->else_case.defined() && op->else_case.defined()) {
             result = -1;
-        } else if (s->else_case.defined() && op->else_case.defined()) {
+        } else if (s->else_case.defined() && !op->else_case.defined()) {
             result = 1;
         } else {
 

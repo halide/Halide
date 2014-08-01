@@ -1,4 +1,5 @@
 #include "SkipStages.h"
+#include "Debug.h"
 #include "IRMutator.h"
 #include "IRPrinter.h"
 #include "IROperator.h"
@@ -14,17 +15,41 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
+
+bool extern_call_uses_buffer(const Call *op, const std::string &func) {
+   if (op->call_type == Call::Extern) {
+     for (size_t i = 0; i < op->args.size(); i++) {
+            const Variable *var = op->args[i].as<Variable>();
+            if (var &&
+                starts_with(var->name, func + ".") &&
+                ends_with(var->name, ".buffer")) {
+               return true;
+           }
+        }
+    }
+    return false;
+}
+
+}
+
+
 class PredicateFinder : public IRVisitor {
 public:
     Expr predicate;
-    PredicateFinder(const string &b) : predicate(const_false()), buffer(b), varies(false) {}
+    PredicateFinder(const string &b, bool s) : predicate(const_false()),
+                                               buffer(b),
+                                               varies(false),
+                                               treat_selects_as_guards(s) {}
 
 private:
 
     using IRVisitor::visit;
     string buffer;
     bool varies;
+    bool treat_selects_as_guards;
     Scope<int> varying;
+    Scope<int> in_pipeline;
 
     void visit(const Variable *op) {
         bool this_varies = varying.contains(op->name);
@@ -44,7 +69,7 @@ private:
         op->body.accept(this);
         if (should_pop) {
             varying.pop(op->name);
-            assert(!expr_uses_var(predicate, op->name));
+            //internal_assert(!expr_uses_var(predicate, op->name));
         } else {
             predicate = substitute(op->name, op->min, predicate);
         }
@@ -76,6 +101,7 @@ private:
     }
 
     void visit(const Pipeline *op) {
+        in_pipeline.push(op->name, 0);
         if (op->name != buffer) {
             op->produce.accept(this);
             if (op->update.defined()) {
@@ -83,6 +109,7 @@ private:
             }
         }
         op->consume.accept(this);
+        in_pipeline.pop(op->name);
     }
 
     template<typename T>
@@ -121,7 +148,11 @@ private:
     }
 
     void visit(const Select *op) {
-        visit_conditional(op->condition, op->true_value, op->false_value);
+        if (treat_selects_as_guards) {
+            visit_conditional(op->condition, op->true_value, op->false_value);
+        } else {
+            IRVisitor::visit(op);
+        }
     }
 
     void visit(const IfThenElse *op) {
@@ -129,9 +160,29 @@ private:
     }
 
     void visit(const Call *op) {
+        // Calls inside of an address_of aren't considered, because no
+        // actuall call to the Func happens.
+        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+            // Visit the args of the inner call
+            const Call *c = op->args[0].as<Call>();
+            if (c) {
+                for (size_t i = 0; i < c->args.size(); i++) {
+                    c->args[i].accept(this);
+                }
+            } else {
+                const Load *l = op->args[0].as<Load>();
+
+                internal_assert(l);
+                l->index.accept(this);
+            }
+            return;
+        }
+
+        varies |= in_pipeline.contains(op->name);
+
         IRVisitor::visit(op);
 
-        if (op->name == buffer) {
+        if (op->name == buffer || extern_call_uses_buffer(op, buffer)) {
             predicate = const_true();
         }
     }
@@ -213,27 +264,28 @@ private:
 
     void visit(const Realize *op) {
         if (op->name == func) {
-            PredicateFinder f(op->name);
-            op->body.accept(&f);
-            Expr predicate = simplify(f.predicate);
+            PredicateFinder find_compute(op->name, true);
+            op->body.accept(&find_compute);
+            Expr compute_predicate = simplify(find_compute.predicate);
 
-            if (expr_uses_vars(predicate, vector_vars)) {
+            if (expr_uses_vars(compute_predicate, vector_vars)) {
                 // Don't try to skip stages if the predicate may vary
                 // per lane. This will just unvectorize the
                 // production, which is probably contrary to the
                 // intent of the user.
-                predicate = const_true();
+                compute_predicate = const_true();
             }
 
-            if (!is_one(predicate)) {
-                ProductionGuarder g(op->name, predicate);
+            if (!is_one(compute_predicate)) {
+                PredicateFinder find_alloc(op->name, false);
+                op->body.accept(&find_alloc);
+                Expr alloc_predicate = simplify(find_alloc.predicate);
+
+                ProductionGuarder g(op->name, compute_predicate);
                 Stmt body = g.mutate(op->body);
-                // In the future we may be able to shrink the size
-                // updated, but right now those values may be
-                // loaded. They can be incorrect, but they must be
-                // loadable. Perhaps we can mmap some readable junk memory
-                // (e.g. lots of pages of /dev/zero).
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+
+                stmt = Realize::make(op->name, op->types, op->bounds,
+                                     alloc_predicate, body);
             } else {
                 IRMutator::visit(op);
             }
@@ -250,8 +302,26 @@ class MightBeSkippable : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Call *op) {
+        // Calls inside of an address_of aren't considered, because no
+        // actuall call to the Func happens.
+        if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
+            // Visit the args of the inner call
+            internal_assert(op->args.size() == 1);
+            const Call *c = op->args[0].as<Call>();
+            if (c) {
+                for (size_t i = 0; i < c->args.size(); i++) {
+                    c->args[i].accept(this);
+                }
+            } else {
+                const Load *l = op->args[0].as<Load>();
+
+                internal_assert(l);
+                l->index.accept(this);
+            }
+            return;
+        }
         IRVisitor::visit(op);
-        if (op->name == func) {
+        if (op->name == func || extern_call_uses_buffer(op, func)) {
             if (!found_call) {
                 result = guarded;
                 found_call = true;
@@ -260,7 +330,6 @@ class MightBeSkippable : public IRVisitor {
             }
         }
     }
-
 
     void visit(const IfThenElse *op) {
         op->condition.accept(this);
@@ -310,14 +379,18 @@ public:
     bool result;
     bool found_call;
 
-    MightBeSkippable(string f) : func(f), result(false), found_call(false) {}
+    MightBeSkippable(string f) : func(f), guarded(false), result(false), found_call(false) {}
 };
 
 Stmt skip_stages(Stmt stmt, const vector<string> &order) {
+    // Don't consider the last stage, because it's the output, so it's
+    // never skippable.
     for (size_t i = order.size()-1; i > 0; i--) {
+        debug(2) << "skip_stages checking " << order[i-1] << "\n";
         MightBeSkippable check(order[i-1]);
         stmt.accept(&check);
         if (check.result) {
+            debug(2) << "skip_stages can skip " << order[i-1] << "\n";
             StageSkipper skipper(order[i-1]);
             stmt = skipper.mutate(stmt);
         }

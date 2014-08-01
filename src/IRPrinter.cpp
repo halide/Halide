@@ -12,7 +12,7 @@ using std::vector;
 using std::string;
 using std::ostringstream;
 
-ostream &operator<<(ostream &out, Type type) {
+ostream &operator<<(ostream &out, const Type &type) {
     switch (type.code) {
     case Type::Int:
         out << "int";
@@ -32,7 +32,7 @@ ostream &operator<<(ostream &out, Type type) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, Expr ir) {
+ostream &operator<<(ostream &stream, const Expr &ir) {
     if (!ir.defined()) {
         stream << "(undefined)";
     } else {
@@ -51,7 +51,7 @@ void IRPrinter::test() {
     Expr y = Variable::make(Int(32), "y");
     ostringstream expr_source;
     expr_source << (x + 3) * (y / 2 + 17);
-    assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
+    internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
     Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, store);
@@ -63,7 +63,7 @@ void IRPrinter::test() {
     Stmt assertion = AssertStmt::make(y > 3, "y is greater than %d", vec<Expr>(3));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
-    Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), let_stmt);
+    Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), const_true(), let_stmt);
 
     ostringstream source;
     source << allocate;
@@ -81,9 +81,9 @@ void IRPrinter::test() {
         "}\n";
 
     if (source.str() != correct_source) {
-        std::cout << "Correct output:\n" << correct_source;
-        std::cout << "Actual output:\n" << source.str();
-        assert(false);
+        internal_error << "Correct output:\n" << correct_source
+                       << "Actual output:\n" << source.str();
+
     }
     std::cout << "IRPrinter test passed\n";
 }
@@ -106,7 +106,7 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     return out;
 }
 
-ostream &operator<<(ostream &stream, Stmt ir) {
+ostream &operator<<(ostream &stream, const Stmt &ir) {
     if (!ir.defined()) {
         stream << "(undefined)\n";
     } else {
@@ -348,9 +348,9 @@ void IRPrinter::visit(const Call *op) {
             print(op->args[0]);
             stream << ".min[" << op->args[1] << "]";
             return;
-        } else if (op->name == Call::extract_buffer_extent) {
+        } else if (op->name == Call::extract_buffer_max) {
             print(op->args[0]);
-            stream << ".extent[" << op->args[1] << "]";
+            stream << ".max[" << op->args[1] << "]";
             return;
         }
     }
@@ -474,7 +474,12 @@ void IRPrinter::visit(const Allocate *op) {
         stream  << " * ";
         print(op->extents[i]);
     }
-    stream << "]\n";
+    stream << "]";
+    if (!is_one(op->condition)) {
+        stream << " if ";
+        print(op->condition);
+    }
+    stream << "\n";
     print(op->body);
 }
 
@@ -494,7 +499,12 @@ void IRPrinter::visit(const Realize *op) {
         stream << "]";
         if (i < op->bounds.size() - 1) stream << ", ";
     }
-    stream << ") {\n";
+    stream << ")";
+    if (!is_one(op->condition)) {
+        stream << " if ";
+        print(op->condition);
+    }
+    stream << " {\n";
 
     indent += 2;
     print(op->body);
@@ -511,17 +521,28 @@ void IRPrinter::visit(const Block *op) {
 
 void IRPrinter::visit(const IfThenElse *op) {
     do_indent();
-    stream << "if (" << op->condition << ") {\n";
-    indent += 2;
-    print(op->then_case);
-    indent -= 2;
-
-    if (op->else_case.defined()) {
-        do_indent();
-        stream << "} else {\n";
+    while (1) {
+        stream << "if (" << op->condition << ") {\n";
         indent += 2;
-        print(op->else_case);
+        print(op->then_case);
         indent -= 2;
+
+        if (!op->else_case.defined()) {
+            break;
+        }
+
+        if (const IfThenElse *nested_if = op->else_case.as<IfThenElse>()) {
+            do_indent();
+            stream << "} else ";
+            op = nested_if;
+        } else {
+            do_indent();
+            stream << "} else {\n";
+            indent += 2;
+            print(op->else_case);
+            indent -= 2;
+            break;
+        }
     }
 
     do_indent();

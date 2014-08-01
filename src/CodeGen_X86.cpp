@@ -22,13 +22,13 @@ using namespace llvm;
 CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
-    assert(false && "x86 not enabled for this build of Halide.");
+    user_error << "x86 not enabled for this build of Halide.\n";
     #endif
 
-    assert(llvm_X86_enabled && "llvm build not configured with X86 target enabled.");
+    user_assert(llvm_X86_enabled) << "llvm build not configured with X86 target enabled.\n";
 
     #if !(WITH_NATIVE_CLIENT)
-    assert(t.os != Target::NaCl && "llvm build not configured with native client enabled.");
+    user_assert(t.os != Target::NaCl) << "llvm build not configured with native client enabled.\n";
     #endif
 }
 
@@ -38,7 +38,7 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     if (target.bits == 32) {
         triple.setArch(llvm::Triple::x86);
     } else {
-        assert(target.bits == 64);
+        user_assert(target.bits == 64) << "Target must be 32- or 64-bit.\n";
         triple.setArch(llvm::Triple::x86_64);
     }
 
@@ -73,10 +73,10 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::GNU);
         #else
-        assert(false && "This version of Halide was compiled without nacl support");
+        user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
     } else if (target.os == Target::IOS) {
-        assert(false && "Not sure what llvm target triple to use when compiling to IOS on x86 (does this even exist?)");
+        user_error << "Can't use IOS on x86.\n";
     }
 
     return triple;
@@ -176,18 +176,19 @@ namespace {
 
 // Attempt to cast an expression to a smaller type while provably not
 // losing information. If it can't be done, return an undefined Expr.
+
 Expr lossless_cast(Type t, Expr e) {
-    if (t.can_represent(e.type())) {
+    if (t == e.type()) {
         return e;
+    } else if (t.can_represent(e.type())) {
+        return cast(t, e);
     }
 
     if (const Cast *c = e.as<Cast>()) {
         if (t == c->value.type()) {
             return c->value;
-        } else if (t.can_represent(c->value.type())) {
-            return cast(t, c->value);
         } else {
-            return Expr();
+            return lossless_cast(t, c->value);
         }
     }
 
@@ -203,7 +204,7 @@ Expr lossless_cast(Type t, Expr e) {
     if (const IntImm *i = e.as<IntImm>()) {
         int x = int_cast_constant(t, i->value);
         if (x == i->value) {
-            return e;
+            return cast(t, e);
         } else {
             return Expr();
         }
@@ -227,7 +228,7 @@ void CodeGen_X86::visit(const Cast *op) {
         Expr pattern;
     };
 
-    Pattern patterns[] = {
+    static Pattern patterns[] = {
         {false, false, true, Int(8, 16), "sse2.padds.b",
          _i8(clamp(wild_i16x16 + wild_i16x16, -128, 127))},
         {false, false, true, Int(8, 16), "sse2.psubs.b",
@@ -321,7 +322,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
 void CodeGen_X86::visit(const Div *op) {
 
-    assert(!is_zero(op->b) && "Division by constant zero");
+    user_assert(!is_zero(op->b)) << "Division by constant zero in expression: " << Expr(op) << "\n";
 
     // Detect if it's a small int division
     const Broadcast *broadcast = op->b.as<Broadcast>();
@@ -334,19 +335,16 @@ void CodeGen_X86::visit(const Div *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;
-    if (op->type == Float(32, 4) && is_one(op->a)) {
+    if (is_one(op->a) &&
+        (op->type == Float(32, 4) ||
+         ((target.features & Target::AVX) &&
+          op->type == Float(32, 8)))) {
         // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 4), "sqrt_f32", vec(wild_f32x4), Call::Extern), op->b, matches)) {
-            value = call_intrin(Float(32, 4), "sse.rsqrt.ps", matches);
+        Expr w = Variable::make(op->type, "*");
+        if (expr_match(Call::make(op->type, "sqrt_f32", vec(w), Call::Extern), op->b, matches)) {
+            value = codegen(Call::make(op->type, "inverse_sqrt_f32", matches, Call::Extern));
         } else {
-            value = call_intrin(Float(32, 4), "sse.rcp.ps", vec(op->b));
-        }
-    } else if ((target.features & Target::AVX) && op->type == Float(32, 8) && is_one(op->a)) {
-        // Reciprocal and reciprocal square root
-        if (expr_match(Call::make(Float(32, 8), "sqrt_f32", vec(wild_f32x8), Call::Extern), op->b, matches)) {
-            value = call_intrin(Float(32, 8), "avx.rsqrt.ps.256", matches);
-        } else {
-            value = call_intrin(Float(32, 8), "avx.rcp.ps.256", vec(op->b));
+            value = codegen(Call::make(op->type, "inverse_f32", vec(op->b), Call::Extern));
         }
     } else if (power_of_two && op->type.is_int()) {
         Value *numerator = codegen(op->a);
@@ -427,8 +425,8 @@ void CodeGen_X86::visit(const Div *op) {
             shift      = IntegerDivision::table_u8[const_divisor][3];
         }
 
-        assert(method != 0 &&
-               "method 0 division is for powers of two and should have been handled elsewhere");
+        internal_assert(method != 0)
+            << "method 0 division is for powers of two and should have been handled elsewhere\n";
 
         Value *num = codegen(op->a);
 
@@ -578,8 +576,8 @@ void CodeGen_X86::test() {
     Stmt loop = Store::make("buf", e, x + i);
     loop = LetStmt::make("x", beta+1, loop);
     // Do some local allocations within the loop
-    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), Block::make(loop, Free::make("tmp_stack")));
-    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), Block::make(loop, Free::make("tmp_heap")));
+    loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), const_true(), Block::make(loop, Free::make("tmp_stack")));
+    loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), Block::make(loop, Free::make("tmp_heap")));
     loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);
@@ -590,19 +588,6 @@ void CodeGen_X86::test() {
     //cg.compile_to_bitcode("test1.bc");
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
-
-    #ifdef _WIN32
-    {
-        char buf[32];
-        size_t read;
-        getenv_s(&read, buf, "HL_NUMTHREADS");
-        if (read == 0) putenv("HL_NUMTHREADS=4");
-    }
-    #else
-    if (!getenv("HL_NUMTHREADS")) {
-        setenv("HL_NUMTHREADS", "4", 1);
-    }
-    #endif
 
     debug(2) << "Compiling to function pointers \n";
     JITCompiledModule m = cg.compile_to_function_pointers();
@@ -620,32 +605,32 @@ void CodeGen_X86::test() {
     buf.host = (uint8_t *)scratch;
 
     fn(&buf, -32, 0);
-    assert(scratch[0] == 5);
-    assert(scratch[1] == 5);
-    assert(scratch[2] == 5);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
+    internal_assert(scratch[0] == 5);
+    internal_assert(scratch[1] == 5);
+    internal_assert(scratch[2] == 5);
+    internal_assert(scratch[3] == 3);
+    internal_assert(scratch[4] == 4*17);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
 
     fn(&buf, 37.32f, 2);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 1);
-    assert(scratch[2] == 4);
-    assert(scratch[3] == 4);
-    assert(scratch[4] == 4);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
+    internal_assert(scratch[0] == 0);
+    internal_assert(scratch[1] == 1);
+    internal_assert(scratch[2] == 4);
+    internal_assert(scratch[3] == 4);
+    internal_assert(scratch[4] == 4);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
 
     fn(&buf, 4.0f, 1);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 3);
-    assert(scratch[2] == 3);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-    assert(extern_function_1_was_called);
+    internal_assert(scratch[0] == 0);
+    internal_assert(scratch[1] == 3);
+    internal_assert(scratch[2] == 3);
+    internal_assert(scratch[3] == 3);
+    internal_assert(scratch[4] == 4*17);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
+    internal_assert(extern_function_1_was_called);
 
     // Check the wrapped version does the same thing
     extern_function_1_was_called = false;
@@ -655,14 +640,14 @@ void CodeGen_X86::test() {
     int int_arg_val = 1;
     const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
     m.wrapped_function(arg_array);
-    assert(scratch[0] == 0);
-    assert(scratch[1] == 3);
-    assert(scratch[2] == 3);
-    assert(scratch[3] == 3);
-    assert(scratch[4] == 4*17);
-    assert(scratch[5] == 5);
-    assert(scratch[6] == 6*17);
-    assert(extern_function_1_was_called);
+    internal_assert(scratch[0] == 0);
+    internal_assert(scratch[1] == 3);
+    internal_assert(scratch[2] == 3);
+    internal_assert(scratch[3] == 3);
+    internal_assert(scratch[4] == 4*17);
+    internal_assert(scratch[5] == 5);
+    internal_assert(scratch[6] == 6*17);
+    internal_assert(extern_function_1_was_called);
 
     std::cout << "CodeGen_X86 test passed" << std::endl;
 }
@@ -676,7 +661,24 @@ string CodeGen_X86::mcpu() const {
 }
 
 string CodeGen_X86::mattrs() const {
-    return "";
+    std::string features;
+    std::string separator;
+    #if LLVM_VERSION >= 35
+    // These attrs only exist in llvm 3.5+
+    if (target.features & Target::FMA) {
+        features += "+fma";
+        separator = " ";
+    }
+    if (target.features & Target::FMA4) {
+        features += separator + "+fma4";
+        separator = " ";
+    }
+    if (target.features & Target::F16C) {
+        features += separator + "+f16c";
+        separator = " ";
+    }
+    #endif
+    return features;
 }
 
 bool CodeGen_X86::use_soft_float_abi() const {

@@ -1,13 +1,16 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "HalideRuntime.h"
+#include "scoped_spin_lock.h"
 
 extern "C" {
 
 extern char *getenv(const char *);
-extern void *fopen(const char *path, const char *mode);
-extern size_t fwrite(const void *ptr, size_t size, size_t n, void *file);
 extern int snprintf(char *str, size_t size, const char *format, ...);
-extern int fclose(void *f);
+
+extern int open(const char *filename, int opts, int mode);
+extern int close(int fd);
+typedef ptrdiff_t ssize_t;
+extern ssize_t write(int fd, const void *buf, size_t bytes);
 
 typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 
@@ -17,8 +20,39 @@ WEAK void halide_set_custom_trace(trace_fn t) {
     halide_custom_trace = t;
 }
 
-WEAK void *halide_trace_file = NULL;
-WEAK bool halide_trace_initialized = false;
+WEAK int halide_trace_file = 0;
+WEAK int halide_trace_file_lock = 0;
+WEAK bool halide_trace_file_initialized = false;
+WEAK bool halide_trace_file_internally_opened = false;
+
+WEAK void halide_set_trace_file(int fd) {
+    halide_trace_file = fd;
+    halide_trace_file_initialized = true;
+}
+
+    extern int errno;
+
+#define O_APPEND 1024
+#define O_CREAT 64
+#define O_WRONLY 1
+WEAK int halide_get_trace_file(void *user_context) {
+    // Prevent multiple threads both trying to initialize the trace
+    // file at the same time.
+    ScopedSpinLock lock(&halide_trace_file_lock);
+    if (!halide_trace_file_initialized) {
+        const char *trace_file_name = getenv("HL_TRACE_FILE");
+        if (trace_file_name) {
+            int fd = open(trace_file_name, O_APPEND | O_CREAT | O_WRONLY, 0644);
+            halide_assert(user_context, (fd > 0) && "Failed to open trace file\n");
+            halide_set_trace_file(fd);
+            halide_trace_file_internally_opened = true;
+        } else {
+            halide_set_trace_file(0);
+        }
+    }
+    return halide_trace_file;
+}
+
 WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
 
     static int32_t ids = 1;
@@ -29,17 +63,9 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
 
         int32_t my_id = __sync_fetch_and_add(&ids, 1);
 
-        if (!halide_trace_initialized) {
-            const char *trace_file_name = getenv("HL_TRACE_FILE");
-            halide_trace_initialized = true;
-            if (trace_file_name) {
-                halide_trace_file = fopen(trace_file_name, "ab");
-                halide_assert(user_context, halide_trace_file && "Failed to open trace file\n");
-            }
-        }
-
         // If we're dumping to a file, use a binary format
-        if (halide_trace_file) {
+        int fd = halide_get_trace_file(user_context);
+        if (fd > 0) {
             // A 32-byte header. The first 6 bytes are metadata, then the rest is a zero-terminated string.
             uint8_t clamped_width = e->vector_width < 256 ? e->vector_width : 255;
             uint8_t clamped_dimensions = e->dimensions < 256 ? e->dimensions : 255;
@@ -88,7 +114,7 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
             }
 
 
-            size_t written = fwrite(&buffer[0], 1, total_bytes, halide_trace_file);
+            size_t written = write(fd, &buffer[0], total_bytes);
             halide_assert(user_context, written == total_bytes && "Can't write to trace file");
 
         } else {
@@ -177,7 +203,7 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
                         if (print_bits == 32) {
                             buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(e->value))[i]);
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((double *)(e->value))[i]);
+                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%g", ((double *)(e->value))[i]);
                         }
                     } else if (e->type_code == 3) {
                         buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(e->value))[i]);
@@ -197,10 +223,11 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
 }
 
 WEAK int halide_shutdown_trace() {
-    if (halide_trace_file) {
-        int ret = fclose(halide_trace_file);
-        halide_trace_file = NULL;
-        halide_trace_initialized = false;
+    if (halide_trace_file_internally_opened) {
+        int ret = close(halide_trace_file);
+        halide_trace_file = 0;
+        halide_trace_file_initialized = false;
+        halide_trace_file_internally_opened = false;
         return ret;
     } else {
         return 0;

@@ -12,6 +12,7 @@ namespace Halide {
 namespace Internal {
 
 struct CodeGen_GPU_Dev;
+struct GPU_Argument;
 
 /** A code generator that emits GPU code from a given Halide stmt. */
 template<typename CodeGen_CPU>
@@ -64,34 +65,15 @@ protected:
     using CodeGen_CPU::buffer_dev_ptr;
     using CodeGen_CPU::llvm_type_of;
     using CodeGen_CPU::create_alloca_at_entry;
-    using CodeGen_CPU::codegen_allocation_size;
-    using CodeGen_CPU::create_allocation;
-    using CodeGen_CPU::destroy_allocation;
     using CodeGen_CPU::i8;
     using CodeGen_CPU::i32;
     using CodeGen_CPU::i64;
     using CodeGen_CPU::buffer_t_type;
+    using CodeGen_CPU::allocations;
 
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
-    void visit(const Allocate *);
-    void visit(const Free *);
-    void visit(const Pipeline *);
-    void visit(const Call *);
-    // @}
-
-    // We track buffer_t's for each allocation in order to manage dirty bits
-    bool track_buffers() {return true;}
-
-    //** Runtime function handles */
-    // @{
-    llvm::Function *dev_malloc_fn;
-    llvm::Function *dev_free_fn;
-    llvm::Function *copy_to_dev_fn;
-    llvm::Function *copy_to_host_fn;
-    llvm::Function *dev_run_fn;
-    llvm::Function *dev_sync_fn;
     // @}
 
     /** Finds and links in the CUDA runtime symbols prior to jitting */
@@ -99,7 +81,8 @@ protected:
 
     /** Reaches inside the module at sets it to use a single shared
      * cuda context */
-    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod, std::vector<void (*)()> *cleanup_routines);
+    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
+                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
 
     static bool lib_cuda_linked;
 

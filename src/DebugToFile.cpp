@@ -25,7 +25,8 @@ class DebugToFile : public IRMutator {
             Function f = iter->second;
             vector<Expr> args;
 
-            assert(op->types.size() == 1 && "debug_to_file doesn't handle functions with multiple values yet");
+            user_assert(op->types.size() == 1)
+                << "debug_to_file doesn't handle functions with multiple values yet\n";
 
             // The name of the file
             args.push_back(f.debug_file());
@@ -46,14 +47,14 @@ class DebugToFile : public IRMutator {
                 if (i < 4) {
                     args.push_back(op->bounds[i].extent);
                 } else {
-                    args[args.size()-1] = (args[args.size()-1] *
-                                           op->bounds[i].extent);
+                    args.back() *= op->bounds[i].extent;
                 }
             }
-            while (args.size() < 7) args.push_back(1);
+            // Fill the remaining args with ones.
+            args.resize(7, 1);
 
             int type_code = 0;
-            Type t = f.values()[0].type();
+            Type t = op->types[0];
             if (t == Float(32)) {
                 type_code = 0;
             } else if (t == Float(64)) {
@@ -75,7 +76,7 @@ class DebugToFile : public IRMutator {
             } else if (t == Int(64)) {
                 type_code = 9;
             } else {
-                assert(false && "Type not supported for debug_to_file");
+                user_error << "Type " << t << " not supported for debug_to_file\n";
             }
             args.push_back(type_code);
             args.push_back(t.bytes());
@@ -87,7 +88,7 @@ class DebugToFile : public IRMutator {
                                          vector<Expr>());
             body = Block::make(mutate(op->body), body);
 
-            stmt = Realize::make(op->name, op->types, op->bounds, body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
 
         } else {
             IRMutator::visit(op);
@@ -108,7 +109,7 @@ Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
         Expr extent = Variable::make(Int(32), output + ".extent." + dim);
         output_bounds.push_back(Range(min, extent));
     }
-    s = Realize::make(output, out.output_types(), output_bounds, s);
+    s = Realize::make(output, out.output_types(), output_bounds, const_true(), s);
     s = DebugToFile(env).mutate(s);
 
     // Remove the realize node we wrapped around the output
@@ -116,10 +117,10 @@ Stmt debug_to_file(Stmt s, string output, const map<string, Function> &env) {
         s = r->body;
     } else if (const Block *b = s.as<Block>()) {
         const Realize *r = b->rest.as<Realize>();
-        assert(r);
+        internal_assert(r);
         s = Block::make(b->first, r->body);
     } else {
-        assert(false);
+        internal_error << "Could not unwrap stmt after debug_to_file\n";
     }
 
     return s;

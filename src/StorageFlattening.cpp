@@ -15,9 +15,9 @@ using std::map;
 
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e) : env(e) {}
+    FlattenDimensions(const map<string, Function> &e)
+        : env(e) {}
     Scope<int> scope;
-    Scope<int> need_buffer_t;
 private:
     const map<string, Function> &env;
 
@@ -70,27 +70,19 @@ private:
     void visit(const Realize *realize) {
         Stmt body = mutate(realize->body);
 
-        // Check if we need to create a buffer_t for this realization
-        vector<bool> make_buffer_t(realize->types.size());
-        while (need_buffer_t.contains(realize->name)) {
-            int idx = need_buffer_t.get(realize->name);
-            assert(idx < (int)make_buffer_t.size());
-            make_buffer_t[idx] = true;
-            need_buffer_t.pop(realize->name);
-        }
-
         // Compute the size
         std::vector<Expr> extents;
         for (size_t i = 0; i < realize->bounds.size(); i++) {
           extents.push_back(realize->bounds[i].extent);
           extents[i] = mutate(extents[i]);
         }
+        Expr condition = mutate(realize->condition);
 
         vector<int> storage_permutation;
         {
             map<string, Function>::const_iterator iter = env.find(realize->name);
-            assert(iter != env.end() && "Realize node refers to function not in environment");
-            const vector<string> &storage_dims = iter->second.schedule().storage_dims;
+            internal_assert(iter != env.end()) << "Realize node refers to function not in environment.\n";
+            const vector<string> &storage_dims = iter->second.schedule().storage_dims();
             const vector<string> &args = iter->second.args();
             for (size_t i = 0; i < storage_dims.size(); i++) {
                 for (size_t j = 0; j < args.size(); j++) {
@@ -98,11 +90,11 @@ private:
                         storage_permutation.push_back((int)j);
                     }
                 }
-                assert(storage_permutation.size() == i+1);
+                internal_assert(storage_permutation.size() == i+1);
             }
         }
 
-        assert(storage_permutation.size() == realize->bounds.size());
+        internal_assert(storage_permutation.size() == realize->bounds.size());
 
         stmt = body;
         for (size_t idx = 0; idx < realize->types.size(); idx++) {
@@ -127,29 +119,29 @@ private:
                 stride_var[i] = Variable::make(Int(32), stride_name[i]);
             }
 
-            if (make_buffer_t[idx]) {
-                // We need to make a buffer_t for this buffer
-                vector<Expr> args(dims*3 + 2);
-                args[0] = Variable::make(Handle(), buffer_name);
-                args[1] = realize->types[idx].bytes();
-                for (int i = 0; i < dims; i++) {
-                    args[3*i+2] = min_var[i];
-                    args[3*i+3] = extent_var[i];
-                    args[3*i+4] = stride_var[i];
-                }
-                Expr buf = Call::make(Handle(), Call::create_buffer_t,
-                                      args, Call::Intrinsic);
-                stmt = LetStmt::make(buffer_name + ".buffer",
-                                     buf,
-                                     stmt);
-            }
-
             // Promote the type to be a multiple of 8 bits
             Type t = realize->types[idx];
             t.bits = t.bytes() * 8;
 
+            // Create a buffer_t object for this allocation.
+            vector<Expr> args(dims*3 + 2);
+            //args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+            Expr first_elem = Load::make(t, buffer_name, 0, Buffer(), Parameter());
+            args[0] = Call::make(Handle(), Call::address_of, vec(first_elem), Call::Intrinsic);
+            args[1] = realize->types[idx].bytes();
+            for (int i = 0; i < dims; i++) {
+                args[3*i+2] = min_var[i];
+                args[3*i+3] = extent_var[i];
+                args[3*i+4] = stride_var[i];
+            }
+            Expr buf = Call::make(Handle(), Call::create_buffer_t,
+                                  args, Call::Intrinsic);
+            stmt = LetStmt::make(buffer_name + ".buffer",
+                                 buf,
+                                 stmt);
+
             // Make the allocation node
-            stmt = Allocate::make(buffer_name, t, extents, stmt);
+            stmt = Allocate::make(buffer_name, t, extents, condition, stmt);
 
             // Compute the strides
             for (int i = (int)realize->bounds.size()-1; i > 0; i--) {
@@ -201,6 +193,7 @@ private:
                 names[i] = name + ".value";
                 Expr var = Variable::make(values[i].type(), names[i]);
                 Stmt store = Store::make(name, var, idx);
+
                 if (result.defined()) {
                     result = Block::make(result, store);
                 } else {
@@ -236,7 +229,6 @@ private:
             if (call->call_type == Call::Halide &&
                 call->func.outputs() > 1) {
                 name = name + '.' + int_to_string(call->value_index);
-
             }
 
             // Promote the type to be a multiple of 8 bits
@@ -266,6 +258,7 @@ private:
         }
     }
 };
+
 
 Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
     return FlattenDimensions(env).mutate(s);

@@ -37,6 +37,7 @@
 #include <string.h>
 #include <sstream>
 
+#include <HalideRuntime.h>
 #include "halide_game_of_life.h"
 
 #define WIDTH 1024
@@ -66,12 +67,10 @@ buffer_t ImageToBuffer(const ImageData &im) {
     return buf;
 }
 
-extern "C" void halide_shutdown_thread_pool();
-
 bool pipeline_barfed = false;
 static Instance *inst = NULL;
 // TODO: use user context instead of globals above...
-extern "C" void halide_error(void */* user_context */, char *msg) {
+extern "C" void halide_error(void */* user_context */, const char *msg) {
     if (inst) {
         inst->PostMessage(msg);
         pipeline_barfed = true;
@@ -164,7 +163,9 @@ public:
         if (busy) return;
         busy = true;
 
+        // Start with 8 threads
         static int thread_pool_size = 8;
+
         static int halide_last_t = 0;
         static int halide_time_weight = 0;
         static int c_last_t = 0;
@@ -177,11 +178,8 @@ public:
             if (threads < 1) threads = 1;
             if (threads > 32) threads = 32;
             if (threads > 0 && threads <= 32 && thread_pool_size != threads) {
-                halide_shutdown_thread_pool();
                 thread_pool_size = threads;
-                char buf[256];
-                snprintf(buf, 256, "%d", threads);
-                setenv("HL_NUMTHREADS", buf, 1);
+                halide_set_num_threads(thread_pool_size);
                 halide_last_t = 0;
                 halide_time_weight = 0;
             }
@@ -207,8 +205,7 @@ public:
         if (first_run) {
             first_run = false;
 
-            // Start with 8 threads
-            setenv("HL_NUMTHREADS", "8", 1);
+            halide_set_num_threads(thread_pool_size);
 
             //  Initialize the buffers
             memset(im2.data(), 0, im2.stride() * im2.size().height());

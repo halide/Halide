@@ -25,10 +25,10 @@ class FoldStorageOfFunction : public IRMutator {
     void visit(const Call *op) {
         IRMutator::visit(op);
         op = expr.as<Call>();
-        assert(op);
+        internal_assert(op);
         if (op->name == func && op->call_type == Call::Halide) {
             vector<Expr> args = op->args;
-            assert(dim < (int)args.size());
+            internal_assert(dim < (int)args.size());
             args[dim] = args[dim] % factor;
             expr = Call::make(op->type, op->name, args, op->call_type,
                               op->func, op->value_index, op->image, op->param);
@@ -38,7 +38,7 @@ class FoldStorageOfFunction : public IRMutator {
     void visit(const Provide *op) {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
-        assert(op);
+        internal_assert(op);
         if (op->name == func) {
             vector<Expr> args = op->args;
             args[dim] = args[dim] % factor;
@@ -124,9 +124,9 @@ class AttemptStorageFoldingOfFunction : public IRMutator {
                              << "max extent = " << max_extent << "\n";
                 }
             } else {
-                    debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
-                             << "min = " << min << "\n"
-                             << "max = " << max << "\n";
+                debug(3) << "Not folding because loop min or max not monotonic in the loop variable\n"
+                         << "min = " << min << "\n"
+                         << "max = " << max << "\n";
             }
         }
 
@@ -177,7 +177,7 @@ class StorageFolding : public IRMutator {
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             }
         } else {
             debug(3) << "Attempting to fold " << op->name << "\n";
@@ -186,16 +186,16 @@ class StorageFolding : public IRMutator {
             if (new_body.same_as(op->body)) {
                 stmt = op;
             } else if (new_body.same_as(body)) {
-                stmt = Realize::make(op->name, op->types, op->bounds, body);
+                stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);
             } else {
                 Region bounds = op->bounds;
 
-                assert(folder.dim_folded >= 0 &&
-                       folder.dim_folded < (int)bounds.size());
+                internal_assert(folder.dim_folded >= 0 &&
+                                folder.dim_folded < (int)bounds.size());
 
                 bounds[folder.dim_folded] = Range(0, folder.fold_factor);
 
-                stmt = Realize::make(op->name, op->types, bounds, new_body);
+                stmt = Realize::make(op->name, op->types, bounds, op->condition, new_body);
             }
         }
     }

@@ -9,7 +9,11 @@ using std::string;
 using std::vector;
 
 RVar::operator Expr() const {
-    return Internal::Variable::make(Int(32), name(), domain);
+    if (!min().defined() || !extent().defined()) {
+        user_error << "Use of undefined RDom dimension: " <<
+            (name().empty() ? "<unknown>" : name()) << "\n";
+    }
+    return Internal::Variable::make(Int(32), name(), domain());
 }
 
 Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
@@ -59,12 +63,15 @@ RDom::RDom(Internal::ReductionDomain d) : dom(d) {
 RDom::RDom(Expr min, Expr extent, string name) {
     min = cast<int>(min);
     extent = cast<int>(extent);
-    if (name == "") name = Internal::unique_name('r');
+    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
     dom = build_domain(name + ".x$r", min, extent,
                        "", Expr(), Expr(),
                        "", Expr(), Expr(),
                        "", Expr(), Expr());
     x = RVar(name + ".x$r", min, extent, dom);
+    y = RVar(name + ".y");
+    z = RVar(name + ".z");
+    w = RVar(name + ".w");
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
@@ -72,13 +79,15 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
     extent0 = cast<int>(extent0);
     min1 = cast<int>(min1);
     extent1 = cast<int>(extent1);
-    if (name == "") name = Internal::unique_name('r');
+    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
     dom = build_domain(name + ".x$r", min0, extent0,
                        name + ".y$r", min1, extent1,
                        "", Expr(), Expr(),
                        "", Expr(), Expr());
     x = RVar(name + ".x$r", min0, extent0, dom);
     y = RVar(name + ".y$r", min1, extent1, dom);
+    z = RVar(name + ".z");
+    w = RVar(name + ".w");
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
@@ -88,7 +97,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     extent1 = cast<int>(extent1);
     min2 = cast<int>(min2);
     extent2 = cast<int>(extent2);
-    if (name == "") name = Internal::unique_name('r');
+    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
     dom = build_domain(name + ".x$r", min0, extent0,
                        name + ".y$r", min1, extent1,
                        name + ".z$r", min2, extent2,
@@ -96,6 +105,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     x = RVar(name + ".x$r", min0, extent0, dom);
     y = RVar(name + ".y$r", min1, extent1, dom);
     z = RVar(name + ".z$r", min2, extent2, dom);
+    w = RVar(name + ".w");
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name) {
@@ -107,7 +117,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     extent2 = cast<int>(extent2);
     min3 = cast<int>(min3);
     extent3 = cast<int>(extent3);
-    if (name == "") name = Internal::unique_name('r');
+    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
     dom = build_domain(name + ".x$r", min0, extent0,
                        name + ".y$r", min1, extent1,
                        name + ".z$r", min2, extent2,
@@ -170,26 +180,24 @@ RVar RDom::operator[](int i) {
     if (i == 1) return y;
     if (i == 2) return z;
     if (i == 3) return w;
-    assert(false && "Reduction domain index out of bounds");
+    user_error << "Reduction domain index out of bounds: " << i << "\n";
     return x; // Keep the compiler happy
 }
 
 RDom::operator Expr() const {
     if (dimensions() != 1) {
-        std::cerr << "Error: Can't treat this multidimensional RDom as an Expr:\n"
-                  << (*this) << "\n"
-                  << "Only single-dimensional RDoms can be cast to Expr.\n";
-        assert(false);
+        user_error << "Error: Can't treat this multidimensional RDom as an Expr:\n"
+                   << (*this) << "\n"
+                   << "Only single-dimensional RDoms can be cast to Expr.\n";
     }
     return Expr(x);
 }
 
 RDom::operator RVar() const {
     if (dimensions() != 1) {
-        std::cerr << "Error: Can't treat this multidimensional RDom as an RVar:\n"
-                  << (*this) << "\n"
-                  << "Only single-dimensional RDoms can be cast to RVar.\n";
-        assert(false);
+        user_error << "Error: Can't treat this multidimensional RDom as an RVar:\n"
+                   << (*this) << "\n"
+                   << "Only single-dimensional RDoms can be cast to RVar.\n";
     }
     return x;
 }

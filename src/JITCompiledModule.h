@@ -47,9 +47,9 @@ struct JITCompiledModule {
      * objects. These pointers may be NULL if not compiling for a
      * gpu-like target. */
     // @{
-    void (*copy_to_host)(void *user_context, struct buffer_t*);
-    void (*copy_to_dev)(void *user_context, struct buffer_t*);
-    void (*free_dev_buffer)(void *user_context, struct buffer_t*);
+    int (*copy_to_host)(void *user_context, struct buffer_t*);
+    int (*copy_to_dev)(void *user_context, struct buffer_t*);
+    int (*free_dev_buffer)(void *user_context, struct buffer_t*);
     // @}
 
     /** The type of a halide runtime error handler function */
@@ -78,10 +78,17 @@ struct JITCompiledModule {
     typedef int (*TraceFn)(void *, const halide_trace_event *);
     void (*set_custom_trace)(TraceFn);
 
+    /** Set a custom print function for this module. See
+     * \ref Func::set_custom_print. */
+    void (*set_custom_print)(void (*custom_print)(void *, const char *));
+
     /** Shutdown the thread pool maintained by this JIT module. This
      * is also done automatically when the last reference to this
      * module is destroyed. */
     void (*shutdown_thread_pool)();
+
+    /** Set the maximum number of bytes occupied by the cache for compute_cached. */
+    void (*memoization_cache_set_size)(uint64_t size);
 
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
@@ -97,12 +104,22 @@ struct JITCompiledModule {
         set_custom_do_par_for(NULL),
         set_custom_do_task(NULL),
         set_custom_trace(NULL),
-        shutdown_thread_pool(NULL) {}
+        set_custom_print(NULL),
+        shutdown_thread_pool(NULL),
+        memoization_cache_set_size(NULL) {}
 
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */
     void compile_module(CodeGen *cg, llvm::Module *mod, const std::string &function_name);
 
+    /** Holds a cleanup routine and context parameter. */
+    struct CleanupRoutine {
+        void (*fn)(void *);
+        void *context;
+
+        CleanupRoutine() : fn(NULL), context(NULL) {}
+        CleanupRoutine(void (*fn)(void *), void *context) : fn(fn), context(context) {}
+    };
 };
 
 }

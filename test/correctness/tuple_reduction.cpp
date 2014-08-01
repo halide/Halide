@@ -4,6 +4,10 @@
 using namespace Halide;
 
 int main(int argc, char **argv) {
+    if (!get_jit_target_from_environment().has_gpu_feature()) {
+        printf("No gpu target enabled. Skipping test.\n");
+        return 0;
+    }
 
     if (1) {
         // Test a tuple reduction on the gpu
@@ -16,11 +20,8 @@ int main(int argc, char **argv) {
         f(x, y) = Tuple(f(x, y)[1]*2, f(x, y)[0]*2);
         // now equals ((x - y)*2, (x + y)*2)
 
-        Target target = get_jit_target_from_environment();
-        if (target.has_gpu_feature()) {
-            f.gpu_tile(x, y, 16, 16, GPU_Default);
-            f.update().gpu_tile(x, y, 16, 16, GPU_Default);
-        }
+        f.gpu_tile(x, y, 16, 16, GPU_Default);
+        f.update().gpu_tile(x, y, 16, 16, GPU_Default);
 
         Realization result = f.realize(1024, 1024);
 

@@ -93,7 +93,9 @@ const string Call::rewrite_buffer = "rewrite_buffer";
 const string Call::profiling_timer = "profiling_timer";
 const string Call::create_buffer_t = "create_buffer_t";
 const string Call::extract_buffer_min = "extract_buffer_min";
-const string Call::extract_buffer_extent = "extract_buffer_extent";
+const string Call::extract_buffer_max = "extract_buffer_max";
+const string Call::set_host_dirty = "set_host_dirty";
+const string Call::set_dev_dirty = "set_dev_dirty";
 const string Call::popcount = "popcount";
 const string Call::count_leading_zeros = "count_leading_zeros";
 const string Call::count_trailing_zeros = "count_trailing_zeros";
@@ -104,6 +106,10 @@ const string Call::trace = "trace";
 const string Call::trace_expr = "trace_expr";
 const string Call::return_second = "return_second";
 const string Call::if_then_else = "if_then_else";
+const string Call::glsl_texture_load = "glsl_texture_load";
+const string Call::glsl_texture_store = "glsl_texture_store";
+const string Call::memoize_expr = "memoize_expr";
+const string Call::copy_memory = "copy_memory";
 
 }
 }

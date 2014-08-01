@@ -6,8 +6,46 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Simplify.h"
+#include "Debug.h"
 
 namespace Halide {
+
+// Evaluate a float polynomial efficiently, taking instruction latency
+// into account. The high order terms come first. n is the number of
+// terms, which is the degree plus one.
+namespace {
+Expr evaluate_polynomial(Expr x, float *coeff, int n) {
+    internal_assert(n >= 2);
+
+    Expr x2 = x * x;
+
+    Expr even_terms = coeff[0];
+    Expr odd_terms = coeff[1];
+
+    for (int i = 2; i < n; i++) {
+        if ((i & 1) == 0) {
+            if (coeff[i] == 0.0f) {
+                even_terms *= x2;
+            } else {
+                even_terms = even_terms * x2 + coeff[i];
+            }
+        } else {
+            if (coeff[i] == 0.0f) {
+                odd_terms *= x2;
+            } else {
+                odd_terms = odd_terms * x2 + coeff[i];
+            }
+        }
+    }
+
+    if ((n & 1) == 0) {
+        return even_terms * x + odd_terms;
+    } else {
+        return odd_terms * x + even_terms;
+    }
+}
+}
+
 namespace Internal {
 
 bool is_const(Expr e) {
@@ -136,7 +174,7 @@ int int_cast_constant(Type t, int val) {
         }
     }
     else {
-        assert(0 && "Cast of integer to non-integer not available here");
+        internal_error << "Cast of integer to non-integer not available here";
     }
     return val;
 }
@@ -181,17 +219,15 @@ Expr const_false(int w) {
 
 void check_representable(Type t, int x) {
     int result = int_cast_constant(t, x);
-    if (result != x) {
-        std::cerr << "Integer constant " << x
-                  << " would be converted to " << result
-                  << " because it will be implicitly coerced to type " << t << "\n";
-        assert(false);
-    }
+    user_assert(result == x)
+        << "Integer constant " << x
+        << " would be converted to " << result
+        << " because it will be implicitly coerced to type " << t << "\n";
 }
 
 void match_types(Expr &a, Expr &b) {
-    assert(!a.type().is_handle() && !b.type().is_handle() &&
-           "Can't do arithmetic on opaque pointer types\n");
+    user_assert(!a.type().is_handle() && !b.type().is_handle())
+        << "Can't do arithmetic on opaque pointer types\n";
 
     if (a.type() == b.type()) return;
 
@@ -204,7 +240,7 @@ void match_types(Expr &a, Expr &b) {
     } else if (a.type().is_vector() && b.type().is_scalar()) {
         b = Broadcast::make(b, a.type().width);
     } else {
-        assert(a.type().width == b.type().width && "Can't match types of differing widths");
+        internal_assert(a.type().width == b.type().width) << "Can't match types of differing widths";
     }
 
     Type ta = a.type(), tb = b.type();
@@ -236,8 +272,7 @@ void match_types(Expr &a, Expr &b) {
         a = cast(Int(bits), a);
         b = cast(Int(bits), b);
     } else {
-        std::cerr << "Could not match types: " << ta << ", " << tb << std::endl;
-        assert(false && "Failed type coercion");
+        internal_error << "Could not match types: " << ta << ", " << tb << "\n";
     }
 }
 
@@ -294,7 +329,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 }
 
 Expr halide_log(Expr x_full) {
-    assert(x_full.type() == Float(32));
+    internal_assert(x_full.type() == Float(32));
 
     if (is_const(x_full)) {
         x_full = simplify(x_full);
@@ -320,17 +355,19 @@ Expr halide_log(Expr x_full) {
     // Very close to the Taylor series for log about 1, but tuned to
     // have minimum relative error in the reduced domain (0.75 - 1.5).
 
+    float coeff[] = {
+        0.05111976432738144643f,
+        -0.11793923497136414580f,
+        0.14971993724699017569f,
+        -0.16862004708254804686f,
+        0.19980668101718729313f,
+        -0.24991211576292837737f,
+        0.33333435275479328386f,
+        -0.50000106292873236491f,
+        1.0f,
+        0.0f};
     Expr x1 = reduced - 1.0f;
-    Expr result = 0.0f;
-    result = x1 * result + 0.05111976432738144643f;
-    result = x1 * result + -0.11793923497136414580f;
-    result = x1 * result + 0.14971993724699017569f;
-    result = x1 * result + -0.16862004708254804686f;
-    result = x1 * result + 0.19980668101718729313f;
-    result = x1 * result + -0.24991211576292837737f;
-    result = x1 * result + 0.33333435275479328386f;
-    result = x1 * result + -0.50000106292873236491f;
-    result = x1 * x1 * result + x1;
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
     result += cast<float>(exponent) * logf(2.0);
 
@@ -338,7 +375,7 @@ Expr halide_log(Expr x_full) {
 }
 
 Expr halide_exp(Expr x_full) {
-    assert(x_full.type() == Float(32));
+    internal_assert(x_full.type() == Float(32));
 
     if (is_const(x_full)) {
         x_full = simplify(x_full);
@@ -359,15 +396,16 @@ Expr halide_exp(Expr x_full) {
     Expr x = x_full - k_real * ln2_part1;
     x -= k_real * ln2_part2;
 
-    Expr result = 0.0f;
-    result = x * result + 0.00031965933071842413f;
-    result = x * result + 0.00119156835564003744f;
-    result = x * result + 0.00848988645943932717f;
-    result = x * result + 0.04160188091348320655f;
-    result = x * result + 0.16667983794100929562f;
-    result = x * result + 0.49999899033463041098f;
-    result = x * result + 1.0f;
-    result = x * result + 1.0f;
+    float coeff[] = {
+        0.00031965933071842413f,
+        0.00119156835564003744f,
+        0.00848988645943932717f,
+        0.04160188091348320655f,
+        0.16667983794100929562f,
+        0.49999899033463041098f,
+        1.0f,
+        1.0f};
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
     // Compute 2^k.
     int fpbias = 127;
@@ -385,6 +423,43 @@ Expr halide_exp(Expr x_full) {
     result = select(biased > 0, result, 0.0f);
 
     return result;
+}
+
+Expr halide_erf(Expr x_full) {
+    user_assert(x_full.type() == Float(32)) << "halide_erf only works for Float(32)";
+
+    // Extract the sign and magnitude.
+    Expr sign = select(x_full < 0, -1.0f, 1.0f);
+    Expr x = abs(x_full);
+
+    // An approximation very similar to one from Abramowitz and
+    // Stegun, but tuned for values > 1. Takes the form 1 - P(x)^-16.
+    float c1[] = {0.0000818502f,
+                  -0.0000026500f,
+                  0.0009353904f,
+                  0.0081960206f,
+                  0.0430054424f,
+                  0.0703310579f,
+                  1.0f};
+    Expr approx1 = evaluate_polynomial(x, c1, sizeof(c1)/sizeof(c1[0]));
+
+    approx1 = 1.0f - pow(approx1, -16);
+
+    // An odd polynomial tuned for values < 1. Similar to the Taylor
+    // expansion of erf.
+    float c2[] = {-0.0005553339f,
+                  0.0048937243f,
+                  -0.0266849239f,
+                  0.1127890132f,
+                  -0.3761207240f,
+                  1.1283789803f};
+
+    Expr approx2 = evaluate_polynomial(x*x, c2, sizeof(c2)/sizeof(c2[0]));
+    approx2 *= x;
+
+    // Switch between the two approximations based on the magnitude.
+    Expr y = select(x > 1.0f, approx1, approx2);
+    return sign * y;
 }
 
 Expr raise_to_integer_power(Expr e, int p) {
@@ -407,41 +482,43 @@ Expr raise_to_integer_power(Expr e, int p) {
 }
 
 Expr fast_log(Expr x) {
-    assert(x.type() == Float(32) && "fast_log only works for Float(32)");
+    user_assert(x.type() == Float(32)) << "fast_log only works for Float(32)";
 
     Expr reduced, exponent;
     range_reduce_log(x, &reduced, &exponent);
 
     Expr x1 = reduced - 1.0f;
-    Expr result = 0.0f;
 
-    result = x1 * result + 0.07640318789187280912f;
-    result = x1 * result + -0.16252961013874300811f;
-    result = x1 * result + 0.20625219040645212387f;
-    result = x1 * result + -0.25110261010892864775f;
-    result = x1 * result + 0.33320464908377461777f;
-    result = x1 * result + -0.49997513376789826101f;
-    result *= x1 * x1;
-    result += x1;
+    float coeff[] = {
+        0.07640318789187280912f,
+        -0.16252961013874300811f,
+        0.20625219040645212387f,
+        -0.25110261010892864775f,
+        0.33320464908377461777f,
+        -0.49997513376789826101f,
+        1.0f,
+        0.0f};
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
     return result + cast<float>(exponent) * logf(2);
 }
 
 Expr fast_exp(Expr x_full) {
-    assert(x_full.type() == Float(32) && "fast_exp only works for Float(32)");
+    user_assert(x_full.type() == Float(32)) << "fast_exp only works for Float(32)";
 
     Expr scaled = x_full / logf(2.0);
     Expr k_real = floor(scaled);
     Expr k = cast<int>(k_real);
     Expr x = x_full - k_real * logf(2.0);
 
-    Expr result = 0.0f;
-    result = x * result + 0.01314350012789660196f;
-    result = x * result + 0.03668965196652099192f;
-    result = x * result + 0.16873890085469545053f;
-    result = x * result + 0.49970514590562437052f;
-    result = x * result + 1.0f;
-    result = x * result + 1.0f;
+    float coeff[] = {
+        0.01314350012789660196f,
+        0.03668965196652099192f,
+        0.16873890085469545053f,
+        0.49970514590562437052f,
+        1.0f,
+        1.0f};
+    Expr result = evaluate_polynomial(x, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
     // Compute 2^k.
     int fpbias = 127;
@@ -461,11 +538,22 @@ Expr print(const std::vector<Expr> &args) {
     std::ostringstream sstr;
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].type().is_float()) {
-            sstr << "%f ";
-            printf_args.push_back(cast(Float(64), args[i]));
-        } else if (const Internal::StringImm *s =
-                   args[i].as<Internal::StringImm>()) {
-            sstr << s->value << " ";
+            // %f in a halide_printf causes mysterious problems on
+            // windows due to calling convention disagreements between
+            // llvm and msvc. To avoid the issues, we hack in float
+            // printing using int printing. If you fix this, Andrew
+            // owes you a beer.
+            Expr integer_part = cast<int>(args[i]); // Should round towards zero.
+            Expr frac_part = abs(args[i]) - abs(integer_part);
+            frac_part *= 10000; // Use 5 decimal places.
+            frac_part = cast<int>(frac_part);
+            sstr << "%d.%05d "; // Pad the fractional part with zeros.
+            printf_args.push_back(integer_part); 
+            printf_args.push_back(frac_part); 
+            //printf_args.push_back(cast(Float(64), args[i]));
+        } else if (args[i].as<Internal::StringImm>() != NULL) {
+            sstr << "%s ";
+            printf_args.push_back(args[i]);
         } else if (args[i].type().is_handle()) {
             sstr << "%p ";
             printf_args.push_back(args[i]);
@@ -493,6 +581,14 @@ Expr print_when(Expr condition, const std::vector<Expr> &args) {
                                 Internal::Call::if_then_else,
                                 Internal::vec<Expr>(condition, p, args[0]),
                                 Internal::Call::Intrinsic);
+}
+
+Expr memoize_tag(Expr result, const std::vector<Expr> &cache_key_values) {
+    std::vector<Expr> args;
+    args.push_back(result);
+    args.insert(args.end(), cache_key_values.begin(), cache_key_values.end());
+    return Internal::Call::make(result.type(), Internal::Call::memoize_expr,
+                                args, Internal::Call::Intrinsic);
 }
 
 }

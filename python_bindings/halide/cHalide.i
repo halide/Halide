@@ -12,12 +12,43 @@
 %ignore halide_profiling_timer;
 %ignore halide_printf;
 %ignore halide_error;
+%ignore halide_error_varargs;
 %ignore halide_do_par_for;
 %ignore halide_shutdown_thread_pool;
 %ignore halide_trace;
 %ignore halide_shutdown_trace;
 %ignore halide_set_random_seed;
 %ignore halide_printf;
+%ignore halide_print;
+%ignore get_scalar;
+%ignore set_scalar;
+%ignore get;
+
+%ignore halide_release;
+%ignore halide_copy_to_dev;
+%ignore halide_copy_to_host;
+%ignore halide_dev_sync;
+%ignore halide_init_kernels;
+%ignore halide_dev_run;
+%ignore halide_dev_malloc;
+%ignore halide_dev_free;
+%ignore halide_get_trace_file;
+%ignore halide_set_trace_file;
+
+%ignore halide_set_num_threads;
+
+%ignore halide_get_ocl_platform_name;
+%ignore halide_set_ocl_platform_name;
+%ignore halide_get_ocl_device_type;
+%ignore halide_set_ocl_device_type;
+%ignore halide_get_gpu_device;
+%ignore halide_set_gpu_device;
+%ignore halide_memoization_cache_set_size;
+%ignore halide_memoization_cache_lookup;
+%ignore halide_memoization_cache_store;
+
+
+#define BUILDING_PYTHON 1
 
 %{
 #include "Halide.h"
@@ -28,17 +59,22 @@ using namespace Halide;
 namespace Halide {
 %ignore Internal;
 }
+%ignore HalideIntrospectionCanary;
 
 %include "std_string.i"
 %include "std_vector.i"
 
 %naturalvar;
 %naturalvar Func;
+%naturalvar ScheduleHandle;
 %naturalvar Expr;
+%naturalvar RVar;
+%naturalvar RDom;
+%naturalvar VarOrRVar;
+%naturalvar Argument;
 
 %include "Halide.h"
 %include "py_util.h"
-
 
 %template(Image_uint8) Image<uint8_t>;
 %template(Image_uint16) Image<uint16_t>;

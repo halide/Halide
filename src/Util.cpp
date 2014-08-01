@@ -1,4 +1,7 @@
 #include "Util.h"
+#include "Introspection.h"
+#include "Debug.h"
+#include "Error.h"
 #include <sstream>
 #include <map>
 
@@ -61,7 +64,9 @@ string unique_name(const string &name, bool user) {
     // having to track all names generated so far.
     if (user) {
         for (size_t i = 0; i < name.length(); i++) {
-            assert(name[i] != '$' && "names passed to unique_name may not contain the character '$'");
+            user_assert(name[i] != '$')
+                << "Name \"" << name << "\" is invalid. "
+                << "Halide names may not contain the character '$'\n";
         }
     }
 
@@ -86,6 +91,20 @@ string base_name(const string &name, char delim) {
     return name.substr(off+1);
 }
 
+string make_entity_name(void *stack_ptr, const string &type, char prefix) {
+    string name = get_variable_name(stack_ptr, type);
+    if (name.empty()) {
+        return unique_name(prefix);
+    } else {
+        // Halide names may not contain '.'
+        for (size_t i = 0; i < name.size(); i++) {
+            if (name[i] == '.') {
+                name[i] = ':';
+            }
+        }
+        return unique_name(name);
+    }
+}
 
 }
 }

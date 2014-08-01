@@ -5,11 +5,11 @@
 // parallelization, unrolling, and tiling.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_05*.cpp -I ../include -L ../bin -rdynamic -lHalide -lpthread -ldl -o lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_05
 // LD_LIBRARY_PATH=../bin ./lesson_05
 
 // On os x:
-// g++ lesson_05*.cpp -I ../include -L ../bin -lHalide -o lesson_05
+// g++ lesson_05*.cpp -g -I ../include -L ../bin -lHalide -o lesson_05
 // DYLD_LIBRARY_PATH=../bin ./lesson_05
 
 #include <Halide.h>
@@ -336,6 +336,12 @@ int main(int argc, char **argv) {
         // x = min(x_outer * factor, x_extent - factor) + x_inner + x_min
         //
         // In our example, x_min was 0, x_extent was 5, and factor was 2.
+
+        // However, if you write a Halide function with an update
+        // definition (see lesson 9), then it is not safe to evaluate
+        // the same point multiple times, so we won't apply this
+        // trick. Instead the range of values computed will be rounded
+        // up to the next multiple of the split factor.
     }
 
     // Fusing, tiling, and parallelizing.

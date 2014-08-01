@@ -9,6 +9,7 @@
 
 #include "Util.h"
 #include "Debug.h"
+#include "Error.h"
 
 /** \file
  * Defines the Scope class, which is used for keeping track of names in a scope while traversing IR
@@ -30,7 +31,6 @@ public:
     SmallStack() : _empty(true) {}
 
     void pop() {
-        assert(!_empty);
         if (_rest.empty()) {
             _empty = true;
             _top = T();
@@ -50,12 +50,10 @@ public:
     }
 
     T top() const {
-        assert(!_empty);
         return _top;
     }
 
     T &top_ref() {
-        assert(!_empty);
         return _top;
     }
 
@@ -72,25 +70,51 @@ template<typename T>
 class Scope {
 private:
     std::map<std::string, SmallStack<T> > table;
-public:
-    Scope() {}
 
-    /** Retrive the value referred to by a name */
+    // Copying a scope object copies a large table full of strings and
+    // stacks. Bad idea.
+    Scope(const Scope<T> &);
+    Scope<T> &operator=(const Scope<T> &);
+
+    const Scope<T> *containing_scope;
+
+
+public:
+    Scope() : containing_scope(NULL) {}
+
+    /** Set the parent scope. If lookups fail in this scope, they
+     * check the containing scope before returning an error. Caller is
+     * responsible for managing the memory of the containing scope. */
+    void set_containing_scope(const Scope<T> *s) {
+        containing_scope = s;
+    }
+
+    /** A const ref to an empty scope. Useful for default function
+     * arguments, which would otherwise require a copy constructor
+     * (with llvm in c++98 mode) */
+    static const Scope<T> &empty_scope() {
+        static Scope<T> _empty_scope;
+        return _empty_scope;        
+    }
+
+    /** Retrieve the value referred to by a name */
     T get(const std::string &name) const {
         typename std::map<std::string, SmallStack<T> >::const_iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            std::cerr << "Symbol '" << name << "' not found" << std::endl;
-            assert(false);
+            if (containing_scope) {
+                return containing_scope->get(name);
+            } else {
+                internal_error << "Symbol '" << name << "' not found\n";
+            }
         }
         return iter->second.top();
     }
 
-    /** Return a reference to an entry */
+    /** Return a reference to an entry. Does not consider the containing scope. */
     T &ref(const std::string &name) {
         typename std::map<std::string, SmallStack<T> >::iterator iter = table.find(name);
         if (iter == table.end() || iter->second.empty()) {
-            std::cerr << "Symbol '" << name << "' not found" << std::endl;
-            assert(false);
+            internal_error << "Symbol '" << name << "' not found\n";
         }
         return iter->second.top_ref();
     }
@@ -98,7 +122,14 @@ public:
     /** Tests if a name is in scope */
     bool contains(const std::string &name) const {
         typename std::map<std::string, SmallStack<T> >::const_iterator iter = table.find(name);
-        return iter != table.end() && !iter->second.empty();
+        if (iter == table.end() || iter->second.empty()) {
+            if (containing_scope) {
+                return containing_scope->contains(name);
+            } else {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Add a new (name, value) pair to the current scope. Hide old
@@ -113,14 +144,14 @@ public:
      * same name in an outer scope) */
     void pop(const std::string &name) {
         typename std::map<std::string, SmallStack<T> >::iterator iter = table.find(name);
-        assert(iter != table.end() && "Name not in symbol table");
+        internal_assert(iter != table.end()) << "Name not in symbol table: " << name << "\n";
         iter->second.pop();
         if (iter->second.empty()) {
             table.erase(iter);
         }
     }
 
-    /** Iterate through the scope. */
+    /** Iterate through the scope. Does not capture any containing scope. */
     class const_iterator {
         typename std::map<std::string, SmallStack<T> >::const_iterator iter;
     public:
@@ -195,6 +226,11 @@ public:
 
     iterator end() {
         return iterator(table.end());
+    }
+
+    void swap(Scope<T> &other) {
+        table.swap(other.table);
+        std::swap(containing_scope, other.containing_scope);
     }
 };
 

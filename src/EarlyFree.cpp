@@ -56,9 +56,22 @@ private:
 
     void visit(const Variable *var) {
         if (starts_with(var->name, func + ".") &&
-            ends_with(var->name, ".buffer")) {
+            (ends_with(var->name, ".buffer") || ends_with(var->name, ".host"))) {
             last_use = containing_stmt;
         }
+    }
+
+    void visit(const IfThenElse *op) {
+        // It's a bad idea to inject it in either side of an
+        // ifthenelse, so we treat this as being in a loop.
+        op->condition.accept(this);
+        bool old_in_loop = in_loop;
+        in_loop = true;
+        op->then_case.accept(this);
+        if (op->else_case.defined()) {
+            op->else_case.accept(this);
+        }
+        in_loop = old_in_loop;
     }
 
     void visit(const Pipeline *pipe) {
@@ -159,7 +172,7 @@ class InjectEarlyFrees : public IRMutator {
     void visit(const Allocate *alloc) {
         IRMutator::visit(alloc);
         alloc = stmt.as<Allocate>();
-        assert(alloc);
+        internal_assert(alloc);
 
         FindLastUse last_use(alloc->name);
         stmt.accept(&last_use);
@@ -170,7 +183,7 @@ class InjectEarlyFrees : public IRMutator {
             inject_marker.last_use = last_use.last_use;
             stmt = inject_marker.mutate(stmt);
         } else {
-            stmt = Allocate::make(alloc->name, alloc->type, alloc->extents,
+            stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
                                 Block::make(alloc->body, Free::make(alloc->name)));
         }
 

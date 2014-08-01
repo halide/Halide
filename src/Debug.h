@@ -6,17 +6,29 @@
  */
 
 #include <iostream>
-#include "IR.h"
 #include <string>
+#include <stdlib.h>
+
+#include "Introspection.h"
 
 namespace Halide {
+
+struct Expr;
+struct Type;
+// Forward declare some things from IRPrinter, which we can't include yet.
+EXPORT std::ostream &operator<<(std::ostream &stream, const Expr &);
+EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
+
 namespace Internal {
 
+struct Stmt;
+std::ostream &operator<<(std::ostream &stream, const Stmt &);
+
 /** For optional debugging during codegen, use the debug class as
- * follows: 
- * 
+ * follows:
+ *
  \code
- debug(verbosity) << "The expression is " << expr << std::endl; 
+ debug(verbosity) << "The expression is " << expr << std::endl;
  \endcode
  *
  * verbosity of 0 always prints, 1 should print after every major
@@ -27,8 +39,8 @@ namespace Internal {
  */
 
 struct debug {
-    static int debug_level;
-    static bool initialized;
+    EXPORT static int debug_level;
+    EXPORT static bool initialized;
     int verbosity;
 
     debug(int v) : verbosity(v) {
@@ -39,7 +51,7 @@ struct debug {
             size_t read = 0;
             getenv_s(&read, lvl, "HL_DEBUG_CODEGEN");
             if (read) {
-            #else   
+            #else
             if (char *lvl = getenv("HL_DEBUG_CODEGEN")) {
             #endif
                 debug_level = atoi(lvl);

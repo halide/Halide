@@ -30,9 +30,10 @@ public:
     ~JITModuleHolder() {
         debug(2) << "Destroying JIT compiled module at " << this << "\n";
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            void *ptr = reinterpret_bits<void *>(cleanup_routines[i]);
-            debug(2) << "  Calling target specific cleanup routine at " << ptr << "\n";
-            (*cleanup_routines[i])();
+            void *ptr = reinterpret_bits<void *>(cleanup_routines[i].fn);
+            debug(2) << "  Calling cleanup routine [" << ptr << "]("
+                     << cleanup_routines[i].context << ")\n";
+            cleanup_routines[i].fn(cleanup_routines[i].context);
         }
 
         shutdown_thread_pool();
@@ -47,7 +48,7 @@ public:
     void (*shutdown_thread_pool)();
 
     /** Do any target-specific module cleanup. */
-    std::vector<void (*)()> cleanup_routines;
+    std::vector<JITCompiledModule::CleanupRoutine> cleanup_routines;
 };
 
 template<>
@@ -69,14 +70,13 @@ char *start, *end;
 template<typename FP>
 void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &name, bool must_succeed, FP *result) {
 
-    assert(mod && ee);
+    internal_assert(mod && ee);
 
     debug(2) << "Retrieving " << name << " from module\n";
     llvm::Function *fn = mod->getFunction(name);
     if (!fn) {
         if (must_succeed) {
-            std::cerr << "Could not find function " << name << " in module\n";
-            assert(false);
+            internal_error << "Could not find function " << name << " in module\n";
         } else {
             *result = NULL;
             return;
@@ -86,8 +86,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
     debug(2) << "JIT Compiling " << name << "\n";
     void *f = ee->getPointerToFunction(fn);
     if (!f && must_succeed) {
-        std::cerr << "Compiling " << name << " returned NULL\n";
-        assert(false);
+        internal_error << "Compiling " << name << " returned NULL\n";
     }
 
     debug(2) << "Function " << name << " is at " << f << "\n";
@@ -148,7 +147,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     engine_builder.setMAttrs(vec<string>(cg->mattrs()));
     ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
-    assert(ee && "Couldn't create execution engine");
+    internal_assert(ee) << "Couldn't create execution engine\n";
 
     #ifdef __arm__
     start = end = NULL;
@@ -175,7 +174,9 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     hook_up_function_pointer(ee, m, "halide_set_custom_do_par_for", true, &set_custom_do_par_for);
     hook_up_function_pointer(ee, m, "halide_set_custom_do_task", true, &set_custom_do_task);
     hook_up_function_pointer(ee, m, "halide_set_custom_trace", true, &set_custom_trace);
+    hook_up_function_pointer(ee, m, "halide_set_custom_print", true, &set_custom_print);
     hook_up_function_pointer(ee, m, "halide_shutdown_thread_pool", true, &shutdown_thread_pool);
+    hook_up_function_pointer(ee, m, "halide_memoization_cache_set_size", true, &memoization_cache_set_size);
 
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();

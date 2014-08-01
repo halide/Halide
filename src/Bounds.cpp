@@ -10,6 +10,7 @@
 #include "Util.h"
 #include "Var.h"
 #include "Debug.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -23,12 +24,13 @@ using std::pair;
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
-    const Scope<Interval> &scope;
-    Scope<Interval> inner_scope;
+    Scope<Interval> scope;
     const FuncValueBounds &func_bounds;
 
-    Bounds(const Scope<Interval> &s, const FuncValueBounds &fb) :
-        scope(s), func_bounds(fb) {}
+    Bounds(const Scope<Interval> *s, const FuncValueBounds &fb) :
+        func_bounds(fb) {
+        scope.set_containing_scope(s);
+    }
 private:
 
     // Compute the intrinsic bounds of a function.
@@ -168,10 +170,6 @@ private:
             Interval bounds = scope.get(op->name);
             min = bounds.min;
             max = bounds.max;
-        } else if (inner_scope.contains(op->name)) {
-            Interval bounds = inner_scope.get(op->name);
-            min = bounds.min;
-            max = bounds.max;
         } else {
             debug(3) << op->name << " not in scope, so leaving it as-is\n";
             min = op;
@@ -202,17 +200,17 @@ private:
         // Check for overflow for (u)int8 and (u)int16
         if (!op->type.is_float() && op->type.bits < 32) {
             if (max.defined()) {
-                Expr test = (cast<int>(max_a) + cast<int>(max_b) == cast<int>(max));
+                Expr test = (cast<int>(max_a) + cast<int>(max_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
             }
             if (min.defined()) {
-                Expr test = (cast<int>(min_a) + cast<int>(min_b) == cast<int>(min));
+                Expr test = (cast<int>(min_a) + cast<int>(min_b) - cast<int>(min));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
@@ -243,17 +241,17 @@ private:
         // Check for overflow for (u)int8 and (u)int16
         if (!op->type.is_float() && op->type.bits < 32) {
             if (max.defined()) {
-                Expr test = (cast<int>(max_a) - cast<int>(min_b) == cast<int>(max));
+                Expr test = (cast<int>(max_a) - cast<int>(min_b) - cast<int>(max));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
             }
             if (min.defined()) {
-                Expr test = (cast<int>(min_a) - cast<int>(max_b) == cast<int>(min));
+                Expr test = (cast<int>(min_a) - cast<int>(max_b) - cast<int>(min));
                 //debug(0) << "Attempting to prove: " << test << " -> " << simplify(test) << "\n";
-                if (!is_one(simplify(test))) {
+                if (!is_zero(simplify(test))) {
                     bounds_of_type(op->type);
                     return;
                 }
@@ -343,11 +341,15 @@ private:
 
         if (op->type.bits < 32 && !op->type.is_float()) {
             // Try to prove it can't overflow
-            Expr test1 = (cast<int>(min_a) * cast<int>(min_b) == cast<int>(min_a * min_b));
-            Expr test2 = (cast<int>(min_a) * cast<int>(max_b) == cast<int>(min_a * max_b));
-            Expr test3 = (cast<int>(max_a) * cast<int>(min_b) == cast<int>(max_a * min_b));
-            Expr test4 = (cast<int>(max_a) * cast<int>(max_b) == cast<int>(max_a * max_b));
-            if (!is_one(simplify(test1 && test2 && test3 && test4))) {
+            Expr test1 = (cast<int>(min_a) * cast<int>(min_b) - cast<int>(min_a * min_b));
+            Expr test2 = (cast<int>(min_a) * cast<int>(max_b) - cast<int>(min_a * max_b));
+            Expr test3 = (cast<int>(max_a) * cast<int>(min_b) - cast<int>(max_a * min_b));
+            Expr test4 = (cast<int>(max_a) * cast<int>(max_b) - cast<int>(max_a * max_b));
+            test1 = simplify(test1);
+            test2 = simplify(test2);
+            test3 = simplify(test3);
+            test4 = simplify(test4);
+            if (!is_zero(test1) || !is_zero(test2) || !is_zero(test3) || !is_zero(test4)) {
                 bounds_of_type(op->type);
                 return;
             }
@@ -524,55 +526,46 @@ private:
     }
 
     void visit(const EQ *) {
-        //assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const NE *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const LT *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const LE *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const GT *) {
-        // assert(false && "Bounds of boolean");
         min = Expr();
         max = Expr();
     }
 
     void visit(const GE *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
 
     void visit(const And *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
 
     void visit(const Or *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
 
     void visit(const Not *) {
-        // assert(false && "Bounds of comparison");
         min = Expr();
         max = Expr();
     }
@@ -615,11 +608,11 @@ private:
     }
 
     void visit(const Ramp *op) {
-        assert(false && "Bounds of vector");
+        internal_error << "Bounds of vector";
     }
 
     void visit(const Broadcast *) {
-        assert(false && "Bounds of vector");
+        internal_error << "Bounds of vector";
     }
 
     void visit(const Call *op) {
@@ -639,6 +632,11 @@ private:
             }
         }
 
+        if (op->type == Handle()) {
+            min = max = Expr();
+            return;
+        }
+
         if (const_args && (op->call_type == Call::Image || op->call_type == Call::Extern)) {
             min = max = Call::make(op->type, op->name, new_args, op->call_type,
                                    op->func, op->value_index, op->image, op->param);
@@ -655,6 +653,14 @@ private:
                 // If the argument is unbounded on one side, then the max is unbounded.
                 max = Expr();
             }
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::return_second) {
+            assert(op->args.size() == 2);
+            op->args[1].accept(this);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::if_then_else) {
+            assert(op->args.size() == 3);
+            // Probably more conservative than necessary
+            Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
+            equivalent_select.accept(this);
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
@@ -669,6 +675,24 @@ private:
             max = Call::make(op->type, op->name, vec<Expr>(max_a), op->call_type,
                              op->func, op->value_index, op->image, op->param);
 
+        } else if (op->call_type == Call::Intrinsic &&
+                   (op->name == Call::extract_buffer_min ||
+                    op->name == Call::extract_buffer_max) &&
+                   !op->args.empty() &&
+                   op->args[0].as<Variable>()) {
+            // Bounds query results should have perfect nesting. Their
+            // max over a loop is just the same bounds query call at
+            // an outer loop level. This requires that the query is
+            // also done at the outer loop level so that the buffer
+            // arg is still valid, which it is, so it is.
+            //
+            // TODO: There should be an assert injected in the inner
+            // loop to check perfect nesting.
+            min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
+            max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::memoize_expr) {
+            assert(op->args.size() >= 1);
+            op->args[0].accept(this);
         } else if (op->func.has_pure_definition()) {
             bounds_of_func(op->func, op->value_index);
         } else {
@@ -679,51 +703,51 @@ private:
 
     void visit(const Let *op) {
         op->value.accept(this);
-        inner_scope.push(op->name, Interval(min, max));
+        scope.push(op->name, Interval(min, max));
         op->body.accept(this);
-        inner_scope.pop(op->name);
+        scope.pop(op->name);
     }
 
     void visit(const LetStmt *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const AssertStmt *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Pipeline *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const For *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Store *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Provide *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Allocate *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Realize *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 
     void visit(const Block *) {
-        assert(false && "Bounds of statement");
+        internal_error << "Bounds of statement\n";
     }
 };
 
 Interval bounds_of_expr_in_scope(Expr expr, const Scope<Interval> &scope, const FuncValueBounds &fb) {
     //debug(3) << "computing bounds_of_expr_in_scope " << expr << "\n";
-    Bounds b(scope, fb);
+    Bounds b(&scope, fb);
     expr.accept(&b);
     //debug(3) << "bounds_of_expr_in_scope " << expr << " = " << simplify(b.min) << ", " << simplify(b.max) << "\n";
     return Interval(b.min, b.max);
@@ -738,7 +762,7 @@ Interval interval_union(const Interval &a, const Interval &b) {
 }
 
 Region region_union(const Region &a, const Region &b) {
-    assert(a.size() == b.size() && "Mismatched dimensionality in region union");
+    internal_assert(a.size() == b.size()) << "Mismatched dimensionality in region union\n";
     Region result;
     for (size_t i = 0; i < a.size(); i++) {
         Expr min = Min::make(a[i].min, b[i].min);
@@ -752,7 +776,73 @@ Region region_union(const Region &a, const Region &b) {
     return result;
 }
 
+Expr simple_min(Expr a, Expr b) {
+    // Take a min, doing a little bit of eager simplification
+    if (equal(a, b)) {
+        return a;
+    }
 
+    const IntImm *ia = a.as<IntImm>();
+    const IntImm *ib = b.as<IntImm>();
+    const Min *ma = a.as<Min>();
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    if (ia && ib) {
+        if (ia->value < ib->value) {
+            // min(3, 4) -> 3
+            return ia;
+        } else {
+            // min(4, 3) -> 3
+            return ib;
+        }
+    } else if (imab && ib) {
+        if (imab->value < ib->value) {
+            // min(min(a, 3), 4) -> min(a, 3)
+            return a;
+        } else {
+            // min(min(a, 4), 3) -> min(a, 3)
+            return min(ma->a, b);
+        }
+    } else if (ia) {
+        // min(3, b) -> min(b, 3)
+        return min(b, a);
+    } else {
+        return min(a, b);
+    }
+}
+
+Expr simple_max(Expr a, Expr b) {
+    // Take a max, doing a little bit of eager simplification
+    if (equal(a, b)) {
+        return a;
+    }
+
+    const IntImm *ia = a.as<IntImm>();
+    const IntImm *ib = b.as<IntImm>();
+    const Max *ma = a.as<Max>();
+    const IntImm *imab = ma ? ma->b.as<IntImm>() : NULL;
+    if (ia && ib) {
+        if (ia->value > ib->value) {
+            // max(4, 3) -> 4
+            return ia;
+        } else {
+            // max(3, 4) -> 4
+            return ib;
+        }
+    } else if (imab && ib) {
+        if (imab->value > ib->value) {
+            // max(max(a, 4), 3) -> max(a, 4)
+            return a;
+        } else {
+            // max(max(a, 3), 4) -> max(a, 4)
+            return max(ma->a, b);
+        }
+    } else if (ia) {
+        // max(3, b) -> max(b, 3)
+        return max(b, a);
+    } else {
+        return max(a, b);
+    }
+}
 
 void merge_boxes(Box &a, const Box &b) {
     if (b.empty()) {
@@ -764,23 +854,62 @@ void merge_boxes(Box &a, const Box &b) {
         return;
     }
 
-    assert(a.size() == b.size());
+    internal_assert(a.size() == b.size());
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].min.defined() && b[i].min.defined()) {
-                a[i].min = min(a[i].min, b[i].min);
+                if (a.used.defined() && b.used.defined()) {
+                    if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
+                        a[i].min = select(a.used, a[i].min, b[i].min);
+                    } else {
+                        a[i].min = select(a.used && b.used, simple_min(a[i].min, b[i].min),
+                                          a.used, a[i].min,
+                                          b[i].min);
+                    }
+                } else if (a.used.defined()) {
+                    a[i].min = select(a.used, simple_min(a[i].min, b[i].min), b[i].min);
+                } else if (b.used.defined()) {
+                    a[i].min = select(b.used, simple_min(a[i].min, b[i].min), a[i].min);
+                } else {
+                    a[i].min = simple_min(a[i].min, b[i].min);
+                }
             } else {
                 a[i].min = Expr();
             }
         }
         if (!a[i].max.same_as(b[i].max)) {
             if (a[i].max.defined() && b[i].max.defined()) {
-                a[i].max = max(a[i].max, b[i].max);
+                if (a.used.defined() && b.used.defined()) {
+                    if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
+                        a[i].max = select(a.used, a[i].max, b[i].max);
+                    } else {
+                        a[i].max = select(a.used && b.used, simple_max(a[i].max, b[i].max),
+                                          a.used, a[i].max,
+                                          b[i].max);
+                    }
+                } else if (a.used.defined()) {
+                    a[i].max = select(a.used, simple_max(a[i].max, b[i].max), b[i].max);
+                } else if (b.used.defined()) {
+                    a[i].max = select(b.used, simple_max(a[i].max, b[i].max), a[i].max);
+                } else {
+                    a[i].max = simple_max(a[i].max, b[i].max);
+                }
             } else {
                 a[i].max = Expr();
             }
         }
+    }
+
+    if (a.used.defined() && b.used.defined()) {
+        if (!equal(a.used, b.used)) {
+            a.used = simplify(a.used || b.used);
+            if (is_one(a.used)) {
+                a.used = Expr();
+            }
+        }
+    } else {
+        a.used = Expr();
     }
 }
 
@@ -788,8 +917,10 @@ void merge_boxes(Box &a, const Box &b) {
 class BoxesTouched : public IRGraphVisitor {
 
 public:
-    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> &s, const FuncValueBounds &fb) :
-        func(fn), consider_calls(calls), consider_provides(provides), scope(s), func_bounds(fb) {}
+    BoxesTouched(bool calls, bool provides, string fn, const Scope<Interval> *s, const FuncValueBounds &fb) :
+        func(fn), consider_calls(calls), consider_provides(provides), func_bounds(fb) {
+        scope.set_containing_scope(s);
+    }
 
     map<string, Box> boxes;
 
@@ -819,12 +950,20 @@ private:
         // actual memory access takes place.
         if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
             // Visit the args of the inner call
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
-            assert(c);
-            for (size_t i = 0; i < c->args.size(); i++) {
-                c->args[i].accept(this);
+            
+            if (c) {
+                for (size_t i = 0; i < c->args.size(); i++) {
+                    c->args[i].accept(this);
+                }
+            } else {
+                const Load *l = op->args[0].as<Load>();
+
+                internal_assert(l);
+                l->index.accept(this);
             }
+
             return;
         }
 
@@ -834,8 +973,6 @@ private:
             op->call_type == Call::Extern) {
             return;
         }
-
-        string name = op->name;
 
         Box b(op->args.size());
         for (size_t i = 0; i < op->args.size(); i++) {
@@ -909,6 +1046,68 @@ private:
         }
     }
 
+    void visit(const IfThenElse *op) {
+        op->condition.accept(this);
+
+        if (expr_uses_vars(op->condition, scope)) {
+            op->then_case.accept(this);
+            if (op->else_case.defined()) {
+                op->else_case.accept(this);
+            }
+        } else {
+            // If the condition is based purely on params, then we'll only
+            // ever go one way in a given run, so we should conditionalize
+            // the boxes touched on the condition.
+
+            // Fork the boxes touched and go down each path
+            map<string, Box> then_boxes, else_boxes;
+            then_boxes.swap(boxes);
+            op->then_case.accept(this);
+            then_boxes.swap(boxes);
+
+            if (op->else_case.defined()) {
+                else_boxes.swap(boxes);
+                op->else_case.accept(this);
+                else_boxes.swap(boxes);
+            }
+
+            //debug(0) << "Encountered an ifthenelse over a param: " << op->condition << "\n";
+
+            // Make sure all the then boxes have an entry on the else
+            // side so that the merge doesn't skip them.
+            for (map<string, Box>::iterator iter = then_boxes.begin();
+                 iter != then_boxes.end(); ++iter) {
+                else_boxes[iter->first];
+            }
+
+            // Merge
+            for (map<string, Box>::iterator iter = else_boxes.begin();
+                 iter != else_boxes.end(); ++iter) {
+                Box &else_box = iter->second;
+                Box &then_box = then_boxes[iter->first];
+                Box &orig_box = boxes[iter->first];
+
+                //debug(0) << " Merging boxes for " << iter->first << "\n";
+
+                if (then_box.used.defined()) {
+                    then_box.used = then_box.used && op->condition;
+                } else {
+                    then_box.used = op->condition;
+                }
+
+                if (else_box.used.defined()) {
+                    else_box.used = else_box.used && !op->condition;
+                } else {
+                    else_box.used = !op->condition;
+                }
+
+                merge_boxes(orig_box, then_box);
+                merge_boxes(orig_box, else_box);
+            }
+        }
+
+    }
+
     void visit(const For *op) {
         if (consider_calls) {
             op->min.accept(this);
@@ -959,7 +1158,7 @@ private:
 
 map<string, Box> boxes_touched(Expr e, Stmt s, bool consider_calls, bool consider_provides,
                                string fn, const Scope<Interval> &scope, const FuncValueBounds &fb) {
-    BoxesTouched b(consider_calls, consider_provides, fn, scope, fb);
+    BoxesTouched b(consider_calls, consider_provides, fn, &scope, fb);
     if (e.defined()) {
         e.accept(&b);
     }
@@ -1027,22 +1226,15 @@ void check(const Scope<Interval> &scope, Expr e, Expr correct_min, Expr correct_
     Interval result = bounds_of_expr_in_scope(e, scope, fb);
     if (result.min.defined()) result.min = simplify(result.min);
     if (result.max.defined()) result.max = simplify(result.max);
-    bool success = true;
     if (!equal(result.min, correct_min)) {
-        std::cout << "In bounds of " << e << ":\n"
-                  << "Incorrect min: " << result.min << '\n'
-                  << "Should have been: " << correct_min << '\n';
-        success = false;
+        internal_error << "In bounds of " << e << ":\n"
+                       << "Incorrect min: " << result.min << '\n'
+                       << "Should have been: " << correct_min << '\n';
     }
     if (!equal(result.max, correct_max)) {
-        std::cout << "In bounds of " << e << ":\n"
-                  << "Incorrect max: " << result.max << '\n'
-                  << "Should have been: " << correct_max << '\n';
-        success = false;
-    }
-    if (!success) {
-        std::cout << "Bounds test failed\n";
-        assert(false);
+        internal_error << "In bounds of " << e << ":\n"
+                       << "Incorrect max: " << result.max << '\n'
+                       << "Should have been: " << correct_max << '\n';
     }
 }
 
@@ -1110,6 +1302,9 @@ void bounds_test() {
     check(scope, y + (Let::make("y", x+3, y - x + 10)), y + 3, y + 23); // Once again, we don't know that y is correlated with x
     check(scope, clamp(1/(x-2), x-10, x+10), -10, 20);
 
+    check(scope, print(x, y), 0, 10);
+    check(scope, print_when(x > y, x, y), 0, 10);
+
     // Check some operations that may overflow
     check(scope, (cast<uint8_t>(x)+250), cast<uint8_t>(0), cast<uint8_t>(255));
     check(scope, (cast<uint8_t>(x)+10)*20, cast<uint8_t>(0), cast<uint8_t>(255));
@@ -1142,19 +1337,19 @@ void bounds_test() {
 
     map<string, Box> r;
     r = boxes_required(loop);
-    assert(r.find("output") == r.end());
-    assert(r.find("input") != r.end());
-    assert(equal(simplify(r["input"][0].min), 6));
-    assert(equal(simplify(r["input"][0].max), 25));
+    internal_assert(r.find("output") == r.end());
+    internal_assert(r.find("input") != r.end());
+    internal_assert(equal(simplify(r["input"][0].min), 6));
+    internal_assert(equal(simplify(r["input"][0].max), 25));
     r = boxes_provided(loop);
-    assert(r.find("output") != r.end());
-    assert(equal(simplify(r["output"][0].min), 4));
-    assert(equal(simplify(r["output"][0].max), 13));
+    internal_assert(r.find("output") != r.end());
+    internal_assert(equal(simplify(r["output"][0].min), 4));
+    internal_assert(equal(simplify(r["output"][0].max), 13));
 
     Box r2 = vec(Interval(Expr(5), Expr(19)));
     merge_boxes(r2, r["output"]);
-    assert(equal(simplify(r2[0].min), 4));
-    assert(equal(simplify(r2[0].max), 19));
+    internal_assert(equal(simplify(r2[0].min), 4));
+    internal_assert(equal(simplify(r2[0].max), 19));
 
     std::cout << "Bounds test passed" << std::endl;
 }

@@ -3,11 +3,11 @@
 // This lesson demonstrates how to define a Func in multiple passes, including scattering.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_09*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -lpng -fopenmp -o lesson_09
+// g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -fopenmp -o lesson_09
 // LD_LIBRARY_PATH=../bin ./lesson_09
 
-// On os x:
-// g++ lesson_09*.cpp -I ../include -L ../bin -lHalide -lpng -fopenmp -o lesson_09
+// On os x (will only work if you actually have g++, not Apple's pretend g++ which is actually clang):
+// g++ lesson_09*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -fopenmp -o lesson_09
 // DYLD_LIBRARY_PATH=../bin ./lesson_09
 
 #include <Halide.h>
@@ -18,21 +18,20 @@
 #include <emmintrin.h>
 #endif
 
-// We'll also need a clock to do performance testing at the end. We'll
-// steal the one used in the performance tests.
-#include "../test/performance/clock.h"
+// We'll also need a clock to do performance testing at the end.
+#include "clock.h"
 
 using namespace Halide;
 
 // Support code for loading pngs.
-#include "../apps/support/image_io.h"
+#include "image_io.h"
 
 int main(int argc, char **argv) {
     // Declare some Vars to use below.
     Var x("x"), y("y");
 
     // Load a grayscale image to use as an input.
-    Image<uint8_t> input = load<uint8_t>("../apps/images/gray.png");
+    Image<uint8_t> input = load<uint8_t>("images/gray.png");
 
     // You can define a Func in multiple passes. Let's see a toy
     // example first.
@@ -773,7 +772,7 @@ int main(int argc, char **argv) {
         // Don't include the time required to allocate the output buffer.
         Image<uint8_t> c_result(input.width(), input.height());
 
-        double t1 = currentTime();
+        double t1 = current_time();
 
         // Run this one hundred times so we can average the timing results.
         for (int iters = 0; iters < 100; iters++) {
@@ -863,7 +862,7 @@ int main(int argc, char **argv) {
             }
         }
 
-        double t2 = currentTime();
+        double t2 = current_time();
 
         // Skip the timing comparison if we don't have openmp
         // enabled. Otherwise it's unfair to C.
@@ -875,7 +874,7 @@ int main(int argc, char **argv) {
             spread.realize(halide_result);
         }
 
-        double t3 = currentTime();
+        double t3 = current_time();
 
         // Report the timings. On my machine they both take about 3ms
         // for the 4-megapixel input (fast!), which makes sense,

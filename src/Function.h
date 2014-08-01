@@ -6,11 +6,12 @@
  */
 
 #include "IntrusivePtr.h"
-#include "Reduction.h"
 #include "Schedule.h"
+#include "Reduction.h"
 
 #include <string>
 #include <vector>
+#include <sstream>
 
 namespace Halide {
 
@@ -35,7 +36,8 @@ struct ExternFuncArgument {
     ExternFuncArgument(Expr e): arg_type(ExprArg), expr(e) {}
 
     ExternFuncArgument(Internal::Parameter p) : arg_type(ImageParamArg), image_param(p) {
-        assert(p.is_buffer());
+        // Scalar params come in via the Expr constructor.
+        internal_assert(p.is_buffer());
     }
     ExternFuncArgument() : arg_type(UndefinedArg) {}
 
@@ -73,7 +75,9 @@ struct FunctionContents {
 
     bool trace_loads, trace_stores, trace_realizations;
 
-    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false) {}
+    bool frozen;
+
+    FunctionContents() : trace_loads(false), trace_stores(false), trace_realizations(false), frozen(false) {}
 };
 
 /** A reference-counted handle to Halide's internal representation of
@@ -111,7 +115,10 @@ public:
     /** Construct a new function with the given name */
     Function(const std::string &n) : contents(new FunctionContents) {
         for (size_t i = 0; i < n.size(); i++) {
-            assert(n[i] != '.' && "Func names may not contain the character '.', as it is used internally by Halide as a separator");
+            user_assert(n[i] != '.')
+                << "Func name \"" << n << "\" is invalid. "
+                << "Func names may not contain the character '.', "
+                << "as it is used internally by Halide as a separator\n";
         }
         contents.ptr->name = n;
     }
@@ -256,6 +263,17 @@ public:
     }
     // @}
 
+    /** Mark function as frozen, which means it cannot accept new
+     * definitions. */
+    void freeze() {
+        contents.ptr->frozen = true;
+    }
+
+    /** Check if a function has been frozen. If so, it is an error to
+     * add new definitions. */
+    bool frozen() const {
+        return contents.ptr->frozen;
+    }
 };
 
 }}
