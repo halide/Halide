@@ -1,5 +1,6 @@
 #include "StmtToHtml.h"
 #include "IROperator.h"
+#include "Scope.h"
 
 #include <iostream>
 #include <fstream>
@@ -84,11 +85,14 @@ private:
     string type(const string &x) { return span("Type", x); }
     string symbol(const string &x) { return span("Symbol", x); }
 
-    std::map<string, int> variables;
+    Scope<int> scope;
     string var(const string &x) {
-        int &id = variables[x];
-        if (id == 0) {
+        int id;
+        if (scope.contains(x)) {
+            id = scope.get(x);
+        } else {
             id = unique_id();
+            scope.push(x, id);
         }
 
         std::stringstream s;
@@ -296,8 +300,8 @@ public:
     }
 
     void visit(const Let *op) {
+        scope.push(op->name, unique_id());
         stream << open_span("Let");
-
         stream << open_span("Matched")
                << "(" << keyword("let") << " "
                << var(op->name)
@@ -307,10 +311,11 @@ public:
         stream << " " << matched("Keyword", "in") << " ";
         print(op->body);
         stream << matched(")");
-
         stream << close_span();
+        scope.pop(op->name);
     }
     void visit(const LetStmt *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("LetStmt")
                << open_line();
         stream << open_span("Matched")
@@ -321,6 +326,7 @@ public:
         stream << close_line();
         print(op->body);
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const AssertStmt *op) {
         stream << open_div("AssertStmt WrapLine");
@@ -332,6 +338,7 @@ public:
         stream << close_div();
     }
     void visit(const Pipeline *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("Produce");
         int produce_id = unique_id();
         stream << open_span("Matched")
@@ -361,9 +368,10 @@ public:
             stream << close_div();
         }
         print(op->consume);
-
+        scope.pop(op->name);
     }
     void visit(const For *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("For");
 
         int id = unique_id();
@@ -385,6 +393,7 @@ public:
         stream << matched("}");
 
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const Store *op) {
         stream << open_div("Store WrapLine");
@@ -414,6 +423,7 @@ public:
         stream << close_div();
     }
     void visit(const Allocate *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("Allocate");
         stream << open_span("Matched")
                << keyword("allocate") << " "
@@ -433,6 +443,7 @@ public:
         print(op->body);
         stream << close_div();
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const Free *op) {
         stream << open_div("Free WrapLine");
@@ -441,6 +452,7 @@ public:
         stream << close_div();
     }
     void visit(const Realize *op) {
+        scope.push(op->name, unique_id());
         stream << open_div("Realize");
         int id = unique_id();
         stream << open_expand_button(id);
@@ -462,6 +474,7 @@ public:
         stream << close_div();
         stream << matched("}");
         stream << close_div();
+        scope.pop(op->name);
     }
     void visit(const Block *op) {
         stream << open_div("Block");
