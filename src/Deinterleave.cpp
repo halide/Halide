@@ -62,15 +62,15 @@ private:
             Type t = op->type;
             t.width = new_width;
             if (internal.contains(op->name)) {
-                expr = Variable::make(t, op->name, op->param, op->reduction_domain);
+                expr = Variable::make(t, op->name, op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 0 &&
                        lane_stride == 2) {
-                expr = Variable::make(t, op->name + ".even_lanes", op->param, op->reduction_domain);
+                expr = Variable::make(t, op->name + ".even_lanes", op->image, op->param, op->reduction_domain);
             } else if (external_lets.contains(op->name) &&
                        starting_lane == 1 &&
                        lane_stride == 2) {
-                expr = Variable::make(t, op->name + ".odd_lanes", op->param, op->reduction_domain);
+                expr = Variable::make(t, op->name + ".odd_lanes", op->image, op->param, op->reduction_domain);
             } else {
                 // Uh-oh, we don't know how to deinterleave this vector expression
                 // Make llvm do it
@@ -98,6 +98,14 @@ private:
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             expr = op;
+        } else if (op->name == Call::interleave_vectors &&
+                   op->call_type == Call::Intrinsic &&
+                   starting_lane == 0 && lane_stride == 2) {
+            expr = op->args[0];
+        } else if (op->name == Call::interleave_vectors &&
+                   op->call_type == Call::Intrinsic &&
+                   starting_lane == 1 && lane_stride == 2) {
+            expr = op->args[1];
         } else {
 
             Type t = op->type;
@@ -169,6 +177,20 @@ class Interleaver : public IRMutator {
 
     using IRMutator::visit;
 
+    bool should_deinterleave;
+
+    Expr deinterleave_expr(Expr e) {
+        if (e.type().width <= 2) {
+            // Just scalarize
+            return e;
+        } else {
+            Expr a = extract_even_lanes(e, vector_lets);
+            Expr b = extract_odd_lanes(e, vector_lets);
+            return Call::make(e.type(), Call::interleave_vectors,
+                              vec(a, b), Call::Intrinsic);
+        }
+    }
+
     template<typename T, typename Body>
     Body visit_let(const T *op) {
         Expr value = mutate(op->value);
@@ -211,46 +233,57 @@ class Interleaver : public IRMutator {
         stmt = visit_let<LetStmt, Stmt>(op);
     }
 
-    void visit(const Select *op) {
-        Expr condition = mutate(op->condition);
-        Expr true_value = mutate(op->true_value);
-        Expr false_value = mutate(op->false_value);
-        const EQ *eq = condition.as<EQ>();
-        const Mod *mod = eq ? eq->a.as<Mod>() : NULL;
-        const Ramp *ramp = mod ? mod->a.as<Ramp>() : NULL;
-        if (ramp && ramp->width > 2 && is_one(ramp->stride) && is_const(eq->b) && is_two(mod->b)) {
-            debug(3) << "Detected interleave vector pattern. Deinterleaving.\n";
-            ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            debug(3) << "Base (" << ramp->base
-                     << ") is congruent to " << mod_rem.remainder
-                     << " modulo " << mod_rem.modulus << "\n";
-            Expr a, b;
-            bool base_is_even = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 0);
-            bool base_is_odd  = ((mod_rem.modulus & 1) == 0) && ((mod_rem.remainder & 1) == 1);
-            if ((is_zero(eq->b) && base_is_even) ||
-                (is_one(eq->b) && base_is_odd)) {
-                a = extract_even_lanes(true_value, vector_lets);
-                b = extract_odd_lanes(false_value, vector_lets);
-            } else if ((is_one(eq->b) && base_is_even) ||
-                       (is_zero(eq->b) && base_is_odd)) {
-                a = extract_even_lanes(false_value, vector_lets);
-                b = extract_odd_lanes(true_value, vector_lets);
-            }
-
-            if (a.defined() && b.defined()) {
-                expr = Call::make(op->type, Call::interleave_vectors, vec(a, b), Call::Intrinsic);
-                return;
-            }
+    void visit(const Mod *op) {
+        const Ramp *r = op->a.as<Ramp>();
+        if (r && is_two(op->b)) {
+            should_deinterleave = true;
         }
-
-        if (condition.same_as(op->condition) &&
-            true_value.same_as(op->true_value) &&
-            false_value.same_as(op->false_value)) {
-            expr = op;
-        } else {
-            expr = Select::make(condition, true_value, false_value);
-        }
+        IRMutator::visit(op);
     }
+
+    void visit(const Div *op) {
+        const Ramp *r = op->a.as<Ramp>();
+        if (r && is_two(op->b)) {
+            should_deinterleave = true;
+        }
+        IRMutator::visit(op);
+    }
+
+    void visit(const Load *op) {
+        bool old_should_deinterleave = should_deinterleave;
+
+        should_deinterleave = false;
+        Expr idx = mutate(op->index);
+        expr = Load::make(op->type, op->name, idx, op->image, op->param);
+        if (should_deinterleave) {
+            expr = deinterleave_expr(expr);
+        }
+
+        should_deinterleave = old_should_deinterleave;
+    }
+
+    void visit(const Store *op) {
+        bool old_should_deinterleave = should_deinterleave;
+
+        should_deinterleave = false;
+        Expr idx = mutate(op->index);
+        if (should_deinterleave) {
+            idx = deinterleave_expr(idx);
+        }
+
+        should_deinterleave = false;
+        Expr value = mutate(op->value);
+        if (should_deinterleave) {
+            value = deinterleave_expr(value);
+        }
+
+        stmt = Store::make(op->name, value, idx);
+
+        should_deinterleave = old_should_deinterleave;
+    }
+
+public:
+    Interleaver() : should_deinterleave(false) {}
 };
 
 Stmt rewrite_interleavings(Stmt s) {
@@ -263,12 +296,10 @@ void check(Expr a, Expr even, Expr odd) {
     Expr correct_even = extract_even_lanes(a);
     Expr correct_odd = extract_odd_lanes(a);
     if (!equal(correct_even, even)) {
-        std::cerr << correct_even << " != " << even << "\n";
-        assert(false);
+        internal_error << correct_even << " != " << even << "\n";
     }
     if (!equal(correct_odd, odd)) {
-        std::cerr << correct_odd << " != " << odd << "\n";
-        assert(false);
+        internal_error << correct_odd << " != " << odd << "\n";
     }
 }
 }

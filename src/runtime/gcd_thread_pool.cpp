@@ -1,6 +1,4 @@
-#include "mini_stdint.h"
-
-#define WEAK __attribute__((weak))
+#include "runtime_internal.h"
 
 extern "C" {
 
@@ -14,6 +12,9 @@ extern void dispatch_apply_f(size_t iterations, dispatch_queue_t queue,
                              void *context, void (*work)(void *, size_t));
 
 WEAK void halide_shutdown_thread_pool() {
+}
+
+WEAK void halide_set_num_threads(int) {
 }
 
 WEAK int (*halide_custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
@@ -59,14 +60,18 @@ WEAK void halide_do_gcd_task(void *job, size_t idx) {
 
 WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                            int min, int size, uint8_t *closure) {
-    halide_gcd_job job;
-    job.f = f;
-    job.user_context = user_context;
-    job.closure = closure;
-    job.min = min;
-    job.exit_status = 0;
-    dispatch_apply_f(size, dispatch_get_global_queue(0, 0), &job, &halide_do_gcd_task);
-    return job.exit_status;
+    if (halide_custom_do_par_for) {
+        return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
+    } else {
+        halide_gcd_job job;
+        job.f = f;
+        job.user_context = user_context;
+        job.closure = closure;
+        job.min = min;
+        job.exit_status = 0;
+        dispatch_apply_f(size, dispatch_get_global_queue(0, 0), &job, &halide_do_gcd_task);
+        return job.exit_status;
+    }
 }
 
 }

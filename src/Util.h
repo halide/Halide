@@ -28,6 +28,17 @@
 #define EXPORT
 #endif
 
+// If we're in user code, we don't want certain functions to be inlined.
+#if defined(COMPILING_HALIDE) || defined(BUILDING_PYTHON)
+#define NO_INLINE
+#else
+#ifdef _WIN32
+#define NO_INLINE __declspec(noinline)
+#else
+#define NO_INLINE __attribute__((noinline))
+#endif
+#endif
+
 namespace Halide {
 namespace Internal {
 
@@ -132,6 +143,11 @@ DstType reinterpret_bits(const SrcType &src) {
     return dst;
 }
 
+/** Make a unique name for an object based on the name of the stack
+ * variable passed in. If introspection isn't working or there are no
+ * debug symbols, just uses unique_name with the given prefix. */
+EXPORT std::string make_entity_name(void *stack_ptr, const std::string &type, char prefix);
+
 /** Generate a unique name starting with the given character. It's
  * unique relative to all other calls to unique_name done by this
  * process. Not thread-safe. */
@@ -149,26 +165,6 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
-
-template<typename UnsignedType>
-bool checked_multiply(const UnsignedType &a, const UnsignedType &c, UnsignedType &result) {
-  if (a == 0) {
-    result = 0;
-  } else {
-    UnsignedType t = a * c;
-    if (t / a != c)
-      return false;
-    result = t;
-  }
-  return true;  
-}
-
-template<typename UnsignedType>
-bool checked_multiply_assert(const UnsignedType &a, const UnsignedType &b, UnsignedType &result) {
-  bool no_overflow = checked_multiply(a, b, result);
-  assert(no_overflow);
-  return no_overflow;
-}
 
 }
 }

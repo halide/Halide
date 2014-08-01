@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
 
 
     double t1, t2;
-    t1 = currentTime();
+    t1 = current_time();
 
     for (int i = 0; i < 100; i++) {
         Func f;
@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
         assert(c(0) == (i+1)*17);
     }    
 
-    t2 = currentTime();
+    t2 = current_time();
     int elapsed = (int)(10.0 * (t2-t1));
 
     printf("%d us per jit compilation\n", elapsed);

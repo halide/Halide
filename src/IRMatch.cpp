@@ -20,26 +20,26 @@ void expr_match_test() {
 
     Expr vec_wild = Variable::make(Int(32, 4), "*");
 
-    assert(expr_match(w, 3, matches) &&
-           equal(matches[0], 3));
+    internal_assert(expr_match(w, 3, matches) &&
+                    equal(matches[0], 3));
 
-    assert(expr_match(w + 3, (y*2) + 3, matches) &&
-           equal(matches[0], y*2));
+    internal_assert(expr_match(w + 3, (y*2) + 3, matches) &&
+                    equal(matches[0], y*2));
 
-    assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
-                      (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
-           equal(matches[0], 81.0f * fy) &&
-           equal(matches[1], x/2) &&
-           equal(matches[2], 4.5f));
+    internal_assert(expr_match(fw * 17 + cast<float>(w + cast<int>(fw)),
+                               (81.0f * fy) * 17 + cast<float>(x/2 + cast<int>(4.5f)), matches) &&
+                    equal(matches[0], 81.0f * fy) &&
+                    equal(matches[1], x/2) &&
+                    equal(matches[2], 4.5f));
 
-    assert(!expr_match(fw + 17, fx + 18, matches) &&
-           matches.empty());
-    assert(!expr_match((w*2) + 17, fx + 17, matches) &&
-           matches.empty());
-    assert(!expr_match(w * 3, 3 * x, matches) &&
-           matches.empty());
+    internal_assert(!expr_match(fw + 17, fx + 18, matches) &&
+                    matches.empty());
+    internal_assert(!expr_match((w*2) + 17, fx + 17, matches) &&
+                    matches.empty());
+    internal_assert(!expr_match(w * 3, 3 * x, matches) &&
+                    matches.empty());
 
-    assert(expr_match(vec_wild * 3, Ramp::make(x, y, 4) * 3, matches));
+    internal_assert(expr_match(vec_wild * 3, Ramp::make(x, y, 4) * 3, matches));
 
     std::cout << "expr_match test passed" << std::endl;
 }

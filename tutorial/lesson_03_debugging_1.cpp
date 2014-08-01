@@ -3,11 +3,11 @@
 // This lesson demonstrates how to inspect what the Halide compiler is producing.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_03*.cpp -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03
+// g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_03
 // LD_LIBRARY_PATH=../bin ./lesson_03
 
 // On os x:
-// g++ lesson_03*.cpp -I ../include -L ../bin -lHalide -o lesson_03
+// g++ lesson_03*.cpp -g -I ../include -L ../bin -lHalide -o lesson_03
 // DYLD_LIBRARY_PATH=../bin ./lesson_03
 
 #include <Halide.h>

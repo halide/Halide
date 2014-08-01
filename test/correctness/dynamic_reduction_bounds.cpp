@@ -21,5 +21,6 @@ int main(int argc, char **argv) {
 
     f.realize(100, 100, 16);
 
+    printf("Success!\n");
     return 0;
 }

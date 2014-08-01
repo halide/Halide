@@ -21,10 +21,14 @@ class Var {
     std::string _name;
 public:
     /** Construct a Var with the given name */
-    Var(const std::string &n) : _name(n) {}
+    Var(const std::string &n) : _name(n) {
+        // Make sure we don't get a unique name with the same name as
+        // this later:
+        Internal::unique_name(n, false);
+    }
 
-    /** Construct a Var with an automatically-generated unique name */
-    Var() : _name(Internal::unique_name('v')) {}
+    /** Construct a Var with an automatically-generated unique name. */
+    Var() : _name(Internal::make_entity_name(this, "Halide::Var", 'v')) {}
 
     /** Get the name of a Var */
     const std::string &name() const {return _name;}
@@ -121,28 +125,59 @@ public:
      * declared variables at some point. We should likely prevent
      * user Var declarations from making names of this form.
      */
+    //{
     static bool is_implicit(const std::string &name) {
         return Internal::starts_with(name, "_") &&
             name.find_first_not_of("0123456789", 1) == std::string::npos;
     }
+    bool is_implicit() const {
+        return is_implicit(name());
+    }
+    //}
 
     /** Return the argument index for a placeholder argument given its
      *  name. Returns 0 for \ref _0, 1 for \ref _1, etc. Returns -1 if
      *  the variable is not of implicit form.
      */
+    //{
     static int implicit_index(const std::string &name) {
         return is_implicit(name) ? atoi(name.c_str() + 1) : -1;
     }
+    int implicit_index() const {
+        return implicit_index(name());
+    }
+    //}
 
     /** Test if a var is the placeholder variable \ref _ */
+    //{
     static bool is_placeholder(const std::string &name) {
         return name == "_";
     }
+    bool is_placeholder() const {
+        return is_placeholder(name());
+    }
+    //}
 
     /** A Var can be treated as an Expr of type Int(32) */
-    operator Expr() {
+    operator Expr() const {
         return Internal::Variable::make(Int(32), name());
     }
+
+    /** Vars to use for scheduling producer/consumer pairs on the gpu. */
+    // @{
+    static Var gpu_blocks() {
+        return Var("__block_id_x");
+    }
+    static Var gpu_threads() {
+        return Var("__thread_id_x");
+    }
+    // @}
+
+    /** A Var that represents the location outside the outermost loop. */
+    static Var outermost() {
+        return Var("__outermost");
+    }
+
 };
 
 /** A placeholder variable for infered arguments. See \ref Var::implicit */

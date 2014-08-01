@@ -68,7 +68,7 @@ public:
 };
 
 // Perform all the substitutions in a scope
-Expr expand_expr(Expr e, Scope<Expr> scope) {
+Expr expand_expr(Expr e, const Scope<Expr> &scope) {
     ExpandExpr ee(scope);
     Expr result = ee.mutate(e);
     debug(3) << "Expanded " << e << " into " << result << "\n";
@@ -111,7 +111,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
-                assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
+                internal_assert(scope.contains(var + ".min") && scope.contains(var + ".max"));
                 Expr min_req = scope.get(var + ".min");
                 Expr max_req = scope.get(var + ".max");
                 min_req = expand_expr(min_req, scope);
@@ -329,6 +329,14 @@ class SlidingWindow : public IRMutator {
             return;
         }
 
+        // If the Function in question has the same compute_at level
+        // as its store_at level, skip it.
+        const Schedule &sched = iter->second.schedule();
+        if (sched.compute_level() == sched.store_level()) {
+            IRMutator::visit(op);
+            return;
+        }
+
         Stmt new_body = op->body;
 
         debug(3) << "Doing sliding window analysis on realization of " << op->name << "\n";
@@ -340,7 +348,7 @@ class SlidingWindow : public IRMutator {
         if (new_body.same_as(op->body)) {
             stmt = op;
         } else {
-            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         }
     }
 public:

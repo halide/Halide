@@ -27,6 +27,7 @@
 #else
 #include <llvm/IR/Verifier.h>
 #include <llvm/Linker/Linker.h>
+#include <llvm/Support/FileSystem.h>
 #endif
 
 #include <llvm/Bitcode/ReaderWriter.h>
@@ -38,10 +39,12 @@
 #include <llvm/Support/TargetRegistry.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/DynamicLibrary.h>
+#include <llvm/Support/DataExtractor.h>
 #include <llvm/Target/TargetLibraryInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
 #include <llvm/ADT/StringMap.h>
+#include <llvm/Object/ObjectFile.h>
 
 // Temporary affordance to compile with both llvm 3.2 and 3.3+
 // Protected as at least one installation of llvm elides version macros.
@@ -55,7 +58,7 @@
 #include <llvm/IRBuilder.h>
 #include <llvm/Intrinsics.h>
 #include <llvm/TargetTransformInfo.h>
-
+#include <llvm/MDBuilder.h>
 #else
 
 // Equivalent LLVM 3.3 includes
@@ -66,7 +69,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Analysis/TargetTransformInfo.h>
-
+#include <llvm/IR/MDBuilder.h>
 #endif
 
 // No msvc warnings from llvm headers please

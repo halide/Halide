@@ -61,9 +61,10 @@ int main(int argc, char **argv) {
     // Make the processed Gaussian pyramid.
     Func gPyramid[J];
     // Do a lookup into a lut with 256 entires per intensity level
+    Expr level = k * (1.0f / (levels - 1));
     Expr idx = gray(x, y)*cast<float>(levels-1)*256.0f;
     idx = clamp(cast<int>(idx), 0, (levels-1)*256);
-    gPyramid[0](x, y, k) = beta*gray(x, y) + remap(idx - 256*k);
+    gPyramid[0](x, y, k) = beta*(gray(x, y) - level) + level + remap(idx - 256*k);
     for (int j = 1; j < J; j++) {
         gPyramid[j](x, y, k) = downsample(gPyramid[j-1])(x, y, k);
     }
@@ -117,9 +118,9 @@ int main(int argc, char **argv) {
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
         // gpu schedule
-        output.compute_root().gpu_tile(x, y, 32, 32, GPU_Default);
+        output.compute_root().gpu_tile(x, y, 16, 8, GPU_Default);
         for (int j = 0; j < J; j++) {
-            int blockw = 32, blockh = 16;
+            int blockw = 16, blockh = 8;
             if (j > 3) {
                 blockw = 2;
                 blockh = 2;
@@ -131,12 +132,12 @@ int main(int argc, char **argv) {
     } else {
         // cpu schedule
         Var yi;
-        output.parallel(y, 4).vectorize(x, 4);
-        gray.compute_root().parallel(y, 4).vectorize(x, 4);
+        output.parallel(y, 4).vectorize(x, 8);
+        gray.compute_root().parallel(y, 4).vectorize(x, 8);
         for (int j = 0; j < 4; j++) {
-            if (j > 0) inGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 4);
-            if (j > 0) gPyramid[j].compute_root().parallel(y, 4).vectorize(x, 4);
-            outGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 4);
+            if (j > 0) inGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
+            if (j > 0) gPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
+            outGPyramid[j].compute_root().parallel(y, 4).vectorize(x, 8);
         }
         for (int j = 4; j < J; j++) {
             inGPyramid[j].compute_root().parallel(y);

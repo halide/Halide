@@ -10,11 +10,12 @@ namespace Internal {
 using std::vector;
 
 class RemoveUndef : public IRMutator {
+public:
+    Expr predicate;
+private:
     using IRMutator::visit;
 
     Scope<int> dead_vars;
-
-    Expr predicate;
 
     void visit(const Variable *op) {
         if (dead_vars.contains(op->name)) {
@@ -343,7 +344,7 @@ class RemoveUndef : public IRMutator {
     }
 
     void visit(const Allocate *op) {
-      std::vector<Expr> new_extents;
+        std::vector<Expr> new_extents;
         bool all_extents_unmodified = true;
         for (size_t i = 0; i < op->extents.size(); i++) {
             new_extents.push_back(mutate(op->extents[i]));
@@ -354,11 +355,17 @@ class RemoveUndef : public IRMutator {
             all_extents_unmodified &= new_extents[i].same_as(op->extents[i]);
         }
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
-        if (all_extents_unmodified && body.same_as(op->body)) {
+        if (!body.defined()) return;
+
+        Expr condition = mutate(op->condition);
+        if (!condition.defined()) return;
+
+        if (all_extents_unmodified &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition)) {
             stmt = op;
         } else {
-            stmt = Allocate::make(op->name, op->type, new_extents, body);
+            stmt = Allocate::make(op->name, op->type, new_extents, condition, body);
         }
     }
 
@@ -390,11 +397,17 @@ class RemoveUndef : public IRMutator {
         }
 
         Stmt body = mutate(op->body);
-        if (!stmt.defined()) return;
-        if (!bounds_changed && body.same_as(op->body)) {
+        if (!body.defined()) return;
+
+        Expr condition = mutate(op->condition);
+        if (!condition.defined()) return;
+
+        if (!bounds_changed &&
+            body.same_as(op->body) &&
+            condition.same_as(op->condition)) {
             stmt = op;
         } else {
-            stmt = Realize::make(op->name, op->types, new_bounds, body);
+            stmt = Realize::make(op->name, op->types, new_bounds, condition, body);
         }
     }
 
@@ -455,7 +468,10 @@ class RemoveUndef : public IRMutator {
 };
 
 Stmt remove_undef(Stmt s) {
-    return RemoveUndef().mutate(s);
+    RemoveUndef r;
+    s = r.mutate(s);
+    internal_assert(!r.predicate.defined()) << "Undefined expression leaked outside of a Store node\n";
+    return s;
 }
 
 }

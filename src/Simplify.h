@@ -6,6 +6,8 @@
  */
 
 #include "IR.h"
+#include "Bounds.h"
+#include "ModulusRemainder.h"
 #include <cmath>
 
 namespace Halide {
@@ -13,12 +15,23 @@ namespace Internal {
 
 /** Perform a a wide range of simplifications to expressions and
  * statements, including constant folding, substituting in trivial
- * values, arithmetic rearranging, etc.
+ * values, arithmetic rearranging, etc. Simplifies across let
+ * statements, so must not be called on stmts with dangling or
+ * repeated variable names.
  */
 // @{
-Stmt simplify(Stmt, bool remove_dead_lets = true);
-EXPORT Expr simplify(Expr, bool remove_dead_lets = true);
+EXPORT Stmt simplify(Stmt, bool simplify_lets = true,
+                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
+EXPORT Expr simplify(Expr, bool simplify_lets = true,
+                     const Scope<Interval> &bounds = Scope<Interval>::empty_scope(),
+                     const Scope<ModulusRemainder> &alignment = Scope<ModulusRemainder>::empty_scope());
 // @}
+
+/** Simplify expressions found in a statement, but don't simplify
+ * across different statements. This is safe to perform at an earlier
+ * stage in lowering than full simplification of a stmt. */
+Stmt simplify_exprs(Stmt);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to simplify

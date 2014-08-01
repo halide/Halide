@@ -33,40 +33,54 @@ private:
         // Calls inside of an address_of don't count, but we want to
         // visit the args of the inner call.
         if (op->call_type == Call::Intrinsic && op->name == Call::address_of) {
-            assert(op->args.size() == 1);
+            internal_assert(op->args.size() == 1);
             const Call *c = op->args[0].as<Call>();
+            const Load *l = op->args[0].as<Load>();
+
+            internal_assert(c || l);
+
+            std::vector<Expr> args;
+            if (c) {
+                args = c->args;
+            } else {
+                args.push_back(l->index);
+            }
 
             bool unchanged = true;
-            vector<Expr> new_args(c->args.size());
-            for (size_t i = 0; i < c->args.size(); i++) {
-                new_args[i] = mutate(c->args[i]);
-                unchanged = unchanged && (new_args[i].same_as(c->args[i]));
+            vector<Expr> new_args(args.size());
+            for (size_t i = 0; i < args.size(); i++) {
+                new_args[i] = mutate(args[i]);
+                unchanged = unchanged && (new_args[i].same_as(args[i]));
             }
 
             if (unchanged) {
                 expr = op;
                 return;
             } else {
-                Expr inner = Call::make(c->type, c->name, new_args, c->call_type,
-                                        c->func, c->value_index, c->image, c->param);
+                Expr inner;
+                if (c) {
+                    inner = Call::make(c->type, c->name, new_args, c->call_type,
+                                       c->func, c->value_index, c->image, c->param);
+                } else {
+                    Expr inner = Load::make(l->type, l->name, new_args[0], l->image, l->param);
+                }
                 expr = Call::make(Handle(), Call::address_of, vec(inner), Call::Intrinsic);
                 return;
             }
-
         }
 
 
 
         IRMutator::visit(op);
         op = expr.as<Call>();
-        assert(op);
+        internal_assert(op);
 
         if (op->call_type != Call::Halide) {
             return;
         }
 
         Function f = op->func;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
+        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
 
         if (f.is_tracing_loads() || (global_level > 2 && !inlined)) {
 
@@ -87,12 +101,12 @@ private:
     void visit(const Provide *op) {
         IRMutator::visit(op);
         op = stmt.as<Provide>();
-        assert(op);
+        internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
-        bool inlined = !f.same_as(output) && f.schedule().compute_level.is_inline();
+        bool inlined = !f.same_as(output) && f.schedule().compute_level().is_inline();
 
         if (f.is_tracing_stores() || (global_level > 1 && !inlined)) {
             // Wrap each expr in a tracing call
@@ -118,7 +132,7 @@ private:
     void visit(const Realize *op) {
         IRMutator::visit(op);
         op = stmt.as<Realize>();
-        assert(op);
+        internal_assert(op);
 
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
@@ -130,7 +144,6 @@ private:
             args.push_back(op->name);
             args.push_back(halide_trace_begin_realization); // event type for begin realization
             args.push_back(0); // realization id
-
             args.push_back(0); // value index
             args.push_back(0); // value
 
@@ -148,12 +161,12 @@ private:
             Stmt new_body = op->body;
             new_body = Block::make(new_body, Evaluate::make(call_after));
             new_body = LetStmt::make(op->name + ".trace_id", call_before, new_body);
-            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         } else if (f.is_tracing_stores() || f.is_tracing_loads()) {
             // We need a trace id defined to pass to the loads and stores
             Stmt new_body = op->body;
             new_body = LetStmt::make(op->name + ".trace_id", 0, new_body);
-            stmt = Realize::make(op->name, op->types, op->bounds, new_body);
+            stmt = Realize::make(op->name, op->types, op->bounds, op->condition, new_body);
         }
 
 
@@ -162,7 +175,7 @@ private:
     void visit(const Pipeline *op) {
         IRMutator::visit(op);
         op = stmt.as<Pipeline>();
-        assert(op);
+        internal_assert(op);
         map<string, Function>::const_iterator iter = env.find(op->name);
         if (iter == env.end()) return;
         Function f = iter->second;
@@ -218,21 +231,21 @@ Stmt inject_tracing(Stmt s, const map<string, Function> &env, Function output) {
     // Add a dummy realize block for the output buffers
     Region output_region;
     Parameter output_buf = output.output_buffers()[0];
-    assert(output_buf.is_buffer());
+    internal_assert(output_buf.is_buffer());
     for (int i = 0; i < output.dimensions(); i++) {
         string d = int_to_string(i);
         Expr min = Variable::make(Int(32), output_buf.name() + ".min." + d);
         Expr extent = Variable::make(Int(32), output_buf.name() + ".extent." + d);
         output_region.push_back(Range(min, extent));
     }
-    s = Realize::make(output.name(), output.output_types(), output_region, s);
+    s = Realize::make(output.name(), output.output_types(), output_region, const_true(), s);
 
     // Inject tracing calls
     s = tracing.mutate(s);
 
     // Strip off the dummy realize block
     const Realize *r = s.as<Realize>();
-    assert(r);
+    internal_assert(r);
     s = r->body;
 
     // Unless tracing was a no-op, add a call to shut down the trace

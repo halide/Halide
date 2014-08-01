@@ -25,7 +25,9 @@ public:
     /** Create a PTX device code generator. */
     CodeGen_PTX_Dev(Target host);
 
-    void add_kernel(Stmt stmt, std::string name, const std::vector<Argument> &args);
+    void add_kernel(Stmt stmt,
+                    const std::string &name,
+                    const std::vector<GPU_Argument> &args);
 
     /** (Re)initialize the PTX module. This is separate from compile, since
      * a PTX device module will often have many kernels compiled into it for
@@ -51,7 +53,6 @@ protected:
     void visit(const For *);
     void visit(const Allocate *);
     void visit(const Free *);
-    void visit(const Pipeline *);
     // @}
 
     std::string march() const;
@@ -59,7 +60,7 @@ protected:
     std::string mattrs() const;
     bool use_soft_float_abi() const;
 
-    /** Map from simt variable names (e.g. foo.blockidx) to the llvm
+    /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */
     std::string simt_intrinsic(const std::string &name);
 };

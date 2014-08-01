@@ -6,7 +6,8 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "halide.h"
+#include "halide_generated.h"
+#include <HalideRuntime.h>
 
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
@@ -16,24 +17,24 @@
 extern "C" void halide_set_error_handler(int (*handler)(void *user_context, const char *));
 extern "C" int halide_host_cpu_count();
 extern "C" int64_t halide_current_time_ns();
-extern "C" void halide_copy_to_host(void *, buffer_t *);
-extern "C" void halide_copy_to_dev(void *, buffer_t *);
-extern "C" void halide_dev_malloc(void *, buffer_t *);
-extern "C" void halide_dev_free(void *, buffer_t *);
+extern "C" int halide_copy_to_host(void *, buffer_t *);
+extern "C" int halide_copy_to_dev(void *, buffer_t *);
+extern "C" int halide_dev_malloc(void *, buffer_t *);
+extern "C" int halide_dev_free(void *, buffer_t *);
 
 int handler(void */* user_context */, const char *msg) {
-    LOGE(msg);
+    LOGE("%s", msg);
 }
 
 extern "C" {
-JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(JNIEnv * env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jobject surf) {
+JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(
+    JNIEnv *env, jobject obj, jbyteArray jSrc, jint j_w, jint j_h, jobject surf) {
 
     const int w = j_w, h = j_h;
 
     halide_set_error_handler(handler);
 
     unsigned char *src = (unsigned char *)env->GetByteArrayElements(jSrc, NULL);
-
     if (!src) {
         LOGD("src is null\n");
         return;
@@ -56,14 +57,15 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
     ANativeWindow_Buffer buf;
     ARect rect = {0, 0, w, h};
 
-    if (ANativeWindow_lock(win, &buf, &rect)) {
+    if (int err = ANativeWindow_lock(win, &buf, NULL)) {
+        LOGD("ANativeWindow_lock failed with error code %d\n", err);
         return;
     }
 
     uint8_t *dst = (uint8_t *)buf.bits;
 
     // If we're using opencl, use the gpu backend for it.
-    setenv("HL_OCL_DEVICE", "gpu", 1);
+    halide_set_ocl_device_type("gpu");
 
     // Make these static so that we can reuse device allocations across frames.
     static buffer_t srcBuf = {0};
@@ -97,7 +99,7 @@ JNIEXPORT void JNICALL Java_com_example_hellohalide_CameraPreview_processFrame(J
         memcpy(dst + w*h, src + w*h, (w*h)/2);
 
         int64_t t1 = halide_current_time_ns();
-        halide(&srcBuf, &dstBuf);
+        halide_generated(&srcBuf, &dstBuf);
 
         if (dstBuf.dev) {
             halide_copy_to_host(NULL, &dstBuf);

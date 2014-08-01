@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include "Debug.h"
+#include "Error.h"
 #include "IRVisitor.h"
 #include "Buffer.h"
 #include "Type.h"
@@ -190,6 +192,16 @@ struct Expr : public Internal::IRHandle {
     EXPORT Expr(float x) : IRHandle(Internal::FloatImm::make(x)) {
     }
 
+    /** Make an expression representing a const 32-bit float, given a
+     * double. Also emits a warning due to truncation. */
+    EXPORT Expr(double x) : IRHandle(Internal::FloatImm::make((float)x)) {
+        user_warning << "Halide cannot represent double constants. "
+                     << "Converting " << x << " to float. "
+                     << "If you wanted a double, use cast<double>(" << x
+                     << (x == (int64_t)(x) ? ".0f" : "f")
+                     << ")\n";
+    }
+
     /** Make an expression representing a const string (i.e. a StringImm) */
     EXPORT Expr(const std::string &s) : IRHandle(Internal::StringImm::make(s)) {
     }
@@ -242,7 +254,7 @@ struct Cast : public ExprNode<Cast> {
     Expr value;
 
     static Expr make(Type t, Expr v) {
-        assert(v.defined() && "Cast of undefined");
+        internal_assert(v.defined()) << "Cast of undefined\n";
 
         Cast *node = new Cast;
         node->type = t;
@@ -256,9 +268,9 @@ struct Add : public ExprNode<Add> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Add of undefined");
-        assert(b.defined() && "Add of undefined");
-        assert(a.type() == b.type() && "Add of mismatched types");
+        internal_assert(a.defined()) << "Add of undefined\n";
+        internal_assert(b.defined()) << "Add of undefined\n";
+        internal_assert(a.type() == b.type()) << "Add of mismatched types\n";
 
         Add *node = new Add;
         node->type = a.type();
@@ -273,9 +285,9 @@ struct Sub : public ExprNode<Sub> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Sub of undefined");
-        assert(b.defined() && "Sub of undefined");
-        assert(a.type() == b.type() && "Sub of mismatched types");
+        internal_assert(a.defined()) << "Sub of undefined\n";
+        internal_assert(b.defined()) << "Sub of undefined\n";
+        internal_assert(a.type() == b.type()) << "Sub of mismatched types\n";
 
         Sub *node = new Sub;
         node->type = a.type();
@@ -290,9 +302,9 @@ struct Mul : public ExprNode<Mul> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Mul of undefined");
-        assert(b.defined() && "Mul of undefined");
-        assert(a.type() == b.type() && "Mul of mismatched types");
+        internal_assert(a.defined()) << "Mul of undefined\n";
+        internal_assert(b.defined()) << "Mul of undefined\n";
+        internal_assert(a.type() == b.type()) << "Mul of mismatched types\n";
 
         Mul *node = new Mul;
         node->type = a.type();
@@ -307,9 +319,9 @@ struct Div : public ExprNode<Div> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Div of undefined");
-        assert(b.defined() && "Div of undefined");
-        assert(a.type() == b.type() && "Div of mismatched types");
+        internal_assert(a.defined()) << "Div of undefined\n";
+        internal_assert(b.defined()) << "Div of undefined\n";
+        internal_assert(a.type() == b.type()) << "Div of mismatched types\n";
 
         Div *node = new Div;
         node->type = a.type();
@@ -326,9 +338,9 @@ struct Mod : public ExprNode<Mod> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Mod of undefined");
-        assert(b.defined() && "Mod of undefined");
-        assert(a.type() == b.type() && "Mod of mismatched types");
+        internal_assert(a.defined()) << "Mod of undefined\n";
+        internal_assert(b.defined()) << "Mod of undefined\n";
+        internal_assert(a.type() == b.type()) << "Mod of mismatched types\n";
 
         Mod *node = new Mod;
         node->type = a.type();
@@ -343,9 +355,9 @@ struct Min : public ExprNode<Min> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Min of undefined");
-        assert(b.defined() && "Min of undefined");
-        assert(a.type() == b.type() && "Min of mismatched types");
+        internal_assert(a.defined()) << "Min of undefined\n";
+        internal_assert(b.defined()) << "Min of undefined\n";
+        internal_assert(a.type() == b.type()) << "Min of mismatched types\n";
 
         Min *node = new Min;
         node->type = a.type();
@@ -360,9 +372,9 @@ struct Max : public ExprNode<Max> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Max of undefined");
-        assert(b.defined() && "Max of undefined");
-        assert(a.type() == b.type() && "Max of mismatched types");
+        internal_assert(a.defined()) << "Max of undefined\n";
+        internal_assert(b.defined()) << "Max of undefined\n";
+        internal_assert(a.type() == b.type()) << "Max of mismatched types\n";
 
         Max *node = new Max;
         node->type = a.type();
@@ -377,9 +389,9 @@ struct EQ : public ExprNode<EQ> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "EQ of undefined");
-        assert(b.defined() && "EQ of undefined");
-        assert(a.type() == b.type() && "EQ of mismatched types");
+        internal_assert(a.defined()) << "EQ of undefined\n";
+        internal_assert(b.defined()) << "EQ of undefined\n";
+        internal_assert(a.type() == b.type()) << "EQ of mismatched types\n";
 
         EQ *node = new EQ;
         node->type = Bool(a.type().width);
@@ -394,9 +406,9 @@ struct NE : public ExprNode<NE> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "NE of undefined");
-        assert(b.defined() && "NE of undefined");
-        assert(a.type() == b.type() && "NE of mismatched types");
+        internal_assert(a.defined()) << "NE of undefined\n";
+        internal_assert(b.defined()) << "NE of undefined\n";
+        internal_assert(a.type() == b.type()) << "NE of mismatched types\n";
 
         NE *node = new NE;
         node->type = Bool(a.type().width);
@@ -411,9 +423,9 @@ struct LT : public ExprNode<LT> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "LT of undefined");
-        assert(b.defined() && "LT of undefined");
-        assert(a.type() == b.type() && "LT of mismatched types");
+        internal_assert(a.defined()) << "LT of undefined\n";
+        internal_assert(b.defined()) << "LT of undefined\n";
+        internal_assert(a.type() == b.type()) << "LT of mismatched types\n";
 
         LT *node = new LT;
         node->type = Bool(a.type().width);
@@ -428,9 +440,9 @@ struct LE : public ExprNode<LE> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "LE of undefined");
-        assert(b.defined() && "LE of undefined");
-        assert(a.type() == b.type() && "LE of mismatched types");
+        internal_assert(a.defined()) << "LE of undefined\n";
+        internal_assert(b.defined()) << "LE of undefined\n";
+        internal_assert(a.type() == b.type()) << "LE of mismatched types\n";
 
         LE *node = new LE;
         node->type = Bool(a.type().width);
@@ -445,9 +457,9 @@ struct GT : public ExprNode<GT> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "GT of undefined");
-        assert(b.defined() && "GT of undefined");
-        assert(a.type() == b.type() && "GT of mismatched types");
+        internal_assert(a.defined()) << "GT of undefined\n";
+        internal_assert(b.defined()) << "GT of undefined\n";
+        internal_assert(a.type() == b.type()) << "GT of mismatched types\n";
 
         GT *node = new GT;
         node->type = Bool(a.type().width);
@@ -462,9 +474,9 @@ struct GE : public ExprNode<GE> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "GE of undefined");
-        assert(b.defined() && "GE of undefined");
-        assert(a.type() == b.type() && "GE of mismatched types");
+        internal_assert(a.defined()) << "GE of undefined\n";
+        internal_assert(b.defined()) << "GE of undefined\n";
+        internal_assert(a.type() == b.type()) << "GE of mismatched types\n";
 
         GE *node = new GE;
         node->type = Bool(a.type().width);
@@ -479,10 +491,10 @@ struct And : public ExprNode<And> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "And of undefined");
-        assert(b.defined() && "And of undefined");
-        assert(a.type().is_bool() && "lhs of And is not a bool");
-        assert(b.type().is_bool() && "rhs of And is not a bool");
+        internal_assert(a.defined()) << "And of undefined\n";
+        internal_assert(b.defined()) << "And of undefined\n";
+        internal_assert(a.type().is_bool()) << "lhs of And is not a bool\n";
+        internal_assert(b.type().is_bool()) << "rhs of And is not a bool\n";
 
         And *node = new And;
         node->type = Bool(a.type().width);
@@ -497,10 +509,10 @@ struct Or : public ExprNode<Or> {
     Expr a, b;
 
     static Expr make(Expr a, Expr b) {
-        assert(a.defined() && "Or of undefined");
-        assert(b.defined() && "Or of undefined");
-        assert(a.type().is_bool() && "lhs of Or is not a bool");
-        assert(b.type().is_bool() && "rhs of Or is not a bool");
+        internal_assert(a.defined()) << "Or of undefined\n";
+        internal_assert(b.defined()) << "Or of undefined\n";
+        internal_assert(a.type().is_bool()) << "lhs of Or is not a bool\n";
+        internal_assert(b.type().is_bool()) << "rhs of Or is not a bool\n";
 
         Or *node = new Or;
         node->type = Bool(a.type().width);
@@ -515,8 +527,8 @@ struct Not : public ExprNode<Not> {
     Expr a;
 
     static Expr make(Expr a) {
-        assert(a.defined() && "Not of undefined");
-        assert(a.type().is_bool() && "argument of Not is not a bool");
+        internal_assert(a.defined()) << "Not of undefined\n";
+        internal_assert(a.type().is_bool()) << "argument of Not is not a bool\n";
 
         Not *node = new Not;
         node->type = Bool(a.type().width);
@@ -532,14 +544,14 @@ struct Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
     static Expr make(Expr condition, Expr true_value, Expr false_value) {
-        assert(condition.defined() && "Select of undefined");
-        assert(true_value.defined() && "Select of undefined");
-        assert(false_value.defined() && "Select of undefined");
-        assert(condition.type().is_bool() && "First argument to Select is not a bool");
-        assert(false_value.type() == true_value.type() && "Select of mismatched types");
-        assert((condition.type().is_scalar() ||
-                condition.type().width == true_value.type().width) &&
-               "In Select, vector width of condition must either be 1, or equal to vector width of arguments");
+        internal_assert(condition.defined()) << "Select of undefined\n";
+        internal_assert(true_value.defined()) << "Select of undefined\n";
+        internal_assert(false_value.defined()) << "Select of undefined\n";
+        internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool\n";
+        internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
+        internal_assert(condition.type().is_scalar() ||
+                        condition.type().width == true_value.type().width)
+            << "In Select, vector width of condition must either be 1, or equal to vector width of arguments\n";
 
         Select *node = new Select;
         node->type = true_value.type();
@@ -555,6 +567,7 @@ struct Select : public ExprNode<Select> {
  * no inherent type. */
 struct Load : public ExprNode<Load> {
     std::string name;
+
     Expr index;
 
     // If it's a load from an image argument or compiled-in constant
@@ -565,8 +578,8 @@ struct Load : public ExprNode<Load> {
     Parameter param;
 
     static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param) {
-        assert(index.defined() && "Load of undefined");
-        assert(type.width == index.type().width && "Vector width of Load must match vector width of index");
+        internal_assert(index.defined()) << "Load of undefined\n";
+        internal_assert(type.width == index.type().width) << "Vector width of Load must match vector width of index\n";
 
         Load *node = new Load;
         node->type = type;
@@ -588,12 +601,12 @@ struct Ramp : public ExprNode<Ramp> {
     int width;
 
     static Expr make(Expr base, Expr stride, int width) {
-        assert(base.defined() && "Ramp of undefined");
-        assert(stride.defined() && "Ramp of undefined");
-        assert(base.type().is_scalar() && "Ramp with vector base");
-        assert(stride.type().is_scalar() && "Ramp with vector stride");
-        assert(width > 1 && "Ramp of width <= 1");
-        assert(stride.type() == base.type() && "Ramp of mismatched types");
+        internal_assert(base.defined()) << "Ramp of undefined\n";
+        internal_assert(stride.defined()) << "Ramp of undefined\n";
+        internal_assert(base.type().is_scalar()) << "Ramp with vector base\n";
+        internal_assert(stride.type().is_scalar()) << "Ramp with vector stride\n";
+        internal_assert(width > 1) << "Ramp of width <= 1\n";
+        internal_assert(stride.type() == base.type()) << "Ramp of mismatched types\n";
 
         Ramp *node = new Ramp;
         node->type = base.type().vector_of(width);
@@ -612,9 +625,9 @@ struct Broadcast : public ExprNode<Broadcast> {
     int width;
 
     static Expr make(Expr value, int width) {
-        assert(value.defined() && "Broadcast of undefined");
-        assert(value.type().is_scalar() && "Broadcast of vector");
-        assert(width > 1 && "Broadcast of width <= 1");
+        internal_assert(value.defined()) << "Broadcast of undefined\n";
+        internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
+        internal_assert(width > 1) << "Broadcast of width <= 1\n";
 
         Broadcast *node = new Broadcast;
         node->type = value.type().vector_of(width);
@@ -632,8 +645,8 @@ struct Let : public ExprNode<Let> {
     Expr value, body;
 
     static Expr make(std::string name, Expr value, Expr body) {
-        assert(value.defined() && "Let of undefined");
-        assert(body.defined() && "Let of undefined");
+        internal_assert(value.defined()) << "Let of undefined\n";
+        internal_assert(body.defined()) << "Let of undefined\n";
 
         Let *node = new Let;
         node->type = body.type();
@@ -652,8 +665,8 @@ struct LetStmt : public StmtNode<LetStmt> {
     Stmt body;
 
     static Stmt make(std::string name, Expr value, Stmt body) {
-        assert(value.defined() && "Let of undefined");
-        assert(body.defined() && "Let of undefined");
+        internal_assert(value.defined()) << "Let of undefined\n";
+        internal_assert(body.defined()) << "Let of undefined\n";
 
         LetStmt *node = new LetStmt;
         node->name = name;
@@ -672,7 +685,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     std::vector<Expr> args;
 
     static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args) {
-        assert(condition.defined() && "AssertStmt of undefined");
+        internal_assert(condition.defined()) << "AssertStmt of undefined\n";
 
         AssertStmt *node = new AssertStmt;
         node->condition = condition;
@@ -694,9 +707,9 @@ struct Pipeline : public StmtNode<Pipeline> {
     Stmt produce, update, consume;
 
     static Stmt make(std::string name, Stmt produce, Stmt update, Stmt consume) {
-        assert(produce.defined() && "Pipeline of undefined");
+        internal_assert(produce.defined()) << "Pipeline of undefined\n";
         // update is allowed to be null
-        assert(consume.defined() && "Pipeline of undefined");
+        internal_assert(consume.defined()) << "Pipeline of undefined\n";
 
         Pipeline *node = new Pipeline;
         node->name = name;
@@ -727,11 +740,11 @@ struct For : public StmtNode<For> {
     Stmt body;
 
     static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body) {
-        assert(min.defined() && "For of undefined");
-        assert(extent.defined() && "For of undefined");
-        assert(min.type().is_scalar() && "For with vector min");
-        assert(extent.type().is_scalar() && "For with vector extent");
-        assert(body.defined() && "For of undefined");
+        internal_assert(min.defined()) << "For of undefined\n";
+        internal_assert(extent.defined()) << "For of undefined\n";
+        internal_assert(min.type().is_scalar()) << "For with vector min\n";
+        internal_assert(extent.type().is_scalar()) << "For with vector extent\n";
+        internal_assert(body.defined()) << "For of undefined\n";
 
         For *node = new For;
         node->name = name;
@@ -751,8 +764,8 @@ struct Store : public StmtNode<Store> {
     Expr value, index;
 
     static Stmt make(std::string name, Expr value, Expr index) {
-        assert(value.defined() && "Store of undefined");
-        assert(index.defined() && "Store of undefined");
+        internal_assert(value.defined()) << "Store of undefined\n";
+        internal_assert(index.defined()) << "Store of undefined\n";
 
         Store *node = new Store;
         node->name = name;
@@ -772,12 +785,12 @@ struct Provide : public StmtNode<Provide> {
     std::vector<Expr> args;
 
     static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args) {
-        assert(!values.empty() && "Provide of no values");
+        internal_assert(!values.empty()) << "Provide of no values\n";
         for (size_t i = 0; i < values.size(); i++) {
-            assert(values[i].defined() && "Provide of undefined value");
+            internal_assert(values[i].defined()) << "Provide of undefined value\n";
         }
         for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "Provide to undefined location");
+            internal_assert(args[i].defined()) << "Provide to undefined location\n";
         }
 
         Provide *node = new Provide;
@@ -796,19 +809,22 @@ struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
     std::vector<Expr> extents;
+    Expr condition;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents, Stmt body) {
+    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
+                     Expr condition, Stmt body) {
         for (size_t i = 0; i < extents.size(); i++) {
-            assert(extents[i].defined() && "Allocate of undefined extent");
-            assert(extents[i].type().is_scalar() == 1 && "Allocate of vector extent");
+            internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
+            internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
         }
-        assert(body.defined() && "Allocate of undefined");
+        internal_assert(body.defined()) << "Allocate of undefined\n";
 
         Allocate *node = new Allocate;
         node->name = name;
         node->type = type;
         node->extents = extents;
+        node->condition = condition;
 
         node->body = body;
         return node;
@@ -832,7 +848,7 @@ struct Range {
     Expr min, extent;
     Range() {}
     Range(Expr min, Expr extent) : min(min), extent(extent) {
-        assert(min.type() == extent.type() && "Region min and extent must have same type");
+        internal_assert(min.type() == extent.type()) << "Region min and extent must have same type\n";
     }
 };
 
@@ -847,22 +863,24 @@ struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
     Region bounds;
+    Expr condition;
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Stmt body) {
+    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body) {
         for (size_t i = 0; i < bounds.size(); i++) {
-            assert(bounds[i].min.defined() && "Realize of undefined");
-            assert(bounds[i].extent.defined() && "Realize of undefined");
-            assert(bounds[i].min.type().is_scalar() && "Realize of vector size");
-            assert(bounds[i].extent.type().is_scalar() && "Realize of vector size");
+            internal_assert(bounds[i].min.defined()) << "Realize of undefined\n";
+            internal_assert(bounds[i].extent.defined()) << "Realize of undefined\n";
+            internal_assert(bounds[i].min.type().is_scalar()) << "Realize of vector size\n";
+            internal_assert(bounds[i].extent.type().is_scalar()) << "Realize of vector size\n";
         }
-        assert(body.defined() && "Realize of undefined");
-        assert(!types.empty() && "Realize has empty type");
+        internal_assert(body.defined()) << "Realize of undefined\n";
+        internal_assert(!types.empty()) << "Realize has empty type\n";
 
         Realize *node = new Realize;
         node->name = name;
         node->types = types;
         node->bounds = bounds;
+        node->condition = condition;
         node->body = body;
         return node;
     }
@@ -874,7 +892,7 @@ struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     static Stmt make(Stmt first, Stmt rest) {
-        assert(first.defined() && "Block of undefined");
+        internal_assert(first.defined()) << "Block of undefined\n";
         // rest is allowed to be null
 
         Block *node = new Block;
@@ -890,7 +908,7 @@ struct IfThenElse : public StmtNode<IfThenElse> {
     Stmt then_case, else_case;
 
     static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt()) {
-        assert(condition.defined() && then_case.defined() && "IfThenElse of undefined");
+        internal_assert(condition.defined() && then_case.defined()) << "IfThenElse of undefined\n";
         // else_case may be null.
 
         IfThenElse *node = new IfThenElse;
@@ -906,7 +924,7 @@ struct Evaluate : public StmtNode<Evaluate> {
     Expr value;
 
     static Stmt make(Expr v) {
-        assert(v.defined() && "Evaluate of undefined");
+        internal_assert(v.defined()) << "Evaluate of undefined\n";
 
         Evaluate *node = new Evaluate;
         node->value = v;
@@ -956,7 +974,9 @@ struct Call : public ExprNode<Call> {
         lerp,
         create_buffer_t,
         extract_buffer_min,
-        extract_buffer_extent,
+        extract_buffer_max,
+        set_host_dirty,
+        set_dev_dirty,
         popcount,
         count_leading_zeros,
         count_trailing_zeros,
@@ -966,7 +986,11 @@ struct Call : public ExprNode<Call> {
         return_second,
         if_then_else,
         trace,
-        trace_expr;
+        trace_expr,
+        glsl_texture_load, 
+        glsl_texture_store,
+        memoize_expr,
+        copy_memory;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.
@@ -980,7 +1004,7 @@ struct Call : public ExprNode<Call> {
     // pointer to that image's buffer
     Buffer image;
 
-    // If it's a call to an image parameter, this call nodes holds a
+    // If it's a call to an image parameter, this call node holds a
     // pointer to that
     Parameter param;
 
@@ -988,21 +1012,21 @@ struct Call : public ExprNode<Call> {
                      Function func = Function(), int value_index = 0,
                      Buffer image = Buffer(), Parameter param = Parameter()) {
         for (size_t i = 0; i < args.size(); i++) {
-            assert(args[i].defined() && "Call of undefined");
+            internal_assert(args[i].defined()) << "Call of undefined\n";
         }
         if (call_type == Halide) {
-            assert(value_index >= 0 &&
-                   value_index < func.outputs() &&
-                   "Value index out of range in call to halide function");
-            assert((func.has_pure_definition() || func.has_extern_definition()) && "Call to undefined halide function");
-            assert((int)args.size() <= func.dimensions() && "Call node with too many arguments.");
+            internal_assert(value_index >= 0 &&
+                            value_index < func.outputs())
+                << "Value index out of range in call to halide function\n";
+            internal_assert((func.has_pure_definition() || func.has_extern_definition())) << "Call to undefined halide function\n";
+            internal_assert((int)args.size() <= func.dimensions()) << "Call node with too many arguments.\n";
             for (size_t i = 0; i < args.size(); i++) {
-                assert(args[i].type() == Int(32) && "Args to call to halide function must be type Int(32)");
+                internal_assert(args[i].type() == Int(32)) << "Args to call to halide function must be type Int(32)\n";
             }
         } else if (call_type == Image) {
-            assert((param.defined() || image.defined()) && "Call node to undefined image");
+            internal_assert((param.defined() || image.defined())) << "Call node to undefined image\n";
             for (size_t i = 0; i < args.size(); i++) {
-                assert(args[i].type() == Int(32) && "Args to load from image must be type Int(32)");
+                internal_assert(args[i].type() == Int(32)) << "Args to load from image must be type Int(32)\n";
             }
         }
 
@@ -1020,11 +1044,11 @@ struct Call : public ExprNode<Call> {
 
     /** Convenience constructor for calls to other halide functions */
     static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
-        assert(idx >= 0 &&
-               idx < func.outputs() &&
-               "Value index out of range in call to halide function");
-        assert((func.has_pure_definition() || func.has_extern_definition()) &&
-               "Call to undefined halide function");
+        internal_assert(idx >= 0 &&
+                        idx < func.outputs())
+            << "Value index out of range in call to halide function\n";
+        internal_assert(func.has_pure_definition() || func.has_extern_definition())
+            << "Call to undefined halide function\n";
         return make(func.output_types()[idx], func.name(), args, Halide, func, idx, Buffer(), Parameter());
     }
 
@@ -1047,28 +1071,37 @@ struct Variable : public ExprNode<Variable> {
     std::string name;
 
     /** References to scalar parameters, or to the dimensions of buffer
-     * parameters hang onto those expressions */
+     * parameters hang onto those expressions. */
     Parameter param;
+
+    /** References to properties of literal image parameters. */
+    Buffer image;
 
     /** Reduction variables hang onto their domains */
     ReductionDomain reduction_domain;
 
     static Expr make(Type type, std::string name) {
-        return make(type, name, Parameter(), ReductionDomain());
+        return make(type, name, Buffer(), Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, Parameter param) {
-        return make(type, name, param, ReductionDomain());
+        return make(type, name, Buffer(), param, ReductionDomain());
+    }
+
+    static Expr make(Type type, std::string name, Buffer image) {
+        return make(type, name, image, Parameter(), ReductionDomain());
     }
 
     static Expr make(Type type, std::string name, ReductionDomain reduction_domain) {
-        return make(type, name, Parameter(), reduction_domain);
+        return make(type, name, Buffer(), Parameter(), reduction_domain);
     }
 
-    static Expr make(Type type, std::string name, Parameter param, ReductionDomain reduction_domain) {
+    static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain) {
+        internal_assert(!name.empty());
         Variable *node = new Variable;
         node->type = type;
         node->name = name;
+        node->image = image;
         node->param = param;
         node->reduction_domain = reduction_domain;
         return node;

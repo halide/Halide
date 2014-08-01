@@ -3,6 +3,7 @@
 
 #include "Target.h"
 #include "Debug.h"
+#include "Error.h"
 #include "LLVM_Headers.h"
 #include "Util.h"
 
@@ -72,16 +73,26 @@ Target get_host_target() {
     bool have_sse41 = info[2] & (1 << 19);
     bool have_sse2 = info[3] & (1 << 26);
     bool have_avx = info[2] & (1 << 28);
-    bool have_f16 = info[2] & (1 << 29);
+    bool have_f16c = info[2] & (1 << 29);
     bool have_rdrand = info[2] & (1 << 30);
+    bool have_fma = info[2] & (1 << 12);
 
-    assert(have_sse2 && "The x86 backend assumes at least sse2 support");
+    user_assert(have_sse2)
+        << "The x86 backend assumes at least sse2 support. This machine does not appear to have sse2.\n"
+        << "cpuid returned: "
+        << std::hex << info[0]
+        << ", " << info[1]
+        << ", " << info[2]
+        << ", " << info[3]
+        << std::dec << "\n";
 
     uint64_t features = 0;
     if (have_sse41) features |= Target::SSE41;
     if (have_avx)   features |= Target::AVX;
+    if (have_f16c)  features |= Target::F16C;
+    if (have_fma)   features |= Target::FMA;
 
-    if (use_64_bits && have_avx && have_f16 && have_rdrand) {
+    if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2?
         // Call cpuid with eax=7, ecx=0
         int info2[4];
@@ -134,15 +145,15 @@ Target get_jit_target_from_environment() {
         return host;
     } else {
         Target t = parse_target_string(target);
-        assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits &&
-               "HL_JIT_TARGET must match the host OS, architecture, and bit width");
+        user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
+            << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
+            << "HL_JIT_TARGET was " << target << ". "
+            << "Host is " << host.to_string() << ".\n";
         return t;
     }
 }
 
 Target parse_target_string(const std::string &target) {
-    //Internal::debug(0) << "Getting host target \n";
-
     Target host = get_host_target();
 
     if (target.empty()) {
@@ -156,20 +167,18 @@ Target parse_target_string(const std::string &target) {
     t.arch = host.arch;
     t.bits = host.bits;
 
-    //Internal::debug(0) << "Got host target \n";
     if (!t.merge_string(target)) {
-        std::cerr << "Did not understand HL_TARGET=" << target << "\n"
-                  << "Expected format is arch-os-feature1-feature2-... "
-                  << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
-                  << "and os is linux, windows, osx, nacl, ios, or android. "
-                  << "If arch or os are omitted, they default to the host. "
-                  << "Features include sse41, avx, avx2, armv7s, aarch64, cuda, "
-                  << "opencl, spir, spir64, no_asserts, no_bounds_query, and gpu_debug.\n"
-                  << "HL_TARGET can also begin with \"host\", which sets the "
-                  << "host's architecture, os, and feature set, with the "
-                  << "exception of the GPU runtimes, which default to off\n";
-
-        assert(false);
+        user_error << "Did not understand HL_TARGET=" << target << "\n"
+                   << "Expected format is arch-os-feature1-feature2-... "
+                   << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
+                   << "and os is linux, windows, osx, nacl, ios, or android. "
+                   << "If arch or os are omitted, they default to the host. "
+                   << "Features include sse41, avx, avx2, armv7s, cuda, "
+                   << "opencl, no_asserts, no_bounds_query, and gpu_debug.\n"
+                   << "HL_TARGET can also begin with \"host\", which sets the "
+                   << "host's architecture, os, and feature set, with the "
+                   << "exception of the GPU runtimes, which default to off.\n"
+                   << "On this platform, the host target is: " << host.to_string() << "\n";
     }
 
     return t;
@@ -247,22 +256,34 @@ bool Target::merge_string(const std::string &target) {
             features |= (Target::SSE41 | Target::AVX | Target::AVX2);
         } else if (tok == "armv7s") {
             features |= Target::ARMv7s;
-        } else if (tok == "aarch64") {
-            features |= Target::AArch64Backend;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
+        } else if (tok == "cuda_capability_30") {
+            features |= Target::CUDA | Target::CUDACapability30;
+        } else if (tok == "cuda_capability_32") {
+            features |= Target::CUDA | Target::CUDACapability32;
+        } else if (tok == "cuda_capability_35") {
+            features |= Target::CUDA | Target::CUDACapability35;
+        } else if (tok == "cuda_capability_50") {
+            features |= Target::CUDA | Target::CUDACapability50;
         } else if (tok == "opencl") {
             features |= Target::OpenCL;
-        } else if (tok == "spir") {
-            features |= Target::OpenCL | Target::SPIR;
-        } else if (tok == "spir64") {
-            features |= Target::OpenCL | Target::SPIR64;
         } else if (tok == "gpu_debug") {
             features |= Target::GPUDebug;
+        } else if (tok == "opengl") {
+            features |= Target::OpenGL;
         } else if (tok == "no_asserts") {
             features |= Target::NoAsserts;
         } else if (tok == "no_bounds_query") {
             features |= Target::NoBoundsQuery;
+        } else if (tok == "cl_doubles") {
+            features |= Target::CLDoubles;
+        } else if (tok == "fma") {
+            features |= (Target::FMA | Target::SSE41 | Target::AVX);
+        } else if (tok == "fma4") {
+            features |= (Target::FMA4 | Target::SSE41 | Target::AVX);
+        } else if (tok == "f16c") {
+            features |= (Target::F16C | Target::SSE41 | Target::AVX);
         } else {
             return false;
         }
@@ -298,14 +319,16 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
   const char* const arch_names[] = {
-    "arch_unknown", "x86", "arm", "pnacl"
+      "arch_unknown", "x86", "arm", "pnacl"
   };
   const char* const os_names[] = {
-    "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
+      "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
   const char* const feature_names[] = {
-    "jit", "sse41", "avx", "avx2", "cuda", "opencl", "gpu_debug", "spir", "spir64",
-    "no_asserts", "no_bounds_query", "armv7s", "aarch64"
+      "jit", "sse41", "avx", "avx2", "cuda",
+      "opencl", "opengl", "gpu_debug", "no_asserts", "no_bounds_query",
+      "armv7s", "cl_doubles", "fma", "fma4", "f16c",
+      "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50"
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
@@ -342,8 +365,12 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
     }
 
 #define DECLARE_NO_INITMOD(mod)                                         \
-    llvm::Module *get_initmod_##mod(LLVMContext *context) {             \
-        assert(false && "Halide was compiled without support for this target\n"); \
+    llvm::Module *get_initmod_##mod(llvm::LLVMContext *, bool) {             \
+        user_error << "Halide was compiled without support for this target\n"; \
+        return NULL;                                                    \
+    }                                                                   \
+    llvm::Module *get_initmod_##mod##_ll(llvm::LLVMContext *) {         \
+        user_error << "Halide was compiled without support for this target\n"; \
         return NULL;                                                    \
     }
 
@@ -361,16 +388,25 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
 DECLARE_CPP_INITMOD(android_clock)
 DECLARE_CPP_INITMOD(android_host_cpu_count)
 DECLARE_CPP_INITMOD(android_io)
+DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
 DECLARE_CPP_INITMOD(cuda_debug)
+DECLARE_CPP_INITMOD(windows_cuda)
+DECLARE_CPP_INITMOD(windows_cuda_debug)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
 DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
+DECLARE_CPP_INITMOD(linux_opengl_context)
+DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(opencl_debug)
+DECLARE_CPP_INITMOD(windows_opencl)
+DECLARE_CPP_INITMOD(windows_opencl_debug)
+DECLARE_CPP_INITMOD(opengl)
+DECLARE_CPP_INITMOD(opengl_debug)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(osx_io)
 DECLARE_CPP_INITMOD(posix_allocator)
@@ -387,19 +423,29 @@ DECLARE_CPP_INITMOD(posix_thread_pool)
 DECLARE_CPP_INITMOD(windows_thread_pool)
 DECLARE_CPP_INITMOD(tracing)
 DECLARE_CPP_INITMOD(write_debug_image)
+DECLARE_CPP_INITMOD(posix_print)
+DECLARE_CPP_INITMOD(gpu_device_selection)
+DECLARE_CPP_INITMOD(cache)
 
+#ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
+#else
+DECLARE_NO_INITMOD(arm)
+#endif
+#ifdef WITH_AARCH64
+DECLARE_LL_INITMOD(aarch64)
+#else
+DECLARE_NO_INITMOD(aarch64)
+#endif
 DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
+DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
 #if WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
-DECLARE_LL_INITMOD(spir_dev)
-DECLARE_LL_INITMOD(spir64_dev)
-DECLARE_LL_INITMOD(spir_common_dev)
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -414,12 +460,16 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         #if LLVM_VERSION >= 35
         modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
         #endif
+        // This is a workaround to silence some linkage warnings during
+        // tests: normally all modules will have the same triple,
+        // but on 64-bit targets some may have "x86_64-unknown-unknown-unknown"
+        // as a workaround for -m64 requiring an explicit 64-bit target.
+        modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
         if (failed) {
-            std::cerr << "Failure linking initial modules: " << err_msg << "\n";
-            assert(false);
+            internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
     }
 
@@ -440,12 +490,24 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_set_custom_do_task",
                        "halide_shutdown_thread_pool",
                        "halide_shutdown_trace",
+                       "halide_set_trace_file",
                        "halide_set_cuda_context",
                        "halide_set_cl_context",
                        "halide_dev_sync",
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",
+                       "halide_set_num_threads",
+                       "halide_opengl_get_proc_address",
+                       "halide_opengl_create_context",
+                       "halide_set_custom_print",
+                       "halide_print",
+                       "halide_set_gpu_device",
+                       "halide_set_ocl_platform_name",
+                       "halide_set_ocl_device_type",
+                       "halide_memoization_cache_set_size",
+                       "halide_memoization_cache_lookup",
+                       "halide_memoization_cache_store",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -484,10 +546,53 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
 namespace Internal {
 
+/** When JIT-compiling on 32-bit windows, we need to rewrite calls 
+        to name-mangled win32 api calls to non-name-mangled versions. */
+void undo_win32_name_mangling(llvm::Module *m) {
+    llvm::IRBuilder<> builder(m->getContext());
+    // For every function prototype...
+    for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
+        llvm::Function *f = (llvm::Function *)(iter);
+        string n = f->getName();
+        // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
+        if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
+            n.size() > 2 && n[0] == 1 && n[1] == '_') {
+
+            // Unmangle the name.
+            string unmangled_name = n.substr(2);
+            size_t at = unmangled_name.rfind('@');
+            unmangled_name = unmangled_name.substr(0, at);
+
+            // Extern declare the unmangled version.
+            llvm::Function *unmangled = llvm::Function::Create(f->getFunctionType(), f->getLinkage(), unmangled_name, m);
+            unmangled->setCallingConv(f->getCallingConv());
+
+            // Add a body to the mangled version that calls the unmangled version.
+            llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", f);
+            builder.SetInsertPoint(block);
+
+            vector<llvm::Value *> args;
+            for (llvm::Function::arg_iterator iter = f->arg_begin();
+                 iter != f->arg_end(); ++iter) {
+                args.push_back(iter);
+            }
+
+            llvm::CallInst *c = builder.CreateCall(unmangled, args);
+            c->setCallingConv(f->getCallingConv());
+
+            if (f->getReturnType()->isVoidTy()) {
+                builder.CreateRetVoid();
+            } else {
+                builder.CreateRet(c);
+            }
+        }
+    }
+}
+
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
-    assert(t.bits == 32 || t.bits == 64);
+    internal_assert(t.bits == 32 || t.bits == 64);
     // NaCl always uses the 32-bit runtime modules, because pointers
     // and size_t are 32-bit in 64-bit NaCl, and that's the only way
     // in which the 32- and 64-bit runtimes differ.
@@ -526,25 +631,35 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_ssp(c, bits_64));
     }
 
-    // These modules are always used
-    modules.push_back(get_initmod_posix_math(c, bits_64));
-
-    if (t.arch == Target::PNaCl) {
+    // Math intrinsics vary slightly across platforms
+    if (t.os == Target::Windows && t.bits == 32) {
+        modules.push_back(get_initmod_win32_math_ll(c));
+    } else if (t.arch == Target::PNaCl) {
         modules.push_back(get_initmod_pnacl_math_ll(c));
     } else {
         modules.push_back(get_initmod_posix_math_ll(c));
     }
+
+    // These modules are always used
+    modules.push_back(get_initmod_gpu_device_selection(c, bits_64));
+    modules.push_back(get_initmod_posix_math(c, bits_64));
     modules.push_back(get_initmod_tracing(c, bits_64));
     modules.push_back(get_initmod_write_debug_image(c, bits_64));
     modules.push_back(get_initmod_posix_allocator(c, bits_64));
     modules.push_back(get_initmod_posix_error_handler(c, bits_64));
+    modules.push_back(get_initmod_posix_print(c, bits_64));
+    modules.push_back(get_initmod_cache(c, bits_64));
 
     // These modules are optional
     if (t.arch == Target::X86) {
         modules.push_back(get_initmod_x86_ll(c));
     }
     if (t.arch == Target::ARM) {
-        modules.push_back(get_initmod_arm_ll(c));
+        if (t.bits == 64) {
+          modules.push_back(get_initmod_aarch64_ll(c));
+        } else {
+          modules.push_back(get_initmod_arm_ll(c));
+        }
     }
     if (t.features & Target::SSE41) {
         modules.push_back(get_initmod_x86_sse41_ll(c));
@@ -553,16 +668,47 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_x86_avx_ll(c));
     }
     if (t.features & Target::CUDA) {
-        if (t.features & Target::GPUDebug) {
-            modules.push_back(get_initmod_cuda_debug(c, bits_64));
+        if (t.os == Target::Windows) {
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_windows_cuda_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_windows_cuda(c, bits_64));
+            }
         } else {
-            modules.push_back(get_initmod_cuda(c, bits_64));
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_cuda_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_cuda(c, bits_64));
+            }
         }
     } else if (t.features & Target::OpenCL) {
-        if (t.features & Target::GPUDebug) {
-            modules.push_back(get_initmod_opencl_debug(c, bits_64));
+        if (t.os == Target::Windows) {
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_windows_opencl_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_windows_opencl(c, bits_64));
+            }
         } else {
-            modules.push_back(get_initmod_opencl(c, bits_64));
+            if (t.features & Target::GPUDebug) {
+                modules.push_back(get_initmod_opencl_debug(c, bits_64));
+            } else {
+                modules.push_back(get_initmod_opencl(c, bits_64));
+            }
+        }
+    } else if (t.features & Target::OpenGL) {
+        if (t.features & Target::GPUDebug) {
+            modules.push_back(get_initmod_opengl_debug(c, bits_64));
+        } else {
+            modules.push_back(get_initmod_opengl(c, bits_64));
+        }
+        if (t.os == Target::Linux) {
+            modules.push_back(get_initmod_linux_opengl_context(c, bits_64));
+        } else if (t.os == Target::OSX) {
+            modules.push_back(get_initmod_osx_opengl_context(c, bits_64));
+        } else if (t.os == Target::Android) {
+            modules.push_back(get_initmod_android_opengl_context(c, bits_64));
+        } else {
+            // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
         }
     } else {
         modules.push_back(get_initmod_nogpu(c, bits_64));
@@ -570,17 +716,34 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
     link_modules(modules);
 
+    if (t.os == Target::Windows &&
+        t.bits == 32 &&
+        (t.features & Target::JIT)) {
+        undo_win32_name_mangling(modules[0]);
+    }
+
     return modules[0];
 }
 
 #if WITH_PTX
-llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
+llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
 
-    // TODO: select this based on sm_ version flag in Target when
-    // we add target specific flags.
-    llvm::Module *module = get_initmod_ptx_compute_20_ll(c);
+    llvm::Module *module;
+
+    // This table is based on the guidance at:
+    // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
+    if (target.features & Target::CUDACapability35) {
+        module = get_initmod_ptx_compute_35_ll(c);
+    } else if (target.features & (Target::CUDACapability32 | Target::CUDACapability50)) {
+        // For some reason sm_32 and sm_50 use libdevice 20
+        module = get_initmod_ptx_compute_20_ll(c);
+    } else if (target.features & Target::CUDACapability30) {
+        module = get_initmod_ptx_compute_30_ll(c);
+    } else {
+        module = get_initmod_ptx_compute_20_ll(c);
+    }
     modules.push_back(module);
 
     link_modules(modules);
@@ -604,24 +767,18 @@ llvm::Module *get_initial_module_for_ptx_device(llvm::LLVMContext *c) {
         if (!f->isDeclaration() && !f->hasFnAttribute(llvm::Attribute::NoInline)) {
             f->setLinkage(llvm::GlobalValue::AvailableExternallyLinkage);
         }
+
+        // Also mark the halide_gpu_thread_barrier as noduplicate.
+        #if LLVM_VERSION > 32
+        if (f->getName() == "halide_gpu_thread_barrier") {
+            f->addFnAttr(llvm::Attribute::NoDuplicate);
+        }
+        #endif
     }
 
     return modules[0];
 }
 #endif
-
-llvm::Module *get_initial_module_for_spir_device(llvm::LLVMContext *c, int bits) {
-    assert(bits == 32 || bits == 64);
-
-    vector<llvm::Module *> modules;
-    if (bits == 32)
-        modules.push_back(get_initmod_spir_dev_ll(c));
-    else
-        modules.push_back(get_initmod_spir64_dev_ll(c));
-    modules.push_back(get_initmod_spir_common_dev_ll(c));
-    link_modules(modules);
-    return modules[0];
-}
 
 }
 

@@ -22,7 +22,7 @@ if [[ "$HL_TARGET" == x86-3* ]]; then
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 else
     BITS=64
-    # ptx falls into this category
+    # ptx and opencl fall into this category
     export LD="ld"
     export CC="${CC} -m64"
     export CXX="${CXX} -m64"
@@ -61,6 +61,7 @@ else
     make test_errors -j8 &&
     make test_static -j8 &&
     make test_tutorials -j8 &&
+    make test_opengl &&
     make test_performance &&
     make test_apps &&
     echo "All tests pass"

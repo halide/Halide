@@ -13,10 +13,10 @@ using namespace llvm;
 CodeGen_PNaCl::CodeGen_PNaCl(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_NATIVE_CLIENT)
-    assert(false && "llvm build not configured with native client enabled.");
+    user_error << "llvm build not configured with native client enabled.\n";
     #endif
 
-    assert(t.os == Target::NaCl && t.arch == Target::PNaCl && t.bits == 32);
+    internal_assert(t.os == Target::NaCl && t.arch == Target::PNaCl && t.bits == 32);
 }
 
 void CodeGen_PNaCl::compile(Stmt stmt, string name,

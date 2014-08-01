@@ -60,11 +60,11 @@ int main(int argc, char **argv) {
     h.vectorize(x, 4);
     h.realize(data);
     for (int x = 0; x < 100; x++) {
-        float correct = sin(x);
+        double correct = sin((double)x);
         if (x % 2 == 0) {
-            correct = 1.0f;
+            correct = 1.0;
         }
-        if (fabs(data(x) - correct) > 0.001f) {
+        if (fabs(data(x) - correct) > 0.001) {
             printf("data(%d) = %f instead of %f\n", x, data(x), correct);
             return -1;
         }
