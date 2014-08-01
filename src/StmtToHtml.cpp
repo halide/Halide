@@ -385,7 +385,7 @@ public:
         stream << " (";
         stream << close_span();
         print_list(vec(Variable::make(Int(32), op->name), op->min, op->extent));
-        stream << ")" << close_expand_button();
+        stream << matched(")") << close_expand_button();
         stream << " " << matched("{");
         stream << open_div("ForBody Indent", id);
         print(op->body);
