@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
     funcs.push_back(lambda(x, x));
     for (size_t i = 2; i < size; i++) {
         funcs.push_back(lambda(x, funcs[i-1](x) + funcs[i-2](x)));
-    }    
+    }
     Func g;
     g(x) = funcs[funcs.size()-1](x);
     g.realize(10);

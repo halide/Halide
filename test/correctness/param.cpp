@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
         f.gpu_tile(x, 256, GPU_Default);
-    } 
+    }
 
     u.set(17.0f);
     Image<float> out_17 = f.realize(1024, target);

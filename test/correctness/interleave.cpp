@@ -10,11 +10,11 @@ using std::vector;
 int main(int argc, char **argv) {
     Func f, g, h;
     Var x;
-    
+
     f(x) = sin(x);
     g(x) = cos(x);
     h(x) = select(x % 2 == 0, 1.0f/f(x/2), g(x/2)*17.0f);
-    
+
     f.compute_root();
     g.compute_root();
     h.vectorize(x, 8);

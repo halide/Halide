@@ -28,8 +28,8 @@ private:
             std::swap(a, b);
             std::swap(ra, rb);
             std::swap(ba, bb);
-        } 
-        
+        }
+
         if (ra && bb) {
             Expr max_a = ra->base + ra->stride * (ra->width - 1);
             Expr min_b = bb->value;
@@ -55,8 +55,8 @@ private:
             std::swap(a, b);
             std::swap(ra, rb);
             std::swap(ba, bb);
-        } 
-        
+        }
+
         if (ra && bb) {
             Expr min_a = ra->base;
             Expr max_b = bb->value;
@@ -86,7 +86,7 @@ private:
 
 class SpecializeClampedRamps : public IRMutator {
     using IRMutator::visit;
-    
+
     void visit(const Store *op) {
         PredicateFinder p;
         Stmt simpler_store = p.mutate(op);

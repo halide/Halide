@@ -123,12 +123,12 @@ int main(int argc, char **argv) {
 
     printf("Success!\n");
 
-    // Clean up our global images, otherwise you get destructor 
+    // Clean up our global images, otherwise you get destructor
     // order weirdness. The images hold onto the JIT-compiled module
-    // that created them, and will delete it when they die. However, 
+    // that created them, and will delete it when they die. However,
     // it might not be possible to destroy the module cleanly after
     // main exits, because destroying the module touches globals
-    // inside of llvm, and destructor order of globals is not 
+    // inside of llvm, and destructor order of globals is not
     // guaranteed.
     input = Image<uint16_t>();
     output = Image<uint16_t>();

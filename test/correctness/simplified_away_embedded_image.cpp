@@ -7,14 +7,14 @@ int main(int argc, char **argv) {
 
     // What happens if an emedded image gets simplified away?
     Image<float> input(32, 32);
-    
+
     Var x("x"), y("y");
     Func foo("foo");
-    
+
     foo(x, y) = input(x, y) - input(x, y);
-    
+
     Image<float> output(32, 32);
-    
+
     foo.realize(output);
 
     // Any non-error is a success.
