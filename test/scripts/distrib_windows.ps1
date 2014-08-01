@@ -25,17 +25,17 @@ $env:PATH += ";C:\Program Files (x86)\MSBuild\12.0\bin"
 #svn co http://llvm.org/svn/llvm-project/cfe/trunk $ROOT\llvm\tools\clang
 
 #git clone http://git.chromium.org/native_client/pnacl-llvm.git $ROOT\pnacl-llvm
-#git checkout 
+#git checkout
 
 
 # Update source to known working versions
 #svn up $ROOT\llvm\tools\clang -r 211000
 #svn up $ROOT\llvm -r 211000
 #cd $ROOT\pnacl-llvm
-# This version of pnacl llvm doesn't really compile on windows. 
+# This version of pnacl llvm doesn't really compile on windows.
 # - Add '#include "llvm/Support/raw_ostream.h"' to IR/Module.cpp
 # - Comment out '#error unknown architecture' in ResolvePNaClIntrinsics.cpp
-# - Clang compiled with msvc won't work, so you need to manually get the nacl sdk, get pepper_33, and 
+# - Clang compiled with msvc won't work, so you need to manually get the nacl sdk, get pepper_33, and
 #   copy the contents of the folder that contains clang.exe into pnacl-llvm/nacl-sdk-bin, and also copy
 #   the dlls from one of the folders that contains cygwin1.dll
 
@@ -139,7 +139,7 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
 
   cd ${ROOT}\build_${d}\bin\Release
 
-  Get-ChildItem . -filter correctness*.exe | ForEach { 
+  Get-ChildItem . -filter correctness*.exe | ForEach {
     echo ""
     echo $_.Fullname
     &$_.Fullname
@@ -149,7 +149,7 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
     }
   }
 
-  Get-ChildItem . -filter performance*.exe | ForEach { 
+  Get-ChildItem . -filter performance*.exe | ForEach {
     echo ""
     echo $_.Fullname
     &$_.Fullname
@@ -158,10 +158,10 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
 #      exit $LastExitCode
     }
   }
-  
+
   # GPU and static tests
   if ($d.EndsWith("trunk")) {
-    Get-ChildItem . -filter static*.exe | ForEach { 
+    Get-ChildItem . -filter static*.exe | ForEach {
       echo ""
       echo $_.Fullname
       &$_.Fullname
@@ -170,8 +170,8 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
         exit $LastExitCode
       }
     }
-  
-    Get-ChildItem . -filter correctness*.exe | ForEach { 
+
+    Get-ChildItem . -filter correctness*.exe | ForEach {
       echo ""
       echo $_.Fullname
       $env:HL_JIT_TARGET = "cuda"
@@ -195,8 +195,8 @@ foreach ($d in "32_trunk","64_trunk","64_pnacl","32_pnacl") {
   }
   cd distrib
 
-  rm Halide.h 
-  rm Halide.lib 
+  rm Halide.h
+  rm Halide.lib
   rm Halide.dll
   cp ..\build_${d}\include\Halide.h .
   cp ..\build_${d}\lib\Release\Halide.lib .

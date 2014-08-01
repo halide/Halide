@@ -54,7 +54,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "WARNING: Parallel should be faster\n");
         return 0;
     }
-    
+
     printf("Success!\n");
     return 0;
 }

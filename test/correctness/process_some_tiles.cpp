@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     call_count = 0;
     Image<float> result = output.realize(10 * tile_size, 10 * tile_size);
 
-    // Force a reload of call_count 
+    // Force a reload of call_count
     my_powf(1, 1);
     call_count--;
 

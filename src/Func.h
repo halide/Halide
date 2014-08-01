@@ -320,7 +320,6 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
-    EXPORT ScheduleHandle &memoize();
 };
 
 /**

@@ -11,14 +11,13 @@ int main(int argc, char **argv) {
     printf("Defining function...\n");
 
     f(x, y) = max(x, y);
-    g(x, y) = 17 * f(x, y);        
+    g(x, y) = 17 * f(x, y);
     h(x, y) = (g(x, y-1) + g(x-1, y) + g(x, y) + g(x+1, y) + g(x, y+1));
-        
 
     g.store_root();
     g.compute_at(h, y);
     f.compute_root();
-    
+
     Image<int> imh = h.realize(32, 32);
 
     bool success = true;
@@ -35,7 +34,7 @@ int main(int argc, char **argv) {
 
             int val = imh(i, j, 0);
             if (val != correct) {
-                printf("imh(%d, %d) = %d instead of %d\n", 
+                printf("imh(%d, %d) = %d instead of %d\n",
                        i, j, val, correct);
                 success = false;
             }

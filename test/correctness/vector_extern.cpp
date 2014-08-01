@@ -11,7 +11,7 @@ int main(int argc, char **argv) {
     printf("Defining function...\n");
 
     f(x) = sqrt(cast<float>(x));
-    
+
     f.vectorize(x, 4);
     Image<float> im = f.realize(32);
 

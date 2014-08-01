@@ -94,7 +94,7 @@ public:
      * (with llvm in c++98 mode) */
     static const Scope<T> &empty_scope() {
         static Scope<T> _empty_scope;
-        return _empty_scope;        
+        return _empty_scope;
     }
 
     /** Retrieve the value referred to by a name */
