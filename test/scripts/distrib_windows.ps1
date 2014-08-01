@@ -33,7 +33,6 @@ $env:PATH += ";C:\Program Files (x86)\MSBuild\12.0\bin"
 #svn up $ROOT\llvm -r 211000
 #cd $ROOT\pnacl-llvm
 # This version of pnacl llvm doesn't really compile on windows.
-# - Add '#include "llvm/Support/raw_ostream.h"' to IR/Module.cpp
 # - Comment out '#error unknown architecture' in ResolvePNaClIntrinsics.cpp
 # - Clang compiled with msvc won't work, so you need to manually get the nacl sdk, get pepper_35, and
 #   copy the contents of the folder that contains clang.exe into pnacl-llvm/nacl-sdk-bin, and also copy
@@ -114,7 +113,7 @@ if (! (Test-Path build_64_pnacl)) {
 }
 cd build_64_pnacl
 # nacl-sdk-bin contains clang.exe, llvm-as.exe, and the required dlls scavenged from the nacl sdk version pepper_33
-cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-64\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-64\lib\Release -D LLVM_VERSION=33 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12 Win64" ..
+cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-64\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-64\lib\Release -D LLVM_VERSION=34 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12 Win64" ..
 MSBuild.exe /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
@@ -122,12 +121,12 @@ if ($LastExitCode) {
 }
 
 cd $ROOT
-if (! (Test-Path build_32_pnacl)) {
+if (! (Test-Path build_32_pnacl)) { 
   mkdir build_32_pnacl
 }
 cd build_32_pnacl
 # nacl-sdk-bin contains clang.exe, llvm-as.exe, and the required dlls scavenged from the nacl sdk version pepper_33
-cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-32\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-32\lib\Release -D LLVM_VERSION=33 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12" ..
+cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-32\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-32\lib\Release -D LLVM_VERSION=34 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12" ..
 MSBuild.exe /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
