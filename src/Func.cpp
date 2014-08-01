@@ -611,11 +611,6 @@ ScheduleHandle &ScheduleHandle::allow_race_conditions() {
     return *this;
 }
 
-ScheduleHandle &ScheduleHandle::memoize() {
-    schedule.memoized() = true;
-    return *this;
-}
-
 ScheduleHandle &ScheduleHandle::serial(VarOrRVar var) {
     set_dim_type(var, For::Serial);
     return *this;
@@ -945,7 +940,7 @@ Func &Func::allow_race_conditions() {
 
 Func &Func::memoize() {
     invalidate_cache();
-    ScheduleHandle(func.schedule()).memoize();
+    func.schedule().memoized() = true;
     return *this;
 }
 

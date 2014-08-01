@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Func f;
     Var x, y;
     f(x, y) = select(((input(x, y) > 10) && (input(x, y) < 20)) ||
-                     ((input(x, y) > 40) && (!(input(x, y) > 50))), 
+                     ((input(x, y) > 40) && (!(input(x, y) > 50))),
                      u8(255), u8(0));
 
     Image<uint8_t> output = f.realize(64, 64);

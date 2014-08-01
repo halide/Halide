@@ -38,7 +38,7 @@ public:
             for (size_t j = 0; j < args.size(); j++) {
                 args[j].accept(this);
             }
-        
+
             if (reductions[i].domain.defined()) {
                 const std::vector<ReductionVariable> &rvars =
                     reductions[i].domain.domain();
@@ -218,7 +218,7 @@ class KeyInfo {
                                     Call::Intrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
-        
+
         return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
                                          vec(dest, src, copy_size), Call::Intrinsic));
     }
@@ -240,7 +240,7 @@ public:
             size_so_far = (size_so_far + needed_alignment) & ~(needed_alignment - 1);
         }
         key_size_expr = (int32_t)size_so_far;
-        
+
         for (iter = dependencies.dependency_info.begin();
              iter != dependencies.dependency_info.end();
              iter++) {
@@ -294,7 +294,7 @@ public:
                 alignment++;
             }
         }
-        
+
         std::map<FindParameterDependencies::DependencyKey,
                  FindParameterDependencies::DependencyInfo>::const_iterator iter;
         for (iter = dependencies.dependency_info.begin();
@@ -320,7 +320,7 @@ public:
     Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
+        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
                                   Call::Intrinsic));
         args.push_back(key_size());
@@ -340,7 +340,7 @@ public:
     Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
+        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
                                   Call::Intrinsic));
         args.push_back(key_size());
@@ -407,7 +407,7 @@ private:
                 update.defined() ? IfThenElse::make(cache_miss, update) :
                                        update;
             Stmt cache_store_back =
-              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name)); 
+              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
             Stmt mutated_consume = Block::make(cache_store_back, consume);
 
             Stmt mutated_pipeline = Pipeline::make(op->name, mutated_produce, mutated_update, mutated_consume);

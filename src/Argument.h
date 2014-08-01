@@ -4,22 +4,22 @@
 #include <string>
 #include "Type.h"
 
-/** \file 
+/** \file
  * Defines a type used for expressing the type signature of a
  * generated halide pipeline
  */
 
-namespace Halide { 
+namespace Halide {
 
 /**
  * A struct representing an argument to a halide-generated
  * function. Used for specifying the function signature of
- * generated code. 
+ * generated code.
  */
 struct Argument {
     /** The name of the argument */
-    std::string name;        
-            
+    std::string name;
+
     /** An argument is either a primitive type (for parameters), or a
      * buffer pointer. If 'is_buffer' is true, then 'type' should be
      * ignored.
@@ -36,7 +36,7 @@ struct Argument {
     Type type;
 
     Argument() : is_buffer(false) {}
-    Argument(const std::string &_name, bool _is_buffer, Type _type) : 
+    Argument(const std::string &_name, bool _is_buffer, Type _type) :
         name(_name), is_buffer(_is_buffer), type(_type) {
         read = write = is_buffer;
     }
