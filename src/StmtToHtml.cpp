@@ -30,7 +30,7 @@ class StmtToHtml : public IRVisitor {
 private:
     std::ofstream stream;
 
-    int unique_id() { return id_count++; }
+    int unique_id() { return ++id_count; }
 
     // All spans and divs will have an id of the form "x-y", where x
     // is shared among all spans/divs in the same context, and y is unique.
@@ -49,7 +49,11 @@ private:
         return s.str();
     }
     string tag(const string &tag, const string &cls, const string &body, int id = -1) {
-        return open_tag(tag, cls, id) + body + close_tag(tag);
+        std::stringstream s;
+        s << open_tag(tag, cls, id);
+        s << body;
+        s << close_tag(tag);
+        return s.str();
     }
     string close_tag(const string &tag) {
         context_stack.pop_back();
@@ -141,14 +145,14 @@ private:
 
 public:
     void visit(const IntImm *op){
-        stream << open_span("IntImm Imm")
-               << op->value
-               << close_span();
+        stream << open_span("IntImm Imm");
+        stream << op->value;
+        stream << close_span();
     }
     void visit(const FloatImm *op){
-        stream << open_span("FloatImm Imm")
-               << op->value << 'f'
-               << close_span();
+        stream << open_span("FloatImm Imm");
+        stream << op->value << 'f';
+        stream << close_span();
     }
     void visit(const StringImm *op){
         stream << open_span("StringImm");
