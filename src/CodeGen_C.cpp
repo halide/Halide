@@ -181,7 +181,7 @@ const string preamble =
 CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
 
 namespace {
-string type_to_c_type(Type type, bool include_space) {
+string type_to_c_type(Type type, bool include_space, bool c_plus_plus = true) {
     bool needs_space = true;
     ostringstream oss;
     user_assert(type.width == 1) << "Can't use vector types when compiling to C (yet)\n";
@@ -196,10 +196,32 @@ string type_to_c_type(Type type, bool include_space) {
 
     } else if (type.is_handle()) {
         needs_space = false;
-        if (type.handle_type.empty()) {
+
+        // If there is no type info or is generating C (not C++) and
+        // the type is a class or in an inner scope, just use void *.
+        if (type.handle_type == NULL ||
+            (!c_plus_plus &&
+	     (!type.handle_type->namespaces.empty() ||
+	      !type.handle_type->enclosing_types.empty() ||
+	      type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class))) {
             oss << "void *";
         } else {
-            oss << type.handle_type << " *";
+            if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Struct) {
+                oss << "struct ";
+            } else if (type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class) {
+                oss << "class ";
+            }
+            if (!type.handle_type->namespaces.empty() ||
+                !type.handle_type->enclosing_types.empty()) {
+                oss << "::";
+                for (size_t i = 0; i < type.handle_type->namespaces.size(); i++) {
+                    oss << type.handle_type->namespaces[i] << "::";
+                }
+                for (size_t i = 0; i < type.handle_type->enclosing_types.size(); i++) {
+                    oss << type.handle_type->enclosing_types[i].name << "::";
+                }
+            }
+            oss << type.handle_type->inner_name.name << " *";
         }
     } else {
         switch (type.bits) {
@@ -263,6 +285,40 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     stream << "#ifndef HALIDE_FUNCTION_ATTRS\n";
     stream << "#define HALIDE_FUNCTION_ATTRS\n";
     stream << "#endif\n";
+
+    bool has_cplusplus_only_types = false;
+    for (size_t i = 0; i < args.size(); i++) {
+	if (args[i].type.handle_type != NULL) {
+	    if (!args[i].type.handle_type->namespaces.empty()) {
+		has_cplusplus_only_types = true;
+		if (args[i].type.handle_type->inner_name.cpp_type_type != halide_cplusplus_type_name::Simple) {
+		    for (size_t ns = 0; ns < args[i].type.handle_type->namespaces.size(); ns++ ) {
+			for (size_t indent = 0; indent < ns; indent++) {
+			   stream << "    ";
+			}
+			stream << indent << "namespace " << args[i].type.handle_type->namespaces[ns] << " {\n";
+		    }
+		    for (size_t indent = 0; indent < args[i].type.handle_type->namespaces.size(); indent++) {
+			stream << "    ";
+		    }
+		    if (args[i].type.handle_type->inner_name.cpp_type_type != halide_cplusplus_type_name::Struct) {
+			stream << "struct " << args[i].type.handle_type->inner_name.name << ";\n";
+		    } else {
+			stream << "class " << args[i].type.handle_type->inner_name.name << ";\n";
+		    }
+		    for (size_t ns = 0; ns < args[i].type.handle_type->namespaces.size(); ns++ ) {
+			for (size_t indent = 0; indent < ns; indent++) {
+			   stream << "    ";
+			}
+			stream << indent << "}\n";
+		    }
+		}
+	    }
+	    if (args[i].type.handle_type->inner_name.cpp_type_type == halide_cplusplus_type_name::Class) {
+		has_cplusplus_only_types = true;
+	    }
+	}	    
+    }
 
     // Now the function prototype
     stream << "#ifdef __cplusplus\n";
