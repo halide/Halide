@@ -318,10 +318,10 @@ private:
         } else if (sub_a && sub_b && equal(sub_a->a, sub_b->b)) {
             // (a - b) + (c - a) -> c - b
             expr = mutate(sub_b->a - sub_a->b);
-        } else if (mul_b && is_negative_const(mul_b->b)) {
+        } else if (mul_b && is_negative_negatable_const(mul_b->b)) {
             // a + b*-x -> a - b*x
             expr = mutate(a - mul_b->a * (-mul_b->b));
-        } else if (mul_a && is_negative_const(mul_a->b)) {
+        } else if (mul_a && is_negative_negatable_const(mul_a->b)) {
             // a*-x + b -> b - a*x
             expr = mutate(b - mul_a->a * (-mul_a->b));
         } else if (cast_a && cast_b &&
@@ -494,7 +494,7 @@ private:
         } else if (sub_b) {
             // a - (b - c) -> a + (c - b)
             expr = mutate(a + (sub_b->b - sub_b->a));
-        } else if (mul_b && is_negative_const(mul_b->b)) {
+        } else if (mul_b && is_negative_negatable_const(mul_b->b)) {
             // a - b*-x -> a + b*x
             expr = mutate(a + mul_b->a * (-mul_b->b));
         } else if (add_b && is_simple_const(add_b->b)) {
@@ -597,7 +597,7 @@ private:
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
         } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
-        } else if (sub_a && is_negative_const(b)) {
+        } else if (sub_a && is_negative_negatable_const(b)) {
             expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -b));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
@@ -2501,6 +2501,10 @@ void simplify_test() {
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
     check(Let::make("x", 0, 0), 0);
+
+    // Test case with most negative 32-bit number, as constant to check that it is not negated.
+    check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
+	  ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     std::cout << "Simplify test passed" << std::endl;
 }
