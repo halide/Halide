@@ -436,19 +436,25 @@ public:
         stream << keyword("allocate") << " ";
         stream << var(op->name) << "[";
         stream << close_span();
-        stream << open_span("Type") << op->type << close_span();
+
+        stream << open_span("Type");
+        stream << op->type;
+        stream << close_span();
+
         for (size_t i = 0; i < op->extents.size(); i++) {
             stream  << " * ";
             print(op->extents[i]);
         }
         stream << matched("]");
         if (!is_one(op->condition)) {
-            stream << " if ";
+            stream << " " << keyword("if") << " ";
             print(op->condition);
         }
+
         stream << open_div("AllocateBody");
         print(op->body);
         stream << close_div();
+
         stream << close_div();
         scope.pop(op->name);
     }
