@@ -39,7 +39,8 @@ private:
         std::stringstream s;
         s << "<" << tag << " class='" << cls << "' id='";
         if (id == -1) {
-            s << context_stack.back() << "-" << unique_id();
+            s << context_stack.back() << "-";
+            s << unique_id();
         } else {
             s << id;
         }
@@ -96,9 +97,9 @@ private:
         }
 
         std::stringstream s;
-        s << "<b class='Variable Matched' id='" << id << "-" << unique_id() << "'>"
-          << x
-          << "</b>";
+        s << "<b class='Variable Matched' id='" << id << "-" << unique_id() << "'>";
+        s << x;
+        s << "</b>";
         return s.str();
     }
 
