@@ -1,8 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIME_H
 #define HALIDE_HALIDERUNTIME_H
 
+#ifndef COMPILING_HALIDE_RUNTIME
 #include <stddef.h>
 #include <stdint.h>
+#else
+#include "runtime_internal.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
