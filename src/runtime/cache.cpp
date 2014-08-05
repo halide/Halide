@@ -1,8 +1,8 @@
 #include "runtime_internal.h"
 #include "mini_string.h"
-#include "scoped_spin_lock.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
+#include "scoped_mutex_lock.h"
 
 // This is temporary code. In particular, the hash table is stupid and
 // currently thredsafety is accomplished via large granularity spin
@@ -160,7 +160,7 @@ uint32_t djb_hash(const uint8_t *key, size_t key_size)  {
     return h;
 }
 
-volatile int memoization_lock = 0;
+halide_mutex memoization_lock;
 
 const size_t kHashTableSize = 256;
 
@@ -266,7 +266,7 @@ WEAK void halide_memoization_cache_set_size(int64_t size) {
         size = kDefaultCacheSize;
     }
 
-    ScopedSpinLock lock(&memoization_lock);
+    ScopedMutexLock lock(&memoization_lock);
 
     max_cache_size = size;
     prune_cache();
@@ -294,7 +294,7 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
-    ScopedSpinLock lock(&memoization_lock);
+    ScopedMutexLock lock(&memoization_lock);
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
@@ -378,7 +378,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
-    ScopedSpinLock lock(&memoization_lock);
+    ScopedMutexLock lock(&memoization_lock);
 
     CacheEntry *entry = cache_entries[index];
     while (entry != NULL) {
@@ -418,7 +418,6 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     current_cache_size += added_size;
     prune_cache();
 
-    // BUGGY: racey writes?
     void *entry_storage = halide_malloc(user_context, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
     va_list tuple_buffers;
     va_start(tuple_buffers, tuple_count);
@@ -444,9 +443,23 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 #if 0
 WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, ...) {
 }
-
-}
-
 #endif
 
+WEAK void halide_memoization_cache_cleanup() {
+    for (int i = 0; i < kHashTableSize; i++) {
+        CacheEntry *entry = cache_entries[i];
+        cache_entries[i] = NULL;
+        while (entry != NULL) {
+            CacheEntry *next = entry->next;
+            entry->~CacheEntry();
+            halide_free(NULL, entry);
+            entry = next;
+        }
+    }
+    current_cache_size = 0;
+    halide_mutex_cleanup(&memoization_lock);
 }
+
+}
+
+
