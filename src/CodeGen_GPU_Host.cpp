@@ -459,6 +459,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
             reinterpret_bits<void (*)(void *)>(f);
         cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
     }
+    CodeGen_CPU::jit_finalize(ee, module, cleanup_routines);
 }
 
 template<typename CodeGen_CPU>
