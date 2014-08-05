@@ -509,6 +509,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_memoization_cache_set_size",
                        "halide_memoization_cache_lookup",
                        "halide_memoization_cache_store",
+                       "halide_memoization_cache_cleanup",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};

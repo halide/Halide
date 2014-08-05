@@ -1,12 +1,12 @@
-#ifndef HALIDE_RUNTIME_MUTEX_H
-#define HALIDE_RUNTIME_MUTEX_H
+#ifndef HALIDE_RUNTIME_SCOPED_MUTEX_LOCK_H
+#define HALIDE_RUNTIME_SCOPED_MUTEX_LOCK_H
 
 #include "HalideRuntime.h"
 
 // Avoid ODR violations
 namespace {
 
-// An RAII mutex
+// An RAII mutex locking operation
 struct ScopedMutexLock {
     halide_mutex *mutex;
 
