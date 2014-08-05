@@ -1394,56 +1394,57 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
     return a;
 }
 
-void FuncRefVar::operator=(Expr e) {
-    (*this) = Tuple(vec<Expr>(e));
+ScheduleHandle FuncRefVar::operator=(Expr e) {
+    return (*this) = Tuple(vec<Expr>(e));
 }
 
-void FuncRefVar::operator=(const Tuple &e) {
+ScheduleHandle FuncRefVar::operator=(const Tuple &e) {
     // If the function has already been defined, this must actually be a reduction
     if (func.has_pure_definition()) {
-        FuncRefExpr(func, args) = e;
-        return;
+        return FuncRefExpr(func, args) = e;
     }
 
     // Find implicit args in the expr and add them to the args list before calling define
     vector<string> a = args_with_implicit_vars(e.as_vector());
     func.define(a, e.as_vector());
+
+    return ScheduleHandle(func.schedule());
 }
 
-void FuncRefVar::operator=(const FuncRefVar &e) {
+ScheduleHandle FuncRefVar::operator=(const FuncRefVar &e) {
     if (e.size() == 1) {
-        (*this) = Expr(e);
+        return (*this) = Expr(e);
     } else {
-        (*this) = Tuple(e);
+        return (*this) = Tuple(e);
     }
 }
 
-void FuncRefVar::operator=(const FuncRefExpr &e) {
+ScheduleHandle FuncRefVar::operator=(const FuncRefExpr &e) {
     if (e.size() == 1) {
-        (*this) = Expr(e);
+        return (*this) = Expr(e);
     } else {
-        (*this) = Tuple(e);
+        return (*this) = Tuple(e);
     }
 }
 
-void FuncRefVar::operator+=(Expr e) {
+ScheduleHandle FuncRefVar::operator+=(Expr e) {
     // This is actually a reduction
-    FuncRefExpr(func, args) += e;
+    return FuncRefExpr(func, args) += e;
 }
 
-void FuncRefVar::operator*=(Expr e) {
+ScheduleHandle FuncRefVar::operator*=(Expr e) {
     // This is actually a reduction
-    FuncRefExpr(func, args) *= e;
+    return FuncRefExpr(func, args) *= e;
 }
 
-void FuncRefVar::operator-=(Expr e) {
+ScheduleHandle FuncRefVar::operator-=(Expr e) {
     // This is actually a reduction
-    FuncRefExpr(func, args) -= e;
+    return FuncRefExpr(func, args) -= e;
 }
 
-void FuncRefVar::operator/=(Expr e) {
+ScheduleHandle FuncRefVar::operator/=(Expr e) {
     // This is actually a reduction
-    FuncRefExpr(func, args) /= e;
+    return FuncRefExpr(func, args) /= e;
 }
 
 FuncRefVar::operator Expr() const {
@@ -1544,32 +1545,34 @@ vector<Expr> FuncRefExpr::args_with_implicit_vars(const vector<Expr> &e) const {
     return a;
 }
 
-void FuncRefExpr::operator=(Expr e) {
-    (*this) = Tuple(vec<Expr>(e));
+ScheduleHandle FuncRefExpr::operator=(Expr e) {
+    return (*this) = Tuple(vec<Expr>(e));
 }
 
-void FuncRefExpr::operator=(const Tuple &e) {
+ScheduleHandle FuncRefExpr::operator=(const Tuple &e) {
     user_assert(func.has_pure_definition())
         << "Can't add a reduction definition to Func \"" << func.name()
         << "\" because it does not have a pure definition.\n";
 
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_reduction(args, e.as_vector());
+
+    return ScheduleHandle(func.reduction_schedule(func.reductions().size() - 1));
 }
 
-void FuncRefExpr::operator=(const FuncRefExpr &e) {
+ScheduleHandle FuncRefExpr::operator=(const FuncRefExpr &e) {
     if (e.size() == 1) {
-        (*this) = Expr(e);
+        return (*this) = Expr(e);
     } else {
-        (*this) = Tuple(e);
+        return (*this) = Tuple(e);
     }
 }
 
-void FuncRefExpr::operator=(const FuncRefVar &e) {
+ScheduleHandle FuncRefExpr::operator=(const FuncRefVar &e) {
     if (e.size() == 1) {
-        (*this) = Expr(e);
+        return (*this) = Expr(e);
     } else {
-        (*this) = Tuple(e);
+        return (*this) = Tuple(e);
     }
 }
 
@@ -1593,28 +1596,28 @@ void define_base_case(Internal::Function func, const vector<Expr> &a, Expr e) {
     FuncRefVar(func, pure_args) = e;
 }
 
-void FuncRefExpr::operator+=(Expr e) {
+ScheduleHandle FuncRefExpr::operator+=(Expr e) {
     vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 0));
-    (*this) = Expr(*this) + e;
+    return (*this) = Expr(*this) + e;
 }
 
-void FuncRefExpr::operator*=(Expr e) {
+ScheduleHandle FuncRefExpr::operator*=(Expr e) {
     vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 1));
-    (*this) = Expr(*this) * e;
+    return (*this) = Expr(*this) * e;
 }
 
-void FuncRefExpr::operator-=(Expr e) {
+ScheduleHandle FuncRefExpr::operator-=(Expr e) {
     vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 0));
-    (*this) = Expr(*this) - e;
+    return (*this) = Expr(*this) - e;
 }
 
-void FuncRefExpr::operator/=(Expr e) {
+ScheduleHandle FuncRefExpr::operator/=(Expr e) {
     vector<Expr> a = args_with_implicit_vars(vec(e));
     define_base_case(func, a, cast(e.type(), 1));
-    (*this) = Expr(*this) / e;
+    return (*this) = Expr(*this) / e;
 }
 
 FuncRefExpr::operator Expr() const {

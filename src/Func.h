@@ -20,12 +20,12 @@
 
 namespace Halide {
 
-/** A fragment of front-end syntax of the form f(x, y, z), where x,
- * y, z are Vars. It could be the left-hand side of a function
- * definition, or it could be a call to a function. We don't know
- * until we see how this object gets used.
- */
-class FuncRefExpr;
+enum GPUAPI {
+    GPU_Default,
+    GPU_CUDA,
+    GPU_OpenCL,
+    GPU_GLSL
+};
 
 /** A class that can represent Vars or RVars. Used for reorder calls
  * which can accept a mix of either. */
@@ -43,160 +43,6 @@ struct VarOrRVar {
     const Var var;
     const RVar rvar;
     const bool is_rvar;
-};
-
-class FuncRefVar {
-    Internal::Function func;
-    int implicit_placeholder_pos;
-    std::vector<std::string> args;
-    std::vector<std::string> args_with_implicit_vars(const std::vector<Expr> &e) const;
-public:
-    FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
-
-    /**  Use this as the left-hand-side of a definition. */
-    EXPORT void operator=(Expr);
-
-    /** Use this as the left-hand-side of a definition for a Func with
-     * multiple outputs. */
-    EXPORT void operator=(const Tuple &);
-
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
-     */
-    EXPORT void operator+=(Expr);
-
-    /** Define this function as a sum reduction over the given
-     * expression. The expression should refer to some RDom to sum
-     * over. If the function does not already have a pure definition,
-     * this sets it to zero.
-     */
-    EXPORT void operator-=(Expr);
-
-    /** Define this function as a product reduction. The expression
-     * should refer to some RDom to take the product over. If the
-     * function does not already have a pure definition, this sets it
-     * to 1.
-     */
-    EXPORT void operator*=(Expr);
-
-    /** Define this function as the product reduction over the inverse
-     * of the expression. The expression should refer to some RDom to
-     * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1.
-     */
-    EXPORT void operator/=(Expr);
-
-    /** Override the usual assignment operator, so that
-     * f(x, y) = g(x, y) defines f.
-     */
-    // @{
-    EXPORT void operator=(const FuncRefVar &e);
-    EXPORT void operator=(const FuncRefExpr &e);
-    // @}
-
-    /** Use this FuncRefVar as a call to the function, and not as the
-     * left-hand-side of a definition. Only works for single-output
-     * funcs.
-     */
-    EXPORT operator Expr() const;
-
-    /** When a FuncRefVar refers to a function that provides multiple
-     * outputs, you can access each output as an Expr using
-     * operator[] */
-    EXPORT Expr operator[](int) const;
-
-    /** How many outputs does the function this refers to produce. */
-    EXPORT size_t size() const;
-
-    /** What function is this calling? */
-    EXPORT Internal::Function function() const {return func;}
-};
-
-/** A fragment of front-end syntax of the form f(x, y, z), where x, y,
- * z are Exprs. If could be the left hand side of a reduction
- * definition, or it could be a call to a function. We don't know
- * until we see how this object gets used.
- */
-class FuncRefExpr {
-    Internal::Function func;
-    int implicit_placeholder_pos;
-    std::vector<Expr> args;
-    std::vector<Expr> args_with_implicit_vars(const std::vector<Expr> &e) const;
-public:
-    FuncRefExpr(Internal::Function, const std::vector<Expr> &,
-                int placeholder_pos = -1);
-    FuncRefExpr(Internal::Function, const std::vector<std::string> &,
-                int placeholder_pos = -1);
-
-    /** Use this as the left-hand-side of a reduction definition (see
-     * \ref RDom). The function must already have a pure definition.
-     */
-    EXPORT void operator=(Expr);
-
-    /** Use this as the left-hand-side of a reduction definition for a
-     * Func with multiple outputs. */
-    EXPORT void operator=(const Tuple &);
-
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
-     */
-    EXPORT void operator+=(Expr);
-
-    /** Define this function as a sum reduction over the given
-     * expression. The expression should refer to some RDom to sum
-     * over. If the function does not already have a pure definition,
-     * this sets it to zero.
-     */
-    EXPORT void operator-=(Expr);
-
-    /** Define this function as a product reduction. The expression
-     * should refer to some RDom to take the product over. If the
-     * function does not already have a pure definition, this sets it
-     * to 1.
-     */
-    EXPORT void operator*=(Expr);
-
-    /** Define this function as the product reduction over the inverse
-     * of the expression. The expression should refer to some RDom to
-     * take the product over. If the function does not already have a
-     * pure definition, this sets it to 1.
-     */
-    EXPORT void operator/=(Expr);
-
-    /* Override the usual assignment operator, so that
-     * f(x, y) = g(x, y) defines f.
-     */
-    // @{
-    EXPORT void operator=(const FuncRefVar &);
-    EXPORT void operator=(const FuncRefExpr &);
-    // @}
-
-    /** Use this as a call to the function, and not the left-hand-side
-     * of a definition. Only works for single-output Funcs. */
-    EXPORT operator Expr() const;
-
-    /** When a FuncRefExpr refers to a function that provides multiple
-     * outputs, you can access each output as an Expr using
-     * operator[].
-     */
-    EXPORT Expr operator[](int) const;
-
-    /** How many outputs does the function this refers to produce. */
-    EXPORT size_t size() const;
-
-    /** What function is this calling? */
-    EXPORT Internal::Function function() const {return func;}
-};
-
-enum GPUAPI {
-    GPU_Default,
-    GPU_CUDA,
-    GPU_OpenCL,
-    GPU_GLSL
 };
 
 /** A temporary wrapper around a schedule used for common schedule manipulations */
@@ -320,6 +166,160 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
+};
+
+/** A fragment of front-end syntax of the form f(x, y, z), where x,
+ * y, z are Vars. It could be the left-hand side of a function
+ * definition, or it could be a call to a function. We don't know
+ * until we see how this object gets used.
+ */
+class FuncRefExpr;
+
+class FuncRefVar {
+    Internal::Function func;
+    int implicit_placeholder_pos;
+    std::vector<std::string> args;
+    std::vector<std::string> args_with_implicit_vars(const std::vector<Expr> &e) const;
+public:
+    FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
+
+    /**  Use this as the left-hand-side of a definition. */
+    EXPORT ScheduleHandle operator=(Expr);
+
+    /** Use this as the left-hand-side of a definition for a Func with
+     * multiple outputs. */
+    EXPORT ScheduleHandle operator=(const Tuple &);
+
+    /** Define this function as a sum reduction over the negative of
+     * the given expression. The expression should refer to some RDom
+     * to sum over. If the function does not already have a pure
+     * definition, this sets it to zero.
+     */
+    EXPORT ScheduleHandle operator+=(Expr);
+
+    /** Define this function as a sum reduction over the given
+     * expression. The expression should refer to some RDom to sum
+     * over. If the function does not already have a pure definition,
+     * this sets it to zero.
+     */
+    EXPORT ScheduleHandle operator-=(Expr);
+
+    /** Define this function as a product reduction. The expression
+     * should refer to some RDom to take the product over. If the
+     * function does not already have a pure definition, this sets it
+     * to 1.
+     */
+    EXPORT ScheduleHandle operator*=(Expr);
+
+    /** Define this function as the product reduction over the inverse
+     * of the expression. The expression should refer to some RDom to
+     * take the product over. If the function does not already have a
+     * pure definition, this sets it to 1.
+     */
+    EXPORT ScheduleHandle operator/=(Expr);
+
+    /** Override the usual assignment operator, so that
+     * f(x, y) = g(x, y) defines f.
+     */
+    // @{
+    EXPORT ScheduleHandle operator=(const FuncRefVar &e);
+    EXPORT ScheduleHandle operator=(const FuncRefExpr &e);
+    // @}
+
+    /** Use this FuncRefVar as a call to the function, and not as the
+     * left-hand-side of a definition. Only works for single-output
+     * funcs.
+     */
+    EXPORT operator Expr() const;
+
+    /** When a FuncRefVar refers to a function that provides multiple
+     * outputs, you can access each output as an Expr using
+     * operator[] */
+    EXPORT Expr operator[](int) const;
+
+    /** How many outputs does the function this refers to produce. */
+    EXPORT size_t size() const;
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func;}
+};
+
+/** A fragment of front-end syntax of the form f(x, y, z), where x, y,
+ * z are Exprs. If could be the left hand side of a reduction
+ * definition, or it could be a call to a function. We don't know
+ * until we see how this object gets used.
+ */
+class FuncRefExpr {
+    Internal::Function func;
+    int implicit_placeholder_pos;
+    std::vector<Expr> args;
+    std::vector<Expr> args_with_implicit_vars(const std::vector<Expr> &e) const;
+public:
+    FuncRefExpr(Internal::Function, const std::vector<Expr> &,
+                int placeholder_pos = -1);
+    FuncRefExpr(Internal::Function, const std::vector<std::string> &,
+                int placeholder_pos = -1);
+
+    /** Use this as the left-hand-side of a reduction definition (see
+     * \ref RDom). The function must already have a pure definition.
+     */
+    EXPORT ScheduleHandle operator=(Expr);
+
+    /** Use this as the left-hand-side of a reduction definition for a
+     * Func with multiple outputs. */
+    EXPORT ScheduleHandle operator=(const Tuple &);
+
+    /** Define this function as a sum reduction over the negative of
+     * the given expression. The expression should refer to some RDom
+     * to sum over. If the function does not already have a pure
+     * definition, this sets it to zero.
+     */
+    EXPORT ScheduleHandle operator+=(Expr);
+
+    /** Define this function as a sum reduction over the given
+     * expression. The expression should refer to some RDom to sum
+     * over. If the function does not already have a pure definition,
+     * this sets it to zero.
+     */
+    EXPORT ScheduleHandle operator-=(Expr);
+
+    /** Define this function as a product reduction. The expression
+     * should refer to some RDom to take the product over. If the
+     * function does not already have a pure definition, this sets it
+     * to 1.
+     */
+    EXPORT ScheduleHandle operator*=(Expr);
+
+    /** Define this function as the product reduction over the inverse
+     * of the expression. The expression should refer to some RDom to
+     * take the product over. If the function does not already have a
+     * pure definition, this sets it to 1.
+     */
+    EXPORT ScheduleHandle operator/=(Expr);
+
+    /* Override the usual assignment operator, so that
+     * f(x, y) = g(x, y) defines f.
+     */
+    // @{
+    EXPORT ScheduleHandle operator=(const FuncRefVar &);
+    EXPORT ScheduleHandle operator=(const FuncRefExpr &);
+    // @}
+
+    /** Use this as a call to the function, and not the left-hand-side
+     * of a definition. Only works for single-output Funcs. */
+    EXPORT operator Expr() const;
+
+    /** When a FuncRefExpr refers to a function that provides multiple
+     * outputs, you can access each output as an Expr using
+     * operator[].
+     */
+    EXPORT Expr operator[](int) const;
+
+    /** How many outputs does the function this refers to produce. */
+    EXPORT size_t size() const;
+
+    /** What function is this calling? */
+    EXPORT Internal::Function function() const {return func;}
 };
 
 /**
