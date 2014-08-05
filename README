@@ -171,7 +171,7 @@ PNaCl. Documentation for this is here:
 
 To use generated code in an application, you'll of course also need
 the Native Client SDK:
-    https://developers.google.com/native-client/sdk/
+    https://developer.chrome.com/native-client/sdk/download
 
 Once The Native Client prerequisites are in place, set the following
 variables (on the command line or by editing the Makefile):
