@@ -95,7 +95,7 @@ public:
      * gives the target a chance to inject calls to target-specific
      * module cleanup routines. */
     virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
-                              std::vector<JITCompiledModule::CleanupRoutine> *) {}
+                              std::vector<JITCompiledModule::CleanupRoutine> *);
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
