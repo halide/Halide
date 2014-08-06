@@ -27,6 +27,7 @@ typedef void * Thread;
 typedef struct {
     uint8_t buf[40];
 } CriticalSection;
+
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
 extern WIN32API void InitializeConditionVariable(ConditionVariable *);
 extern WIN32API void WakeAllConditionVariable(ConditionVariable *);
@@ -39,17 +40,19 @@ extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
 extern WIN32API bool InitOnceExecuteOnce(InitOnce *, bool WIN32API (*f)(InitOnce *, void *, void **), void *, void **);
 
 // Avoid ODR violations. Should do for some of the above as well.
-namespace {
+namespace halide_runtime_internal {
+
 struct windows_mutex {
     InitOnce once;
     CriticalSection critical_section;
 };
 
-WIN32API bool init_mutex(InitOnce *, void *mutex_arg, void **) {
+WEAK WIN32API bool init_mutex(InitOnce *, void *mutex_arg, void **) {
     windows_mutex *mutex = (windows_mutex *)mutex_arg;
     InitializeCriticalSection(&mutex->critical_section);
     return true;
 }
+
 }
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {

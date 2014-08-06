@@ -26,7 +26,9 @@ extern long dispatch_semaphore_wait(dispatch_semaphore_t dsema, dispatch_time_t 
 extern long dispatch_semaphore_signal(dispatch_semaphore_t dsema);
 extern void dispatch_release(void *object);
 
-namespace {
+}
+
+namespace halide_runtime_internal {
 struct gcd_mutex {
     dispatch_once_t once;
     dispatch_semaphore_t semaphore;
@@ -38,6 +40,9 @@ WEAK void init_mutex(void *mutex_arg) {
 }
 
 }
+using namespace halide_runtime_internal;
+
+extern "C" {
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
