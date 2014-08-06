@@ -2,14 +2,15 @@
 #include "HalideRuntime.h"
 
 namespace halide_runtime_internal {
+
 extern void halide_print_impl(void *, const char *);
+WEAK void (*halide_custom_print)(void *, const char *) = NULL;
+
 }
 
 extern "C" {
+
 extern int vsnprintf (char *s, size_t n, const char *format, va_list arg);
-
-
-WEAK void (*halide_custom_print)(void *, const char *) = NULL;
 
 WEAK void halide_print(void *user_context, const char *msg) {
     if (halide_custom_print) {

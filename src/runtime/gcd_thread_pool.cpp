@@ -39,8 +39,11 @@ WEAK void init_mutex(void *mutex_arg) {
     mutex->semaphore = dispatch_semaphore_create(1);
 }
 
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
+
 }
-using namespace halide_runtime_internal;
 
 extern "C" {
 
@@ -69,16 +72,11 @@ WEAK void halide_shutdown_thread_pool() {
 WEAK void halide_set_num_threads(int) {
 }
 
-WEAK int (*halide_custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
-                                  int, uint8_t *);
 
-  WEAK void halide_set_custom_do_task(int (*f)(void *, int (*)(void *, int, uint8_t *),
-                                               int, uint8_t *)) {
+WEAK void halide_set_custom_do_task(int (*f)(void *, int (*)(void *, int, uint8_t *),
+                                             int, uint8_t *)) {
     halide_custom_do_task = f;
 }
-
-WEAK int (*halide_custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                     int, uint8_t *);
 
 WEAK void halide_set_custom_do_par_for(int (*f)(void *, int (*)(void *, int, uint8_t *),
                                                 int, int, uint8_t *)) {
