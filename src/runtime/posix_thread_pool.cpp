@@ -52,9 +52,16 @@ extern int atoi(const char *);
 
 extern int halide_printf(void *user_context, const char *, ...);
 
-#ifndef NULL
-#define NULL 0
-#endif
+} // extern "C"
+
+namespace halide_runtime_internal {
+
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
+WEAK int halide_num_threads;
+WEAK bool halide_thread_pool_initialized = false;
 
 struct work {
     work *next_job;
@@ -69,7 +76,7 @@ struct work {
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
 #define MAX_THREADS 64
-WEAK struct {
+struct halide_work_queue_t {
     // all fields are protected by this mutex.
     pthread_mutex_t mutex;
 
@@ -88,7 +95,12 @@ WEAK struct {
         return !shutdown;
     }
 
-} halide_work_queue;
+};
+WEAK halide_work_queue_t halide_work_queue;
+
+} // namespace halide_runtime_internal
+
+extern "C" {
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
     pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
@@ -106,8 +118,6 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
     pthread_mutex_unlock(mutex);
 }
 
-WEAK int halide_num_threads;
-WEAK bool halide_thread_pool_initialized = false;
 
 WEAK void halide_shutdown_thread_pool() {
     if (!halide_thread_pool_initialized) return;
@@ -148,15 +158,10 @@ WEAK void halide_set_num_threads(int n) {
     halide_num_threads = n;
 }
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
-
 WEAK void halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)) {
     halide_custom_do_task = f;
 }
 
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 
 WEAK void halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)) {
     halide_custom_do_par_for = f;
@@ -171,6 +176,9 @@ WEAK int halide_do_task(void *user_context, halide_task f, int idx,
     }
 }
 
+} // extern "C"
+
+namespace halide_runtime_internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -232,7 +240,9 @@ WEAK void *halide_worker_thread(void *void_arg) {
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
 }
+}
 
+extern "C" {
 extern int halide_host_cpu_count();
 
 WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
@@ -304,4 +314,4 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     return job.exit_status;
 }
 
-}
+} // extern "C"
