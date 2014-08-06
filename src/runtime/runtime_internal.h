@@ -49,5 +49,10 @@ typedef __builtin_va_list va_list;
 #define va_end(ap)          __builtin_va_end(ap)
 #define va_arg(ap, type)    __builtin_va_arg(ap, type)
 
+// A convenient namespace for weak functions that are internal to the
+// halide runtime.
+namespace halide_runtime_internal {}
+using namespace halide_runtime_internal;
+
 #endif
 
