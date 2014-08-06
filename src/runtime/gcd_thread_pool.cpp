@@ -32,7 +32,7 @@ struct gcd_mutex {
     dispatch_semaphore_t semaphore;
 };
 
-void init_mutex(void *mutex_arg) {
+WEAK void init_mutex(void *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
     mutex->semaphore = dispatch_semaphore_create(1);
 }
