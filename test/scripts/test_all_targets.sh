@@ -160,10 +160,10 @@ for LLVM in ${LLVMS}; do
         # Update this llvm and rebuild if it's pnacl
         cd llvm/${LLVM}
         git fetch &&
-        git checkout 650319f0929eea0cb49581e2ecffa3641f11ec02 &&
+        #git checkout 650319f0929eea0cb49581e2ecffa3641f11ec02 &&
         cd tools/clang &&
         git fetch &&
-        git checkout c9e11978abdba970b12b46ab792634f0a98319d7 &&
+        #git checkout c9e11978abdba970b12b46ab792634f0a98319d7 &&
         cd ../../ &&
         make -j8 -C build-32 &&
         make -j8 -C build-64
