@@ -45,124 +45,124 @@ struct VarOrRVar {
     const bool is_rvar;
 };
 
-/** A temporary wrapper around a schedule used for common schedule manipulations */
-class ScheduleHandle {
+/** A single definition of a Func. May be a pure or update definition. */
+class Def {
     Internal::Schedule schedule;
     void set_dim_type(VarOrRVar var, Internal::For::ForType t);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string dump_argument_list();
 public:
-    ScheduleHandle(Internal::Schedule s) : schedule(s) {s.touched();}
+    Def(Internal::Schedule s) : schedule(s) {s.touched();}
 
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
-    EXPORT ScheduleHandle &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
-    EXPORT ScheduleHandle &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
-    EXPORT ScheduleHandle &serial(VarOrRVar var);
-    EXPORT ScheduleHandle &parallel(VarOrRVar var);
-    EXPORT ScheduleHandle &vectorize(VarOrRVar var);
-    EXPORT ScheduleHandle &unroll(VarOrRVar var);
-    EXPORT ScheduleHandle &parallel(VarOrRVar var, Expr task_size);
-    EXPORT ScheduleHandle &vectorize(VarOrRVar var, int factor);
-    EXPORT ScheduleHandle &unroll(VarOrRVar var, int factor);
-    EXPORT ScheduleHandle &tile(VarOrRVar x, VarOrRVar y,
+    EXPORT Def &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
+    EXPORT Def &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
+    EXPORT Def &serial(VarOrRVar var);
+    EXPORT Def &parallel(VarOrRVar var);
+    EXPORT Def &vectorize(VarOrRVar var);
+    EXPORT Def &unroll(VarOrRVar var);
+    EXPORT Def &parallel(VarOrRVar var, Expr task_size);
+    EXPORT Def &vectorize(VarOrRVar var, int factor);
+    EXPORT Def &unroll(VarOrRVar var, int factor);
+    EXPORT Def &tile(VarOrRVar x, VarOrRVar y,
                                 VarOrRVar xo, VarOrRVar yo,
                                 VarOrRVar xi, VarOrRVar yi, Expr
                                 xfactor, Expr yfactor);
-    EXPORT ScheduleHandle &tile(VarOrRVar x, VarOrRVar y,
+    EXPORT Def &tile(VarOrRVar x, VarOrRVar y,
                                 VarOrRVar xi, VarOrRVar yi,
                                 Expr xfactor, Expr yfactor);
-    EXPORT ScheduleHandle &reorder(const std::vector<VarOrRVar> &vars);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(const std::vector<VarOrRVar> &vars);
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y);
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
-    EXPORT ScheduleHandle &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
-    EXPORT ScheduleHandle &rename(VarOrRVar old_name, VarOrRVar new_name);
-    EXPORT ScheduleHandle specialize(Expr condition);
+    EXPORT Def &rename(VarOrRVar old_name, VarOrRVar new_name);
+    EXPORT Def specialize(Expr condition);
 
-    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y,
+    EXPORT Def &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu(VarOrRVar block_x, VarOrRVar block_y,
                                VarOrRVar thread_x, VarOrRVar thread_y,
                                GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+    EXPORT Def &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                                GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
+    EXPORT Def &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Def &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
                                     GPUAPI gpu_api = GPU_Default);
-    EXPORT ScheduleHandle &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT ScheduleHandle &allow_race_conditions();
+    EXPORT Def &allow_race_conditions();
     // @}
 
     // These calls are for legacy compatibility only.
-    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x) {
+    EXPORT Def &cuda_threads(VarOrRVar thread_x) {
         return gpu_threads(thread_x);
     }
-    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
+    EXPORT Def &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu_threads(thread_x, thread_y);
     }
-    EXPORT ScheduleHandle &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
+    EXPORT Def &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu_threads(thread_x, thread_y, thread_z);
     }
 
-    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x) {
+    EXPORT Def &cuda_blocks(VarOrRVar block_x) {
         return gpu_blocks(block_x);
     }
-    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
+    EXPORT Def &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
         return gpu_blocks(block_x, block_y);
     }
-    EXPORT ScheduleHandle &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
+    EXPORT Def &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
         return gpu_blocks(block_x, block_y, block_z);
     }
 
-    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
+    EXPORT Def &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
         return gpu(block_x, thread_x);
     }
-    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar block_y,
+    EXPORT Def &cuda(VarOrRVar block_x, VarOrRVar block_y,
                                 VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu(block_x, thread_x, block_y, thread_y);
     }
-    EXPORT ScheduleHandle &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+    EXPORT Def &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                 VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
     }
-    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, int x_size) {
+    EXPORT Def &cuda_tile(VarOrRVar x, int x_size) {
         return gpu_tile(x, x_size);
     }
-    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
+    EXPORT Def &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
         return gpu_tile(x, y, x_size, y_size);
     }
-    EXPORT ScheduleHandle &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Def &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
@@ -184,46 +184,46 @@ public:
     FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
 
     /**  Use this as the left-hand-side of a definition. */
-    EXPORT ScheduleHandle operator=(Expr);
+    EXPORT Def operator=(Expr);
 
     /** Use this as the left-hand-side of a definition for a Func with
      * multiple outputs. */
-    EXPORT ScheduleHandle operator=(const Tuple &);
+    EXPORT Def operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
      * to sum over. If the function does not already have a pure
      * definition, this sets it to zero.
      */
-    EXPORT ScheduleHandle operator+=(Expr);
+    EXPORT Def operator+=(Expr);
 
     /** Define this function as a sum reduction over the given
      * expression. The expression should refer to some RDom to sum
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
      */
-    EXPORT ScheduleHandle operator-=(Expr);
+    EXPORT Def operator-=(Expr);
 
     /** Define this function as a product reduction. The expression
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
      */
-    EXPORT ScheduleHandle operator*=(Expr);
+    EXPORT Def operator*=(Expr);
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
      * pure definition, this sets it to 1.
      */
-    EXPORT ScheduleHandle operator/=(Expr);
+    EXPORT Def operator/=(Expr);
 
     /** Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
     // @{
-    EXPORT ScheduleHandle operator=(const FuncRefVar &e);
-    EXPORT ScheduleHandle operator=(const FuncRefExpr &e);
+    EXPORT Def operator=(const FuncRefVar &e);
+    EXPORT Def operator=(const FuncRefExpr &e);
     // @}
 
     /** Use this FuncRefVar as a call to the function, and not as the
@@ -263,46 +263,46 @@ public:
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
      */
-    EXPORT ScheduleHandle operator=(Expr);
+    EXPORT Def operator=(Expr);
 
     /** Use this as the left-hand-side of a reduction definition for a
      * Func with multiple outputs. */
-    EXPORT ScheduleHandle operator=(const Tuple &);
+    EXPORT Def operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
      * to sum over. If the function does not already have a pure
      * definition, this sets it to zero.
      */
-    EXPORT ScheduleHandle operator+=(Expr);
+    EXPORT Def operator+=(Expr);
 
     /** Define this function as a sum reduction over the given
      * expression. The expression should refer to some RDom to sum
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
      */
-    EXPORT ScheduleHandle operator-=(Expr);
+    EXPORT Def operator-=(Expr);
 
     /** Define this function as a product reduction. The expression
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
      */
-    EXPORT ScheduleHandle operator*=(Expr);
+    EXPORT Def operator*=(Expr);
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
      * pure definition, this sets it to 1.
      */
-    EXPORT ScheduleHandle operator/=(Expr);
+    EXPORT Def operator/=(Expr);
 
     /* Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
     // @{
-    EXPORT ScheduleHandle operator=(const FuncRefVar &);
-    EXPORT ScheduleHandle operator=(const FuncRefExpr &);
+    EXPORT Def operator=(const FuncRefVar &);
+    EXPORT Def operator=(const FuncRefExpr &);
     // @}
 
     /** Use this as a call to the function, and not the left-hand-side
@@ -1221,7 +1221,7 @@ public:
      * When cond is true, this is equivalent to g.compute_at(f,y).
      * When it is false, this is equivalent to g.compute_at(f,x).
      */
-    EXPORT ScheduleHandle specialize(Expr condition);
+    EXPORT Def specialize(Expr condition);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
@@ -1606,9 +1606,8 @@ public:
     EXPORT Func &compute_inline();
 
     /** Get a handle on an update step of a reduction for the
-     * purposes of scheduling it. Only the pure dimensions of the
-     * update step can be meaningfully manipulated (see \ref RDom) */
-    EXPORT ScheduleHandle update(int idx = 0);
+     * purposes of scheduling it. */
+    EXPORT Def update(int idx = 0);
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no
@@ -1630,6 +1629,9 @@ public:
     Internal::Function function() const {
         return func;
     }
+
+    /** You can cast a Func to its pure definition. */
+    operator Def() const;
 
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making
