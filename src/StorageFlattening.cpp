@@ -4,6 +4,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -164,50 +165,78 @@ private:
         }
     }
 
-    void visit(const Provide *provide) {
+    struct ProvideValue {
+        Expr value;
+        string name;
+    };
 
-        vector<Expr> values(provide->values.size());
+    void visit(const Provide *provide) {
+        vector<ProvideValue> values(provide->values.size());
+        Box provided = box_provided(Stmt(provide), provide->name);
+        Box required = box_required(Stmt(provide), provide->name);
+
         for (size_t i = 0; i < values.size(); i++) {
-            values[i] = mutate(provide->values[i]);
+            Expr value = mutate(provide->values[i]);
 
             // Promote the type to be a multiple of 8 bits
-            Type t = values[i].type();
+            Type t = value.type();
             t.bits = t.bytes() * 8;
-            if (t.bits != values[i].type().bits) {
-                values[i] = Cast::make(t, values[i]);
+            if (t.bits != value.type().bits) {
+                value = Cast::make(t, value);
             }
+
+            values[i].value = value;
+            values[i].name = provide->name + "." + int_to_string(i);
         }
 
-        if (values.size() == 1) {
+        Stmt result;
+        if (provide->values.size() == 1) {
+            // If this is not a tuple, just emit a simple store.
             Expr idx = mutate(flatten_args(provide->name, provide->args));
-            stmt = Store::make(provide->name, values[0], idx);
+            result = Store::make(provide->name, values.front().value, idx);
         } else {
+            if (provided.size() == required.size() &&
+                boxes_overlap(provided, required)) {
+                // The boxes provided and used overlap, so the provide
+                // must be done atomically, by gathering the values in
+                // a sequence of lets, followed by a sequence of
+                // stores.
+                for (size_t i = 0; i < values.size(); i++) {
+                    const ProvideValue &cv = values[i];
 
-            vector<string> names(provide->values.size());
-            Stmt result;
+                    Expr idx = mutate(flatten_args(cv.name, provide->args));
+                    Expr var = Variable::make(cv.value.type(), cv.name + ".value");
+                    Stmt store = Store::make(cv.name, var, idx);
 
-            // Store the values by name
-            for (size_t i = 0; i < provide->values.size(); i++) {
-                string name = provide->name + "." + int_to_string(i);
-                Expr idx = mutate(flatten_args(name, provide->args));
-                names[i] = name + ".value";
-                Expr var = Variable::make(values[i].type(), names[i]);
-                Stmt store = Store::make(name, var, idx);
+                    if (result.defined()) {
+                        result = Block::make(result, store);
+                    } else {
+                        result = store;
+                    }
+                }
 
-                if (result.defined()) {
-                    result = Block::make(result, store);
-                } else {
-                    result = store;
+                for (size_t i = values.size(); i > 0; i--) {
+                    const ProvideValue &cv = values[i-1];
+
+                    result = LetStmt::make(cv.name + ".value", cv.value, result);
+                }
+            } else {
+                // The boxes don't overlap, just emit a sequence of stores.
+                for (size_t i = 0; i < values.size(); i++) {
+                    const ProvideValue &cv = values[i];
+
+                    Expr idx = mutate(flatten_args(cv.name, provide->args));
+                    Stmt store = Store::make(cv.name, cv.value, idx);
+
+                    if (result.defined()) {
+                        result = Block::make(result, store);
+                    } else {
+                        result = store;
+                    }
                 }
             }
-
-            // Add the let statements that define the values
-            for (size_t i = provide->values.size(); i > 0; i--) {
-                result = LetStmt::make(names[i-1], values[i-1], result);
-            }
-
-            stmt = result;
         }
+        stmt = result;
     }
 
     void visit(const Call *call) {
