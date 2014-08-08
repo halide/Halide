@@ -25,12 +25,12 @@ void debug_print_buffer(void *user_context, const char *buf_name, const buffer_t
                   buf.min[3], buf.extent[3], buf.stride[3]);
 }
 
-  char to_hex_char(int val) {
+char to_hex_char(int val) {
     if (val < 10) {
-      return '0' + val;
+        return '0' + val;
     }
     return 'A' + (val - 10);
-  }
+}
 
 void debug_print_key(void *user_context, const char *msg, const uint8_t *cache_key, int32_t key_size) {
     halide_printf(user_context, "Key for %s\n", msg);
@@ -43,10 +43,10 @@ void debug_print_key(void *user_context, const char *msg, const uint8_t *cache_k
     char *buf_ptr = buf;
     for (int i = 0; i < key_size; i++) {
         if (cache_key[i] >= 32 && cache_key[i] <= '~') {
-	    *buf_ptr++ = cache_key[i];
+            *buf_ptr++ = cache_key[i];
         } else {
-	    *buf_ptr++ = to_hex_char((cache_key[i] >> 4));
-	    *buf_ptr++ = to_hex_char((cache_key[i] & 0xf));
+            *buf_ptr++ = to_hex_char((cache_key[i] >> 4));
+            *buf_ptr++ = to_hex_char((cache_key[i] & 0xf));
         }
     }
     if (append_ellipses) {
@@ -197,7 +197,7 @@ int64_t current_cache_size = 0;
 #if CACHE_DEBUGGING
 void validate_cache() {
   halide_printf(NULL, "validating cache, current size %lld of maximum %lld\n",
-		current_cache_size, max_cache_size);
+                current_cache_size, max_cache_size);
   int entries_in_hash_table = 0;
   for (int i = 0; i < kHashTableSize; i++) {
     CacheEntry *entry = cache_entries[i];
@@ -483,5 +483,3 @@ WEAK void halide_memoization_cache_cleanup() {
 }
 
 }
-
-
