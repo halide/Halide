@@ -2,6 +2,7 @@
 #define HALIDE_BOUNDS_H
 
 #include "IR.h"
+#include "IROperator.h"
 #include "Scope.h"
 #include <vector>
 
@@ -52,6 +53,7 @@ struct Box {
     const Interval &operator[](int i) const {return bounds[i];}
     void resize(size_t sz) {bounds.resize(sz);}
     void push_back(const Interval &i) {bounds.push_back(i);}
+    bool used_defined() const {return used.defined() && !is_one(used);}
 };
 
 // Expand box a to encompass box b

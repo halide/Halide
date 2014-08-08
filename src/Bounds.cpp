@@ -856,8 +856,8 @@ void merge_boxes(Box &a, const Box &b) {
 
     internal_assert(a.size() == b.size());
 
-    bool a_used_defined = a.used.defined() && !is_one(a.used);
-    bool b_used_defined = b.used.defined() && !is_one(b.used);
+    bool a_used_defined = a.used_defined();
+    bool b_used_defined = b.used_defined();
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
@@ -919,8 +919,8 @@ void merge_boxes(Box &a, const Box &b) {
 bool boxes_overlap(const Box &a, const Box &b) {
     internal_assert(a.size() == b.size());
 
-    bool a_used_defined = a.used.defined() && !is_one(a.used);
-    bool b_used_defined = b.used.defined() && !is_one(b.used);
+    bool a_used_defined = a.used_defined();
+    bool b_used_defined = b.used_defined();
 
     // Overlapping requires both boxes to be used.
     Expr overlap = ((a_used_defined ? a.used : const_true()) &&
@@ -1114,13 +1114,13 @@ private:
 
                 //debug(0) << " Merging boxes for " << iter->first << "\n";
 
-                if (then_box.used.defined() && !is_one(then_box.used)) {
+                if (then_box.used_defined()) {
                     then_box.used = then_box.used && op->condition;
                 } else {
                     then_box.used = op->condition;
                 }
 
-                if (else_box.used.defined() && !is_one(else_box.used)) {
+                if (else_box.used_defined()) {
                     else_box.used = else_box.used && !op->condition;
                 } else {
                     else_box.used = !op->condition;
