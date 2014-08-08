@@ -517,8 +517,8 @@ vector<Stmt> build_update(Function f) {
 
     vector<Stmt> updates;
 
-    for (size_t i = 0; i < f.reductions().size(); i++) {
-        ReductionDefinition r = f.reductions()[i];
+    for (size_t i = 0; i < f.updates().size(); i++) {
+        UpdateDefinition r = f.updates()[i];
 
         string prefix = f.name() + ".s" + int_to_string(i+1) + ".";
 
@@ -534,7 +534,7 @@ vector<Stmt> build_update(Function f) {
             Expr s = r.args[i];
             s = qualify(prefix, s);
             site[i] = s;
-            debug(2) << "Reduction site " << i << " = " << s << "\n";
+            debug(2) << "Update site " << i << " = " << s << "\n";
         }
 
         Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
@@ -575,7 +575,7 @@ pair<Stmt, Stmt> build_production(Function func) {
 // large to cover the inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     const Schedule &s = func.schedule();
-    for (size_t stage = 0; stage <= func.reductions().size(); stage++) {
+    for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (size_t i = 0; i < s.bounds().size(); i++) {
             Bound b = s.bounds()[i];
             Expr max_val = (b.extent + b.min) - 1;
@@ -761,7 +761,7 @@ private:
         }
     }
 
-    // If we're an inline reduction or extern, we may need to inject a realization here
+    // If we're an inline update or extern, we may need to inject a realization here
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
             !func.is_pure() &&
@@ -1003,13 +1003,13 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (size_t i = 0; i < f.reductions().size(); i++) {
-        const ReductionDefinition &r = f.reductions()[i];
+    for (size_t i = 0; i < f.updates().size(); i++) {
+        const UpdateDefinition &r = f.updates()[i];
         any_scheduled = any_scheduled || r.schedule.touched();
     }
     if (any_scheduled) {
-        for (size_t i = 0; i < f.reductions().size(); i++) {
-            const ReductionDefinition &r = f.reductions()[i];
+        for (size_t i = 0; i < f.updates().size(); i++) {
+            const UpdateDefinition &r = f.updates()[i];
             if (!r.schedule.touched()) {
                 std::cerr << "Warning: Update step " << i
                           << " of function " << f.name()
@@ -1116,7 +1116,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
         if (i == order.size()) continue;
 
         if (f.has_pure_definition() &&
-            !f.has_reduction_definition() &&
+            !f.has_update_definition() &&
             f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);

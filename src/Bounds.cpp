@@ -1250,7 +1250,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             Interval result;
 
             if (f.has_pure_definition() &&
-                !f.has_reduction_definition() &&
+                !f.has_update_definition() &&
                 !f.has_extern_definition()) {
 
                 // Make a scope that says the args could be anything.

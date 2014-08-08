@@ -46,123 +46,123 @@ struct VarOrRVar {
 };
 
 /** A single definition of a Func. May be a pure or update definition. */
-class Def {
+class Stage {
     Internal::Schedule schedule;
     void set_dim_type(VarOrRVar var, Internal::For::ForType t);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
     std::string dump_argument_list();
 public:
-    Def(Internal::Schedule s) : schedule(s) {s.touched();}
+    Stage(Internal::Schedule s) : schedule(s) {s.touched();}
 
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */
     // @{
 
-    EXPORT Def &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
-    EXPORT Def &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
-    EXPORT Def &serial(VarOrRVar var);
-    EXPORT Def &parallel(VarOrRVar var);
-    EXPORT Def &vectorize(VarOrRVar var);
-    EXPORT Def &unroll(VarOrRVar var);
-    EXPORT Def &parallel(VarOrRVar var, Expr task_size);
-    EXPORT Def &vectorize(VarOrRVar var, int factor);
-    EXPORT Def &unroll(VarOrRVar var, int factor);
-    EXPORT Def &tile(VarOrRVar x, VarOrRVar y,
+    EXPORT Stage &split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor);
+    EXPORT Stage &fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused);
+    EXPORT Stage &serial(VarOrRVar var);
+    EXPORT Stage &parallel(VarOrRVar var);
+    EXPORT Stage &vectorize(VarOrRVar var);
+    EXPORT Stage &unroll(VarOrRVar var);
+    EXPORT Stage &parallel(VarOrRVar var, Expr task_size);
+    EXPORT Stage &vectorize(VarOrRVar var, int factor);
+    EXPORT Stage &unroll(VarOrRVar var, int factor);
+    EXPORT Stage &tile(VarOrRVar x, VarOrRVar y,
                                 VarOrRVar xo, VarOrRVar yo,
                                 VarOrRVar xi, VarOrRVar yi, Expr
                                 xfactor, Expr yfactor);
-    EXPORT Def &tile(VarOrRVar x, VarOrRVar y,
+    EXPORT Stage &tile(VarOrRVar x, VarOrRVar y,
                                 VarOrRVar xi, VarOrRVar yi,
                                 Expr xfactor, Expr yfactor);
-    EXPORT Def &reorder(const std::vector<VarOrRVar> &vars);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y);
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5);
-    EXPORT Def &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
-    EXPORT Def &rename(VarOrRVar old_name, VarOrRVar new_name);
-    EXPORT Def specialize(Expr condition);
+    EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
+    EXPORT Stage specialize(Expr condition);
 
-    EXPORT Def &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_single_thread(GPUAPI gpu_api = GPU_Default);
 
-    EXPORT Def &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT Def &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu(VarOrRVar block_x, VarOrRVar block_y,
+    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar thread_x, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y,
                                VarOrRVar thread_x, VarOrRVar thread_y,
                                GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+    EXPORT Stage &gpu(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z,
                                GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
+    EXPORT Stage &gpu_tile(VarOrRVar x, Expr x_size, GPUAPI gpu_api = GPU_Default);
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, Expr x_size, Expr y_size,
                                     GPUAPI gpu_api = GPU_Default);
-    EXPORT Def &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                     Expr x_size, Expr y_size, Expr z_size, GPUAPI gpu_api = GPU_Default);
 
-    EXPORT Def &allow_race_conditions();
+    EXPORT Stage &allow_race_conditions();
     // @}
 
     // These calls are for legacy compatibility only.
-    EXPORT Def &cuda_threads(VarOrRVar thread_x) {
+    EXPORT Stage &cuda_threads(VarOrRVar thread_x) {
         return gpu_threads(thread_x);
     }
-    EXPORT Def &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
+    EXPORT Stage &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu_threads(thread_x, thread_y);
     }
-    EXPORT Def &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
+    EXPORT Stage &cuda_threads(VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu_threads(thread_x, thread_y, thread_z);
     }
 
-    EXPORT Def &cuda_blocks(VarOrRVar block_x) {
+    EXPORT Stage &cuda_blocks(VarOrRVar block_x) {
         return gpu_blocks(block_x);
     }
-    EXPORT Def &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
+    EXPORT Stage &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y) {
         return gpu_blocks(block_x, block_y);
     }
-    EXPORT Def &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
+    EXPORT Stage &cuda_blocks(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z) {
         return gpu_blocks(block_x, block_y, block_z);
     }
 
-    EXPORT Def &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
+    EXPORT Stage &cuda(VarOrRVar block_x, VarOrRVar thread_x) {
         return gpu(block_x, thread_x);
     }
-    EXPORT Def &cuda(VarOrRVar block_x, VarOrRVar block_y,
+    EXPORT Stage &cuda(VarOrRVar block_x, VarOrRVar block_y,
                                 VarOrRVar thread_x, VarOrRVar thread_y) {
         return gpu(block_x, thread_x, block_y, thread_y);
     }
-    EXPORT Def &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
+    EXPORT Stage &cuda(VarOrRVar block_x, VarOrRVar block_y, VarOrRVar block_z,
                                 VarOrRVar thread_x, VarOrRVar thread_y, VarOrRVar thread_z) {
         return gpu(block_x, thread_x, block_y, thread_y, block_z, thread_z);
     }
-    EXPORT Def &cuda_tile(VarOrRVar x, int x_size) {
+    EXPORT Stage &cuda_tile(VarOrRVar x, int x_size) {
         return gpu_tile(x, x_size);
     }
-    EXPORT Def &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
+    EXPORT Stage &cuda_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size) {
         return gpu_tile(x, y, x_size, y_size);
     }
-    EXPORT Def &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
+    EXPORT Stage &cuda_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
@@ -184,46 +184,46 @@ public:
     FuncRefVar(Internal::Function, const std::vector<Var> &, int placeholder_pos = -1);
 
     /**  Use this as the left-hand-side of a definition. */
-    EXPORT Def operator=(Expr);
+    EXPORT Stage operator=(Expr);
 
     /** Use this as the left-hand-side of a definition for a Func with
      * multiple outputs. */
-    EXPORT Def operator=(const Tuple &);
+    EXPORT Stage operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
      * to sum over. If the function does not already have a pure
      * definition, this sets it to zero.
      */
-    EXPORT Def operator+=(Expr);
+    EXPORT Stage operator+=(Expr);
 
     /** Define this function as a sum reduction over the given
      * expression. The expression should refer to some RDom to sum
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
      */
-    EXPORT Def operator-=(Expr);
+    EXPORT Stage operator-=(Expr);
 
     /** Define this function as a product reduction. The expression
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
      */
-    EXPORT Def operator*=(Expr);
+    EXPORT Stage operator*=(Expr);
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
      * pure definition, this sets it to 1.
      */
-    EXPORT Def operator/=(Expr);
+    EXPORT Stage operator/=(Expr);
 
     /** Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
     // @{
-    EXPORT Def operator=(const FuncRefVar &e);
-    EXPORT Def operator=(const FuncRefExpr &e);
+    EXPORT Stage operator=(const FuncRefVar &e);
+    EXPORT Stage operator=(const FuncRefExpr &e);
     // @}
 
     /** Use this FuncRefVar as a call to the function, and not as the
@@ -245,7 +245,7 @@ public:
 };
 
 /** A fragment of front-end syntax of the form f(x, y, z), where x, y,
- * z are Exprs. If could be the left hand side of a reduction
+ * z are Exprs. If could be the left hand side of an update
  * definition, or it could be a call to a function. We don't know
  * until we see how this object gets used.
  */
@@ -260,49 +260,49 @@ public:
     FuncRefExpr(Internal::Function, const std::vector<std::string> &,
                 int placeholder_pos = -1);
 
-    /** Use this as the left-hand-side of a reduction definition (see
+    /** Use this as the left-hand-side of an update definition (see
      * \ref RDom). The function must already have a pure definition.
      */
-    EXPORT Def operator=(Expr);
+    EXPORT Stage operator=(Expr);
 
-    /** Use this as the left-hand-side of a reduction definition for a
+    /** Use this as the left-hand-side of an update definition for a
      * Func with multiple outputs. */
-    EXPORT Def operator=(const Tuple &);
+    EXPORT Stage operator=(const Tuple &);
 
     /** Define this function as a sum reduction over the negative of
      * the given expression. The expression should refer to some RDom
      * to sum over. If the function does not already have a pure
      * definition, this sets it to zero.
      */
-    EXPORT Def operator+=(Expr);
+    EXPORT Stage operator+=(Expr);
 
     /** Define this function as a sum reduction over the given
      * expression. The expression should refer to some RDom to sum
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
      */
-    EXPORT Def operator-=(Expr);
+    EXPORT Stage operator-=(Expr);
 
     /** Define this function as a product reduction. The expression
      * should refer to some RDom to take the product over. If the
      * function does not already have a pure definition, this sets it
      * to 1.
      */
-    EXPORT Def operator*=(Expr);
+    EXPORT Stage operator*=(Expr);
 
     /** Define this function as the product reduction over the inverse
      * of the expression. The expression should refer to some RDom to
      * take the product over. If the function does not already have a
      * pure definition, this sets it to 1.
      */
-    EXPORT Def operator/=(Expr);
+    EXPORT Stage operator/=(Expr);
 
     /* Override the usual assignment operator, so that
      * f(x, y) = g(x, y) defines f.
      */
     // @{
-    EXPORT Def operator=(const FuncRefVar &);
-    EXPORT Def operator=(const FuncRefExpr &);
+    EXPORT Stage operator=(const FuncRefVar &);
+    EXPORT Stage operator=(const FuncRefExpr &);
     // @}
 
     /** Use this as a call to the function, and not the left-hand-side
@@ -815,33 +815,33 @@ public:
     /** Does this function have at least a pure definition. */
     EXPORT bool defined() const;
 
-    /** Get the left-hand-side of the reduction definition. An empty
-     * vector if there's no reduction definition. If there are
-     * multiple reduction definitions for this function, use the
+    /** Get the left-hand-side of the update definition. An empty
+     * vector if there's no update definition. If there are
+     * multiple update definitions for this function, use the
      * argument to select which one you want. */
-    EXPORT const std::vector<Expr> &reduction_args(int idx = 0) const;
+    EXPORT const std::vector<Expr> &update_args(int idx = 0) const;
 
-    /** Get the right-hand-side of a reduction definition. An error if
-     * there's no reduction definition. If there are multiple
-     * reduction definitions for this function, use the argument to
+    /** Get the right-hand-side of an update definition. An error if
+     * there's no update definition. If there are multiple
+     * update definitions for this function, use the argument to
      * select which one you want. */
-    EXPORT Expr reduction_value(int idx = 0) const;
+    EXPORT Expr update_value(int idx = 0) const;
 
-    /** Get the right-hand-side of a reduction definition for
+    /** Get the right-hand-side of an update definition for
      * functions that returns multiple values. An error if there's no
-     * reduction definition. Returns a Tuple with one element for
+     * update definition. Returns a Tuple with one element for
      * functions that return a single value. */
-    EXPORT Tuple reduction_values(int idx = 0) const;
+    EXPORT Tuple update_values(int idx = 0) const;
 
-    /** Get the reduction domain for a reduction definition. */
+    /** Get the reduction domain for an update definition, if there is
+     * one. */
     EXPORT RDom reduction_domain(int idx = 0) const;
 
-    /** Is this function a reduction (i.e. does it have at least one
-     * reduction definition)? */
-    EXPORT bool is_reduction() const;
+    /** Does this function have at least one update definition? */
+    EXPORT bool has_update_definition() const;
 
-    /** How many reduction definitions does this function have? */
-    EXPORT int num_reduction_definitions() const;
+    /** How many update definitions does this function have? */
+    EXPORT int num_update_definitions() const;
 
     /** Is this function an external stage? That is, was it defined
      * using define_extern? */
@@ -898,7 +898,7 @@ public:
     // @}
 
     /** Either calls to the function, or the left-hand-side of a
-     * reduction definition (see \ref RDom). If the function has
+     * update definition (see \ref RDom). If the function has
      * already been defined, and fewer arguments are given than the
      * function has dimensions, then enough implicit vars are added to
      * the end of the argument list to make up the difference. (see
@@ -1221,7 +1221,7 @@ public:
      * When cond is true, this is equivalent to g.compute_at(f,y).
      * When it is false, this is equivalent to g.compute_at(f,x).
      */
-    EXPORT Def specialize(Expr condition);
+    EXPORT Stage specialize(Expr condition);
 
     /** Tell Halide that the following dimensions correspond to GPU
      * thread indices. This is useful if you compute a producer
@@ -1426,7 +1426,7 @@ public:
     EXPORT Func &compute_at(Func f, Var var);
 
     /** Schedule a function to be computed within the iteration over
-     * some dimension of a reduction domain. Produces equivalent code
+     * some dimension of an update domain. Produces equivalent code
      * to the version of compute_at that takes a Var. */
     EXPORT Func &compute_at(Func f, RVar var);
 
@@ -1580,8 +1580,8 @@ public:
 
     /** Aggressively inline all uses of this function. This is the
      * default schedule, so you're unlikely to need to call this. For
-     * a reduction, that means it gets computed as close to the
-     * innermost loop as possible.
+     * a Func with an update definition, that means it gets computed
+     * as close to the innermost loop as possible.
      *
      * Consider once more the pipeline from \ref Func::compute_at :
      *
@@ -1605,9 +1605,9 @@ public:
      */
     EXPORT Func &compute_inline();
 
-    /** Get a handle on an update step of a reduction for the
-     * purposes of scheduling it. */
-    EXPORT Def update(int idx = 0);
+    /** Get a handle on an update step for the purposes of scheduling
+     * it. */
+    EXPORT Stage update(int idx = 0);
 
     /** Trace all loads from this Func by emitting calls to
      * halide_trace. If the Func is inlined, this has no
@@ -1630,8 +1630,9 @@ public:
         return func;
     }
 
-    /** You can cast a Func to its pure definition. */
-    operator Def() const;
+    /** You can cast a Func to its pure stage for the purposes of
+     * scheduling it. */
+    operator Stage() const;
 
     /** Get a handle on the output buffer for this Func. Only relevant
      * if this is the output Func in a pipeline. Useful for making
