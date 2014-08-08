@@ -56,6 +56,8 @@ struct Box {
 
 // Expand box a to encompass box b
 void merge_boxes(Box &a, const Box &b);
+// Test if box a could possibly overlap box b.
+bool boxes_overlap(const Box &a, const Box &b);
 
 /** Compute rectangular domains large enough to cover all the 'Call's
  * to each function that occurs within a given statement or
