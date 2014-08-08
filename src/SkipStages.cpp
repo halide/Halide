@@ -166,6 +166,7 @@ private:
             // Visit the args of the inner call
             const Call *c = op->args[0].as<Call>();
             if (c) {
+                varies |= varying.contains(c->name);
                 for (size_t i = 0; i < c->args.size(); i++) {
                     c->args[i].accept(this);
                 }
@@ -173,6 +174,7 @@ private:
                 const Load *l = op->args[0].as<Load>();
 
                 internal_assert(l);
+                varies |= varying.contains(l->name);
                 l->index.accept(this);
             }
             return;
@@ -185,6 +187,20 @@ private:
         if (op->name == buffer || extern_call_uses_buffer(op, buffer)) {
             predicate = const_true();
         }
+    }
+
+    void visit(const Allocate *op) {
+        // This code works to ensure expressions depending on an
+        // allocation don't get moved outside the allocation and are
+        // marked as varying if predicate depends on the value of the
+        // allocation.
+        varying.push(op->name, 0);
+        varying.push(op->name + ".buffer", 0);
+        varying.push(op->name + ".host", 0);
+        IRVisitor::visit(op);
+        varying.pop(op->name + ".host");
+        varying.pop(op->name + ".buffer");
+        varying.pop(op->name);
     }
 };
 
