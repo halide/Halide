@@ -17,19 +17,19 @@ int main(int argc, char **argv) {
 
     {
 
-        Def pure =
+        Stage pure =
             f(x) = x;
 
-        Def fix_first =
+        Stage fix_first =
             f(0) = 1;
 
-        Def rewrites[] = {
+        Stage rewrites[] = {
             f(r*2) = 13,
             f(r*4) = 14
         };
 
         struct {
-            Def a, b, c;
+            Stage a, b, c;
         } more_updates = {
             f(3*r) = 4,
             f(2*r) = 8,
