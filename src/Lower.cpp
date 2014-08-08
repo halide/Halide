@@ -1334,7 +1334,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error_msg.str(), vec<Expr>(elem_size)));
         }
 
-        if (touched.used.defined()) {
+        if (touched.used_defined()) {
             debug(3) << "Image " << name << " is only used when " << touched.used << "\n";
         }
 
@@ -1359,7 +1359,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
 
-            if (touched.used.defined()) {
+            if (touched.used_defined()) {
                 min_required = select(touched.used, min_required, actual_min);
                 extent_required = select(touched.used, extent_required, actual_extent);
             }
@@ -1382,7 +1382,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr actual_max = actual_min + actual_extent - 1;
             Expr max_required = min_required_var + extent_required_var - 1;
 
-            if (touched.used.defined()) {
+            if (touched.used_defined()) {
                 max_required = select(touched.used, max_required, actual_max);
             }
             asserts_required.push_back(AssertStmt::make(actual_max >= max_required,
