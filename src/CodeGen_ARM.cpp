@@ -15,6 +15,7 @@
 // Native client llvm relies on global flags to control sandboxing on
 // arm, because they expect you to be coming from the command line.
 #if WITH_NATIVE_CLIENT
+#if LLVM_VERSION < 34
 #include <llvm/Support/CommandLine.h>
 namespace llvm {
 extern cl::opt<bool> FlagSfiData,
@@ -26,6 +27,7 @@ extern cl::opt<bool> FlagSfiData,
     FlagSfiZeroMask;
 }
 extern llvm::cl::opt<bool> ReserveR9;
+#endif
 #endif
 
 namespace Halide {
@@ -358,6 +360,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         triple.setEnvironment(llvm::Triple::EABI);
         // The ARM Nacl backend relies on global switches being set to do
         // the sandboxing, so set them here.
+        #if LLVM_VERSION < 34
         llvm::FlagSfiData = true;
         llvm::FlagSfiLoad = true;
         llvm::FlagSfiStore = true;
@@ -366,6 +369,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         llvm::FlagSfiDisableCP = true;
         llvm::FlagSfiZeroMask = false;
         ReserveR9 = true;
+        #endif
         #else
         user_error << "This version of Halide was compiled without nacl support\b";
         #endif

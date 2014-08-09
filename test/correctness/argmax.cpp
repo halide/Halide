@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     arg_max_f() = select(f(r) > best_so_far, r, arg_max_f());
 
     int result_f = evaluate_may_gpu<int>(arg_max_f());
-    
+
     if (result_f != 50) {
         printf("Arg max of f is %d, but should have been 50\n", result_f);
         return -1;

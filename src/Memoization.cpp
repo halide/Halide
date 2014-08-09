@@ -38,7 +38,7 @@ public:
             for (size_t j = 0; j < args.size(); j++) {
                 args[j].accept(this);
             }
-        
+
             if (reductions[i].domain.defined()) {
                 const std::vector<ReductionVariable> &rvars =
                     reductions[i].domain.domain();
@@ -71,7 +71,7 @@ public:
         const std::vector<Parameter> &output_buffers =
             function.output_buffers();
         for (size_t i = 0; i < output_buffers.size(); i++) {
-            for (int j = 0; j < std::min(function.dimensions(), 4); j++) {
+            for (int j = 0; j < function.dimensions() && j < 4; j++) {
                 if (output_buffers[i].min_constraint(i).defined()) {
                     output_buffers[i].min_constraint(i).accept(this);
                 }
@@ -199,14 +199,17 @@ class KeyInfo {
         for (iter = dependencies.dependency_info.begin();
              iter != dependencies.dependency_info.end();
              iter++) {
-            max_alignment = std::max(max_alignment, iter->second.type.bytes());
+            int alignment = iter->second.type.bytes();
+            if (alignment > max_alignment) {
+                max_alignment = alignment;
+            }
         }
         // Make sure max_alignment is a power of two and has maximum value of 32
         int i = 0;
         while (i < 4 && max_alignment > (1 << i)) {
             i = i + 1;
         }
-        return (1 << i);
+        return (size_t)(1 << i);
     }
 
     Stmt call_copy_memory(const std::string &key_name, const std::string &value, Expr index) {
@@ -215,7 +218,7 @@ class KeyInfo {
                                     Call::Intrinsic);
         Expr src = StringImm::make(value);
         Expr copy_size = (int32_t)value.size();
-        
+
         return Evaluate::make(Call::make(UInt(8), Call::copy_memory,
                                          vec(dest, src, copy_size), Call::Intrinsic));
     }
@@ -237,7 +240,7 @@ public:
             size_so_far = (size_so_far + needed_alignment) & ~(needed_alignment - 1);
         }
         key_size_expr = (int32_t)size_so_far;
-        
+
         for (iter = dependencies.dependency_info.begin();
              iter != dependencies.dependency_info.end();
              iter++) {
@@ -291,7 +294,7 @@ public:
                 alignment++;
             }
         }
-        
+
         std::map<FindParameterDependencies::DependencyKey,
                  FindParameterDependencies::DependencyInfo>::const_iterator iter;
         for (iter = dependencies.dependency_info.begin();
@@ -317,7 +320,7 @@ public:
     Expr generate_lookup(std::string key_allocation_name, std::string computed_bounds_name,
                          int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
+        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
                                   Call::Intrinsic));
         args.push_back(key_size());
@@ -337,7 +340,7 @@ public:
     Stmt store_computation(std::string key_allocation_name, std::string computed_bounds_name,
                            int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
-        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
+        args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of,
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
                                   Call::Intrinsic));
         args.push_back(key_size());
@@ -423,7 +426,7 @@ private:
             Expr cache_miss = Variable::make(Bool(), cache_miss_name);
 
             Stmt cache_store_back =
-              IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
+                IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
 	    Stmt cache_release = key_info.release_cache_entry(cache_key_name, computed_bounds_name, f.outputs(), op->name);
 
             Stmt mutated_produce = IfThenElse::make(cache_miss, produce);

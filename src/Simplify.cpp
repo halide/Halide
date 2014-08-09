@@ -318,10 +318,10 @@ private:
         } else if (sub_a && sub_b && equal(sub_a->a, sub_b->b)) {
             // (a - b) + (c - a) -> c - b
             expr = mutate(sub_b->a - sub_a->b);
-        } else if (mul_b && is_negative_const(mul_b->b)) {
+        } else if (mul_b && is_negative_negatable_const(mul_b->b)) {
             // a + b*-x -> a - b*x
             expr = mutate(a - mul_b->a * (-mul_b->b));
-        } else if (mul_a && is_negative_const(mul_a->b)) {
+        } else if (mul_a && is_negative_negatable_const(mul_a->b)) {
             // a*-x + b -> b - a*x
             expr = mutate(b - mul_a->a * (-mul_a->b));
         } else if (cast_a && cast_b &&
@@ -494,7 +494,7 @@ private:
         } else if (sub_b) {
             // a - (b - c) -> a + (c - b)
             expr = mutate(a + (sub_b->b - sub_b->a));
-        } else if (mul_b && is_negative_const(mul_b->b)) {
+        } else if (mul_b && is_negative_negatable_const(mul_b->b)) {
             // a - b*-x -> a + b*x
             expr = mutate(a + mul_b->a * (-mul_b->b));
         } else if (add_b && is_simple_const(add_b->b)) {
@@ -597,7 +597,7 @@ private:
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
         } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
-        } else if (sub_a && is_negative_const(b)) {
+        } else if (sub_a && is_negative_negatable_const(b)) {
             expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -b));
         } else if (mul_a && is_simple_const(mul_a->b) && is_simple_const(b)) {
             expr = mutate(mul_a->a * (mul_a->b * b));
@@ -1695,7 +1695,39 @@ private:
                     }
                 }
             }
+        } else if (op->call_type == Call::Intrinsic &&
+                   (op->name == Call::shift_left ||
+                    op->name == Call::shift_right)) {
+          Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+          int ib = 0;
+
+          if (const_castint(b, &ib)) {
+            Type t = op->type;
+
+            bool shift_left = op->name == Call::shift_left;
+            if (ib < 0) {
+              shift_left = !shift_left;
+              ib = -ib;
+            }
+
+            if (ib < std::min(t.bits, 32)) {
+              ib = 1 << ib;
+              b = make_const(t, ib);
+
+              if (shift_left) {
+                expr = mutate(Mul::make(a, b));
+              } else {
+                expr = mutate(Div::make(a, b));
+              }
+
+              return;
+            } else {
+              user_warning << "Cannot replace bit shift with arithmetic "
+                           << "operator (integer overflow).\n";
+            }
+          }
         }
+
         IRMutator::visit(op);
     }
 
@@ -1770,7 +1802,11 @@ private:
                 new_var = Variable::make(new_value.type().element_of(), new_name);
                 replacement = substitute(new_name, Broadcast::make(new_var, broadcast->width), replacement);
                 new_value = broadcast->value;
-            } else if (cast) {
+            } else if (cast && cast->type.bits > cast->value.type().bits) {
+                // Widening casts get pushed inwards, narrowing casts
+                // stay outside. This keeps the temporaries small, and
+                // helps with peephole optimizations in codegen that
+                // skip the widening entirely.
                 new_var = Variable::make(cast->value.type(), new_name);
                 replacement = substitute(new_name, Cast::make(cast->type, new_var), replacement);
                 new_value = cast->value;
@@ -2288,6 +2324,12 @@ void simplify_test() {
     check((y + x%3) + (x/3)*3, y + x);
     check((y + (x/3*3)) + x%3, y + x);
 
+    // Check bitshift operations
+    check(Cast::make(Int(16), x) << 10, Cast::make(Int(16), x) * 1024);
+    check(Cast::make(Int(16), x) >> 10, Cast::make(Int(16), x) / 1024);
+    check(Cast::make(Int(16), x) << -10, Cast::make(Int(16), x) / 1024);
+    // Correctly triggers a warning:
+    //check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
 
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
@@ -2459,6 +2501,10 @@ void simplify_test() {
     // Check that dead lets get stripped
     check(Let::make("x", 3*y*y*y, 4), 4);
     check(Let::make("x", 0, 0), 0);
+
+    // Test case with most negative 32-bit number, as constant to check that it is not negated.
+    check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
+	  ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     std::cout << "Simplify test passed" << std::endl;
 }

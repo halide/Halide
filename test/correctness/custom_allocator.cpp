@@ -24,7 +24,7 @@ void my_free(void *user_context, void *ptr) {
 int main(int argc, char **argv) {
     Func f, g;
     Var x;
-        
+
     f(x) = x;
     g(x) = f(x);
     f.compute_root();

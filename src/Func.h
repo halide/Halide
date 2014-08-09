@@ -320,7 +320,14 @@ public:
                                      int x_size, int y_size, int z_size) {
         return gpu_tile(x, y, z, x_size, y_size, z_size);
     }
-    EXPORT ScheduleHandle &memoize();
+};
+
+/**
+ * Used to determine if the output printed to file should be as a normal string
+ * or as an HTML file which can be opened in a browerser and manipulated via JS and CSS.*/
+enum StmtOutputFormat {
+     Text,
+     HTML
 };
 
 /** A halide function. This class represents one stage in a Halide
@@ -557,10 +564,83 @@ public:
                              const Target &target = get_target_from_environment());
 
     /** Write out an internal representation of lowered code. Useful
-     * for analyzing and debugging scheduling. Canonical extension is
-     * .stmt, which must be supplied in filename. */
+     * for analyzing and debugging scheduling. Can emit html or plain
+     * text. */
     EXPORT void compile_to_lowered_stmt(const std::string &filename,
+                                        StmtOutputFormat fmt = Text,
                                         const Target &target = get_target_from_environment());
+
+    /** Write out an internal representation of lowered code as above
+     * but simplified using the provided realization bounds and other
+     * concrete parameter values. Can emit html or plain text. */
+    //@{
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   Realization dst,
+                                                   const std::map<std::string, Expr> &additional_replacements,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   Realization dst,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   Buffer dst,
+                                                   const std::map<std::string, Expr> &additional_replacements,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &target = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   Buffer dst,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &target = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size, int y_size, int z_size, int w_size,
+                                                   const std::map<std::string, Expr> &additional_replacements,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size, int y_size, int z_size, int w_size,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size, int y_size, int z_size,
+                                                   const std::map<std::string, Expr> &additional_replacements,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size, int y_size, int z_size,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size, int y_size,
+                                                   const std::map<std::string, Expr> &additional_replacements,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size, int y_size,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size,
+                                                   const std::map<std::string, Expr> &additional_replacements,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
+                                                   int x_size,
+                                                   StmtOutputFormat fmt = Text,
+                                                   const Target &t = get_target_from_environment());
+
+    // @}
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first

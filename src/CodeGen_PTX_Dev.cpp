@@ -28,7 +28,7 @@ CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen(host) {
 }
 
 void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
-                                 std::string name,
+                                 const std::string &name,
                                  const std::vector<GPU_Argument> &args) {
 
     debug(2) << "In CodeGen_PTX_Dev::add_kernel\n";
@@ -331,9 +331,12 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(module));
     }
     #else
-    // FIXME: This doesn't actually do the job. Now that
-    // DataLayoutPass is gone, I have no idea how to get this to work.
-    if (const DataLayout *TD = Target.getDataLayout()) {
+    #if LLVM_VERSION < 36
+    const DataLayout *TD = Target.getDataLayout();
+    #else
+    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
+    #endif
+    if (TD) {
         module->setDataLayout(TD);
     }
     PM.add(new DataLayoutPass(module));

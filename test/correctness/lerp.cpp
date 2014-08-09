@@ -227,10 +227,47 @@ int main(int argc, char **argv) {
     lerp_constants() = lerp(0, cast<uint32_t>(1023), .5f);
     Image<uint32_t> result = lerp_constants.realize();
 
-    uint32_t expected = (uint32_t)(1023 * .5f + .5f);
+    uint32_t expected = evaluate<uint32_t>(cast<uint32_t>(lerp(0, cast<uint16_t>(1023), .5f)));
     if (result(0) != expected)
         std::cerr << "Expected " << expected << " got " << result(0) << std::endl;
     assert(result(0) == expected);
+
+    // Add a little more coverage for uint32_t as this was failing
+    // without being detected for a long time.
+
+    Image<uint8_t> input_a_img(16, 16);
+    Image<uint8_t> input_b_img(16, 16);
+
+    for (int i = 0; i < 16; i ++) {
+        for (int j = 0; j < 16; j ++) {
+  	    input_a_img(i, j) = (i << 4) + j;
+	    input_b_img(i, j) = ((15 - i) << 4) + (15 - j);
+	}
+    }
+
+    ImageParam input_a(UInt(8), 2);
+    ImageParam input_b(UInt(8), 2);
+
+    Var x, y;
+    Func lerp_with_casts;
+    Param<float> w;
+    lerp_with_casts(x, y) = lerp(cast<int32_t>(input_a(x, y)), cast<int32_t>(input_b(x, y)), w);
+    lerp_with_casts.vectorize(x, 4);
+
+    input_a.set(input_a_img);
+    input_b.set(input_b_img);
+
+    w.set(0.0f);
+    Image<int32_t> result_should_be_a = lerp_with_casts.realize(16, 16);
+    w.set(1.0f);
+    Image<int32_t> result_should_be_b = lerp_with_casts.realize(16, 16);
+
+    for (int i = 0; i < 16; i ++) {
+        for (int j = 0; j < 16; j ++) {
+	    assert(input_a_img(i, j) == result_should_be_a(i, j));
+	    assert(input_b_img(i, j) == result_should_be_b(i, j));
+	}
+    }
 
     std::cout << "Success!" << std::endl;
 }

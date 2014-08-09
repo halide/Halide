@@ -649,7 +649,7 @@ private:
 
     Stmt build_pipeline(Stmt s) {
         pair<Stmt, Stmt> realization = build_production(func);
-  
+
         return Pipeline::make(func.name(), realization.first, realization.second, s);
     }
 
@@ -1646,25 +1646,25 @@ Stmt lower(Function f, const Target &t) {
     vector<string> order = realization_order(f.name(), env, graph);
     Stmt s = create_initial_loop_nest(f, t);
 
-    debug(2) << "Initial statement: " << '\n' << s << '\n';
+    debug(2) << "Lowering before everything:" << '\n' << s << '\n';
     s = schedule_functions(s, order, env, graph, t);
-    debug(2) << "All realizations injected:\n" << s << '\n';
+    debug(2) << "Lowering after injecting realizations:\n" << s << '\n';
 
     debug(2) << "Injecting memoization...\n";
     s = inject_memoization(s, env, f.name());
-    debug(2) << "Memoization injected:\n" << s << '\n';
+    debug(2) << "Lowering after injecting memoization:\n" << s << '\n';
 
     debug(1) << "Injecting tracing...\n";
     s = inject_tracing(s, env, f);
-    debug(2) << "Tracing injected:\n" << s << '\n';
+    debug(2) << "Lowering after injecting tracing:\n" << s << '\n';
 
     debug(1) << "Injecting profiling...\n";
     s = inject_profiling(s, f.name());
-    debug(2) << "Profiling injected:\n" << s << '\n';
+    debug(2) << "Lowering after injecting profiling:\n" << s << '\n';
 
     debug(1) << "Adding checks for parameters\n";
     s = add_parameter_checks(s, t);
-    debug(2) << "Parameter checks injected:\n" << s << '\n';
+    debug(2) << "Lowering after injecting parameter checks:\n" << s << '\n';
 
     // Compute the maximum and minimum possible value of each
     // function. Used in later bounds inference passes.
@@ -1675,117 +1675,112 @@ Stmt lower(Function f, const Target &t) {
     // inference.
     debug(1) << "Adding checks for images\n";
     s = add_image_checks(s, f, t, func_bounds);
-    debug(2) << "Image checks injected:\n" << s << '\n';
+    debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
     // can't simplify statements from here until we fix them up. (We
     // can still simplify Exprs).
     debug(1) << "Performing computation bounds inference...\n";
     s = bounds_inference(s, order, env, func_bounds);
-    debug(2) << "Computation bounds inference:\n" << s << '\n';
+    debug(2) << "Lowering after computation bounds inference:\n" << s << '\n';
 
     debug(1) << "Performing sliding window optimization...\n";
     s = sliding_window(s, env);
-    debug(2) << "Sliding window:\n" << s << '\n';
+    debug(2) << "Lowering after sliding window:\n" << s << '\n';
 
     debug(1) << "Performing allocation bounds inference...\n";
     s = allocation_bounds_inference(s, env, func_bounds);
-    debug(2) << "Allocation bounds inference:\n" << s << '\n';
+    debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
     debug(1) << "Uniquifying variable names...\n";
     s = uniquify_variable_names(s);
-    debug(2) << "Uniquified variable names: \n" << s << "\n\n";
+    debug(2) << "Lowering after uniquifying variable names:\n" << s << "\n\n";
 
     debug(1) << "Performing storage folding optimization...\n";
     s = storage_folding(s);
-    debug(2) << "Storage folding:\n" << s << '\n';
+    debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
     s = debug_to_file(s, order[order.size()-1], env);
-    debug(2) << "Injected debug_to_file calls:\n" << s << '\n';
+    debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
     s = simplify(s, false);
-    debug(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Lowering after first simplification:\n" << s << "\n\n";
 
     debug(1) << "Dynamically skipping stages...\n";
     s = skip_stages(s, order);
-    debug(2) << "Dynamically skipped stages: \n" << s << "\n\n";
+    debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
     if (t.features & Target::OpenGL) {
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
         s = inject_opengl_intrinsics(s);
-        debug(2) << "OpenGL intrinsics: \n" << s << "\n\n";
+        debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, env);
-    debug(2) << "Storage flattening: \n" << s << "\n\n";
+    debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (t.has_gpu_feature() || t.features & Target::OpenGL) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s);
-        debug(2) << "Injected host <-> dev buffer copies:\n" << s << "\n\n";
+        debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
     }
 
     if (t.has_gpu_feature()) {
         debug(1) << "Injecting per-block gpu synchronization...\n";
         s = fuse_gpu_thread_loops(s);
-        debug(2) << "Injected per-block gpu synchronization:\n" << s << "\n\n";
+        debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
 
     debug(1) << "Removing code that depends on undef values...\n";
     s = remove_undef(s);
-    debug(2) << "Removed code that depends on undef values: \n" << s << "\n\n";
+    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
     s = unify_duplicate_lets(s);
     s = remove_trivial_for_loops(s);
-    debug(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Lowering after second simplifcation:\n" << s << "\n\n";
 
     debug(1) << "Unrolling...\n";
     s = unroll_loops(s);
-    debug(2) << "Unrolled: \n" << s << "\n\n";
-
-    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    debug(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Lowering after unrolling:\n" << s << "\n\n";
 
     debug(1) << "Vectorizing...\n";
     s = vectorize_loops(s);
-    debug(2) << "Vectorized: \n" << s << "\n\n";
-
-    debug(1) << "Simplifying...\n";
     s = simplify(s);
-    debug(2) << "Simplified: \n" << s << "\n\n";
+    debug(2) << "Lowering after vectorizing:\n" << s << "\n\n";
+
+    debug(1) << "Detecting vector interleavings...\n";
+    s = rewrite_interleavings(s);
+    s = simplify(s);
+    debug(2) << "Lowering after rewriting vector interleavings:\n" << s << "\n\n";
 
     debug(1) << "Specializing clamped ramps...\n";
     s = specialize_clamped_ramps(s);
     s = simplify(s);
-    debug(2) << "Specialized clamped ramps: \n" << s << "\n\n";
-
-    debug(1) << "Detecting vector interleavings...\n";
-    s = rewrite_interleavings(s);
-    debug(2) << "Rewrote vector interleavings: \n" << s << "\n\n";
+    debug(2) << "Loering after specializing clamped ramps:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
-    debug(2) << "Injected early frees: \n" << s << "\n\n";
+    debug(2) << "Lowering after injecting early frees:\n" << s << "\n\n";
 
     if (t.has_gpu_feature()) {
         debug(1) << "Injecting device frees...\n";
         s = inject_dev_frees(s);
-        debug(2) << "Injected device frees: \n" << s << "\n\n";
+        debug(2) << "Lowering after injecting device frees:\n" << s << "\n\n";
     }
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
     s = simplify(s);
-    debug(1) << "Simplified: \n" << s << "\n\n";
+    debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     return s;
 }

@@ -426,6 +426,7 @@ DECLARE_CPP_INITMOD(write_debug_image)
 DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
+DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -509,6 +510,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_memoization_cache_lookup",
                        "halide_memoization_cache_store",
                        "halide_memoization_cache_release",
+                       "halide_memoization_cache_cleanup",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -547,8 +549,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
 namespace Internal {
 
-/** When JIT-compiling on 32-bit windows, we need to rewrite calls 
-        to name-mangled win32 api calls to non-name-mangled versions. */
+/** When JIT-compiling on 32-bit windows, we need to rewrite calls
+ *  to name-mangled win32 api calls to non-name-mangled versions.
+ */
 void undo_win32_name_mangling(llvm::Module *m) {
     llvm::IRBuilder<> builder(m->getContext());
     // For every function prototype...
@@ -557,6 +560,7 @@ void undo_win32_name_mangling(llvm::Module *m) {
         string n = f->getName();
         // if it's a __stdcall call that starts with \01_, then we're making a win32 api call
         if (f->getCallingConv() == llvm::CallingConv::X86_StdCall &&
+            f->empty() &&
             n.size() > 2 && n[0] == 1 && n[1] == '_') {
 
             // Unmangle the name.
@@ -627,7 +631,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     } else if (t.os == Target::NaCl) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
         modules.push_back(get_initmod_nacl_io(c, bits_64));
-        modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
+        modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
         modules.push_back(get_initmod_ssp(c, bits_64));
     }

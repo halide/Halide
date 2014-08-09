@@ -92,6 +92,19 @@ CodeGen::CodeGen(Target t) :
     initialize_llvm();
 }
 
+void CodeGen::jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module,
+                           std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
+    // If the module contains a memoization cache cleanup function, run it when the module dies.
+    llvm::Function *fn = module->getFunction("halide_memoization_cache_cleanup");
+    if (fn) {
+        void *f = ee->getPointerToFunction(fn);
+        internal_assert(f) << "Could not find compiled form of halide_memoization_cache_release in module\n";
+        void (*cleanup_routine)(void *) =
+            reinterpret_bits<void (*)(void *)>(f);
+        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
+    }
+}
+
 void CodeGen::initialize_llvm() {
     // Initialize the targets we want to generate code for which are enabled
     // in llvm configuration

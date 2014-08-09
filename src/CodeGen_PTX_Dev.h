@@ -26,7 +26,7 @@ public:
     CodeGen_PTX_Dev(Target host);
 
     void add_kernel(Stmt stmt,
-                    std::string name,
+                    const std::string &name,
                     const std::vector<GPU_Argument> &args);
 
     /** (Re)initialize the PTX module. This is separate from compile, since

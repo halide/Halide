@@ -105,7 +105,8 @@ set(RUNTIME_CPP
   windows_opencl_debug
   windows_io
   posix_print
-  cache)
+  cache
+  nacl_host_cpu_count)
 set (RUNTIME_LL
   arm
   aarch64
@@ -137,12 +138,12 @@ set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
-    set(LL "${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
-    set(BC "${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
+    set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+    set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} -fno-blocks -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE -DBITS_${j} -emit-llvm -O3 -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
     add_custom_command(OUTPUT "${BC}"
                        DEPENDS "${LL}"
@@ -157,7 +158,7 @@ foreach (i ${RUNTIME_CPP} )
 endforeach()
 foreach (i ${RUNTIME_LL} )
   set(LL "${NATIVE_RUNTIME_DIR}${i}.ll")
-  set(BC "${NATIVE_INT_DIR}initmod.${i}.bc")
+  set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}.bc")
   set(INITMOD "${INITMOD_PREFIX}${i}.cpp")
   add_custom_command(OUTPUT "${BC}"
                      DEPENDS "${LL}"
@@ -268,6 +269,8 @@ set(HEADER_FILES
   ParallelRVar.h
   BoundaryConditions.h
   UnifyDuplicateLets.h
+  HumanReadableStmt.h
+  StmtToHtml.h
   Memoization.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
@@ -360,6 +363,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   FuseGPUThreadLoops.cpp
   ParallelRVar.cpp
   BoundaryConditions.cpp
+  HumanReadableStmt.cpp
+  StmtToHtml.cpp
   Memoization.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})

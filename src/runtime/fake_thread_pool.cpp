@@ -1,8 +1,17 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 
-#define WEAK __attribute__((weak))
+#include "HalideRuntime.h"
 
 extern "C" {
+
+WEAK void halide_mutex_destroy(halide_mutex *mutex_arg) {
+}
+
+WEAK void halide_mutex_lock(halide_mutex *mutex) {
+}
+
+WEAK void halide_mutex_unlock(halide_mutex *mutex) {
+}
 
 WEAK void halide_shutdown_thread_pool() {
 }

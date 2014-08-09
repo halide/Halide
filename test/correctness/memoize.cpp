@@ -56,6 +56,29 @@ extern "C" DLLEXPORT int count_calls_with_arg_parallel(uint8_t val, buffer_t *ou
     return 0;
 }
 
+int call_count_staged[4];
+
+extern "C" DLLEXPORT int count_calls_staged(int32_t stage, uint8_t val, buffer_t *in, buffer_t *out) {
+    if (in->host == NULL) {
+        for (int i = 0; i < 4; i++) {
+            in->min[i] = out->min[i];
+            in->extent[i] = out->extent[i];
+            in->stride[i] = out->stride[i];
+        }
+      in->elem_size = out->elem_size;
+    } else if (out->host) {
+        assert(stage < sizeof(call_count_staged)/sizeof(call_count_staged[0]));
+        call_count_staged[stage]++;
+        for (int32_t i = 0; i < out->extent[0]; i++) {
+            for (int32_t j = 0; j < out->extent[1]; j++) {
+                out->host[i * out->stride[0] + j * out->stride[1]] =
+                  in->host[i * in->stride[0] + j * in->stride[1]] + val;
+            }
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
 
     {
@@ -301,7 +324,7 @@ int main(int argc, char **argv) {
 
         f.compute_root().memoize();
         g.vectorize(x, 8).compute_at(h, x);
-        
+
         val.set(23.0f);
         index.set(2);
         Image<uint8_t> out1 = h.realize(1);
@@ -408,7 +431,7 @@ int main(int argc, char **argv) {
         Var x, y;
         // Ensure that all calls map to the same cache key, but pass a thread ID
         // through to avoid having to do locking or an atomic add
-        f(x, y) = count_calls(x, y % 4, memoize_tag(y / 1, 0)) + cast<uint8_t>(x);
+        f(x, y) = count_calls(x, y % 4, memoize_tag(y / 16, 0)) + cast<uint8_t>(x);
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
@@ -430,6 +453,62 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 8; i++) {
           printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
+    }
+
+    {
+        Param<float> val;
+
+        Func f;
+        Var x, y;
+        f(x, y) = cast<uint8_t>((x << 8) + y);
+
+        Func prev_func = f;
+
+        Func stage[4];
+        for (int i = 0; i < 4; i++) {
+            std::vector<ExternFuncArgument> args(3);
+            args[0] = cast<int32_t>(i);
+            args[1] = cast<int32_t>(val);
+            args[2] = prev_func;
+            stage[i].define_extern("count_calls_staged",
+                                   args,
+                                   UInt(8), 2);
+            prev_func = stage[i];
+        }
+
+        f.compute_root();
+        for (int i = 0; i < 3; i++) {
+          stage[i].compute_root();
+        }
+#if DYNAMIC_SKIP_STAGE_BUG_FIXED // This makes the test fail to compile
+        stage[3].compute_root().memoize();
+#else
+        stage[3].compute_root();
+#endif
+        val.set(23.0f);
+        Image<uint8_t> result = stage[3].realize(128, 128);
+
+        for (int32_t i = 0; i < 128; i++) {
+            for (int32_t j = 0; j < 128; j++) {
+              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+            }
+        }
+
+        for (int i = 0; i < 4; i++) {
+          printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+        }
+
+        result = stage[3].realize(128, 128);
+        for (int32_t i = 0; i < 128; i++) {
+            for (int32_t j = 0; j < 128; j++) {
+              assert(result(i, j) == (uint8_t)((i << 8) + j + 4 * 23));
+            }
+        }
+
+        for (int i = 0; i < 4; i++) {
+            printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+        }
+
     }
 
     printf("Success!\n");

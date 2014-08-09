@@ -1,13 +1,13 @@
-// Implementation note: all function that directly or indirectly access the
-// runtime state in halide_opengl_state must be declared as WEAK, otherwise
-// the behavior at runtime is undefined.
-
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
 #include "mini_string.h"
 #include "mini_opengl.h"
+
+// Implementation note: all function that directly or indirectly access the
+// runtime state in halide_opengl_state must be declared as WEAK, otherwise
+// the behavior at runtime is undefined.
 
 #define EXPORT extern "C" WEAK
 
@@ -74,10 +74,14 @@ enum ArgumentKind {
 
 enum ArgumentType {
     ARGTYPE_NONE,
+    ARGTYPE_BOOL,
     ARGTYPE_FLOAT,
-    ARGTYPE_INT,
+    ARGTYPE_INT8,
+    ARGTYPE_INT16,
+    ARGTYPE_INT32,
     ARGTYPE_UINT8,
-    ARGTYPE_UINT16
+    ARGTYPE_UINT16,
+    ARGTYPE_UINT32
 };
 
 struct HalideOpenGLArgument {
@@ -157,10 +161,10 @@ static const char var_marker[] = "/// VAR ";
 
 // Ensure that OpenGL runtime is correctly initialized. Used in all public API
 // functions.
-#define CHECK_INITIALIZED(ERRORCODE)				\
-    if (!ST.initialized) {					\
-	halide_error(user_context, "OpenGL runtime not initialized.\n");	\
-	return ERRORCODE;					\
+#define CHECK_INITIALIZED(ERRORCODE)                            \
+    if (!ST.initialized) {                                      \
+        halide_error(user_context, "OpenGL runtime not initialized.\n");        \
+        return ERRORCODE;                                       \
     }
 
 // Macro for error checking.
@@ -254,12 +258,20 @@ static HalideOpenGLArgument *parse_argument(void *user_context, const char *src,
     ArgumentType type = ARGTYPE_NONE;
     if ((name = match_prefix(src, "float "))) {
         type = ARGTYPE_FLOAT;
-    } else if ((name = match_prefix(src, "int "))) {
-        type = ARGTYPE_INT;
-    } else if ((name = match_prefix(src, "uint8 "))) {
+    } else if ((name = match_prefix(src, "bool "))) {
+        type = ARGTYPE_BOOL;
+    } else if ((name = match_prefix(src, "int8_t "))) {
+        type = ARGTYPE_INT8;
+    } else if ((name = match_prefix(src, "int16_t "))) {
+        type = ARGTYPE_INT16;
+    } else if ((name = match_prefix(src, "int32_t "))) {
+        type = ARGTYPE_INT32;
+    } else if ((name = match_prefix(src, "uint8_t "))) {
         type = ARGTYPE_UINT8;
-    } else if ((name = match_prefix(src, "uint16 "))) {
-	type = ARGTYPE_UINT16;
+    } else if ((name = match_prefix(src, "uint16_t "))) {
+        type = ARGTYPE_UINT16;
+    } else if ((name = match_prefix(src, "uint32_t "))) {
+        type = ARGTYPE_UINT32;
     }
     if (type == ARGTYPE_NONE) {
         halide_error(user_context, "Internal error: argument type not supported");
@@ -287,25 +299,25 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
 
     #ifdef DEBUG
     {
-      // Android logcat output clips at ~1000 character chunks by default;
-      // to avoid clipping the interesting stuff, emit a line at a time.
-      // This is less efficient, but it's DEBUG-only.
-      halide_printf(user_context, "Compiling GLSL kernel (size=%d):\n", size);
-      const int kBufSize = 255;
-      char buf[kBufSize + 1];
-      const char* s = src;
-      int d = 0;
-      while (s < src + size) {
-        while (*s != '\n' && *s != '\0' && d < kBufSize) {
-          buf[d++] = *s++;
+        // Android logcat output clips at ~1000 character chunks by default;
+        // to avoid clipping the interesting stuff, emit a line at a time.
+        // This is less efficient, but it's DEBUG-only.
+        halide_printf(user_context, "Compiling GLSL kernel (size=%d):\n", size);
+        const int kBufSize = 255;
+        char buf[kBufSize + 1];
+        const char* s = src;
+        int d = 0;
+        while (s < src + size) {
+            while (*s != '\n' && *s != '\0' && d < kBufSize) {
+                buf[d++] = *s++;
+            }
+            buf[d++] = '\0';
+            halide_printf(user_context, "%s\n", buf);
+            d = 0;
+            while (*s == '\n' || *s == '\0') {
+                s++;
+            }
         }
-        buf[d++] = '\0';
-        halide_printf(user_context, "%s\n", buf);
-        d = 0;
-        while (*s == '\n' || *s == '\0') {
-          s++;
-        }
-      }
     }
     #endif
 
@@ -325,6 +337,9 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
                 arg->kind = ARGKIND_VAR;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
+            } else {
+                halide_error(user_context, "Invalid VAR marker");
+                goto error;
             }
         } else if ((args = match_prefix(line, input_marker))) {
             if (HalideOpenGLArgument *arg =
@@ -332,6 +347,9 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
                 arg->kind = ARGKIND_INBUF;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
+            } else {
+                halide_error(user_context, "Invalid IN_BUFFER marker");
+                goto error;
             }
         } else if ((args = match_prefix(line, output_marker))) {
             if (HalideOpenGLArgument *arg =
@@ -339,6 +357,9 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
                 arg->kind = ARGKIND_OUTBUF;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
+            } else {
+                halide_error(user_context, "Invalid OUT_BUFFER marker");
+                goto error;
             }
         } else {
             // Stop parsing if we encounter something we don't recognize
@@ -348,16 +369,21 @@ static HalideOpenGLKernel *create_kernel(void *user_context, const char *src, in
     }
 
     // Arguments are currently in reverse order, flip the list.
-    HalideOpenGLArgument *cur = kernel->arguments;
-    kernel->arguments = NULL;
-    while (cur) {
-        HalideOpenGLArgument *next = cur->next;
-        cur->next = kernel->arguments;
-        kernel->arguments = cur;
-        cur = next;
+    {
+        HalideOpenGLArgument *cur = kernel->arguments;
+        kernel->arguments = NULL;
+        while (cur) {
+            HalideOpenGLArgument *next = cur->next;
+            cur->next = kernel->arguments;
+            kernel->arguments = cur;
+            cur = next;
+        }
     }
 
     return kernel;
+  error:
+    free(kernel);
+    return NULL;
 }
 
 // Delete all data associated with a kernel. Also release associated OpenGL
@@ -406,8 +432,8 @@ EXPORT int halide_opengl_init(void *user_context) {
     ST.vertex_shader_id = halide_opengl_make_shader(user_context,
         GL_VERTEX_SHADER, vertex_shader_src, NULL);
     if (ST.vertex_shader_id == 0) {
-	halide_error(user_context, "Failed to create vertex shader");
-	return 1;
+        halide_error(user_context, "Failed to create vertex shader");
+        return 1;
     }
 
     // Vertices and their order in a triangle strip for rendering a square
@@ -801,14 +827,20 @@ EXPORT int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     GLint width = buf->extent[0];
     GLint height = buf->extent[1];
 
-    bool is_interleaved =
-        (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
-    if (is_interleaved) {
-        ST.PixelStorei(GL_UNPACK_ROW_LENGTH, buf->extent[1]);
+    // To use TexSubImage2D directly, the colors must be stored interleaved
+    // and rows must be stored consecutively.
+    bool is_interleaved = (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
+    bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
+    if (is_interleaved && is_packed) {
         ST.PixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        uint8_t *host_ptr = buf->host + buf->elem_size *
+            (buf->min[0] * buf->stride[0] +
+             buf->min[1] * buf->stride[1] +
+             buf->min[2] * buf->stride[2] +
+             buf->min[3] * buf->stride[3]);
         ST.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
-                         format, type, buf->host);
+                         format, type, host_ptr);
         CHECK_GLERROR(1);
     } else {
         #ifdef DEBUG
@@ -845,13 +877,6 @@ EXPORT int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
 
 // Copy pixel data from a texture to a CPU buffer.
 static int GetPixels(void *user_context, buffer_t *buf, GLint format, GLint type, void *dest) {
-#if 0
-    // glGetImage isn't supported in OpenGL ES, so this path is currently
-    // commented out.
-    ST.BindTexture(GL_TEXTURE_2D, tex);
-    ST.GetTexImage(GL_TEXTURE_2D, 0, format, type, dest);
-    ST.BindTexture(GL_TEXTURE_2D, 0);
-#else
     GLuint tex = get_texture_id(buf);
     ST.BindFramebuffer(GL_FRAMEBUFFER, ST.framebuffer_id);
     ST.FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -867,7 +892,6 @@ static int GetPixels(void *user_context, buffer_t *buf, GLint format, GLint type
     }
     ST.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
     ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
-#endif
     return 0;
 }
 
@@ -898,18 +922,27 @@ EXPORT int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         return 1;
     }
     GLint width = buf->extent[0], height = buf->extent[1];
+
+    // To download the texture directly, the colors must be stored interleaved
+    // and rows must be stored consecutively.
     bool is_interleaved = (buf->stride[2] == 1 && buf->stride[0] == buf->extent[2]);
-    if (is_interleaved) {
-        // TODO: GL_UNPACK_ROW_LENGTH
-        ST.PixelStorei(GL_PACK_ROW_LENGTH, buf->extent[1]);
+    bool is_packed = (buf->stride[1] == buf->extent[0] * buf->stride[0]);
+    if (is_interleaved && is_packed) {
         ST.PixelStorei(GL_PACK_ALIGNMENT, 1);
-        GetPixels(user_context, buf, format, type, buf->host);
+        uint8_t *host_ptr = buf->host + buf->elem_size *
+            (buf->min[0] * buf->stride[0] +
+             buf->min[1] * buf->stride[1] +
+             buf->min[2] * buf->stride[2] +
+             buf->min[3] * buf->stride[3]);
+        GetPixels(user_context, buf, format, type, host_ptr);
     } else {
         #ifdef DEBUG
-        halide_printf(user_context, "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
+        halide_printf(user_context,
+                      "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
         #endif
 
-        size_t size = width * height * buf->extent[2] * buf->elem_size;
+        size_t stride = width * buf->extent[2] * buf->elem_size;
+        size_t size = height * stride;
         uint8_t *tmp = (uint8_t*)halide_malloc(user_context, size);
         if (!tmp) {
             halide_error(user_context, "halide_malloc failed inside copy_to_host\n");
@@ -939,6 +972,24 @@ EXPORT int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     CHECK_GLERROR(1);
     buf->dev_dirty = false;
     return 0;
+}
+
+static void SetIntParam(void *user_context, const char *name,
+                        GLint loc, GLint value) {
+    #ifdef DEBUG
+    halide_printf(user_context, "Setting int %s = %d (loc=%d)\n",
+        name, value, loc);
+    #endif
+    ST.Uniform1iv(loc, 1, &value);
+}
+
+static void SetFloatParam(void *user_context, const char *name,
+                          GLint loc, GLfloat value) {
+    #ifdef DEBUG
+    halide_printf(user_context, "Setting float %s = %g (loc=%d)\n",
+        name, value, loc);
+    #endif
+    ST.Uniform1fv(loc, 1, &value);
 }
 
 
@@ -1008,24 +1059,55 @@ EXPORT int halide_opengl_dev_run(
                 continue;
             }
 
+            // Note: small integers are represented as floats in GLSL.
             switch (kernel_arg->type) {
-            case ARGTYPE_INT:
-                #ifdef DEBUG
-                halide_printf(user_context, "Setting int %s = %d (loc=%d)\n",
-                              kernel_arg->name, *((GLint *)args[i]), loc);
-                #endif
-                ST.Uniform1iv(loc, 1, (GLint *)args[i]);
+            case ARGTYPE_FLOAT:
+                SetFloatParam(user_context, kernel_arg->name, loc, *(float*)args[i]);
                 break;
-            case ARGTYPE_FLOAT: {
-                #ifdef DEBUG
-                halide_printf(user_context, "Setting float %s = %g (loc=%d)\n",
-                              kernel_arg->name, *((GLfloat *)args[i]), loc);
-                #endif
-                ST.Uniform1fv(loc, 1, (GLfloat *)args[i]);
+            case ARGTYPE_BOOL: {
+                GLint value = *((bool*)args[i]) ? 1 : 0;
+                SetIntParam(user_context, kernel_arg->name, loc, value);
+                break;
+            }
+            case ARGTYPE_INT8: {
+                GLfloat value = *((int8_t*)args[i]);
+                SetFloatParam(user_context, kernel_arg->name, loc, value);
+                break;
+            }
+            case ARGTYPE_UINT8: {
+                GLfloat value = *((uint8_t*)args[i]);
+                SetFloatParam(user_context, kernel_arg->name, loc, value);
+                break;
+            }
+            case ARGTYPE_INT16: {
+                GLfloat value = *((int16_t*)args[i]);
+                SetFloatParam(user_context, kernel_arg->name, loc, value);
+                break;
+            }
+            case ARGTYPE_UINT16: {
+                GLfloat value = *((uint16_t*)args[i]);
+                SetFloatParam(user_context, kernel_arg->name, loc, value);
+                break;
+            }
+            case ARGTYPE_INT32: {
+                GLint value = *((int32_t*)args[i]);
+                SetIntParam(user_context, kernel_arg->name, loc, value);
+                break;
+            }
+            case ARGTYPE_UINT32: {
+                uint32_t value = *((uint32_t*)args[i]);
+                GLint signed_value;
+                if (value > 0x7fffffff) {
+                    halide_error_varargs(user_context,
+                                         "GLSL: argument '%' is too large for GLint\n",
+                                         kernel_arg->name);
+                    return -1;
+                }
+                signed_value = static_cast<GLint>(value);
+                SetIntParam(user_context, kernel_arg->name, loc, signed_value);
                 break;
             }
             case ARGTYPE_NONE:
-            default:
                 halide_error(user_context, "Unknown kernel argument type");
                 return 1;
             }
@@ -1051,8 +1133,8 @@ EXPORT int halide_opengl_dev_run(
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
             halide_error(user_context,
-			 "OpenGL ES 2.0 only supports one single output texture");
-	    return 1;
+                         "OpenGL ES 2.0 only supports one single output texture");
+            return 1;
         }
 
         GLuint tex = *((GLuint*)args[i]);
@@ -1065,10 +1147,10 @@ EXPORT int halide_opengl_dev_run(
         CHECK_GLERROR(1);
 
         HalideOpenGLTexture *texinfo = halide_opengl_find_texture(tex);
-	if (!texinfo) {
-	    halide_error(user_context, "Undefined output texture");
-	    return 1;
-	}
+        if (!texinfo) {
+            halide_error(user_context, "Undefined output texture");
+            return 1;
+        }
         output_min[0] = texinfo->min[0];
         output_min[1] = texinfo->min[1];
         output_extent[0] = texinfo->extent[0];

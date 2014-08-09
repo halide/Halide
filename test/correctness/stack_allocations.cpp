@@ -20,7 +20,7 @@ int main(int argc, char **argv) {
     Func f, g, h;
     Var x, y;
 
-    f(x, y) = x + y;    
+    f(x, y) = x + y;
     g(x, y) = f(x-1, y+1) * f(x+1, y-1);
     h(x, y) = g(x+1, y+1) + g(x-1, y-1);
 
