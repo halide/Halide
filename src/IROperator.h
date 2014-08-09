@@ -41,6 +41,14 @@ EXPORT bool is_positive_const(Expr e);
  * strictly less than zero (in all lanes, if a vector expression) */
 EXPORT bool is_negative_const(Expr e);
 
+/** Is the expression a const (as defined by is_const), and also
+ * strictly less than zero (in all lanes, if a vector expression) and
+ * is its negative value representable. (This excludes the most
+ * negative value of the Expr's type from inclusion. Intended to be
+ * used when the value will be negated as part of simplification.)
+ */
+EXPORT bool is_negative_negatable_const(Expr e);
+
 /** Is the expression a const (as defined by is_const), and also equal
  * to zero (in all lanes, if a vector expression) */
 EXPORT bool is_zero(Expr e);

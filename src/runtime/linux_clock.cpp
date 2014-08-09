@@ -1,4 +1,4 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 
 #ifndef __clockid_t_defined
 #define __clockid_t_defined 1

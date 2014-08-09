@@ -10,7 +10,7 @@ using namespace Halide;
 #define DLLEXPORT
 #endif
 
-extern "C" DLLEXPORT 
+extern "C" DLLEXPORT
 int extern_error(buffer_t *out) {
     return -1;
 }

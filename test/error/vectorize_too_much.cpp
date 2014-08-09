@@ -8,7 +8,7 @@ int main(int argc, char **argv) {
 
     Image<int> input(5, 5);
     Func f;
-    f(x, y) = input(x, y) * 2; 
+    f(x, y) = input(x, y) * 2;
     f.vectorize(x, 8).vectorize(y, 8);
 
     // Should result in an error

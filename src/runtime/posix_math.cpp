@@ -1,4 +1,4 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 
 #define INLINE inline __attribute__((weak)) __attribute__((used)) __attribute__((always_inline)) __attribute__((nothrow)) __attribute__((pure))
 

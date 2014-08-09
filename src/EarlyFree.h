@@ -1,7 +1,7 @@
 #ifndef HALIDE_EARLY_FREE_H
 #define HALIDE_EARLY_FREE_H
 
-/** \file 
+/** \file
  * Defines the lowering pass that injects markers just after
  * the last use of each buffer so that they can potentially be freed
  * earlier.

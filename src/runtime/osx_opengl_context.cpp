@@ -1,3 +1,4 @@
+#include "runtime_internal.h"
 #include "HalideRuntime.h"
 
 extern "C" void *dlopen(const char *, int);
@@ -7,8 +8,6 @@ extern "C" void *aglCreateContext(void *, void *);
 extern "C" int aglGetError();
 extern "C" void aglDestroyPixelFormat(void *);
 extern "C" unsigned char aglSetCurrentContext(void *);
-
-#define WEAK __attribute__((weak))
 
 extern "C" {
 

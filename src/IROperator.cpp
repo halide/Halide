@@ -136,6 +136,25 @@ bool is_negative_const(Expr e) {
     return false;
 }
 
+bool is_negative_negatable_const(Expr e) {
+    if (const IntImm *i = e.as<IntImm>()) {
+        return i->value < 0 &&
+               i->value != e.type().imin();
+    }
+    if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
+    if (const Cast *c = e.as<Cast>()) {
+        return is_negative_negatable_const(c->value);
+    }
+    if (const Ramp *r = e.as<Ramp>()) {
+        // slightly conservative
+        return is_negative_negatable_const(r->base) && is_negative_const(r->stride);
+    }
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_negative_negatable_const(b->value);
+    }
+    return false;
+}
+
 bool is_zero(Expr e) {
     if (const IntImm *int_imm = e.as<IntImm>()) return int_imm->value == 0;
     if (const FloatImm *float_imm = e.as<FloatImm>()) return float_imm->value == 0.0f;
@@ -545,11 +564,11 @@ Expr print(const std::vector<Expr> &args) {
             // owes you a beer.
             Expr integer_part = cast<int>(args[i]); // Should round towards zero.
             Expr frac_part = abs(args[i]) - abs(integer_part);
-            frac_part *= 10000; // Use 5 decimal places.
+            frac_part *= 100000; // Use 5 decimal places.
             frac_part = cast<int>(frac_part);
             sstr << "%d.%05d "; // Pad the fractional part with zeros.
-            printf_args.push_back(integer_part); 
-            printf_args.push_back(frac_part); 
+            printf_args.push_back(integer_part);
+            printf_args.push_back(frac_part);
             //printf_args.push_back(cast(Float(64), args[i]));
         } else if (args[i].as<Internal::StringImm>() != NULL) {
             sstr << "%s ";

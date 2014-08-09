@@ -1,6 +1,16 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 
-#define WEAK __attribute__((weak))
+#include "HalideRuntime.h"
+#include "mini_string.h"
+
+// TODO: This code currently doesn't work on OS X (Darwin) as we do
+// not initialize the pthread_mutex_t using PTHREAD_MUTEX_INITIALIZER
+// or pthread_mutex_init. (And Darwin using a non-zero value for the
+// siganture here.) Fix is probably to use a pthread_once type
+// mechanism to call pthread_mutex_init, but that requires the once
+// initializer which might not be zero and is platform dependent. Thus
+// we need our own portable once implementation. For now, threadpool
+// only works on platforms where PTHREAD_MUTEX_INITIALIZER is zero.
 
 extern "C" {
 
@@ -21,8 +31,8 @@ typedef struct {
 } pthread_cond_t;
 typedef long pthread_condattr_t;
 typedef struct {
-    // 40 bytes is enough for a mutex on 64-bit and 32-bit systems
-    unsigned char _private[40];
+    // 64 bytes is enough for a mutex on 64-bit and 32-bit systems
+    unsigned char _private[64];
 } pthread_mutex_t;
 typedef long pthread_mutexattr_t;
 extern int pthread_create(pthread_t *thread, pthread_attr_t const * attr,
@@ -79,6 +89,22 @@ WEAK struct {
     }
 
 } halide_work_queue;
+
+WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_destroy(mutex);
+    memset(mutex_arg, 0, sizeof(halide_mutex));
+}
+
+WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_lock(mutex);
+}
+
+WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_unlock(mutex);
+}
 
 WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;

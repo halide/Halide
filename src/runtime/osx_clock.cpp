@@ -1,4 +1,4 @@
-#include "mini_stdint.h"
+#include "runtime_internal.h"
 
 #ifndef _STRUCT_TIMEVAL
 #define _STRUCT_TIMEVAL

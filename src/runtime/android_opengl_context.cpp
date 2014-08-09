@@ -1,6 +1,5 @@
+#include "runtime_internal.h"
 #include "HalideRuntime.h"
-
-#define WEAK __attribute__((weak))
 
 extern "C" {
 

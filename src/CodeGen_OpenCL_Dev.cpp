@@ -349,7 +349,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
 
 
 void CodeGen_OpenCL_Dev::add_kernel(Stmt s,
-                                    string name,
+                                    const string &name,
                                     const vector<GPU_Argument> &args) {
     debug(2) << "CodeGen_OpenCL_Dev::compile " << name << "\n";
 
@@ -373,7 +373,7 @@ struct BufferSize {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
-                                                      string name,
+                                                      const string &name,
                                                       const vector<GPU_Argument> &args) {
 
     debug(2) << "Adding OpenCL kernel " << name << "\n";

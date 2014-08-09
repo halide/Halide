@@ -43,6 +43,10 @@
 %ignore halide_set_ocl_device_type;
 %ignore halide_get_gpu_device;
 %ignore halide_set_gpu_device;
+%ignore halide_memoization_cache_set_size;
+%ignore halide_memoization_cache_lookup;
+%ignore halide_memoization_cache_store;
+
 
 #define BUILDING_PYTHON 1
 
