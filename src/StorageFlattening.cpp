@@ -21,6 +21,7 @@ public:
     Scope<int> scope;
 private:
     const map<string, Function> &env;
+    Scope<int> realizations;
 
     Expr flatten_args(const string &name, const vector<Expr> &args) {
         Expr idx = 0;
@@ -69,6 +70,8 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *realize) {
+        realizations.push(realize->name, 1);
+
         Stmt body = mutate(realize->body);
 
         // Compute the size
@@ -78,6 +81,8 @@ private:
           extents[i] = mutate(extents[i]);
         }
         Expr condition = mutate(realize->condition);
+
+        realizations.pop(realize->name);
 
         vector<int> storage_permutation;
         {
@@ -170,10 +175,8 @@ private:
         string name;
     };
 
-    void visit(const Provide *provide) {
-        vector<ProvideValue> values(provide->values.size());
-        Box provided = box_provided(Stmt(provide), provide->name);
-        Box required = box_required(Stmt(provide), provide->name);
+    void flatten_provide_values(vector<ProvideValue> &values, const Provide *provide) {
+        values.resize(provide->values.size());
 
         for (size_t i = 0; i < values.size(); i++) {
             Expr value = mutate(provide->values[i]);
@@ -186,54 +189,89 @@ private:
             }
 
             values[i].value = value;
-            values[i].name = provide->name + "." + int_to_string(i);
+            if (values.size() > 1) {
+                values[i].name = provide->name + "." + int_to_string(i);
+            } else {
+                values[i].name = provide->name;
+            }
         }
+    }
+
+    // Lower a set of provides
+    Stmt flatten_provide_atomic(const Provide *provide) {
+        vector<ProvideValue> values;
+        flatten_provide_values(values, provide);
 
         Stmt result;
+        for (size_t i = 0; i < values.size(); i++) {
+            const ProvideValue &cv = values[i];
+
+            Expr idx = mutate(flatten_args(cv.name, provide->args));
+            Expr var = Variable::make(cv.value.type(), cv.name + ".value");
+            Stmt store = Store::make(cv.name, var, idx);
+
+            if (result.defined()) {
+                result = Block::make(result, store);
+            } else {
+                result = store;
+            }
+        }
+
+        for (size_t i = values.size(); i > 0; i--) {
+            const ProvideValue &cv = values[i-1];
+
+            result = LetStmt::make(cv.name + ".value", cv.value, result);
+        }
+        return result;
+    }
+
+    Stmt flatten_provide(const Provide *provide) {
+        vector<ProvideValue> values;
+        flatten_provide_values(values, provide);
+
+        Stmt result;
+        for (size_t i = 0; i < values.size(); i++) {
+            const ProvideValue &cv = values[i];
+
+            Expr idx = mutate(flatten_args(cv.name, provide->args));
+            Stmt store = Store::make(cv.name, cv.value, idx);
+
+            if (result.defined()) {
+                result = Block::make(result, store);
+            } else {
+                result = store;
+            }
+        }
+        return result;
+    }
+
+    void visit(const Provide *provide) {
+        Stmt result;
+
+        // Handle the provide atomically if necessary. This logic is
+        // currently very conservative, it will lower many provides
+        // atomically that do not require it.
         if (provide->values.size() == 1) {
-            // If this is not a tuple, just emit a simple store.
-            Expr idx = mutate(flatten_args(provide->name, provide->args));
-            result = Store::make(provide->name, values.front().value, idx);
+            // If there is only one value, we don't need to worry
+            // about atomicity.
+            result = flatten_provide(provide);
+        } else if (!realizations.contains(provide->name)) {
+            // If the provide is not a realization, it might be
+            // aliased. Flatten it atomically because we can't
+            // prove the boxes don't overlap.
+            result = flatten_provide_atomic(provide);
         } else {
+            Box provided = box_provided(Stmt(provide), provide->name);
+            Box required = box_required(Stmt(provide), provide->name);
+
             if (provided.size() == required.size() &&
                 boxes_overlap(provided, required)) {
-                // The boxes provided and used overlap, so the provide
-                // must be done atomically, by gathering the values in
-                // a sequence of lets, followed by a sequence of
-                // stores.
-                for (size_t i = 0; i < values.size(); i++) {
-                    const ProvideValue &cv = values[i];
-
-                    Expr idx = mutate(flatten_args(cv.name, provide->args));
-                    Expr var = Variable::make(cv.value.type(), cv.name + ".value");
-                    Stmt store = Store::make(cv.name, var, idx);
-
-                    if (result.defined()) {
-                        result = Block::make(result, store);
-                    } else {
-                        result = store;
-                    }
-                }
-
-                for (size_t i = values.size(); i > 0; i--) {
-                    const ProvideValue &cv = values[i-1];
-
-                    result = LetStmt::make(cv.name + ".value", cv.value, result);
-                }
+                // The boxes provided and required might overlap, so
+                // the provide must be done atomically.
+                result = flatten_provide_atomic(provide);
             } else {
-                // The boxes don't overlap, just emit a sequence of stores.
-                for (size_t i = 0; i < values.size(); i++) {
-                    const ProvideValue &cv = values[i];
-
-                    Expr idx = mutate(flatten_args(cv.name, provide->args));
-                    Stmt store = Store::make(cv.name, cv.value, idx);
-
-                    if (result.defined()) {
-                        result = Block::make(result, store);
-                    } else {
-                        result = store;
-                    }
-                }
+                // The boxes don't overlap.
+                result = flatten_provide(provide);
             }
         }
         stmt = result;
