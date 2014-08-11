@@ -198,21 +198,60 @@ class Interleaver : public IRMutator {
         if (e.type().width <= 2) {
             // Just scalarize
             return e;
-        } else {
+        } else if (should_deinterleave == 1) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
-
-            std::cout << "deinterleaving vectors: "
-                      << should_deinterleave << "\n";
-            if (--should_deinterleave) {
-                int old_deinterleave = should_deinterleave;
-                a = deinterleave_expr(a);
-                should_deinterleave = old_deinterleave;
-                b = deinterleave_expr(b);
-            }
-
             return Call::make(e.type(), Call::interleave_vectors,
                               vec(a, b), Call::Intrinsic);
+        } else {
+            std::vector< std::vector<Expr> > lanes(should_deinterleave);
+
+            lanes[0].resize(2);
+            lanes[0][0] = extract_even_lanes(e, vector_lets);
+            lanes[0][1] = extract_odd_lanes(e, vector_lets);
+
+            Type t = e.type();
+            int num_lanes = 1;
+
+            for (int i = 1; i < should_deinterleave; ++i) {
+                num_lanes <<= 1;
+                t.width >>= 1;
+
+                if (t.width <= 2) {
+                    should_deinterleave = i;
+                    lanes.resize(should_deinterleave);
+                    break;
+                }
+
+                lanes[i].resize(2 * num_lanes);
+
+                for (int j = 0; j < num_lanes; ++j) {
+                    lanes[i][j] = extract_even_lanes(lanes[i-1][j], vector_lets);
+                    lanes[i][num_lanes + j] = extract_odd_lanes(lanes[i-1][j], vector_lets);
+                }
+            }
+
+            num_lanes <<= 1;
+            t.width >>= 1;
+
+            for (int i = should_deinterleave-1; i > 0; --i) {
+                Type s = t;
+                t.bits  <<= 1;
+                s.width <<= 1;
+                num_lanes >>= 1;
+
+                for (int j = 0; j < num_lanes; ++j) {
+                    Expr a = lanes[i][2*j];
+                    Expr b = lanes[i][2*j + 1];
+
+                    lanes[i-1][j] = Cast::make(t, Call::make(s, Call::interleave_vectors,
+                                                             vec(a, b), Call::Intrinsic));
+                }
+            }
+
+            t.width <<= 1;
+            return Cast::make(e.type(), Call::make(t, Call::interleave_vectors,
+                                                   vec(lanes[0][0], lanes[0][1]), Call::Intrinsic));
         }
     }
 
