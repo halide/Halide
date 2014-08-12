@@ -317,10 +317,10 @@ class Interleaver : public IRMutator {
     void visit(const Load *op) {
         bool old_interleave_levels = interleave_levels;
 
-        interleave_levels = false;
+        interleave_levels = 0;
         Expr idx = mutate(op->index);
         expr = Load::make(op->type, op->name, idx, op->image, op->param);
-        if (interleave_levels) {
+        if (interleave_levels > 0) {
             expr = deinterleave_expr(expr);
         }
 
@@ -330,15 +330,15 @@ class Interleaver : public IRMutator {
     void visit(const Store *op) {
         bool old_interleave_levels = interleave_levels;
 
-        interleave_levels = false;
+        interleave_levels = 0;
         Expr idx = mutate(op->index);
-        if (interleave_levels) {
+        if (interleave_levels > 0) {
             idx = deinterleave_expr(idx);
         }
 
-        interleave_levels = false;
+        interleave_levels = 0;
         Expr value = mutate(op->value);
-        if (interleave_levels) {
+        if (interleave_levels > 0) {
             value = deinterleave_expr(value);
         }
 
