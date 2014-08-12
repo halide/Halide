@@ -248,12 +248,12 @@ void prune_cache() {
     while (current_cache_size > max_cache_size &&
            prune_candidate != NULL) {
         CacheEntry *more_recent = prune_candidate->more_recent;
-	
+        
         if (prune_candidate->in_use_count == 0) {
             uint32_t h = prune_candidate->hash;
             uint32_t index = h % kHashTableSize;
 
-	    // Remove from hash table
+            // Remove from hash table
             CacheEntry *prev_hash_entry = cache_entries[index];
             if (prev_hash_entry == prune_candidate) {
                 cache_entries[index] = prune_candidate->next;
@@ -265,34 +265,35 @@ void prune_cache() {
                 prev_hash_entry->next = prune_candidate->next;
             }
 
-	    // Remove from less recent chain.
-	    if (least_recently_used == prune_candidate) {
-	        least_recently_used = more_recent;
-	    }
+            // Remove from less recent chain.
+            if (least_recently_used == prune_candidate) {
+                least_recently_used = more_recent;
+            }
             if (more_recent != NULL) {
-	        more_recent->less_recent = prune_candidate->less_recent;
+                more_recent->less_recent = prune_candidate->less_recent;
             }
 
-	    // Remove from more recent chain.
+            // Remove from more recent chain.
             if (most_recently_used == prune_candidate) {
                 most_recently_used = prune_candidate->less_recent;
             }
-	    if (prune_candidate->less_recent != NULL) {
-	        prune_candidate->less_recent = more_recent;
-	    }
+            if (prune_candidate->less_recent != NULL) {
+                prune_candidate->less_recent = more_recent;
+            }
 
-	    // Decrease cache used amount
+            // Decrease cache used amount
             for (int32_t i = 0; i < prune_candidate->tuple_count; i++) {
                 current_cache_size -= full_extent(prune_candidate->buffer(i));
             }
 
             // This code uses placement new, hence placement delete style.
             // (This is because the cache entry has variable size.)
+            void *entry_user_context = prune_candidate->user_context;
             prune_candidate->~CacheEntry();
-            halide_free(NULL, prune_candidate);
-	}
+            halide_free(entry_user_context, prune_candidate);
+        }
 
-	prune_candidate = more_recent;
+        prune_candidate = more_recent;
     }
 #if CACHE_DEBUGGING
     validate_cache();
@@ -385,7 +386,7 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
                 }
                 va_end(tuple_buffers);
 
-		entry->in_use_count++;
+                entry->in_use_count++;
 
                 return false;
             }
@@ -528,8 +529,8 @@ WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *ca
                 __builtin_va_end(tuple_buffers);
             }
             if (all_bounds_equal) {
-	        halide_assert(user_context, entry->in_use_count > 0);
-		entry->in_use_count--;
+                halide_assert(user_context, entry->in_use_count > 0);
+                entry->in_use_count--;
                 return;
             }
         }
@@ -544,8 +545,9 @@ WEAK void halide_memoization_cache_cleanup() {
         cache_entries[i] = NULL;
         while (entry != NULL) {
             CacheEntry *next = entry->next;
+            void *user_context = entry->user_context;
             entry->~CacheEntry();
-            halide_free(NULL, entry);
+            halide_free(user_context, entry);
             entry = next;
         }
     }
