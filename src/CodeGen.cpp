@@ -1347,19 +1347,95 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::interleave_vectors) {
-            internal_assert(op->args.size() == 2);
-            Expr a = op->args[0], b = op->args[1];
-            debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+            internal_assert(op->args.size() <= 4);
 
-            vector<Constant *> indices(op->type.width);
-            for (int i = 0; i < op->type.width; i++) {
-                int idx = i/2;
-                if (i % 2 == 1) idx += a.type().width;
-                indices[i] = ConstantInt::get(i32, idx);
+            if(op->args.size() == 1) {
+                value = codegen(op->args[0]);
+            } else if(op->args.size() == 2) {
+                Expr a = op->args[0], b = op->args[1];
+                debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+
+                vector<Constant *> indices(op->type.width);
+                for (int i = 0; i < op->type.width; i++) {
+                    int idx = i/2;
+                    if (i % 2 == 1) idx += a.type().width;
+                    indices[i] = ConstantInt::get(i32, idx);
+                }
+
+                value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+            } else if(op->args.size() == 3) {
+                Expr a = op->args[0], b = op->args[1], c = op->args[2];
+                debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << "\n";
+
+                // First we shuffle a & b together...
+                vector<Constant *> indices(op->type.width);
+                for (int i = 0; i < op->type.width; i++) {
+                    if (i % 3 == 0) {
+                        indices[i] = ConstantInt::get(i32, i/3);
+                    } else if (i % 3 == 1) {
+                        indices[i] = ConstantInt::get(i32, i/3 + a.type().width);
+                    } else {
+                        indices[i] = UndefValue::get(i32);
+                    }
+                }
+
+                Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+
+                // Then we create a vector of the output size that contains c...
+                for (int i = 0; i < op->type.width; i++) {
+                    if (i < c.type().width) {
+                        indices[i] = ConstantInt::get(i32, i);
+                    } else {
+                        indices[i] = UndefValue::get(i32);
+                    }
+                }
+
+                Value *value_c = builder->CreateShuffleVector(codegen(c), UndefValue::get(llvm_type_of(c.type())), ConstantVector::get(indices));
+
+                // Finally, we shuffle the above 2 vectors together into the result.
+                for (int i = 0; i < op->type.width; i++) {
+                    if (i % 3 < 2) {
+                        indices[i] = ConstantInt::get(i32, i);
+                    } else {
+                        indices[i] = ConstantInt::get(i32, i/3 + op->type.width);
+                    }
+                }
+
+                value = builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
+            } else if(op->args.size() == 4) {
+                Expr a = op->args[0], b = op->args[1], c = op->args[2], d = op->args[3];
+                debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
+
+                internal_assert(op->type.width % 4 == 0);
+                internal_assert(a.type().width == op->type.width / 4);
+                internal_assert(b.type().width == op->type.width / 4);
+                internal_assert(c.type().width == op->type.width / 4);
+                internal_assert(d.type().width == op->type.width / 4);
+
+                int half_width = op->type.width / 2;
+                vector<Constant *> indices(half_width);
+                for (int i = 0; i < half_width; i++) {
+                    int idx = i/2;
+                    if (i % 2 == 1) idx += a.type().width;
+                    indices[i] = ConstantInt::get(i32, idx);
+                }
+
+                // First we shuffle a & b together...
+                Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+
+                // Next we shuffle c & d together...
+                Value *value_cd = builder->CreateShuffleVector(codegen(c), codegen(d), ConstantVector::get(indices));
+
+                // Now we reinterpret the shuffled vectors as vectors of pairs...
+                Type t = a.type();
+                t.bits *= 2;
+                Value *vec_ab = builder->CreateBitCast(value_ab, llvm_type_of(t));
+                Value *vec_cd = builder->CreateBitCast(value_cd, llvm_type_of(t));
+
+                // Finally, we shuffle the above 2 vectors together into the result.
+                Value *vec = builder->CreateShuffleVector(vec_ab, vec_cd, ConstantVector::get(indices));
+                value = builder->CreateBitCast(vec, llvm_type_of(op->type));
             }
-
-            value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-
         } else if (op->name == Call::debug_to_file) {
             internal_assert(op->args.size() == 9);
             const StringImm *filename = op->args[0].as<StringImm>();
