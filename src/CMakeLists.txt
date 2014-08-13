@@ -23,6 +23,7 @@ endif()
 include_directories ( "${LLVM_INCLUDE}")
 link_directories ("${LLVM_LIB}")
 
+set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(WIN32)
   file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
 else()
@@ -31,8 +32,6 @@ else()
   string(STRIP "${LIBS_UNSTRIPPED}" LIBS_SPACES)
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
-
-message("${LLVM_LIB} ${LIBS}")
 
 if (TARGET_NATIVE_CLIENT)
   add_definitions("-DWITH_NATIVE_CLIENT=1")
@@ -370,6 +369,41 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES})
 
 target_link_libraries(Halide InitialModules ${LIBS})
+
+if (NOT HALIDE_SHARED_LIBRARY)
+
+# For the Xcode build, we want the static library version of libHalide.a
+# to include all of its dependencies so that other projects can link to the 
+# library without having to worry about which version of LLVM or the initial 
+# modules it was built with. This is accomplished by adding an additional file
+# list to the link line containing all of these dependencies
+
+if (XCODE)
+
+# Create a
+set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
+
+# Determine the location of libInitialModules.a so we can include the path to it
+# in the link file list
+IF (CMAKE_BUILD_TYPE)
+  set(InitialModulesPath ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/${CMAKE_BUILD_TYPE}/libInitialModules.a)
+ELSE()
+  set(InitialModulesPath ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/Debug/libInitialModules.a)
+ENDIF()
+
+# We need a newline delimited list of the lib files
+execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS)
+string(REPLACE " " "\n" LIBS ${LIBS})
+
+# Write the archive file dependencies to a new LinkFileList
+file(WRITE ${EXTRA_LINKFILELIST} "${LIBS}${InitialModulesPath}\n")
+
+set_target_properties(Halide PROPERTIES XCODE_ATTRIBUTE_OTHER_LIBTOOLFLAGS "-filelist ${EXTRA_LINKFILELIST}")
+
+endif(XCODE)
+
+endif (NOT HALIDE_SHARED_LIBRARY)
+
 # if this is a DLL, don't link dependencies to this set of libs.
 #if (HALIDE_SHARED_LIBRARY)
 #  set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
