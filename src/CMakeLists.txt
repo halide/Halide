@@ -137,8 +137,8 @@ set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
-    set(LL "${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
-    set(BC "${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
+    set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+    set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
@@ -157,7 +157,7 @@ foreach (i ${RUNTIME_CPP} )
 endforeach()
 foreach (i ${RUNTIME_LL} )
   set(LL "${NATIVE_RUNTIME_DIR}${i}.ll")
-  set(BC "${NATIVE_INT_DIR}initmod.${i}.bc")
+  set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}.bc")
   set(INITMOD "${INITMOD_PREFIX}${i}.cpp")
   add_custom_command(OUTPUT "${BC}"
                      DEPENDS "${LL}"

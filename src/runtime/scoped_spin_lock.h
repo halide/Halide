@@ -1,6 +1,9 @@
 #ifndef HALIDE_SCOPED_SPIN_LOCK_H
 #define HALIDE_SCOPED_SPIN_LOCK_H
 
+// Avoid ODR violations
+namespace {
+
 // An RAII spin lock.
 struct ScopedSpinLock {
     volatile int *lock;
@@ -13,5 +16,7 @@ struct ScopedSpinLock {
         __sync_lock_release(lock);
     }
 };
+
+}
 
 #endif
