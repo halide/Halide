@@ -54,7 +54,7 @@ Type map_type(const Type &type) {
     } else {
         user_assert(type.width <= 4)
             << "GLSL: vector types wider than 4 aren't supported\n";
-        user_assert(type.is_bool() || type.is_int() || type.is_float())
+        user_assert(type.is_bool() || type.is_int() || type.is_uint() || type.is_float())
             << "GLSL: Can't represent vector type '"<< type << "'.\n";
         Type scalar_type = type;
         scalar_type.width = 1;
@@ -276,9 +276,16 @@ void CodeGen_GLSL::visit(const Mod *op) {
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     std::vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
+    // The vectorize pass will insert a ramp in the color dimension argument.
     if (expr_match(Ramp::make(w, 1, 4), e, matches)) {
         // No suffix is needed when accessing a full RGBA vector.
+    } else if (expr_match(Ramp::make(w, 1, 3), e, matches)) {
+        return ".rgb";
+    } else if (expr_match(Ramp::make(w, 1, 2), e, matches)) {
+        return ".rg";
     } else if (const IntImm *idx = e.as<IntImm>()) {
+        // If the color dimension is not vectorized, e.g. it is unrolled, then
+        // then we access each channel individually.
         int i = idx->value;
         internal_assert(0 <= i && i <= 3) <<  "Color channel must be between 0 and 3.\n";
         char suffix[] = "rgba";
@@ -309,18 +316,40 @@ void CodeGen_GLSL::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::glsl_texture_load) {
             internal_assert(op->args.size() == 5);
-            internal_assert(op->args[0].as<StringImm>());
-            string buffername = op->args[0].as<StringImm>()->value;
-            internal_assert(op->type == UInt(8) || op->type == UInt(16));
+          
+            // Keep track of whether or not the intrinsic was vectorized
+            int width = 1;
+            
+            // The argument to the call is either a StringImm or a broadcasted
+            // StringImm if this is part of a vectorized expression
+            internal_assert(op->args[0].as<StringImm>() || (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
+            
+            const StringImm* stringImm = op->args[0].as<StringImm>();
+            if (!stringImm) {
+              stringImm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+              width = op->args[0].as<Broadcast>()->width;
+            }
+            
+            // Determine the halide buffer associated with this load
+            string buffername = stringImm->value;
+            
+            internal_assert(op->type == UInt(8,1) || op->type == UInt(8,2) || op->type == UInt(8,3) || op->type == UInt(8,4) ||
+                            op->type == UInt(16,1) || op->type == UInt(16,2) || op->type == UInt(16,3) || op->type == UInt(16,4));
+            
+            // In the event that this intrinsic was vectorized, the individual
+            // coordinates may be GLSL vecN types instead of scalars. In this case
+            // we use only the first element
+          
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                << print_expr(op->args[2]) << ", "
-                << print_expr(op->args[3]) << "))"
+                << print_expr(op->args[2]) << ((width > 1) ? ".x" : "") << ", "
+                << print_expr(op->args[3]) << ((width > 1) ? ".x" : "") << "))"
                 << get_vector_suffix(op->args[4])
                 << " * " << op->type.imax() << ".0";
+          
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
-            internal_assert(op->args[5].type() == UInt(8) || op->args[5].type() == UInt(16));
+          
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                    << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
@@ -379,7 +408,7 @@ void CodeGen_GLSL::visit(const AssertStmt *) {
 
 void CodeGen_GLSL::visit(const Broadcast *op) {
     ostringstream rhs;
-    rhs << "vec4(" << print_expr(op->value) << ")";
+    rhs << "vec" << op->width << "(" << print_expr(op->value) << ")";
     print_assignment(op->type, rhs.str());
 }
 

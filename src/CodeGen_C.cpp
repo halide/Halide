@@ -939,9 +939,7 @@ void CodeGen_C::visit(const Store *op) {
 }
 
 void CodeGen_C::visit(const Let *op) {
-    string id_value = print_expr(op->value);
-    Expr new_var = Variable::make(op->value.type(), id_value);
-    Expr body = substitute(op->name, new_var, op->body);
+    Expr body = substitute(op->name, op->value, op->body);
     print_expr(body);
 }
 
