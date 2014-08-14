@@ -13,6 +13,7 @@ char *strchr(const char* s, char c);
 
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
+void *memset(void *s, int val, size_t n);
 
 #ifdef __cplusplus
 }  // extern "C"
