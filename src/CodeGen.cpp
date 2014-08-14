@@ -1409,7 +1409,8 @@ Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
         Type odd_t  = type;
         even_t.width = odd_t.width = 0;
         std::vector<Expr> even_vecs, odd_vecs;
-        for (size_t i = 0; i < vecs.size(); ++i) {
+        int odd_num_vecs = vecs.size() % 2;
+        for (size_t i = 0; i < vecs.size() - odd_num_vecs; ++i) {
             if (i % 2 == 0) {
                 even_t.width += vecs[i].type().width;
                 even_vecs.push_back(vecs[i]);
@@ -1419,17 +1420,62 @@ Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
             }
         }
 
+        Expr last;
+        if (odd_num_vecs) {
+            last = vecs.back();
+        }
+
         Value* a = interleave_vectors(even_t, even_vecs);
         Value* b = interleave_vectors(odd_t, odd_vecs);
 
-        vector<Constant *> indices(type.width);
-        for (int i = 0; i < type.width; i++) {
-            int idx = i/2;
-            if (i % 2 == 1) idx += even_t.width;
-            indices[i] = ConstantInt::get(i32, idx);
-        }
+        if (odd_num_vecs == 0 ) {
+            vector<Constant *> indices(type.width);
+            for (int i = 0; i < type.width; i++) {
+                int idx = i/2;
+                if (i % 2 == 1) idx += even_t.width;
+                indices[i] = ConstantInt::get(i32, idx);
+            }
 
-        return builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+            return builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+        } else {
+            vector<Constant *> indices(type.width);
+            for (int i = 0, idx = 0; i < type.width; i++) {
+                if (i % vecs.size() < vecs.size()-1) {
+                    if (idx % 2 == 0) {
+                        indices[i] = ConstantInt::get(i32, idx / 2);
+                    } else {
+                        indices[i] = ConstantInt::get(i32, idx / 2 + even_t.width);
+                    }
+
+                    ++idx;
+                } else {
+                    indices[i] = UndefValue::get(i32);
+                }
+            }
+
+            Value *ab = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+
+            for (int i = 0; i < type.width; i++) {
+                if (i < last.type().width) {
+                    indices[i] = ConstantInt::get(i32, i);
+                } else {
+                    indices[i] = UndefValue::get(i32);
+                }
+            }
+
+            Value *none = UndefValue::get(llvm_type_of(last.type()));
+            Value *c = builder->CreateShuffleVector(codegen(last), none, ConstantVector::get(indices));
+
+            for (int i = 0; i < type.width; i++) {
+                if (i % vecs.size() < vecs.size()-1) {
+                    indices[i] = ConstantInt::get(i32, i);
+                } else {
+                    indices[i] = ConstantInt::get(i32, i/vecs.size() + type.width);
+                }
+            }
+
+            return builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+        }
     }
 }
 
