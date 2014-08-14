@@ -1195,7 +1195,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
     }
     user_assert(constant_bounds)
         << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    unroll(c);
+
     return *this;
 }
 
