@@ -192,17 +192,65 @@ class Interleaver : public IRMutator {
 
     using IRMutator::visit;
 
-    bool should_deinterleave;
+    int interleave_levels;
 
     Expr deinterleave_expr(Expr e) {
         if (e.type().width <= 2) {
             // Just scalarize
             return e;
-        } else {
+        } else if (interleave_levels == 1) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
                               vec(a, b), Call::Intrinsic);
+        } else {
+            std::vector< std::vector<Expr> > lanes(interleave_levels);
+
+            lanes[0].resize(2);
+            lanes[0][0] = extract_even_lanes(e, vector_lets);
+            lanes[0][1] = extract_odd_lanes(e, vector_lets);
+
+            Type t = e.type();
+            int num_lanes = 1;
+
+            for (int i = 1; i < interleave_levels; ++i) {
+                if ((t.width / 2) <= 2) {
+                    interleave_levels = i;
+                    lanes.resize(interleave_levels);
+                    break;
+                }
+
+                num_lanes <<= 1;
+                t.width >>= 1;
+                lanes[i].resize(2 * num_lanes);
+
+                for (int j = 0; j < num_lanes; ++j) {
+                    lanes[i][j] = extract_even_lanes(lanes[i-1][j], vector_lets);
+                    lanes[i][num_lanes + j] = extract_odd_lanes(lanes[i-1][j], vector_lets);
+                }
+            }
+
+            num_lanes <<= 1;
+            t.width >>= 1;
+
+            for (int i = interleave_levels-1; i > 0; --i) {
+                Type s = t;
+                t.bits  <<= 1;
+                s.width <<= 1;
+                num_lanes >>= 1;
+
+                for (int j = 0; j < num_lanes; ++j) {
+                    Expr a = lanes[i][2*j];
+                    Expr b = lanes[i][2*j + 1];
+
+                    lanes[i-1][j] = Cast::make(t, Call::make(s, Call::interleave_vectors,
+                                                             vec(a, b), Call::Intrinsic));
+                }
+            }
+
+            t.width <<= 1;
+            return Cast::make(e.type(), Call::make(t, Call::interleave_vectors,
+                                                   vec(lanes[0][0], lanes[0][1]), Call::Intrinsic));
         }
     }
 
@@ -250,55 +298,57 @@ class Interleaver : public IRMutator {
 
     void visit(const Mod *op) {
         const Ramp *r = op->a.as<Ramp>();
-        if (r && is_two(op->b)) {
-            should_deinterleave = true;
+        int bits;
+        if (r && is_const_power_of_two(op->b, &bits)) {
+            interleave_levels = bits;
         }
         IRMutator::visit(op);
     }
 
     void visit(const Div *op) {
         const Ramp *r = op->a.as<Ramp>();
-        if (r && is_two(op->b)) {
-            should_deinterleave = true;
+        int bits;
+        if (r && is_const_power_of_two(op->b, &bits)) {
+            interleave_levels = bits;
         }
         IRMutator::visit(op);
     }
 
     void visit(const Load *op) {
-        bool old_should_deinterleave = should_deinterleave;
+        bool old_interleave_levels = interleave_levels;
 
-        should_deinterleave = false;
+        interleave_levels = 0;
         Expr idx = mutate(op->index);
         expr = Load::make(op->type, op->name, idx, op->image, op->param);
-        if (should_deinterleave) {
+        if (interleave_levels > 0) {
             expr = deinterleave_expr(expr);
         }
 
-        should_deinterleave = old_should_deinterleave;
+        interleave_levels = old_interleave_levels;
     }
 
     void visit(const Store *op) {
-        bool old_should_deinterleave = should_deinterleave;
+        bool old_interleave_levels = interleave_levels;
 
-        should_deinterleave = false;
+        interleave_levels = 0;
         Expr idx = mutate(op->index);
-        if (should_deinterleave) {
+        if (interleave_levels > 0) {
             idx = deinterleave_expr(idx);
         }
 
-        should_deinterleave = false;
+        interleave_levels = 0;
         Expr value = mutate(op->value);
-        if (should_deinterleave) {
+        if (interleave_levels > 0) {
             value = deinterleave_expr(value);
         }
 
         stmt = Store::make(op->name, value, idx);
 
-        should_deinterleave = old_should_deinterleave;
+        interleave_levels = old_interleave_levels;
     }
 
 public:
-    Interleaver() : should_deinterleave(false) {}
+    Interleaver() : interleave_levels(0) {}
 };
 
 Stmt rewrite_interleavings(Stmt s) {
