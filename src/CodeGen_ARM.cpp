@@ -1208,7 +1208,7 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         if (valid) {
-            Instruction *store = call_void_intrin(instr, args);
+            Instruction *store = call_void_intrin(instr.str(), args);
             add_tbaa_metadata(store, op->name);
         }
 
