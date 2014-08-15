@@ -46,7 +46,8 @@ class StoreCollector : public IRMutator {
         const Store *s = op->first.as<Store>();
 
         if (l && l->name == store_name) {
-            return op;
+            stmt = op;
+            return;
         } else if (s && s->name == store_name) {
             const Ramp *r = s->index.as<Ramp>();
 
