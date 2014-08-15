@@ -42,8 +42,12 @@ class StoreCollector : public IRMutator {
     }
 
     void visit(const Block *op) {
+        const Load  *l = op->first.as<Load>();
         const Store *s = op->first.as<Store>();
-        if (s && s->name == store_name) {
+
+        if (l && l->name == store_name) {
+            return op;
+        } else if (s && s->name == store_name) {
             const Ramp *r = s->index.as<Ramp>();
 
             if (r && is_const(r->stride) &&
