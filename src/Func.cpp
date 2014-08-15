@@ -1719,11 +1719,13 @@ public:
     vector<pair<int, Internal::Parameter> > image_param_args;
     vector<pair<int, Buffer> > image_args;
 
-    InferArguments(const string &o) : output(o) {
+    InferArguments(const string &o, bool include_buffers = true)
+        : output(o), include_buffers(include_buffers) {
     }
 
 private:
     const string &output;
+    const bool include_buffers;
 
     using IRGraphVisitor::visit;
 
@@ -1759,6 +1761,7 @@ private:
     }
 
     void include_buffer(Buffer b) {
+        if (!include_buffers) return;
         if (!b.defined()) return;
         if (already_have(b.name())) return;
         image_args.push_back(make_pair((int)arg_types.size(), b));
@@ -1860,7 +1863,7 @@ std::vector<Argument> Func::infer_arguments(const Target &target) {
 
     lower(target);
 
-    InferArguments infer_args(name());
+    InferArguments infer_args(name(), /*include_buffers*/ false);
     lowered.accept(&infer_args);
 
     std::sort(infer_args.arg_types.begin(), infer_args.arg_types.end(), ArgumentComparator());
