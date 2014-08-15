@@ -1842,6 +1842,30 @@ void validate_arguments(const string &output,
         }
     }
 }
+
+// Sort the Arguments with all buffers first (alphabetical by name),
+// followed by all non-buffers (alphabetical by name).
+struct ArgumentComparator {
+    bool operator()(const Argument& a, const Argument& b) {
+        if (a.is_buffer != b.is_buffer)
+            return a.is_buffer;
+        else
+            return a.name < b.name;
+    }
+};
+}
+
+std::vector<Argument> Func::infer_arguments(const Target &target) {
+    user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
+
+    lower(target);
+
+    InferArguments infer_args(name());
+    lowered.accept(&infer_args);
+
+    std::sort(infer_args.arg_types.begin(), infer_args.arg_types.end(), ArgumentComparator());
+
+    return infer_args.arg_types;
 }
 
 void Func::lower(const Target &t) {
