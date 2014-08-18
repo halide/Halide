@@ -264,8 +264,7 @@ private:
             Box provided = box_provided(Stmt(provide), provide->name);
             Box required = box_required(Stmt(provide), provide->name);
 
-            if (provided.size() == required.size() &&
-                boxes_overlap(provided, required)) {
+            if (boxes_overlap(provided, required)) {
                 // The boxes provided and required might overlap, so
                 // the provide must be done atomically.
                 result = flatten_provide_atomic(provide);
