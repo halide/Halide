@@ -46,7 +46,11 @@
 %ignore halide_memoization_cache_set_size;
 %ignore halide_memoization_cache_lookup;
 %ignore halide_memoization_cache_store;
+%ignore halide_memoization_cache_cleanup;
 
+%ignore halide_mutex_lock;
+%ignore halide_mutex_unlock;
+%ignore halide_mutex_cleanup;
 
 #define BUILDING_PYTHON 1
 
