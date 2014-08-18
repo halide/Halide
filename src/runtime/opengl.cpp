@@ -5,6 +5,11 @@
 #include "mini_string.h"
 #include "mini_opengl.h"
 
+// This constant is used to indicate that the application will take
+// responsibility for binding the output render target before calling the
+// Halide function.
+#define HALIDE_GLSL_CLIENT_BOUND ((uint64_t)-1)
+
 // Implementation note: all function that directly or indirectly access the
 // runtime state in halide_opengl_state must be declared as WEAK, otherwise
 // the behavior at runtime is undefined.
@@ -753,6 +758,15 @@ EXPORT int halide_opengl_dev_sync(void *user_context) {
     return 0;
 }
 
+// This function is called to populate the buffer_t.dev field with a constant
+// indicating that the OpenGL object corresponding to the buffer_t is bound by
+// the app and not by the halide runtime. For example, the buffer_t may be
+// backed by an FBO already bound by the application.
+EXPORT uint64_t halide_opengl_output_client_bound(void) {
+  
+  return HALIDE_GLSL_CLIENT_BOUND;
+}
+
 template <class T>
 static void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height,
                                   int channels) {
@@ -1020,6 +1034,7 @@ EXPORT int halide_opengl_dev_run(
     ST.UseProgram(kernel->program_id);
 
     HalideOpenGLArgument *kernel_arg;
+    bool bind_render_targets = true;
 
     // Copy input arguments to corresponding GLSL uniforms.
     GLint num_active_textures = 0;
@@ -1034,6 +1049,14 @@ EXPORT int halide_opengl_dev_run(
         }
 
         if (kernel_arg->kind == ARGKIND_OUTBUF) {
+            // Check if the output buffer will be bound by the client instead of
+            // the Halide runtime
+            GLuint tex = *((GLuint *)args[i]);
+          
+            if (tex == (GLuint)HALIDE_GLSL_CLIENT_BOUND) {
+                bind_render_targets = false;
+            }
+          
             // Outbuf textures are handled explicitly below
             continue;
         } else if (kernel_arg->kind == ARGKIND_INBUF) {
@@ -1121,7 +1144,11 @@ EXPORT int halide_opengl_dev_run(
     // Prepare framebuffer for rendering to output textures.
     GLint output_min[2] = { 0, 0 };
     GLint output_extent[2] = { 0, 0 };
-    ST.BindFramebuffer(GL_FRAMEBUFFER, ST.framebuffer_id);
+  
+    if (bind_render_targets) {
+        ST.BindFramebuffer(GL_FRAMEBUFFER, ST.framebuffer_id);
+    }
+  
     ST.Disable(GL_CULL_FACE);
     ST.Disable(GL_DEPTH_TEST);
 
@@ -1138,13 +1165,18 @@ EXPORT int halide_opengl_dev_run(
         }
 
         GLuint tex = *((GLuint*)args[i]);
+
+        // Check to see if the object name is actually a FBO
+        if (bind_render_targets) {
 #ifdef DEBUG
-        halide_printf(user_context, "Output texture %d: %d\n", num_output_textures, tex);
+            halide_printf(user_context, "Output texture %d: %d\n", num_output_textures, tex);
 #endif
-        ST.FramebufferTexture2D(GL_FRAMEBUFFER,
-                                GL_COLOR_ATTACHMENT0 + num_output_textures,
-                                GL_TEXTURE_2D, tex, 0);
-        CHECK_GLERROR(1);
+          
+            ST.FramebufferTexture2D(GL_FRAMEBUFFER,
+                                    GL_COLOR_ATTACHMENT0 + num_output_textures,
+                                    GL_TEXTURE_2D, tex, 0);
+            CHECK_GLERROR(1);
+        }
 
         HalideOpenGLTexture *texinfo = halide_opengl_find_texture(tex);
         if (!texinfo) {
@@ -1167,21 +1199,24 @@ EXPORT int halide_opengl_dev_run(
             malloc(num_output_textures * sizeof(GLenum));
         for (int i=0; i<num_output_textures; i++)
             draw_buffers[i] = GL_COLOR_ATTACHMENT0 + i;
-// TODO: disabled for now, since OpenGL ES 2 doesn't support multiple render
-// targets.
-//        ST.DrawBuffers(num_output_textures, draw_buffers);
-        CHECK_GLERROR(1);
+        // TODO: disabled for now, since OpenGL ES 2 doesn't support multiple render
+        // targets.
+        //        ST.DrawBuffers(num_output_textures, draw_buffers);
         free(draw_buffers);
+
+        CHECK_GLERROR(1);
     }
 
-    // Check that framebuffer is set up correctly
-    GLenum status = ST.CheckFramebufferStatus(GL_FRAMEBUFFER);
-    CHECK_GLERROR(1);
-    if (status != GL_FRAMEBUFFER_COMPLETE) {
-        halide_printf(user_context, "Setting up GL framebuffer %d failed (%x)\n",
-                      ST.framebuffer_id, status);
-        // TODO: cleanup
-        return 1;
+    if (bind_render_targets) {
+        // Check that framebuffer is set up correctly
+        GLenum status = ST.CheckFramebufferStatus(GL_FRAMEBUFFER);
+        CHECK_GLERROR(1);
+        if (status != GL_FRAMEBUFFER_COMPLETE) {
+            halide_printf(user_context, "Setting up GL framebuffer %d failed (%x)\n",
+                          ST.framebuffer_id, status);
+            // TODO: cleanup
+            return 1;
+        }
     }
 
     // Set vertex attributes
@@ -1215,7 +1250,11 @@ EXPORT int halide_opengl_dev_run(
         ST.ActiveTexture(GL_TEXTURE0 + i);
         ST.BindTexture(GL_TEXTURE_2D, 0);
     }
-    ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    if (bind_render_targets) {
+        ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
     ST.BindBuffer(GL_ARRAY_BUFFER, 0);
     ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     return 0;
