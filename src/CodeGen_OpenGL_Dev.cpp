@@ -201,9 +201,7 @@ void CodeGen_GLSL::visit(const Cast *op) {
         return;
     }
 
-    // Casts expressions are simple enough that we return them directly
-    // instead of calling print_assignment.
-    id = print_type(target_type) + "(" + print_expr(value) + ")";
+    print_assignment(target_type, print_type(target_type) + "(" + print_expr(value) + ")");
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
@@ -299,9 +297,7 @@ void CodeGen_GLSL::visit(const Store *op) {
 }
 
 void CodeGen_GLSL::visit(const Evaluate *op) {
-    string id = print_expr(op->value);
-    if (!id.empty())
-        stream << id << "\n";
+    print_expr(op->value);
 }
 
 void CodeGen_GLSL::visit(const Call *op) {
@@ -470,22 +466,17 @@ void CodeGen_GLSL::test() {
     string src = source.str();
     std::string correct_source =
         "float _0 = min(1.0000000, 5.0000000);\n"
-        "int(_0)\n"
-        "float _1 = max(1.0000000, 5.0000000);\n"
-        "int(_1)\n"
-        "float _2 = mix(0.0000000, 255.00000, 0.49803922);\n"
-        "_2\n"
-        "float _3 = mix(0.0000000, 255.00000, 0.30000001);\n"
-        "_3\n"
-        "float _4 = sin(3.0000000);\n"
-        "_4\n"
-        "float _5 = abs(-2.0000000);\n"
-        "int(_5)\n"
-        "float _6 = 3.0000000;\n"
-        "_6\n"
-        "float _7 = floor(-0.66666669);\n"
-        "int(_7)\n"
-        ;
+        "int _1 = int(_0);\n"
+        "float _2 = max(1.0000000, 5.0000000);\n"
+        "int _3 = int(_2);\n"
+        "float _4 = mix(0.0000000, 255.00000, 0.49803922);\n"
+        "float _5 = mix(0.0000000, 255.00000, 0.30000001);\n"
+        "float _6 = sin(3.0000000);\n"
+        "float _7 = abs(-2.0000000);\n"
+        "int _8 = int(_7);\n"
+        "float _9 = 3.0000000;\n"
+        "float _10 = floor(-0.66666669);\n"
+        "int _11 = int(_10);\n";
 
     if (src != correct_source) {
         int diff = 0;

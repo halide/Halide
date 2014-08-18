@@ -169,11 +169,9 @@ It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
     http://www.chromium.org/nativeclient/pnacl/developing-pnacl
 
-A standard Native Client tree will also be required for the C library
-includes to build the runtime initial modules. (Only glibc has been
-tried, not newlib.) Likely the easiest way to get this is to download
-the Native Client SDK from here:
-    https://developers.google.com/native-client/sdk/
+To use generated code in an application, you'll of course also need
+the Native Client SDK:
+    https://developer.chrome.com/native-client/sdk/download
 
 Once The Native Client prerequisites are in place, set the following
 variables (on the command line or by editing the Makefile):

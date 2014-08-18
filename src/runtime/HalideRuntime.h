@@ -1,8 +1,12 @@
 #ifndef HALIDE_HALIDERUNTIME_H
 #define HALIDE_HALIDERUNTIME_H
 
+#ifndef COMPILING_HALIDE_RUNTIME
 #include <stddef.h>
 #include <stdint.h>
+#else
+#include "runtime_internal.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -68,6 +72,26 @@ extern void halide_error_varargs(void *user_context, const char *, ...);
 
 /** A macro that calls halide_error if the supplied condition is false. */
 #define halide_assert(user_context, cond) if (!(cond)) halide_error(user_context, #cond);
+
+/** These are allocated statically inside the runtime, hence the fixed
+ * size. They must be initialized with zero. The first time
+ * halide_mutex_lock is called, the lock must be initialized in a
+ * thread safe manner. This incurs a small overhead for a once
+ * mechanism, but makes the lock reliably easy to setup and use
+ * without depending on e.g. C++ constructor logic.
+ */
+struct halide_mutex {
+    unsigned char _private[64];
+};
+
+/** A basic set of mutex functions, which call platform specific code
+ * for mutual exclusion.
+ */
+//@{
+extern void halide_mutex_lock(struct halide_mutex *mutex);
+extern void halide_mutex_unlock(struct halide_mutex *mutex);
+extern void halide_mutex_cleanup(struct halide_mutex *mutex_arg);
+//@}
 
 /** Define halide_do_par_for to replace the default thread pool
  * implementation. halide_shutdown_thread_pool can also be called to
@@ -303,6 +327,12 @@ extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *c
  */
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
                                            buffer_t *realized_bounds, int32_t tuple_count, ... /* list of buffer_t * */);
+
+
+/** Free all memory and resources associated with the memoization cache.
+ * Must be called at a time when no other threads are accessing the cache.
+ */
+extern void halide_memoization_cache_cleanup();
 
 #ifdef __cplusplus
 } // End extern "C"
