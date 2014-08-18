@@ -917,6 +917,12 @@ void merge_boxes(Box &a, const Box &b) {
 }
 
 bool boxes_overlap(const Box &a, const Box &b) {
+    // If one box is scalar and the other is not, the boxes cannot
+    // overlap.
+    if (a.size() != b.size() && (a.size() == 0 || b.size() == 0)) {
+        return false;
+    }
+
     internal_assert(a.size() == b.size());
 
     bool a_used_defined = a.used_defined();
@@ -934,6 +940,7 @@ bool boxes_overlap(const Box &a, const Box &b) {
             overlap = overlap && a[i].min >= b[i].max;
         }
     }
+
     return is_one(simplify(overlap));
 }
 
