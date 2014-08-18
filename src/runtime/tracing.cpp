@@ -14,23 +14,30 @@ extern ssize_t write(int fd, const void *buf, size_t bytes);
 
 typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 
-WEAK trace_fn halide_custom_trace = NULL;
-
-WEAK void halide_set_custom_trace(trace_fn t) {
-    halide_custom_trace = t;
 }
 
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK trace_fn halide_custom_trace = NULL;
 WEAK int halide_trace_file = 0;
 WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK bool halide_trace_file_internally_opened = false;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+WEAK void halide_set_custom_trace(trace_fn t) {
+    halide_custom_trace = t;
+}
 
 WEAK void halide_set_trace_file(int fd) {
     halide_trace_file = fd;
     halide_trace_file_initialized = true;
 }
 
-    extern int errno;
+extern int errno;
 
 #define O_APPEND 1024
 #define O_CREAT 64
