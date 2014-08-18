@@ -54,5 +54,26 @@ typedef __builtin_va_list va_list;
 namespace halide_runtime_internal {}
 using namespace halide_runtime_internal;
 
+// Commonly-used extern functions
+extern "C" {
+int64_t halide_current_time_ns(void *user_context);
+
+char *getenv(const char *);
+void free(void *);
+void *malloc(size_t);
+int snprintf(char *, size_t, const char *, ...);
+const char *strstr(const char *, const char *);
+int atoi(const char *);
+int strcmp(const char* s, const char* t);
+int strncmp(const char* s, const char* t, size_t n);
+size_t strlen(const char* s);
+char *strchr(const char* s, char c);
+void* memcpy(void* s1, const void* s2, size_t n);
+int memcmp(const void* s1, const void* s2, size_t n);
+void *memset(void *s, int val, size_t n);
+
+}
+
+
 #endif
 

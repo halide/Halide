@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 
 #include "HalideRuntime.h"
-#include "mini_string.h"
 
 // TODO: This code currently doesn't work on OS X (Darwin) as we do
 // not initialize the pthread_mutex_t using PTHREAD_MUTEX_INITIALIZER
