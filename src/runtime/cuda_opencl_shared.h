@@ -4,8 +4,8 @@ namespace Halide { namespace Runtime { namespace Internal {
 #define DEBUG_PRINTF halide_printf
 #else
 // This ensures that DEBUG and non-DEBUG have the same semicolon eating behavior.
-static void _noop_printf(void *, const char *, ...) { }
-#define DEBUG_PRINTF _noop_printf
+WEAK void noop_printf(void *, const char *, ...) { }
+#define DEBUG_PRINTF noop_printf
 #endif
 
 // Compute the total amount of memory we'd need to allocate on gpu to
