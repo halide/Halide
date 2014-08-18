@@ -168,6 +168,9 @@ public:
     }
 };
 
+// For backwards compatibility, keep the ScheduleHandle name.
+typedef Stage ScheduleHandle;
+
 /** A fragment of front-end syntax of the form f(x, y, z), where x,
  * y, z are Vars. It could be the left-hand side of a function
  * definition, or it could be a call to a function. We don't know
