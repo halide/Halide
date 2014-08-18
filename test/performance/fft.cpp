@@ -286,7 +286,7 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
         if (S == N/R) {
             v.vectorize(n0);
             V.vectorize(V.args()[2]);
-            for (int i = 0; i < V.num_reduction_definitions(); i++) {
+            for (int i = 0; i < V.num_update_definitions(); i++) {
                 V.update(i).vectorize(V.args()[2]);
             }
         }
