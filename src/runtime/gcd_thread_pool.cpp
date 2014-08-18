@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 
 #include "HalideRuntime.h"
-#include "mini_string.h"
 
 extern "C" {
 

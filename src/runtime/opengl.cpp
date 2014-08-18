@@ -2,7 +2,6 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#include "mini_string.h"
 #include "mini_opengl.h"
 
 // Implementation note: all function that directly or indirectly access the
