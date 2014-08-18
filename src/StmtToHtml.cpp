@@ -2,6 +2,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 
+#include <iterator>
 #include <iostream>
 #include <fstream>
 #include <sstream>
