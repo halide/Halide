@@ -58,7 +58,7 @@ public:
             if (stage == 0) {
                 exprs = func.values();
             } else {
-                const ReductionDefinition &r = func.reductions()[stage-1];
+                const UpdateDefinition &r = func.updates()[stage-1];
                 exprs = r.values;
                 exprs.insert(exprs.end(), r.args.begin(), r.args.end());
             }
@@ -93,18 +93,18 @@ public:
                 // figure out what those dimensions are, and just have all
                 // stages but the last use the bounds for the last stage.
                 vector<bool> always_pure_dims(func.args().size(), true);
-                const std::vector<ReductionDefinition> &reductions = func.reductions();
-                for (size_t i = 0; i < reductions.size(); i++) {
+                const std::vector<UpdateDefinition> &updates = func.updates();
+                for (size_t i = 0; i < updates.size(); i++) {
                     for (size_t j = 0; j < always_pure_dims.size(); j++) {
-                        const Variable *v = reductions[i].args[j].as<Variable>();
+                        const Variable *v = updates[i].args[j].as<Variable>();
                         if (!v || v->name != func.args()[j]) {
                             always_pure_dims[j] = false;
                         }
                     }
                 }
 
-                if (stage < (int)func.reductions().size()) {
-                    size_t stages = func.reductions().size();
+                if (stage < (int)func.updates().size()) {
+                    size_t stages = func.updates().size();
                     string last_stage = func.name() + ".s" + int_to_string(stages) + ".";
                     for (size_t i = 0; i < always_pure_dims.size(); i++) {
                         if (always_pure_dims[i]) {
@@ -211,7 +211,7 @@ public:
             }
 
             if (stage > 0) {
-                const ReductionDefinition &r = func.reductions()[stage-1];
+                const UpdateDefinition &r = func.updates()[stage-1];
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
@@ -325,7 +325,7 @@ public:
                                      Variable::make(Int(32), arg + ".max")));
             }
             if (stage > 0) {
-                const ReductionDefinition &r = func.reductions()[stage-1];
+                const UpdateDefinition &r = func.updates()[stage-1];
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &dom = r.domain.domain();
                     for (size_t i = 0; i < dom.size(); i++) {
@@ -383,7 +383,7 @@ public:
             s.compute_exprs();
             stages.push_back(s);
 
-            for (size_t j = 0; j < f[i].reductions().size(); j++) {
+            for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
                 s.name = s.func.name();
                 s.compute_exprs();
@@ -446,7 +446,7 @@ public:
                 for (size_t j = 0; j < args.size(); j++) {
                     if (args[j].is_func()) {
                         Function f(args[j].func);
-                        string stage_name = f.name() + ".s" + int_to_string(f.reductions().size());
+                        string stage_name = f.name() + ".s" + int_to_string(f.updates().size());
                         Box b(f.dimensions());
                         for (int d = 0; d < f.dimensions(); d++) {
                             string buf_name = f.name() + ".o0.bounds_query." + consumer.name;
@@ -638,7 +638,7 @@ public:
         // And the current bounds on its reduction variables.
         if (producing >= 0 && stages[producing].stage > 0) {
             const Stage &s = stages[producing];
-            const ReductionDefinition &r = s.func.reductions()[s.stage-1];
+            const UpdateDefinition &r = s.func.updates()[s.stage-1];
             if (r.domain.defined()) {
                 const vector<ReductionVariable> &d = r.domain.domain();
                 for (size_t i = 0; i < d.size(); i++) {
