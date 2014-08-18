@@ -1765,7 +1765,7 @@ Stmt lower(Function f, const Target &t) {
     debug(1) << "Specializing clamped ramps...\n";
     s = specialize_clamped_ramps(s);
     s = simplify(s);
-    debug(2) << "Loering after specializing clamped ramps:\n" << s << "\n\n";
+    debug(2) << "Lowering after specializing clamped ramps:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);

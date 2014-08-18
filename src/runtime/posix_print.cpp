@@ -1,6 +1,5 @@
 #include "runtime_internal.h"
 #include "HalideRuntime.h"
-#include <stdarg.h>
 
 extern "C" {
 extern int vsnprintf (char *s, size_t n, const char *format, va_list arg);
