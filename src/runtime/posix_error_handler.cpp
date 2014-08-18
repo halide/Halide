@@ -1,8 +1,10 @@
 #include "runtime_internal.h"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
+
 WEAK void (*halide_error_handler)(void *, const char *) = NULL;
-}
+
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

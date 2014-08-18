@@ -11,7 +11,8 @@ extern void NSLog(objc_id fmt, ...);
 // To allocate a constant string, use: __builtin___CFStringMakeConstantString
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
+
 WEAK void halide_print_impl(void *user_context, const char *str) {
     // Buy an autorelease pool because this is not perf critical and it is the
     // really safe thing to do.
@@ -30,4 +31,4 @@ WEAK void halide_print_impl(void *user_context, const char *str) {
     objc_msgSend(pool, sel_getUid("drain"));
 }
 
-}
+}}} // namespace Halide::Runtime::Internal

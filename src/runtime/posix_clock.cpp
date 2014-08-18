@@ -15,10 +15,10 @@ struct timeval {
 
 #endif
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 WEAK bool halide_reference_clock_inited = false;
 WEAK timeval halide_reference_clock;
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

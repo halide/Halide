@@ -37,12 +37,12 @@ WEAK int vsnprintf(char *str, size_t size, const char *fmt, va_list ap) {
 }
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
+
 WEAK void halide_print_impl(void *user_context, const char *str) {
     uint8_t *stdout = __iob_func() + FILE_SIZE;
     //uint8_t *stderr = __iob_func() + FILE_SIZE*2;
     fprintf(stdout, "%s", str);
 }
-}
 
-
+}}} // namespace Halide::Runtime::Internal

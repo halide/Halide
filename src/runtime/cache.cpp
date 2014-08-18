@@ -10,7 +10,7 @@
 // later. In the meantime, on some platforms it can be replaced by a
 // platform specific LRU cache such as libcache from Apple.
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 #define CACHE_DEBUGGING 0
 
@@ -255,7 +255,7 @@ WEAK void prune_cache() {
 #endif
 }
 
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

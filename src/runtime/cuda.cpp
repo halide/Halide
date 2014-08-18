@@ -4,7 +4,7 @@
 #include "mini_cuda.h"
 #include "cuda_opencl_shared.h"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK const char *get_cuda_error_name(CUresult error);
 WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx);
@@ -17,7 +17,7 @@ volatile int WEAK weak_cuda_lock = 0;
 CUcontext WEAK *cuda_ctx_ptr = NULL;
 volatile int WEAK *cuda_lock_ptr = NULL;
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -75,7 +75,7 @@ WEAK int halide_release_cuda_context(void *user_context) {
 
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 // Helper object to acquire and release the cuda context.
 class CudaContext {
@@ -277,7 +277,7 @@ WEAK bool validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0)
     return true;
 #endif
 }
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* ptx_src, int size) {
@@ -670,7 +670,7 @@ WEAK int halide_dev_run(void *user_context,
 
 } // extern "C" linkage
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK const char *get_cuda_error_name(CUresult error) {
     switch(error) {
@@ -704,4 +704,4 @@ WEAK const char *get_cuda_error_name(CUresult error) {
     }
 }
 
-}
+}}} // namespace Halide::Runtime::Internal

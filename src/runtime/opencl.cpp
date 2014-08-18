@@ -7,7 +7,7 @@
 
 #include "cuda_opencl_shared.h"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -24,7 +24,7 @@ cl_context WEAK *cl_ctx_ptr = NULL;
 cl_command_queue WEAK *cl_q_ptr = NULL;
 volatile int WEAK *cl_lock_ptr = NULL;
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 // Allow OpenCL 1.1 features to be used.
 #define ENABLE_OPENCL_11
@@ -92,7 +92,7 @@ WEAK int halide_release_cl_context(void *user_context) {
 
 } // extern "C"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
@@ -340,7 +340,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -929,7 +929,7 @@ WEAK int halide_dev_run(void *user_context,
 
 } // extern "C" linkage
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 WEAK const char *get_opencl_error_name(cl_int err) {
     switch (err) {
     case CL_SUCCESS: return "CL_SUCCESS";
@@ -982,4 +982,5 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     default: return "<Unknown error>";
     }
 }
-}
+
+}}} // namespace Halide::Runtime::Internal

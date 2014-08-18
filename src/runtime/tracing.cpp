@@ -16,7 +16,7 @@ typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK trace_fn halide_custom_trace = NULL;
 WEAK int halide_trace_file = 0;
@@ -24,7 +24,7 @@ WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK bool halide_trace_file_internally_opened = false;
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

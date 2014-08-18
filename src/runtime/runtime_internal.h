@@ -51,8 +51,8 @@ typedef __builtin_va_list va_list;
 
 // A convenient namespace for weak functions that are internal to the
 // halide runtime.
-namespace halide_runtime_internal {}
-using namespace halide_runtime_internal;
+namespace Halide { namespace Runtime { namespace Internal {}}}
+using namespace Halide::Runtime::Internal;
 
 // Commonly-used extern functions
 extern "C" {
