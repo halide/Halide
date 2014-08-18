@@ -16,7 +16,7 @@ extern "C" size_t fwrite(const void *, size_t, size_t, void *);
 // It would be nice to use a format that web browsers read and display
 // directly, but those formats don't tend to satisfy the above goals.
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 // See "type_code" in DebugToFile.cpp
 // TIFF sample type values are:
@@ -102,7 +102,7 @@ WEAK bool has_tiff_extension(const char *filename) {
     return *f == '\0';
 }
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 WEAK extern "C" int32_t halide_debug_to_file(void *user_context, const char *filename, uint8_t *data,
                                              int32_t s0, int32_t s1, int32_t s2, int32_t s3,

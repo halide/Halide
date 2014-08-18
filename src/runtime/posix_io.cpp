@@ -7,8 +7,10 @@ extern void *stderr;
 
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
+
 WEAK void halide_print_impl(void *user_context, const char *str) {
     fprintf(stderr, "%s", str);
 }
-}
+
+}}} // namespace Halide::Runtime::Internal

@@ -53,7 +53,7 @@ extern int halide_printf(void *user_context, const char *, ...);
 
 } // extern "C"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
@@ -97,7 +97,7 @@ struct halide_work_queue_t {
 };
 WEAK halide_work_queue_t halide_work_queue;
 
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -177,7 +177,7 @@ WEAK int halide_do_task(void *user_context, halide_task f, int idx,
 
 } // extern "C"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -239,7 +239,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
 }
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 extern int halide_host_cpu_count();

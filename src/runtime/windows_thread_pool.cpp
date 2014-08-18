@@ -40,7 +40,7 @@ extern WIN32API bool InitOnceExecuteOnce(InitOnce *, bool WIN32API (*f)(InitOnce
 
 } // extern "C"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 struct windows_mutex {
     InitOnce once;
@@ -104,7 +104,7 @@ WEAK bool WIN32API InitOnceCallback(InitOnce *, void *, void **) {
 WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;
 
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
@@ -182,7 +182,7 @@ WEAK int halide_do_task(void *user_context, halide_task f, int idx,
 
 } // extern "C"
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -253,7 +253,7 @@ WEAK void *halide_worker_thread(void *void_arg) {
     return NULL;
 }
 
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

@@ -3,7 +3,7 @@
 #include "scoped_spin_lock.h"
 
 // Runtime settings for opencl and cuda device selection
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK char halide_ocl_platform_name[256];
 WEAK int halide_ocl_platform_name_lock = 0;
@@ -17,7 +17,7 @@ WEAK int halide_gpu_device = 0;
 WEAK int halide_gpu_device_lock = 0;
 WEAK bool halide_gpu_device_initialized = false;
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

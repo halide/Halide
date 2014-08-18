@@ -62,7 +62,7 @@ extern "C" int halide_opengl_create_context(void *user_context);
 
 // ---------- Types ----------
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 enum ArgumentKind {
     ARGKIND_NONE,
@@ -1218,7 +1218,7 @@ WEAK int halide_opengl_dev_run(
     return 0;
 }
 
-} // namespace halide_runtime_internal
+}}} // namespace Halide::Runtime::Internal
 
 //  Create wrappers that satisfy old naming conventions
 

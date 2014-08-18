@@ -7,12 +7,12 @@ extern void free(void *);
 
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void *(*halide_custom_malloc)(void *, size_t) = NULL;
 WEAK void (*halide_custom_free)(void *, void *) = NULL;
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 

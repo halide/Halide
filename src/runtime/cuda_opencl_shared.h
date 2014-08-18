@@ -1,4 +1,4 @@
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
 
 #ifdef DEBUG
 #define DEBUG_PRINTF halide_printf
@@ -124,5 +124,5 @@ WEAK dev_copy make_dev_to_host_copy(const buffer_t *buf) {
     return c;
 }
 
-}
+}}} // namespace Halide::Runtime::Internal
 

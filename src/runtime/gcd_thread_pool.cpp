@@ -27,7 +27,8 @@ extern void dispatch_release(void *object);
 
 }
 
-namespace halide_runtime_internal {
+namespace Halide { namespace Runtime { namespace Internal {
+
 struct gcd_mutex {
     dispatch_once_t once;
     dispatch_semaphore_t semaphore;
@@ -42,7 +43,7 @@ typedef int (*halide_task)(void *user_context, int, uint8_t *);
 WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
 WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 extern "C" {
 
