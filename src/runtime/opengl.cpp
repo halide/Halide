@@ -761,8 +761,7 @@ WEAK int halide_opengl_dev_sync(void *user_context) {
 // indicating that the OpenGL object corresponding to the buffer_t is bound by
 // the app and not by the halide runtime. For example, the buffer_t may be
 // backed by an FBO already bound by the application.
-EXPORT uint64_t halide_opengl_output_client_bound(void) {
-  
+WEAK uint64_t halide_opengl_output_client_bound(void) {
   return HALIDE_GLSL_CLIENT_BOUND;
 }
 
@@ -1049,11 +1048,11 @@ WEAK int halide_opengl_dev_run(
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
             GLuint tex = *((GLuint *)args[i]);
-          
+
             if (tex == (GLuint)HALIDE_GLSL_CLIENT_BOUND) {
                 bind_render_targets = false;
             }
-          
+
             // Outbuf textures are handled explicitly below
             continue;
         } else if (kernel_arg->kind == ARGKIND_INBUF) {
@@ -1141,11 +1140,11 @@ WEAK int halide_opengl_dev_run(
     // Prepare framebuffer for rendering to output textures.
     GLint output_min[2] = { 0, 0 };
     GLint output_extent[2] = { 0, 0 };
-  
+
     if (bind_render_targets) {
         ST.BindFramebuffer(GL_FRAMEBUFFER, ST.framebuffer_id);
     }
-  
+
     ST.Disable(GL_CULL_FACE);
     ST.Disable(GL_DEPTH_TEST);
 
@@ -1168,7 +1167,7 @@ WEAK int halide_opengl_dev_run(
 #ifdef DEBUG
             halide_printf(user_context, "Output texture %d: %d\n", num_output_textures, tex);
 #endif
-          
+
             ST.FramebufferTexture2D(GL_FRAMEBUFFER,
                                     GL_COLOR_ATTACHMENT0 + num_output_textures,
                                     GL_TEXTURE_2D, tex, 0);
