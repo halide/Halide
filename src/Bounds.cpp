@@ -856,10 +856,13 @@ void merge_boxes(Box &a, const Box &b) {
 
     internal_assert(a.size() == b.size());
 
+    bool a_maybe_unused = a.maybe_unused();
+    bool b_maybe_unused = b.maybe_unused();
+
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].min.defined() && b[i].min.defined()) {
-                if (a.used.defined() && b.used.defined()) {
+                if (a_maybe_unused && b_maybe_unused) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].min = select(a.used, a[i].min, b[i].min);
                     } else {
@@ -867,9 +870,9 @@ void merge_boxes(Box &a, const Box &b) {
                                           a.used, a[i].min,
                                           b[i].min);
                     }
-                } else if (a.used.defined()) {
+                } else if (a_maybe_unused) {
                     a[i].min = select(a.used, simple_min(a[i].min, b[i].min), b[i].min);
-                } else if (b.used.defined()) {
+                } else if (b_maybe_unused) {
                     a[i].min = select(b.used, simple_min(a[i].min, b[i].min), a[i].min);
                 } else {
                     a[i].min = simple_min(a[i].min, b[i].min);
@@ -880,7 +883,7 @@ void merge_boxes(Box &a, const Box &b) {
         }
         if (!a[i].max.same_as(b[i].max)) {
             if (a[i].max.defined() && b[i].max.defined()) {
-                if (a.used.defined() && b.used.defined()) {
+                if (a_maybe_unused && b_maybe_unused) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].max = select(a.used, a[i].max, b[i].max);
                     } else {
@@ -888,9 +891,9 @@ void merge_boxes(Box &a, const Box &b) {
                                           a.used, a[i].max,
                                           b[i].max);
                     }
-                } else if (a.used.defined()) {
+                } else if (a_maybe_unused) {
                     a[i].max = select(a.used, simple_max(a[i].max, b[i].max), b[i].max);
-                } else if (b.used.defined()) {
+                } else if (b_maybe_unused) {
                     a[i].max = select(b.used, simple_max(a[i].max, b[i].max), a[i].max);
                 } else {
                     a[i].max = simple_max(a[i].max, b[i].max);
@@ -901,7 +904,7 @@ void merge_boxes(Box &a, const Box &b) {
         }
     }
 
-    if (a.used.defined() && b.used.defined()) {
+    if (a_maybe_unused && b_maybe_unused) {
         if (!equal(a.used, b.used)) {
             a.used = simplify(a.used || b.used);
             if (is_one(a.used)) {
@@ -911,6 +914,34 @@ void merge_boxes(Box &a, const Box &b) {
     } else {
         a.used = Expr();
     }
+}
+
+bool boxes_overlap(const Box &a, const Box &b) {
+    // If one box is scalar and the other is not, the boxes cannot
+    // overlap.
+    if (a.size() != b.size() && (a.size() == 0 || b.size() == 0)) {
+        return false;
+    }
+
+    internal_assert(a.size() == b.size());
+
+    bool a_maybe_unused = a.maybe_unused();
+    bool b_maybe_unused = b.maybe_unused();
+
+    // Overlapping requires both boxes to be used.
+    Expr overlap = ((a_maybe_unused ? a.used : const_true()) &&
+                    (b_maybe_unused ? b.used : const_true()));
+
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].max.defined() && b[i].min.defined()) {
+            overlap = overlap && b[i].max > a[i].min;
+        }
+        if (a[i].min.defined() && b[i].max.defined()) {
+            overlap = overlap && a[i].max > b[i].min;
+        }
+    }
+
+    return !is_zero(simplify(overlap));
 }
 
 // Compute the box produced by a statement
@@ -975,6 +1006,7 @@ private:
         }
 
         Box b(op->args.size());
+        b.used = const_true();
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
             b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
@@ -1089,13 +1121,13 @@ private:
 
                 //debug(0) << " Merging boxes for " << iter->first << "\n";
 
-                if (then_box.used.defined()) {
+                if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
                 } else {
                     then_box.used = op->condition;
                 }
 
-                if (else_box.used.defined()) {
+                if (else_box.maybe_unused()) {
                     else_box.used = else_box.used && !op->condition;
                 } else {
                     else_box.used = !op->condition;
