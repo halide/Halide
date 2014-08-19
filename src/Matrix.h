@@ -14,11 +14,11 @@ class Matrix;
  * until we see how this object gets used.
  */
 class MatrixRef {
-    Matrix mat;
+    Matrix& mat;
     Expr row;
     Expr col;
   public:
-    MatrixRef(Matrix M, Expr i, Expr j);
+    MatrixRef(Matrix& M, Expr i, Expr j);
 
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
@@ -70,7 +70,7 @@ class Matrix {
     /* For small matrices we store the coefficient Expr's directly. */
     std::vector<Expr> coeffs;
 
-    /* For large matrices (m*n > 16) we simply wrap a Func. */
+    /* For large matrices (m > 4 || n > 4) we simply wrap a Func. */
     Func func;
 
     /* Variables for accessing the function as a matrix. */
@@ -86,34 +86,51 @@ class Matrix {
     /* Number of columns in the matrix. */
     Expr ncols;
 
-    friend class MatrixRef;
-
     int small_offset(Expr row, Expr col);
+
+    friend class MatrixRef;
 
     friend Matrix operator+(Matrix, Matrix);
     friend Matrix operator-(Matrix, Matrix);
     friend Matrix operator*(Matrix, Matrix);
     friend Matrix operator*(Expr, Matrix);
     friend Matrix operator*(Matrix, Expr);
+    friend Matrix operator/(Matrix, Expr);
   public:
     EXPORT Matrix();
     EXPORT Matrix(Expr m, Expr n, Type t);
     EXPORT Matrix(Expr m, Expr n, Func f);
+    EXPORT Matrix(Expr m, Expr n, const std::vector<Expr>& c);
 
     EXPORT Type type() const;
+    EXPORT Func function() const {return func;}
 
     EXPORT Expr num_rows() const;
     EXPORT Expr num_cols() const;
 
-    EXPORT Matrix row(Expr i) const;
-    EXPORT Matrix col(Expr j) const;
-    EXPORT Matrix block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) const;
+    EXPORT Matrix row(Expr i);
+    EXPORT Matrix col(Expr j);
+    EXPORT Matrix block(Expr min_i, Expr max_i, Expr min_j, Expr max_j);
 
-    EXPORT Matrix transpose() const;
+    EXPORT Matrix transpose();
 
     EXPORT MatrixRef operator[] (Expr i);
     EXPORT MatrixRef operator() (Expr i, Expr j);
 };
+
+EXPORT Matrix identity_matrix(Type, Expr);
+
+template<typename T>
+EXPORT Matrix identity_matrix(Expr size) {
+    return identity_matrix(type_of<T>(), size);
+}
+
+EXPORT Matrix operator+(Matrix, Matrix);
+EXPORT Matrix operator-(Matrix, Matrix);
+EXPORT Matrix operator*(Matrix, Matrix);
+EXPORT Matrix operator*(Expr, Matrix);
+EXPORT Matrix operator*(Matrix, Expr);
+EXPORT Matrix operator/(Matrix, Expr);
 
 }
 
