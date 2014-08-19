@@ -47,8 +47,7 @@ private:
         if (op->name == store_name) {
             const Ramp *r = op->index.as<Ramp>();
 
-            if (r && is_const(r->stride) &&
-                *as_const_int(r->stride) == store_stride) {
+            if (r && is_const(r->stride, store_stride)) {
                 stores.push_back(*op);
                 stmt = Stmt();
                 return;
@@ -95,8 +94,7 @@ private:
             } else if (store->name == store_name) {
                 const Ramp *r = store->index.as<Ramp>();
             
-                if (r && is_const(r->stride) &&
-                    *as_const_int(r->stride) == store_stride) {
+                if (r && is_const(r->stride, store_stride)) {
                     stores.push_back(*store);
                     stmt = mutate(op->rest);
                     return;
