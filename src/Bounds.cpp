@@ -856,13 +856,13 @@ void merge_boxes(Box &a, const Box &b) {
 
     internal_assert(a.size() == b.size());
 
-    bool a_used_defined = a.used_defined();
-    bool b_used_defined = b.used_defined();
+    bool a_maybe_used = a.maybe_used();
+    bool b_maybe_used = b.maybe_used();
 
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].min.defined() && b[i].min.defined()) {
-                if (a_used_defined && b_used_defined) {
+                if (a_maybe_used && b_maybe_used) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].min = select(a.used, a[i].min, b[i].min);
                     } else {
@@ -870,9 +870,9 @@ void merge_boxes(Box &a, const Box &b) {
                                           a.used, a[i].min,
                                           b[i].min);
                     }
-                } else if (a_used_defined) {
+                } else if (a_maybe_used) {
                     a[i].min = select(a.used, simple_min(a[i].min, b[i].min), b[i].min);
-                } else if (b_used_defined) {
+                } else if (b_maybe_used) {
                     a[i].min = select(b.used, simple_min(a[i].min, b[i].min), a[i].min);
                 } else {
                     a[i].min = simple_min(a[i].min, b[i].min);
@@ -883,7 +883,7 @@ void merge_boxes(Box &a, const Box &b) {
         }
         if (!a[i].max.same_as(b[i].max)) {
             if (a[i].max.defined() && b[i].max.defined()) {
-                if (a_used_defined && b_used_defined) {
+                if (a_maybe_used && b_maybe_used) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].max = select(a.used, a[i].max, b[i].max);
                     } else {
@@ -891,9 +891,9 @@ void merge_boxes(Box &a, const Box &b) {
                                           a.used, a[i].max,
                                           b[i].max);
                     }
-                } else if (a_used_defined) {
+                } else if (a_maybe_used) {
                     a[i].max = select(a.used, simple_max(a[i].max, b[i].max), b[i].max);
-                } else if (b_used_defined) {
+                } else if (b_maybe_used) {
                     a[i].max = select(b.used, simple_max(a[i].max, b[i].max), a[i].max);
                 } else {
                     a[i].max = simple_max(a[i].max, b[i].max);
@@ -904,7 +904,7 @@ void merge_boxes(Box &a, const Box &b) {
         }
     }
 
-    if (a_used_defined && b_used_defined) {
+    if (a_maybe_used && b_maybe_used) {
         if (!equal(a.used, b.used)) {
             a.used = simplify(a.used || b.used);
             if (is_one(a.used)) {
@@ -925,12 +925,12 @@ bool boxes_overlap(const Box &a, const Box &b) {
 
     internal_assert(a.size() == b.size());
 
-    bool a_used_defined = a.used_defined();
-    bool b_used_defined = b.used_defined();
+    bool a_maybe_used = a.maybe_used();
+    bool b_maybe_used = b.maybe_used();
 
     // Overlapping requires both boxes to be used.
-    Expr overlap = ((a_used_defined ? a.used : const_true()) &&
-                    (b_used_defined ? b.used : const_true()));
+    Expr overlap = ((a_maybe_used ? a.used : const_true()) &&
+                    (b_maybe_used ? b.used : const_true()));
 
     for (size_t i = 0; i < a.size(); i++) {
         if (a[i].max.defined() && b[i].min.defined()) {
@@ -1121,13 +1121,13 @@ private:
 
                 //debug(0) << " Merging boxes for " << iter->first << "\n";
 
-                if (then_box.used_defined()) {
+                if (then_box.maybe_used()) {
                     then_box.used = then_box.used && op->condition;
                 } else {
                     then_box.used = op->condition;
                 }
 
-                if (else_box.used_defined()) {
+                if (else_box.maybe_used()) {
                     else_box.used = else_box.used && !op->condition;
                 } else {
                     else_box.used = !op->condition;
