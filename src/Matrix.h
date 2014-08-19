@@ -84,7 +84,10 @@ class Matrix {
   /* Number of columns in the matrix. */
   Expr ncols;
 
- public:
+  friend class MatrixRef;
+
+  int small_offset(Expr row, Expr col);
+public:
   EXPORT Matrix();
   EXPORT Matrix(Expr m, Expr n, Type t);
   EXPORT Matrix(Expr m, Expr n, Func f);
