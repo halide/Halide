@@ -15,8 +15,10 @@ class Matrix;
  */
 class MatrixRef {
     Matrix mat;
-public:
-    MatrixRef(Matrix M);
+    Expr row;
+    Expr col;
+  public:
+    MatrixRef(Matrix M, Expr i, Expr j);
 
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
@@ -65,44 +67,52 @@ public:
 };
 
 class Matrix {
-  /* For small matrices we store the coefficient Expr's directly. */
-  std::vector<Expr> coeffs;
+    /* For small matrices we store the coefficient Expr's directly. */
+    std::vector<Expr> coeffs;
 
-  /* For large matrices (m*n > 16) we simply wrap a Func. */
-  Func func;
+    /* For large matrices (m*n > 16) we simply wrap a Func. */
+    Func func;
 
-  /* Variables for accessing the function as a matrix. */
-  Var x, y;
+    /* Variables for accessing the function as a matrix. */
+    Var x, y;
 
-  /* A flag indicating if we should use the function representation or
-   * the coefficient representation. */
-  bool is_large;
+    /* A flag indicating if we should use the function representation or
+     * the coefficient representation. */
+    bool is_large;
 
-  /* Number of rows in the matrix. */
-  Expr nrows;
+    /* Number of rows in the matrix. */
+    Expr nrows;
 
-  /* Number of columns in the matrix. */
-  Expr ncols;
+    /* Number of columns in the matrix. */
+    Expr ncols;
 
-  friend class MatrixRef;
+    friend class MatrixRef;
 
-  int small_offset(Expr row, Expr col);
-public:
-  EXPORT Matrix();
-  EXPORT Matrix(Expr m, Expr n, Type t);
-  EXPORT Matrix(Expr m, Expr n, Func f);
+    int small_offset(Expr row, Expr col);
 
-  EXPORT Expr num_rows() const;
-  EXPORT Expr num_cols() const;
+    friend Matrix operator+(Matrix, Matrix);
+    friend Matrix operator-(Matrix, Matrix);
+    friend Matrix operator*(Matrix, Matrix);
+    friend Matrix operator*(Expr, Matrix);
+    friend Matrix operator*(Matrix, Expr);
+  public:
+    EXPORT Matrix();
+    EXPORT Matrix(Expr m, Expr n, Type t);
+    EXPORT Matrix(Expr m, Expr n, Func f);
 
-  EXPORT Matrix row(Expr i) const;
-  EXPORT Matrix col(Expr j) const;
-  EXPORT Matrix block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) const;
+    EXPORT Type type() const;
 
-  EXPORT Matrix transpose() const;
+    EXPORT Expr num_rows() const;
+    EXPORT Expr num_cols() const;
 
-  EXPORT MatrixRef operator[] (Expr i);
-  EXPORT MatrixRef operator() (Expr i, Expr j);
+    EXPORT Matrix row(Expr i) const;
+    EXPORT Matrix col(Expr j) const;
+    EXPORT Matrix block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) const;
+
+    EXPORT Matrix transpose() const;
+
+    EXPORT MatrixRef operator[] (Expr i);
+    EXPORT MatrixRef operator() (Expr i, Expr j);
 };
 
 }
