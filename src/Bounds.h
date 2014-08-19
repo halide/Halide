@@ -36,24 +36,28 @@ Interval bounds_of_expr_in_scope(Expr expr,
                                  const Scope<Interval> &scope,
                                  const FuncValueBounds &func_bounds = FuncValueBounds());
 
-
+/** Represents the bounds of a region of arbitrary dimension. Zero
+ * dimensions corresponds to a scalar region. */
 struct Box {
-    // The conditions under which this region may be touched
+    /** The conditions under which this region may be touched. */
     Expr used;
 
-    // The bounds if it is touched
+    /** The bounds if it is touched. */
     std::vector<Interval> bounds;
 
     Box() {}
     Box(size_t sz) : bounds(sz) {}
     Box(const std::vector<Interval> &b) : bounds(b) {}
+
     size_t size() const {return bounds.size();}
     bool empty() const {return bounds.empty();}
     Interval &operator[](int i) {return bounds[i];}
     const Interval &operator[](int i) const {return bounds[i];}
     void resize(size_t sz) {bounds.resize(sz);}
     void push_back(const Interval &i) {bounds.push_back(i);}
-    bool maybe_used() const {return used.defined() && !is_one(used);}
+
+    /** Check if the used condition is defined and not trivially true. */
+    bool maybe_unused() const {return used.defined() && !is_one(used);}
 };
 
 // Expand box a to encompass box b
