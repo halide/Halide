@@ -179,13 +179,15 @@ protected:
             
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
-            internal_assert(op->args[0].as<StringImm>() || (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
               
             const StringImm* stringImm = op->args[0].as<StringImm>();
             if (!stringImm) {
+              internal_assert(op->args[0].as<Broadcast>());
               stringImm = op->args[0].as<Broadcast>()->value.as<StringImm>();
             }
-            
+
+            internal_assert(stringImm);
+
             string bufname = stringImm->value;
             BufferRef &ref = buffers[bufname];
             ref.type = op->type;

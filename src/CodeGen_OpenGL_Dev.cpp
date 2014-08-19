@@ -337,8 +337,8 @@ void CodeGen_GLSL::visit(const Call *op) {
             // we use only the first element
           
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                << print_expr(op->args[2]) << ((width > 1) ? ".x" : "") << ", "
-                << print_expr(op->args[3]) << ((width > 1) ? ".x" : "") << "))"
+                << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
+                << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
                 << get_vector_suffix(op->args[4])
                 << " * " << op->type.imax() << ".0";
           
