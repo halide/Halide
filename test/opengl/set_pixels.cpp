@@ -1,9 +1,18 @@
 #include <Halide.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 using namespace Halide;
 
 int main() {
+
+    // This test must be run with HL_JIT_TARGET=host-opengl
+    const char* jit_target_env = getenv("HL_JIT_TARGET");
+    if (!jit_target_env || strcmp("host-opengl", jit_target_env))  {
+        fprintf(stderr,"ERROR: This test must be run with HL_JIT_TARGET=host-opengl.\n");
+        return 1;
+    }
+
     Func f;
     Var x, y, c;
 
@@ -13,6 +22,7 @@ int main() {
     Image<uint8_t> out(10, 10, 3);
     f.bound(c, 0, 3);
     f.glsl(x, y, c);
+    f.unroll(c);
     f.realize(out);
 
     out.copy_to_host();
