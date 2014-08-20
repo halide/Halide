@@ -8,8 +8,14 @@ bool is_int(Expr i) {
     return i.type().is_int() || i.type().is_uint();
 }
 
-bool is_positive_int(Expr i) {
-    return Internal::is_positive_const(i) && is_int(i);
+bool is_size_const(Expr i) {
+    bool valid = is_const(i) && is_int(i);
+    if (valid) {
+        const int n = *as_const_int(i);
+        valid = n >= 0;
+    }
+
+    return valid;
 }
 
 MatrixRef::MatrixRef(Matrix& M, Expr i, Expr j) : mat(M), row(i), col(j) {
@@ -62,6 +68,10 @@ void MatrixRef::operator/=(Expr x) {
     }
 }
 
+void MatrixRef::operator=(const MatrixRef &e) {
+    (*this) = Expr(e);
+}
+
 void MatrixRef::operator=(const FuncRefVar &e) {
     internal_assert(e.size() == 1);
     (*this) = Expr(e);
@@ -83,10 +93,10 @@ MatrixRef::operator Expr() const {
 
 int Matrix::small_offset(Expr row, Expr col) {
     if (!is_large) {
-        internal_assert(is_positive_int(row));
-        internal_assert(is_positive_int(col));
-        internal_assert(is_positive_int(nrows));
-        internal_assert(is_positive_int(ncols));
+        internal_assert(is_size_const(row));
+        internal_assert(is_size_const(col));
+        internal_assert(is_size_const(nrows));
+        internal_assert(is_size_const(ncols));
 
         const int i = *as_const_int(row);
         const int j = *as_const_int(col);
@@ -104,7 +114,7 @@ Matrix::Matrix(Expr m, Expr n, Type t) : is_large(true), nrows(m), ncols(n) {
     internal_assert(nrows.defined() && is_int(nrows));
     internal_assert(ncols.defined() && is_int(ncols));
 
-    if (is_positive_int(nrows) && is_positive_int(ncols)) {
+    if (is_size_const(nrows) && is_size_const(ncols)) {
         const int nr = *Internal::as_const_int(nrows);
         const int nc = *Internal::as_const_int(ncols);
 
@@ -124,8 +134,8 @@ Matrix::Matrix(Expr m, Expr n, Type t) : is_large(true), nrows(m), ncols(n) {
 }
 
 Matrix::Matrix(Expr m, Expr n, const std::vector<Expr>& c) : is_large(false), nrows(m), ncols(n) {
-    internal_assert(is_positive_int(nrows));
-    internal_assert(is_positive_int(ncols));
+    internal_assert(is_size_const(nrows));
+    internal_assert(is_size_const(ncols));
 
     const int nr = *Internal::as_const_int(nrows);
     const int nc = *Internal::as_const_int(ncols);
@@ -149,7 +159,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
         internal_assert(is_one(ncols) || is_one(nrows));
 
         if (is_one(ncols)) {
-            if (is_positive_int(nrows)) {
+            if (is_size_const(nrows)) {
                 const int nr = *Internal::as_const_int(nrows);
 
                 if (nr <= 4) {
@@ -171,7 +181,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
             func.bound(x, 0, nrows)
                 .bound(y, 0, 1);
         } else {  // is_one(nrows)
-            if (is_positive_int(ncols)) {
+            if (is_size_const(ncols)) {
                 const int nc = *Internal::as_const_int(ncols);
 
                 if (nc <= 4) {
@@ -196,7 +206,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
     } else {
         internal_assert(f.dimensions() == 2);
 
-        if (is_positive_int(nrows) && is_positive_int(ncols)) {
+        if (is_size_const(nrows) && is_size_const(ncols)) {
             const int nr = *Internal::as_const_int(nrows);
             const int nc = *Internal::as_const_int(ncols);
 
@@ -240,7 +250,7 @@ Expr Matrix::num_cols() const {
 }
 
 Matrix Matrix::row(Expr i) {
-    if (is_positive_int(ncols)) {
+    if (is_size_const(ncols)) {
         const int n = *Internal::as_const_int(ncols);
         if (n <= 4) {
             std::vector<Expr> row_coeffs(n);
@@ -257,7 +267,7 @@ Matrix Matrix::row(Expr i) {
 }
 
 Matrix Matrix::col(Expr j) {
-    if (is_positive_int(nrows)) {
+    if (is_size_const(nrows)) {
         const int m = *Internal::as_const_int(nrows);
         if (m <= 4) {
             std::vector<Expr> col_coeffs(m);
@@ -277,7 +287,7 @@ Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
     Expr block_nrows = simplify(max_i - min_i + 1);
     Expr block_ncols = simplify(max_j - min_j + 1);
 
-    if (is_positive_int(block_nrows) && is_positive_int(block_ncols)) {
+    if (is_size_const(block_nrows) && is_size_const(block_ncols)) {
         const int m = *Internal::as_const_int(block_nrows);
         const int n = *Internal::as_const_int(block_ncols);
 
@@ -319,6 +329,82 @@ Matrix Matrix::transpose() {
         }
         return Matrix(ncols, nrows, coeff_trans);
     }
+}
+
+Expr Matrix::cofactor(int i, int j) {
+    internal_assert(!is_large) << "matrix cofactors are only available for small matrices.\n";
+
+    const int m = *as_const_int(nrows);
+    const int n = *as_const_int(ncols);
+    internal_assert(m == n) << "matrix cofactors are only defined for square matrices.\n";
+
+    Matrix &A = *this;
+    Matrix  B(A.num_rows()-1, A.num_cols()-1, A.type());
+    Expr sign = (i + j) % 2 == 0? 1 : -1;
+
+    for (int l = 0; l < n; ++l) {
+        const int l_off = l < j? 0: 1;
+        for (int k = 0; k < n; ++k) {
+            const int k_off = k < i? 0: 1;
+            B(i,j) = sign * A(l + l_off, k + k_off);
+        }
+    }
+
+    return B.determinant();
+}
+
+Expr Matrix::determinant() {
+    internal_assert(!is_large) << "matrix determinant is only available for small matrices.\n";
+
+    // Assert nrows == ncols!!!
+    const int m = *as_const_int(nrows);
+    const int n = *as_const_int(ncols);
+    internal_assert(m == n) << "matrix determinant is only defined for square matrices.\n";
+
+    Matrix &A = *this;
+
+    Expr det = cast(type(), 0);
+    if (n == 1) {
+        det = A(0,0);
+    } else if (n == 2) {
+        det = A(0,0)*A(1,1) - A(0,1)*A(1,1);
+    } else if (n == 3) {
+        det = A(0,0)*(A(1,1)*A(2,2) - A(1,2)*A(2,1))
+                - A(0,1)*(A(1,0)*A(2,2) - A(1,2)*A(2,0))
+                + A(0,2)*(A(1,0)*A(2,1) - A(1,1)*A(2,0));
+    } else { /*if (n == 4)*/
+        for (int j = 0; j < n; ++j) {
+            det += A(0,j) * A.cofactor(0, j);
+        }
+    }
+    return det;
+}
+
+Matrix Matrix::inverse() {
+    internal_assert(!is_large) << "matrix inverse is only available for small matrices.\n";
+
+    // Assert nrows == ncols!!!
+    const int m = *as_const_int(nrows);
+    const int n = *as_const_int(ncols);
+    internal_assert(m == n) << "matrix inverse is only defined for square matrices.\n";
+
+    Matrix &A = *this;
+    Expr det = A.determinant();
+
+    Matrix inv(n, n, type());
+    if (n == 1) {
+        inv(0,0) = A(0,0);
+    } else if (n == 2) {
+        inv(0,0) =  A(1,1) / det;  inv(0,1) = -A(0,1) / det;
+        inv(1,0) = -A(1,0) / det;  inv(1,1) =  A(1,1) / det;
+    } else { /*if (n == 3 || n == 4)*/
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < n; ++i) {
+                inv(i, j) = cofactor(j, i) / det;
+            }
+        }
+    }
+    return inv;
 }
 
 MatrixRef Matrix::operator[] (Expr i) {

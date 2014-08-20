@@ -57,6 +57,7 @@ class MatrixRef {
      * f(x, y) = g(x, y) defines f.
      */
     // @{
+    EXPORT void operator=(const MatrixRef &);
     EXPORT void operator=(const FuncRefVar &);
     EXPORT void operator=(const FuncRefExpr &);
     // @}
@@ -113,6 +114,16 @@ class Matrix {
     EXPORT Matrix block(Expr min_i, Expr max_i, Expr min_j, Expr max_j);
 
     EXPORT Matrix transpose();
+
+    /*
+      These operations are only available for small nxn matrices, i.e.
+      n = 2, 3, or 4.
+     */
+    // @{
+    EXPORT Expr cofactor(int i, int j);
+    EXPORT Expr determinant();
+    EXPORT Matrix inverse();
+    // @}
 
     EXPORT MatrixRef operator[] (Expr i);
     EXPORT MatrixRef operator() (Expr i, Expr j);
