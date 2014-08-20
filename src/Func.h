@@ -16,7 +16,6 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
-#include "Target.h"
 
 namespace Halide {
 
@@ -1667,6 +1666,16 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(func);
     }
+
+    /** Infer the arguments to the Func, sorted into a canonical order:
+     * all buffers (sorted alphabetically by name), followed by all non-buffers
+     * (sorted alphabetically by name).
+     This lets you write things like:
+     \code
+     func.compile_to_assembly("/dev/stdout", func.infer_arguments());
+     \endcode
+     */
+    EXPORT std::vector<Argument> infer_arguments() const;
 
 };
 
