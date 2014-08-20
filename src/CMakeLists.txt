@@ -275,7 +275,7 @@ set(HEADER_FILES
   UnifyDuplicateLets.h
   HumanReadableStmt.h
   StmtToHtml.h
-  Memoization.h,
+  Memoization.h
   CodeGen_MIPS.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
