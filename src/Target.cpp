@@ -327,7 +327,7 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
   const char* const arch_names[] = {
-    "arch_unknown", "x86", "arm", "pnacl", "mips"
+      "arch_unknown", "x86", "arm", "pnacl", "mips"
   };
   const char* const os_names[] = {
       "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"

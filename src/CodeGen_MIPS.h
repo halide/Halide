@@ -11,10 +11,10 @@
 namespace Halide {
 namespace Internal {
 
-/** A code generator that emits pnacl bitcode from a given Halide stmt. */
+/** A code generator that emits mips code from a given Halide stmt. */
 class CodeGen_MIPS : public CodeGen_Posix {
 public:
-    /** Create a pnacl code generator. Processor features can be
+    /** Create a mips code generator. Processor features can be
      * enabled using the appropriate flags in the target struct. */
     CodeGen_MIPS(Target);
 
