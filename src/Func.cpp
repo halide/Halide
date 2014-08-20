@@ -1723,25 +1723,6 @@ public:
         : output(o), include_buffers(include_buffers) {
     }
 
-private:
-    const string &output;
-    const bool include_buffers;
-
-    using IRGraphVisitor::visit;
-
-    bool already_have(const string &name) {
-        // Ignore dependencies on the output buffers
-        if (name == output || starts_with(name, output + ".")) {
-            return true;
-        }
-        for (size_t i = 0; i < arg_types.size(); i++) {
-            if (arg_types[i].name == name) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void visit_function(const Function& func) {
         if (func.has_pure_definition()) {
             visit_exprs(func.values());
@@ -1785,6 +1766,25 @@ private:
                 visit_expr(buf->extent_constraint(i));
             }
         }
+    }
+
+private:
+    const string &output;
+    const bool include_buffers;
+
+    using IRGraphVisitor::visit;
+
+    bool already_have(const string &name) {
+        // Ignore dependencies on the output buffers
+        if (name == output || starts_with(name, output + ".")) {
+            return true;
+        }
+        for (size_t i = 0; i < arg_types.size(); i++) {
+            if (arg_types[i].name == name) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void visit_exprs(const std::vector<Expr>& v) {
@@ -1912,17 +1912,11 @@ struct ArgumentComparator {
 };
 }
 
-std::vector<Argument> Func::infer_arguments(bool use_lowered, const Target &target) {
+std::vector<Argument> Func::infer_arguments() const {
     user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
 
     InferArguments infer_args(name(), /*include_buffers*/ false);
-    if (use_lowered) {
-        lower(target);
-        lowered.accept(&infer_args);
-    } else {
-        Expr call = outputs() == 1 ? (*this)(Halide::_) : (*this)(Halide::_)[0];
-        call.accept(&infer_args);
-    }
+    infer_args.visit_function(func);
 
     std::sort(infer_args.arg_types.begin(), infer_args.arg_types.end(), ArgumentComparator());
 
