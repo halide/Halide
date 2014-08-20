@@ -1084,35 +1084,41 @@ int next_power_of_two(int x) {
             return p2;
         }
     }
+    // unreachable.
 }
 }
 
 void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
 
+    // If the index is constant, we generate some TBAA info that helps
+    // LLVM understand our loads/stores aren't aliased.
     bool constant_index = false;
     int base = 0;
     int width = 1;
 
-    const Ramp *ramp = index.as<Ramp>();
-    if (ramp) {
-        const int *pstride = as_const_int(ramp->stride);
-        const int *pbase = as_const_int(ramp->base);
-        if (pstride && pbase) {
-            int stride = *pstride;
-            base = *pbase;
-            width = next_power_of_two(ramp->width * stride);
+    if (index.defined()) {
+        if (const Ramp *ramp = index.as<Ramp>()) {
+            const int *pstride = as_const_int(ramp->stride);
+            const int *pbase = as_const_int(ramp->base);
+            if (pstride && pbase) {
+                // We want to find the smallest aligned width and offset
+                // that contains this ramp.
+                int stride = *pstride;
+                base = *pbase;
+                width = next_power_of_two(ramp->width * stride);
 
-            while (base % width) {
-                base -= (base % width + width) % width;
-                width *= 2;
+                while (base % width) {
+                    base -= (base % width + width) % width;
+                    width *= 2;
+                }
+                constant_index = true;
             }
-            constant_index = true;
-        }
-    } else {
-        const int *pbase = as_const_int(index);
-        if (pbase) {
-            base = *pbase;
-            constant_index = true;
+        } else {
+            const int *pbase = as_const_int(index);
+            if (pbase) {
+                base = *pbase;
+                constant_index = true;
+            }
         }
     }
 
@@ -1120,15 +1126,14 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr ind
     // loads and stores to different buffers can get reordered.
     MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
     tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa));
-    if (constant_index && width < 1024) {
+    // We also add metadata for constant indices to allow loads and
+    // stores to the same buffer to get reordered.
+    if (constant_index) {
         for (int w = 1024; w >= width; w /= 2) {
             int b = (base * width) / w;
 
             std::stringstream level;
-            level << buffer << "_" << w << "_" << b;
-
-            debug(0) << level.str() << "\n";
-
+            level << buffer << ".width" << w << ".base" << b;
             tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, level.str()), tbaa));
         }
     }
