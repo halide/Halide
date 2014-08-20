@@ -26,22 +26,22 @@ public:
             }
         }
 
-        const std::vector<ReductionDefinition> &reductions =
-            function.reductions();
-        for (size_t i = 0; i < reductions.size(); i++) {
-            const std::vector<Expr> &values = reductions[i].values;
+        const std::vector<UpdateDefinition> &updates =
+            function.updates();
+        for (size_t i = 0; i < updates.size(); i++) {
+            const std::vector<Expr> &values = updates[i].values;
             for (size_t j = 0; j < values.size(); j++) {
                 values[j].accept(this);
             }
 
-            const std::vector<Expr> &args = reductions[i].args;
+            const std::vector<Expr> &args = updates[i].args;
             for (size_t j = 0; j < args.size(); j++) {
                 args[j].accept(this);
             }
 
-            if (reductions[i].domain.defined()) {
+            if (updates[i].domain.defined()) {
                 const std::vector<ReductionVariable> &rvars =
-                    reductions[i].domain.domain();
+                    updates[i].domain.domain();
                 for (size_t j = 0; j < rvars.size(); j++) {
                     rvars[j].min.accept(this);
                     rvars[j].extent.accept(this);
@@ -417,7 +417,7 @@ private:
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(f.output_types()[0].bytes());
-            std::string max_stage_num = int_to_string(f.reductions().size());
+            std::string max_stage_num = int_to_string(f.updates().size());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
                 Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");

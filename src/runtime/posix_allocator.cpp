@@ -5,8 +5,16 @@ extern "C" {
 extern void *malloc(size_t);
 extern void free(void *);
 
+}
+
+namespace Halide { namespace Runtime { namespace Internal {
+
 WEAK void *(*halide_custom_malloc)(void *, size_t) = NULL;
 WEAK void (*halide_custom_free)(void *, void *) = NULL;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
 
 WEAK void halide_set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                       void (*cust_free)(void *, void *)) {
