@@ -57,33 +57,14 @@ void CodeGen_MIPS::compile(Stmt stmt, string name,
 
     // Optimize
     CodeGen::optimize_module();
-
-    #if (WITH_MIPS)
-
-    // TODO: Remove or handle vectorized code in the stmt
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // MIPS expects the triple le32-unknown-nacl
-    llvm::Triple triple;
-    triple.setArch(llvm::Triple::le32);
-    triple.setVendor(llvm::Triple::UnknownVendor);
-    triple.setOS(llvm::Triple::NaCl);
-    module->setTargetTriple(triple.str());
-    module->setDataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
-    #endif
 }
 
 string CodeGen_MIPS::mcpu() const {
-    return "";
+    if (target.bits == 32) {
+        return "mipsel";
+    } else {
+        return "mips64el";
+    }
 }
 
 string CodeGen_MIPS::mattrs() const {
