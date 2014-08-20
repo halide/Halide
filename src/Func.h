@@ -1663,14 +1663,13 @@ public:
 
     /** Infer the arguments to the Func, sorted into a canonical order:
      * all buffers (sorted alphabetically by name), followed by all non-buffers
-     * (sorted alphabetically by name). If use_lowered is true, the Func will be
-     * lowered before inference (and thus, some arguments may be simplified away).
+     * (sorted alphabetically by name).
      This lets you write things like:
      \code
-     func.compile_to_assembly("/dev/stdout", func.infer_arguments(true));
+     func.compile_to_assembly("/dev/stdout", func.infer_arguments());
      \endcode
      */
-    EXPORT std::vector<Argument> infer_arguments(bool use_lowered, const Target &target = get_target_from_environment());
+    EXPORT std::vector<Argument> infer_arguments() const;
 
 };
 
