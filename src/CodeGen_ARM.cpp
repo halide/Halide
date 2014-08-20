@@ -1170,10 +1170,10 @@ void CodeGen_ARM::visit(const Store *op) {
 
     if (is_one(ramp->stride) &&
         call && call->call_type == Call::Intrinsic &&
-        call->name == Call::interleave_vectors) {
-        internal_assert(call->args.size() == 2)
-            << "Wrong number of args to interleave vectors: " << call->args.size() << "\n";
-        vector<Value *> args(call->args.size() + 2);
+        call->name == Call::interleave_vectors &&
+        0 < call->args.size() && call->args.size() <= 4) {
+        const int num_vecs = call->args.size();
+        vector<Value *> args(num_vecs + 1);
 
         Type t = call->args[0].type();
         int alignment = t.bytes();
@@ -1187,31 +1187,28 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         args[0] = ptr; // The pointer
-        args[1] = codegen(call->args[0]);
-        args[2] = codegen(call->args[1]);
-        args[3] = ConstantInt::get(i32, alignment);
+        for (int i = 0; i < num_vecs; ++i) {
+            args[i+1] = codegen(call->args[i]);
+        }
 
-        Instruction *store = NULL;
-        if (t == Int(8, 8) || t == UInt(8, 8)) {
-            store = call_void_intrin("vst2.v8i8", args);
-        } else if (t == Int(8, 16) || t == UInt(8, 16)) {
-            store = call_void_intrin("vst2.v16i8", args);
-        } else if (t == Int(16, 4) || t == UInt(16, 4)) {
-            store = call_void_intrin("vst2.v4i16", args);
-        } else if (t == Int(16, 8) || t == UInt(16, 8)) {
-            store = call_void_intrin("vst2.v8i16", args);
-        } else if (t == Int(32, 2) || t == UInt(32, 2)) {
-            store = call_void_intrin("vst2.v2i32", args);
-        } else if (t == Int(32, 4) || t == UInt(32, 4)) {
-            store = call_void_intrin("vst2.v4i32", args);
-        } else if (t == Float(32, 2)) {
-            store = call_void_intrin("vst2.v2f32", args);
-        } else if (t == Float(32, 4)) {
-            store = call_void_intrin("vst2.v4f32", args);
+        if (num_vecs % 2 == 0) {
+            args.push_back(ConstantInt::get(i32, alignment));
+        }
+
+        bool valid = true;
+        std::ostringstream instr;
+        instr << "vst" << num_vecs << ".v" << t.width;
+        if (t.code == Type::Int || t.code == Type::UInt) {
+            instr << "i" << t.bits;
+        } else if (t.code == Type::Float) {
+            instr << "f" << t.bits;
         } else {
             CodeGen::visit(op);
+            valid = false;
         }
-        if (store) {
+
+        if (valid) {
+            Instruction *store = call_void_intrin(instr.str(), args);
             add_tbaa_metadata(store, op->name);
         }
 
