@@ -61,6 +61,10 @@ if (TARGET_OPENGL)
   add_definitions("-DWITH_OPENGL=1")
 endif()
 
+if (TARGET_MIPS)
+  add_definitions("-DWITH_MIPS=1")
+endif()
+
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
 
 set(RUNTIME_CPP
@@ -115,7 +119,8 @@ set (RUNTIME_LL
   x86
   x86_sse41
   win32_math
-  pnacl_math)
+  pnacl_math
+  mips)
 set (RUNTIME_BC
   compute_20
   compute_30
@@ -270,7 +275,8 @@ set(HEADER_FILES
   UnifyDuplicateLets.h
   HumanReadableStmt.h
   StmtToHtml.h
-  Memoization.h)
+  Memoization.h
+  CodeGen_MIPS.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -365,6 +371,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   HumanReadableStmt.cpp
   StmtToHtml.cpp
   Memoization.cpp
+  CodeGen_MIPS.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

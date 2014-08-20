@@ -70,6 +70,7 @@ option(TARGET_ARM "Include ARM target" ON)
 option(TARGET_PTX "Include PTX target" ON)
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
+option(HALIDE_SHARED_LIBRARY "Build as a shared library" ON)
 
 set(CAT cat)
 if(WIN32)
