@@ -29,7 +29,7 @@ llvm::Triple CodeGen_MIPS::get_target_triple() const {
 
     if (target.os == Target::Android) {
         triple.setOS(llvm::Triple::Linux);
-        triple.setEnvironment(llvm::Triple::EABI);
+        triple.setEnvironment(llvm::Triple::GNUEABI);
     } else {
         user_error << "No mips support for this OS\n";
     }
