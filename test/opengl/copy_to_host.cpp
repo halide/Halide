@@ -1,9 +1,18 @@
 #include <Halide.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 using namespace Halide;
 
 int main() {
+
+    // This test must be run with HL_JIT_TARGET=host-opengl
+    const char* jit_target_env = getenv("HL_JIT_TARGET");
+    if (!jit_target_env || strcmp("host-opengl", jit_target_env))  {
+        fprintf(stderr,"ERROR: This test must be run with HL_JIT_TARGET=host-opengl.\n");
+        return 1;
+    }
+
     Func gpu("gpu"), cpu("cpu");
     Var x, y, c;
 
@@ -13,6 +22,7 @@ int main() {
                                         12));
     gpu.bound(c, 0, 3);
     gpu.glsl(x, y, c);
+    gpu.unroll(c);
     gpu.compute_root();
 
     // This should trigger a copy_to_host operation

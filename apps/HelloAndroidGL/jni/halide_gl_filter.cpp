@@ -36,6 +36,7 @@ int main(int argc, char **argv) {
     result.output_buffer().set_stride(0, 4);
     result.bound(c, 0, 4);
     result.glsl(x, y, c);
+    result.unroll(c);
 
     std::vector<Argument> args;
     args.push_back(time);
