@@ -1105,10 +1105,11 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr ind
                 // that contains this ramp.
                 int stride = *pstride;
                 base = *pbase;
+                assert(base >= 0);
                 width = next_power_of_two(ramp->width * stride);
 
                 while (base % width) {
-                    base -= (base % width + width) % width;
+                    base -= base % width;
                     width *= 2;
                 }
                 constant_index = true;
