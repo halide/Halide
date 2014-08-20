@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 
 #include "HalideRuntime.h"
-#include "mini_string.h"
 
 extern "C" {
 
@@ -27,6 +26,7 @@ typedef void * Thread;
 typedef struct {
     uint8_t buf[40];
 } CriticalSection;
+
 extern WIN32API Thread CreateThread(void *, size_t, void *(*fn)(void *), void *, int32_t, int32_t *);
 extern WIN32API void InitializeConditionVariable(ConditionVariable *);
 extern WIN32API void WakeAllConditionVariable(ConditionVariable *);
@@ -38,38 +38,24 @@ extern WIN32API void LeaveCriticalSection(CriticalSection *);
 extern WIN32API int32_t WaitForSingleObject(Thread, int32_t timeout);
 extern WIN32API bool InitOnceExecuteOnce(InitOnce *, bool WIN32API (*f)(InitOnce *, void *, void **), void *, void **);
 
-// Avoid ODR violations. Should do for some of the above as well.
-namespace {
+} // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal {
+
 struct windows_mutex {
     InitOnce once;
     CriticalSection critical_section;
 };
 
-WIN32API bool init_mutex(InitOnce *, void *mutex_arg, void **) {
+WEAK WIN32API bool init_mutex(InitOnce *, void *mutex_arg, void **) {
     windows_mutex *mutex = (windows_mutex *)mutex_arg;
     InitializeCriticalSection(&mutex->critical_section);
     return true;
 }
-}
 
-WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    if (mutex->once != 0) {
-        DeleteCriticalSection(&mutex->critical_section);
-        memset(mutex_arg, 0, sizeof(halide_mutex));
-    }
-}
-
-WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    InitOnceExecuteOnce(&mutex->once, init_mutex, mutex, NULL);
-    EnterCriticalSection(&mutex->critical_section);
-}
-
-WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
-    windows_mutex *mutex = (windows_mutex *)mutex_arg;
-    LeaveCriticalSection(&mutex->critical_section);
-}
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 
 struct work {
     work *next_job;
@@ -84,7 +70,7 @@ struct work {
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
 #define MAX_THREADS 64
-WEAK struct {
+struct halide_work_queue_t {
     // Initialization of the critical section is guarded by this
     InitOnce init_once;
 
@@ -106,7 +92,9 @@ WEAK struct {
         return !shutdown;
     }
 
-} halide_work_queue;
+};
+
+WEAK halide_work_queue_t halide_work_queue;
 
 WEAK bool WIN32API InitOnceCallback(InitOnce *, void *, void **) {
     InitializeCriticalSection(&halide_work_queue.mutex);
@@ -115,6 +103,29 @@ WEAK bool WIN32API InitOnceCallback(InitOnce *, void *, void **) {
 
 WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+    windows_mutex *mutex = (windows_mutex *)mutex_arg;
+    if (mutex->once != 0) {
+        DeleteCriticalSection(&mutex->critical_section);
+        memset(mutex_arg, 0, sizeof(halide_mutex));
+    }
+}
+
+WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
+    windows_mutex *mutex = (windows_mutex *)mutex_arg;
+    InitOnceExecuteOnce(&mutex->once, init_mutex, mutex, NULL);
+    EnterCriticalSection(&mutex->critical_section);
+}
+
+WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
+    windows_mutex *mutex = (windows_mutex *)mutex_arg;
+    LeaveCriticalSection(&mutex->critical_section);
+}
 
 WEAK void halide_shutdown_thread_pool() {
     if (!halide_thread_pool_initialized) return;
@@ -152,15 +163,9 @@ WEAK void halide_set_num_threads(int n) {
     halide_num_threads = n;
 }
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
-
 WEAK void halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)) {
     halide_custom_do_task = f;
 }
-
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 
 WEAK void halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)) {
     halide_custom_do_par_for = f;
@@ -175,6 +180,9 @@ WEAK int halide_do_task(void *user_context, halide_task f, int idx,
     }
 }
 
+} // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -244,6 +252,10 @@ WEAK void *halide_worker_thread(void *void_arg) {
     LeaveCriticalSection(&halide_work_queue.mutex);
     return NULL;
 }
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
 
 WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
                            int min, int size, uint8_t *closure) {
@@ -327,4 +339,4 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     return job.exit_status;
 }
 
-}
+} // extern "C"

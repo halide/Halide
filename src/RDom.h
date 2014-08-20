@@ -54,14 +54,14 @@ public:
 };
 
 /** A multi-dimensional domain over which to iterate. Used when
- * defining functions as reductions.
+ * defining functions with update definitions.
  *
- * A reduction is a function with a two-part definition. It has an
+ * An reduction is a function with a two-part definition. It has an
  * initial value, which looks much like a pure function, and an update
- * rule, which refers to some RDom. Evaluating such a function first
- * initializes it over the required domain (which is inferred based on
- * usage), and then runs update rule for all points in the RDom. For
- * example:
+ * definition, which may refer to some RDom. Evaluating such a
+ * function first initializes it over the required domain (which is
+ * inferred based on usage), and then runs update rule for all points
+ * in the RDom. For example:
  *
  \code
  Func f;
@@ -75,7 +75,7 @@ public:
  * This function creates a single-dimensional buffer of size 10, in
  * which element x contains the value x*2. Internally, first the
  * initialization rule fills in x at every site, and then the update
- * rule doubles every site.
+ * definition doubles every site.
  *
  * One use of reductions is to build a function recursively (pure
  * functions in halide cannot be recursive). For example, this
@@ -90,8 +90,8 @@ public:
  \endcode
  *
  * Another use of reductions is to perform scattering operations, as
- * unlike a pure function declaration, the left-hand-side of a
- * reduction definition may contain general expressions:
+ * unlike a pure function declaration, the left-hand-side of an update
+ * definition may contain general expressions:
  *
  \code
  ImageParam input(UInt(8), 2);
@@ -102,7 +102,7 @@ public:
  histogram(input(r.x, r.y)) = histogram(input(r.x, r.y)) + 1;
  \endcode
  *
- * A reduction definition may also be multi-dimensional. This example
+ * An update definition may also be multi-dimensional. This example
  * computes a summed-area table by first summing horizontally and then
  * vertically:
  *
@@ -157,10 +157,10 @@ public:
  * reduction domain, the inferred pure domain is traversed in its
  * entirety. For the above example, this means that sum_x walks down
  * the columns, and sum_y walks along the rows. This may not be
- * cache-coherent, but you may not reorder these dimensions using the
- * schedule, as it risks changing the meaning of your function (even
- * though it doesn't in this case). The solution lies in clever
- * scheduling. If we say:
+ * cache-coherent. You may try reordering these dimensions using the
+ * schedule, but Halide will return an error if it decides that this
+ * risks changing the meaning of your function. The solution lies in
+ * clever scheduling. If we say:
  *
  \code
  sum_x.compute_at(sum_y, r.y);
