@@ -1742,6 +1742,62 @@ private:
         return false;
     }
 
+    void visit_function(const Function& func) {
+        if (func.has_pure_definition()) {
+            visit_exprs(func.values());
+        }
+        for (std::vector<ReductionDefinition>::const_iterator reduction = func.reductions().begin();
+             reduction != func.reductions().end();
+             ++reduction) {
+            visit_exprs(reduction->values);
+            visit_exprs(reduction->args);
+            if (reduction->domain.defined()) {
+                for (std::vector<ReductionVariable>::const_iterator rvar = reduction->domain.domain().begin();
+                     rvar != reduction->domain.domain().end();
+                     ++rvar) {
+                visit_expr(rvar->min);
+                visit_expr(rvar->extent);
+            }
+          }
+        }
+        if (func.has_extern_definition()) {
+            for (std::vector<ExternFuncArgument>::const_iterator extern_arg = func.extern_arguments().begin();
+                 extern_arg != func.extern_arguments().end();
+                 ++extern_arg) {
+            if (extern_arg->is_func()) {
+                visit_function(extern_arg->func);
+            } else if (extern_arg->is_expr()) {
+                visit_expr(extern_arg->expr);
+            } else if (extern_arg->is_buffer()) {
+                include_parameter(Parameter(extern_arg->buffer.type(), true,
+                                            extern_arg->buffer.name()));
+            } else if (extern_arg->is_image_param()) {
+                include_parameter(extern_arg->image_param);
+            }
+          }
+        }
+        for (std::vector<Parameter>::const_iterator buf = func.output_buffers().begin();
+             buf != func.output_buffers().end();
+             ++buf) {
+            for (int i = 0; i < std::min(func.dimensions(), 4); i++) {
+                visit_expr(buf->min_constraint(i));
+                visit_expr(buf->stride_constraint(i));
+                visit_expr(buf->extent_constraint(i));
+            }
+        }
+    }
+
+    void visit_exprs(const std::vector<Expr>& v) {
+        for (std::vector<Expr>::const_iterator it = v.begin(); it != v.end(); ++it) {
+            visit_expr(*it);
+        }
+    }
+
+    void visit_expr(Expr e) {
+        if (!e.defined()) return;
+        e.accept(this);
+    }
+
     void include_parameter(Internal::Parameter p) {
         if (!p.defined()) return;
         if (already_have(p.name())) return;
@@ -1776,18 +1832,16 @@ private:
     }
 
     void visit(const Variable *op) {
+        IRGraphVisitor::visit(op);
         include_parameter(op->param);
         include_buffer(op->image);
     }
 
     void visit(const Call *op) {
         IRGraphVisitor::visit(op);
-
-        // Sometimes, a buffer will be referred to by an intrinsic and nowhere else.
-        if (op->call_type == Call::Intrinsic) {
-            include_buffer(op->image);
-            include_parameter(op->param);
-        }
+        visit_function(op->func);
+        include_buffer(op->image);
+        include_parameter(op->param);
     }
 };
 
@@ -1858,13 +1912,17 @@ struct ArgumentComparator {
 };
 }
 
-std::vector<Argument> Func::infer_arguments(const Target &target) {
+std::vector<Argument> Func::infer_arguments(bool use_lowered, const Target &target) {
     user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
 
-    lower(target);
-
     InferArguments infer_args(name(), /*include_buffers*/ false);
-    lowered.accept(&infer_args);
+    if (use_lowered) {
+        lower(target);
+        lowered.accept(&infer_args);
+    } else {
+        Expr call = outputs() == 1 ? (*this)(Halide::_) : (*this)(Halide::_)[0];
+        call.accept(&infer_args);
+    }
 
     std::sort(infer_args.arg_types.begin(), infer_args.arg_types.end(), ArgumentComparator());
 
