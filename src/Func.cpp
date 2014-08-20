@@ -1734,7 +1734,7 @@ public:
         if (func.has_pure_definition()) {
             visit_exprs(func.values());
         }
-        for (std::vector<ReductionDefinition>::const_iterator reduction = func.reductions().begin();
+        for (std::vector<Internal::ReductionDefinition>::const_iterator reduction = func.reductions().begin();
              reduction != func.reductions().end();
              ++reduction) {
             visit_exprs(reduction->values);
