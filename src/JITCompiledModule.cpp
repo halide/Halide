@@ -132,7 +132,11 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.PositionIndependentExecutable = true;
     options.UseInitArray = false;
 
+    #if LLVM_VERSION > 35
+    EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));
+    #else
     EngineBuilder engine_builder(m);
+    #endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
