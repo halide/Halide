@@ -30,7 +30,6 @@ int main(int argc, char **argv) {
     // Sum-scan along the last element of each block into a scratch space just before the start of each block.
     RDom r2(1, blocks-1);
     f(-1, r2) = f(B-1, r2-1) + f(-1, r2-1);
-    RVar tmp;
     f.update(1).gpu_single_thread();
 
     // Add the last element of the previous block to everything in each row
