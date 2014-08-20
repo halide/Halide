@@ -1330,7 +1330,8 @@ public:
     }
     // @}
 
-    /** Scheduling for GLSL. */
+    /** Scheduling for GLSL. Var c must be subsequently vectorized or unrolled 
+     * in the schedule. */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These
