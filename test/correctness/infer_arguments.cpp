@@ -4,7 +4,7 @@
 
 using namespace Halide;
 
-static Func Build() {
+Func build() {
     ImageParam input1(UInt(8), 3, "input1");
     ImageParam input2(UInt(8), 2, "input2");
     Param<int32_t> height("height");
