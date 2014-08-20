@@ -1734,14 +1734,14 @@ public:
         if (func.has_pure_definition()) {
             visit_exprs(func.values());
         }
-        for (std::vector<ReductionDefinition>::const_iterator reduction = func.reductions().begin();
-             reduction != func.reductions().end();
-             ++reduction) {
-            visit_exprs(reduction->values);
-            visit_exprs(reduction->args);
-            if (reduction->domain.defined()) {
-                for (std::vector<ReductionVariable>::const_iterator rvar = reduction->domain.domain().begin();
-                     rvar != reduction->domain.domain().end();
+        for (std::vector<UpdateDefinition>::const_iterator update = func.updates().begin();
+             update != func.updates().end();
+             ++update) {
+            visit_exprs(update->values);
+            visit_exprs(update->args);
+            if (update->domain.defined()) {
+                for (std::vector<ReductionVariable>::const_iterator rvar = update->domain.domain().begin();
+                     rvar != update->domain.domain().end();
                      ++rvar) {
                 visit_expr(rvar->min);
                 visit_expr(rvar->extent);
