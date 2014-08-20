@@ -614,10 +614,6 @@ int main(int argc, char **argv) {
     c2c_in(x, y, rep) = Tuple(in(x, y), 0.0f);
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
-    // Zero the strides of the rep variable to benchmark pure FFT
-    // performance (as if input/output buffers were cached).
-    R_c2c[0].raw_buffer()->stride[2] = 0;
-    R_c2c[1].raw_buffer()->stride[2] = 0;
 
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
@@ -639,8 +635,6 @@ int main(int argc, char **argv) {
         bench_r2cT = clamp_r2cT;
     }
     Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, reps, target);
-    R_r2cT[0].raw_buffer()->stride[2] = 0;
-    R_r2cT[1].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
@@ -657,7 +651,6 @@ int main(int argc, char **argv) {
     cT2r_in(x, y, rep) = Tuple(cT(x, y), cT(x, y));
     Func bench_cT2r = fft2d_cT2r(cT2r_in, W, H);
     Realization R_cT2r = bench_cT2r.realize(W, H, reps, target);
-    R_cT2r[0].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
