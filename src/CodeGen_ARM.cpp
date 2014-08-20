@@ -1212,7 +1212,7 @@ void CodeGen_ARM::visit(const Store *op) {
             CodeGen::visit(op);
         }
         if (store) {
-            add_tbaa_metadata(store, op->name);
+            add_tbaa_metadata(store, op->name, op->index);
         }
 
         for (size_t i = 0; i < lets.size(); i++) {
@@ -1245,7 +1245,7 @@ void CodeGen_ARM::visit(const Store *op) {
             debug(4) << "Creating call to " << builtin.str() << "\n";
             Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
             (void)store;
-            add_tbaa_metadata(store, op->name);
+            add_tbaa_metadata(store, op->name, op->index);
             return;
         }
     }
@@ -1337,7 +1337,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
 
         if (group) {
-            add_tbaa_metadata(dyn_cast<Instruction>(group), op->name);
+            add_tbaa_metadata(dyn_cast<Instruction>(group), op->name, op->index);
             debug(4) << "Extracting element " << offset << " from resulting struct\n";
             value = builder->CreateExtractValue(group, vec((unsigned int)offset));
             return;
@@ -1358,7 +1358,7 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *stride = codegen(ramp->stride * op->type.bytes());
             debug(4) << "Creating call to " << builtin.str() << "\n";
             Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
-            add_tbaa_metadata(load, op->name);
+            add_tbaa_metadata(load, op->name, op->index);
             value = load;
             return;
         }
