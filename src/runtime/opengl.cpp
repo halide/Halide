@@ -990,19 +990,11 @@ EXPORT int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
 static void SetIntParam(void *user_context, const char *name,
                         GLint loc, GLint value) {
-    #ifdef DEBUG
-    halide_printf(user_context, "Setting int %s = %d (loc=%d)\n",
-        name, value, loc);
-    #endif
     ST.Uniform1iv(loc, 1, &value);
 }
 
 static void SetFloatParam(void *user_context, const char *name,
                           GLint loc, GLfloat value) {
-    #ifdef DEBUG
-    halide_printf(user_context, "Setting float %s = %g (loc=%d)\n",
-        name, value, loc);
-    #endif
     ST.Uniform1fv(loc, 1, &value);
 }
 
