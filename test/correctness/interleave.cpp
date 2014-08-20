@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
     buff.raw_buffer()->stride[1] = 1;
 
     Realization r(Internal::vec(buff));
-    output.realize(r, get_jit_target_from_environment());
+    output.realize(r);
 
     Image<float> result2 = r[0];
     for (int x = 0; x < 16; x++) {
