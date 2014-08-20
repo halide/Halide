@@ -15,18 +15,20 @@ struct timeval {
 
 #endif
 
+namespace Halide { namespace Runtime { namespace Internal {
+WEAK bool halide_reference_clock_inited = false;
+WEAK timeval halide_reference_clock;
+}}} // namespace Halide::Runtime::Internal
+
 extern "C" {
 
 extern int gettimeofday(timeval *tv, void *);
 
-WEAK bool halide_reference_clock_inited = false;
-WEAK timeval halide_reference_clock;
-
 WEAK int halide_start_clock(void *user_context) {
     // Guard against multiple calls
     if (!halide_reference_clock_inited) {
-      gettimeofday(&halide_reference_clock, NULL);
-      halide_reference_clock_inited = true;
+        gettimeofday(&halide_reference_clock, NULL);
+        halide_reference_clock_inited = true;
     }
     return 0;
 }

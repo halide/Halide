@@ -50,7 +50,7 @@ struct ExternFuncArgument {
 
 namespace Internal {
 
-struct ReductionDefinition {
+struct UpdateDefinition {
     std::vector<Expr> values, args;
     Schedule schedule;
     ReductionDomain domain;
@@ -64,7 +64,7 @@ struct FunctionContents {
     std::vector<Type> output_types;
     Schedule schedule;
 
-    std::vector<ReductionDefinition> reductions;
+    std::vector<UpdateDefinition> updates;
 
     std::string debug_file;
 
@@ -102,15 +102,15 @@ public:
      * reduction domain */
     void define(const std::vector<std::string> &args, std::vector<Expr> values);
 
-    /** Add a reduction definition to this function. It must already
-     * have a pure definition but not a reduction definition, and the
+    /** Add an update definition to this function. It must already
+     * have a pure definition but not an update definition, and the
      * length of args must match the length of args used in the pure
      * definition. 'value' must depend on some reduction domain, and
      * may contain variables from that domain as well as pure
      * variables. Any pure variables must also appear as Variables in
      * the args array, and they must have the same name as the pure
      * definition's argument in the same index. */
-    void define_reduction(const std::vector<Expr> &args, std::vector<Expr> values);
+    void define_update(const std::vector<Expr> &args, std::vector<Expr> values);
 
     /** Construct a new function with the given name */
     Function(const std::string &n) : contents(new FunctionContents) {
@@ -161,7 +161,7 @@ public:
     /** Does this function *only* have a pure definition */
     bool is_pure() const {
         return (has_pure_definition() &&
-                !has_reduction_definition() &&
+                !has_update_definition() &&
                 !has_extern_definition());
     }
 
@@ -182,20 +182,20 @@ public:
         return contents.ptr->output_buffers;
     }
 
-    /** Get a mutable handle to the schedule for the reduction
+    /** Get a mutable handle to the schedule for the update
      * stage */
-    Schedule &reduction_schedule(int idx = 0) {
-        return contents.ptr->reductions[idx].schedule;
+    Schedule &update_schedule(int idx = 0) {
+        return contents.ptr->updates[idx].schedule;
     }
 
-    /** Get a const reference to this function's reduction definitions. */
-    const std::vector<ReductionDefinition> &reductions() const {
-        return contents.ptr->reductions;
+    /** Get a const reference to this function's update definitions. */
+    const std::vector<UpdateDefinition> &updates() const {
+        return contents.ptr->updates;
     }
 
-    /** Does this function have a reduction definition */
-    bool has_reduction_definition() const {
-        return !contents.ptr->reductions.empty();
+    /** Does this function have an update definition */
+    bool has_update_definition() const {
+        return !contents.ptr->updates.empty();
     }
 
     /** Check if the function has an extern definition */
