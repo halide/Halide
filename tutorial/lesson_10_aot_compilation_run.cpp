@@ -57,8 +57,8 @@ int main(int argc, char **argv) {
     input_buf.host  = &input[0];
     output_buf.host = &output[0];
 
-    // To access pixel (x, y) in a two-dimensional buffer_t
-    // representing a grayscale image, Halide looks at memory address:
+    // To access pixel (x, y) in a two-dimensional buffer_t, Halide
+    // looks at memory address:
 
     // host + elem_size * ((x - min[0])*stride[0] + (y - min[1])*stride[1])
 
@@ -83,7 +83,7 @@ int main(int argc, char **argv) {
     // coordinate (not the origin!).  See lesson 6 for more detail
     // about the mins.
 
-    // The elem_size field tells us how many bytes each value
+    // The elem_size field tells us how many bytes each element
     // uses. For the 8-bit image we use in this test it's one.
     input_buf.elem_size = output_buf.elem_size = 1;
 
