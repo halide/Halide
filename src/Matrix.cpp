@@ -130,7 +130,7 @@ Matrix::Matrix(Expr m, Expr n, Type t) : is_large(true), nrows(m), ncols(n) {
 
     func(x, y) = Halide::undef(t);
     func.bound(x, 0, nrows)
-                .bound(y, 0, ncols);
+            .bound(y, 0, ncols);
 }
 
 Matrix::Matrix(Expr m, Expr n, const std::vector<Expr>& c) : is_large(false), nrows(m), ncols(n) {
@@ -179,7 +179,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
             func(x, y) = Halide::undef(f.output_types()[0]);
             func(x, 0) = f(x);
             func.bound(x, 0, nrows)
-                .bound(y, 0, 1);
+                    .bound(y, 0, 1);
         } else {  // is_one(nrows)
             if (is_size_const(ncols)) {
                 const int nc = *Internal::as_const_int(ncols);
@@ -201,7 +201,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
             func(x, y) = Halide::undef(f.output_types()[0]);
             func(0, y) = f(y);
             func.bound(x, 0, 1)
-                .bound(y, 0, ncols);
+                    .bound(y, 0, ncols);
         }
     } else {
         internal_assert(f.dimensions() == 2);
@@ -229,7 +229,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
         y = f.args()[1];
         func = f;
         func.bound(x, 0, nrows)
-            .bound(y, 0, ncols);
+                .bound(y, 0, ncols);
     }
 }
 
@@ -339,14 +339,14 @@ Expr Matrix::cofactor(int i, int j) {
     internal_assert(m == n) << "matrix cofactors are only defined for square matrices.\n";
 
     Matrix &A = *this;
-    Matrix  B(A.num_rows()-1, A.num_cols()-1, A.type());
+    Matrix  B(n-1, n-1, A.type());
     Expr sign = (i + j) % 2 == 0? 1 : -1;
 
-    for (int l = 0; l < n; ++l) {
-        const int l_off = l < j? 0: 1;
-        for (int k = 0; k < n; ++k) {
-            const int k_off = k < i? 0: 1;
-            B(i,j) = sign * A(l + l_off, k + k_off);
+    for (int k = 0; k < n-1; ++k) {
+        const int k_off = k < j? 0: 1;
+        for (int l = 0; l < n-1; ++l) {
+            const int l_off = l < i? 0: 1;
+            B(l,k) = sign * A(l + l_off, k + k_off);
         }
     }
 
@@ -367,7 +367,7 @@ Expr Matrix::determinant() {
     if (n == 1) {
         det = A(0,0);
     } else if (n == 2) {
-        det = A(0,0)*A(1,1) - A(0,1)*A(1,1);
+        det = A(0,0)*A(1,1) - A(0,1)*A(1,0);
     } else if (n == 3) {
         det = A(0,0)*(A(1,1)*A(2,2) - A(1,2)*A(2,1))
                 - A(0,1)*(A(1,0)*A(2,2) - A(1,2)*A(2,0))
@@ -539,9 +539,9 @@ Matrix operator/(Matrix b, Expr a) {
 
 Matrix operator*(Matrix a, Matrix b) {
     // internal_assert(a.num_cols() == b.num_rows());
-    
+
     Expr prod_nrows = a.num_rows();
-    Expr prod_ncols = a.num_cols();
+    Expr prod_ncols = b.num_cols();
 
     if (is_positive_const(prod_nrows) && is_positive_const(prod_ncols)) {
         const int m = *as_const_int(prod_nrows);
