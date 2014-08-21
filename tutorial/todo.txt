@@ -1,6 +1,3 @@
-- static compilation
-- cross-compilation
-- parameters
 - debug_to_file
 - print, print_when
 - using the gpu
@@ -12,5 +9,6 @@
 - extern functions and extern stages
 - common scheduling patterns
 - specialize
-- parallel reductions (pending parallel_rvar merge)
+- parallel reductions
 - constraints
+
