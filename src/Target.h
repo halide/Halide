@@ -25,7 +25,7 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl} arch;
+  enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;

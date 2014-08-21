@@ -61,6 +61,10 @@ Target get_host_target() {
     bool use_64_bits = (sizeof(size_t) == 8);
     int bits = use_64_bits ? 64 : 32;
 
+    #if __mips__ || __mips || __MIPS__
+    Target::Arch arch = Target::MIPS;
+    return Target(os, arch, bits, 0);
+    #else
     #ifdef __arm__
     Target::Arch arch = Target::ARM;
     return Target(os, arch, bits, 0);
@@ -104,6 +108,7 @@ Target get_host_target() {
     }
 
     return Target(os, arch, bits, features);
+#endif
 #endif
 }
 
@@ -170,7 +175,7 @@ Target parse_target_string(const std::string &target) {
     if (!t.merge_string(target)) {
         user_error << "Did not understand HL_TARGET=" << target << "\n"
                    << "Expected format is arch-os-feature1-feature2-... "
-                   << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, "
+                   << "Where arch is x86-32, x86-64, arm-32, arm-64, pnacl, mips"
                    << "and os is linux, windows, osx, nacl, ios, or android. "
                    << "If arch or os are omitted, they default to the host. "
                    << "Features include sse41, avx, avx2, armv7s, cuda, "
@@ -213,6 +218,9 @@ bool Target::merge_string(const std::string &target) {
             is_os = true;
             is_arch = true;
             is_bits = true;
+        } else if (tok == "mips") {
+            arch = Target::MIPS;
+            is_arch = true;
         } else if (tok == "32") {
             bits = 32;
             is_bits = true;
@@ -319,7 +327,7 @@ bool Target::merge_string(const std::string &target) {
 
 std::string Target::to_string() const {
   const char* const arch_names[] = {
-      "arch_unknown", "x86", "arm", "pnacl"
+      "arch_unknown", "x86", "arm", "pnacl", "mips"
   };
   const char* const os_names[] = {
       "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
@@ -447,9 +455,20 @@ DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
+#if WITH_X86
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
+#else
+DECLARE_NO_INITMOD(x86_avx)
+DECLARE_NO_INITMOD(x86)
+DECLARE_NO_INITMOD(x86_sse41)
+#endif
+#if WITH_MIPS
+DECLARE_LL_INITMOD(mips)
+#else
+DECLARE_NO_INITMOD(mips)
+#endif
 
 namespace {
 
@@ -665,6 +684,9 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         } else {
           modules.push_back(get_initmod_arm_ll(c));
         }
+    }
+    if (t.arch == Target::MIPS) {
+        modules.push_back(get_initmod_mips_ll(c));
     }
     if (t.features & Target::SSE41) {
         modules.push_back(get_initmod_x86_sse41_ll(c));
