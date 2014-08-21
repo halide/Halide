@@ -1,6 +1,10 @@
 #ifndef HALIDE_MATRIX_H
 #define HALIDE_MATRIX_H
 
+#ifdef HAVE_EIGEN
+# include <Eigen/Eigen>
+#endif
+
 #include "IR.h"
 #include "Func.h"
 
@@ -103,6 +107,11 @@ class Matrix {
     EXPORT Matrix(Expr m, Expr n, Func f);
     EXPORT Matrix(Expr m, Expr n, const std::vector<Expr>& c);
 
+#ifdef HAVE_EIGEN
+    template<class M>
+    EXPORT Matrix(const Eigen::MatrixBase<M>& mat);
+#endif
+
     EXPORT Type type() const;
     EXPORT Func function() const {return func;}
 
@@ -142,6 +151,37 @@ EXPORT Matrix operator*(Matrix, Matrix);
 EXPORT Matrix operator*(Expr, Matrix);
 EXPORT Matrix operator*(Matrix, Expr);
 EXPORT Matrix operator/(Matrix, Expr);
+
+#ifdef HAVE_EIGEN
+template<class M>
+Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
+    const int m = m.rows();
+    const int n = m.cols();
+
+    nrows = Expr(m);
+    ncols = Expr(n);
+
+    if (m <= 4 && n <= 4) {
+        is_large = false;
+        coeffs.resize(m * n);
+        for (size_t j = 0; j < n; ++j) {
+            for (size_t i = 0; i < m; ++i) {
+                const int idx = small_offset(i, j);
+                coeffs[idx] = mat(i, j);
+            }
+        }
+    } else {
+        is_large = true;
+
+        x = Var("x");
+        y = Var("y");
+
+        func(x, y) = mat(x, y);
+        func.bound(x, 0, nrows)
+            .bound(y, 0, ncols);
+    }
+}
+#endif
 
 }
 
