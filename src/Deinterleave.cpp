@@ -48,7 +48,7 @@ private:
 
     using IRMutator::visit;
 
-    void visit(cost For *op) {
+    void visit(const For *op) {
         stmt = op;
     }
 
