@@ -341,7 +341,7 @@ class Interleaver : public IRMutator {
     int num_lanes;
 
     Expr deinterleave_expr(Expr e) {
-        if (e.type().width <= 2) {
+        if (e.type().width <= num_lanes) {
             // Just scalarize
             return e;
         } else if (num_lanes == 2) {
@@ -355,7 +355,7 @@ class Interleaver : public IRMutator {
             Expr c = extract_mod3_lanes(e, 2, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
                               vec(a, b, c), Call::Intrinsic);
-        } else { // if (num_lanes == 4)
+        } else if (num_lanes == 4) {
             Expr a = extract_even_lanes(e, vector_lets);
             Expr b = extract_odd_lanes(e, vector_lets);
             Expr aa = extract_even_lanes(a, vector_lets);
@@ -364,6 +364,9 @@ class Interleaver : public IRMutator {
             Expr bb = extract_odd_lanes(b, vector_lets);
             return Call::make(e.type(), Call::interleave_vectors,
                               vec(aa, ab, ba, bb), Call::Intrinsic);
+        } else {
+            // Give up and don't do anything clever for >4
+            return e;
         }
     }
 
@@ -476,7 +479,7 @@ class Interleaver : public IRMutator {
     void visit(const Block *op) {
         const LetStmt *let = op->first.as<LetStmt>();
         const Store *store = op->first.as<Store>();
-        
+
         std::vector<LetStmt> let_stmts;
         while (let) {
             let_stmts.push_back(*let);
