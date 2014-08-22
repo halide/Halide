@@ -2243,7 +2243,7 @@ void test_int_cast_constant() {
     internal_assert(int_cast_constant(t, max + 1) == (T) (max + 1))
         << "Simplify test failed: int_cast_constant\n";
 
-    internal_assert(int_cast_constant(t, -1) == (T) -1)
+    internal_assert((T)int_cast_constant(t, -1) == (T) -1)
         << "Simplify test failed: int_cast_constant\n";
     internal_assert(int_cast_constant(t, 0) == (T) 0)
         << "Simplify test failed: int_cast_constant\n";
