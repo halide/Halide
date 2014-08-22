@@ -715,8 +715,8 @@ private:
             // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides d
             expr = mutate(Broadcast::make(mul_a_a->a / (ib / ia), broadcast_b->width));
         } else if (div_a &&
-                   const_int(div_a->b, &ia) &&
-                   const_int(b, &ib)) {
+                   const_int(div_a->b, &ia) && ia >= 0 &&
+                   const_int(b, &ib) && ib >= 0) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(Div::make(div_a->a, ia*ib));
         } else if (div_a_a && add_a &&
