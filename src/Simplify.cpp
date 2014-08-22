@@ -369,7 +369,7 @@ private:
             expr = mutate(Max::make(add_a_a->a, Add::make(max_a->b, b)));
         } else if (div_a && add_a_a &&
                    const_int(add_a_a->b, &ia) &&
-                   const_int(div_a->b, &ib) &&
+                   const_int(div_a->b, &ib) && ib &&
                    const_int(b, &ic)) {
             // ((a + ia) / ib + ic) -> (a + (ia + ib*ic)) / ib
             expr = mutate((add_a_a->a + (ia + ib*ic)) / ib);
@@ -657,7 +657,7 @@ private:
             mul_a_a = ramp_a->base.as<Mul>();
         }
 
-        if (op->type == Int(32) && const_int(b, &ib) && !is_const(a)) {
+        if (op->type == Int(32) && const_int(b, &ib) && ib && !is_const(a)) {
             // Check for bounded numerators divided by constant
             // denominators.
             Interval bounds = bounds_of_expr_in_scope(a, bounds_info);
@@ -683,7 +683,7 @@ private:
             expr = make_one(a.type());
         } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
             expr = div_imp(ia,ib);
-        } else if (const_float(a, &fa) && const_float(b, &fb)) {
+        } else if (const_float(a, &fa) && const_float(b, &fb) && fb != 0.0f) {
             expr = fa/fb;
         } else if (const_castint(a, &ia) && const_castint(b, &ib) && ib) {
             if (op->type.is_uint()) {
@@ -715,10 +715,10 @@ private:
             // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides d
             expr = mutate(Broadcast::make(mul_a_a->a / (ib / ia), broadcast_b->width));
         } else if (div_a &&
-                   const_int(div_a->b, &ia) && ia &&
-                   const_int(b, &ib) && ib) {
+                   const_int(div_a->b, &ia) &&
+                   const_int(b, &ib)) {
             // (x / 3) / 4 -> x / 12
-            expr = mutate(div_a->a / (ia*ib));
+            expr = mutate(Div::make(div_a->a, ia*ib));
         } else if (div_a_a && add_a &&
                    const_int(div_a_a->b, &ia) && ia &&
                    const_int(add_a->b, &ib) &&
@@ -1023,7 +1023,7 @@ private:
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
 
         } else if (div_a && div_b &&
-                   const_int(div_a->b, &ia) &&
+                   const_int(div_a->b, &ia) && ia &&
                    const_int(div_b->b, &ib) &&
                    (ia == ib)) {
             // min(a / 4, b / 4) -> min(a, b) / 4
@@ -1209,7 +1209,7 @@ private:
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
 
         } else if (div_a && div_b &&
-                   const_int(div_a->b, &ia) &&
+                   const_int(div_a->b, &ia) && ia &&
                    const_int(div_b->b, &ib) &&
                    (ia == ib)) {
             // max(a / 4, b / 4) -> max(a, b) / 4
@@ -2271,8 +2271,14 @@ void test_int_cast_constant() {
 }
 
 void simplify_test() {
+    // We want different fuzz tests every time, to increase coverage.
+    // We also report the seed to enable reproducing failures.
+    const int fuzz_seed = time(NULL);
+    srand(fuzz_seed);
+    std::cout << "Simplify test seed: " << fuzz_seed << '\n';
+
     Type fuzz_types[] = {
-        //UInt(1),
+        UInt(1),
         Int(32),
         Int(8),
         Int(16),
@@ -2282,8 +2288,8 @@ void simplify_test() {
     };
 
     int max_fuzz_vector_width = 4;
-    int fuzz_test_count = 10000;
-    int fuzz_test_depth = 2;
+    int fuzz_test_count = 1000;
+    int fuzz_test_depth = 5;
     int fuzz_test_samples = 4;
 
     std::vector<Var> fuzz_args(random_vars, random_vars + random_var_count);
