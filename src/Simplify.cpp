@@ -44,6 +44,7 @@ int do_indirect_int_cast(Type t, int x) {
     }
 }
 
+// Returns true if T does not have a well defined overflow behavior.
 bool no_overflow(Type T) {
     return T.is_float() || (T.is_int() && T.bits == 32);
 }
@@ -55,7 +56,6 @@ public:
         alignment_info.set_containing_scope(ai);
         bounds_info.set_containing_scope(bi);
     }
-
 private:
     bool simplify_lets;
 
@@ -1343,8 +1343,10 @@ private:
         } else if (const_castint(b, &ib) && ib == b.type().imin()) {
             // Comparing expression of type < minimum of type.  This can never be true.
             expr = const_false(op->type.width);
-        } else if (is_zero(delta)) {
-            expr = const_false(op->type.width);
+        } else if (is_zero(delta) || (no_overflow(delta.type()) && is_positive_const(delta))) {
+             expr = const_false(op->type.width);
+        } else if (no_overflow(delta.type()) && is_negative_const(delta)) {
+            expr = const_true(op->type.width);
         } else if (broadcast_a && broadcast_b) {
             // Push broadcasts outwards
             expr = mutate(Broadcast::make(broadcast_a->value < broadcast_b->value, broadcast_a->width));
@@ -2114,6 +2116,9 @@ Expr random_leaf(Type T, bool imm_only = false) {
             return cast(T, random_vars[var]);
         } else {
             if (T == Int(32)) {
+                // For Int(32), we don't care about correctness during
+                // overflow, so just use numbers that are unlikely to
+                // overflow.
                 return cast(T, rand()%256 - 128);
             } else {
                 return cast(T, rand() - RAND_MAX/2);
@@ -2140,6 +2145,9 @@ Expr random_expr(Type T, int depth) {
         Mod::make
     };
 
+    // TODO: This currently won't generate any comparison operators
+    // with anything other than UInt(1) operands. This is a big hole
+    // in the fuzz testing.
     static make_bin_op_fn make_bool_bin_op[] = {
         EQ::make,
         NE::make,
