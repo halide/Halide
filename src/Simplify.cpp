@@ -675,26 +675,26 @@ private:
             }
         }
 
-        if (is_zero(a)) {
+        if (is_zero(a) && !is_zero(b)) {
             expr = a;
         } else if (is_one(b)) {
             expr = a;
-        } else if (equal(a, b)) {
+        } else if (equal(a, b) && !is_zero(b)) {
             expr = make_one(a.type());
-        } else if (const_int(a, &ia) && const_int(b, &ib)) {
+        } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
             expr = div_imp(ia,ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = fa/fb;
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+        } else if (const_castint(a, &ia) && const_castint(b, &ib) && ib) {
             if (op->type.is_uint()) {
                 expr = make_const(op->type, ((unsigned int)ia)/((unsigned int)ib));
             } else {
                 expr = make_const(op->type, div_imp(ia,ib)); //Use the definition::make of division
             }
         } else if (broadcast_a && broadcast_b) {
-            expr = mutate(Broadcast::make(broadcast_a->value / broadcast_b->value, broadcast_a->width));
+            expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
         } else if (ramp_a && broadcast_b &&
-                   const_int(broadcast_b->value, &ib) &&
+                   const_int(broadcast_b->value, &ib) && ib &&
                    const_int(ramp_a->stride, &ia) && ((ia % ib) == 0)) {
             // ramp(x, ia, w) / broadcast(ib, w) -> ramp(x/ib, ia/ib, w) when ib divides ia
             expr = mutate(Ramp::make(ramp_a->base/ib, ia/ib, ramp_a->width));
@@ -707,20 +707,22 @@ private:
             // ramp(x*a, c, w) / broadcast(a, w) -> broadcast(x, w) when c*(w-1) < a
             expr = mutate(Broadcast::make(mul_a_a->a, broadcast_b->width));
         } else if (ramp_a && broadcast_b &&
-                   mul_a_a && const_int(mul_a_a->b, &ia) &&
-                   const_int(broadcast_b->value, &ib) &&
+                   mul_a_a && const_int(mul_a_a->b, &ia) && ia &&
+                   const_int(broadcast_b->value, &ib) && ib &&
                    const_int(ramp_a->stride, &ic) &&
                    (ib % ia) == 0 &&
                    (ic * (broadcast_b->width - 1)) < ia) {
             // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides d
             expr = mutate(Broadcast::make(mul_a_a->a / (ib / ia), broadcast_b->width));
-        } else if (div_a && const_int(div_a->b, &ia) && const_int(b, &ib)) {
+        } else if (div_a &&
+                   const_int(div_a->b, &ia) && ia &&
+                   const_int(b, &ib) && ib) {
             // (x / 3) / 4 -> x / 12
             expr = mutate(div_a->a / (ia*ib));
         } else if (div_a_a && add_a &&
-                   const_int(div_a_a->b, &ia) &&
+                   const_int(div_a_a->b, &ia) && ia &&
                    const_int(add_a->b, &ib) &&
-                   const_int(b, &ic)) {
+                   const_int(b, &ic) && ic) {
             // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
             expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
@@ -777,7 +779,7 @@ private:
 
         // If the RHS is a constant, do modulus remainder analysis on the LHS
         ModulusRemainder mod_rem(0, 1);
-        if (const_int(b, &ib) && a.type() == Int(32)) {
+        if (const_int(b, &ib) && ib && a.type() == Int(32)) {
             // If the LHS is bounded, we can possibly bail out early
             Interval ia = bounds_of_expr_in_scope(a, bounds_info);
             if (ia.max.defined() && ia.min.defined() &&
@@ -789,32 +791,32 @@ private:
             mod_rem = modulus_remainder(a, alignment_info);
         }
 
-        if (const_int(a, &ia) && const_int(b, &ib)) {
+        if (const_int(a, &ia) && const_int(b, &ib) && ib) {
             expr = mod_imp(ia, ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = mod_imp(fa, fb);
-        } else if (const_castint(a, &ia) && const_castint(b, &ib)) {
+        } else if (const_castint(a, &ia) && const_castint(b, &ib) && ib) {
             if (op->type.is_uint()) {
                 expr = make_const(op->type, ((unsigned int)ia) % ((unsigned int)ib));
             } else {
                 expr = Cast::make(op->type, mod_imp(ia, ib));
             }
         } else if (broadcast_a && broadcast_b) {
-            expr = mutate(Broadcast::make(broadcast_a->value % broadcast_b->value, broadcast_a->width));
-        } else if (mul_a && const_int(b, &ib) && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
+            expr = mutate(Broadcast::make(Mod::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
+        } else if (mul_a && const_int(b, &ib) && ib && const_int(mul_a->b, &ia) && (ia % ib == 0)) {
             // (x * (b*a)) % b -> 0
             expr = make_zero(a.type());
-        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && (ia % ib == 0)) {
+        } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (x * (b*a) + y) % b -> (y % b)
             expr = mutate(add_a->b % ib);
-        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && (ia % ib == 0)) {
+        } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) && ib && (ia % ib == 0)) {
             // (y + x * (b*a)) % b -> (y % b)
             expr = mutate(add_a->a % ib);
-        } else if (const_int(b, &ib) && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
+        } else if (const_int(b, &ib) && ib && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
             expr = mod_rem.remainder % ib;
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
-                   broadcast_b && const_int(broadcast_b->value, &ib) &&
+                   broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % ib, ramp_a->width));
@@ -2134,6 +2136,8 @@ Expr random_expr(Type T, int depth) {
         Mul::make,
         Min::make,
         Max::make,
+        Div::make,
+        Mod::make
     };
 
     static make_bin_op_fn make_bool_bin_op[] = {
@@ -2153,7 +2157,7 @@ Expr random_expr(Type T, int depth) {
 
     const int bin_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
     const int bool_bin_op_count = sizeof(make_bool_bin_op) / sizeof(make_bool_bin_op[0]);
-    const int op_count = bin_op_count + bool_bin_op_count + 5;
+    const int op_count = bin_op_count + bool_bin_op_count + 4;
 
     int op = rand() % op_count;
     switch(op) {
@@ -2177,10 +2181,13 @@ Expr random_expr(Type T, int depth) {
         }
         return random_expr(T, depth);
 
-        // Div/Mod need special handling to avoid divide by 0.
     case 4:
-    case 5:
-        return random_expr(T, depth);
+        if (T.is_bool()) {
+            return Not::make(random_expr(T, depth));
+        } else {
+            return random_expr(T, depth);
+        }
+        break;
 
     default:
         make_bin_op_fn maker;
@@ -2206,6 +2213,11 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
 
         Expr a_j_v = simplify(substitute(vars, a_j));
         Expr b_j_v = simplify(substitute(vars, b_j));
+        // If the simplifier didn't produce constants, there must be
+        // undefined behavior in this expression. Ignore it.
+        if (!is_const(a_j_v) || !is_const(b_j_v)) {
+            continue;
+        }
         if (!equal(a_j_v, b_j_v)) {
             for(map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
                 debug(0) << i->first << " = " << i->second << '\n';
