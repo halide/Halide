@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
     planar
         .compute_at(interleaved, xy)
         .vectorize(x, 4);
-    
+
     interleaved
         .reorder(y, x)
         .bound(y, 0, 3)
@@ -170,6 +170,56 @@ int main(int argc, char **argv) {
             if (delta > 0.01 || delta < -0.01) {
                 printf("result(%d) = %f instead of %f\n", x, result5(x,y), correct);
                 return -1;
+            }
+        }
+    }
+
+    // Make sure we don't interleave when the reordering would change the meaning.
+    Image<uint8_t> ref;
+    for (int i = 0; i < 2; i++) {
+        Func output6;
+        output6(x, y) = cast<uint8_t>(x);
+        RDom r(0, 16);
+
+        // A not-safe-to-merge pair of updates
+        output6(2*r, 0) = cast<uint8_t>(3);
+        output6(2*r+1, 0) = output6(2*r, 0)+2;
+
+        // A safe-to-merge pair of updates
+        output6(2*r, 1) = cast<uint8_t>(3);
+        output6(2*r+1, 1) = cast<uint8_t>(4);
+
+        // A safe-to-merge-but-we-don't pair of updates, because they
+        // load recursively, so we conservatively bail out.
+        output6(2*r, 2) += 1;
+        output6(2*r+1, 2) += 2;
+
+        // A safe-to-merge-but-not-complete triple of updates:
+        output6(3*r, 3) = cast<uint8_t>(3);
+        output6(3*r+1, 3) = cast<uint8_t>(4);
+
+        // A safe-to-merge triple of updates:
+        output6(3*r, 3) = cast<uint8_t>(7);
+        output6(3*r+2, 3) = cast<uint8_t>(9);
+        output6(3*r+1, 3) = cast<uint8_t>(8);
+
+        if (i == 0) {
+            // Making the reference output.
+            ref = output6.realize(50, 4);
+        } else {
+            // Vectorize and compare to the reference.
+            for (int j = 0; j < 11; j++) {
+                output6.update(j).vectorize(r);
+            }
+            Image<uint8_t> out = output6.realize(50, 4);
+            for (int y = 0; y < ref.height(); y++) {
+                for (int x = 0; x < ref.width(); x++) {
+                    if (out(x, y) != ref(x, y)) {
+                        printf("result(%d, %d) = %d instead of %d\n",
+                               x, y, out(x, y), ref(x, y));
+                        return -1;
+                    }
+                }
             }
         }
     }
