@@ -18,15 +18,20 @@ class ContainsLoad : public IRVisitor {
 public:
     const std::string load_name;
     bool has_load;
-    
+
     ContainsLoad(const std::string& name) :
         load_name(name), has_load(false) {}
 
     operator bool() const {return has_load;}
 private:
+
+    using IRVisitor::visit;
+
     void visit(const Load *op) {
-        has_load = true;
-        return;
+        if (op->name == load_name) {
+            has_load = true;
+            return;
+        }
     }
 };
 
@@ -40,16 +45,20 @@ public:
     StoreCollector(const std::string& name, int stride, std::vector<LetStmt>& lets, std::vector<Store>& ss) :
         store_name(name), store_stride(stride), let_stmts(lets), stores(ss) {}
 private:
-    
+
     using IRMutator::visit;
-    
+
+    void visit(const For *op) {
+        stmt = op;
+    }
+
     void visit(const Store *op) {
         if (op->name == store_name) {
             const Ramp *r = op->index.as<Ramp>();
 
             if (r && is_const(r->stride, store_stride)) {
                 stores.push_back(*op);
-                stmt = Stmt();
+                stmt = Evaluate::make(0);
                 return;
             }
         }
@@ -64,7 +73,7 @@ private:
             stmt = op;
             return;
         }
-        
+
         let_stmts.push_back(*op);
         stmt = mutate(op->body);
         return;
@@ -81,7 +90,7 @@ private:
                 stmt = op;
                 return;
             }
-            
+
             let_stmts.push_back(*let);
             stmt = mutate(Block::make(let->body, op->rest));
             return;
@@ -93,7 +102,7 @@ private:
                 return;
             } else if (store->name == store_name) {
                 const Ramp *r = store->index.as<Ramp>();
-            
+
                 if (r && is_const(r->stride, store_stride)) {
                     stores.push_back(*store);
                     stmt = mutate(op->rest);
@@ -493,6 +502,7 @@ class Interleaver : public IRMutator {
                     std::vector<int> offsets(*stride);
                     for (int i = 0; i < *stride; ++i) {
                         const Ramp *ri = stores[i].index.as<Ramp>();
+                        internal_assert(ri);
                         if (ri->width != width) {
                             okay_to_interleave = false;
                             break;
@@ -501,7 +511,7 @@ class Interleaver : public IRMutator {
                         Expr diff = simplify(ri->base - r0->base);
 
                         const int *offs = as_const_int(diff);
-                        if (offs != 0) {
+                        if (offs) {
                             offsets[i] = *offs;
                             if (*offs < min_offset) {
                                 min_offset = *offs;
@@ -537,7 +547,7 @@ class Interleaver : public IRMutator {
                             Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
                             Stmt new_store = Store::make(store->name, value, index);
                             stmt = Block::make(new_store, mutate(rest));
-                            
+
                             while (!let_stmts.empty()) {
                                 LetStmt let = let_stmts.back();
                                 stmt = LetStmt::make(let.name, let.value, stmt);
