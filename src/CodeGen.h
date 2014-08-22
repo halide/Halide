@@ -223,7 +223,7 @@ protected:
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
 
     using IRVisitor::visit;
 

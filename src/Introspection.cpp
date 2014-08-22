@@ -622,29 +622,29 @@ private:
 
         // Open the object file in question. The API to do this keeps changing.
         #if LLVM_VERSION >= 36
-        if (0) { // As of 08/20/2014 this deadlocks inside of llvm. Disabled for now.
-            llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile> > maybe_obj =
-                llvm::object::ObjectFile::createObjectFile(binary);
 
-            if (!maybe_obj) {
-                debug(1) << "Failed to load binary:" << binary << "\n";
-                return;
-            }
+        llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile> > maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
 
-            obj = maybe_obj.get().getBinary().get();
+        if (!maybe_obj) {
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
         }
+
+        obj = maybe_obj.get().getBinary().get();
+
         #elif LLVM_VERSION >= 35
-        {
-            llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile> > maybe_obj =
-                llvm::object::ObjectFile::createObjectFile(binary);
 
-            if (!maybe_obj) {
-                debug(1) << "Failed to load binary:" << binary << "\n";
-                return;
-            }
+        llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile> > maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
 
-            obj = maybe_obj.get().get();
+        if (!maybe_obj) {
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
         }
+
+        obj = maybe_obj.get().get();
+
         #else
         obj = llvm::object::ObjectFile::createObjectFile(binary);
         #endif
