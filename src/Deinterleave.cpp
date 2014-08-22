@@ -175,17 +175,14 @@ Expr extract_odd_lanes(Expr e) {
     return extract_odd_lanes(e, lets);
 }
 
-Expr extract_lane(Expr e, int lane, bool simplify) {
+Expr extract_lane(Expr e, int lane) {
     Scope<int> lets;
     Deinterleaver d(lets);
     d.starting_lane = lane;
     d.lane_stride = 0;
     d.new_width = 1;
     e = d.mutate(e);
-    if (simplify) {
-        e = Halide::Internal::simplify(e);
-    }
-    return e;
+    return simplify(e);
 }
 
 class Interleaver : public IRMutator {
