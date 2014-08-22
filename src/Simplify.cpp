@@ -12,6 +12,7 @@
 #include "ModulusRemainder.h"
 #include "Substitute.h"
 #include "Bounds.h"
+#include "Deinterleave.h"
 
 namespace Halide {
 namespace Internal {
@@ -943,13 +944,13 @@ private:
         } else if (min_b && (equal(min_b->b, a) || equal(min_b->a, a))) {
             // min(y, min(x, y)) -> min(x, y)
             expr = b;
-        } else if (min_a_a && equal(min_a_a->b, b)) {
+        } else if (min_a && min_a_a && equal(min_a_a->b, b)) {
             // min(min(min(x, y), z), y) -> min(min(x, y), z)
             expr = a;
-        } else if (min_a_a_a && equal(min_a_a_a->b, b)) {
+        } else if (min_a && min_a_a_a && equal(min_a_a_a->b, b)) {
             // min(min(min(min(x, y), z), w), y) -> min(min(min(x, y), z), w)
             expr = a;
-        } else if (min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
+        } else if (min_a && min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
             // min(min(min(min(min(x, y), z), w), l), y) -> min(min(min(min(x, y), z), w), l)
             expr = a;
 
@@ -985,17 +986,17 @@ private:
             expr = mutate(Max::make(Min::make(min_a_a->a, Min::make(min_a_a->b, min_b_a->b)),
                                     Min::make(max_a->b, max_b->b)));
 
-        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->b)) {
             // Distributive law for addition
             // min(a + b, c + b) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->a)) + add_a->b;
-        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->a)) {
             // min(b + a, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->b, add_b->b)) + add_a->a;
-        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->b)) {
             // min(b + a, c + b) -> min(a, c) + b
             expr = mutate(min(add_a->b, add_b->a)) + add_a->a;
-        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
 
@@ -1171,17 +1172,17 @@ private:
             expr = mutate(Max::make(Min::make(min_a_a->a, Max::make(min_a_a->b, min_b_a->b)),
                                     Max::make(max_a->b, max_b->b)));
 
-        } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->b)) {
             // Distributive law for addition
             // max(a + b, c + b) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->a)) + add_a->b;
-        } else if (add_a && add_b && equal(add_a->a, add_b->a)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->a)) {
             // max(b + a, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->b, add_b->b)) + add_a->a;
-        } else if (add_a && add_b && equal(add_a->a, add_b->b)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->b)) {
             // max(b + a, c + b) -> max(a, c) + b
             expr = mutate(max(add_a->b, add_b->a)) + add_a->a;
-        } else if (add_a && add_b && equal(add_a->b, add_b->a)) {
+        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->a)) {
             // max(a + b, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
 
@@ -1566,6 +1567,20 @@ private:
             expr = op;
         } else {
             expr = Select::make(condition, true_value, false_value);
+        }
+    }
+
+    void visit(const Ramp *op) {
+        Expr base = mutate(op->base);
+        Expr stride = mutate(op->stride);
+
+        if (is_zero(stride)) {
+            expr = Broadcast::make(base, op->width);
+        } else if (base.same_as(op->base) &&
+                   stride.same_as(op->stride)) {
+            expr = op;
+        } else {
+            expr = Ramp::make(base, stride, op->width);
         }
     }
 
@@ -2036,6 +2051,8 @@ Stmt simplify_exprs(Stmt s) {
     return SimplifyExprs().mutate(s);
 }
 
+namespace {
+
 void check(Expr a, Expr b) {
     //debug(0) << "Checking that " << a << " -> " << b << "\n";
     Expr simpler = simplify(a);
@@ -2058,6 +2075,156 @@ void check(Stmt a, Stmt b) {
             << "Output: " << simpler << '\n'
             << "Expected output: " << b << '\n';
     }
+}
+
+static Var random_vars[] = { Var("a"), Var("b"), Var("c"), Var("d"), Var("e"), Var("f"), Var("g") };
+static const int random_var_count = sizeof(random_vars)/sizeof(random_vars[0]);
+
+Expr random_leaf(Type T, bool imm_only = false) {
+    if (T.is_scalar()) {
+        int var = rand()%random_var_count + 1;
+        if (!imm_only && var < random_var_count) {
+            return cast(T, random_vars[var]);
+        } else {
+            return cast(T, rand() - RAND_MAX/2);
+        }
+    } else {
+        if (rand() % 2 == 0) {
+            return Ramp::make(random_leaf(T.element_of()), random_leaf(T.element_of()), T.width);
+        } else {
+            return Broadcast::make(random_leaf(T.element_of()), T.width);
+        }
+    }
+}
+
+Expr random_expr(Type T, int depth) {
+    typedef Expr (*make_bin_op_fn)(Expr, Expr);
+    static make_bin_op_fn make_bin_op[] = {
+        Add::make,
+        Sub::make,
+        Mul::make,
+        Min::make,
+        Max::make,
+    };
+/*
+    static make_bin_op_fn make_bool_bin_op[] = {
+        EQ::make,
+        NE::make,
+        LT::make,
+        LE::make,
+        GT::make,
+        GE::make,
+        And::make,
+        Or::make,
+    };
+*/
+
+    if (depth-- <= 0) {
+        return random_leaf(T);
+    }
+
+    const int binary_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
+    const int op_count = binary_op_count + 5;
+
+    int op = rand() % op_count;
+    switch(op) {
+    case 0: return random_leaf(T);
+//    case 1: return Select::make(random_expr(UInt(1).vector_of(T.width), depth), random_expr(T, depth), random_expr(T, depth));
+
+        // Ramp/Broadcast
+    case 2:
+    case 3:
+        if (T.width != 1) {
+            if (op == 3) {
+                return Ramp::make(random_expr(T.element_of(), depth), random_expr(T.element_of(), depth), T.width);
+            } else {
+                return Broadcast::make(random_expr(T.element_of(), depth), T.width);
+            }
+        }
+        return random_expr(T, depth);
+
+        // Div/Mod need special handling to avoid divide by 0.
+    case 4:
+    case 5:
+        return random_expr(T, depth);
+
+    default:
+        make_bin_op_fn maker = make_bin_op[op%binary_op_count];
+        Expr a = random_expr(T, depth);
+        Expr b = random_expr(T, depth);
+        return maker(a, b);
+    }
+}
+
+bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars, bool verbose = false);
+
+class DiagnoseSimplification : public IRVisitor {
+    Expr m;
+    Type t;
+    const map<string, Expr> &vars;
+
+    template <typename T>
+    void visit_binary_operator(const T *b) {
+        if (const T *a = m.as<T>()) {
+            test_simplification(a->a, b->a, t, vars, true);
+            test_simplification(a->b, b->b, t, vars, true);
+        }
+    }
+
+    using IRVisitor::visit;
+
+    void visit(const Add *op) {visit_binary_operator(op);}
+    void visit(const Sub *op) {visit_binary_operator(op);}
+    void visit(const Mul *op) {visit_binary_operator(op);}
+    void visit(const Div *op) {visit_binary_operator(op);}
+    void visit(const Mod *op) {visit_binary_operator(op);}
+    void visit(const Min *op) {visit_binary_operator(op);}
+    void visit(const Max *op) {visit_binary_operator(op);}
+    void visit(const EQ *op) {visit_binary_operator(op);}
+    void visit(const NE *op) {visit_binary_operator(op);}
+    void visit(const LT *op) {visit_binary_operator(op);}
+    void visit(const LE *op) {visit_binary_operator(op);}
+    void visit(const GT *op) {visit_binary_operator(op);}
+    void visit(const GE *op) {visit_binary_operator(op);}
+    void visit(const And *op) {visit_binary_operator(op);}
+    void visit(const Or *op) {visit_binary_operator(op);}
+
+public:
+    DiagnoseSimplification(Expr a, Type t, const map<string, Expr> &vars) : m(a), t(t), vars(vars) {}
+};
+
+bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars, bool verbose) {
+    for (int j = 0; j < T.width; j++) {
+        Expr a_j = a;
+        Expr b_j = b;
+        if (T.width != 1) {
+            a_j = extract_lane(a, j, false);
+            b_j = extract_lane(b, j, false);
+        }
+
+        Expr a_j_v = simplify(substitute(vars, simplify(a_j)));
+        Expr b_j_v = simplify(substitute(vars, simplify(b_j)));
+        if (!equal(a_j_v, b_j_v)) {
+            DiagnoseSimplification diag(a_j, T, vars);
+            b_j.accept(&diag);
+
+            for(map<string, Expr>::const_iterator i = vars.begin(); i != vars.end(); i++) {
+                debug(0) << i->first << " = " << i->second << '\n';
+            }
+
+            debug(0) << a << '\n';
+            debug(0) << b << '\n';
+            debug(0) << "In vector lane " << j << ":\n";
+            debug(0) << a_j << " " << simplify(a_j) << " -> " << a_j_v << '\n';
+            debug(0) << b_j << " " << simplify(b_j) << " -> " << b_j_v << '\n';
+            return false;
+        }
+    }
+    if (verbose) {
+        debug(0) << a << " == " << b << '\n';
+    }
+    return true;
+}
 }
 
 void simplify_test() {
@@ -2506,7 +2673,51 @@ void simplify_test() {
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
 	  ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
+    Type fuzz_types[] = {
+        //UInt(1),
+        UInt(8),
+        UInt(16),
+        UInt(32),
+        UInt(64),
+        Int(8),
+        Int(16),
+        Int(32),
+        Int(64),
+    };
+
+    int max_fuzz_vector_width = 32;
+    int fuzz_test_count = 10000;
+    int fuzz_test_depth = 3;
+    int fuzz_test_samples = 4;
+
+    std::vector<Var> fuzz_args(random_vars, random_vars + random_var_count);
+
+    for (size_t i = 0; i < sizeof(fuzz_types)/sizeof(fuzz_types[0]); i++) {
+        Type T = fuzz_types[i];
+        for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
+            Type VT = T.vector_of(w);
+            for (int n = 0; n < fuzz_test_count; n++) {
+                // Generate a random expr...
+                Expr test = random_expr(VT, fuzz_test_depth);
+                // And simplify it.
+                Expr simplified = simplify(test);
+
+                map<string, Expr> vars;
+                for (int i = 0; i < fuzz_test_samples; i++) {
+                    for (int v = 0; v < random_var_count; v++) {
+                        vars[random_vars[v].name()] = random_leaf(T, true);
+                    }
+
+                    if (!test_simplification(test, simplified, VT, vars)) {
+                        internal_error << "Simplification failure\n";
+                    }
+                }
+            }
+        }
+    }
+
     std::cout << "Simplify test passed" << std::endl;
 }
 }
 }
+
