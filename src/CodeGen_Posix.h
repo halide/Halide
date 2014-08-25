@@ -63,6 +63,8 @@ protected:
     struct Allocation {
         llvm::Value *ptr;
 
+        Stmt delete_stmt;
+
         /** How many bytes this allocation is, or 0 if not
          * constant. */
         int constant_bytes;
@@ -110,13 +112,13 @@ private:
      * when it goes out of scope call 'destroy_allocation'. */
     Allocation create_allocation(const std::string &name, Type type,
                                  const std::vector<Expr> &extents,
-                                 Expr condition);
+                                 Expr condition, Expr new_expr);
 
     /** Free the memory backing an allocation and pop it from the
      * symbol table and the allocations map. For heap allocations it
      * calls halide_free in the runtime, for stack allocations it
      * marks the block as free so it can be reused. */
-    void free_allocation(const std::string &name);
+    void free_allocation(const std::string &name, Stmt delete_stmt);
 };
 
 }}

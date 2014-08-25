@@ -810,10 +810,16 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     std::vector<Expr> extents;
     Expr condition;
+    // Both new_expr and delete_stmt must both be defined or undefined.
+    // These override the code generator dependent malloc and free equivalents
+    // if provided. If the new succeeds, the delete is guaranteed to be called.
+    Expr new_expr;
+    Stmt delete_stmt;
     Stmt body;
 
     static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
-                     Expr condition, Stmt body) {
+                     Expr condition, Stmt body,
+		     Expr new_expr = Expr(), Stmt delete_stmt = Stmt()) {
         for (size_t i = 0; i < extents.size(); i++) {
             internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
             internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
@@ -824,6 +830,8 @@ struct Allocate : public StmtNode<Allocate> {
         node->name = name;
         node->type = type;
         node->extents = extents;
+	node->new_expr = new_expr;
+	node->delete_stmt = delete_stmt;
         node->condition = condition;
 
         node->body = body;
@@ -834,10 +842,12 @@ struct Allocate : public StmtNode<Allocate> {
 /** Free the resources associated with the given buffer. */
 struct Free : public StmtNode<Free> {
     std::string name;
+    Stmt delete_stmt;
 
-    static Stmt make(std::string name) {
+    static Stmt make(std::string name, Stmt delete_stmt = Stmt()) {
         Free *node = new Free;
         node->name = name;
+	node->delete_stmt = delete_stmt;
         return node;
     }
 };

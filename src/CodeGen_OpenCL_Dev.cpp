@@ -298,6 +298,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Cast *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
+    user_assert(!op->new_expr.defined()) << "Allocate node inside OpenCL kernel has custom new expression.\n" <<
+        "(Memoization is not supported inside GPU kernels at present.)\n";
 
     if (op->name == "__shared") {
         // Already handled
@@ -336,6 +338,8 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Allocate *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Free *op) {
+    user_assert(!op->delete_stmt.defined()) << "Free node inside OpenCL kernel has custom delete statment.\n" <<
+        "(Memoization is not supported inside GPU kernels at present.)\n";
     if (op->name == "__shared") {
         return;
     } else {

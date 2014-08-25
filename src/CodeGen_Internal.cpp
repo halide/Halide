@@ -67,6 +67,8 @@ void Closure::visit(const Store *op) {
 }
 
 void Closure::visit(const Allocate *op) {
+    op->new_expr.accept(this);
+    op->delete_stmt.accept(this);
     ignore.push(op->name, 0);
     for (size_t i = 0; i < op->extents.size(); i++) {
         op->extents[i].accept(this);
