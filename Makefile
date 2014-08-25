@@ -270,7 +270,7 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
-TUTORIALS = $(filter-out *_generate.cpp, $(shell ls tutorial/*.cpp))
+TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
 
 STATIC_TEST_CXX ?= $(CXX)
 
