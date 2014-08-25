@@ -425,7 +425,6 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         }
 
         cl_device_id devices[] = { dev };
-        size_t lengths[] = { size };
 
         // Get the max constant buffer size supported by this OpenCL implementation.
         cl_ulong max_constant_buffer_size = 0;

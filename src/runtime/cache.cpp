@@ -90,7 +90,6 @@ WEAK buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
 }
 
 WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
-    size_t i = 0;
     return memcmp(key1, key2, key_size) == 0;
 }
 
@@ -282,7 +281,6 @@ WEAK void prune_cache() {
 extern "C" {
 
 WEAK void halide_memoization_cache_set_size(int64_t size) {
-    int64_t old_size = max_cache_size;
     if (size == 0) {
         size = kDefaultCacheSize;
     }
