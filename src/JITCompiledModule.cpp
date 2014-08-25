@@ -145,11 +145,7 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
     engine_builder.setJITMemoryManager(memory_manager);
     #else
-    // this is the default and putting in the #ifdef allows llvm to remove all mention
-    // of MCJIT without breaking Halide.
-    #if LLVM_VERSION <= 35
     engine_builder.setUseMCJIT(false);
-    #endif
     #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(cg->mcpu());
