@@ -9,25 +9,9 @@
 #pragma warning(push, 0)
 #endif
 
-// This code is almost certainly wrong in that in the comment implies
-// we're turning off MCJIT for OS X and Windows, where the code turns
-// it *on* for those two platforms and leaves it off everywhere else.
-//
-// LLVM is moving to MCJIT as the only JIT and Halide needs to switch
-// over soon to not block llvm work. This conditional is intended to
-// leave the existing behavior unchanged for older versions of
-// llvm. That behavior is questionable and will likely be changed to
-// something cleaner shortly.
-#if LLVM_VERSION <= 35
-// MCJIT doesn't seem to work right on os x or windows yet
-#ifdef __APPLE__
-#else
-#ifdef _WIN32
-#else
-#define USE_MCJIT
-#endif
-#endif
-#else
+// LLVM is moving to MCJIT as the only JIT, however MCJIT doesn't seem
+// to work right on os x or windows for some older versions of llvm.
+#if LLVM_VERSION >= 36 || (!defined(__APPLE__) && !defined(_WIN32))
 #define USE_MCJIT
 #endif
 
