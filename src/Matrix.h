@@ -1,7 +1,7 @@
 #ifndef HALIDE_MATRIX_H
 #define HALIDE_MATRIX_H
 
-#ifdef HAVE_EIGEN
+#ifdef WITH_EIGEN
 # include <Eigen/Eigen>
 #endif
 
@@ -91,7 +91,8 @@ class Matrix {
     /* Number of columns in the matrix. */
     Expr ncols;
 
-    int small_offset(Expr row, Expr col);
+    /* Returns the offset into the expression vector for small matrices. */
+    int small_offset(Expr row, Expr col) const;
 
     friend class MatrixRef;
 
@@ -107,13 +108,13 @@ class Matrix {
     EXPORT Matrix(Expr m, Expr n, Func f);
     EXPORT Matrix(Expr m, Expr n, const std::vector<Expr>& c);
 
-#ifdef HAVE_EIGEN
+#ifdef WITH_EIGEN
     template<class M>
     EXPORT Matrix(const Eigen::MatrixBase<M>& mat);
 #endif
 
     EXPORT Type type() const;
-    EXPORT Func function() const {return func;}
+    EXPORT Func function();
 
     EXPORT Expr num_rows() const;
     EXPORT Expr num_cols() const;
@@ -152,11 +153,11 @@ EXPORT Matrix operator*(Expr, Matrix);
 EXPORT Matrix operator*(Matrix, Expr);
 EXPORT Matrix operator/(Matrix, Expr);
 
-#ifdef HAVE_EIGEN
+#ifdef WITH_EIGEN
 template<class M>
 Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
-    const int m = m.rows();
-    const int n = m.cols();
+    const int m = mat.rows();
+    const int n = mat.cols();
 
     nrows = Expr(m);
     ncols = Expr(n);
@@ -164,8 +165,8 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
     if (m <= 4 && n <= 4) {
         is_large = false;
         coeffs.resize(m * n);
-        for (size_t j = 0; j < n; ++j) {
-            for (size_t i = 0; i < m; ++i) {
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < m; ++i) {
                 const int idx = small_offset(i, j);
                 coeffs[idx] = mat(i, j);
             }
@@ -176,7 +177,12 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
         x = Var("x");
         y = Var("y");
 
-        func(x, y) = mat(x, y);
+        func(x, y) = Halide::undef(type_of<typename M::Scalar>());
+        for (int j = 0; j < n; ++j) {
+            for (int i = 0; i < m; ++i) {
+                func(i, j) = mat(i, j);
+            }
+        }
         func.bound(x, 0, nrows)
             .bound(y, 0, ncols);
     }
