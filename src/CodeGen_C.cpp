@@ -1053,79 +1053,84 @@ void CodeGen_C::visit(const Allocate *op) {
     bool on_stack = false;
     int32_t constant_size;
     string size_id;
-    if (constant_allocation_size(op->extents, op->name, constant_size)) {
-        int64_t stack_bytes = constant_size * op->type.bytes();
-
-        if (stack_bytes > ((int64_t(1) << 31) - 1)) {
-            user_error << "Total size for allocation "
-                       << op->name << " is constant but exceeds 2^31 - 1.\n";
-        } else {
-            size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
-            if (stack_bytes <= 1024 * 8) {
-                on_stack = true;
-            }
-        }
+    if (op->new_expr.defined()) {
+        allocations.push(op->name, op->type);
+        stream << print_type(op->type) << "*" << print_name(op->name) << " = (" << print_expr(op->new_expr) << ");\n";
     } else {
-        // Check that the allocation is not scalar (if it were scalar
-        // it would have constant size).
-        internal_assert(op->extents.size() > 0);
+        if (constant_allocation_size(op->extents, op->name, constant_size)) {
+            int64_t stack_bytes = constant_size * op->type.bytes();
 
-        size_id = print_assignment(Int(64), print_expr(op->extents[0]));
-
-        for (size_t i = 1; i < op->extents.size(); i++) {
-            // Make the code a little less cluttered for two-dimensional case
-            string new_size_id_rhs;
-            string next_extent = print_expr(op->extents[i]);
-            if (i > 1) {
-                new_size_id_rhs =  "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+            if (stack_bytes > ((int64_t(1) << 31) - 1)) {
+                user_error << "Total size for allocation "
+                           << op->name << " is constant but exceeds 2^31 - 1.\n";
             } else {
-                new_size_id_rhs = size_id + " * " + next_extent;
+                size_id = print_expr(Expr(static_cast<int32_t>(constant_size)));
+                if (stack_bytes <= 1024 * 8) {
+                    on_stack = true;
+                }
             }
-            size_id = print_assignment(Int(64), new_size_id_rhs);
+        } else {
+            // Check that the allocation is not scalar (if it were scalar
+            // it would have constant size).
+            internal_assert(op->extents.size() > 0);
+
+            size_id = print_assignment(Int(64), print_expr(op->extents[0]));
+
+            for (size_t i = 1; i < op->extents.size(); i++) {
+                // Make the code a little less cluttered for two-dimensional case
+                string new_size_id_rhs;
+                string next_extent = print_expr(op->extents[i]);
+                if (i > 1) {
+                    new_size_id_rhs =  "(" + size_id + " > ((int64_t(1) << 31) - 1)) ? " + size_id + " : (" + size_id + " * " + next_extent + ")";
+                } else {
+                    new_size_id_rhs = size_id + " * " + next_extent;
+                }
+                size_id = print_assignment(Int(64), new_size_id_rhs);
+            }
+            do_indent();
+            stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
+              " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
+            open_scope();
+            do_indent();
+            stream << "halide_printf("
+                   << (have_user_context ? "__user_context_" : "NULL")
+                   << ", \"32-bit signed overflow computing size of allocation "
+                   << op->name << "\\n\");\n";
+            close_scope("overflow test " + op->name);
         }
+
+        // Check the condition to see if this allocation should actually be created.
+        // If the allocation is on the stack, the only condition we can respect is
+        // unconditional false (otherwise a non-constant-sized array declaration
+        // will be generated).
+        if (!on_stack || is_zero(op->condition)) {
+            Expr conditional_size = Select::make(op->condition,
+                                                 Var(size_id),
+                                                 Expr(static_cast<int32_t>(0)));
+            conditional_size = simplify(conditional_size);
+            size_id = print_assignment(Int(64), print_expr(conditional_size));
+        }
+
+        allocations.push(op->name, op->type);
+
         do_indent();
-        stream << "if ((" << size_id << " > ((int64_t(1) << 31) - 1)) || ((" << size_id <<
-          " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
-        open_scope();
-        do_indent();
-        stream << "halide_printf("
-               << (have_user_context ? "__user_context_" : "NULL")
-               << ", \"32-bit signed overflow computing size of allocation "
-               << op->name << "\\n\");\n";
-        close_scope("overflow test " + op->name);
-    }
+        stream << print_type(op->type) << ' ';
 
-    // Check the condition to see if this allocation should actually be created.
-    // If the allocation is on the stack, the only condition we can respect is
-    // unconditional false (otherwise a non-constant-sized array declaration
-    // will be generated).
-    if (!on_stack || is_zero(op->condition)) {
-        Expr conditional_size = Select::make(op->condition,
-                                             Var(size_id),
-                                             Expr(static_cast<int32_t>(0)));
-        conditional_size = simplify(conditional_size);
-        size_id = print_assignment(Int(64), print_expr(conditional_size));
-    }
-
-    allocations.push(op->name, op->type);
-
-    do_indent();
-    stream << print_type(op->type) << ' ';
-
-    if (on_stack) {
-        stream << print_name(op->name)
-               << "[" << size_id << "];\n";
-    } else {
-        stream << "*"
-               << print_name(op->name)
-               << " = ("
-               << print_type(op->type)
-               << " *)halide_malloc("
-               << (have_user_context ? "__user_context_" : "NULL")
-               << ", sizeof("
-               << print_type(op->type)
-               << ")*" << size_id << ");\n";
-        heap_allocations.push(op->name, 0);
+        if (on_stack) {
+            stream << print_name(op->name)
+                   << "[" << size_id << "];\n";
+        } else {
+            stream << "*"
+                   << print_name(op->name)
+                   << " = ("
+                   << print_type(op->type)
+                   << " *)halide_malloc("
+                   << (have_user_context ? "__user_context_" : "NULL")
+                   << ", sizeof("
+                   << print_type(op->type)
+                   << ")*" << size_id << ");\n";
+            heap_allocations.push(op->name, 0);
+        }
     }
 
     op->body.accept(this);
@@ -1137,7 +1142,9 @@ void CodeGen_C::visit(const Allocate *op) {
 }
 
 void CodeGen_C::visit(const Free *op) {
-    if (heap_allocations.contains(op->name)) {
+    if (op->delete_stmt.defined()) {
+        print_stmt(op->delete_stmt);
+    } else if (heap_allocations.contains(op->name)) {
         do_indent();
         stream << "halide_free("
                << (have_user_context ? "__user_context_, " : "NULL, ")

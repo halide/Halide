@@ -150,7 +150,8 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 }
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
-                                                           const std::vector<Expr> &extents, Expr condition) {
+                                                           const std::vector<Expr> &extents, Expr condition,
+							   Expr new_expr) {
 
     Value *llvm_size = NULL;
     int64_t stack_bytes = 0;
@@ -252,7 +253,7 @@ CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &na
     return allocation;
 }
 
-void CodeGen_Posix::free_allocation(const std::string &name) {
+void CodeGen_Posix::free_allocation(const std::string &name, Stmt delete_stmt) {
     Allocation alloc = allocations.get(name);
 
     internal_assert(alloc.ptr);
@@ -284,7 +285,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
     }
 
     Allocation allocation = create_allocation(alloc->name, alloc->type,
-                                              alloc->extents, alloc->condition);
+                                              alloc->extents, alloc->condition, alloc->new_expr);
     sym_push(alloc->name + ".host", allocation.ptr);
 
     codegen(alloc->body);
@@ -295,7 +296,7 @@ void CodeGen_Posix::visit(const Allocate *alloc) {
 }
 
 void CodeGen_Posix::visit(const Free *stmt) {
-    free_allocation(stmt->name);
+    free_allocation(stmt->name, stmt->delete_stmt);
     sym_pop(stmt->name + ".host");
 }
 
@@ -315,7 +316,7 @@ void CodeGen_Posix::prepare_for_early_exit() {
             // one in the allocation - it may have been forwarded
             // inside a parallel for loop
             stash.push_back(allocations.get(names[i]));
-            free_allocation(names[i]);
+            free_allocation(names[i], stash.back().delete_stmt);
         }
 
         // Restore all the allocations before we jump back to the main
