@@ -410,15 +410,21 @@ private:
                 return;
             }
 
-            // Divisor is either strictly positive or strictly
-            // negative, so we can just take the extrema.
-            Expr a = min_a / min_b;
-            Expr b = min_a / max_b;
-            Expr c = max_a / min_b;
-            Expr d = max_a / max_b;
+            if (!is_zero(min_b) && !is_zero(max_b)) {
+                // Divisor is either strictly positive or strictly
+                // negative, so we can just take the extrema.
+                Expr a = min_a / min_b;
+                Expr b = min_a / max_b;
+                Expr c = max_a / min_b;
+                Expr d = max_a / max_b;
 
-            min = Min::make(Min::make(a, b), Min::make(c, d));
-            max = Max::make(Max::make(a, b), Max::make(c, d));
+                min = Min::make(Min::make(a, b), Min::make(c, d));
+                max = Max::make(Max::make(a, b), Max::make(c, d));
+            } else {
+                // Divide by zero.
+                min = Expr();
+                max = Expr();
+            }
         }
     }
 
