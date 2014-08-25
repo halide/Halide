@@ -91,7 +91,7 @@ MatrixRef::operator Expr() const {
     }
 }
 
-int Matrix::small_offset(Expr row, Expr col) {
+int Matrix::small_offset(Expr row, Expr col) const {
     if (!is_large) {
         internal_assert(is_size_const(row));
         internal_assert(is_size_const(col));
@@ -239,6 +239,29 @@ Type Matrix::type() const {
     } else {
         return coeffs[0].type();
     }
+}
+
+Func Matrix::function() {
+    if (!is_large && !func.defined()) {
+        const int nr = *Internal::as_const_int(nrows);
+        const int nc = *Internal::as_const_int(ncols);
+
+        func(x, y) = Halide::undef(type());
+
+        for (int j = 0; j < nc; ++j ) {
+            for (int i = 0; i < nr; ++i ) {
+                const int idx = small_offset(i, j);
+                func(i, j) = coeffs[idx];
+            }
+        }
+
+        func.bound(x, 0, nrows)
+            .bound(y, 0, ncols)
+            .unroll(x)
+            .unroll(y);
+    }
+
+    return func;
 }
 
 Expr Matrix::num_rows() const {
