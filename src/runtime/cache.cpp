@@ -116,7 +116,7 @@ struct CacheEntry {
     uint32_t hash;
     uint32_t tuple_count;
     buffer_t computed_bounds;
-    buffer_t buf;
+    buffer_t buf[1];
     // ADDITIONAL buffer_t STRUCTS HERE
 
     // Allow placement new with constructor
@@ -163,7 +163,7 @@ struct CacheEntry {
     }
 
     buffer_t &buffer(int32_t i) {
-        buffer_t *buf_ptr = &buf;
+        buffer_t *buf_ptr = &buf[0];
         return buf_ptr[i];
     }
 
