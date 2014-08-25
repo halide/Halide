@@ -487,12 +487,14 @@ class Interleaver : public IRMutator {
             let = let->body.as<LetStmt>();
         }
 
-        if (store) {
+        if (store && op->rest.defined()) {
             const Ramp *r0 = store->index.as<Ramp>();
 
             if (r0 && is_const(r0->stride) && !is_one(r0->stride)) {
                 const int *stride = as_const_int(r0->stride);
                 const int width = r0->width;
+
+                internal_assert(stride);
 
                 std::vector<Store> stores;
                 stores.push_back(*store);
@@ -535,7 +537,7 @@ class Interleaver : public IRMutator {
                                 base = stores[i].index.as<Ramp>()->base;
                             }
 
-                            if (args[j].defined()) {
+                            if (j < 0 || j >= *stride || args[j].defined()) {
                                 should_interleave = false;
                                 break;
                             }
