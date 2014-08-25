@@ -1191,13 +1191,12 @@ void CodeGen_ARM::visit(const Store *op) {
             args[i+1] = codegen(call->args[i]);
         }
 
-        if (num_vecs % 2 == 0) {
-            args.push_back(ConstantInt::get(i32, alignment));
-        }
+        args.push_back(ConstantInt::get(i32, alignment));
 
         bool valid = true;
         std::ostringstream instr;
         instr << "vst" << num_vecs << ".v" << t.width;
+        internal_assert(num_vecs != 1);
         if (t.code == Type::Int || t.code == Type::UInt) {
             instr << "i" << t.bits;
         } else if (t.code == Type::Float) {
