@@ -1131,7 +1131,7 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr ind
     // stores to the same buffer to get reordered.
     if (constant_index) {
         for (int w = 1024; w >= width; w /= 2) {
-            int b = (base * width) / w;
+            int b = (base / w) * w;
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
