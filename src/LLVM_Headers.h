@@ -9,12 +9,15 @@
 #pragma warning(push, 0)
 #endif
 
+// Only use MCJIT for earlier versions of llvm, eventually this support can be removed.
+#if LLVM_VERSION <= 35
 // MCJIT doesn't seem to work right on os x or windows yet
 #ifdef __APPLE__
 #else
 #ifdef _WIN32
 #else
 #define USE_MCJIT
+#endif
 #endif
 #endif
 
