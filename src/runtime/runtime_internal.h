@@ -2,7 +2,7 @@
 #define HALIDE_RUNTIME_INTERNAL_H
 
 #if __STDC_HOSTED__
-#error "Halide runtime files must be compiled with clang in freestanding mode."
+//#error "Halide runtime files must be compiled with clang in freestanding mode."
 #endif
 
 #ifdef __UINT8_TYPE__
@@ -58,12 +58,13 @@ WEAK void halide_error(void *user_context, const char *msg);
 char *getenv(const char *);
 void free(void *);
 void *malloc(size_t);
-const char *strstr(const char *, const char *);
+int snprintf(char *, size_t, const char *, ...);
+char *strstr(const char *, const char *);
 int atoi(const char *);
 int strcmp(const char* s, const char* t);
 int strncmp(const char* s, const char* t, size_t n);
 size_t strlen(const char* s);
-char *strchr(const char* s, char c);
+char *strchr(const char* s, int c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);

@@ -716,7 +716,13 @@ WEAK TextureInfo *find_texture(GLuint tex) {
 
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
-WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
+extern "C"
+WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf)
+  
+#ifndef HALIDE_APP
+;
+#else
+  {
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -807,6 +813,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
     }
     return 0;
 }
+#endif
 
 // Delete all texture information associated with a buffer. The OpenGL texture
 // itself is only deleted if it was actually allocated by Halide and not
@@ -1128,7 +1135,6 @@ WEAK void set_float_param(void *user_context, const char *name,
     ST.Uniform1fv(loc, 1, &value);
 }
 
-
 WEAK int halide_opengl_dev_run(
     void *user_context,
     void *state_ptr,
@@ -1423,11 +1429,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t *buf) {
 WEAK int halide_copy_to_host(void *user_context, buffer_t *buf) {
     return halide_opengl_copy_to_host(user_context, buf);
 }
-
-WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf) {
-    return halide_opengl_copy_to_dev(user_context, buf);
-}
-
+  
 WEAK int halide_dev_run(void *user_context,
                         void *state_ptr,
                         const char *entry_name,
@@ -1452,3 +1454,14 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr,
     return halide_opengl_init_kernels(user_context, state_ptr, src, size);
 }
 }
+
+extern "C"
+WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf)
+#ifndef HALIDE_APP
+;
+#else
+{
+  return halide_opengl_copy_to_dev(user_context, buf);
+}
+#endif
+

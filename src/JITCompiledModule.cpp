@@ -7,6 +7,9 @@
 #include "LLVM_Headers.h"
 #include "Debug.h"
 
+#include <dlfcn.h>
+
+
 namespace Halide {
 namespace Internal {
 
@@ -73,6 +76,25 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
 
     internal_assert(mod && ee);
 
+    // Check to see if the function is already loaded in the current process and
+    // if so, use the existing function instead of JIT compiling another
+
+    // TODO: Better to use llvm::sys::DynamicLibrary:: Will it search RTLD_SELF?
+    // llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
+  
+    if ((*result = reinterpret_bits<FP>(dlsym(RTLD_SELF,name.c_str())))) {
+      debug(2) << "Retrieving " << name << " from image\n";
+      
+      // Make the function in the module extern
+      llvm::Function *fn = mod->getFunction(name);
+      if (fn) {
+        fn->deleteBody();
+        ee->updateGlobalMapping(fn,(void*)*result);
+      }
+      
+      return;
+    }
+  
     debug(2) << "Retrieving " << name << " from module\n";
     llvm::Function *fn = mod->getFunction(name);
     if (!fn) {
