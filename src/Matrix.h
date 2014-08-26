@@ -155,6 +155,22 @@ EXPORT Matrix operator*(Matrix, Expr);
 EXPORT Matrix operator/(Matrix, Expr);
 
 #ifdef WITH_EIGEN
+namespace Internal {
+template<class M>
+Expr buildMatrixDef(const Eigen::MatrixBase<M>& mat, const Var x, const Var y, const int i=0, const int j=0) {
+    if (i == mat.rows()-1 && j == mat.cols()-1) {
+        return mat(i,j);
+    } else {
+        const int next_i = i < mat.rows()-1? i+1 : 0;
+        const int next_j = next_i == 0? j+1 : j;
+
+        return select(x == i && y == j, mat(i,j),
+                      buildMatrixDef(mat, x, y, next_i, next_j));
+    }
+}
+
+}  // namespace Internal
+
 template<class M>
 Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
     const int m = mat.rows();
@@ -178,14 +194,9 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
         x = Var("x");
         y = Var("y");
 
-        func(x, y) = Halide::undef(type_of<typename M::Scalar>());
-        for (int j = 0; j < n; ++j) {
-            for (int i = 0; i < m; ++i) {
-                func(i, j) = mat(i, j);
-            }
-        }
-        func.bound(x, 0, nrows)
-            .bound(y, 0, ncols);
+        func(x, y) = Internal::buildMatrixDef(mat, x, y);
+        // func.bound(x, 0, nrows)
+        //     .bound(y, 0, ncols);
     }
 }
 #endif

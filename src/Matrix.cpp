@@ -263,13 +263,9 @@ Buffer Matrix::realize() {
   const int nr = *Internal::as_const_int(nrows);
   const int nc = *Internal::as_const_int(ncols);
 
-
   Func f = function();
-  f.bound(x, 0, nrows)
-    .bound(y, 0, ncols)
-    .unroll(x)
-    .unroll(y);
-  
+  f.bound(x, 0, nrows).bound(y, 0, ncols);
+
   return f.realize(nr, nc);
 }
 
@@ -378,11 +374,11 @@ Expr Matrix::cofactor(int i, int j) {
         const int k_off = k < j? 0: 1;
         for (int l = 0; l < n-1; ++l) {
             const int l_off = l < i? 0: 1;
-            B(l,k) = sign * A(l + l_off, k + k_off);
+            B(l,k) = A(l + l_off, k + k_off);
         }
     }
 
-    return B.determinant();
+    return sign * B.determinant();
 }
 
 Expr Matrix::determinant() {
@@ -425,10 +421,10 @@ Matrix Matrix::inverse() {
 
     Matrix inv(n, n, type());
     if (n == 1) {
-        inv(0,0) = A(0,0);
+        inv(0,0) = 1 / A(0,0);
     } else if (n == 2) {
         inv(0,0) =  A(1,1) / det;  inv(0,1) = -A(0,1) / det;
-        inv(1,0) = -A(1,0) / det;  inv(1,1) =  A(1,1) / det;
+        inv(1,0) = -A(1,0) / det;  inv(1,1) =  A(0,0) / det;
     } else { /*if (n == 3 || n == 4)*/
         for (int j = 0; j < n; ++j) {
             for (int i = 0; i < n; ++i) {
