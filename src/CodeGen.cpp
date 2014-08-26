@@ -310,7 +310,7 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(2) << module << "\n";
 
     // Now verify the function is ok
-    verifyFunction(*function);
+    // verifyFunction(*function);
 
     // Now we need to make the wrapper function (useful for calling from jit)
     string wrapper_name = name + "_jit_wrapper";
@@ -341,7 +341,7 @@ void CodeGen::compile(Stmt stmt, string name,
     verifyFunction(*wrapper);
 
     // Finally, verify the module is ok
-    verifyModule(*module);
+    // verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
@@ -2107,7 +2107,7 @@ void CodeGen::visit(const Call *op) {
             fn->setCallingConv(CallingConv::C);
             debug(4) << "Did not find " << op->name << ". Declared it extern \"C\".\n";
         } else {
-            debug(4) << "Found " << op->name << "\n";
+            debug(4) << "Found " << op->name << " in module \n";
 
             // Halide's type system doesn't preserve pointer types
             // correctly (they just get called "Handle()"), so we may
@@ -2159,6 +2159,12 @@ void CodeGen::visit(const Call *op) {
         // Add a user context arg as needed. It's never a vector.
         if (function_takes_user_context(op->name)) {
             debug(4) << "Adding user_context to " << op->name << " args\n";
+          
+            // Need to insert the argument into the function argument list to
+            // pass the verifier??
+          
+          
+          
             args.insert(args.begin(), get_user_context());
         }
 

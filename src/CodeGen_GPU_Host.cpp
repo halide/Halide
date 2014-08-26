@@ -323,8 +323,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     builder->SetInsertPoint(init_kernels_bb);
     Value *user_context = get_user_context();
     Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
-    Value *init = module->getFunction("halide_init_kernels");
+    llvm::Function *init = module->getFunction("halide_init_kernels");
     internal_assert(init) << "Could not find function halide_init_kernels in initial module\n";
+  
+    // Make the function extern so that the JIT'ed code will call the debuggable
+    // version in the app
+    // TODO: Can this operation be specified in the target?
+    init->deleteBody();
+  
     Value *result = builder->CreateCall4(init, user_context,
                                          get_module_state(),
                                          kernel_src_ptr, kernel_size);
@@ -584,8 +590,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
-        llvm::Function *dev_run_fn = module->getFunction("halide_dev_run");
+
+        llvm::Function* dev_run_fn = module->getFunction("halide_dev_run");
         internal_assert(dev_run_fn) << "Could not find halide_dev_run in module\n";
+      
+        // Make the function extern so that the JIT'ed code will call the debuggable
+        // version in the app
+        // TODO: Can this operation be specified in the target?
+        dev_run_fn->deleteBody();
+      
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
         CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_run");
