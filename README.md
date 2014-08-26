@@ -123,18 +123,23 @@ necessary for AOT compiling 32-bit Halide pipelines. The 64-bit
 version of Halide cross-compiles 32-bit code just fine.
 
 To get a 32-bit llvm, configure and compile it like so:
+
     % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
     % CC="gcc -m32" CXX="g++ -m32" make
 
 To generate a 32-bit Halide, compile it like so:
+
     % HL_TARGET=x86-32 LD="ld -melf_i386" CC="gcc -m32" CXX="g++ -m32" make
 
 You should then be able to run the JIT tests with a 32-bit target:
+
     % CXX="g++ -m32 -msse4" make build_tests
     % HL_TARGET=x86-32-sse41 make run_tests
 
 If you have a 32-bit libpng, you can also run the apps in 32-bit:
+
     % HL_TARGET=x86-32-sse41 CXX="g++ -m32 -msse4" make test_apps
+
 The tests should pass, but the tutorials will fail to compile unless
 you manually supply a 32-bit libpng.
 
@@ -158,12 +163,14 @@ and, for good measure, PNaCl's version of clang:
     http://git.chromium.org/native_client/pnacl-clang.git
 
 To check these out:
+
     % git clone http://git.chromium.org/native_client/pnacl-llvm.git pnacl-llvm
     % cd pnacl-llvm/tools
     % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
     % cd ../..
 
 To enable all Halide targets, build it like so:
+
     % mkdir build
     % cd build
     % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
@@ -171,10 +178,12 @@ To enable all Halide targets, build it like so:
 
 It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
+
     http://www.chromium.org/nativeclient/pnacl/developing-pnacl
 
 To use generated code in an application, you'll of course also need
 the Native Client SDK:
+
     https://developer.chrome.com/native-client/sdk/download
 
 Once The Native Client prerequisites are in place, set the following
