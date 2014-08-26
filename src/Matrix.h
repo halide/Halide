@@ -115,6 +115,7 @@ class Matrix {
 
     EXPORT Type type() const;
     EXPORT Func function();
+    EXPORT Buffer realize();
 
     EXPORT Expr num_rows() const;
     EXPORT Expr num_cols() const;

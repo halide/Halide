@@ -264,6 +264,16 @@ Func Matrix::function() {
     return func;
 }
 
+Buffer Matrix::realize() {
+  internal_assert(is_size_const(nrows));
+  internal_assert(is_size_const(ncols));
+
+  const int nr = *Internal::as_const_int(nrows);
+  const int nc = *Internal::as_const_int(ncols);
+
+  return function().realize(nr, nc);
+}
+
 Expr Matrix::num_rows() const {
     return nrows;
 }

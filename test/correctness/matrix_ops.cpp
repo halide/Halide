@@ -23,7 +23,7 @@ bool same_as_matrix(const Buffer& buff, const Eigen::MatrixBase<M>& mat) {
 template<int n>
 bool test_matrix_operations() {
     bool success = true;
-    
+
     typedef Eigen::Matrix<float, n, n> EigenMatrix;
 
     EigenMatrix A, B;
@@ -35,18 +35,18 @@ bool test_matrix_operations() {
     v = EigenMatrix::Random();
 
     Matrix AB = Matrix(A) * Matrix(B);
-    success &= same_as_matrix(AB.function().realize(), A*B);
+    success &= same_as_matrix(AB.realize(), A*B);
 
     Matrix Au = Matrix(A) * Matrix(u);
-    success &= same_as_matrix(Au.function().realize(), A*u);
+    success &= same_as_matrix(Au.realize(), A*u);
 
     B = A.transpose();
     Matrix At = Matrix(A).transpose();
-    success &= same_as_matrix(At.function().realize(), B);
+    success &= same_as_matrix(At.realize(), B);
 
     B = A.inverse();
     Matrix Ainv = Matrix(A).inverse();
-    success &= same_as_matrix(Ainv.function().realize(), B);
+    success &= same_as_matrix(Ainv.realize(), B);
 
     float det = evaluate<float>(Matrix(A).determinant());
     success &= det = A.determinant();
@@ -68,17 +68,17 @@ bool test_matrix_operations(const int n) {
     v = EigenMatrix::Random(n, 1);
 
     Matrix AB = Matrix(A) * Matrix(B);
-    success &= same_as_matrix(AB.function().realize(), A*B);
+    success &= same_as_matrix(AB.realize(), A*B);
 
     Matrix Au = Matrix(A) * Matrix(u);
-    success &= same_as_matrix(Au.function().realize(), A*u);
+    success &= same_as_matrix(Au.realize(), A*u);
 
     B = A.transpose();
     Matrix At = Matrix(A).transpose();
-    success &= same_as_matrix(At.function().realize(), B);
+    success &= same_as_matrix(At.realize(), B);
 
     Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
-    success &= same_as_matrix(result.function().realize(), 2*A*u + B*v/3);
+    success &= same_as_matrix(result.realize(), 2*A*u + B*v/3);
 
     return success;
 }
@@ -98,4 +98,3 @@ int main() {
 }
 
 #endif
-
