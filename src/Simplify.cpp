@@ -791,7 +791,9 @@ private:
             mod_rem = modulus_remainder(a, alignment_info);
         }
 
-        if (const_int(a, &ia) && const_int(b, &ib) && ib) {
+        if (is_zero(a) && !is_zero(b)) {
+            expr = a;
+        } else if (const_int(a, &ia) && const_int(b, &ib) && ib) {
             expr = mod_imp(ia, ib);
         } else if (const_float(a, &fa) && const_float(b, &fb)) {
             expr = mod_imp(fa, fb);
@@ -823,9 +825,9 @@ private:
         } else if (ramp_a && const_int(ramp_a->base, &ia) &&
                    const_int(ramp_a->stride, &ia2) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
-                   ia/ib == (ia + ramp_a->width*ia2)/ib) {
+                   div_imp(ia, ib) == div_imp(ia + ramp_a->width*ia2, ib)) {
             // ramp(x, y, w) % broadcast(z, w) = ramp(x % z, y, w) if x/z == (x + w*y)/z
-            expr = mutate(Ramp::make(ramp_a->base % ib, ramp_a->stride, ramp_a->width));
+            expr = mutate(Ramp::make(mod_imp(ia, ib), ramp_a->stride, ramp_a->width));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -1008,17 +1010,17 @@ private:
             expr = mutate(Max::make(Min::make(min_a_a->a, Min::make(min_a_a->b, min_b_a->b)),
                                     Min::make(max_a->b, max_b->b)));
 
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->b)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->b)) {
             // Distributive law for addition
             // min(a + b, c + b) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->a)) + add_a->b;
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->a)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->a, add_b->a)) {
             // min(b + a, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->b, add_b->b)) + add_a->a;
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->b)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->a, add_b->b)) {
             // min(b + a, c + b) -> min(a, c) + b
             expr = mutate(min(add_a->b, add_b->a)) + add_a->a;
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->a)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
 
@@ -1194,17 +1196,17 @@ private:
             expr = mutate(Max::make(Min::make(min_a_a->a, Max::make(min_a_a->b, min_b_a->b)),
                                     Max::make(max_a->b, max_b->b)));
 
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->b)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->b)) {
             // Distributive law for addition
             // max(a + b, c + b) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->a)) + add_a->b;
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->a)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->a, add_b->a)) {
             // max(b + a, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->b, add_b->b)) + add_a->a;
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->a, add_b->b)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->a, add_b->b)) {
             // max(b + a, c + b) -> max(a, c) + b
             expr = mutate(max(add_a->b, add_b->a)) + add_a->a;
-        } else if (add_a && add_b && op->type == Int(32) && equal(add_a->b, add_b->a)) {
+        } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->a)) {
             // max(a + b, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
 
@@ -1365,8 +1367,8 @@ private:
             } else if (add_a && add_b && equal(add_a->b, add_b->b)) {
                 expr = mutate(add_a->a < add_b->a);
             } else if (sub_a && sub_b && equal(sub_a->a, sub_b->a)) {
-                // Add a term to both sides
-                expr = mutate(sub_a->b < sub_b->b);
+                // Add a term to both sides and negate.
+                expr = mutate(sub_b->b < sub_a->b);
             } else if (sub_a && sub_b && equal(sub_a->b, sub_b->b)) {
                 expr = mutate(sub_a->a < sub_b->a);
             } else if (add_a) {
@@ -2133,6 +2135,26 @@ Expr random_leaf(Type T, bool imm_only = false) {
     }
 }
 
+Expr random_expr(Type T, int depth);
+
+Expr random_condition(Type T, int depth) {
+    typedef Expr (*make_bin_op_fn)(Expr, Expr);
+    static make_bin_op_fn make_bin_op[] = {
+        EQ::make,
+        NE::make,
+        LT::make,
+        LE::make,
+        GT::make,
+        GE::make,
+    };
+    const int op_count = sizeof(make_bin_op)/sizeof(make_bin_op[0]);
+
+    Expr a = random_expr(T, depth);
+    Expr b = random_expr(T, depth);
+    int op = rand()%op_count;
+    return make_bin_op[op](a, b);
+}
+
 Expr random_expr(Type T, int depth) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
@@ -2142,19 +2164,9 @@ Expr random_expr(Type T, int depth) {
         Min::make,
         Max::make,
         Div::make,
-        Mod::make
-    };
+     };
 
-    // TODO: This currently won't generate any comparison operators
-    // with anything other than UInt(1) operands. This is a big hole
-    // in the fuzz testing.
     static make_bin_op_fn make_bool_bin_op[] = {
-        EQ::make,
-        NE::make,
-        LT::make,
-        LE::make,
-        GT::make,
-        GE::make,
         And::make,
         Or::make,
     };
@@ -2165,12 +2177,12 @@ Expr random_expr(Type T, int depth) {
 
     const int bin_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
     const int bool_bin_op_count = sizeof(make_bool_bin_op) / sizeof(make_bool_bin_op[0]);
-    const int op_count = bin_op_count + bool_bin_op_count + 4;
+    const int op_count = bin_op_count + bool_bin_op_count + 6;
 
     int op = rand() % op_count;
     switch(op) {
     case 0: return random_leaf(T);
-    case 1: return Select::make(random_expr(UInt(1).vector_of(T.width), depth),
+    case 1: return Select::make(random_condition(T, depth),
                                 random_expr(T, depth),
                                 random_expr(T, depth));
 
@@ -2195,7 +2207,20 @@ Expr random_expr(Type T, int depth) {
         } else {
             return random_expr(T, depth);
         }
-        break;
+    case 5:
+        if (T.is_bool()) {
+            return random_condition(T, depth);
+        } else {
+            return random_expr(T, depth);
+        }
+    case 6:
+        if (T.is_bool()) {
+            return random_expr(T, depth);
+        } else if (T.is_int()) {
+            return Mod::make(random_expr(T, depth), cast(T, abs(random_expr(T, depth))));
+        } else {
+            return Mod::make(random_expr(T, depth), random_expr(T, depth));
+        }
 
     default:
         make_bin_op_fn maker;
@@ -2241,7 +2266,6 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
     }
     return true;
 }
-}
 
 template <typename T>
 void test_int_cast_constant() {
@@ -2277,45 +2301,41 @@ void test_int_cast_constant() {
             << "Simplify test failed: int_cast_constant\n";
     }
 }
+}
 
-void simplify_test() {
-    // We want different fuzz tests every time, to increase coverage.
-    // We also report the seed to enable reproducing failures.
-    const int fuzz_seed = time(NULL);
-    srand(fuzz_seed);
-    std::cout << "Simplify test seed: " << fuzz_seed << '\n';
+void fuzz_test_simplify(int seed, int count, int depth = 5, int samples = 3) {
+    srand(seed);
 
     Type fuzz_types[] = {
-        UInt(1),
-        Int(32),
         Int(8),
         Int(16),
+        Int(32),
+        UInt(1),
         UInt(8),
         UInt(16),
         UInt(32),
     };
 
     int max_fuzz_vector_width = 4;
-    int fuzz_test_count = 1000;
-    int fuzz_test_depth = 5;
-    int fuzz_test_samples = 4;
 
-    std::vector<Var> fuzz_args(random_vars, random_vars + random_var_count);
+    map<string, Expr> vars;
+    for (int v = 0; v < random_var_count; ++v) {
+        vars[random_vars[v].name()] = Expr();
+    }
 
     for (size_t i = 0; i < sizeof(fuzz_types)/sizeof(fuzz_types[0]); i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
             Type VT = T.vector_of(w);
-            for (int n = 0; n < fuzz_test_count; n++) {
+            for (int n = 0; n < count; n++) {
                 // Generate a random expr...
-                Expr test = random_expr(VT, fuzz_test_depth);
+                Expr test = random_expr(VT, depth);
                 // And simplify it.
                 Expr simplified = simplify(test);
 
-                map<string, Expr> vars;
-                for (int i = 0; i < fuzz_test_samples; i++) {
-                    for (int v = 0; v < random_var_count; v++) {
-                        vars[random_vars[v].name()] = random_leaf(T, true);
+                for (int i = 0; i < samples; i++) {
+                    for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
+                        v->second = random_leaf(T, true);
                     }
 
                     if (!test_simplification(test, simplified, VT, vars)) {
@@ -2325,7 +2345,9 @@ void simplify_test() {
             }
         }
     }
+}
 
+void simplify_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
     Expr xf = cast<float>(x);
     Expr yf = cast<float>(y);
@@ -2762,6 +2784,12 @@ void simplify_test() {
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
 	  ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+
+    // We want different fuzz tests every time, to increase coverage.
+    // We also report the seed to enable reproducing failures.
+    const int fuzz_seed = time(NULL);
+    std::cout << "Simplify test seed: " << fuzz_seed << '\n';
+    fuzz_test_simplify(fuzz_seed, 500);
 
     std::cout << "Simplify test passed" << std::endl;
 }
