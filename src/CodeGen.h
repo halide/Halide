@@ -303,6 +303,10 @@ protected:
 
     llvm::Value *get_user_context() const;
 
+    /** Implementation of the intrinsic call to
+     * interleave_vectors. This implementation allows for interleaving
+     * an arbitrary number of vectors.*/
+    llvm::Value *interleave_vectors(Type, const std::vector<Expr>&);
 
 
 private:

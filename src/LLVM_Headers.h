@@ -9,13 +9,10 @@
 #pragma warning(push, 0)
 #endif
 
-// MCJIT doesn't seem to work right on os x or windows yet
-#ifdef __APPLE__
-#else
-#ifdef _WIN32
-#else
+// LLVM is moving to MCJIT as the only JIT, however MCJIT doesn't seem
+// to work right on os x or windows for some older versions of llvm.
+#if LLVM_VERSION >= 36 || (!defined(__APPLE__) && !defined(_WIN32))
 #define USE_MCJIT
-#endif
 #endif
 
 #ifdef USE_MCJIT

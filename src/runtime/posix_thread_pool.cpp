@@ -138,9 +138,8 @@ WEAK void halide_shutdown_thread_pool() {
     //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
     // Tidy up
     pthread_mutex_destroy(&halide_work_queue.mutex);
-    // Reset it to zero in case we call another do_par_for
-    pthread_mutex_t uninitialized_mutex = {0};
-    halide_work_queue.mutex = uninitialized_mutex;
+    // Reinitialize in case we call another do_par_for
+    pthread_mutex_init(&halide_work_queue.mutex, NULL);
     pthread_cond_destroy(&halide_work_queue.state_change);
     halide_thread_pool_initialized = false;
 }
