@@ -129,8 +129,6 @@ Matrix::Matrix(Expr m, Expr n, Type t) : is_large(true), nrows(m), ncols(n) {
     y = Var("y");
 
     func(x, y) = Halide::undef(t);
-    func.bound(x, 0, nrows)
-            .bound(y, 0, ncols);
 }
 
 Matrix::Matrix(Expr m, Expr n, const std::vector<Expr>& c) : is_large(false), nrows(m), ncols(n) {
@@ -178,8 +176,6 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
             y = Var("y");
             func(x, y) = Halide::undef(f.output_types()[0]);
             func(x, 0) = f(x);
-            func.bound(x, 0, nrows)
-                    .bound(y, 0, 1);
         } else {  // is_one(nrows)
             if (is_size_const(ncols)) {
                 const int nc = *Internal::as_const_int(ncols);
@@ -200,8 +196,6 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
             y = f.args()[0];
             func(x, y) = Halide::undef(f.output_types()[0]);
             func(0, y) = f(y);
-            func.bound(x, 0, 1)
-                    .bound(y, 0, ncols);
         }
     } else {
         internal_assert(f.dimensions() == 2);
@@ -228,8 +222,6 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
         x = f.args()[0];
         y = f.args()[1];
         func = f;
-        func.bound(x, 0, nrows)
-                .bound(y, 0, ncols);
     }
 }
 
@@ -255,10 +247,10 @@ Func Matrix::function() {
             }
         }
 
-        func.bound(x, 0, nrows)
-            .bound(y, 0, ncols)
-            .unroll(x)
-            .unroll(y);
+        // func.bound(x, 0, nrows)
+        //     .bound(y, 0, ncols)
+        //     .unroll(x)
+        //     .unroll(y);
     }
 
     return func;
@@ -271,7 +263,14 @@ Buffer Matrix::realize() {
   const int nr = *Internal::as_const_int(nrows);
   const int nc = *Internal::as_const_int(ncols);
 
-  return function().realize(nr, nc);
+
+  Func f = function();
+  f.bound(x, 0, nrows)
+    .bound(y, 0, ncols)
+    .unroll(x)
+    .unroll(y);
+  
+  return f.realize(nr, nc);
 }
 
 Expr Matrix::num_rows() const {

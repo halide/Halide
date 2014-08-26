@@ -68,17 +68,19 @@ bool test_matrix_operations(const int n) {
     v = EigenMatrix::Random(n, 1);
 
     Matrix AB = Matrix(A) * Matrix(B);
+    Func f = AB.function();
+    f.compile_to_lowered_stmt("mat_mult.stmt");
     success &= same_as_matrix(AB.realize(), A*B);
 
-    Matrix Au = Matrix(A) * Matrix(u);
-    success &= same_as_matrix(Au.realize(), A*u);
+    // Matrix Au = Matrix(A) * Matrix(u);
+    // success &= same_as_matrix(Au.realize(), A*u);
 
-    B = A.transpose();
-    Matrix At = Matrix(A).transpose();
-    success &= same_as_matrix(At.realize(), B);
+    // B = A.transpose();
+    // Matrix At = Matrix(A).transpose();
+    // success &= same_as_matrix(At.realize(), B);
 
-    Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
-    success &= same_as_matrix(result.realize(), 2*A*u + B*v/3);
+    // Matrix result = 2 * Matrix(A) * Matrix(u) + Matrix(B) * Matrix(v) / 3;
+    // success &= same_as_matrix(result.realize(), 2*A*u + B*v/3);
 
     return success;
 }
