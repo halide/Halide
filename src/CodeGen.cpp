@@ -396,9 +396,16 @@ void CodeGen::compile_to_bitcode(const string &filename) {
     string error_string;
 #if LLVM_VERSION < 35
     raw_fd_ostream out(filename.c_str(), error_string);
-#else
+#elif LLVM_VERSION == 35
     raw_fd_ostream out(filename.c_str(), error_string, llvm::sys::fs::F_None);
+#else // llvm 3.6
+    std::error_code err;
+    raw_fd_ostream out(filename.c_str(), err, llvm::sys::fs::F_None);
+    if (err) error_string = err.message();
 #endif
+    internal_assert(error_string.empty())
+        << "Error opening output " << filename << ": " << error_string << "\n";
+
     WriteBitcodeToFile(module, out);
 }
 
@@ -451,8 +458,12 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Figure out where we are going to send the output.
 #if LLVM_VERSION < 35
     raw_fd_ostream raw_out(filename.c_str(), error_string);
-#else
+#elif LLVM_VERSION == 35
     raw_fd_ostream raw_out(filename.c_str(), error_string, llvm::sys::fs::F_None);
+#else // llvm 3.6
+    std::error_code err;
+    raw_fd_ostream raw_out(filename.c_str(), err, llvm::sys::fs::F_None);
+    if (err) error_string = err.message();
 #endif
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
