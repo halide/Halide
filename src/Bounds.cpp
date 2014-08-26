@@ -650,10 +650,17 @@ private:
             Expr min_a = min, max_a = max;
             min = make_zero(op->type);
             if (min_a.defined() && max_a.defined()) {
-                if (op->type.is_uint()) {
-                    max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
+                if (equal(min_a, max_a)) {
+                    min = max = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
                 } else {
-                    max = Max::make(0-min_a, max_a);
+                    min = make_zero(op->type);
+                    if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
+                        max = Max::make(Cast::make(op->type, -min_a), Cast::make(op->type, max_a));
+                    } else {
+                        min_a = Call::make(op->type, Call::abs, vec(min_a), Call::Intrinsic);
+                        max_a = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
+                        max = Max::make(min_a, max_a);
+                    }
                 }
             } else {
                 // If the argument is unbounded on one side, then the max is unbounded.
