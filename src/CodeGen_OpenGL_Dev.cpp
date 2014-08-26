@@ -466,44 +466,45 @@ void CodeGen_GLSL::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::glsl_texture_load) {
             internal_assert(op->args.size() == 5);
-          
+
             // Keep track of whether or not the intrinsic was vectorized
             int width = 1;
-            
+
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
-            internal_assert(op->args[0].as<StringImm>() || (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
-            
+            internal_assert(op->args[0].as<StringImm>() ||
+                            (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
+
             const StringImm* stringImm = op->args[0].as<StringImm>();
             if (!stringImm) {
-              stringImm = op->args[0].as<Broadcast>()->value.as<StringImm>();
-              width = op->args[0].as<Broadcast>()->width;
+                stringImm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+                width = op->args[0].as<Broadcast>()->width;
             }
-            
+
             // Determine the halide buffer associated with this load
             string buffername = stringImm->value;
-            
-            internal_assert(op->type == UInt(8,1) || op->type == UInt(8,2) || op->type == UInt(8,3) || op->type == UInt(8,4) ||
-                            op->type == UInt(16,1) || op->type == UInt(16,2) || op->type == UInt(16,3) || op->type == UInt(16,4));
-            
+
+            internal_assert(op->type == UInt(8,1) || op->type == UInt(8,2) ||
+                            op->type == UInt(8,3) || op->type == UInt(8,4) ||
+                            op->type == UInt(16,1) || op->type == UInt(16,2) ||
+                            op->type == UInt(16,3) || op->type == UInt(16,4));
+
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
             // we use only the first element
-          
+
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
                 << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
                 << get_vector_suffix(op->args[4])
                 << " * " << op->type.imax() << ".0";
-          
+
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
-          
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                    << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
-
             // glsl_texture_store is called only for its side effect; there is
             // no return value.
             id = "";
