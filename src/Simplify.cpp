@@ -392,19 +392,23 @@ private:
             // (x/3)*3 + x%3 -> x
             expr = div_a_a->a;
         } else if (add_a && mul_a_a && mod_b &&
-                   equal(mul_a_a->b, mod_b->b)) {
+                   equal(mul_a_a->b, mod_b->b) &&
+                   (!mod_a_b || !equal(mod_a_b->b, mod_b->b))) {
             // ((x*3) + y) + z%3 -> (x*3 + z%3) + y
             expr = mutate((add_a->a + b) + add_a->b);
         } else if (add_a && mod_a_a && mul_b &&
-                   equal(mod_a_a->b, mul_b->b)) {
+                   equal(mod_a_a->b, mul_b->b) &&
+                   (!mod_a_b || !equal(mod_a_b->b, mul_b->b))) {
             // ((x%3) + y) + z*3 -> (z*3 + x%3) + y
             expr = mutate((b + add_a->a) + add_a->b);
         } else if (add_a && mul_a_b && mod_b &&
-                   equal(mul_a_b->b, mod_b->b)) {
+                   equal(mul_a_b->b, mod_b->b) &&
+                   (!mod_a_a || !equal(mod_a_a->b, mod_b->b))) {
             // (y + (x*3)) + z%3 -> y + (x*3 + z%3)
             expr = mutate(add_a->a + (add_a->b + b));
         } else if (add_a && mod_a_b && mul_b &&
-                   equal(mod_a_b->b, mul_b->b)) {
+                   equal(mod_a_b->b, mul_b->b) &&
+                   (!mod_a_a || !equal(mod_a_a->b, mul_b->b))) {
             // (y + (x%3)) + z*3 -> y + (z*3 + x%3)
             expr = mutate(add_a->a + (b + add_a->b));
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
