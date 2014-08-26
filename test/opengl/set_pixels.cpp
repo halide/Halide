@@ -22,7 +22,6 @@ int main() {
     Image<uint8_t> out(10, 10, 3);
     f.bound(c, 0, 3);
     f.glsl(x, y, c);
-    f.unroll(c);
     f.realize(out);
 
     out.copy_to_host();

@@ -22,7 +22,6 @@ int main() {
                                         12));
     gpu.bound(c, 0, 3);
     gpu.glsl(x, y, c);
-    gpu.unroll(c);
     gpu.compute_root();
 
     // This should trigger a copy_to_host operation

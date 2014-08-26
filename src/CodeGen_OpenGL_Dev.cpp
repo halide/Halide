@@ -319,9 +319,6 @@ class EvaluateSelect : public IRVisitor {
         const int width = op->type.width;
 
         result.resize(width);
-        for (int i = 0; i < width; i++) {
-            result[i] = Expr(0);
-        }
         op->condition.accept(this);
         std::vector<Expr> cond = result;
 
