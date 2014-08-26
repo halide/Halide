@@ -16,7 +16,6 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
-#include "Target.h"
 
 namespace Halide {
 
@@ -352,10 +351,13 @@ class Func {
     int add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
-    /** The lowered imperative form of this function. Cached here so
-     * that recompilation for different targets doesn't require
-     * re-lowering */
+    /** The lowered imperative form of this function and the target
+     * this was lowered for. Cached here so that recompilation doesn't
+     * necessarily require re-lowering */
+    // @{
     Internal::Stmt lowered;
+    Target lowered_target;
+    // @}
 
     /** Lower the func if it hasn't been already. */
     void lower(const Target &t);
@@ -1667,6 +1669,16 @@ public:
     operator ExternFuncArgument() const {
         return ExternFuncArgument(func);
     }
+
+    /** Infer the arguments to the Func, sorted into a canonical order:
+     * all buffers (sorted alphabetically by name), followed by all non-buffers
+     * (sorted alphabetically by name).
+     This lets you write things like:
+     \code
+     func.compile_to_assembly("/dev/stdout", func.infer_arguments());
+     \endcode
+     */
+    EXPORT std::vector<Argument> infer_arguments() const;
 
 };
 
