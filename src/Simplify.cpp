@@ -613,7 +613,7 @@ private:
         } else if (broadcast_a && ramp_b) {
             Expr m = broadcast_a->value;
             expr = mutate(Ramp::make(m * ramp_b->base, m * ramp_b->stride, ramp_b->width));
-        } else if (add_a && is_simple_const(add_a->b) && is_simple_const(b)) {
+        } else if (add_a && !(ramp_a && ramp_b) && is_simple_const(add_a->b) && is_simple_const(b)) {
             expr = mutate(add_a->a * b + add_a->b * b);
         } else if (sub_a && is_negative_negatable_const(b)) {
             expr = mutate(Mul::make(Sub::make(sub_a->b, sub_a->a), -b));
@@ -2164,6 +2164,7 @@ Expr random_expr(Type T, int depth) {
         Min::make,
         Max::make,
         Div::make,
+        Mod::make,
      };
 
     static make_bin_op_fn make_bool_bin_op[] = {
@@ -2177,7 +2178,7 @@ Expr random_expr(Type T, int depth) {
 
     const int bin_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
     const int bool_bin_op_count = sizeof(make_bool_bin_op) / sizeof(make_bool_bin_op[0]);
-    const int op_count = bin_op_count + bool_bin_op_count + 6;
+    const int op_count = bin_op_count + bool_bin_op_count + 5;
 
     int op = rand() % op_count;
     switch(op) {
@@ -2212,14 +2213,6 @@ Expr random_expr(Type T, int depth) {
             return random_condition(T, depth);
         } else {
             return random_expr(T, depth);
-        }
-    case 6:
-        if (T.is_bool()) {
-            return random_expr(T, depth);
-        } else if (T.is_int()) {
-            return Mod::make(random_expr(T, depth), cast(T, abs(random_expr(T, depth))));
-        } else {
-            return Mod::make(random_expr(T, depth), random_expr(T, depth));
         }
 
     default:
