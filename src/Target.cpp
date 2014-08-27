@@ -624,7 +624,6 @@ void undo_win32_name_mangling(llvm::Module *m) {
 }
 
 void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm::Module *m) {
-    call->dump();
     string new_name = "_" + fn->getName().str();
     llvm::Function *alt = m->getFunction(new_name);
     if (!alt) {
@@ -634,7 +633,6 @@ void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm
     }
     internal_assert(alt->getName() == new_name);
     call->setCalledFunction(alt);
-    call->dump();
 }
 
 /** Windows uses _close, _open, _write, etc instead of the posix
