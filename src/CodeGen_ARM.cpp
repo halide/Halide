@@ -1168,14 +1168,30 @@ void CodeGen_ARM::visit(const Store *op) {
     }
     const Call *call = rhs.as<Call>();
 
+    // Interleaving store instructions only exist for certain types.
+    bool type_ok_for_vst = false;
+    if (call && !call->args.empty()) {
+        Type t = call->args[0].type();
+        type_ok_for_vst =
+            (t == UInt(8, 16) || t == UInt(8, 8) ||
+             t == UInt(16, 8) || t == UInt(16, 4) ||
+             t == UInt(32, 4) || t == UInt(32, 2) ||
+             t == UInt(64, 2) || t == UInt(64, 1) ||
+             t == Float(32, 2) || t == Float(32, 4));
+    }
+
     if (is_one(ramp->stride) &&
         call && call->call_type == Call::Intrinsic &&
-        call->name == Call::interleave_vectors) {
-        internal_assert(call->args.size() == 2)
-            << "Wrong number of args to interleave vectors: " << call->args.size() << "\n";
-        vector<Value *> args(call->args.size() + 2);
+        call->name == Call::interleave_vectors &&
+        type_ok_for_vst &&
+        2 <= call->args.size() && call->args.size() <= 4) {
+
+        const int num_vecs = call->args.size();
+        vector<Value *> args(num_vecs + 1);
 
         Type t = call->args[0].type();
+
+        // Assume element-aligned.
         int alignment = t.bytes();
 
         Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), ramp->base);
@@ -1187,33 +1203,22 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         args[0] = ptr; // The pointer
-        args[1] = codegen(call->args[0]);
-        args[2] = codegen(call->args[1]);
-        args[3] = ConstantInt::get(i32, alignment);
+        for (int i = 0; i < num_vecs; ++i) {
+            args[i+1] = codegen(call->args[i]);
+        }
 
-        Instruction *store = NULL;
-        if (t == Int(8, 8) || t == UInt(8, 8)) {
-            store = call_void_intrin("vst2.v8i8", args);
-        } else if (t == Int(8, 16) || t == UInt(8, 16)) {
-            store = call_void_intrin("vst2.v16i8", args);
-        } else if (t == Int(16, 4) || t == UInt(16, 4)) {
-            store = call_void_intrin("vst2.v4i16", args);
-        } else if (t == Int(16, 8) || t == UInt(16, 8)) {
-            store = call_void_intrin("vst2.v8i16", args);
-        } else if (t == Int(32, 2) || t == UInt(32, 2)) {
-            store = call_void_intrin("vst2.v2i32", args);
-        } else if (t == Int(32, 4) || t == UInt(32, 4)) {
-            store = call_void_intrin("vst2.v4i32", args);
-        } else if (t == Float(32, 2)) {
-            store = call_void_intrin("vst2.v2f32", args);
-        } else if (t == Float(32, 4)) {
-            store = call_void_intrin("vst2.v4f32", args);
+        args.push_back(ConstantInt::get(i32, alignment));
+
+        std::ostringstream instr;
+        instr << "vst" << num_vecs << ".v" << t.width;
+        if (t.is_float()) {
+            instr << "f" << t.bits;
         } else {
-            CodeGen::visit(op);
+            instr << "i" << t.bits;
         }
-        if (store) {
-            add_tbaa_metadata(store, op->name, op->index);
-        }
+
+        Instruction *store = call_void_intrin(instr.str(), args);
+        add_tbaa_metadata(store, op->name, op->index);
 
         for (size_t i = 0; i < lets.size(); i++) {
             sym_pop(lets[i].first);

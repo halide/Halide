@@ -136,6 +136,7 @@ if("${NATIVE_INT_DIR}" STREQUAL "./")
 endif()
 
 # Commands to build initial module objects.
+set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
@@ -147,7 +148,7 @@ foreach (i ${RUNTIME_CPP} )
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
     add_custom_command(OUTPUT "${BC}"
                        DEPENDS "${LL}"

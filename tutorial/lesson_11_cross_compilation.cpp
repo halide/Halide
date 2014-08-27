@@ -88,7 +88,10 @@ int main(int argc, char **argv) {
 
     FILE *f = fopen("lesson_11_arm_32_android.o", "rb");
     uint8_t header[32];
-    fread(header, 32, 1, f);
+    if (!f || fread(header, 32, 1, f) != 1) {
+        printf("Object file not generated\n");
+        return -1;
+    }
     fclose(f);
 
     if (memcmp(header, arm_32_android_magic, sizeof(arm_32_android_magic))) {
@@ -101,7 +104,10 @@ int main(int argc, char **argv) {
     uint8_t win_64_magic[] = {0x64, 0x86};
 
     f = fopen("lesson_11_x86_64_windows.o", "rb");
-    fread(header, 32, 1, f);
+    if (!f || fread(header, 32, 1, f) != 1) {
+        printf("Object file not generated\n");
+        return -1;
+    }
     fclose(f);
 
     if (memcmp(header, win_64_magic, sizeof(win_64_magic))) {
@@ -115,7 +121,10 @@ int main(int argc, char **argv) {
                                    11,  // CPU subtype is ARMv7s
                                    1};  // It's a relocatable object file.
     f = fopen("lesson_11_arm_32_ios.o", "rb");
-    fread(header, 32, 1, f);
+    if (!f || fread(header, 32, 1, f) != 1) {
+        printf("Object file not generated\n");
+        return -1;
+    }
     fclose(f);
 
     if (memcmp(header, arm_32_ios_magic, sizeof(arm_32_ios_magic))) {
