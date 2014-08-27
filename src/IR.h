@@ -253,35 +253,35 @@ namespace Internal {
 struct Cast : public ExprNode<Cast> {
     Expr value;
 
-    static Expr make(Type t, Expr v);
+    EXPORT static Expr make(Type t, Expr v);
 };
 
 /** The sum of two expressions */
 struct Add : public ExprNode<Add> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** The difference of two expressions */
 struct Sub : public ExprNode<Sub> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** The product of two expressions */
 struct Mul : public ExprNode<Mul> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** The ratio of two expressions */
 struct Div : public ExprNode<Div> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** The remainder of a / b. Mostly equivalent to '%' in C, except that
@@ -290,84 +290,84 @@ struct Div : public ExprNode<Div> {
 struct Mod : public ExprNode<Mod> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** The lesser of two values. */
 struct Min : public ExprNode<Min> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** The greater of two values */
 struct Max : public ExprNode<Max> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Is the first expression equal to the second */
 struct EQ : public ExprNode<EQ> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Is the first expression not equal to the second */
 struct NE : public ExprNode<NE> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Is the first expression less than the second. */
 struct LT : public ExprNode<LT> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Is the first expression less than or equal to the second. */
 struct LE : public ExprNode<LE> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Is the first expression greater than the second. */
 struct GT : public ExprNode<GT> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Is the first expression greater than or equal to the second. */
 struct GE : public ExprNode<GE> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Logical and - are both expressions true */
 struct And : public ExprNode<And> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Logical or - is at least one of the expression true */
 struct Or : public ExprNode<Or> {
     Expr a, b;
 
-    static Expr make(Expr a, Expr b);
+    EXPORT static Expr make(Expr a, Expr b);
 };
 
 /** Logical not - true if the expression false */
 struct Not : public ExprNode<Not> {
     Expr a;
 
-    static Expr make(Expr a);
+    EXPORT static Expr make(Expr a);
 };
 
 /** A ternary operator. Evalutes 'true_value' and 'false_value',
@@ -376,7 +376,7 @@ struct Not : public ExprNode<Not> {
 struct Select : public ExprNode<Select> {
     Expr condition, true_value, false_value;
 
-    static Expr make(Expr condition, Expr true_value, Expr false_value);
+    EXPORT static Expr make(Expr condition, Expr true_value, Expr false_value);
 };
 
 /** Load a value from a named buffer. The buffer is treated as an
@@ -394,7 +394,7 @@ struct Load : public ExprNode<Load> {
     // If it's a load from an image parameter, this points to that
     Parameter param;
 
-    static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param);
+    EXPORT static Expr make(Type type, std::string name, Expr index, Buffer image, Parameter param);
 };
 
 /** A linear ramp vector node. This is vector with 'width' elements,
@@ -406,7 +406,7 @@ struct Ramp : public ExprNode<Ramp> {
     Expr base, stride;
     int width;
 
-    static Expr make(Expr base, Expr stride, int width);
+    EXPORT static Expr make(Expr base, Expr stride, int width);
 };
 
 /** A vector with 'width' elements, in which every element is
@@ -416,7 +416,7 @@ struct Broadcast : public ExprNode<Broadcast> {
     Expr value;
     int width;
 
-    static Expr make(Expr value, int width);
+    EXPORT static Expr make(Expr value, int width);
 };
 
 /** A let expression, like you might find in a functional
@@ -426,7 +426,7 @@ struct Let : public ExprNode<Let> {
     std::string name;
     Expr value, body;
 
-    static Expr make(std::string name, Expr value, Expr body);
+    EXPORT static Expr make(std::string name, Expr value, Expr body);
 };
 
 /** The statement form of a let node. Within the statement 'body',
@@ -436,7 +436,7 @@ struct LetStmt : public StmtNode<LetStmt> {
     Expr value;
     Stmt body;
 
-    static Stmt make(std::string name, Expr value, Stmt body);
+    EXPORT static Stmt make(std::string name, Expr value, Stmt body);
 };
 
 /** If the 'condition' is false, then bail out printing the
@@ -447,7 +447,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
     std::string message;
     std::vector<Expr> args;
 
-    static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args);
+    EXPORT static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args);
 };
 
 /** This node is a helpful annotation to do with permissions. The
@@ -461,7 +461,7 @@ struct Pipeline : public StmtNode<Pipeline> {
     std::string name;
     Stmt produce, update, consume;
 
-    static Stmt make(std::string name, Stmt produce, Stmt update, Stmt consume);
+    EXPORT static Stmt make(std::string name, Stmt produce, Stmt update, Stmt consume);
 };
 
 /** A for loop. Execute the 'body' statement for all values of the
@@ -483,7 +483,7 @@ struct For : public StmtNode<For> {
     ForType for_type;
     Stmt body;
 
-    static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body);
+    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body);
 };
 
 /** Store a 'value' to the buffer called 'name' at a given
@@ -493,7 +493,7 @@ struct Store : public StmtNode<Store> {
     std::string name;
     Expr value, index;
 
-    static Stmt make(std::string name, Expr value, Expr index);
+    EXPORT static Stmt make(std::string name, Expr value, Expr index);
 };
 
 /** This defines the value of a function at a multi-dimensional
@@ -505,7 +505,7 @@ struct Provide : public StmtNode<Provide> {
     std::vector<Expr> values;
     std::vector<Expr> args;
 
-    static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args);
+    EXPORT static Stmt make(std::string name, const std::vector<Expr> &values, const std::vector<Expr> &args);
 };
 
 /** Allocate a scratch area called with the given name, type, and
@@ -519,8 +519,8 @@ struct Allocate : public StmtNode<Allocate> {
     Expr condition;
     Stmt body;
 
-    static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
-                     Expr condition, Stmt body);
+    EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
+                            Expr condition, Stmt body);
 };
 
 /** Free the resources associated with the given buffer. */
@@ -554,7 +554,7 @@ struct Realize : public StmtNode<Realize> {
     Expr condition;
     Stmt body;
 
-    static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body);
+    EXPORT static Stmt make(const std::string &name, const std::vector<Type> &types, const Region &bounds, Expr condition, Stmt body);
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
@@ -562,7 +562,7 @@ struct Realize : public StmtNode<Realize> {
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
-    static Stmt make(Stmt first, Stmt rest);
+    EXPORT static Stmt make(Stmt first, Stmt rest);
 };
 
 /** An if-then-else block. 'else' may be NULL. */
@@ -570,14 +570,14 @@ struct IfThenElse : public StmtNode<IfThenElse> {
     Expr condition;
     Stmt then_case, else_case;
 
-    static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt());
+    EXPORT static Stmt make(Expr condition, Stmt then_case, Stmt else_case = Stmt());
 };
 
 /** Evaluate and discard an expression, presumably because it has some side-effect. */
 struct Evaluate : public StmtNode<Evaluate> {
     Expr value;
 
-    static Stmt make(Expr v);
+    EXPORT static Stmt make(Expr v);
 };
 
 }
@@ -656,9 +656,9 @@ struct Call : public ExprNode<Call> {
     // pointer to that
     Parameter param;
 
-    static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
-                     Function func = Function(), int value_index = 0,
-                     Buffer image = Buffer(), Parameter param = Parameter());
+    EXPORT static Expr make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
+                            Function func = Function(), int value_index = 0,
+                            Buffer image = Buffer(), Parameter param = Parameter());
 
     /** Convenience constructor for calls to other halide functions */
     static Expr make(Function func, const std::vector<Expr> &args, int idx = 0) {
@@ -714,7 +714,7 @@ struct Variable : public ExprNode<Variable> {
         return make(type, name, Buffer(), Parameter(), reduction_domain);
     }
 
-    static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain);
+    EXPORT static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain);
 };
 
 }
