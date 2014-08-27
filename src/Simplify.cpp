@@ -820,7 +820,7 @@ private:
             expr = mutate(add_a->a % ib);
         } else if (const_int(b, &ib) && ib && a.type() == Int(32) && mod_rem.modulus % ib == 0) {
             // ((a*b)*x + c) % a -> c % a
-            expr = mod_rem.remainder % ib;
+            expr = mod_imp(mod_rem.remainder, ib);
         } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
                    ia % ib == 0) {
@@ -2112,8 +2112,9 @@ void check(Stmt a, Stmt b) {
     }
 }
 
-static Var random_vars[] = { Var("a"), Var("b"), Var("c"), Var("d"), Var("e") };
-static const int random_var_count = sizeof(random_vars)/sizeof(random_vars[0]);
+Var a("a"), b("b"), c("c"), d("d"), e("e");
+Var random_vars[] = { a, b, c, d, e };
+const int random_var_count = sizeof(random_vars)/sizeof(random_vars[0]);
 
 Expr random_leaf(Type T, bool imm_only = false) {
     if (T.is_scalar()) {
