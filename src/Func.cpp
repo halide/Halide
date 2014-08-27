@@ -1930,8 +1930,9 @@ std::vector<Argument> Func::infer_arguments() const {
 }
 
 void Func::lower(const Target &t) {
-    if (!lowered.defined()) {
+    if (!lowered.defined() || t != lowered_target) {
         lowered = Halide::Internal::lower(func, t);
+        lowered_target = t;
         // Forbid new definitions of the func
         func.freeze();
     }

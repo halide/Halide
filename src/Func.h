@@ -351,10 +351,13 @@ class Func {
     int add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
-    /** The lowered imperative form of this function. Cached here so
-     * that recompilation for different targets doesn't require
-     * re-lowering */
+    /** The lowered imperative form of this function and the target
+     * this was lowered for. Cached here so that recompilation doesn't
+     * necessarily require re-lowering */
+    // @{
     Internal::Stmt lowered;
+    Target lowered_target;
+    // @}
 
     /** Lower the func if it hasn't been already. */
     void lower(const Target &t);

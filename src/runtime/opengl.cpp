@@ -922,8 +922,8 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         return 1;
     }
 
-    GLuint tex = get_texture_id(buf);
     #ifdef DEBUG
+    GLuint tex = get_texture_id(buf);
     halide_printf(user_context, "halide_copy_to_host: %d\n", tex);
     #endif
 
