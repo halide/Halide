@@ -88,9 +88,7 @@ set(RUNTIME_CPP
   windows_clock
   posix_error_handler
   posix_io
-  nacl_io
   ssp
-  osx_io
   posix_math
   posix_thread_pool
   windows_thread_pool
@@ -136,6 +134,7 @@ if("${NATIVE_INT_DIR}" STREQUAL "./")
 endif()
 
 # Commands to build initial module objects.
+set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
@@ -147,7 +146,7 @@ foreach (i ${RUNTIME_CPP} )
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
     add_custom_command(OUTPUT "${BC}"
                        DEPENDS "${LL}"
@@ -380,8 +379,8 @@ target_link_libraries(Halide InitialModules ${LIBS})
 if (NOT HALIDE_SHARED_LIBRARY)
 
 # For the Xcode build, we want the static library version of libHalide.a
-# to include all of its dependencies so that other projects can link to the 
-# library without having to worry about which version of LLVM or the initial 
+# to include all of its dependencies so that other projects can link to the
+# library without having to worry about which version of LLVM or the initial
 # modules it was built with. This is accomplished by adding an additional file
 # list to the link line containing all of these dependencies
 

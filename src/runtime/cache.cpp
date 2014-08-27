@@ -90,7 +90,6 @@ WEAK buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
 }
 
 WEAK bool keys_equal(const uint8_t *key1, const uint8_t *key2, size_t key_size) {
-    size_t i = 0;
     return memcmp(key1, key2, key_size) == 0;
 }
 
@@ -118,7 +117,7 @@ struct CacheEntry {
     uint32_t in_use_count; // 0 if none returned from halide_cache_lookup
     uint32_t tuple_count;
     buffer_t computed_bounds;
-    buffer_t buf;
+    buffer_t buf[1];
     // ADDITIONAL buffer_t STRUCTS HERE
 
     // Allow placement new with constructor
@@ -166,7 +165,7 @@ struct CacheEntry {
     }
 
     buffer_t &buffer(int32_t i) {
-        buffer_t *buf_ptr = &buf;
+        buffer_t *buf_ptr = &buf[0];
         return buf_ptr[i];
     }
 
@@ -304,7 +303,6 @@ WEAK void prune_cache() {
 extern "C" {
 
 WEAK void halide_memoization_cache_set_size(int64_t size) {
-    int64_t old_size = max_cache_size;
     if (size == 0) {
         size = kDefaultCacheSize;
     }

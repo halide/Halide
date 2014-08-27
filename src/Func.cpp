@@ -1195,10 +1195,9 @@ Func &Func::glsl(Var x, Var y, Var c) {
     }
     user_assert(constant_bounds)
         << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
-    unroll(c);
+    vectorize(c);
     return *this;
 }
-
 
 Func &Func::reorder_storage(Var x, Var y) {
     invalidate_cache();
@@ -1931,8 +1930,9 @@ std::vector<Argument> Func::infer_arguments() const {
 }
 
 void Func::lower(const Target &t) {
-    if (!lowered.defined()) {
+    if (!lowered.defined() || t != lowered_target) {
         lowered = Halide::Internal::lower(func, t);
+        lowered_target = t;
         // Forbid new definitions of the func
         func.freeze();
     }

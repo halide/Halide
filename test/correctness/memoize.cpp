@@ -110,13 +110,13 @@ int main(int argc, char **argv) {
                                   UInt(8), 2);
 
         Func f, g;
-	Var x, y;
+        Var x, y;
         f() = count_calls(coord, coord);
         f.compute_root().memoize();
 
-	g(x, y) = f();
+        g(x, y) = f();
 
-	coord.set(0);
+        coord.set(0);
         Image<uint8_t> out1 = g.realize(256, 256);
         Image<uint8_t> out2 = g.realize(256, 256);
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
         }
         assert(call_count == 1);
 
-	coord.set(1);
+        coord.set(1);
         Image<uint8_t> out3 = g.realize(256, 256);
         Image<uint8_t> out4 = g.realize(256, 256);
 
@@ -451,15 +451,15 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call count here.
         fprintf(stderr, "Call count before oversize realize is %d.\n", call_count_with_arg);
-	call_count_with_arg = 0;
+        call_count_with_arg = 0;
 
-	Image<uint8_t> big = g.realize(1024, 1024);
-	Image<uint8_t> big2 = g.realize(1024, 1024);
+        Image<uint8_t> big = g.realize(1024, 1024);
+        Image<uint8_t> big2 = g.realize(1024, 1024);
 
         // TODO work out an assertion on call count here.
         fprintf(stderr, "Call count after oversize realize is %d.\n", call_count_with_arg);
 
-	call_count_with_arg = 0;
+        call_count_with_arg = 0;
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
             val.set((float)r);

@@ -351,10 +351,13 @@ class Func {
     int add_implicit_vars(std::vector<Expr> &) const;
     // @}
 
-    /** The lowered imperative form of this function. Cached here so
-     * that recompilation for different targets doesn't require
-     * re-lowering */
+    /** The lowered imperative form of this function and the target
+     * this was lowered for. Cached here so that recompilation doesn't
+     * necessarily require re-lowering */
+    // @{
     Internal::Stmt lowered;
+    Target lowered_target;
+    // @}
 
     /** Lower the func if it hasn't been already. */
     void lower(const Target &t);
@@ -1332,7 +1335,10 @@ public:
     }
     // @}
 
-    /** Scheduling for GLSL. */
+    /** Schedule for execution using GLSL. Conceptually, this is similar to
+     * parallelization over 'x' and 'y' (since GLSL shaders compute individual
+     * output pixels in parallel) and vectorization over 'c' (since GLSL
+     * implicitly vectorizes the color channel). */
     EXPORT Func &glsl(Var x, Var y, Var c);
 
     /** Specify how the storage for the function is laid out. These

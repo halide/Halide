@@ -308,7 +308,6 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
     // Create the module itself if necessary.
     if (!(*state)->module) {
         DEBUG_PRINTF( user_context, "    cuModuleLoadData %p, %i -> ", ptx_src, size );
-        CUmodule module;
         CUresult err = cuModuleLoadData(&(*state)->module, ptx_src);
         if (err != CUDA_SUCCESS) {
             DEBUG_PRINTF( user_context, "%s\n", get_cuda_error_name(err) );
@@ -316,7 +315,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
                                  get_cuda_error_name(err));
             return err;
         } else {
-            DEBUG_PRINTF( user_context, "%p\n", module );
+            DEBUG_PRINTF( user_context, "%p\n", (*state)->module );
         }
     }
 
