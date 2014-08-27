@@ -350,12 +350,27 @@ std::string Target::to_string() const {
 }
 
 namespace {
-llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMContext *context) {
-    #if LLVM_VERSION < 35
-    return llvm::ParseBitcodeFile(bitcode_buffer, *context);
+llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
+
+    #if LLVM_VERSION >= 36
+    llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
     #else
-    return llvm::parseBitcodeFile(bitcode_buffer, *context).get();
+    llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
+
+    #if LLVM_VERSION >= 35
+    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
+    #else
+    llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);
+    #endif
+
+    #if LLVM_VERSION < 36
+    delete bitcode_buffer;
+    #endif
+
+    mod->setModuleIdentifier(id);
+
+    return mod;
 }
 }
 
@@ -365,10 +380,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
     llvm::Module *get_initmod_##mod(llvm::LLVMContext *context) {      \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length); \
-        llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
-        llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
-        module->setModuleIdentifier(#mod);                              \
-        delete bitcode_buffer;                                          \
+        llvm::Module *module = parse_bitcode_file(sb, context, #mod);   \
         return module;                                                  \
     }
 
