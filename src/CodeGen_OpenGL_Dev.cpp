@@ -469,20 +469,23 @@ void CodeGen_GLSL::visit(const Call *op) {
 
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
-            internal_assert(op->args[0].as<StringImm>() || (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
-            
+            internal_assert(op->args[0].as<StringImm>() ||
+                            (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
+
             const StringImm* string_imm = op->args[0].as<StringImm>();
             if (!string_imm) {
-              string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
-              width = op->args[0].as<Broadcast>()->width;
+                string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+                width = op->args[0].as<Broadcast>()->width;
             }
 
             // Determine the halide buffer associated with this load
             string buffername = string_imm->value;
-            
-            internal_assert(op->type == UInt(8,1) || op->type == UInt(8,2) || op->type == UInt(8,3) || op->type == UInt(8,4) ||
-                            op->type == UInt(16,1) || op->type == UInt(16,2) || op->type == UInt(16,3) || op->type == UInt(16,4));
-            
+
+            internal_assert(op->type == UInt(8, 1) || op->type == UInt(8, 2) ||
+                            op->type == UInt(8, 3) || op->type == UInt(8, 4) ||
+                            op->type == UInt(16, 1) || op->type == UInt(16, 2) ||
+                            op->type == UInt(16, 3) || op->type == UInt(16, 4));
+
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
             // we use only the first element
@@ -676,6 +679,5 @@ void CodeGen_GLSL::test() {
 
     std::cout << "CodeGen_GLSL test passed\n";
 }
-
 
 }}
