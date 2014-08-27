@@ -134,7 +134,10 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
         set<const IRNode *>::iterator iter = visited.find(e.ptr);
 
         if (iter != visited.end()) {
-            if (e.as<Variable>() || is_const(e) || e.as<StringImm>()) {
+            if (e.as<Variable>() ||
+                is_const(e) ||
+                e.as<StringImm>() ||
+                (e.as<Broadcast>() && e.as<Broadcast>()->value.as<StringImm>())) {
                 return;
             }
 
