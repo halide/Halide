@@ -28,7 +28,7 @@ std::string replace_all(std::string &str,
     return str;
 }
 
-// Maps Halide types to appropriate GLSL types or emit error if no equivalent
+// Maps Halide types to appropriate GLSL types or emits error if no equivalent
 // type is available.
 Type map_type(const Type &type) {
     Type result = type;
@@ -224,25 +224,176 @@ void CodeGen_GLSL::visit(const For *loop) {
     }
 }
 
-void CodeGen_GLSL::visit(const Select *op) {
-    string cond = print_expr(op->condition);
+class EvaluateSelect : public IRVisitor {
+    using IRVisitor::visit;
 
-    string id_value = unique_name('_');
-    do_indent();
-    stream << print_type(op->type) << " " << id_value << ";\n";
-    do_indent();
-    stream << "if (" << cond << ")\n";
-    open_scope(); {
-        string true_val = print_expr(op->true_value);
-        stream << id_value << " = " << true_val << ";\n";
-    } close_scope("");
-    do_indent();
-    stream << "else\n";
-    open_scope(); {
-        string false_val = print_expr(op->false_value);
-        stream << id_value << " = " << false_val<< ";\n";
+    void visit(const Ramp *op) {
+        result.resize(op->width);
+        for (int i = 0; i < op->width; i++) {
+            result[i] = simplify(Add::make(op->base, Mul::make(op->stride, Expr(i))));
+        }
+    }
+
+    void visit(const Broadcast *op) {
+        result.resize(op->width);
+        for (int i = 0; i < op->width; i++) {
+            result[i] = op->value;
+        }
+    }
+
+    template <class T>
+    void visit_binary_op(const T *op) {
+        op->a.accept(this);
+        std::vector<Expr> result_a = result;
+        op->b.accept(this);
+        std::vector<Expr> result_b = result;
+        for (size_t i = 0; i < result_a.size(); i++) {
+            result[i] = simplify(T::make(result_a[i], result_b[i]));
+        }
+    }
+
+    void visit(const EQ *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const NE *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const LT *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const LE *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const GT *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const GE *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Add *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Sub *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Mul *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Div *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Min *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Max *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const And *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Or *op) {
+        visit_binary_op(op);
+    }
+
+    void visit(const Not *op) {
+        op->a.accept(this);
+        for (size_t i = 0; i < result.size(); i++) {
+            result[i] = simplify(Not::make(result[i]));
+        }
+    }
+
+    void visit(const Select *op) {
+        const int width = op->type.width;
+
+        result.resize(width);
+        op->condition.accept(this);
+        std::vector<Expr> cond = result;
+
+        op->true_value.accept(this);
+        std::vector<Expr> true_value = result;
+
+        op->false_value.accept(this);
+        std::vector<Expr> false_value = result;
+
+        for (int i = 0; i < width; i++) {
+            if (is_const(cond[i])) {
+                result[i] = is_one(cond[i]) ? true_value[i] : false_value[i];
+            } else {
+                result[i] = Select::make(cond[i], true_value[i], false_value[i]);
+            }
+        }
+    }
+
+public:
+    std::vector<Expr> result;
+    EvaluateSelect() {
+    }
+};
+
+std::vector<Expr> evaluate_vector_select(const Select *op) {
+    EvaluateSelect eval;
+    op->accept(&eval);
+    return eval.result;
+}
+
+void CodeGen_GLSL::visit(const Select *op) {
+    string id_value;
+    if (op->type.is_scalar()) {
+        id_value = unique_name('_');
         do_indent();
-    } close_scope("");
+        stream << print_type(op->type) << " " << id_value << ";\n";
+        string cond = print_expr(op->condition);
+        do_indent();
+        stream << "if (" << cond << ") ";
+        open_scope();
+        {
+            string true_val = print_expr(op->true_value);
+            do_indent();
+            stream << id_value << " = " << true_val << ";\n";
+        }
+        close_scope("");
+
+        do_indent();
+        stream << "else ";
+        open_scope();
+        {
+            string false_val = print_expr(op->false_value);
+            do_indent();
+            stream << id_value << " = " << false_val<< ";\n";
+        }
+        close_scope("");
+    } else {
+        // Selects in user code are primarily used for constructing vector
+        // types. If the select condition can be evaluated at compile-time
+        // (which is often the case), we can do so without lowering the select
+        // to "if" statements.
+        int width = op->type.width;
+        std::vector<Expr> result = evaluate_vector_select(op);
+        std::vector<std::string> ids(width);
+        for (int i = 0; i < width; i++) {
+            ids[i] = print_expr(result[i]);
+        }
+        id_value = unique_name('_');
+        do_indent();
+        stream << print_type(op->type) << " " << id_value << " = "
+               << print_type(op->type) << "(";
+        for (int i = 0; i < width; i++) {
+            stream << ids[i] << ((i < width - 1) ? ", " : ");\n");
+        }
+    }
 
     id = id_value;
 }
@@ -312,10 +463,10 @@ void CodeGen_GLSL::visit(const Call *op) {
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::glsl_texture_load) {
             internal_assert(op->args.size() == 5);
-          
+
             // Keep track of whether or not the intrinsic was vectorized
             int width = 1;
-            
+
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
             internal_assert(op->args[0].as<StringImm>() || (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
@@ -325,7 +476,7 @@ void CodeGen_GLSL::visit(const Call *op) {
               string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
               width = op->args[0].as<Broadcast>()->width;
             }
-            
+
             // Determine the halide buffer associated with this load
             string buffername = string_imm->value;
             
@@ -335,21 +486,19 @@ void CodeGen_GLSL::visit(const Call *op) {
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
             // we use only the first element
-          
+
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
                 << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
                 << get_vector_suffix(op->args[4])
                 << " * " << op->type.imax() << ".0";
-          
+
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
-          
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
                    << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
-
             // glsl_texture_store is called only for its side effect; there is
             // no return value.
             id = "";
@@ -485,6 +634,9 @@ void CodeGen_GLSL::test() {
     e.push_back(abs(-2));
     e.push_back(Halide::print(3.0f));
     e.push_back(-2/Expr(3));  // Test rounding behavior of integer division.
+    e.push_back(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
+                             Broadcast::make(1.f, 4),
+                             Broadcast::make(2.f, 4)));
 
     ostringstream source;
     CodeGen_GLSL cg(source);
@@ -505,7 +657,8 @@ void CodeGen_GLSL::test() {
         "int _8 = int(_7);\n"
         "float _9 = 3.0000000;\n"
         "float _10 = floor(-0.66666669);\n"
-        "int _11 = int(_10);\n";
+        "int _11 = int(_10);\n"
+        "vec4 _12 = vec4(2.0000000, 1.0000000, 2.0000000, 2.0000000);\n";
 
     if (src != correct_source) {
         int diff = 0;

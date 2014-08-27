@@ -1184,18 +1184,23 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     Stage(func.schedule()).gpu_blocks(x, y);
 
+    int color_extent = 1;
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
     for (size_t i = 0; i < sched.bounds().size(); i++) {
         if (c.name() == sched.bounds()[i].var) {
             constant_bounds = is_const(sched.bounds()[i].min) &&
                 is_const(sched.bounds()[i].extent);
+            if (constant_bounds) {
+                color_extent = *as_const_int(sched.bounds()[i].extent);
+            }
             break;
         }
     }
     user_assert(constant_bounds)
         << "The color channel for GLSL loops must have constant bounds, e.g., .bound(c, 0, 3).\n";
 
+    vectorize(c, color_extent);
     return *this;
 }
 
