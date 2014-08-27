@@ -137,8 +137,7 @@ struct FindOneCommonSubexpression : public IRGraphVisitor {
             if (e.as<Variable>() ||
                 is_const(e) ||
                 e.as<StringImm>() ||
-                (e.as<Broadcast>() && e.as<Broadcast>()->value.as<StringImm>()))
-            {
+                (e.as<Broadcast>() && e.as<Broadcast>()->value.as<StringImm>())) {
                 return;
             }
 
