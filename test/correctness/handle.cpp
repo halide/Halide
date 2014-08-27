@@ -3,7 +3,7 @@
 
 using namespace Halide;
 
-HalideExtern_1(int, strlen, const char *);
+HalideExtern_1(size_t, strlen, const char *);
 
 int main(int argc, char **argv) {
     const char *c_message = "Hello, world!";
@@ -11,9 +11,9 @@ int main(int argc, char **argv) {
     Param<const char *> message;
     message.set(c_message);
 
-    int result = evaluate<int>(strlen(message));
+    size_t result = evaluate<size_t>(strlen(message));
 
-    int correct = strlen(c_message);
+    size_t correct = strlen(c_message);
     if (result != correct) {
         printf("strlen(%s) -> %d instead of %d\n",
                c_message, result, correct);

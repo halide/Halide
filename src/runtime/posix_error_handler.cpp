@@ -9,8 +9,6 @@ WEAK void (*halide_error_handler)(void *, const char *) = NULL;
 extern "C" {
 
 extern int halide_printf(void *, const char *, ...);
-extern int vsnprintf(char *, size_t, const char *, va_list);
-extern void exit(int);
 
 WEAK void halide_error(void *user_context, const char *msg) {
     if (halide_error_handler) {
