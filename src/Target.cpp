@@ -638,13 +638,16 @@ void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm
 void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
     string posix_fns[] = {"vsnprintf", "open", "close", "write"};
 
+    string *posix_fns_begin = posix_fns;
+    string *posix_fns_end = posix_fns + sizeof(posix_fns) / sizeof(posix_fns[0]);
+
     for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
         for (llvm::Function::iterator f_iter = iter->begin(); f_iter != iter->end(); ++f_iter) {
             for (llvm::BasicBlock::iterator b_iter = f_iter->begin(); b_iter != f_iter->end(); ++b_iter) {
                 llvm::Value *inst = (llvm::Value *)b_iter;
                 if (llvm::CallInst *call = llvm::dyn_cast<llvm::CallInst>(inst)) {
                     if (llvm::Function *fn = call->getCalledFunction()) {
-                        if (std::find(begin(posix_fns), end(posix_fns), fn->getName()) != end(posix_fns)) {
+                        if (std::find(posix_fns_begin, posix_fns_end, fn->getName()) != posix_fns_end) {
                             add_underscore_to_posix_call(call, fn, m);
                         }
                     }
