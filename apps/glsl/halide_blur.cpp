@@ -19,7 +19,6 @@ int main(int argc, char **argv) {
     input8.set_bounds(2, 0, 3);
     out.bound(c, 0, 3);
     out.glsl(x, y, c);
-    out.unroll(c);
 
     std::vector<Argument> args;
     args.push_back(input8);

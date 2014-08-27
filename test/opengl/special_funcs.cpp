@@ -41,7 +41,6 @@ int main() {
     Image<uint8_t> out(10, 10, 1);
     f.bound(c, 0, 1);
     f.glsl(x, y, c);
-    f.unroll(c);
     f.realize(out);
 
     out.copy_to_host();

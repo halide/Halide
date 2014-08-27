@@ -33,7 +33,6 @@ int main() {
     g(x, y, c) = h(x, y, c);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);
-    g.unroll(c);
 
     Image<uint8_t> out(255, 10, 3);
     g.realize(out);
