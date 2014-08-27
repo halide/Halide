@@ -717,7 +717,7 @@ private:
                    (ib % ia) == 0 &&
                    (ic * (broadcast_b->width - 1)) < ia) {
             // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides d
-            expr = mutate(Broadcast::make(mul_a_a->a / (ib / ia), broadcast_b->width));
+            expr = mutate(Broadcast::make(mul_a_a->a / div_imp(ib, ia), broadcast_b->width));
         } else if (div_a &&
                    const_int(div_a->b, &ia) && ia >= 0 &&
                    const_int(b, &ib) && ib >= 0) {
@@ -733,29 +733,29 @@ private:
                    ia && ib && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
                 // (x * 4) / 2 -> x * 2
-                expr = mutate(mul_a->a * (ia / ib));
+                expr = mutate(mul_a->a * div_imp(ia, ib));
             } else {
                 // (x * 2) / 4 -> x / 2
-                expr = mutate(mul_a->a / (ib / ia));
+                expr = mutate(mul_a->a / div_imp(ib, ia));
             }
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // (x*4 + y) / 2 -> x*2 + y/2
-            expr = mutate((mul_a_a->a * (ia/ib)) + (add_a->b / b));
+            expr = mutate((mul_a_a->a * div_imp(ia, ib)) + (add_a->b / b));
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // (y + x*4) / 2 -> y/2 + x*2
-            expr = mutate((add_a->a / b) + (mul_a_b->a * (ia/ib)));
+            expr = mutate((add_a->a / b) + (mul_a_b->a * div_imp(ia, ib)));
         } else if (sub_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // (x*4 - y) / 2 -> x*2 - y/2
-            expr = mutate((mul_a_a->a * (ia/ib)) - (sub_a->b / b));
+            expr = mutate((mul_a_a->a * div_imp(ia, ib)) - (sub_a->b / b));
         } else if (sub_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
                    ib && (ia % ib == 0)) {
             // (y - x*4) / 2 -> y/2 - x*2
-            expr = mutate((sub_a->a / b) - (mul_a_b->a * (ia/ib)));
+            expr = mutate((sub_a->a / b) - (mul_a_b->a * div_imp(ia, ib)));
         } else if (b.type().is_float() && is_simple_const(b)) {
             // Convert const float division to multiplication
             // x / 2 -> x * 0.5
