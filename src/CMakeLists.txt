@@ -88,9 +88,7 @@ set(RUNTIME_CPP
   windows_clock
   posix_error_handler
   posix_io
-  nacl_io
   ssp
-  osx_io
   posix_math
   posix_thread_pool
   windows_thread_pool
@@ -381,8 +379,8 @@ target_link_libraries(Halide InitialModules ${LIBS})
 if (NOT HALIDE_SHARED_LIBRARY)
 
 # For the Xcode build, we want the static library version of libHalide.a
-# to include all of its dependencies so that other projects can link to the 
-# library without having to worry about which version of LLVM or the initial 
+# to include all of its dependencies so that other projects can link to the
+# library without having to worry about which version of LLVM or the initial
 # modules it was built with. This is accomplished by adding an additional file
 # list to the link line containing all of these dependencies
 
