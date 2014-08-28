@@ -214,43 +214,53 @@ private:
     }
 
     void visit(const Call *op) {
+        Type t = op->type;
+        t.width = new_width;
+
         // Don't mutate scalars
         if (op->type.is_scalar()) {
             expr = op;
         } else if (op->name == Call::interleave_vectors &&
-                   op->call_type == Call::Intrinsic &&
-                   op->args.size() == 2 &&
-                   starting_lane == 0 && lane_stride == 2) {
-            expr = op->args[0];
-        } else if (op->name == Call::interleave_vectors &&
-                   op->call_type == Call::Intrinsic &&
-                   op->args.size() == 2 &&
-                   starting_lane == 1 && lane_stride == 2) {
-            expr = op->args[1];
-        } else if (op->name == Call::interleave_vectors &&
-                   op->call_type == Call::Intrinsic &&
-                   op->args.size() == 3 &&
-                   starting_lane == 0 && lane_stride == 3) {
-            expr = op->args[0];
-        } else if (op->name == Call::interleave_vectors &&
-                   op->call_type == Call::Intrinsic &&
-                   op->args.size() == 3 &&
-                   starting_lane == 1 && lane_stride == 3) {
-            expr = op->args[1];
-        } else if (op->name == Call::interleave_vectors &&
-                   op->call_type == Call::Intrinsic &&
-                   op->args.size() == 3 &&
-                   starting_lane == 2 && lane_stride == 3) {
-            expr = op->args[2];
+                   op->call_type == Call::Intrinsic) {
+            internal_assert(starting_lane >= 0 && starting_lane < lane_stride);
+            if ((int)op->args.size() == lane_stride) {
+                expr = op->args[starting_lane];
+            } else if ((int)op->args.size() % lane_stride == 0) {
+                // Pick up every lane-stride arg.
+                std::vector<Expr> new_args(op->args.size() / lane_stride);
+                for (size_t i = 0; i < new_args.size(); i++) {
+                    new_args[i] = op->args[i*lane_stride + starting_lane];
+                }
+                expr = Call::make(t, Call::interleave_vectors, new_args, Call::Intrinsic);
+            } else {
+                // Interleave some vectors then deinterleave by some other factor...
+                // Brute force!
+                std::vector<Expr> args;
+                args.push_back(op);
+                for (int i = 0; i < new_width; i++) {
+                    args.push_back(i*lane_stride + starting_lane);
+                }
+                expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
+            }
+        } else if (op->name == Call::shuffle_vector &&
+                   op->call_type == Call::Intrinsic) {
+            // Extract every nth numeric arg to the shuffle.
+            std::vector<Expr> args;
+            args.push_back(op->args[0]);
+            for (int i = 0; i < new_width; i++) {
+                int idx = i * lane_stride + starting_lane + 1;
+                internal_assert(idx >= 0 && idx < int(op->args.size()));
+                args.push_back(op->args[idx]);
+            }
+            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         } else {
-
-            Type t = op->type;
-            t.width = new_width;
 
             // Vector calls are always parallel across the lanes, so we
             // can just deinterleave the args.
 
-            // TODO: beware of other intrinsics for which this is not true!
+            // Beware of other intrinsics for which this is not true!
+            // Currently there's only interleave_vectors and
+            // shuffle_vector.
 
             std::vector<Expr> args(op->args.size());
             for (size_t i = 0; i < args.size(); i++) {
