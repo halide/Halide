@@ -724,13 +724,13 @@ private:
             // (x / 3) / 4 -> x / 12
             expr = mutate(Div::make(div_a->a, ia*ib));
         } else if (div_a_a && add_a &&
-                   const_int(div_a_a->b, &ia) && ia &&
+                   const_int(div_a_a->b, &ia) && ia >= 0 &&
                    const_int(add_a->b, &ib) &&
-                   const_int(b, &ic) && ic) {
+                   const_int(b, &ic) && ic >= 0) {
             // (x / ia + ib) / ic -> (x + ia*ib) / (ia*ic)
-            expr = mutate((div_a_a->a + ia*ib) / (ia*ic));
+            expr = mutate(Div::make(div_a_a->a + ia*ib, ia*ic));
         } else if (mul_a && const_int(mul_a->b, &ia) && const_int(b, &ib) &&
-                   ia && ib && (ia % ib == 0 || ib % ia == 0)) {
+                   ia > 0 && ib > 0 && (ia % ib == 0 || ib % ia == 0)) {
             if (ia % ib == 0) {
                 // (x * 4) / 2 -> x * 2
                 expr = mutate(mul_a->a * div_imp(ia, ib));
@@ -739,21 +739,21 @@ private:
                 expr = mutate(mul_a->a / div_imp(ib, ia));
             }
         } else if (add_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
-                   ib && (ia % ib == 0)) {
+                   ib > 0 && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // (x*4 + y) / 2 -> x*2 + y/2
             expr = mutate((mul_a_a->a * div_imp(ia, ib)) + (add_a->b / b));
         } else if (add_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
-                   ib && (ia % ib == 0)) {
+                   ib > 0 && (ia % ib == 0)) {
             // (y + x*4) / 2 -> y/2 + x*2
             expr = mutate((add_a->a / b) + (mul_a_b->a * div_imp(ia, ib)));
         } else if (sub_a && mul_a_a && const_int(mul_a_a->b, &ia) && const_int(b, &ib) &&
-                   ib && (ia % ib == 0)) {
+                   ib > 0 && (ia % ib == 0)) {
             // Pull terms that are a multiple of the divisor out
             // (x*4 - y) / 2 -> x*2 - y/2
             expr = mutate((mul_a_a->a * div_imp(ia, ib)) - (sub_a->b / b));
         } else if (sub_a && mul_a_b && const_int(mul_a_b->b, &ia) && const_int(b, &ib) &&
-                   ib && (ia % ib == 0)) {
+                   ib > 0 && (ia % ib == 0)) {
             // (y - x*4) / 2 -> y/2 - x*2
             expr = mutate((sub_a->a / b) - (mul_a_b->a * div_imp(ia, ib)));
         } else if (b.type().is_float() && is_simple_const(b)) {
@@ -2299,11 +2299,31 @@ void test_int_cast_constant() {
             << "Simplify test failed: int_cast_constant\n";
     }
 }
+
+template <typename T>
+void test_div_mod(T a, T b) {
+    T q = div_imp(a, b);
+    T r = mod_imp(a, b);
+
+    internal_assert(q * b + r == a) << "a, b = " << (int)a << ", " << (int)b
+                                    << ", q, r = " << (int)q << ", " << (int)r << "\n";
+    internal_assert(0 <= r && r < std::abs(b)) << "a, b = " << (int)a << ", " << (int)b
+                                               << ", q, r = " << (int)q << ", " << (int)r << "\n";
 }
 
-void fuzz_test_simplify(int seed, int count, int depth = 5, int samples = 3) {
-    srand(seed);
+template <typename T>
+void test_div_mod() {
+    for (int i = 0; i < 100000; i++) {
+        T a = (T)(rand()%254 - 127);
+        T b = 0;
+        while (b == 0) {
+            b = (T)(rand()%254 - 127);
+        }
+        test_div_mod(a, b);
+    }
+}
 
+void fuzz_test_simplify(int count, int depth = 5, int samples = 3) {
     Type fuzz_types[] = {
         Int(8),
         Int(16),
@@ -2344,6 +2364,7 @@ void fuzz_test_simplify(int seed, int count, int depth = 5, int samples = 3) {
         }
     }
 }
+}
 
 void simplify_test() {
     Expr x = Var("x"), y = Var("y"), z = Var("z"), w = Var("w"), v = Var("v");
@@ -2358,6 +2379,13 @@ void simplify_test() {
     test_int_cast_constant<uint8_t>();
     test_int_cast_constant<uint16_t>();
     test_int_cast_constant<uint32_t>();
+
+    test_div_mod<int32_t>();
+    test_div_mod<int8_t>();
+    test_div_mod<int16_t>();
+    test_div_mod<uint8_t>();
+    test_div_mod<uint16_t>();
+    test_div_mod<uint32_t>();
 
     check(Cast::make(Int(32), Cast::make(Int(32), x)), x);
     check(Cast::make(Float(32), 3), 3.0f);
@@ -2394,13 +2422,13 @@ void simplify_test() {
     // Check some specific expressions involving div and mod
     check(Expr(23) / 4, Expr(5));
     check(Expr(-23) / 4, Expr(-6));
-    check(Expr(-23) / -4, Expr(5));
-    check(Expr(23) / -4, Expr(-6));
+    check(Expr(-23) / -4, Expr(6));
+    check(Expr(23) / -4, Expr(-5));
     check(Expr(-2000000000) / 1000000001, Expr(-2));
     check(Expr(23) % 4, Expr(3));
     check(Expr(-23) % 4, Expr(1));
-    check(Expr(-23) % -4, Expr(-3));
-    check(Expr(23) % -4, Expr(-1));
+    check(Expr(-23) % -4, Expr(1));
+    check(Expr(23) % -4, Expr(3));
     check(Expr(-2000000000) % 1000000001, Expr(2));
 
     check(3 + x, x + 3);
@@ -2785,9 +2813,12 @@ void simplify_test() {
 
     // We want different fuzz tests every time, to increase coverage.
     // We also report the seed to enable reproducing failures.
-    const int fuzz_seed = time(NULL);
+    int fuzz_seed = time(NULL);
+    srand(fuzz_seed);
     std::cout << "Simplify test seed: " << fuzz_seed << '\n';
-    fuzz_test_simplify(fuzz_seed, 500);
+    for (int i = 0; i < 1<<30; i++) {
+        fuzz_test_simplify(500);
+    }
 
     std::cout << "Simplify test passed" << std::endl;
 }
