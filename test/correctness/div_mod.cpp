@@ -293,7 +293,7 @@ bool div_mod() {
         }
     }
 
-    // Compute division result and check it.
+    // Compute division and mod, and check they satisfy the requirements of Euclidean division.
     Func f;
     f(_) = Tuple(a / b, a % b);  // Using Halide division operation.
     Realization R = f.realize(WIDTH, HEIGHT);
@@ -307,12 +307,28 @@ bool div_mod() {
             T bi = b(i, j);
             T qi = q(i, j);
             T ri = r(i, j);
+
             if (qi*bi + ri != ai && (ecount++) < 10) {
-                printf ("(a/b)*b + a%%b != a; a, b = %d, %d; q, r = %d, %d\n", ai, bi, qi, ri);
+                std::cout << "(a/b)*b + a%b != a; a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
                 success = false;
-            } else if (!(0 <= ri && ri < std::abs(bi)) && (ecount++) < 10) {
-                printf("a%%b is not in [0, |b|); a, b = %d, %d; q, r = %d, %d\n", ai, bi, qi, ri);
+            } else if (!(0 <= ri && (bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
+                std::cout << "ri is not in the range [0, |b|); a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
                 success = false;
+            }
+
+            if (i < SWIDTH && j < SHEIGHT) {
+                Expr ae = cast<T>((int)ai);
+                Expr be = cast<T>((int)bi);
+                Expr qe = simplify(ae/be);
+                Expr re = simplify(ae%be);
+
+                if (!Internal::equal(qe, cast<T>((int)qi)) && (ecount++) < 10) {
+                    std::cout << "Compiled a/b != simplified a/b: " << (int)ai << "/" << (int)bi << " = " << (int)qi << " != " << qe << "\n";
+                    success = false;
+                } else if (!Internal::equal(re, cast<T>((int)ri)) && (ecount++) < 10) {
+                    std::cout << "Compiled a%b != simplified a%b: " << (int)ai << "/" << (int)bi << " = " << (int)ri << " != " << re << "\n";
+                    success = false;
+                }
             }
         }
     }

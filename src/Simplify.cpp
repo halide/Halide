@@ -2300,29 +2300,6 @@ void test_int_cast_constant() {
     }
 }
 
-template <typename T>
-void test_div_mod(T a, T b) {
-    T q = div_imp(a, b);
-    T r = mod_imp(a, b);
-
-    internal_assert(q * b + r == a) << "a, b = " << (int)a << ", " << (int)b
-                                    << ", q, r = " << (int)q << ", " << (int)r << "\n";
-    internal_assert(0 <= r && r < std::abs(b)) << "a, b = " << (int)a << ", " << (int)b
-                                               << ", q, r = " << (int)q << ", " << (int)r << "\n";
-}
-
-template <typename T>
-void test_div_mod() {
-    for (int i = 0; i < 100000; i++) {
-        T a = (T)(rand()%254 - 127);
-        T b = 0;
-        while (b == 0) {
-            b = (T)(rand()%254 - 127);
-        }
-        test_div_mod(a, b);
-    }
-}
-
 void fuzz_test_simplify(int count, int depth = 5, int samples = 3) {
     Type fuzz_types[] = {
         Int(8),
@@ -2379,13 +2356,6 @@ void simplify_test() {
     test_int_cast_constant<uint8_t>();
     test_int_cast_constant<uint16_t>();
     test_int_cast_constant<uint32_t>();
-
-    test_div_mod<int32_t>();
-    test_div_mod<int8_t>();
-    test_div_mod<int16_t>();
-    test_div_mod<uint8_t>();
-    test_div_mod<uint16_t>();
-    test_div_mod<uint32_t>();
 
     check(Cast::make(Int(32), Cast::make(Int(32), x)), x);
     check(Cast::make(Float(32), 3), 3.0f);
@@ -2816,9 +2786,7 @@ void simplify_test() {
     int fuzz_seed = time(NULL);
     srand(fuzz_seed);
     std::cout << "Simplify test seed: " << fuzz_seed << '\n';
-    for (int i = 0; i < 1<<30; i++) {
-        fuzz_test_simplify(500);
-    }
+    fuzz_test_simplify(500);
 
     std::cout << "Simplify test passed" << std::endl;
 }
