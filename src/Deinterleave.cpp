@@ -632,9 +632,9 @@ void check(Expr a, Expr even, Expr odd) {
 void deinterleave_vector_test() {
     std::pair<Expr, Expr> result;
     Expr x = Variable::make(Int(32), "x");
-    Expr ramp = Ramp::make(x + 4, 3, 7);
+    Expr ramp = Ramp::make(x + 4, 3, 8);
     Expr ramp_a = Ramp::make(x + 4, 6, 4);
-    Expr ramp_b = Ramp::make(x + 7, 6, 3);
+    Expr ramp_b = Ramp::make(x + 7, 6, 4);
     Expr broadcast = Broadcast::make(x + 4, 16);
     Expr broadcast_a = Broadcast::make(x + 4, 8);
     Expr broadcast_b = broadcast_a;
