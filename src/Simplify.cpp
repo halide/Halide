@@ -867,7 +867,6 @@ private:
         const Max *max_b = b.as<Max>();
 
         min_a_a = max_a ? max_a->a.as<Min>() : min_a_a;
-        const Min *min_b_a = max_b ? max_b->a.as<Min>(): NULL;
 
         // Detect if the lhs or rhs is a rounding-up operation
         int a_round_up_factor = 0, b_round_up_factor = 0;
@@ -1007,13 +1006,6 @@ private:
         } else if (min_a && min_b && equal(min_a->b, min_b->b)) {
             // min(min(y, x), min(z, x)) -> min(min(y, z), x)
             expr = mutate(Min::make(Min::make(min_a->a, min_b->a), min_a->b));
-
-        } else if (max_a && min_a_a && max_b && min_b_a && equal(min_a_a->a, min_b_a->a)) {
-            // Min of two different clamps of the same thing
-            // min(max(min(x, z), y), max(min(x, w), v)) -> max(min(x, min(z, w)), min(y, v))
-            expr = mutate(Max::make(Min::make(min_a_a->a, Min::make(min_a_a->b, min_b_a->b)),
-                                    Min::make(max_a->b, max_b->b)));
-
         } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->b)) {
             // Distributive law for addition
             // min(a + b, c + b) -> min(a, c) + b
@@ -1070,9 +1062,6 @@ private:
         const Max *max_a_a_a_a = max_a_a_a ? max_a_a_a->a.as<Max>() : NULL;
         const Min *min_a = a.as<Min>();
         const Min *min_b = b.as<Min>();
-
-        const Min *min_a_a = max_a ? max_a->a.as<Min>() : NULL;
-        const Min *min_b_a = max_b ? max_b->a.as<Min>() : NULL;
 
         if (equal(a, b)) {
             expr = a;
@@ -1193,13 +1182,6 @@ private:
         } else if (min_a && min_b && equal(min_a->b, min_b->b)) {
             // max(min(y, x), min(z, x)) -> min(max(y, z), x)
             expr = mutate(Min::make(Max::make(min_a->a, min_b->a), min_a->b));
-
-        } else if (max_a && min_a_a && max_b && min_b_a && equal(min_a_a->a, min_b_a->a)) {
-            // Max of two different clamps of the same thing
-            // max(max(min(x, z), y), max(min(x, w), v)) -> max(min(x, max(z, w)), max(y, v))
-            expr = mutate(Max::make(Min::make(min_a_a->a, Max::make(min_a_a->b, min_b_a->b)),
-                                    Max::make(max_a->b, max_b->b)));
-
         } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->b)) {
             // Distributive law for addition
             // max(a + b, c + b) -> max(a, c) + b
@@ -2670,13 +2652,6 @@ void simplify_test() {
 
     // The min of two matching clamps is the clamp of the mins
     check(min(clamp(x, -10, 14), clamp(y, -10, 14)), clamp(min(x, y), -10, 14));
-
-    // The min of two clamps that match in the first arg is the clamp using the min of the bounds
-    check(min(clamp(x, y, z), clamp(x, v, w)),
-          clamp(x, min(y, v), min(z, w)));
-
-    check(max(clamp(x, y, z), clamp(x, v, w)),
-          clamp(x, max(y, v), max(z, w)));
 
     check(Ramp::make(0, 1, 4) == Broadcast::make(2, 4),
           Ramp::make(-2, 1, 4) == Broadcast::make(0, 4));
