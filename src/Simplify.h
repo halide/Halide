@@ -34,20 +34,29 @@ EXPORT Expr simplify(Expr, bool simplify_lets = true,
 Stmt simplify_exprs(Stmt);
 
 /** Implementations of division and mod that are specific to Halide.
- * Use these implementations; do not use native C division or mod to simplify
- * Halide expressions. */
+ * Use these implementations; do not use native C division or mod to
+ * simplify Halide expressions. Halide division and modulo satisify
+ * the Euclidean definition of division for integers a and b:
+ *
+ /code
+ (a/b)*b + a%b = a
+ 0 <= a%b < |b|
+ /endcode
+ *
+ */
+// @{
 template<typename T>
 inline T mod_imp(T a, T b) {
     Type t = type_of<T>();
     if (t.is_int()) {
         T r = a % b;
-        r = r + (r < 0 ? std::abs(b) : 0);
+        r = r + (r < 0 ? (T)std::abs((int)b) : 0);
         return r;
     } else {
         return a % b;
     }
 }
-// Division that rounds the quotient down for integers.
+
 template<typename T>
 inline T div_imp(T a, T b) {
     Type t = type_of<T>();
@@ -61,6 +70,7 @@ inline T div_imp(T a, T b) {
         return a / b;
     }
 }
+// @}
 
 // Special cases for float, double.
 template<> inline float mod_imp<float>(float a, float b) {
