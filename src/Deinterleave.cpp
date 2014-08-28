@@ -294,6 +294,7 @@ private:
 };
 
 Expr extract_odd_lanes(Expr e, const Scope<int> &lets) {
+    internal_assert(e.type().width % 2 == 0);
     Deinterleaver d(lets);
     d.starting_lane = 1;
     d.lane_stride = 2;
@@ -303,6 +304,7 @@ Expr extract_odd_lanes(Expr e, const Scope<int> &lets) {
 }
 
 Expr extract_even_lanes(Expr e, const Scope<int> &lets) {
+    internal_assert(e.type().width % 2 == 0);
     Deinterleaver d(lets);
     d.starting_lane = 0;
     d.lane_stride = 2;
@@ -312,16 +314,19 @@ Expr extract_even_lanes(Expr e, const Scope<int> &lets) {
 }
 
 Expr extract_even_lanes(Expr e) {
+    internal_assert(e.type().width % 2 == 0);
     Scope<int> lets;
     return extract_even_lanes(e, lets);
 }
 
 Expr extract_odd_lanes(Expr e) {
+    internal_assert(e.type().width % 2 == 0);
     Scope<int> lets;
     return extract_odd_lanes(e, lets);
 }
 
 Expr extract_mod3_lanes(Expr e, int lane, const Scope<int> &lets) {
+    internal_assert(e.type().width % 3 == 0);
     Deinterleaver d(lets);
     d.starting_lane = lane;
     d.lane_stride = 3;
@@ -407,11 +412,15 @@ class Interleaver : public IRMutator {
 
         // For vector lets, we may additionally need a let defining the even and odd lanes only
         if (value.type().is_vector()) {
-            result = T::make(op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
-            result = T::make(op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
-            result = T::make(op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
-            result = T::make(op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
-            result = T::make(op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+            if (value.type().width % 2 == 0) {
+                result = T::make(op->name + ".even_lanes", extract_even_lanes(value, vector_lets), result);
+                result = T::make(op->name + ".odd_lanes", extract_odd_lanes(value, vector_lets), result);
+            }
+            if (value.type().width % 3 == 0) {
+                result = T::make(op->name + ".lanes_0_of_3", extract_mod3_lanes(value, 0, vector_lets), result);
+                result = T::make(op->name + ".lanes_1_of_3", extract_mod3_lanes(value, 1, vector_lets), result);
+                result = T::make(op->name + ".lanes_2_of_3", extract_mod3_lanes(value, 2, vector_lets), result);
+            }
         }
 
         return result;
