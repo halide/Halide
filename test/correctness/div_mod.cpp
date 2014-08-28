@@ -295,8 +295,13 @@ bool div_mod() {
 
     // Compute division and mod, and check they satisfy the requirements of Euclidean division.
     Func f;
-    f(_) = Tuple(a / b, a % b);  // Using Halide division operation.
-    Realization R = f.realize(WIDTH, HEIGHT);
+    Var x, y;
+    f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
+    Target target = get_jit_target_from_environment();
+    if (target.has_gpu_feature()) {
+        f.compute_root().gpu_tile(x, y, 16, 16);
+    }
+    Realization R = f.realize(WIDTH, HEIGHT, target);
     Image<T> q(R[0]);
     Image<T> r(R[1]);
 
