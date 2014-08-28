@@ -218,7 +218,17 @@ Stmt build_provide_loop_nest(Function f,
             //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
 
-            // Don't put the let here, put it just inside the loop over outer
+            if (split.exact) {
+                // The bounds of the old reduction variable need to be
+                // explicitly defined for the benefit of producers
+                // that feed into this stage. They run from base to
+                // base + split factor.
+                stmt = LetStmt::make(prefix + split.old_var + ".min",
+                                     base_var, stmt);
+                stmt = LetStmt::make(prefix + split.old_var + ".max",
+                                     base_var + split.factor - 1, stmt);
+            }
+
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
