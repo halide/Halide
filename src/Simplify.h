@@ -38,13 +38,30 @@ Stmt simplify_exprs(Stmt);
  * Halide expressions. */
 template<typename T>
 inline T mod_imp(T a, T b) {
-    T rem = a % b;
     Type t = type_of<T>();
     if (t.is_int()) {
-        rem = rem + (rem != 0 && (rem ^ b) < 0 ? b : 0);
+        T r = a % b;
+        r = r + (r < 0 ? std::abs(b) : 0);
+        return r;
+    } else {
+        return a % b;
     }
-    return rem;
 }
+// Division that rounds the quotient down for integers.
+template<typename T>
+inline T div_imp(T a, T b) {
+    Type t = type_of<T>();
+    if (t.is_int()) {
+        int q = a / b;
+        int r = a - q * b;
+        int bs = b >> (t.bits - 1);
+        int rs = r >> (t.bits - 1);
+        return q - (rs & bs) + (rs & ~bs);
+    } else {
+        return a / b;
+    }
+}
+
 // Special cases for float, double.
 template<> inline float mod_imp<float>(float a, float b) {
     float f = a - b * (floorf(a / b));
@@ -56,23 +73,13 @@ template<> inline double mod_imp<double>(double a, double b) {
     return f;
 }
 
-// Division that rounds the quotient down for integers.
-template<typename T>
-inline T div_imp(T a, T b) {
-    Type t = type_of<T>();
-    T quotient;
-    if (t.is_int()) {
-        T axorb = a ^ b;
-        T post = a != 0 ? ((axorb) >> (t.bits-1)) : 0;
-        T pre = a < 0 ? -post : post;
-        T num = a + pre;
-        T q = num / b;
-        quotient = q + post;
-    } else {
-        quotient = a / b;
-    }
-    return quotient;
+template<> inline float div_imp<float>(float a, float b) {
+    return a/b;
 }
+template<> inline double div_imp<double>(double a, double b) {
+    return a/b;
+}
+
 
 void simplify_test();
 

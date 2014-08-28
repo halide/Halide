@@ -410,15 +410,21 @@ private:
                 return;
             }
 
-            // Divisor is either strictly positive or strictly
-            // negative, so we can just take the extrema.
-            Expr a = min_a / min_b;
-            Expr b = min_a / max_b;
-            Expr c = max_a / min_b;
-            Expr d = max_a / max_b;
+            if (!is_zero(min_b) && !is_zero(max_b)) {
+                // Divisor is either strictly positive or strictly
+                // negative, so we can just take the extrema.
+                Expr a = min_a / min_b;
+                Expr b = min_a / max_b;
+                Expr c = max_a / min_b;
+                Expr d = max_a / max_b;
 
-            min = Min::make(Min::make(a, b), Min::make(c, d));
-            max = Max::make(Max::make(a, b), Max::make(c, d));
+                min = Min::make(Min::make(a, b), Min::make(c, d));
+                max = Max::make(Max::make(a, b), Max::make(c, d));
+            } else {
+                // Divide by zero.
+                min = Expr();
+                max = Expr();
+            }
         }
     }
 
@@ -443,7 +449,7 @@ private:
         } else {
             // Only consider B (so A can be undefined)
             min = make_zero(op->type);
-            max = max_b;
+            max = cast(max_b.type(), abs(max_b));
             if (!max.type().is_float()) {
                 // Integer modulo returns at most one less than the
                 // second arg.
@@ -644,10 +650,17 @@ private:
             Expr min_a = min, max_a = max;
             min = make_zero(op->type);
             if (min_a.defined() && max_a.defined()) {
-                if (op->type.is_uint()) {
-                    max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
+                if (equal(min_a, max_a)) {
+                    min = max = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
                 } else {
-                    max = Max::make(0-min_a, max_a);
+                    min = make_zero(op->type);
+                    if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
+                        max = Max::make(Cast::make(op->type, -min_a), Cast::make(op->type, max_a));
+                    } else {
+                        min_a = Call::make(op->type, Call::abs, vec(min_a), Call::Intrinsic);
+                        max_a = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
+                        max = Max::make(min_a, max_a);
+                    }
                 }
             } else {
                 // If the argument is unbounded on one side, then the max is unbounded.
