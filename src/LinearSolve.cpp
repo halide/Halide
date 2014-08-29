@@ -2,11 +2,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
-<<<<<<< HEAD
 #include "LinearSolve.h"
-=======
-#include "Solve.h"
->>>>>>> master
 #include "Var.h"
 
 namespace Halide {
@@ -25,29 +21,6 @@ class HasVariable : public IRVisitor {
 
     void visit(const Variable* op) {
         has_var = true;
-    }
-};
-
-class UsesVariable : public IRVisitor {
-  public:
-    std::string var_name;
-    Scope<Expr>* scope;
-    bool has_var;
-
-    UsesVariable(const std::string& var, Scope<Expr> *s) :
-            var_name(var), scope(s), has_var(false) {}
-
-  private:
-    using IRVisitor::visit;
-
-    void visit(const Variable* op) {
-        if (op->name == var_name) {
-            has_var = true;
-        } else if (scope->contains(op->name)) {
-            scope->get(op->name).accept(this);
-        } else {
-            IRVisitor::visit(op);
-        }
     }
 };
 
@@ -85,10 +58,24 @@ private:
         return check.has_var;
     }
 
+    Expr normalize_type(Expr e) {
+        if (e.type().is_int() || e.type().is_uint()) {
+            return simplify(Cast::make(Int(32), e));
+        } else {
+            return e;
+        }
+    }
+
+    void match_coeff_type(Expr& e) {
+        e = normalize_type(e);
+        match_types(coeff.top_ref(), e);
+    }
+
     void add_to_constant_term(Expr e) {
-        match_types(e, coeff.top_ref());
+        match_coeff_type(e);
+
         if (terms[0].coeff.defined()) {
-            match_types(e, terms[0].coeff);
+            match_types(terms[0].coeff, e);
             terms[0].coeff = simplify(Add::make(terms[0].coeff, Mul::make(coeff.top(), e)));
         } else {
             terms[0].coeff = simplify(Mul::make(coeff.top(), e));
@@ -137,7 +124,7 @@ private:
         }
 
         Expr neg(-1);
-        match_types(neg, coeff.top_ref());
+        match_coeff_type(neg);
         coeff.push(Mul::make(neg, coeff.top_ref()));
         if (has_var(op->b)) {
             op->b.accept(this);
@@ -160,7 +147,7 @@ private:
         if (has_var(b)) {
             success = false;
         } else if (has_var(a)) {
-            match_types(coeff.top_ref(), b);
+            match_coeff_type(b);
             coeff.push(Div::make(coeff.top(), b));
             a.accept(this);
             coeff.pop();
@@ -179,12 +166,12 @@ private:
         if (a_has_var && b_has_var) {
             success = false;
         } else if (a_has_var) {
-            match_types(coeff.top_ref(), b);
+            match_coeff_type(b);
             coeff.push(Mul::make(coeff.top(), b));
             a.accept(this);
             coeff.pop();
         } else if (b_has_var) {
-            match_types(coeff.top_ref(), a);
+            match_coeff_type(a);
             coeff.push(Mul::make(coeff.top(), a));
             b.accept(this);
             coeff.pop();
@@ -212,7 +199,7 @@ private:
 void collect_terms(std::vector<Term>& old_terms, std::vector<Term>& new_terms) {
     std::map<std::string, int> term_map;
 
-    Term t0 = {make_zero(UInt(8)), NULL};
+    Term t0 = {make_zero(Int(8)), NULL};
     new_terms.push_back(t0);
     for (size_t i = 0; i < old_terms.size(); ++i) {
         if (!old_terms[i].coeff.defined())
@@ -248,9 +235,11 @@ Expr linear_expr(const std::vector<Term>& terms) {
         if (terms[i].var) {
             Expr c = terms[i].coeff;
             Expr var = terms[i].var;
-            match_types(c, expr);
             match_types(c, var);
-            expr = Add::make(expr, Mul::make(c, var));
+
+            Expr prod = Mul::make(c, var);
+            match_types(prod, expr);
+            expr = Add::make(expr, prod);
         } else {
             Expr c = terms[i].coeff;
             match_types(c, expr);
@@ -371,9 +360,8 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                rhs = simplify(Div::make(rhs, var_term.coeff));
-                lhs = var_term.var;
-                match_types(lhs, rhs);
+                rhs = simplify(Cast::make(op->a.type(), Div::make(rhs, var_term.coeff)));
+                lhs = simplify(Cast::make(op->a.type(), var_term.var));
                 solved = true;
             }
 
@@ -434,9 +422,9 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                rhs = simplify(Div::make(rhs, var_term.coeff));
-                lhs = var_term.var;
-                match_types(lhs, rhs);
+                match_types(rhs, var_term.coeff);
+                rhs = simplify(Cast::make(op->a.type(), Div::make(rhs, var_term.coeff)));
+                lhs = simplify(Cast::make(op->a.type(), var_term.var));
                 solved = true;
             }
 
