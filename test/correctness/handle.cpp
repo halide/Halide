@@ -3,7 +3,18 @@
 
 using namespace Halide;
 
-HalideExtern_1(size_t, strlen, const char *);
+// Make a custom strlen so that it always returns a 32-bit int,
+// instead of switching based on bit-width.
+extern "C" int my_strlen(const char *c) {
+    int l = 0;
+    while (*c) {
+        c++;
+        l++;
+    }
+    return l;
+}
+
+HalideExtern_1(int, my_strlen, const char *);
 
 int main(int argc, char **argv) {
     const char *c_message = "Hello, world!";
@@ -11,9 +22,9 @@ int main(int argc, char **argv) {
     Param<const char *> message;
     message.set(c_message);
 
-    size_t result = evaluate<size_t>(strlen(message));
+    int result = evaluate<int>(my_strlen(message));
 
-    size_t correct = strlen(c_message);
+    int correct = my_strlen(c_message);
     if (result != correct) {
         printf("strlen(%s) -> %d instead of %d\n",
                c_message, result, correct);

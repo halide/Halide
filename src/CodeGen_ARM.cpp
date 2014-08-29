@@ -1177,6 +1177,10 @@ void CodeGen_ARM::visit(const Store *op) {
              t == UInt(16, 8) || t == UInt(16, 4) ||
              t == UInt(32, 4) || t == UInt(32, 2) ||
              t == UInt(64, 2) || t == UInt(64, 1) ||
+             t == Int(8, 16) || t == Int(8, 8) ||
+             t == Int(16, 8) || t == Int(16, 4) ||
+             t == Int(32, 4) || t == Int(32, 2) ||
+             t == Int(64, 2) || t == Int(64, 1) ||
              t == Float(32, 2) || t == Float(32, 4));
     }
 
