@@ -125,8 +125,8 @@ Func transform(Func f, Matrix T) {
 
 Func rotate(Func f, Expr x0, Expr y0, Expr theta) {
   Matrix T(3, 3, Float(32));
-  T(0,0) = cos(theta);  T(0,1) = sin(theta);  T(0,2) = x0;
-  T(1,0) = sin(-1.0f*theta);  T(1,1) =  cos(theta);  T(1,2) = y0;
+  T(0,0) =  cos(theta);  T(0,1) = sin(theta);  T(0,2) = x0;
+  T(1,0) = -sin(theta);  T(1,1) = cos(theta);  T(1,2) = y0;
   T(2,0) = 0.0f; T(2,1) = 0.0f; T(2,2) = 1.0f;
 
   // DBG_ASSIGN(T(0,0), cos(theta));  DBG_ASSIGN(T(0,1), sin(theta));  DBG_ASSIGN(T(0,2), x0);
@@ -172,11 +172,15 @@ int main(int argc, char **argv) {
     Var x("x"), y("y"), c("c");
 
     Func bound_input("bound_input");
-    // bound_input = BoundaryConditions::constant_exterior(input, 0.0f, 0, input.width()-1, 0, input.height()-1);
+    bound_input = BoundaryConditions::constant_exterior(input, 0.0f,
+                                                        0, input.width(),
+                                                        0, input.height(),
+                                                        0, 3);
+
     // bound_input = BoundaryConditions::repeat_edge(input, 0, input.width()-1, 0, input.height()-1);
-    bound_input(x, y, c) = select(0 <= x && x < input.width() &&
-                                  0 <= y && y < input.height(),
-                                  input(x, y, c), 0.0f);
+    // bound_input(x, y, c) = select(0 <= x && x < input.width() &&
+    //                               0 <= y && y < input.height(),
+    //                               input(x, y, c), 0.0f);
 
     Func r("r"), g("g"), b("b");
     r(x, y) = bound_input(x, y, 0);
@@ -199,7 +203,7 @@ int main(int argc, char **argv) {
     bool parallelize = (schedule >= 2);
     bool vectorize = (schedule == 1 || schedule == 3);
 
-    result.bound(c, 0, 3).unroll(c);
+    result.reorder(c, x, y).bound(c, 0, 3).unroll(c);
 
     if (vectorize) {
         result.vectorize(x, 4);
@@ -214,9 +218,11 @@ int main(int argc, char **argv) {
         result.store_at(output, c).compute_at(output, y);
     }
 
+    output.compile_to_lowered_stmt("rotate.stmt");
+
     Target target = get_jit_target_from_environment();
-    target.features |= Halide::Target::NoAsserts;
-    target.features |= Halide::Target::NoBoundsQuery;
+    // target.features |= Halide::Target::NoAsserts;
+    // target.features |= Halide::Target::NoBoundsQuery;
     output.compile_jit(target);
 
     printf("Loading '%s'\n", infile.c_str());
