@@ -16,8 +16,6 @@
 #define USE_MCJIT
 #endif
 
-#define USE_MCJIT
-
 #ifdef USE_MCJIT
 #include <llvm/ExecutionEngine/MCJIT.h>
 #else
