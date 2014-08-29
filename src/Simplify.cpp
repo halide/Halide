@@ -1891,18 +1891,7 @@ private:
         if (simplify_lets) {
             expr = simplify_let<Let, Expr>(op);
         } else {
-            // At the very least we should constant-fold.
-            Expr value = mutate(op->value);
-            if (is_const(value)) {
-                Expr body = mutate(substitute(op->name, value, op->body));
-                if (value.same_as(op->value) && body.same_as(op->body)) {
-                    expr = op;
-                } else {
-                    expr = Let::make(op->name, value, body);
-                }
-            } else {
-                IRMutator::visit(op);
-            }
+            IRMutator::visit(op);
         }
     }
 
@@ -1910,17 +1899,7 @@ private:
         if (simplify_lets) {
             stmt = simplify_let<LetStmt, Stmt>(op);
         } else {
-            Expr value = mutate(op->value);
-            if (is_const(value)) {
-                Stmt body = mutate(substitute(op->name, value, op->body));
-                if (value.same_as(op->value) && body.same_as(op->body)) {
-                    stmt = op;
-                } else {
-                    stmt = LetStmt::make(op->name, value, body);
-                }
-            } else {
-                IRMutator::visit(op);
-            }
+            IRMutator::visit(op);
         }
     }
 
