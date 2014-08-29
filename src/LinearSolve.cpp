@@ -2,7 +2,11 @@
 #include "IROperator.h"
 #include "Scope.h"
 #include "Simplify.h"
+<<<<<<< HEAD
 #include "LinearSolve.h"
+=======
+#include "Solve.h"
+>>>>>>> master
 #include "Var.h"
 
 namespace Halide {
