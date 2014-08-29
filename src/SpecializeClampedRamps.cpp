@@ -1,6 +1,7 @@
 #include "SpecializeClampedRamps.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -89,11 +90,12 @@ class SpecializeClampedRamps : public IRMutator {
 
     void visit(const Store *op) {
         PredicateFinder p;
-        Stmt simpler_store = p.mutate(op);
+        Stmt simpler_store = simplify(p.mutate(op));
         if (simpler_store.same_as(op)) {
             stmt = op;
         } else {
-            Expr predicate = p.min_predicate && p.max_predicate;
+            simpler_store = SpecializeClampedRamps().mutate(simpler_store);
+            Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_store, op);
         }
     }
@@ -101,14 +103,15 @@ class SpecializeClampedRamps : public IRMutator {
     void visit(const LetStmt *op) {
         PredicateFinder p;
         Stmt body = mutate(op->body);
-        Expr simpler_value = p.mutate(op->value);
+        Expr simpler_value = simplify(p.mutate(op->value));
         if (body.same_as(op->body) && simpler_value.same_as(op->value)) {
             stmt = op;
         } else if (simpler_value.same_as(op->value)) {
             stmt = LetStmt::make(op->name, op->value, body);
         } else {
             Stmt simpler_let = LetStmt::make(op->name, simpler_value, body);
-            Expr predicate = p.min_predicate && p.max_predicate;
+            simpler_let = SpecializeClampedRamps().mutate(simpler_let);
+            Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_let, op);
         }
     }

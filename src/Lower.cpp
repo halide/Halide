@@ -28,6 +28,7 @@
 #include "SkipStages.h"
 #include "CSE.h"
 #include "SpecializeClampedRamps.h"
+#include "SpecializeBranchedLoops.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
 #include "Inline.h"
@@ -99,7 +100,6 @@ Stmt build_provide_loop_nest(Function f,
 
     // Make the (multi-dimensional multi-valued) store node.
     Stmt stmt = Provide::make(f.name(), values, site);
-    std::cout << "1\t" << stmt;
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -176,6 +176,7 @@ Stmt build_provide_loop_nest(Function f,
         }
     }
 
+#if 0
     // Define the function args in terms of the loop variables using the splits
     map<string, pair<string, Expr> > base_values;
     for (size_t i = 0; i < splits.size(); i++) {
@@ -218,7 +219,6 @@ Stmt build_provide_loop_nest(Function f,
             Expr base_var = Variable::make(Int(32), base_name);
             //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-            std::cout << "2\t" << stmt;
 
             if (split.exact) {
                 // The bounds of the old reduction variable need to be
@@ -232,7 +232,6 @@ Stmt build_provide_loop_nest(Function f,
             }
 
             stmt = LetStmt::make(base_name, base, stmt);
-            std::cout << "3\t" << stmt;
 
         } else if (split.is_fuse()) {
             // Define the inner and outer in terms of the fused var
@@ -254,6 +253,7 @@ Stmt build_provide_loop_nest(Function f,
             stmt = substitute(prefix + split.old_var, outer, stmt);
         }
     }
+#endif
 
     // All containing lets and fors. Outermost first.
     vector<Container> nest;
@@ -290,27 +290,31 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Rewrap the statement in the containing lets and fors.
-    size_t j = splits.size() - 1;
+    int j = (int)splits.size() - 1;
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
         if (nest[i].value.defined()) {
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
-            std::cout << "4\t" << stmt;
         } else {
-            const Split &split = splits[j];
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            Expr outer = Variable::make(Int(32), prefix + split.outer);
+            bool used_split = false;
 
-            if (nest[i].name == prefix + split.outer) {
-                if (split.is_split()) {
+            if (j >= 0) {
+                const Split &split = splits[j];
+                Expr outer = Variable::make(Int(32), prefix + split.outer);
+
+                if (split.is_split() && nest[i].name == prefix + split.outer) {
                     Expr inner = Variable::make(Int(32), prefix + split.inner);
                     Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
                     Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
+                    Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
 
                     known_size_dims[split.inner] = split.factor;
 
                     Expr base = outer * split.factor + old_min;
+                    bool has_tail = false;
+                    Stmt tail_stmt;
 
                     map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
                     if ((iter != known_size_dims.end()) &&
@@ -332,15 +336,15 @@ Stmt build_provide_loop_nest(Function f,
                         // Adjust the base downwards to not compute off the
                         // end of the realization.
 
-                        base = Min::make(base, old_max + (1 - split.factor));
-
+                        // base = Min::make(base, old_max + (1 - split.factor));
+                        has_tail = true;
+                        tail_stmt = stmt;
                     }
 
                     string base_name = prefix + split.inner + ".base";
                     Expr base_var = Variable::make(Int(32), base_name);
                     //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
                     stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-                    std::cout << "2\t" << stmt;
 
                     if (split.exact) {
                         // The bounds of the old reduction variable need to be
@@ -354,19 +358,53 @@ Stmt build_provide_loop_nest(Function f,
                     }
 
                     stmt = LetStmt::make(base_name, base, stmt);
-                    std::cout << "3\t" << stmt;
 
                     stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
-                    std::cout << "4\t" << stmt;
 
-                } else if (split.is_fuse()) {
-                } else {
+                    if (has_tail) {
+                        Expr tail_base = old_max + (1 - split.factor);
+                        string tail_base_name = prefix + split.inner + ".base";
+                        Expr tail_base_var = Variable::make(Int(32), base_name);
+                        tail_stmt = substitute(prefix + split.old_var, tail_base_var + inner, tail_stmt);
+                        tail_stmt = LetStmt::make(tail_base_name, tail_base, tail_stmt);
+                        Expr tail_condition = NE::make(Mod::make(old_extent, split.factor), 0);
+                        tail_stmt = IfThenElse::make(tail_condition, tail_stmt);
+                        stmt = Block::make(stmt, tail_stmt);
+                    }
+
+                    used_split = true;
+                } else if (split.is_fuse() && nest[i].name == prefix + split.old_var) {
+                    // Define the inner and outer in terms of the fused var
+                    Expr fused = Variable::make(Int(32), prefix + split.old_var);
+                    Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min");
+                    Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
+                    Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
+
+                    Expr inner = fused % inner_extent + inner_min;
+                    Expr outer = fused / inner_extent + outer_min;
+
+                    //stmt = LetStmt::make(prefix + split.inner, inner, stmt);
+                    //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
+                    stmt = substitute(prefix + split.inner, inner, stmt);
+                    stmt = substitute(prefix + split.outer, outer, stmt);
+
+                    stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+
+                    used_split = true;
+                } else if (split.is_rename() && nest[i].name == prefix + split.outer) {
+                    // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
+                    stmt = substitute(prefix + split.old_var, outer, stmt);
+
+                    stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+
+                    used_split = true;
                 }
+            }
 
-                j--;
-            } else {
+            if (!used_split) {
                 stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
-                std::cout << "4\t" << stmt;
+            } else {
+                --j;
             }
         }
     }
@@ -380,7 +418,7 @@ Stmt build_provide_loop_nest(Function f,
         Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
         if (split.is_split()) {
             Expr inner_extent = split.factor;
-            Expr outer_extent = (old_var_max - old_var_min + split.factor)/split.factor;
+            Expr outer_extent = old_var_extent / split.factor;
             stmt = LetStmt::make(prefix + split.inner + ".loop_min", 0, stmt);
             stmt = LetStmt::make(prefix + split.inner + ".loop_max", inner_extent-1, stmt);
             stmt = LetStmt::make(prefix + split.inner + ".loop_extent", inner_extent, stmt);
@@ -1849,6 +1887,11 @@ Stmt lower(Function f, const Target &t) {
     s = specialize_clamped_ramps(s);
     s = simplify(s);
     debug(2) << "Lowering after specializing clamped ramps:\n" << s << "\n\n";
+
+    debug(1) << "Specializing branched loops...\n";
+    s = specialize_branched_loops(s);
+    s = simplify(s);
+    debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);
