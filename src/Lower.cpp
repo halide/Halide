@@ -99,6 +99,7 @@ Stmt build_provide_loop_nest(Function f,
 
     // Make the (multi-dimensional multi-valued) store node.
     Stmt stmt = Provide::make(f.name(), values, site);
+    std::cout << "1\t" << stmt;
 
     // The dimensions for which we have a known static size.
     map<string, Expr> known_size_dims;
@@ -217,6 +218,7 @@ Stmt build_provide_loop_nest(Function f,
             Expr base_var = Variable::make(Int(32), base_name);
             //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+            std::cout << "2\t" << stmt;
 
             if (split.exact) {
                 // The bounds of the old reduction variable need to be
@@ -230,6 +232,7 @@ Stmt build_provide_loop_nest(Function f,
             }
 
             stmt = LetStmt::make(base_name, base, stmt);
+            std::cout << "3\t" << stmt;
 
         } else if (split.is_fuse()) {
             // Define the inner and outer in terms of the fused var
@@ -287,14 +290,84 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Rewrap the statement in the containing lets and fors.
+    size_t j = splits.size() - 1;
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
         if (nest[i].value.defined()) {
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
+            std::cout << "4\t" << stmt;
         } else {
+            const Split &split = splits[j];
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+            Expr outer = Variable::make(Int(32), prefix + split.outer);
+
+            if (nest[i].name == prefix + split.outer) {
+                if (split.is_split()) {
+                    Expr inner = Variable::make(Int(32), prefix + split.inner);
+                    Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
+                    Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
+
+                    known_size_dims[split.inner] = split.factor;
+
+                    Expr base = outer * split.factor + old_min;
+
+                    map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
+                    if ((iter != known_size_dims.end()) &&
+                        is_zero(simplify(iter->second % split.factor))) {
+
+                        // We have proved that the split factor divides the
+                        // old extent. No need to adjust the base.
+                        known_size_dims[split.outer] = iter->second / split.factor;
+                    } else if (split.exact) {
+                        // It's an exact split but we failed to prove that the
+                        // extent divides the factor. This is a problem.
+                        user_error << "When splitting " << split.old_var << " into "
+                                   << split.outer << " and " << split.inner << ", "
+                                   << "could not prove the split factor (" << split.factor << ") "
+                                   << "divides the extent of " << split.old_var
+                                   << " (" << iter->second << "). This is required when "
+                                   << "the split originates from an RVar.\n";
+                    } else if (!is_update) {
+                        // Adjust the base downwards to not compute off the
+                        // end of the realization.
+
+                        base = Min::make(base, old_max + (1 - split.factor));
+
+                    }
+
+                    string base_name = prefix + split.inner + ".base";
+                    Expr base_var = Variable::make(Int(32), base_name);
+                    //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+                    stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+                    std::cout << "2\t" << stmt;
+
+                    if (split.exact) {
+                        // The bounds of the old reduction variable need to be
+                        // explicitly defined for the benefit of producers
+                        // that feed into this stage. They run from base to
+                        // base + split factor.
+                        stmt = LetStmt::make(prefix + split.old_var + ".min",
+                                             base_var, stmt);
+                        stmt = LetStmt::make(prefix + split.old_var + ".max",
+                                             base_var + split.factor - 1, stmt);
+                    }
+
+                    stmt = LetStmt::make(base_name, base, stmt);
+                    std::cout << "3\t" << stmt;
+
+                    stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+                    std::cout << "4\t" << stmt;
+
+                } else if (split.is_fuse()) {
+                } else {
+                }
+
+                j--;
+            } else {
+                stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+                std::cout << "4\t" << stmt;
+            }
         }
     }
 
