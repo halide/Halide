@@ -7,7 +7,7 @@
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -o lesson_12
+// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -lpng -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
 #include <Halide.h>
