@@ -470,6 +470,28 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     }
 }
 
+static string smod_def(string T) {
+    ostringstream ss;
+    ss << T << " __attribute__((overloadable)) smod(" << T << " a, " << T << " b) {\n";
+    ss << T << " r = a % b;\n";
+    ss << "if (r < 0) { r += b < 0 ? -b : b; }\n";
+    ss << "return r;\n";
+    ss << "}\n";
+    return ss.str();
+}
+
+static string sdiv_def(string T) {
+    ostringstream ss;
+    ss << T << " __attribute__((overloadable)) sdiv(" << T << " a, " << T << " b) {\n";
+    ss << T << " q = a / b;\n";
+    ss << T << " r = a - q*b;\n";
+    ss << T << " bs = b >> (8*sizeof(" << T << ") - 1);\n";
+    ss << T << " rs = r >> (8*sizeof(" << T << ") - 1);\n";
+    ss << "return q - (rs&bs) + (rs&~bs);\n";
+    ss << "}\n";
+    return ss.str();
+}
+
 void CodeGen_OpenCL_Dev::init_module() {
     debug(2) << "OpenCL device codegen init_module\n";
 
@@ -489,8 +511,14 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float neg_inf_f32() { return -INFINITY; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
-               << "#define mod(a, b) (((a % b) < 0) ? ((a % b) + b) : (a % b))\n"
-               << "#define sdiv(a, b) ((a - mod(a, b))/b)\n"
+               << smod_def("char") << "\n"
+               << smod_def("short") << "\n"
+               << smod_def("int") << "\n"
+               << smod_def("long") << "\n"
+               << sdiv_def("char") << "\n"
+               << sdiv_def("short") << "\n"
+               << sdiv_def("int") << "\n"
+               << sdiv_def("long") << "\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
