@@ -95,7 +95,7 @@ class SpecializeClampedRamps : public IRMutator {
             stmt = op;
         } else {
             simpler_store = simplify(simpler_store);
-            simpler_store = SpecializeClampedRamps().mutate(simpler_store);
+            simpler_store = mutate(simpler_store);
             Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_store, op);
         }
@@ -111,7 +111,7 @@ class SpecializeClampedRamps : public IRMutator {
             stmt = LetStmt::make(op->name, op->value, body);
         } else {
             Stmt simpler_let = LetStmt::make(op->name, simplify(simpler_value), body);
-            simpler_let = SpecializeClampedRamps().mutate(simpler_let);
+            simpler_let = mutate(simpler_let);
             Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_let, op);
         }
