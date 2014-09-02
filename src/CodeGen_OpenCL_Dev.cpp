@@ -104,6 +104,33 @@ string simt_intrinsic(const string &name) {
 }
 }
 
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " >> " << bits;
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
+    } else {
+        visit_binop(op->type, op->a, op->b, "/");
+    }
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "smod_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
+    } else {
+        visit_binop(op->type, op->a, op->b, "%");
+    }
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
@@ -472,7 +499,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
 
 static string smod_def(string T) {
     ostringstream ss;
-    ss << T << " __attribute__((overloadable)) smod(" << T << " a, " << T << " b) {\n";
+    ss << T << " smod_" << T << "(" << T << " a, " << T << " b) {\n";
     ss << T << " r = a % b;\n";
     ss << "if (r < 0) { r += b < 0 ? -b : b; }\n";
     ss << "return r;\n";
@@ -482,7 +509,7 @@ static string smod_def(string T) {
 
 static string sdiv_def(string T) {
     ostringstream ss;
-    ss << T << " __attribute__((overloadable)) sdiv(" << T << " a, " << T << " b) {\n";
+    ss << T << " sdiv_" << T << "(" << T << " a, " << T << " b) {\n";
     ss << T << " q = a / b;\n";
     ss << T << " r = a - q*b;\n";
     ss << T << " bs = b >> (8*sizeof(" << T << ") - 1);\n";
