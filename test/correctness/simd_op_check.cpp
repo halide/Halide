@@ -1350,14 +1350,49 @@ void check_neon_all() {
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst2.%d", bits);
-                check(op, width/bits, tmp2(0, 0) + tmp2(0, 63));
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
 
     // VST3	X	-	Store three-element structures
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 192; width <= 384; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*3) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                tmp2(x, y) = select(x%3 == 0, tmp1(x/3),
+                                    x%3 == 1, tmp1(x/3 + 16),
+                                    tmp1(x/3 + 32));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst3.%d", bits);
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+            }
+        }
+    }
+
     // VST4	X	-	Store four-element structures
-    // Not supported for now. We need a better syntax for interleaving to take advantage of these
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 256; width <= 512; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*4) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                tmp2(x, y) = select(x%4 == 0, tmp1(x/4),
+                                    x%4 == 1, tmp1(x/4 + 16),
+                                    x%4 == 2, tmp1(x/4 + 32),
+                                    tmp1(x/4 + 48));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst4.%d", bits);
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+            }
+        }
+    }
 
     // VSTM	X	F, D	Store Multiple Registers
     // VSTR	X	F, D	Store Register
