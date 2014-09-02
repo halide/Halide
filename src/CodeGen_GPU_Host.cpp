@@ -176,8 +176,19 @@ protected:
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::glsl_texture_load ||
              op->name == Call::glsl_texture_store)) {
-            internal_assert(op->args[0].as<StringImm>());
-            string bufname = op->args[0].as<StringImm>()->value;
+
+            // The argument to the call is either a StringImm or a broadcasted
+            // StringImm if this is part of a vectorized expression
+
+            const StringImm* string_imm = op->args[0].as<StringImm>();
+            if (!string_imm) {
+                internal_assert(op->args[0].as<Broadcast>());
+                string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+            }
+
+            internal_assert(string_imm);
+
+            string bufname = string_imm->value;
             BufferRef &ref = buffers[bufname];
             ref.type = op->type;
 
