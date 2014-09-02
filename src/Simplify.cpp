@@ -1727,37 +1727,59 @@ private:
                     }
                 }
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   (op->name == Call::shift_left ||
-                    op->name == Call::shift_right)) {
-          Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-          int ib = 0;
+        } else if (op->call_type == Call::Intrinsic) {
+            if (op->name == Call::shift_left ||
+                op->name == Call::shift_right) {
 
-          if (const_castint(b, &ib)) {
-            Type t = op->type;
+                Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+                int ib = 0;
 
-            bool shift_left = op->name == Call::shift_left;
-            if (ib < 0) {
-              shift_left = !shift_left;
-              ib = -ib;
+                if (const_castint(b, &ib)) {
+                    Type t = op->type;
+
+                    bool shift_left = op->name == Call::shift_left;
+                    if (ib < 0) {
+                        shift_left = !shift_left;
+                        ib = -ib;
+                    }
+
+                    if (ib < std::min(t.bits, 32)) {
+                        ib = 1 << ib;
+                        b = make_const(t, ib);
+
+                        if (shift_left) {
+                            expr = mutate(Mul::make(a, b));
+                        } else {
+                            expr = mutate(Div::make(a, b));
+                        }
+
+                        return;
+                    } else {
+                        user_warning << "Cannot replace bit shift with arithmetic "
+                                     << "operator (integer overflow).\n";
+                    }
+                }
+            } else if (op->name == Call::abs) {
+                // Constant evaluate abs(x).
+                Expr a = mutate(op->args[0]);
+                Type ta = a.type();
+                int ia = 0;
+                if (ta.is_int() && const_castint(a, &ia)) {
+                    if (ia < 0) {
+                        ia = -ia;
+                    }
+                    expr = Cast::make(op->type, ia);
+                    return;
+                } else if (ta.is_uint()) {
+                    // abs(uint) is a no-op.
+                    expr = a;
+                    return;
+                }
+                if (!a.same_as(op->args[0])) {
+                    expr = abs(a);
+                    return;
+                }
             }
-
-            if (ib < std::min(t.bits, 32)) {
-              ib = 1 << ib;
-              b = make_const(t, ib);
-
-              if (shift_left) {
-                expr = mutate(Mul::make(a, b));
-              } else {
-                expr = mutate(Div::make(a, b));
-              }
-
-              return;
-            } else {
-              user_warning << "Cannot replace bit shift with arithmetic "
-                           << "operator (integer overflow).\n";
-            }
-          }
         }
 
         IRMutator::visit(op);
