@@ -160,6 +160,26 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
     return true;
 }
 
+bool test_expression(Expr test, int samples) {
+    Expr simplified = simplify(test);
+
+    map<string, Expr> vars;
+    for (int v = 0; v < random_var_count; ++v) {
+        vars[random_vars[v].name()] = Expr();
+    }
+
+    for (int i = 0; i < samples; i++) {
+        for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
+            v->second = random_leaf(test.type().element_of(), true);
+        }
+
+        if (!test_simplification(test, simplified, test.type(), vars)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 int main(int argc, char **argv) {
     // Number of random expressions to test.
     const int count = 1000;
@@ -186,11 +206,6 @@ int main(int argc, char **argv) {
 
     int max_fuzz_vector_width = 4;
 
-    map<string, Expr> vars;
-    for (int v = 0; v < random_var_count; ++v) {
-        vars[random_vars[v].name()] = Expr();
-    }
-
     for (size_t i = 0; i < sizeof(fuzz_types)/sizeof(fuzz_types[0]); i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
@@ -198,18 +213,7 @@ int main(int argc, char **argv) {
             for (int n = 0; n < count; n++) {
                 // Generate a random expr...
                 Expr test = random_expr(VT, depth);
-                // And simplify it.
-                Expr simplified = simplify(test);
-
-                for (int i = 0; i < samples; i++) {
-                    for (std::map<string, Expr>::iterator v = vars.begin(); v != vars.end(); v++) {
-                        v->second = random_leaf(T, true);
-                    }
-
-                    if (!test_simplification(test, simplified, VT, vars)) {
-                        return -1;
-                    }
-                }
+                test_expression(test, samples);
             }
         }
     }
