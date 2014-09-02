@@ -1,6 +1,7 @@
 #include "SpecializeClampedRamps.h"
 #include "IRMutator.h"
 #include "IROperator.h"
+#include "Simplify.h"
 #include "Substitute.h"
 
 namespace Halide {
@@ -93,7 +94,9 @@ class SpecializeClampedRamps : public IRMutator {
         if (simpler_store.same_as(op)) {
             stmt = op;
         } else {
-            Expr predicate = p.min_predicate && p.max_predicate;
+            simpler_store = simplify(simpler_store);
+            simpler_store = SpecializeClampedRamps().mutate(simpler_store);
+            Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_store, op);
         }
     }
@@ -107,8 +110,9 @@ class SpecializeClampedRamps : public IRMutator {
         } else if (simpler_value.same_as(op->value)) {
             stmt = LetStmt::make(op->name, op->value, body);
         } else {
-            Stmt simpler_let = LetStmt::make(op->name, simpler_value, body);
-            Expr predicate = p.min_predicate && p.max_predicate;
+            Stmt simpler_let = LetStmt::make(op->name, simplify(simpler_value), body);
+            simpler_let = SpecializeClampedRamps().mutate(simpler_let);
+            Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_let, op);
         }
     }
