@@ -8,14 +8,17 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 Var a("a"), b("b"), c("c"), d("d"), e("e");
-Var random_vars[] = { a, b, c, d, e };
-const int random_var_count = sizeof(random_vars)/sizeof(random_vars[0]);
+Var fuzz_vars[] = { a, b, c, d, e };
+const int fuzz_var_count = sizeof(fuzz_vars)/sizeof(fuzz_vars[0]);
+
+Type fuzz_types[] = { Int(16), UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
+const int fuzz_type_count = sizeof(fuzz_types)/sizeof(fuzz_types[0]);
 
 Expr random_leaf(Type T, bool imm_only = false) {
     if (T.is_scalar()) {
-        int var = rand()%random_var_count + 1;
-        if (!imm_only && var < random_var_count) {
-            return cast(T, random_vars[var]);
+        int var = rand()%fuzz_var_count + 1;
+        if (!imm_only && var < fuzz_var_count) {
+            return cast(T, fuzz_vars[var]);
         } else {
             if (T == Int(32)) {
                 // For Int(32), we don't care about correctness during
@@ -87,33 +90,32 @@ Expr random_expr(Type T, int depth) {
                                 random_expr(T, depth),
                                 random_expr(T, depth));
 
-        // Ramp/Broadcast
     case 2:
+        if (T.width != 1) {
+            return Broadcast::make(random_expr(T.element_of(), depth),
+                                   T.width);
+        }
+        break;
     case 3:
         if (T.width != 1) {
-            if (op == 3) {
-                return Ramp::make(random_expr(T.element_of(), depth),
-                                  random_expr(T.element_of(), depth),
-                                  T.width);
-            } else {
-                return Broadcast::make(random_expr(T.element_of(), depth),
-                                       T.width);
-            }
+            return Ramp::make(random_expr(T.element_of(), depth),
+                              random_expr(T.element_of(), depth),
+                              T.width);
         }
-        return random_expr(T, depth);
+        break;
 
     case 4:
         if (T.is_bool()) {
             return Not::make(random_expr(T, depth));
-        } else {
-            return random_expr(T, depth);
         }
+        break;
+
     case 5:
+        // When generating boolean expressions, maybe throw in a condition on non-bool types.
         if (T.is_bool()) {
             return random_condition(T, depth);
-        } else {
-            return random_expr(T, depth);
         }
+        break;
 
     default:
         make_bin_op_fn maker;
@@ -126,6 +128,8 @@ Expr random_expr(Type T, int depth) {
         Expr b = random_expr(T, depth);
         return maker(a, b);
     }
+    // If we got here, try again.
+    return random_expr(T, depth);
 }
 
 bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) {
@@ -164,8 +168,8 @@ bool test_expression(Expr test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
-    for (int v = 0; v < random_var_count; ++v) {
-        vars[random_vars[v].name()] = Expr();
+    for (int v = 0; v < fuzz_var_count; ++v) {
+        vars[fuzz_vars[v].name()] = Expr();
     }
 
     for (int i = 0; i < samples; i++) {
@@ -194,19 +198,9 @@ int main(int argc, char **argv) {
     srand(fuzz_seed);
     std::cout << "Simplify fuzz test seed: " << fuzz_seed << '\n';
 
-    Type fuzz_types[] = {
-        Int(8),
-        Int(16),
-        Int(32),
-        UInt(1),
-        UInt(8),
-        UInt(16),
-        UInt(32),
-    };
-
     int max_fuzz_vector_width = 4;
 
-    for (size_t i = 0; i < sizeof(fuzz_types)/sizeof(fuzz_types[0]); i++) {
+    for (size_t i = 0; i < fuzz_type_count; i++) {
         Type T = fuzz_types[i];
         for (int w = 1; w < max_fuzz_vector_width; w *= 2) {
             Type VT = T.vector_of(w);
