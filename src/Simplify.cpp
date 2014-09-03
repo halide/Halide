@@ -1777,7 +1777,7 @@ private:
                 Expr a = mutate(op->args[0]);
                 Type ta = a.type();
                 int ia = 0;
-                if (ta.is_int() && const_castint(a, &ia)) {
+                if (ta.is_int() && const_castint(a, &ia) && ia != ta.imin()) {
                     if (ia < 0) {
                         ia = -ia;
                     }
