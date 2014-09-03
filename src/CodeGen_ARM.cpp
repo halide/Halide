@@ -1168,14 +1168,34 @@ void CodeGen_ARM::visit(const Store *op) {
     }
     const Call *call = rhs.as<Call>();
 
+    // Interleaving store instructions only exist for certain types.
+    bool type_ok_for_vst = false;
+    if (call && !call->args.empty()) {
+        Type t = call->args[0].type();
+        type_ok_for_vst =
+            (t == UInt(8, 16) || t == UInt(8, 8) ||
+             t == UInt(16, 8) || t == UInt(16, 4) ||
+             t == UInt(32, 4) || t == UInt(32, 2) ||
+             t == UInt(64, 2) || t == UInt(64, 1) ||
+             t == Int(8, 16) || t == Int(8, 8) ||
+             t == Int(16, 8) || t == Int(16, 4) ||
+             t == Int(32, 4) || t == Int(32, 2) ||
+             t == Int(64, 2) || t == Int(64, 1) ||
+             t == Float(32, 2) || t == Float(32, 4));
+    }
+
     if (is_one(ramp->stride) &&
         call && call->call_type == Call::Intrinsic &&
         call->name == Call::interleave_vectors &&
-        0 < call->args.size() && call->args.size() <= 4) {
+        type_ok_for_vst &&
+        2 <= call->args.size() && call->args.size() <= 4) {
+
         const int num_vecs = call->args.size();
         vector<Value *> args(num_vecs + 1);
 
         Type t = call->args[0].type();
+
+        // Assume element-aligned.
         int alignment = t.bytes();
 
         Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), ramp->base);
@@ -1193,23 +1213,16 @@ void CodeGen_ARM::visit(const Store *op) {
 
         args.push_back(ConstantInt::get(i32, alignment));
 
-        bool valid = true;
         std::ostringstream instr;
         instr << "vst" << num_vecs << ".v" << t.width;
-        internal_assert(num_vecs != 1);
-        if (t.code == Type::Int || t.code == Type::UInt) {
-            instr << "i" << t.bits;
-        } else if (t.code == Type::Float) {
+        if (t.is_float()) {
             instr << "f" << t.bits;
         } else {
-            CodeGen::visit(op);
-            valid = false;
+            instr << "i" << t.bits;
         }
 
-        if (valid) {
-            Instruction *store = call_void_intrin(instr.str(), args);
-            add_tbaa_metadata(store, op->name, op->index);
-        }
+        Instruction *store = call_void_intrin(instr.str(), args);
+        add_tbaa_metadata(store, op->name, op->index);
 
         for (size_t i = 0; i < lets.size(); i++) {
             sym_pop(lets[i].first);

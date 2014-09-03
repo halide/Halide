@@ -27,6 +27,8 @@ typedef unsigned __INT8_TYPE__ uint8_t;
 typedef __SIZE_TYPE__ size_t;
 typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
+typedef ptrdiff_t ssize_t;
+
 #define NULL 0
 #define WEAK __attribute__((weak))
 
@@ -54,6 +56,9 @@ typedef __builtin_va_list va_list;
 namespace Halide { namespace Runtime { namespace Internal {}}}
 using namespace Halide::Runtime::Internal;
 
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+
 // Commonly-used extern functions
 extern "C" {
 int64_t halide_current_time_ns(void *user_context);
@@ -71,6 +76,11 @@ char *strchr(const char* s, char c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);
+int open(const char *filename, int opts, int mode);
+int close(int fd);
+ssize_t write(int fd, const void *buf, size_t bytes);
+int vsnprintf(char *, size_t, const char *, va_list);
+void exit(int);
 
 }
 

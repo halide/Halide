@@ -10,8 +10,9 @@
 #endif
 
 // LLVM is moving to MCJIT as the only JIT, however MCJIT doesn't seem
-// to work right on os x or windows for some older versions of llvm.
-#if LLVM_VERSION >= 36 || (!defined(__APPLE__) && !defined(_WIN32))
+// to work right on os x for some older versions of llvm, and doesn't
+// work on Windows at all.
+#if LLVM_VERSION >= 36 || (!defined(_WIN32) && !defined(__APPLE__))
 #define USE_MCJIT
 #endif
 
