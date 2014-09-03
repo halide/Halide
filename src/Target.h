@@ -81,6 +81,9 @@ struct Target {
         OpenGL,  ///< Enable the OpenGL runtime.
     };
 
+        // NOTE: Changes to this enum must be reflected in the definition of
+        // to_string()!
+
     /** A bitmask that stores the active features. */
     typedef Internal::BitSet<Features> FeatureSet;
     FeatureSet features;

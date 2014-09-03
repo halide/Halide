@@ -332,6 +332,7 @@ std::string Target::to_string() const {
   const char* const os_names[] = {
       "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
+  // The contents of this array must match Target::Features.
   const char* const feature_names[] = {
       "jit", "gpu_debug", "no_asserts", "no_bounds_query",
       "sse41", "avx", "avx2", "fma", "fma4", "f16c",
