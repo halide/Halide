@@ -350,12 +350,27 @@ std::string Target::to_string() const {
 }
 
 namespace {
-llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMContext *context) {
-    #if LLVM_VERSION < 35
-    return llvm::ParseBitcodeFile(bitcode_buffer, *context);
+llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context, const char *id) {
+
+    #if LLVM_VERSION >= 36
+    llvm::MemoryBufferRef bitcode_buffer = llvm::MemoryBufferRef(buf, id);
     #else
-    return llvm::parseBitcodeFile(bitcode_buffer, *context).get();
+    llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(buf);
     #endif
+
+    #if LLVM_VERSION >= 35
+    llvm::Module *mod = llvm::parseBitcodeFile(bitcode_buffer, *context).get();
+    #else
+    llvm::Module *mod = llvm::ParseBitcodeFile(bitcode_buffer, *context);
+    #endif
+
+    #if LLVM_VERSION < 36
+    delete bitcode_buffer;
+    #endif
+
+    mod->setModuleIdentifier(id);
+
+    return mod;
 }
 }
 
@@ -365,10 +380,7 @@ llvm::Module *parse_bitcode_file(llvm::MemoryBuffer *bitcode_buffer, llvm::LLVMC
     llvm::Module *get_initmod_##mod(llvm::LLVMContext *context) {      \
         llvm::StringRef sb = llvm::StringRef((const char *)halide_internal_initmod_##mod, \
                                              halide_internal_initmod_##mod##_length); \
-        llvm::MemoryBuffer *bitcode_buffer = llvm::MemoryBuffer::getMemBuffer(sb); \
-        llvm::Module *module = parse_bitcode_file(bitcode_buffer, context); \
-        module->setModuleIdentifier(#mod);                              \
-        delete bitcode_buffer;                                          \
+        llvm::Module *module = parse_bitcode_file(sb, context, #mod);   \
         return module;                                                  \
     }
 
@@ -416,14 +428,12 @@ DECLARE_CPP_INITMOD(windows_opencl_debug)
 DECLARE_CPP_INITMOD(opengl)
 DECLARE_CPP_INITMOD(opengl_debug)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
-DECLARE_CPP_INITMOD(osx_io)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
 DECLARE_CPP_INITMOD(windows_clock)
 DECLARE_CPP_INITMOD(osx_clock)
 DECLARE_CPP_INITMOD(posix_error_handler)
 DECLARE_CPP_INITMOD(posix_io)
-DECLARE_CPP_INITMOD(nacl_io)
 DECLARE_CPP_INITMOD(ssp)
 DECLARE_CPP_INITMOD(windows_io)
 DECLARE_CPP_INITMOD(posix_math)
@@ -613,6 +623,44 @@ void undo_win32_name_mangling(llvm::Module *m) {
     }
 }
 
+void add_underscore_to_posix_call(llvm::CallInst *call, llvm::Function *fn, llvm::Module *m) {
+    string new_name = "_" + fn->getName().str();
+    llvm::Function *alt = m->getFunction(new_name);
+    if (!alt) {
+        alt = llvm::Function::Create(fn->getFunctionType(),
+                                     llvm::GlobalValue::ExternalLinkage,
+                                     new_name, m);
+    }
+    internal_assert(alt->getName() == new_name);
+    call->setCalledFunction(alt);
+}
+
+/** Windows uses _close, _open, _write, etc instead of the posix
+ * names. Defining stubs that redirect causes mis-compilations inside
+ * of mcjit, so we just rewrite uses of these functions to include an
+ * underscore. */
+void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
+    string posix_fns[] = {"vsnprintf", "open", "close", "write"};
+
+    string *posix_fns_begin = posix_fns;
+    string *posix_fns_end = posix_fns + sizeof(posix_fns) / sizeof(posix_fns[0]);
+
+    for (llvm::Module::iterator iter = m->begin(); iter != m->end(); ++iter) {
+        for (llvm::Function::iterator f_iter = iter->begin(); f_iter != iter->end(); ++f_iter) {
+            for (llvm::BasicBlock::iterator b_iter = f_iter->begin(); b_iter != f_iter->end(); ++b_iter) {
+                llvm::Value *inst = (llvm::Value *)b_iter;
+                if (llvm::CallInst *call = llvm::dyn_cast<llvm::CallInst>(inst)) {
+                    if (llvm::Function *fn = call->getCalledFunction()) {
+                        if (std::find(posix_fns_begin, posix_fns_end, fn->getName()) != posix_fns_end) {
+                            add_underscore_to_posix_call(call, fn, m);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** Create an llvm module containing the support code for a given target. */
 llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
@@ -632,7 +680,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
     } else if (t.os == Target::OSX) {
         modules.push_back(get_initmod_osx_clock(c, bits_64));
-        modules.push_back(get_initmod_osx_io(c, bits_64));
+        modules.push_back(get_initmod_posix_io(c, bits_64));
         modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
     } else if (t.os == Target::Android) {
         modules.push_back(get_initmod_android_clock(c, bits_64));
@@ -649,7 +697,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
     } else if (t.os == Target::NaCl) {
         modules.push_back(get_initmod_posix_clock(c, bits_64));
-        modules.push_back(get_initmod_nacl_io(c, bits_64));
+        modules.push_back(get_initmod_posix_io(c, bits_64));
         modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64));
         modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
         modules.push_back(get_initmod_ssp(c, bits_64));
@@ -747,6 +795,10 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         t.bits == 32 &&
         (t.features & Target::JIT)) {
         undo_win32_name_mangling(modules[0]);
+    }
+
+    if (t.os == Target::Windows) {
+        add_underscores_to_posix_calls_on_windows(modules[0]);
     }
 
     return modules[0];

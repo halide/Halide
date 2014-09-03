@@ -761,7 +761,7 @@ WEAK int halide_opengl_dev_sync(void *user_context) {
 // indicating that the OpenGL object corresponding to the buffer_t is bound by
 // the app and not by the halide runtime. For example, the buffer_t may be
 // backed by an FBO already bound by the application.
-WEAK uint64_t halide_opengl_output_client_bound(void) {
+WEAK uint64_t halide_opengl_output_client_bound() {
   return HALIDE_GLSL_CLIENT_BOUND;
 }
 
@@ -987,19 +987,11 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
 WEAK void set_int_param(void *user_context, const char *name,
                         GLint loc, GLint value) {
-    #ifdef DEBUG
-    halide_printf(user_context, "Setting int %s = %d (loc=%d)\n",
-        name, value, loc);
-    #endif
     ST.Uniform1iv(loc, 1, &value);
 }
 
 WEAK void set_float_param(void *user_context, const char *name,
                           GLint loc, GLfloat value) {
-    #ifdef DEBUG
-    halide_printf(user_context, "Setting float %s = %g (loc=%d)\n",
-        name, value, loc);
-    #endif
     ST.Uniform1fv(loc, 1, &value);
 }
 
@@ -1048,11 +1040,9 @@ WEAK int halide_opengl_dev_run(
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
             GLuint tex = *((GLuint *)args[i]);
-
             if (tex == (GLuint)HALIDE_GLSL_CLIENT_BOUND) {
                 bind_render_targets = false;
             }
-
             // Outbuf textures are handled explicitly below
             continue;
         } else if (kernel_arg->kind == ARGKIND_INBUF) {
@@ -1167,7 +1157,6 @@ WEAK int halide_opengl_dev_run(
 #ifdef DEBUG
             halide_printf(user_context, "Output texture %d: %d\n", num_output_textures, tex);
 #endif
-
             ST.FramebufferTexture2D(GL_FRAMEBUFFER,
                                     GL_COLOR_ATTACHMENT0 + num_output_textures,
                                     GL_TEXTURE_2D, tex, 0);
