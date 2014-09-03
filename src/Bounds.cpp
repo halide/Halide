@@ -21,6 +21,24 @@ using std::vector;
 using std::string;
 using std::pair;
 
+namespace {
+int static_sign(Expr x) {
+    if (is_positive_const(x)) {
+        return 1;
+    } else if (is_negative_const(x)) {
+        return -1;
+    } else {
+        Expr zero = make_zero(x.type());
+        if (equal(const_true(), simplify(x > zero))) {
+            return 1;
+        } else if (equal(const_true(), simplify(x < zero))) {
+            return -1;
+        }
+    }
+    return 0;
+}
+}
+
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
@@ -377,7 +395,7 @@ private:
             return;
         }
 
-        if (min_b.same_as(max_b)) {
+        if (equal(min_b, max_b)) {
             if (is_zero(min_b)) {
                 // Divide by zero. Drat.
                 min = Expr();
@@ -398,13 +416,9 @@ private:
             }
         } else {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
-            bool min_is_positive = is_positive_const(min_b) ||
-                equal(const_true(), simplify(min_b > make_zero(min_b.type())));
-            bool max_is_negative = is_negative_const(max_b) ||
-                equal(const_true(), simplify(max_b < make_zero(max_b.type())));
-            if (!equal(min_b, max_b) &&
-                !min_is_positive &&
-                !max_is_negative) {
+            int min_sign = static_sign(min_b);
+            int max_sign = static_sign(max_b);
+            if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
                 min = Expr();
                 max = Expr();
                 return;
