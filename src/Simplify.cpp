@@ -153,18 +153,13 @@ private:
             // outer cast is narrower, the inner cast can be
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
-        } else if (cast && const_castint(cast->value, &i) &&
-                   (cast->type.is_int() || i >= 0)) {
+        } else if (cast && const_castint(cast->value, &i)) {
             // cast of cast of const int can just be cast of const
             // int (with the int suitably munged to fit in the
             // intermediate type).
             // u16(u8(255)) -> u16(255)
-
-            // However, this only works if the returned bits fit into
-            // the intermediate type, which fails when casting
-            // negative 32-bit values to unsigned.
-
-            expr = mutate(Cast::make(op->type, i));
+            // u16(u8(257)) -> u16(1)
+            expr = mutate(Cast::make(op->type, do_indirect_int_cast(cast->type, i)));
         } else if (op->type == Int(32) && cast && const_int(cast->value, &i)) {
             // Cast to something then back to int
             expr = do_indirect_int_cast(cast->type, i);
@@ -1220,7 +1215,6 @@ private:
     void visit(const EQ *op) {
         Expr delta = mutate(op->a - op->b);
 
-        const Ramp *ramp = delta.as<Ramp>();
         const Broadcast *broadcast = delta.as<Broadcast>();
         const Add *add = delta.as<Add>();
         const Sub *sub = delta.as<Sub>();
@@ -1231,7 +1225,25 @@ private:
         if (is_zero(delta)) {
             expr = const_true(op->type.width);
             return;
-        } else if (delta.type() == Int(32) && !is_const(delta)) {
+        } else if (is_const(delta)) {
+            bool t = true;
+            bool f = true;
+            for (int i = 0; i < delta.type().width; i++) {
+                Expr deltai = extract_lane(delta, i);
+                if (is_zero(deltai)) {
+                    f = false;
+                } else {
+                    t = false;
+                }
+            }
+            if (t) {
+                expr = const_true(op->type.width);
+                return;
+            } else if (f) {
+                expr = const_false(op->type.width);
+                return;
+            }
+        } else if (delta.type() == Int(32)) {
             // Attempt to disprove using modulus remainder analysis
             ModulusRemainder mod_rem = modulus_remainder(delta, alignment_info);
             if (mod_rem.remainder) {
@@ -1255,10 +1267,7 @@ private:
             }
         }
 
-        if (is_const(delta) && !ramp) {
-            // We checked for zero already
-            expr = const_false(op->type.width);
-        } else if (broadcast) {
+        if (broadcast) {
             // Push broadcasts outwards
             expr = Broadcast::make(mutate(broadcast->value ==
                                           make_zero(broadcast->value.type())),
