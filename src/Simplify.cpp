@@ -139,6 +139,7 @@ private:
     void visit(const Cast *op) {
         Expr value = mutate(op->value);
         const Cast *cast = value.as<Cast>();
+        const Broadcast *broadcast_value = value.as<Broadcast>();
         float f = 0.0f;
         int i = 0;
         if (value.type() == op->type) {
@@ -175,6 +176,9 @@ private:
             // 0), so any later peephole matching that ignores casts
             // doesn't get confused.
             expr = Cast::make(op->type, do_indirect_int_cast(op->type, i));
+        } else if (broadcast_value) {
+            // cast(broadcast(x)) -> broadcast(cast(x))
+            expr = mutate(Broadcast::make(Cast::make(op->type.element_of(), broadcast_value->value), broadcast_value->width));
         } else if (value.same_as(op->value)) {
             expr = op;
         } else {
