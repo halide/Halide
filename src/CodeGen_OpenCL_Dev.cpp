@@ -575,7 +575,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     // __shared always has address space __local.
     src_stream << "#define __address_space___shared __local\n";
 
-    if ((target.features & Target::CLDoubles) != 0) {
+    if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
         src_stream << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"

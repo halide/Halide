@@ -2150,7 +2150,7 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
 
 void CodeGen::create_assertion(Value *cond, const string &message, const vector<Value *> &args) {
 
-    if (target.features & Halide::Target::NoAsserts) return;
+    if (target.has_feature(Halide::Target::NoAsserts)) return;
 
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
