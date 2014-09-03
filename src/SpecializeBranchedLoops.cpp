@@ -23,8 +23,8 @@ bool is_inequality(Expr cond) {
 }
 
 struct Branch {
+    bool then_first;
     Expr min;
-    Expr extent;
     Stmt then_case;
     Stmt else_case;
 };
@@ -58,27 +58,23 @@ private:
                     const GE *ge = solve.as<GE>();
 
                     if (lt) {
-                        Expr lhs = lt->b;
-                        Branch b = {for_loop->min, simplify(lhs - for_loop->min),
-                                    op->then_case, op->else_case};
+                        Expr rhs = lt->b;
+                        Branch b = {true, simplify(rhs), op->then_case, op->else_case};
                         loops[i].branch = b;
                         loops[i].has_branch = true;
                     } else if (gt) {
-                        Expr lhs = gt->b;
-                        Branch b = {simplify(lhs + 1), for_loop->extent,
-                                    op->then_case, op->else_case};
+                        Expr rhs = gt->b;
+                        Branch b = {false, simplify(rhs), op->then_case, op->else_case};
                         loops[i].branch = b;
                         loops[i].has_branch = true;
                     } else if (le) {
-                        Expr lhs = le->b;
-                        Branch b = {for_loop->min, simplify(lhs - for_loop->min),
-                                    op->then_case, op->else_case};
+                        Expr rhs = le->b;
+                        Branch b = {true, simplify(rhs + 1), op->then_case, op->else_case};
                         loops[i].branch = b;
                         loops[i].has_branch = true;
                     } else /*if (ge)*/ {
-                        Expr lhs = ge->b;
-                        Branch b = {lhs, for_loop->extent,
-                                    op->then_case, op->else_case};
+                        Expr rhs = ge->b;
+                        Branch b = {false, simplify(rhs + 1), op->then_case, op->else_case};
                         loops[i].branch = b;
                         loops[i].has_branch = true;
                     }
@@ -120,21 +116,23 @@ private:
             Stmt first;
             Stmt second;
 
-            if (branch.min.same_as(op->min)) {
-                first  = For::make(op->name, branch.min, branch.extent, op->for_type, branch.then_case);
+            Expr first_min = op->min;
+            Expr second_min = branch.min;
+            Expr first_extent = simplify(second_min - first_min);
+            Expr second_extent = simplify(op->extent - first_extent);
+
+            if (branch.then_first) {
+                first = For::make(op->name, first_min, first_extent, op->for_type, branch.then_case);
 
                 if (branch.else_case.defined()) {
-                    Expr second_min = simplify(branch.min + branch.extent);
-                    Expr second_extent = simplify(op->extent - branch.extent);
                     second = For::make(op->name, second_min, second_extent, op->for_type, branch.else_case);
                 }
             } else {
                 if (branch.else_case.defined()) {
-                    Expr first_extent = simplify(branch.min - op->min);
-                    first  = For::make(op->name, op->min, first_extent, op->for_type, branch.else_case);
+                    first  = For::make(op->name, first_min, first_extent, op->for_type, branch.else_case);
                 }
 
-                second = For::make(op->name, branch.min, branch.extent, op->for_type, branch.then_case);
+                second = For::make(op->name, second_min, second_extent, op->for_type, branch.then_case);
             }
 
             if (first.defined() && second.defined()) {
