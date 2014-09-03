@@ -16,6 +16,8 @@ class LLVMContext;
 
 namespace Halide {
 
+namespace Internal {
+
 template <class T>
 class BitSet {
 public:
@@ -34,6 +36,8 @@ private:
 
     uint64_t flags;
 };
+
+}  // namespace Internal
 
 /** A struct representing a target machine and os to generate code for. */
 struct Target {
@@ -78,7 +82,7 @@ struct Target {
     };
 
     /** A bitmask that stores the active features. */
-    typedef BitSet<Features> FeatureSet;
+    typedef Internal::BitSet<Features> FeatureSet;
     FeatureSet features;
 
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
