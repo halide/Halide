@@ -24,11 +24,12 @@ public:
     BitSet() : flags(0) {}
     BitSet(T val) : flags(to_mask(val)) {}
 
-    BitSet<T> operator|(T val) { BitSet<T> tmp(*this); tmp.set(val); return tmp; }
     BitSet<T> &set(T val) { flags |= to_mask(val); return *this; }
-    BitSet<T> &operator|=(T val) { return set(val); }
+    BitSet<T> &reset(T val) { flags &= ~to_mask(val); return *this; }
+    bool test(T val) const { return (flags & to_mask(val)) != 0; }
 
-    bool is_set(T val) const { return (flags & to_mask(val)) != 0; }
+    BitSet<T> operator|(T val) { BitSet<T> tmp(*this); tmp.set(val); return tmp; }
+    BitSet<T> &operator|=(T val) { return set(val); }
 
     bool operator==(const BitSet<T> &other) const { return flags == other.flags; }
 private:
@@ -79,10 +80,10 @@ struct Target {
         CLDoubles,  ///< Enable double support on OpenCL targets
 
         OpenGL,  ///< Enable the OpenGL runtime.
-    };
 
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
+    };
 
     /** A bitmask that stores the active features. */
     typedef Internal::BitSet<Features> FeatureSet;
@@ -92,7 +93,7 @@ struct Target {
     Target(OS o, Arch a, int b, const FeatureSet &f) : os(o), arch(a), bits(b), features(f) {}
 
     bool has_feature(Features f) const {
-        return features.is_set(f);
+        return features.test(f);
     }
 
     /** Is OpenCL or CUDA enabled in this target? I.e. is
