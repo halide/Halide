@@ -196,21 +196,33 @@ public:
 
         // If we realize curved into a Halide::Image, that will
         // unfairly penalize GPU performance by including a GPU->CPU
-        // copy. Halide::Image objects always exist on the CPU.
+        // copy in every run. Halide::Image objects always exist on
+        // the CPU.
 
         // Halide::Buffer, however, represents a buffer that may
-        // exist on either CPU or GPU or both. Constructing an
-        // Image using a Buffer forces the copy-back from the GPU.
+        // exist on either CPU or GPU or both.
         Buffer output(UInt(8), input.width(), input.height(), input.channels());
 
-        // Take the best of several runs.
+        // Run the filter once to initialize any GPU runtime state.
+        curved.realize(output);
+
+        // Now take the best of 3 runs for timing.
         double best_time;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 3; i++) {
+
             double t1 = current_time();
-            curved.realize(output);
+
+            // Run the filter 100 times.
+            for (int j = 0; j < 100; j++) {
+                curved.realize(output);
+            }
+
+            // Force any GPU code to finish by copying the buffer back to the CPU.
+            output.copy_to_host();
+
             double t2 = current_time();
 
-            double elapsed = t2 - t1;
+            double elapsed = (t2 - t1)/100;
             if (i == 0 || elapsed < best_time) {
                 best_time = elapsed;
             }
