@@ -67,8 +67,7 @@ Type map_type(const Type &type) {
 // Most GLSL builtins are only defined for float arguments, so we may have to
 // introduce type casts around the arguments and the entire function call.
 // TODO: handle vector types
-Expr call_builtin(const Type &result_type,
-                  const std::string &func,
+Expr call_builtin(const Type &result_type, const std::string &func,
                   const std::vector<Expr> &args) {
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -481,10 +480,8 @@ void CodeGen_GLSL::visit(const Call *op) {
             // Determine the halide buffer associated with this load
             string buffername = string_imm->value;
 
-            internal_assert(op->type == UInt(8, 1) || op->type == UInt(8, 2) ||
-                            op->type == UInt(8, 3) || op->type == UInt(8, 4) ||
-                            op->type == UInt(16, 1) || op->type == UInt(16, 2) ||
-                            op->type == UInt(16, 3) || op->type == UInt(16, 4));
+            internal_assert((op->type.code == Type::UInt || op->type.code == Type::Float) &&
+                            (op->type.width >= 1 && op->type.width <= 4));
 
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
@@ -493,15 +490,19 @@ void CodeGen_GLSL::visit(const Call *op) {
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
                 << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
-                << get_vector_suffix(op->args[4])
-                << " * " << op->type.imax() << ".0";
+                << get_vector_suffix(op->args[4]);
+            if (op->type.is_uint())
+                rhs << " * " << op->type.imax() << ".0";
 
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
-                   << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
+                   << " = " << sval;
+            if (op->args[5].type().is_uint())
+                stream << " / " << op->args[5].type().imax() << ".0";
+            stream << ";\n";
             // glsl_texture_store is called only for its side effect; there is
             // no return value.
             id = "";
@@ -577,11 +578,18 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
             user_assert(args[i].read != args[i].write) <<
                 "GLSL: buffers may only be read OR written inside a kernel loop.\n";
-            user_assert(t == UInt(8) || t == UInt(16)) <<
-                "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
+            std::string type_name;
+            if (t == UInt(8)) {
+                type_name = "uint8_t";
+            } else if (t == UInt(16)) {
+                type_name = "uint16_t";
+            } else if (t == Float(32)) {
+                type_name = "float";
+            } else {
+                user_error << "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
+            }
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
-                   << (t == UInt(8) ? "uint8_t " : "uint16_t ")
-                   << print_name(args[i].name) << "\n";
+                   << type_name << " " << print_name(args[i].name) << "\n";
         } else {
             header << "/// VAR "
                    << CodeGen_C::print_type(args[i].type) << " "
