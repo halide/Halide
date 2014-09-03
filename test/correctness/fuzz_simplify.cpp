@@ -7,18 +7,32 @@ using namespace std;
 using namespace Halide;
 using namespace Halide::Internal;
 
-Var a("a"), b("b"), c("c"), d("d"), e("e");
-Var fuzz_vars[] = { a, b, c, d, e };
-const int fuzz_var_count = sizeof(fuzz_vars)/sizeof(fuzz_vars[0]);
+const int fuzz_var_count = 5;
 
 Type fuzz_types[] = { Int(16), UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
 const int fuzz_type_count = sizeof(fuzz_types)/sizeof(fuzz_types[0]);
+
+std::string fuzz_var(int i) {
+    return std::string(1, 'a' + i);
+}
+
+Expr random_var() {
+    return Variable::make(Int(0), fuzz_var(rand()%fuzz_var_count));
+}
+
+Type random_type(int width) {
+    Type T = fuzz_types[rand()%fuzz_type_count];
+    if (width > 1) {
+        T = T.vector_of(width);
+    }
+    return T;
+}
 
 Expr random_leaf(Type T, bool imm_only = false) {
     if (T.is_scalar()) {
         int var = rand()%fuzz_var_count + 1;
         if (!imm_only && var < fuzz_var_count) {
-            return cast(T, fuzz_vars[var]);
+            return cast(T, random_var());
         } else {
             if (T == Int(32)) {
                 // For Int(32), we don't care about correctness during
@@ -117,6 +131,9 @@ Expr random_expr(Type T, int depth) {
         }
         break;
 
+    case 6:
+        return Cast::make(T, random_expr(random_type(T.width), depth));
+
     default:
         make_bin_op_fn maker;
         if (T.is_bool()) {
@@ -168,8 +185,8 @@ bool test_expression(Expr test, int samples) {
     Expr simplified = simplify(test);
 
     map<string, Expr> vars;
-    for (int v = 0; v < fuzz_var_count; ++v) {
-        vars[fuzz_vars[v].name()] = Expr();
+    for (int i = 0; i < fuzz_var_count; i++) {
+        vars[fuzz_var(i)] = Expr();
     }
 
     for (int i = 0; i < samples; i++) {
@@ -207,7 +224,9 @@ int main(int argc, char **argv) {
             for (int n = 0; n < count; n++) {
                 // Generate a random expr...
                 Expr test = random_expr(VT, depth);
-                test_expression(test, samples);
+                if (!test_expression(test, samples)) {
+                    return -1;
+                }
             }
         }
     }
