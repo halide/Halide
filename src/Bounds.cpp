@@ -457,7 +457,11 @@ private:
         } else {
             // Only consider B (so A can be undefined)
             min = make_zero(op->type);
-            max = cast(op->type, abs(max_b));
+            if (max_b.type().is_uint()) {
+                max = max_b;
+            } else {
+                max = cast(op->type, abs(max_b));
+            }
             if (!max.type().is_float()) {
                 // Integer modulo returns at most one less than the
                 // second arg.
