@@ -628,7 +628,7 @@ int main(int argc, char **argv) {
     Func bench_r2cT = fft2d_r2cT(r2cT_in, W, H);
     // Due to padding for vectorization, this has asserts that fail,
     // but are harmless (padding is overwritten, but no more).
-    if ((target.features & Target::NoAsserts) == 0) {
+    if (!target.has_feature(Target::NoAsserts)) {
         Func clamp_r2cT;
         clamp_r2cT(x, y, rep) = bench_r2cT(clamp(x, 0, H/2), y, rep);
         clamp_r2cT.compute_root().vectorize(x, 8);

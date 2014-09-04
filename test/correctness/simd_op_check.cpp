@@ -1473,9 +1473,9 @@ int main(int argc, char **argv) {
 
     target = get_target_from_environment();
 
-    use_avx2 = target.features & Target::AVX2;
-    use_avx = use_avx2 | (target.features & Target::AVX);
-    use_sse41 = use_avx | (target.features & Target::SSE41);
+    use_avx2 = target.has_feature(Target::AVX2);
+    use_avx = use_avx2 || target.has_feature(Target::AVX);
+    use_sse41 = use_avx || target.has_feature(Target::SSE41);
 
     // There's no separate target for SSSE3; we currently enable it in
     // lockstep with SSE4.1
