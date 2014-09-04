@@ -5,6 +5,7 @@
 // ---------- OpenGL core (1.3 and earlier) ----------
 
 typedef char GLchar;
+typedef unsigned char GLubyte;
 typedef unsigned int GLenum;
 typedef unsigned char GLboolean;
 typedef int GLint;
@@ -40,6 +41,7 @@ typedef void GLvoid;
 #define GL_RGB 0x1907
 #define GL_RGBA 0x1908
 #define GL_LUMINANCE 0x1909
+#define GL_VERSION 0x1F02
 #define GL_NEAREST 0x2600
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_MIN_FILTER 0x2801
@@ -56,6 +58,7 @@ typedef void (*PFNGLDRAWBUFFERSPROC) (GLsizei n, const GLenum *bufs);
 typedef void (*PFNGLDRAWELEMENTSPROC)(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices );
 typedef void (*PFNGLGENTEXTURESPROC)(GLsizei n, GLuint *textures);
 typedef GLenum (*PFNGLGETERRORPROC)(void);
+typedef const GLubyte *(*PFNGLGETSTRINGPROC)(GLenum name);
 typedef void (*PFNGLGETTEXIMAGEPROC)(GLenum target, GLint level,
                                      GLenum format, GLenum type,
                                      GLvoid *pixels);
@@ -129,8 +132,9 @@ typedef void (*PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum t
 
 // ---------- OpenGL 3.0 ----------
 
-// #define GL_RGBA32F 0x8814
-// #define GL_RGB32F 0x8815
+#define GL_RGBA32F 0x8814
+#define GL_RGB32F 0x8815
+#define GL_LUMINANCE32F 0x8818
 
 // GL_ARB_framebuffer_object
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
