@@ -79,7 +79,7 @@ struct Target {
         OpenCL,  ///< Enable the OpenCL runtime.
         CLDoubles,  ///< Enable double support on OpenCL targets
 
-        OpenGL,  ///< Enable the OpenGL runtime.
+        OpenGL  ///< Enable the OpenGL runtime.
 
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
