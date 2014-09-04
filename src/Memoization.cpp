@@ -360,7 +360,7 @@ public:
 
     // Returns a statement which will store the result of a computation under this key
     Stmt release_cache_entry(std::string key_allocation_name, std::string computed_bounds_name,
-			     int32_t tuple_count, std::string storage_base_name) {
+                             int32_t tuple_count, std::string storage_base_name) {
         std::vector<Expr> args;
         args.push_back(Call::make(type_of<uint8_t *>(), Call::address_of, 
                                   vec(Load::make(type_of<uint8_t>(), key_allocation_name, Expr(0), Buffer(), Parameter())),
@@ -427,7 +427,7 @@ private:
 
             Stmt cache_store_back =
                 IfThenElse::make(cache_miss, key_info.store_computation(cache_key_name, computed_bounds_name, f.outputs(), op->name));
-	    Stmt cache_release = key_info.release_cache_entry(cache_key_name, computed_bounds_name, f.outputs(), op->name);
+            Stmt cache_release = key_info.release_cache_entry(cache_key_name, computed_bounds_name, f.outputs(), op->name);
 
             Stmt mutated_produce = IfThenElse::make(cache_miss, produce);
             Stmt mutated_update =
@@ -469,7 +469,7 @@ private:
 };
 
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
-			const std::string &name) {
+                        const std::string &name) {
     InjectMemoization injector(env, name);
 
     return injector.mutate(s);

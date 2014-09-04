@@ -451,6 +451,18 @@ public:
             stream << " " << keyword("if") << " ";
             print(op->condition);
         }
+        if (op->new_expr.defined()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_new") << "{";
+            print(op->new_expr);
+            stream << matched("}");
+        }
+        if (op->delete_stmt.defined()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_delete") << "{";
+            print(op->delete_stmt);
+            stream << matched("}");
+        }
 
         stream << open_div("AllocateBody");
         print(op->body);
@@ -463,6 +475,12 @@ public:
         stream << open_div("Free WrapLine");
         stream << keyword("free") << " ";
         stream << var(op->name);
+        if (op->delete_stmt.defined()) {
+            stream << open_span("Matched");
+            stream << keyword("custom_delete") << "{";
+            print(op->delete_stmt);
+            stream << matched("}");
+        }
         stream << close_div();
     }
     void visit(const Realize *op) {

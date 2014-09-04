@@ -182,15 +182,15 @@ class InjectEarlyFrees : public IRMutator {
             InjectMarker inject_marker;
             inject_marker.func = alloc->name;
             inject_marker.last_use = last_use.last_use;
-	    inject_marker.delete_stmt = alloc->delete_stmt;
-	    if (alloc->delete_stmt.defined()) {
-	        // Clear out the delete statement
-	        stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition, alloc->body, alloc->new_expr);
-	    }
+            inject_marker.delete_stmt = alloc->delete_stmt;
+            if (alloc->delete_stmt.defined()) {
+                // Clear out the delete statement
+                stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition, alloc->body, alloc->new_expr);
+            }
             stmt = inject_marker.mutate(stmt);
         } else {
             stmt = Allocate::make(alloc->name, alloc->type, alloc->extents, alloc->condition,
-				  Block::make(alloc->body, Free::make(alloc->name, alloc->delete_stmt)), alloc->new_expr);
+                                  Block::make(alloc->body, Free::make(alloc->name, alloc->delete_stmt)), alloc->new_expr);
         }
 
     }

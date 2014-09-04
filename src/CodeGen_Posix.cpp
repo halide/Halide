@@ -151,7 +151,7 @@ Value *CodeGen_Posix::codegen_allocation_size(const std::string &name, Type type
 
 CodeGen_Posix::Allocation CodeGen_Posix::create_allocation(const std::string &name, Type type,
                                                            const std::vector<Expr> &extents, Expr condition,
-							   Expr new_expr) {
+                                                           Expr new_expr) {
 
     Value *llvm_size = NULL;
     int64_t stack_bytes = 0;

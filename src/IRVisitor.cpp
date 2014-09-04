@@ -183,10 +183,19 @@ void IRVisitor::visit(const Allocate *op) {
       op->extents[i].accept(this);
     }
     op->condition.accept(this);
+    if (op->new_expr.defined()) {
+        op->new_expr.accept(this);
+    }
+    if (op->delete_stmt.defined()) {
+        op->delete_stmt.accept(this);
+    }
     op->body.accept(this);
 }
 
 void IRVisitor::visit(const Free *op) {
+    if (op->delete_stmt.defined()) {
+        op->delete_stmt.accept(this);
+    }
 }
 
 void IRVisitor::visit(const Realize *op) {
@@ -402,6 +411,12 @@ void IRGraphVisitor::visit(const Allocate *op) {
         include(op->extents[i]);
     }
     include(op->condition);
+    if (op->new_expr.defined()) {
+        include(op->new_expr);
+    }
+    if (op->delete_stmt.defined()) {
+        include(op->delete_stmt);
+    }
     include(op->body);
 }
 

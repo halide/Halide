@@ -387,11 +387,11 @@ Stmt Provide::make(std::string name, const std::vector<Expr> &values, const std:
 }
 
 Stmt Allocate::make(std::string name, Type type, const std::vector<Expr> &extents,
-		    Expr condition, Stmt body,
-		    Expr new_expr, Stmt delete_stmt) {
+                    Expr condition, Stmt body,
+                    Expr new_expr, Stmt delete_stmt) {
     for (size_t i = 0; i < extents.size(); i++) {
-	internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
-	internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
+        internal_assert(extents[i].defined()) << "Allocate of undefined extent\n";
+        internal_assert(extents[i].type().is_scalar() == 1) << "Allocate of vector extent\n";
     }
     internal_assert(body.defined()) << "Allocate of undefined\n";
 
