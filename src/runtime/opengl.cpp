@@ -107,7 +107,6 @@ struct TextureInfo {
     GLuint id;
     GLint min[4];
     GLint extent[4];
-    GLenum format;                      // internal format: GL_RGBA, ...
     bool halide_allocated;              // allocated by us or host app?
     TextureInfo *next;
 };
@@ -530,7 +529,7 @@ WEAK bool get_texture_format(void *user_context,
     } else if (buf->extent[2] == 4) {
         *format = GL_RGBA;
     } else {
-        halide_error(user_context, "Only 1, 3, or 4 color channels are supported");
+        halide_error(user_context, "GLSL: Only 1, 3, or 4 color channels are supported.");
         return false;
     }
 
@@ -640,7 +639,6 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
             texinfo->min[i] = buf->min[i];
             texinfo->extent[i] = buf->extent[i];
         }
-        texinfo->format = format;
         texinfo->halide_allocated = halide_allocated;
 
         texinfo->next = ST.textures;
@@ -693,8 +691,7 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
 // is responsible for setting up the OpenGL environment and compiling the GLSL
 // code into a fragment shader.
 WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
-                                      const char *src, int size) {
-    // TODO: handle error
+                                    const char *src, int size) {
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -755,12 +752,11 @@ WEAK int halide_opengl_dev_sync(void *user_context) {
 // the app and not by the halide runtime. For example, the buffer_t may be
 // backed by an FBO already bound by the application.
 WEAK uint64_t halide_opengl_output_client_bound() {
-  return HALIDE_GLSL_CLIENT_BOUND;
+    return HALIDE_GLSL_CLIENT_BOUND;
 }
 
 template <class T>
-WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height,
-                                  int channels) {
+WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, int channels) {
     T *src = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
@@ -778,8 +774,7 @@ WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height,
 }
 
 template <class T>
-WEAK void interleaved_to_halide(buffer_t *buf, T *src, int width, int height,
-                                  int channels) {
+WEAK void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, int channels) {
     T *dst = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * channels;
