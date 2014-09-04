@@ -479,13 +479,23 @@ void IRPrinter::visit(const Allocate *op) {
         stream << " if ";
         print(op->condition);
     }
+    if (op->new_expr.defined()) {
+        stream << "\n custom_new { " << op->new_expr << " }";
+    }
+    if (op->delete_stmt.defined()) {
+        stream << "\n custom_delete { " << op->delete_stmt << " }";
+    }
     stream << "\n";
     print(op->body);
 }
 
 void IRPrinter::visit(const Free *op) {
     do_indent();
-    stream << "free " << op->name << '\n';
+    stream << "free " << op->name;
+    if (op->delete_stmt.defined()) {
+        stream << " custom_delete { " << op->delete_stmt << " }";
+    }
+    stream << '\n';
 }
 
 void IRPrinter::visit(const Realize *op) {

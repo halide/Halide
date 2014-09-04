@@ -517,7 +517,9 @@ struct Allocate : public StmtNode<Allocate> {
     Type type;
     std::vector<Expr> extents;
     Expr condition;
-    // Both new_expr and delete_stmt must both be defined or undefined.
+    // Both new_expr and delete_stmt must both be defined or undefined, though
+    // after the EarlyFree pass runs, the delete_stmt may be set to undefined
+    // in the Allocate node as it has moved to the Free node.
     // These override the code generator dependent malloc and free equivalents
     // if provided. If the new succeeds, the delete is guaranteed to be called.
     Expr new_expr;
@@ -526,7 +528,7 @@ struct Allocate : public StmtNode<Allocate> {
 
     EXPORT static Stmt make(std::string name, Type type, const std::vector<Expr> &extents,
                             Expr condition, Stmt body,
-			    Expr new_expr = Expr(), Stmt delete_stmt = Stmt());
+                            Expr new_expr = Expr(), Stmt delete_stmt = Stmt());
 };
 
 /** Free the resources associated with the given buffer. */

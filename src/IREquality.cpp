@@ -374,6 +374,28 @@ public:
 
         expr = s->condition;
         op->condition.accept(this);
+
+        if (!result) {
+            if (!s->new_expr.defined() && op->new_expr.defined()) {
+                result = -1;
+            } else if (s->new_expr.defined() && !op->new_expr.defined()) {
+                result = 1;
+            } else {
+                expr = s->new_expr;
+                op->new_expr.accept(this);
+            }
+        }
+
+        if (!result) {
+            if (!s->delete_stmt.defined() && op->delete_stmt.defined()) {
+                result = -1;
+            } else if (s->delete_stmt.defined() && !op->delete_stmt.defined()) {
+                result = 1;
+            } else {
+                stmt = s->delete_stmt;
+                op->delete_stmt.accept(this);
+            }
+        }
     }
 
     void visit(const Realize *op) {
@@ -437,6 +459,17 @@ public:
         const Free *s = stmt.as<Free>();
 
         compare_names(s->name, op->name);
+
+        if (!result) {
+            if (!s->delete_stmt.defined() && op->delete_stmt.defined()) {
+                result = -1;
+            } else if (s->delete_stmt.defined() && !op->delete_stmt.defined()) {
+                result = 1;
+            } else {
+                stmt = s->delete_stmt;
+                op->delete_stmt.accept(this);
+            }
+        }
     }
 
     void visit(const IfThenElse *op) {

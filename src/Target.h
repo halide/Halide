@@ -117,8 +117,8 @@ struct Target {
      * Like merge_string(), but reset the contents of 'this' first.
      */
     EXPORT bool from_string(const std::string &target) {
-	*this = Target();
-	return merge_string(target);
+        *this = Target();
+        return merge_string(target);
     }
 };
 
