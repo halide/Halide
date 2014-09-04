@@ -63,11 +63,17 @@ extern "C" int halide_opengl_create_context(void *user_context);
     GLFUNC(PFNGLENABLEVERTEXATTRIBARRAYPROC, EnableVertexAttribArray);  \
     GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
     GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
-    GLFUNC(PFNGLREADPIXELS, ReadPixels)
+    GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
+    GLFUNC(PFNGLGETSTRINGPROC, GetString)
 
 // ---------- Types ----------
 
 namespace Halide { namespace Runtime { namespace Internal {
+
+enum OpenGLProfile {
+    OpenGL,
+    OpenGLES
+};
 
 enum ArgumentKind {
     ARGKIND_NONE,
@@ -119,6 +125,10 @@ struct ModuleState {
 // All persistent state maintained by the runtime.
 struct GlobalState {
     bool initialized;
+
+    // Information about the OpenGL platform we're running on.
+    OpenGLProfile profile;
+    int major_version, minor_version;
 
     // Various objects shared by all filter kernels
     GLuint vertex_shader_id;
@@ -193,6 +203,7 @@ WEAK const char *var_marker    = "/// VAR ";
 
 extern "C" void *malloc(size_t);
 extern "C" void free(void*);
+extern "C" int sscanf(const char *, const char *, ...);
 
 WEAK char *strndup(const char *s, size_t n) {
     char *p = (char*)malloc(n+1);
@@ -413,10 +424,30 @@ WEAK int halide_opengl_init(void *user_context) {
     ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR); \
     if (!ST.VAR) {                                                      \
         halide_printf(user_context, "Could not load function pointer for %s\n", "gl" #VAR); \
-        return 1;                                                         \
+        return 1;                                                       \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
+
+    const char *version = (const char *)ST.GetString(GL_VERSION);
+    int major, minor;
+    if (sscanf(version, "OpenGL ES %d.%d", &major, &minor) == 2) {
+        ST.profile = OpenGLES;
+        ST.major_version = major;
+        ST.minor_version = minor;
+    } else if (sscanf(version, "%d.%d", &major, &minor) == 2) {
+        ST.profile = OpenGL;
+        ST.major_version = major;
+        ST.minor_version = minor;
+    } else {
+        ST.profile = OpenGL;
+        ST.major_version = 2;
+        ST.minor_version = 0;
+    }
+    #ifdef DEBUG
+    halide_printf(user_context, "It seems to be OpenGL %s %d.%d!\n",
+                  (ST.profile == OpenGL) ? "" : "ES", major, minor);
+    #endif
 
     ST.textures = NULL;
     ST.state_list = NULL;
@@ -518,10 +549,19 @@ WEAK void halide_opengl_release(void *user_context) {
 }
 
 // Determine OpenGL texture format and channel type for a given buffer_t.
-WEAK bool get_texture_format(void *user_context,
-                               buffer_t *buf,
-                               GLint *format,
-                               GLint *type) {
+WEAK bool get_texture_format(void *user_context, buffer_t *buf,
+                             GLint *internal_format, GLint *format, GLint *type) {
+    if (buf->elem_size == 1) {
+        *type = GL_UNSIGNED_BYTE;
+    } else if (buf->elem_size == 2) {
+        *type = GL_UNSIGNED_SHORT;
+    } else if (buf->elem_size == 4) {
+        *type = GL_FLOAT;
+    } else {
+        halide_error(user_context, "GLSL: Only uint8, uint16, and float textures are supported.");
+        return false;
+    }
+
     if (buf->extent[2] <= 1) {
         *format = GL_LUMINANCE;
     } else if (buf->extent[2] == 3) {
@@ -533,14 +573,28 @@ WEAK bool get_texture_format(void *user_context,
         return false;
     }
 
-    if (buf->elem_size == 1) {
-        *type = GL_UNSIGNED_BYTE;
-    } else if (buf->elem_size == 2) {
-        *type = GL_UNSIGNED_SHORT;
-    } else {
-        halide_error(user_context, "Only uint8 and uint16 textures are supported");
-        return false;
+    switch (ST.profile) {
+    case OpenGLES:
+        // For OpenGL ES, the texture format has to match the pixel format
+        // since there no conversion is performed during texture transfers.
+        // See OES_texture_float.
+        *internal_format = *format;
+        break;
+    case OpenGL:
+        // For OpenGL, ARB_texture_float defines special internal formats for
+        // float textures.
+        if (*type == GL_FLOAT) {
+            switch (*format) {
+            case GL_RGBA: *internal_format = GL_RGBA32F; break;
+            case GL_RGB: *internal_format = GL_RGB32F; break;
+            case GL_LUMINANCE: *internal_format = GL_LUMINANCE32F; break;
+            }
+        } else {
+            *internal_format = *format;
+        }
+        break;
     }
+
     return true;
 }
 
@@ -570,7 +624,6 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
     // appropriate texture.
     GLuint tex = get_texture_id(buf);
     bool halide_allocated = false;
-    GLint format = 0;
     GLint width, height;
     if (tex != 0) {
 #ifdef HAVE_GLES3
@@ -606,15 +659,16 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
         CHECK_GLERROR(1);
 
         // Create empty texture here and fill it with glTexSubImage2D later.
+        GLint internal_format = 0;
+        GLint format = 0;
         GLint type = GL_UNSIGNED_BYTE;
-        if (!get_texture_format(user_context, buf, &format, &type)) {
+        if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
             halide_error(user_context, "Invalid texture format\n");
             return 1;
         }
         width = buf->extent[0];
         height = buf->extent[1];
-
-        ST.TexImage2D(GL_TEXTURE_2D, 0, format,
+        ST.TexImage2D(GL_TEXTURE_2D, 0, internal_format,
                       width, height, 0, format, type, NULL);
         CHECK_GLERROR(1);
 
@@ -819,8 +873,8 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     ST.BindTexture(GL_TEXTURE_2D, tex);
     CHECK_GLERROR(1);
 
-    GLint format, type;
-    if (!get_texture_format(user_context, buf, &format, &type)) {
+    GLint internal_format, format, type;
+    if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
         halide_error(user_context, "Invalid texture format\n");
         return 1;
     }
@@ -915,8 +969,8 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     halide_printf(user_context, "halide_copy_to_host: %d\n", tex);
     #endif
 
-    GLint format, type;
-    if (!get_texture_format(user_context, buf, &format, &type)) {
+    GLint internal_format, format, type;
+    if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
         halide_error(user_context, "Invalid texture format\n");
         return 1;
     }
