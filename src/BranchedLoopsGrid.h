@@ -23,7 +23,7 @@ public:
   size_t dim() const {return dims.size();}
   size_t size(const int dim) const {return points[dim].size() - 1;}
   
-  void push_dim(const std::string& name, Expr min, Expr max);
+  void push_dim(const std::string& name, Expr min, Expr extent);
   void split(const std::string& name, const int i, Expr x);
 
   const std::string& var(const int dim) const {return dims[dim];}
@@ -45,10 +45,10 @@ private:
 };
 
 template<class T>
-void BranchedLoopsGrid<T>::push_dim(const std::string& name, Expr min, Expr max) {
+void BranchedLoopsGrid<T>::push_dim(const std::string& name, Expr min, Expr extent) {
   std::vector<Expr> pts(2);
   pts[0] = min;
-  pts[1] = max;
+  pts[1] = min + extent;
   
   dims.push_back(name);
   points.push_back(pts);
