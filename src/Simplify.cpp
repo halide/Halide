@@ -2595,7 +2595,7 @@ void simplify_test() {
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
-	  ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+          ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     std::cout << "Simplify test passed" << std::endl;
 }
