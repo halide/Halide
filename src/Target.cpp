@@ -341,12 +341,13 @@ std::string Target::to_string() const {
       "armv7s",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
-      "opengl",
+      "opengl"
   };
+  internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
       + "-" + string(os_names[os]);
-  for (size_t i = 0; i < (sizeof(feature_names) / sizeof(feature_names[0])); ++i) {
+  for (size_t i = 0; i < FeatureEnd; ++i) {
       if (has_feature(static_cast<Feature>(i))) {
           result += "-" + string(feature_names[i]);
       }
