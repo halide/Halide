@@ -351,6 +351,8 @@ void check_sse_all() {
 
     check("pmaddwd", 4, i32(i16_1) * 3 + i32(i16_2) * 4);
     check("pmaddwd", 4, u32(u16_1) * 3 + u32(u16_2) * 4);
+    check("pmaddwd", 4, i32(i16_1) * 3 - i32(i16_2) * 4);
+    check("pmaddwd", 4, u32(u16_1) * 3 - u32(u16_2) * 4);
 
     if (use_avx2) {
         check("vpmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);

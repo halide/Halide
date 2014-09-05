@@ -213,39 +213,62 @@ Expr lossless_cast(Type t, Expr e) {
     return Expr();
 }
 
-}
+// i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
+// interleaving a, c, and b, d, and then using pmaddwd. We
+// recognize it here, and implement it in the initial module.
+bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
+    Type t = a.type();
+    internal_assert(b.type() == t);
 
-void CodeGen_X86::visit(const Add *op) {
-    // i32(i16_a)*i32(i16_b) + i32(i16_c)*i32(i16_d) can be done by
-    // interleaving a, c, and b, d, and then using pmaddwd. We
-    // recognize it here, and implement it in the initial module.
+    const Mul *ma = a.as<Mul>();
+    const Mul *mb = b.as<Mul>();
 
-    if ((op->type.is_int() || op->type.is_uint()) &&
-        op->type.bits == 32 &&
-        (op->type.width == 4 || op->type.width == 8)) {
-        vector<Expr> matches;
-        Expr wild = Variable::make(op->type, "*");
-        Expr pattern = wild*wild + wild*wild;
-        if (expr_match(pattern, op, matches)) {
-            // Can all the operands be represented as (u)int16?
-            Type narrow = op->type;
-            narrow.bits = 16;
-            bool ok = true;
-            for (int i = 0; i < 4; i++) {
-                matches[i] = lossless_cast(narrow, matches[i]);
-                ok = ok && matches[i].defined();
-            }
-
-            if (ok) {
-                codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
-                return;
-            }
-
-        }
+    if (!(ma && mb && (t.is_int() || t.is_uint()) &&
+          t.bits == 32 && (t.width == 4 || t.width == 8))) {
+        return false;
     }
 
-    CodeGen::visit(op);
+    Type narrow = t;
+    narrow.bits = 16;
+    vector<Expr> args = vec(lossless_cast(narrow, ma->a),
+                            lossless_cast(narrow, ma->b),
+                            lossless_cast(narrow, mb->a),
+                            lossless_cast(narrow, mb->b));
+    if (!args[0].defined() || !args[1].defined() ||
+        !args[2].defined() || !args[3].defined()) {
+        return false;
+    }
 
+    result.swap(args);
+    return true;
+}
+
+}
+
+
+void CodeGen_X86::visit(const Add *op) {
+    vector<Expr> matches;
+    if (should_use_pmaddwd(op->a, op->b, matches)) {
+        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+    } else {
+        CodeGen::visit(op);
+    }
+}
+
+
+void CodeGen_X86::visit(const Sub *op) {
+    vector<Expr> matches;
+    if (should_use_pmaddwd(op->a, op->b, matches)) {
+        // Negate one of the factors in the second expression
+        if (is_const(matches[2])) {
+            matches[2] = -matches[2];
+        } else {
+            matches[3] = -matches[3];
+        }
+        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+    } else {
+        CodeGen::visit(op);
+    }
 }
 
 void CodeGen_X86::visit(const Cast *op) {
