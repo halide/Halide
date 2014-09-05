@@ -21,7 +21,7 @@ namespace Internal {
  *  Should leave non-memoized Funcs unchanged.
  */
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
-			const std::string &name);
+                        const std::string &name);
 
 }
 }

@@ -266,8 +266,8 @@ extern void halide_set_ocl_platform_name(const char *n);
 extern const char *halide_get_ocl_platform_name(void *user_context);
 
 /** Set the device type for OpenCL to use. The argument is copied
- * internally. It must be "cpu" or "gpu". If never called, Halide uses
- * the environment variable HL_OCL_DEVICE_TYPE. */
+ * internally. It must be "cpu", "gpu", or "acc". If never called,
+ * Halide uses the environment variable HL_OCL_DEVICE_TYPE. */
 extern void halide_set_ocl_device_type(const char *n);
 
 /** Halide calls this to gets the desired OpenCL device
