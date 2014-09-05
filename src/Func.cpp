@@ -2577,7 +2577,7 @@ void *Func::compile_jit(const Target &target) {
     }
 
     Target t = target;
-    t.features |= Target::JIT;
+    t.set_feature(Target::JIT);
     StmtCompiler cg(t);
 
     // Sanitise the name of the generated function
