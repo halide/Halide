@@ -5,8 +5,10 @@
  * Defines the structure that describes a Halide target.
  */
 
+#include <bitset>
 #include <stdint.h>
 #include <string>
+#include "Error.h"
 #include "Util.h"
 
 namespace llvm {
@@ -15,30 +17,6 @@ class LLVMContext;
 }
 
 namespace Halide {
-
-namespace Internal {
-
-template <class T>
-class BitSet {
-public:
-    BitSet() : flags(0) {}
-    BitSet(T val) : flags(to_mask(val)) {}
-
-    BitSet<T> &set(T val) { flags |= to_mask(val); return *this; }
-    BitSet<T> &reset(T val) { flags &= ~to_mask(val); return *this; }
-    bool test(T val) const { return (flags & to_mask(val)) != 0; }
-
-    BitSet<T> operator|(T val) { BitSet<T> tmp(*this); tmp.set(val); return tmp; }
-    BitSet<T> &operator|=(T val) { return set(val); }
-
-    bool operator==(const BitSet<T> &other) const { return flags == other.flags; }
-private:
-    uint64_t to_mask(T val) const { return 1 << val; }
-
-    uint64_t flags;
-};
-
-}  // namespace Internal
 
 /** A struct representing a target machine and os to generate code for. */
 struct Target {
@@ -55,7 +33,7 @@ struct Target {
     int bits;
 
     /** Optional features a target can have. */
-    enum Features {
+    enum Feature {
         JIT,  ///< Generate code that will run immediately inside the calling process.
         GPUDebug,  ///< Increase the level of checking and the verbosity of the gpu runtimes.
         NoAsserts,  ///< Disable all runtime checks, for slightly tighter code.
@@ -81,19 +59,55 @@ struct Target {
 
         OpenGL,  ///< Enable the OpenGL runtime.
 
+        FeatureEnd,
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
     };
 
-    /** A bitmask that stores the active features. */
-    typedef Internal::BitSet<Features> FeatureSet;
-    FeatureSet features;
-
     Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
-    Target(OS o, Arch a, int b, const FeatureSet &f) : os(o), arch(a), bits(b), features(f) {}
+    Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
+        : os(o), arch(a), bits(b) {
+        for (size_t i = 0; i < initial_features.size(); i++) {
+            set_feature(initial_features[i]);
+        }
+    }
 
-    bool has_feature(Features f) const {
-        return features.test(f);
+    void set_feature(Feature f, bool value = true) {
+        user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+        features.set(f, value);
+    }
+
+    void set_features(std::vector<Feature> features_to_set, bool value = true) {
+        for (size_t i = 0; i < features_to_set.size(); i++) {
+            set_feature(features_to_set[i]);
+        }
+    }
+
+    bool has_feature(Feature f) const {
+        user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+        return features[f];
+    }
+
+    bool features_any_of(std::vector<Feature> test_features) const {
+        for (size_t i = 0; i < test_features.size(); i++) {
+            user_assert(test_features[i] < FeatureEnd) << "Invalid Target feature.\n";
+
+            if (features[test_features[i]]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool features_all_of(std::vector<Feature> test_features) const {
+        for (size_t i = 0; i < test_features.size(); i++) {
+            user_assert(test_features[i] < FeatureEnd) << "Invalid Target feature.\n";
+
+            if (!features[test_features[i]]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Is OpenCL or CUDA enabled in this target? I.e. is
@@ -158,6 +172,10 @@ struct Target {
         *this = Target();
         return merge_string(target);
     }
+
+private:
+    /** A bitmask that stores the active features. */
+    std::bitset<FeatureEnd> features;
 };
 
 /** Return the target corresponding to the host machine. */

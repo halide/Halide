@@ -396,6 +396,22 @@ bool test(int vec_width) {
         }
     }
 
+    // pmaddwd
+    if (type_of<A>() == Int(16)) {
+        if (verbose) printf("pmaddwd\n");
+        Func f15;
+        f15(x, y) = cast<int>(input(x, y)) * 3 + cast<int>(input(x, y+1)) * 4;
+        Image<int32_t> im15 = f15.realize(W, H-1);
+        for (int y = 0; y < H-1; y++) {
+            for (int x = 0; x < W; x++) {
+                int correct = input(x, y)*3 + input(x, y+1)*4;
+                if (im15(x, y) != correct) {
+                    printf("im15(%d, %d) = %d instead of %d\n", x, y, im15(x, y), correct);
+                }
+            }
+        }
+    }
+
     // Fast exp, log, and pow
     if (type_of<A>() == Float(32)) {
         if (verbose) printf("Fast transcendentals\n");
