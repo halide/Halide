@@ -215,6 +215,39 @@ Expr lossless_cast(Type t, Expr e) {
 
 }
 
+void CodeGen_X86::visit(const Add *op) {
+    // i32(i16_a)*i32(i16_b) + i32(i16_c)*i32(i16_d) can be done by
+    // interleaving a, c, and b, d, and then using pmaddwd. We
+    // recognize it here, and implement it in the initial module.
+
+    if ((op->type.is_int() || op->type.is_uint()) &&
+        op->type.bits == 32 &&
+        (op->type.width == 4 || op->type.width == 8)) {
+        vector<Expr> matches;
+        Expr wild = Variable::make(op->type, "*");
+        Expr pattern = wild*wild + wild*wild;
+        if (expr_match(pattern, op, matches)) {
+            // Can all the operands be represented as (u)int16?
+            Type narrow = op->type;
+            narrow.bits = 16;
+            bool ok = true;
+            for (int i = 0; i < 4; i++) {
+                matches[i] = lossless_cast(narrow, matches[i]);
+                ok = ok && matches[i].defined();
+            }
+
+            if (ok) {
+                codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+                return;
+            }
+
+        }
+    }
+
+    CodeGen::visit(op);
+
+}
+
 void CodeGen_X86::visit(const Cast *op) {
 
     vector<Expr> matches;
