@@ -49,14 +49,18 @@ int main(int argc, char **argv) {
     target.os = Target::Android; // The operating system
     target.arch = Target::ARM;   // The CPU architecture
     target.bits = 32;            // The bit-width of the architecture
-    target.features = 0;         // A bitmask of optional features to enable.
+    std::vector<Target::Feature> arm_features; // A list of features to set
+    target.set_features(arm_features);
     brighter.compile_to_file("lesson_11_arm_32_android", args, target); // Pass the target as the last argument.
 
     // And now a Windows object file for 64-bit x86 with AVX and SSE 4.1:
     target.os = Target::Windows;
     target.arch = Target::X86;
     target.bits = 64;
-    target.features = Target::AVX | Target::SSE41;
+    std::vector<Target::Feature> x86_features;
+    x86_features.push_back(Target::AVX);
+    x86_features.push_back(Target::SSE41);
+    target.set_features(x86_features);
     brighter.compile_to_file("lesson_11_x86_64_windows", args, target);
 
     // And finally an iOS mach-o object file for one of Apple's 32-bit
@@ -68,7 +72,9 @@ int main(int argc, char **argv) {
     target.os = Target::IOS;
     target.arch = Target::ARM;
     target.bits = 32;
-    target.features = Target::ARMv7s;
+    std::vector<Target::Feature> armv7s_features;
+    armv7s_features.push_back(Target::ARMv7s);
+    target.set_features(armv7s_features);
     brighter.compile_to_file("lesson_11_arm_32_ios", args, target);
 
 

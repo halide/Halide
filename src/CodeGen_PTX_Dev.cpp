@@ -210,13 +210,13 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.features & Target::CUDACapability50) {
+    if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
-    } else if (target.features & Target::CUDACapability35) {
+    } else if (target.has_feature(Target::CUDACapability35)) {
         return "sm_35";
-    } else if (target.features & Target::CUDACapability32) {
+    } else if (target.has_feature(Target::CUDACapability32)) {
         return "sm_32";
-    } else if (target.features & Target::CUDACapability30) {
+    } else if (target.has_feature(Target::CUDACapability30)) {
         return "sm_30";
     } else {
         return "sm_20";
@@ -224,8 +224,8 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features & (Target::CUDACapability32 |
-                           Target::CUDACapability50)) {
+    if (target.features_any_of(vec(Target::CUDACapability32,
+                                   Target::CUDACapability50))) {
         // Need ptx isa 4.0. llvm < 3.5 doesn't support it.
         #if LLVM_VERSION < 35
         user_error << "This version of Halide was linked against llvm 3.4 or earlier, "
