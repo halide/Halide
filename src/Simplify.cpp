@@ -891,7 +891,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
+        } else if (op->type == Int(32) && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1081,7 +1081,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
+        } else if (op->type == Int(32) && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1769,7 +1769,7 @@ private:
                 Expr a = mutate(op->args[0]);
                 Type ta = a.type();
                 int ia = 0;
-                if (ta.is_int() && const_castint(a, &ia)) {
+                if (ta.is_int() && const_castint(a, &ia) && ia != ta.imin()) {
                     if (ia < 0) {
                         ia = -ia;
                     }
@@ -2587,7 +2587,7 @@ void simplify_test() {
 
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
-	  ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+          ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
 
     std::cout << "Simplify test passed" << std::endl;
 }

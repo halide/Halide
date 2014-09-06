@@ -218,6 +218,9 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         if (strstr("gpu", dev_type)) {
             device_type |= CL_DEVICE_TYPE_GPU;
         }
+        if (strstr("acc", dev_type)) {
+            device_type |= CL_DEVICE_TYPE_ACCELERATOR;
+        }
     }
     // If no device types are specified, use all the available
     // devices.

@@ -148,7 +148,7 @@ const string preamble =
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
     "template<typename T> T smod(T a, T b) {T result = a % b; if (result < 0) result += b < 0 ? -b : b; return result;}\n"
-    "template<typename T> T sdiv(T a, T b) {T q = a / b; T r = a - q*b; int bs = b >> (bits - 1); int rs = r >> (bits - 1); return q - (rs & bs) + (rs & ~bs);}\n"
+    "template<typename T> T sdiv(T a, T b) {T q = a / b; T r = a - q*b; int bs = b >> (8*sizeof(T) - 1); int rs = r >> (8*sizeof(T) - 1); return q - (rs & bs) + (rs & ~bs);}\n"
 
     // This may look wasteful, but it's the right way to do
     // it. Compilers understand memcpy and will convert it to a no-op
