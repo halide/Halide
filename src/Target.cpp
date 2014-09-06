@@ -65,11 +65,11 @@ Target get_host_target() {
 
     #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
-    return Target(os, arch, bits, 0);
+    return Target(os, arch, bits);
     #else
     #ifdef __arm__
     Target::Arch arch = Target::ARM;
-    return Target(os, arch, bits, 0);
+    return Target(os, arch, bits);
     #else
 
     Target::Arch arch = Target::X86;
