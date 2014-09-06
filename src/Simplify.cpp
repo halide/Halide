@@ -702,20 +702,12 @@ private:
             // ramp(x, ia, w) / broadcast(ib, w) -> ramp(x/ib, ia/ib, w) when ib divides ia
             expr = mutate(Ramp::make(ramp_a->base/ib, ia/ib, ramp_a->width));
         } else if (ramp_a && broadcast_b &&
-                   mul_a_a && const_int(mul_a_a->b, &ia) &&
-                   const_int(broadcast_b->value, &ib) &&
-                   const_int(ramp_a->stride, &ic) &&
-                   ia == ib &&
-                   (ic * (broadcast_b->width - 1)) < ia) {
-            // ramp(x*a, c, w) / broadcast(a, w) -> broadcast(x, w) when c*(w-1) < a
-            expr = mutate(Broadcast::make(mul_a_a->a, broadcast_b->width));
-        } else if (ramp_a && broadcast_b &&
                    mul_a_a && const_int(mul_a_a->b, &ia) && ia &&
                    const_int(broadcast_b->value, &ib) && ib &&
                    const_int(ramp_a->stride, &ic) &&
                    (ib % ia) == 0 &&
-                   (ic * (broadcast_b->width - 1)) < ia) {
-            // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides d
+                   std::abs(ic * (broadcast_b->width - 1)) < std::abs(ia)) {
+            // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides b
             expr = mutate(Broadcast::make(mul_a_a->a / div_imp(ib, ia), broadcast_b->width));
         } else if (div_a &&
                    const_int(div_a->b, &ia) && ia >= 0 &&
