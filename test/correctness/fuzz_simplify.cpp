@@ -9,7 +9,7 @@ using namespace Halide::Internal;
 
 const int fuzz_var_count = 5;
 
-Type fuzz_types[] = { Int(16), UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
+Type fuzz_types[] = { UInt(1), UInt(8), UInt(16), UInt(32), Int(8), Int(16), Int(32) };
 const int fuzz_type_count = sizeof(fuzz_types)/sizeof(fuzz_types[0]);
 
 std::string fuzz_var(int i) {
