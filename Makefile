@@ -43,9 +43,9 @@ WITH_OPENGL ?= 1
 WITH_INTROSPECTION ?= 1
 # WITH_EXCEPTIONS ?= 1
 
-# Runtime files with debug information is known to confuse older versions of
-# LLVM running on OS X and Windows. We therefore disable them by default unless
-# LLVM >= 3.6 or we're running under Linux.
+# Including debug information in runtime files makes debugging runtime errors
+# easier, but is only supported on platforms that use LLVM's new MCJIT
+# runtime. (See also src/LLVM_Header.h)
 WITH_DEBUG_RUNTIME ?= $(if $(or $(LLVM_36_OR_NEWER), \
                                 $(filter $(UNAME), Linux)), 1, )
 
