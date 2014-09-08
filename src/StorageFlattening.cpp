@@ -23,14 +23,15 @@ private:
     const map<string, Function> &env;
     Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
+    Expr flatten_args(const string &buffer_name, const string &function_name,
+                      const vector<Expr> &args) {
         Expr idx = 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
         for (size_t i = 0; i < args.size(); i++) {
             string dim = int_to_string(i);
-            string stride_name = name + ".stride." + dim;
-            string min_name = name + ".min." + dim;
+            string stride_name = buffer_name + ".stride." + dim;
+            string min_name = buffer_name + ".min." + dim;
             string stride_name_constrained = stride_name + ".constrained";
             string min_name_constrained = min_name + ".constrained";
             if (scope.contains(stride_name_constrained)) {
@@ -43,7 +44,7 @@ private:
             mins[i] = Variable::make(Int(32), min_name);
         }
 
-        if (env.find(name) != env.end()) {
+        if (env.find(function_name) != env.end()) {
             // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
@@ -206,7 +207,7 @@ private:
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
-            Expr idx = mutate(flatten_args(cv.name, provide->args));
+            Expr idx = mutate(flatten_args(cv.name, provide->name, provide->args));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
             Stmt store = Store::make(cv.name, var, idx);
 
@@ -233,7 +234,7 @@ private:
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
-            Expr idx = mutate(flatten_args(cv.name, provide->args));
+            Expr idx = mutate(flatten_args(cv.name, provide->name, provide->args));
             Stmt store = Store::make(cv.name, cv.value, idx);
 
             if (result.defined()) {
@@ -301,7 +302,7 @@ private:
             Type t = call->type;
             t.bits = t.bytes() * 8;
 
-            Expr idx = mutate(flatten_args(name, call->args));
+            Expr idx = mutate(flatten_args(name, call->name, call->args));
             expr = Load::make(t, name, idx, call->image, call->param);
 
             if (call->type.bits != t.bits) {
