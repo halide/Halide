@@ -111,8 +111,6 @@ LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader 
 
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 
-UNAME = $(shell uname)
-
 OPENGL_LDFLAGS =
 ifneq ($(WITH_OPENGL), )
 ifeq ($(UNAME), Linux)
