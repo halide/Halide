@@ -153,7 +153,8 @@ private:
             // outer cast is narrower, the inner cast can be
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
-        } else if (cast && const_castint(cast->value, &i)) {
+        } else if (cast && const_castint(cast->value, &i) &&
+                   (cast->type.is_int() || (cast->type.bits < 32) || i >= 0)) {
             // cast of cast of const int can just be cast of const
             // int (with the int suitably munged to fit in the
             // intermediate type).
