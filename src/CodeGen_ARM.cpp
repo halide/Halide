@@ -333,7 +333,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
     llvm::Triple triple;
 
     if (target.bits == 32) {
-        if (target.features & Target::ARMv7s) {
+        if (target.has_feature(Target::ARMv7s)) {
             triple.setArchName("armv7s");
         } else {
             triple.setArch(llvm::Triple::arm);
@@ -1177,6 +1177,10 @@ void CodeGen_ARM::visit(const Store *op) {
              t == UInt(16, 8) || t == UInt(16, 4) ||
              t == UInt(32, 4) || t == UInt(32, 2) ||
              t == UInt(64, 2) || t == UInt(64, 1) ||
+             t == Int(8, 16) || t == Int(8, 8) ||
+             t == Int(16, 8) || t == Int(16, 4) ||
+             t == Int(32, 4) || t == Int(32, 2) ||
+             t == Int(64, 2) || t == Int(64, 1) ||
              t == Float(32, 2) || t == Float(32, 4));
     }
 
@@ -1387,7 +1391,7 @@ void CodeGen_ARM::visit(const Call *op) {
 
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
-        if (target.features & Target::ARMv7s) {
+        if (target.has_feature(Target::ARMv7s)) {
             return "swift";
         } else {
             return "cortex-a9";
@@ -1414,7 +1418,7 @@ bool CodeGen_ARM::use_soft_float_abi() const {
     // exhaustive anyway. It is not clear the armv7s case is necessary either.
     return target.bits == 32 &&
         ((target.os == Target::Android) ||
-         (target.os == Target::IOS && ((target.features & Target::ARMv7s) == 0)));
+         (target.os == Target::IOS && !target.has_feature(Target::ARMv7s)));
 }
 
 }}
