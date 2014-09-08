@@ -88,37 +88,37 @@ enum ArgumentType {
     ARGTYPE_UINT32
 };
 
-struct HalideOpenGLArgument {
+struct Argument {
     char *name;
     ArgumentKind kind;
     ArgumentType type;
-    HalideOpenGLArgument *next;
+    Argument *next;
 };
 
-struct HalideOpenGLKernel {
+struct KernelInfo {
     char *source;
-    HalideOpenGLArgument *arguments;
+    Argument *arguments;
     GLuint shader_id;
     GLuint program_id;
 };
 
 // Information about each known texture.
-struct HalideOpenGLTexture {
+struct TextureInfo {
     GLuint id;
     GLint min[4];
     GLint extent[4];
     GLenum format;                      // internal format: GL_RGBA, ...
     bool halide_allocated;              // allocated by us or host app?
-    HalideOpenGLTexture *next;
+    TextureInfo *next;
 };
 
 struct ModuleState {
-    HalideOpenGLKernel *kernel;
+    KernelInfo *kernel;
     ModuleState *next;
 };
 
 // All persistent state maintained by the runtime.
-struct HalideOpenGLState {
+struct GlobalState {
     bool initialized;
 
     // Various objects shared by all filter kernels
@@ -128,7 +128,7 @@ struct HalideOpenGLState {
     GLuint element_buffer;
 
     // A list of all textures that are still active
-    HalideOpenGLTexture *textures;
+    TextureInfo *textures;
 
     ModuleState *state_list;
 
@@ -140,7 +140,7 @@ struct HalideOpenGLState {
 
 // ---------- Static variables ----------
 
-WEAK HalideOpenGLState halide_opengl_state;
+WEAK GlobalState global_state;
 
 WEAK const char *vertex_shader_src =
     "attribute vec2 position;\n"
@@ -161,13 +161,13 @@ WEAK const char *var_marker    = "/// VAR ";
 // ---------- Macros ----------
 
 // Convenience macro for accessing state of the OpenGL runtime
-#define ST halide_opengl_state
+#define ST global_state
 
 // Ensure that OpenGL runtime is correctly initialized. Used in all public API
 // functions.
 #define CHECK_INITIALIZED(ERRORCODE)                            \
     if (!ST.initialized) {                                      \
-        halide_error(user_context, "OpenGL runtime not initialized.\n");        \
+        halide_error(user_context, "OpenGL runtime not initialized.\n"); \
         return ERRORCODE;                                       \
     }
 
@@ -182,7 +182,7 @@ WEAK const char *var_marker    = "/// VAR ";
 #endif
 
 #define CHECK_GLERROR(ERRORCODE) do {                                   \
-        GLenum err = halide_opengl_state.GetError();                    \
+        GLenum err = global_state.GetError();                           \
         if (err != GL_NO_ERROR) {                                       \
             LOG_GLERROR(err);                                           \
             halide_error(user_context, "OpenGL error");                 \
@@ -220,8 +220,8 @@ WEAK void print_buffer(void *user_context, buffer_t *buf) {
                   buf->host_dirty, buf->dev_dirty);
 }
 
-WEAK GLuint halide_opengl_make_shader(void *user_context, GLenum type,
-                                      const char *source, GLint *length) {
+WEAK GLuint make_shader(void *user_context, GLenum type,
+                        const char *source, GLint *length) {
     GLuint shader = ST.CreateShader(type);
     CHECK_GLERROR(1);
     ST.ShaderSource(shader, 1, (const GLchar **)&source, length);
@@ -254,10 +254,9 @@ WEAK const char *match_prefix(const char *s, const char *prefix) {
     return NULL;
 }
 
-// Parse declaration of the form "type name" and construct
-// matching HalideOpenGLArgument.
-WEAK HalideOpenGLArgument *parse_argument(void *user_context, const char *src,
-                                            const char *end) {
+// Parse declaration of the form "type name" and construct matching Argument.
+WEAK Argument *parse_argument(void *user_context, const char *src,
+                              const char *end) {
     const char *name;
     ArgumentType type = ARGTYPE_NONE;
     if ((name = match_prefix(src, "float "))) {
@@ -282,8 +281,7 @@ WEAK HalideOpenGLArgument *parse_argument(void *user_context, const char *src,
         return NULL;
     }
 
-    HalideOpenGLArgument *arg =
-        (HalideOpenGLArgument *)malloc(sizeof(HalideOpenGLArgument));
+    Argument *arg = (Argument *)malloc(sizeof(Argument));
     arg->name = strndup(name, end - name);
     arg->type = type;
     arg->kind = ARGKIND_NONE;
@@ -291,10 +289,9 @@ WEAK HalideOpenGLArgument *parse_argument(void *user_context, const char *src,
     return arg;
 }
 
-// Create HalideOpenGLKernel for a piece of GLSL code
-WEAK HalideOpenGLKernel *create_kernel(void *user_context, const char *src, int size) {
-    HalideOpenGLKernel *kernel =
-        (HalideOpenGLKernel *)malloc(sizeof(HalideOpenGLKernel));
+// Create KernelInfo for a piece of GLSL code
+WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
+    KernelInfo *kernel = (KernelInfo *)malloc(sizeof(KernelInfo));
 
     kernel->source = strndup(src, size);
     kernel->arguments = NULL;
@@ -336,8 +333,7 @@ WEAK HalideOpenGLKernel *create_kernel(void *user_context, const char *src, int 
         if ((args = match_prefix(line, kernel_marker))) {
             // ignore
         } else if ((args = match_prefix(line, var_marker))) {
-            if (HalideOpenGLArgument *arg =
-                parse_argument(user_context, args, next_line - 1)) {
+            if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = ARGKIND_VAR;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
@@ -346,8 +342,7 @@ WEAK HalideOpenGLKernel *create_kernel(void *user_context, const char *src, int 
                 goto error;
             }
         } else if ((args = match_prefix(line, input_marker))) {
-            if (HalideOpenGLArgument *arg =
-                parse_argument(user_context, args, next_line - 1)) {
+            if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = ARGKIND_INBUF;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
@@ -356,8 +351,7 @@ WEAK HalideOpenGLKernel *create_kernel(void *user_context, const char *src, int 
                 goto error;
             }
         } else if ((args = match_prefix(line, output_marker))) {
-            if (HalideOpenGLArgument *arg =
-                parse_argument(user_context, args, next_line - 1)) {
+            if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
                 arg->kind = ARGKIND_OUTBUF;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
@@ -374,10 +368,10 @@ WEAK HalideOpenGLKernel *create_kernel(void *user_context, const char *src, int 
 
     // Arguments are currently in reverse order, flip the list.
     {
-        HalideOpenGLArgument *cur = kernel->arguments;
+        Argument *cur = kernel->arguments;
         kernel->arguments = NULL;
         while (cur) {
-            HalideOpenGLArgument *next = cur->next;
+            Argument *next = cur->next;
             cur->next = kernel->arguments;
             kernel->arguments = cur;
             cur = next;
@@ -392,13 +386,13 @@ WEAK HalideOpenGLKernel *create_kernel(void *user_context, const char *src, int 
 
 // Delete all data associated with a kernel. Also release associated OpenGL
 // shader and program.
-WEAK void halide_opengl_delete_kernel(void *user_context, HalideOpenGLKernel *kernel) {
+WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
     ST.DeleteProgram(kernel->program_id);
     ST.DeleteShader(kernel->shader_id);
 
-    HalideOpenGLArgument *arg = kernel->arguments;
+    Argument *arg = kernel->arguments;
     while (arg) {
-        HalideOpenGLArgument *next = arg->next;
+        Argument *next = arg->next;
         free(arg);
         arg = next;
     }
@@ -433,8 +427,8 @@ WEAK int halide_opengl_init(void *user_context) {
     CHECK_GLERROR(1);
 
     // Initialize vertex shader.
-    ST.vertex_shader_id = halide_opengl_make_shader(user_context,
-        GL_VERTEX_SHADER, vertex_shader_src, NULL);
+    ST.vertex_shader_id = make_shader(user_context, GL_VERTEX_SHADER,
+                                      vertex_shader_src, NULL);
     if (ST.vertex_shader_id == 0) {
         halide_error(user_context, "Failed to create vertex shader");
         return 1;
@@ -485,17 +479,17 @@ WEAK void halide_opengl_release(void *user_context) {
 
     ModuleState *mod = ST.state_list;
     while (mod) {
-        halide_opengl_delete_kernel(user_context, mod->kernel);
+        delete_kernel(user_context, mod->kernel);
         ModuleState *next = mod->next;
         free(mod);
         mod = next;
     }
 
     // Delete all textures that were allocated by us.
-    HalideOpenGLTexture *tex = ST.textures;
+    TextureInfo *tex = ST.textures;
     int freed_textures = 0;
     while (tex) {
-        HalideOpenGLTexture *next = tex->next;
+        TextureInfo *next = tex->next;
         if (tex->halide_allocated) {
             ST.DeleteTextures(1, &tex->id);
             CHECK_GLERROR();
@@ -552,8 +546,8 @@ WEAK bool get_texture_format(void *user_context,
 }
 
 
-WEAK HalideOpenGLTexture *halide_opengl_find_texture(GLuint tex) {
-    HalideOpenGLTexture *texinfo = ST.textures;
+WEAK TextureInfo *find_texture(GLuint tex) {
+    TextureInfo *texinfo = ST.textures;
     while (texinfo && texinfo->id != tex) {
         texinfo = texinfo->next;
     }
@@ -639,9 +633,8 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
     // buffer_t, so we copy the interesting information here.  (There can be
     // multiple dev_malloc calls for the same buffer_t. Only record texture
     // information once.)
-    if (!halide_opengl_find_texture(tex)) {
-        HalideOpenGLTexture *texinfo =
-            (HalideOpenGLTexture*)malloc(sizeof(HalideOpenGLTexture));
+    if (!find_texture(tex)) {
+        TextureInfo *texinfo = (TextureInfo*)malloc(sizeof(TextureInfo));
         texinfo->id = tex;
         for (int i=0; i<3; i++) {
             texinfo->min[i] = buf->min[i];
@@ -667,9 +660,9 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
         return 0;
     }
 
-    // Look up corresponding HalideOpenGLTexture and unlink it from the list.
-    HalideOpenGLTexture **ptr = &ST.textures;
-    HalideOpenGLTexture *texinfo = *ptr;
+    // Look up corresponding TextureInfo and unlink it from the list.
+    TextureInfo **ptr = &ST.textures;
+    TextureInfo *texinfo = *ptr;
     for (; texinfo != NULL; ptr = &texinfo->next, texinfo = *ptr) {
         if (texinfo->id == tex) {
             *ptr = texinfo->next;
@@ -717,15 +710,15 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
     *state = mod;
 
     if (!mod->kernel) {
-        HalideOpenGLKernel *kernel = create_kernel(user_context, src, size);
+        KernelInfo *kernel = create_kernel(user_context, src, size);
         if (!kernel) {
             halide_error(user_context, "Invalid kernel\n");
             return -1;
         }
 
         // Compile shader
-        kernel->shader_id = halide_opengl_make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                      kernel->source, NULL);
+        kernel->shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
+                                        kernel->source, NULL);
 
         // Link GLSL program
         GLuint program = ST.CreateProgram();
@@ -1013,7 +1006,7 @@ WEAK int halide_opengl_dev_run(
         return -1;
     }
 
-    HalideOpenGLKernel *kernel = mod->kernel;
+    KernelInfo *kernel = mod->kernel;
     if (!kernel) {
         halide_printf(user_context, "Internal error: unknown kernel named '%s'\n", entry_name);
         return 1;
@@ -1021,7 +1014,7 @@ WEAK int halide_opengl_dev_run(
 
     ST.UseProgram(kernel->program_id);
 
-    HalideOpenGLArgument *kernel_arg;
+    Argument *kernel_arg;
     bool bind_render_targets = true;
 
     // Copy input arguments to corresponding GLSL uniforms.
@@ -1163,7 +1156,7 @@ WEAK int halide_opengl_dev_run(
             CHECK_GLERROR(1);
         }
 
-        HalideOpenGLTexture *texinfo = halide_opengl_find_texture(tex);
+        TextureInfo *texinfo = find_texture(tex);
         if (!texinfo) {
             halide_error(user_context, "Undefined output texture");
             return 1;

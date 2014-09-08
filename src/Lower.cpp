@@ -677,7 +677,7 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (target.features & Target::NoAsserts) {
+        if (target.has_feature(Target::NoAsserts)) {
             return s;
         } else {
             return inject_explicit_bounds(s, func);
@@ -891,7 +891,7 @@ Stmt create_initial_loop_nest(Function f, const Target &t) {
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
     s = Pipeline::make(f.name(), r.first, r.second, Evaluate::make(0));
-    if (t.features & Target::NoAsserts) {
+    if (t.has_feature(Target::NoAsserts)) {
         return s;
     } else {
         return inject_explicit_bounds(s, f);
@@ -1200,7 +1200,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         s = LetStmt::make(lets[i].first, lets[i].second, s);
     }
 
-    if (t.features & Target::NoAsserts) {
+    if (t.has_feature(Target::NoAsserts)) {
         asserts.clear();
     }
 
@@ -1224,8 +1224,8 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 // requirements.
 Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds &fb) {
 
-    bool no_asserts = t.features & Target::NoAsserts;
-    bool no_bounds_query = t.features & Target::NoBoundsQuery;
+    bool no_asserts = t.has_feature(Target::NoAsserts);
+    bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
     // First hunt for all the referenced buffers
     FindBuffers finder;
@@ -1725,7 +1725,7 @@ Stmt lower(Function f, const Target &t) {
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.features & Target::OpenGL) {
+    if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
         s = inject_opengl_intrinsics(s);
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
@@ -1735,7 +1735,7 @@ Stmt lower(Function f, const Target &t) {
     s = storage_flattening(s, env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
-    if (t.has_gpu_feature() || t.features & Target::OpenGL) {
+    if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";

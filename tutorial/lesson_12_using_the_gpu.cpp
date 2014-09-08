@@ -7,7 +7,7 @@
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -o lesson_12
+// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -lpng -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
 #include <Halide.h>
@@ -175,18 +175,18 @@ public:
         // performance than CUDA, even with NVidia's drivers, because
         // NVidia's open source LLVM backend doesn't seem to do all
         // the same optimizations their proprietary compiler does.
-        target.features |= Target::OpenCL;
+        target.set_feature(Target::OpenCL);
 
         // Uncomment the next line and comment out the line above to
         // try CUDA instead.
-        // target.features |= Target::CUDA;
+        // target.set_feature(Target::CUDA);
 
         // If you want to see all of the OpenCL or CUDA API calls done
         // by the pipeline, you can also enable the GPUDebug
         // flag. This is helpful for figuring out which stages are
         // slow, or when CPU -> GPU copies happen. It hurts
         // performance though, so we'll leave it commented out.
-        //target.features |= Target::GPUDebug;
+        // target.set_feature(Target::GPUDebug);
 
         curved.compile_jit(target);
     }
@@ -196,21 +196,33 @@ public:
 
         // If we realize curved into a Halide::Image, that will
         // unfairly penalize GPU performance by including a GPU->CPU
-        // copy. Halide::Image objects always exist on the CPU.
+        // copy in every run. Halide::Image objects always exist on
+        // the CPU.
 
         // Halide::Buffer, however, represents a buffer that may
-        // exist on either CPU or GPU or both. Constructing an
-        // Image using a Buffer forces the copy-back from the GPU.
+        // exist on either CPU or GPU or both.
         Buffer output(UInt(8), input.width(), input.height(), input.channels());
 
-        // Take the best of several runs.
+        // Run the filter once to initialize any GPU runtime state.
+        curved.realize(output);
+
+        // Now take the best of 3 runs for timing.
         double best_time;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 3; i++) {
+
             double t1 = current_time();
-            curved.realize(output);
+
+            // Run the filter 100 times.
+            for (int j = 0; j < 100; j++) {
+                curved.realize(output);
+            }
+
+            // Force any GPU code to finish by copying the buffer back to the CPU.
+            output.copy_to_host();
+
             double t2 = current_time();
 
-            double elapsed = t2 - t1;
+            double elapsed = (t2 - t1)/100;
             if (i == 0 || elapsed < best_time) {
                 best_time = elapsed;
             }
