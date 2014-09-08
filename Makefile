@@ -43,6 +43,12 @@ WITH_OPENGL ?= 1
 WITH_INTROSPECTION ?= 1
 # WITH_EXCEPTIONS ?= 1
 
+# Runtime files with debug information is known to confuse older versions of
+# LLVM running on OS X and Windows. We therefore disable them by default unless
+# LLVM >= 3.6 or we're running under Linux.
+WITH_DEBUG_RUNTIME ?= $(if $(or $(LLVM_36_OR_NEWER), \
+                                $(filter $(UNAME), Linux)), 1, )
+
 # turn off PTX for llvm 3.2
 ifneq ($(LLVM_VERSION), 3.2)
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
@@ -78,6 +84,9 @@ AARCH64_CXX_FLAGS=$(if $(WITH_AARCH64), -DWITH_AARCH64=1, )
 AARCH64_LLVM_CONFIG_LIB=$(if $(WITH_AARCH64), aarch64, )
 
 INTROSPECTION_CXX_FLAGS=$(if $(WITH_INTROSPECTION), -DWITH_INTROSPECTION, )
+
+DEBUG_RUNTIME_CXXFLAGS = $(if $(WITH_DEBUG_RUNTIME), -g, )
+
 EXCEPTIONS_CXX_FLAGS=$(if $(WITH_EXCEPTIONS), -DWITH_EXCEPTIONS, )
 
 CXX_WARNING_FLAGS = -Wall -Werror -Wno-unused-function -Wcast-qual
@@ -233,11 +242,11 @@ msvc/initmod.cpp: $(INITIAL_MODULES)
 # -m64 isn't respected unless we also use a 64-bit target
 $(BUILD_DIR)/initmod.%_64.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -ffreestanding -fno-blocks -fno-exceptions -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
+	$(CLANG) $(CXX_WARNING_FLAGS) $(DEBUG_RUNTIME_CXXFLAGS) -ffreestanding -fno-blocks -fno-exceptions -m64 -target "x86_64-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_64 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_64.d
 
 $(BUILD_DIR)/initmod.%_32.ll: src/runtime/%.cpp $(BUILD_DIR)/clang_ok
 	@-mkdir -p $(BUILD_DIR)
-	$(CLANG) $(CXX_WARNING_FLAGS) -g -ffreestanding -fno-blocks -fno-exceptions -m32 -target "i386-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
+	$(CLANG) $(CXX_WARNING_FLAGS) $(DEBUG_RUNTIME_CXXFLAGS) -ffreestanding -fno-blocks -fno-exceptions -m32 -target "i386-unknown-unknown-unknown" -DCOMPILING_HALIDE_RUNTIME -DBITS_32 -emit-llvm -S src/runtime/$*.cpp -o $@ -MMD -MP -MF $(BUILD_DIR)/initmod.$*_32.d
 
 $(BUILD_DIR)/initmod.%_ll.ll: src/runtime/%.ll
 	@-mkdir -p $(BUILD_DIR)
