@@ -90,7 +90,7 @@ Target get_host_target() {
         << ", " << info[3]
         << std::dec << "\n";
 
-    uint64_t features = 0;
+    Target::FeatureSet features;
     if (have_sse41) features |= Target::SSE41;
     if (have_avx)   features |= Target::AVX;
     if (have_f16c)  features |= Target::F16C;
@@ -259,21 +259,21 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "sse41") {
             features |= Target::SSE41;
         } else if (tok == "avx") {
-            features |= (Target::SSE41 | Target::AVX);
+            features = features | Target::SSE41 |Target::AVX;
         } else if (tok == "avx2") {
-            features |= (Target::SSE41 | Target::AVX | Target::AVX2);
+            features = features | Target::SSE41 | Target::AVX | Target::AVX2;
         } else if (tok == "armv7s") {
             features |= Target::ARMv7s;
         } else if (tok == "cuda" || tok == "ptx") {
             features |= Target::CUDA;
         } else if (tok == "cuda_capability_30") {
-            features |= Target::CUDA | Target::CUDACapability30;
+            features = features | Target::CUDA | Target::CUDACapability30;
         } else if (tok == "cuda_capability_32") {
-            features |= Target::CUDA | Target::CUDACapability32;
+            features = features | Target::CUDA | Target::CUDACapability32;
         } else if (tok == "cuda_capability_35") {
-            features |= Target::CUDA | Target::CUDACapability35;
+            features = features | Target::CUDA | Target::CUDACapability35;
         } else if (tok == "cuda_capability_50") {
-            features |= Target::CUDA | Target::CUDACapability50;
+            features = features | Target::CUDA | Target::CUDACapability50;
         } else if (tok == "opencl") {
             features |= Target::OpenCL;
         } else if (tok == "gpu_debug") {
@@ -287,11 +287,11 @@ bool Target::merge_string(const std::string &target) {
         } else if (tok == "cl_doubles") {
             features |= Target::CLDoubles;
         } else if (tok == "fma") {
-            features |= (Target::FMA | Target::SSE41 | Target::AVX);
+            features = features | Target::FMA | Target::SSE41 | Target::AVX;
         } else if (tok == "fma4") {
-            features |= (Target::FMA4 | Target::SSE41 | Target::AVX);
+            features = features | Target::FMA4 | Target::SSE41 | Target::AVX;
         } else if (tok == "f16c") {
-            features |= (Target::F16C | Target::SSE41 | Target::AVX);
+            features = features | Target::F16C | Target::SSE41 | Target::AVX;
         } else {
             return false;
         }
@@ -332,19 +332,22 @@ std::string Target::to_string() const {
   const char* const os_names[] = {
       "os_unknown", "linux", "windows", "osx", "android", "ios", "nacl"
   };
+  // The contents of this array must match Target::Features.
   const char* const feature_names[] = {
-      "jit", "sse41", "avx", "avx2", "cuda",
-      "opencl", "opengl", "gpu_debug", "no_asserts", "no_bounds_query",
-      "armv7s", "cl_doubles", "fma", "fma4", "f16c",
-      "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50"
+      "jit", "gpu_debug", "no_asserts", "no_bounds_query",
+      "sse41", "avx", "avx2", "fma", "fma4", "f16c",
+      "armv7s",
+      "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
+      "opencl", "cl_doubles",
+      "opengl",
   };
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
       + "-" + string(os_names[os]);
   for (size_t i = 0; i < (sizeof(feature_names) / sizeof(feature_names[0])); ++i) {
-    if (features & (1ULL << i)) {
-      result += "-" + string(feature_names[i]);
-    }
+      if (has_feature(static_cast<Features>(i))) {
+          result += "-" + string(feature_names[i]);
+      }
   }
   return result;
 }
@@ -736,42 +739,42 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     if (t.arch == Target::MIPS) {
         modules.push_back(get_initmod_mips_ll(c));
     }
-    if (t.features & Target::SSE41) {
+    if (t.has_feature(Target::SSE41)) {
         modules.push_back(get_initmod_x86_sse41_ll(c));
     }
-    if (t.features & Target::AVX) {
+    if (t.has_feature(Target::AVX)) {
         modules.push_back(get_initmod_x86_avx_ll(c));
     }
-    if (t.features & Target::CUDA) {
+    if (t.has_feature(Target::CUDA)) {
         if (t.os == Target::Windows) {
-            if (t.features & Target::GPUDebug) {
+            if (t.has_feature(Target::GPUDebug)) {
                 modules.push_back(get_initmod_windows_cuda_debug(c, bits_64));
             } else {
                 modules.push_back(get_initmod_windows_cuda(c, bits_64));
             }
         } else {
-            if (t.features & Target::GPUDebug) {
+            if (t.has_feature(Target::GPUDebug)) {
                 modules.push_back(get_initmod_cuda_debug(c, bits_64));
             } else {
                 modules.push_back(get_initmod_cuda(c, bits_64));
             }
         }
-    } else if (t.features & Target::OpenCL) {
+    } else if (t.has_feature(Target::OpenCL)) {
         if (t.os == Target::Windows) {
-            if (t.features & Target::GPUDebug) {
+            if (t.has_feature(Target::GPUDebug)) {
                 modules.push_back(get_initmod_windows_opencl_debug(c, bits_64));
             } else {
                 modules.push_back(get_initmod_windows_opencl(c, bits_64));
             }
         } else {
-            if (t.features & Target::GPUDebug) {
+            if (t.has_feature(Target::GPUDebug)) {
                 modules.push_back(get_initmod_opencl_debug(c, bits_64));
             } else {
                 modules.push_back(get_initmod_opencl(c, bits_64));
             }
         }
-    } else if (t.features & Target::OpenGL) {
-        if (t.features & Target::GPUDebug) {
+    } else if (t.has_feature(Target::OpenGL)) {
+        if (t.has_feature(Target::GPUDebug)) {
             modules.push_back(get_initmod_opengl_debug(c, bits_64));
         } else {
             modules.push_back(get_initmod_opengl(c, bits_64));
@@ -793,7 +796,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
 
     if (t.os == Target::Windows &&
         t.bits == 32 &&
-        (t.features & Target::JIT)) {
+        (t.has_feature(Target::JIT))) {
         undo_win32_name_mangling(modules[0]);
     }
 
@@ -813,12 +816,13 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
 
     // This table is based on the guidance at:
     // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
-    if (target.features & Target::CUDACapability35) {
+    if (target.has_feature(Target::CUDACapability35)) {
         module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.features & (Target::CUDACapability32 | Target::CUDACapability50)) {
+    } else if (target.has_feature(Target::CUDACapability32) ||
+               target.has_feature(Target::CUDACapability50)) {
         // For some reason sm_32 and sm_50 use libdevice 20
         module = get_initmod_ptx_compute_20_ll(c);
-    } else if (target.features & Target::CUDACapability30) {
+    } else if (target.has_feature(Target::CUDACapability30)) {
         module = get_initmod_ptx_compute_30_ll(c);
     } else {
         module = get_initmod_ptx_compute_20_ll(c);

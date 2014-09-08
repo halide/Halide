@@ -17,9 +17,9 @@ StmtCompiler::StmtCompiler(Target target) {
     }
 
     // The awkward mapping from targets to code generators
-    if ((target.features & Target::CUDA) ||
-        (target.features & Target::OpenCL) ||
-        (target.features & Target::OpenGL)) {
+    if ((target.has_feature(Target::CUDA)) ||
+        (target.has_feature(Target::OpenCL)) ||
+        (target.has_feature(Target::OpenGL))) {
         if (target.arch == Target::X86) {
             contents = new CodeGen_GPU_Host<CodeGen_X86>(target);
         }

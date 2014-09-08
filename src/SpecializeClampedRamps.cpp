@@ -17,8 +17,8 @@ private:
     using IRVisitor::visit;
 
     void visit(const Min *op) {
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
+        Expr a = simplify(mutate(op->a));
+        Expr b = simplify(mutate(op->b));
 
         const Ramp *ra = a.as<Ramp>();
         const Ramp *rb = b.as<Ramp>();
@@ -44,8 +44,8 @@ private:
     }
 
     void visit(const Max *op) {
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
+        Expr a = simplify(mutate(op->a));
+        Expr b = simplify(mutate(op->b));
 
         const Ramp *ra = a.as<Ramp>();
         const Ramp *rb = b.as<Ramp>();
@@ -94,7 +94,6 @@ class SpecializeClampedRamps : public IRMutator {
         if (simpler_store.same_as(op)) {
             stmt = op;
         } else {
-            simpler_store = SpecializeClampedRamps().mutate(simpler_store);
             Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_store, op);
         }
@@ -110,7 +109,6 @@ class SpecializeClampedRamps : public IRMutator {
             stmt = LetStmt::make(op->name, op->value, body);
         } else {
             Stmt simpler_let = LetStmt::make(op->name, simpler_value, body);
-            simpler_let = SpecializeClampedRamps().mutate(simpler_let);
             Expr predicate = simplify(p.min_predicate && p.max_predicate);
             stmt = IfThenElse::make(predicate, simpler_let, op);
         }

@@ -39,8 +39,8 @@ bool relatively_equal(value_t a, value_t b) {
 #define fun_1(type, name, c_name)                                             \
     void test_##type##_##name(buffer_t *in_buf) {                             \
         Target target = get_jit_target_from_environment();                    \
-        if ((target.features & Target::OpenCL) != 0 &&                        \
-            (target.features & Target::CLDoubles) == 0 &&                     \
+        if (target.has_feature(Target::OpenCL) &&                             \
+            !target.has_feature(Target::CLDoubles) &&                         \
             type_of<type>() == type_of<double>()) {                           \
             return;                                                           \
         }                                                                     \
@@ -65,8 +65,8 @@ bool relatively_equal(value_t a, value_t b) {
 #define fun_2(type, name, c_name)                                                   \
     void test_##type##_##name(buffer_t *in_buf) {                                   \
         Target target = get_jit_target_from_environment();                          \
-        if ((target.features & Target::OpenCL) != 0 &&                              \
-            (target.features & Target::CLDoubles) == 0 &&                           \
+        if (target.has_feature(Target::OpenCL) &&                                   \
+            !target.has_feature(Target::CLDoubles) &&                               \
             type_of<type>() == type_of<double>()) {                                 \
             return;                                                                 \
         }                                                                           \
