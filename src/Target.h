@@ -59,7 +59,7 @@ struct Target {
 
         OpenGL,  ///< Enable the OpenGL runtime.
 
-        FeatureEnd,
+        FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
     };
