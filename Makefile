@@ -8,6 +8,7 @@
 
 SHELL = bash
 CXX ?= g++
+UNAME := $(shell uname -s)
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
@@ -26,6 +27,10 @@ OPTIMIZE ?= -O3
 BUILD_BIT_SIZE ?=
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+ifeq ($(shell expr $(LLVM_VERSION_TIMES_10) ">=" 36), 1)
+LLVM_36_OR_NEWER = 1
+endif
+
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
@@ -89,7 +94,6 @@ CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 
-LLVM_36_OR_NEWER = $(shell expr LLVM_VERSION_TIMES_TEN ">=" 36)
 ifneq ($(LLVM_36_OR_NEWER), 1)
 LLVM_OLD_JIT_COMPONENT = jit
 endif
