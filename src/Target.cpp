@@ -683,7 +683,8 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     // -g (debug info) doesn't work with the old JIT, give an
     // intelligible reason why here.
     if (debug && t.has_feature(Target::JIT)) {
-        internal_error << "The debug runtime is not supported when using JIT on this platform.\n";
+        Internal::debug(0) << "The debug runtime is not supported when using JIT on this platform.\n";
+        debug = false;
     }
 #endif
 
