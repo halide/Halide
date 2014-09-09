@@ -36,7 +36,7 @@ WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
 WITH_OPENCL ?= 1
 WITH_OPENGL ?= 1
 WITH_INTROSPECTION ?= 1
-# WITH_EXCEPTIONS ?= 1
+WITH_EXCEPTIONS ?= 0
 
 # turn off PTX for llvm 3.2
 ifneq ($(LLVM_VERSION), 3.2)

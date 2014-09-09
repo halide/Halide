@@ -34,35 +34,35 @@ else()
 endif()
 
 if (TARGET_NATIVE_CLIENT)
-  add_definitions("-DWITH_NATIVE_CLIENT=1")
+  add_definitions("-DWITH_NATIVE_CLIENT")
 endif()
 
 if (TARGET_X86)
-  add_definitions("-DWITH_X86=1")
+  add_definitions("-DWITH_X86")
 endif()
 
 if (TARGET_ARM)
-  add_definitions("-DWITH_ARM=1")
+  add_definitions("-DWITH_ARM")
 endif()
 
 if (TARGET_AARCH64)
-  add_definitions("-DWITH_AARCH64=1")
+  add_definitions("-DWITH_AARCH64")
 endif()
 
 if (TARGET_PTX)
-  add_definitions("-DWITH_PTX=1")
+  add_definitions("-DWITH_PTX")
 endif()
 
 if (TARGET_OPENCL)
-  add_definitions("-DWITH_OPENCL=1")
+  add_definitions("-DWITH_OPENCL")
 endif()
 
 if (TARGET_OPENGL)
-  add_definitions("-DWITH_OPENGL=1")
+  add_definitions("-DWITH_OPENGL")
 endif()
 
 if (TARGET_MIPS)
-  add_definitions("-DWITH_MIPS=1")
+  add_definitions("-DWITH_MIPS")
 endif()
 
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
