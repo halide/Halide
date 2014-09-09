@@ -8,7 +8,7 @@
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
-#if WITH_PTX
+#ifdef WITH_PTX
 namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
 #endif
 
@@ -126,7 +126,7 @@ void CodeGen_PTX_Dev::init_module() {
 
     CodeGen::init_module();
 
-    #if WITH_PTX
+    #ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
     #endif
 
@@ -247,7 +247,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-    #if WITH_PTX
+    #ifdef WITH_PTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
