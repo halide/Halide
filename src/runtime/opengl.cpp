@@ -75,29 +75,23 @@ enum OpenGLProfile {
     OpenGLES
 };
 
-enum ArgumentKind {
-    ARGKIND_NONE,
-    ARGKIND_VAR,
-    ARGKIND_INBUF,
-    ARGKIND_OUTBUF
-};
-
-enum ArgumentType {
-    ARGTYPE_NONE,
-    ARGTYPE_BOOL,
-    ARGTYPE_FLOAT,
-    ARGTYPE_INT8,
-    ARGTYPE_INT16,
-    ARGTYPE_INT32,
-    ARGTYPE_UINT8,
-    ARGTYPE_UINT16,
-    ARGTYPE_UINT32
-};
-
 struct Argument {
+    // The kind of data stored in an argument
+    enum Kind {
+        Invalid,
+        Var,                            // uniform variable
+        Inbuf,                          // input texture
+        Outbuf                          // output texture
+    };
+
+    // The elementary data type of the argument
+    enum Type {
+        Void, Bool, Float, Int8, Int16, Int32, UInt8, UInt16, UInt32
+    };
+
     char *name;
-    ArgumentKind kind;
-    ArgumentType type;
+    Kind kind;
+    Type type;
     Argument *next;
 };
 
@@ -268,25 +262,25 @@ WEAK const char *match_prefix(const char *s, const char *prefix) {
 WEAK Argument *parse_argument(void *user_context, const char *src,
                               const char *end) {
     const char *name;
-    ArgumentType type = ARGTYPE_NONE;
+    Argument::Type type = Argument::Void;
     if ((name = match_prefix(src, "float "))) {
-        type = ARGTYPE_FLOAT;
+        type = Argument::Float;
     } else if ((name = match_prefix(src, "bool "))) {
-        type = ARGTYPE_BOOL;
+        type = Argument::Bool;
     } else if ((name = match_prefix(src, "int8_t "))) {
-        type = ARGTYPE_INT8;
+        type = Argument::Int8;
     } else if ((name = match_prefix(src, "int16_t "))) {
-        type = ARGTYPE_INT16;
+        type = Argument::Int16;
     } else if ((name = match_prefix(src, "int32_t "))) {
-        type = ARGTYPE_INT32;
+        type = Argument::Int32;
     } else if ((name = match_prefix(src, "uint8_t "))) {
-        type = ARGTYPE_UINT8;
+        type = Argument::UInt8;
     } else if ((name = match_prefix(src, "uint16_t "))) {
-        type = ARGTYPE_UINT16;
+        type = Argument::UInt16;
     } else if ((name = match_prefix(src, "uint32_t "))) {
-        type = ARGTYPE_UINT32;
+        type = Argument::UInt32;
     }
-    if (type == ARGTYPE_NONE) {
+    if (type == Argument::Void) {
         halide_error(user_context, "Internal error: argument type not supported");
         return NULL;
     }
@@ -294,7 +288,7 @@ WEAK Argument *parse_argument(void *user_context, const char *src,
     Argument *arg = (Argument *)malloc(sizeof(Argument));
     arg->name = strndup(name, end - name);
     arg->type = type;
-    arg->kind = ARGKIND_NONE;
+    arg->kind = Argument::Invalid;
     arg->next = 0;
     return arg;
 }
@@ -344,7 +338,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
             // ignore
         } else if ((args = match_prefix(line, var_marker))) {
             if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = ARGKIND_VAR;
+                arg->kind = Argument::Var;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
@@ -353,7 +347,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
             }
         } else if ((args = match_prefix(line, input_marker))) {
             if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = ARGKIND_INBUF;
+                arg->kind = Argument::Inbuf;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
@@ -362,7 +356,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
             }
         } else if ((args = match_prefix(line, output_marker))) {
             if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = ARGKIND_OUTBUF;
+                arg->kind = Argument::Outbuf;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
@@ -1078,7 +1072,7 @@ WEAK int halide_opengl_dev_run(
             return 1;
         }
 
-        if (kernel_arg->kind == ARGKIND_OUTBUF) {
+        if (kernel_arg->kind == Argument::Outbuf) {
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
             GLuint tex = *((GLuint *)args[i]);
@@ -1087,7 +1081,7 @@ WEAK int halide_opengl_dev_run(
             }
             // Outbuf textures are handled explicitly below
             continue;
-        } else if (kernel_arg->kind == ARGKIND_INBUF) {
+        } else if (kernel_arg->kind == Argument::Inbuf) {
             GLint loc =
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
             CHECK_GLERROR(1);
@@ -1101,7 +1095,7 @@ WEAK int halide_opengl_dev_run(
             ST.Uniform1iv(loc, 1, &num_active_textures);
             num_active_textures++;
             // TODO: check maximum number of active textures
-        } else if (kernel_arg->kind == ARGKIND_VAR) {
+        } else if (kernel_arg->kind == Argument::Var) {
             GLint loc =
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
             CHECK_GLERROR(1);
@@ -1112,40 +1106,40 @@ WEAK int halide_opengl_dev_run(
 
             // Note: small integers are represented as floats in GLSL.
             switch (kernel_arg->type) {
-            case ARGTYPE_FLOAT:
+            case Argument::Float:
                 set_float_param(user_context, kernel_arg->name, loc, *(float*)args[i]);
                 break;
-            case ARGTYPE_BOOL: {
+            case Argument::Bool: {
                 GLint value = *((bool*)args[i]) ? 1 : 0;
                 set_int_param(user_context, kernel_arg->name, loc, value);
                 break;
             }
-            case ARGTYPE_INT8: {
+            case Argument::Int8: {
                 GLfloat value = *((int8_t*)args[i]);
                 set_float_param(user_context, kernel_arg->name, loc, value);
                 break;
             }
-            case ARGTYPE_UINT8: {
+            case Argument::UInt8: {
                 GLfloat value = *((uint8_t*)args[i]);
                 set_float_param(user_context, kernel_arg->name, loc, value);
                 break;
             }
-            case ARGTYPE_INT16: {
+            case Argument::Int16: {
                 GLfloat value = *((int16_t*)args[i]);
                 set_float_param(user_context, kernel_arg->name, loc, value);
                 break;
             }
-            case ARGTYPE_UINT16: {
+            case Argument::UInt16: {
                 GLfloat value = *((uint16_t*)args[i]);
                 set_float_param(user_context, kernel_arg->name, loc, value);
                 break;
             }
-            case ARGTYPE_INT32: {
+            case Argument::Int32: {
                 GLint value = *((int32_t*)args[i]);
                 set_int_param(user_context, kernel_arg->name, loc, value);
                 break;
             }
-            case ARGTYPE_UINT32: {
+            case Argument::UInt32: {
                 uint32_t value = *((uint32_t*)args[i]);
                 GLint signed_value;
                 if (value > 0x7fffffff) {
@@ -1158,8 +1152,8 @@ WEAK int halide_opengl_dev_run(
                 set_int_param(user_context, kernel_arg->name, loc, signed_value);
                 break;
             }
-            case ARGTYPE_NONE:
-                halide_error(user_context, "Unknown kernel argument type");
+            case Argument::Void:
+                halide_error(user_context, "GLSL: Encountered invalid kernel argument type");
                 return 1;
             }
         }
@@ -1183,7 +1177,7 @@ WEAK int halide_opengl_dev_run(
     GLint num_output_textures = 0;
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (kernel_arg->kind != ARGKIND_OUTBUF) continue;
+        if (kernel_arg->kind != Argument::Outbuf) continue;
 
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
