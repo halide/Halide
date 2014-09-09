@@ -349,39 +349,52 @@ void check_sse_all() {
 
     // skip dot product and argmin
 
+    check("pmaddwd", 4, i32(i16_1) * 3 + i32(i16_2) * 4);
+    check("pmaddwd", 4, u32(u16_1) * 3 + u32(u16_2) * 4);
+    check("pmaddwd", 4, i32(i16_1) * 3 - i32(i16_2) * 4);
+    check("pmaddwd", 4, u32(u16_1) * 3 - u32(u16_2) * 4);
+
+    if (use_avx2) {
+        check("vpmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
+        check("vpmaddwd", 8, u32(u16_1) * 3 + u32(u16_2) * 4);
+    } else {
+        check("pmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
+        check("pmaddwd", 8, u32(u16_1) * 3 + u32(u16_2) * 4);
+    }
+
     // llvm doesn't distinguish between signed and unsigned multiplies
     //check("pmuldq", 4, i64(i32_1) * i64(i32_2));
     if (use_sse41) {
-    check("pmuludq", 4, u64(u32_1) * u64(u32_2));
-    check("pmulld", 4, i32_1 * i32_2);
+        check("pmuludq", 4, u64(u32_1) * u64(u32_2));
+        check("pmulld", 4, i32_1 * i32_2);
 
-    check("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
-    check("blendvpd", 2, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-    check("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
+        check("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
+        check("blendvpd", 2, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+        check("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
 
-    check("pmaxsb", 16, max(i8_1, i8_2));
-    check("pminsb", 16, min(i8_1, i8_2));
-    check("pmaxuw", 8, max(u16_1, u16_2));
-    check("pminuw", 8, min(u16_1, u16_2));
-    check("pmaxud", 4, max(u32_1, u32_2));
-    check("pminud", 4, min(u32_1, u32_2));
-    check("pmaxsd", 4, max(i32_1, i32_2));
-    check("pminsd", 4, min(i32_1, i32_2));
+        check("pmaxsb", 16, max(i8_1, i8_2));
+        check("pminsb", 16, min(i8_1, i8_2));
+        check("pmaxuw", 8, max(u16_1, u16_2));
+        check("pminuw", 8, min(u16_1, u16_2));
+        check("pmaxud", 4, max(u32_1, u32_2));
+        check("pminud", 4, min(u32_1, u32_2));
+        check("pmaxsd", 4, max(i32_1, i32_2));
+        check("pminsd", 4, min(i32_1, i32_2));
 
-    check("roundps", 4, round(f32_1));
-    check("roundpd", 2, round(f64_1));
-    check("roundps", 4, floor(f32_1));
-    check("roundpd", 2, floor(f64_1));
-    check("roundps", 4, ceil(f32_1));
-    check("roundpd", 2, ceil(f64_1));
+        check("roundps", 4, round(f32_1));
+        check("roundpd", 2, round(f64_1));
+        check("roundps", 4, floor(f32_1));
+        check("roundpd", 2, floor(f64_1));
+        check("roundps", 4, ceil(f32_1));
+        check("roundpd", 2, ceil(f64_1));
 
-    check("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
-    check("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
+        check("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
+        check("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
     }
 
     // SSE 4.2
     if (use_sse42) {
-    check("pcmpgtq", 2, select(i64_1 > i64_2, i64(1), i64(2)));
+        check("pcmpgtq", 2, select(i64_1 > i64_2, i64(1), i64(2)));
     }
 
     // AVX
