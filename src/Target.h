@@ -110,6 +110,26 @@ struct Target {
         return true;
     }
 
+    /** Return a copy of the target with the given feature set.
+     * This is convenient when enabling certain features (e.g. NoBoundsQuery)
+     * in an initialization list, where the target to be mutated may be
+     * a const reference. */
+    Target with_feature(Feature f) const {
+        Target copy = *this;
+        copy.set_feature(f);
+        return copy;
+    }
+
+    /** Return a copy of the target with the given feature cleared.
+     * This is convenient when disabling certain features (e.g. NoBoundsQuery)
+     * in an initialization list, where the target to be mutated may be
+     * a const reference. */
+    Target without_feature(Feature f) const {
+        Target copy = *this;
+        copy.set_feature(f, false);
+        return copy;
+    }
+
     /** Is OpenCL or CUDA enabled in this target? I.e. is
      * Func::gpu_tile and similar going to work? We do not include
      * OpenGL, because it is not capable of gpgpu, and is not
