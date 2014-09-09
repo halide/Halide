@@ -28,15 +28,20 @@ BUILD_BIT_SIZE ?=
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
 
+# All WITH_* flags are either empty or not-empty. They do not behave
+# like true/false values in most languages.  To turn one off, either
+# edit this file, add "WITH_FOO=" (no assigned value) to the make
+# line, or define an environment variable WITH_FOO that has an empty
+# value.
 WITH_NATIVE_CLIENT ?= $(findstring nacltransforms, $(LLVM_COMPONENTS))
 WITH_X86 ?= $(findstring x86, $(LLVM_COMPONENTS))
 WITH_ARM ?= $(findstring arm, $(LLVM_COMPONENTS))
 WITH_MIPS ?= $(findstring mips, $(LLVM_COMPONENTS))
 WITH_AARCH64 ?= $(findstring aarch64, $(LLVM_COMPONENTS))
-WITH_OPENCL ?= 1
-WITH_OPENGL ?= 1
-WITH_INTROSPECTION ?= 1
-WITH_EXCEPTIONS ?= 0
+WITH_OPENCL ?= not-empty
+WITH_OPENGL ?= not-empty
+WITH_INTROSPECTION ?= not-empty
+WITH_EXCEPTIONS ?=
 
 # turn off PTX for llvm 3.2
 ifneq ($(LLVM_VERSION), 3.2)
