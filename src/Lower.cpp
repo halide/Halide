@@ -27,8 +27,8 @@
 #include "UniquifyVariableNames.h"
 #include "SkipStages.h"
 #include "CSE.h"
-#include "SpecializeClampedRamps.h"
 #include "SpecializeBranchedLoops.h"
+#include "SpecializeClampedRamps.h"
 #include "RemoveUndef.h"
 #include "AllocationBoundsInference.h"
 #include "Inline.h"
@@ -288,7 +288,6 @@ Stmt build_provide_loop_nest(Function f,
     }
 
     // Rewrap the statement in the containing lets and fors.
-    int j = (int)splits.size() - 1;
     for (int i = (int)nest.size() - 1; i >= 0; i--) {
         if (nest[i].value.defined()) {
             stmt = LetStmt::make(nest[i].name, nest[i].value, stmt);
@@ -296,114 +295,7 @@ Stmt build_provide_loop_nest(Function f,
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            bool used_split = false;
-
-            if (j >= 0) {
-                const Split &split = splits[j];
-                Expr outer = Variable::make(Int(32), prefix + split.outer);
-
-                if (split.is_split() && nest[i].name == prefix + split.outer) {
-                    Expr inner = Variable::make(Int(32), prefix + split.inner);
-                    Expr old_max = Variable::make(Int(32), prefix + split.old_var + ".loop_max");
-                    Expr old_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
-                    Expr old_extent = Variable::make(Int(32), prefix + split.old_var + ".loop_extent");
-
-                    known_size_dims[split.inner] = split.factor;
-
-                    Expr base = outer * split.factor + old_min;
-                    bool has_tail = false;
-                    Stmt tail_stmt;
-
-                    map<string, Expr>::iterator iter = known_size_dims.find(split.old_var);
-                    if ((iter != known_size_dims.end()) &&
-                        is_zero(simplify(iter->second % split.factor))) {
-
-                        // We have proved that the split factor divides the
-                        // old extent. No need to adjust the base.
-                        known_size_dims[split.outer] = iter->second / split.factor;
-                    } else if (split.exact) {
-                        // It's an exact split but we failed to prove that the
-                        // extent divides the factor. This is a problem.
-                        user_error << "When splitting " << split.old_var << " into "
-                                   << split.outer << " and " << split.inner << ", "
-                                   << "could not prove the split factor (" << split.factor << ") "
-                                   << "divides the extent of " << split.old_var
-                                   << " (" << iter->second << "). This is required when "
-                                   << "the split originates from an RVar.\n";
-                    } else if (!is_update) {
-                        // Adjust the base downwards to not compute off the
-                        // end of the realization.
-
-                        // base = Min::make(base, old_max + (1 - split.factor));
-                        has_tail = true;
-                        tail_stmt = stmt;
-                    }
-
-                    string base_name = prefix + split.inner + ".base";
-                    Expr base_var = Variable::make(Int(32), base_name);
-                    //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
-                    stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-
-                    if (split.exact) {
-                        // The bounds of the old reduction variable need to be
-                        // explicitly defined for the benefit of producers
-                        // that feed into this stage. They run from base to
-                        // base + split factor.
-                        stmt = LetStmt::make(prefix + split.old_var + ".min",
-                                             base_var, stmt);
-                        stmt = LetStmt::make(prefix + split.old_var + ".max",
-                                             base_var + split.factor - 1, stmt);
-                    }
-
-                    stmt = LetStmt::make(base_name, base, stmt);
-
-                    stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
-
-                    if (has_tail) {
-                        Expr tail_base = old_max + (1 - split.factor);
-                        string tail_base_name = prefix + split.inner + ".base";
-                        Expr tail_base_var = Variable::make(Int(32), base_name);
-                        tail_stmt = substitute(prefix + split.old_var, tail_base_var + inner, tail_stmt);
-                        tail_stmt = LetStmt::make(tail_base_name, tail_base, tail_stmt);
-                        Expr tail_condition = NE::make(Mod::make(old_extent, split.factor), 0);
-                        tail_stmt = IfThenElse::make(tail_condition, tail_stmt);
-                        stmt = Block::make(stmt, tail_stmt);
-                    }
-
-                    used_split = true;
-                } else if (split.is_fuse() && nest[i].name == prefix + split.old_var) {
-                    // Define the inner and outer in terms of the fused var
-                    Expr fused = Variable::make(Int(32), prefix + split.old_var);
-                    Expr inner_min = Variable::make(Int(32), prefix + split.inner + ".loop_min");
-                    Expr outer_min = Variable::make(Int(32), prefix + split.outer + ".loop_min");
-                    Expr inner_extent = Variable::make(Int(32), prefix + split.inner + ".loop_extent");
-
-                    Expr inner = fused % inner_extent + inner_min;
-                    Expr outer = fused / inner_extent + outer_min;
-
-                    //stmt = LetStmt::make(prefix + split.inner, inner, stmt);
-                    //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
-                    stmt = substitute(prefix + split.inner, inner, stmt);
-                    stmt = substitute(prefix + split.outer, outer, stmt);
-
-                    stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
-
-                    used_split = true;
-                } else if (split.is_rename() && nest[i].name == prefix + split.outer) {
-                    // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
-                    stmt = substitute(prefix + split.old_var, outer, stmt);
-
-                    stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
-
-                    used_split = true;
-                }
-            }
-
-            if (!used_split) {
-                stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
-            } else {
-                --j;
-            }
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
         }
     }
 
@@ -416,7 +308,7 @@ Stmt build_provide_loop_nest(Function f,
         Expr old_var_min = Variable::make(Int(32), prefix + split.old_var + ".loop_min");
         if (split.is_split()) {
             Expr inner_extent = split.factor;
-            Expr outer_extent = old_var_extent / split.factor;
+            Expr outer_extent = (old_var_max - old_var_min + split.factor)/split.factor;
             stmt = LetStmt::make(prefix + split.inner + ".loop_min", 0, stmt);
             stmt = LetStmt::make(prefix + split.inner + ".loop_max", inner_extent-1, stmt);
             stmt = LetStmt::make(prefix + split.inner + ".loop_extent", inner_extent, stmt);

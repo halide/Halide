@@ -68,14 +68,13 @@ public:
 private:
     using IRVisitor::visit;
 
-    Expr cond;
     Stmt then_case;
     Stmt else_case;
 
     void visit(const IfThenElse *op) {
         then_case = op->then_case;
         else_case = op->else_case;
-        cond = mutate(op->condition);
+        Expr cond = mutate(op->condition);
         stmt = IfThenElse::make(cond, mutate(then_case), mutate(else_case));
         if (!cond.same_as(op->condition)) {
             stmt = mutate(stmt);
@@ -315,14 +314,14 @@ private:
             b2.extent = ext2;
             b2.expr = b;
         } else if(ge) {
-            Expr ext1 = simplify(ge->b - min);
+            Expr ext1 = simplify(ge->b - min + 1);
             Expr ext2 = simplify(extent - ext1);
 
             b1.min = min;
             b1.extent = ext1;
             b1.expr = b;
 
-            b2.min = ge->b;
+            b2.min = ge->b + 1;
             b2.extent = ext2;
             b2.expr = a;
         } else if(gt) {
@@ -371,14 +370,14 @@ private:
             b2.extent = ext2;
             b2.stmt = b;
         } else if(ge) {
-            Expr ext1 = simplify(ge->b - min);
+            Expr ext1 = simplify(ge->b - min + 1);
             Expr ext2 = simplify(extent - ext1);
 
             b1.min = min;
             b1.extent = ext1;
             b1.stmt = b;
 
-            b2.min = ge->b;
+            b2.min = ge->b + 1;
             b2.extent = ext2;
             b2.stmt = a;
         } else if(gt) {
@@ -509,11 +508,11 @@ private:
 
             min = b1.min;
             extent = b1.extent;
-            b1.expr.accept(this);
+            b1.stmt.accept(this);
 
             min = b2.min;
             extent = b2.extent;
-            b2.expr.accept(this);
+            b2.stmt.accept(this);
 
             // If we didn't branch any further, push these branches onto the stack.
             if (branches.size() == num_branches) {
@@ -570,13 +569,13 @@ private:
 
     void visit(const LetStmt *op) {
         scope.push(op->name, op->value);
-        mutate(op->body);
+        stmt = LetStmt::make(op->name, op->value, mutate(op->body));
         scope.pop(op->name);
     }
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-#if 1
+#if 0
     SpecializeBranchedLoops specialize;
 
     std::cout << "Specializing branched loops in stmt:\n" << s << std::endl
