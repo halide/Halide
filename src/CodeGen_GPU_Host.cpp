@@ -623,5 +623,12 @@ template class CodeGen_GPU_Host<CodeGen_X86>;
 template class CodeGen_GPU_Host<CodeGen_ARM>;
 #endif
 
+#ifdef WITH_MIPS
+template class CodeGen_GPU_Host<CodeGen_MIPS>;
+#endif
+
+#ifdef WITH_PNACL
+template class CodeGen_GPU_Host<CodeGen_PNaCl>;
+#endif
 
 }}

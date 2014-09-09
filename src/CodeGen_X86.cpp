@@ -69,7 +69,7 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
             std::cerr << "Warning: x86-64 android is untested\n";
         }
     } else if (target.os == Target::NaCl) {
-        #if WITH_NATIVE_CLIENT
+        #ifdef WITH_NATIVE_CLIENT
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::GNU);
         #else

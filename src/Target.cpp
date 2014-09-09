@@ -465,12 +465,12 @@ DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
-#if WITH_PTX
+#ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
-#if WITH_X86
+#ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -479,7 +479,7 @@ DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
 #endif
-#if WITH_MIPS
+#ifdef WITH_MIPS
 DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
@@ -810,7 +810,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     return modules[0];
 }
 
-#if WITH_PTX
+#ifdef WITH_PTX
 llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
