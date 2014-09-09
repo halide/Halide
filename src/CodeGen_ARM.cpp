@@ -14,7 +14,7 @@
 
 // Native client llvm relies on global flags to control sandboxing on
 // arm, because they expect you to be coming from the command line.
-#if WITH_NATIVE_CLIENT
+#ifdef WITH_NATIVE_CLIENT
 #if LLVM_VERSION < 34
 #include <llvm/Support/CommandLine.h>
 namespace llvm {
@@ -355,7 +355,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         triple.setVendor(llvm::Triple::Apple);
     } else if (target.os == Target::NaCl) {
         user_assert(target.bits == 32) << "ARM NaCl must be 32-bit\n";
-        #if WITH_NATIVE_CLIENT
+        #ifdef WITH_NATIVE_CLIENT
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::EABI);
         // The ARM Nacl backend relies on global switches being set to do

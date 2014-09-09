@@ -12,6 +12,8 @@ namespace Halide {
 using std::string;
 using std::vector;
 
+using Internal::vec;
+
 namespace {
 #ifndef __arm__
 
@@ -63,11 +65,11 @@ Target get_host_target() {
 
     #if __mips__ || __mips || __MIPS__
     Target::Arch arch = Target::MIPS;
-    return Target(os, arch, bits, 0);
+    return Target(os, arch, bits);
     #else
     #ifdef __arm__
     Target::Arch arch = Target::ARM;
-    return Target(os, arch, bits, 0);
+    return Target(os, arch, bits);
     #else
 
     Target::Arch arch = Target::X86;
@@ -90,11 +92,11 @@ Target get_host_target() {
         << ", " << info[3]
         << std::dec << "\n";
 
-    Target::FeatureSet features;
-    if (have_sse41) features |= Target::SSE41;
-    if (have_avx)   features |= Target::AVX;
-    if (have_f16c)  features |= Target::F16C;
-    if (have_fma)   features |= Target::FMA;
+    std::vector<Target::Feature> initial_features;
+    if (have_sse41) initial_features.push_back(Target::SSE41);
+    if (have_avx)   initial_features.push_back(Target::AVX);
+    if (have_f16c)  initial_features.push_back(Target::F16C);
+    if (have_fma)   initial_features.push_back(Target::FMA);
 
     if (use_64_bits && have_avx && have_f16c && have_rdrand) {
         // So far, so good.  AVX2?
@@ -103,11 +105,11 @@ Target get_host_target() {
         cpuid(info2, 7, 0);
         bool have_avx2 = info[1] & (1 << 5);
         if (have_avx2) {
-            features |= Target::AVX2;
+            initial_features.push_back(Target::AVX2);
         }
     }
 
-    return Target(os, arch, bits, features);
+    return Target(os, arch, bits, initial_features);
 #endif
 #endif
 }
@@ -255,43 +257,43 @@ bool Target::merge_string(const std::string &target) {
             is_arch = true;
             is_bits = true;
         } else if (tok == "jit") {
-            features |= Target::JIT;
+            set_feature(Target::JIT);
         } else if (tok == "sse41") {
-            features |= Target::SSE41;
+            set_feature(Target::SSE41);
         } else if (tok == "avx") {
-            features = features | Target::SSE41 |Target::AVX;
+            set_features(vec(Target::SSE41, Target::AVX));
         } else if (tok == "avx2") {
-            features = features | Target::SSE41 | Target::AVX | Target::AVX2;
+            set_features(vec(Target::SSE41, Target::AVX, Target::AVX2));
         } else if (tok == "armv7s") {
-            features |= Target::ARMv7s;
+            set_feature(Target::ARMv7s);
         } else if (tok == "cuda" || tok == "ptx") {
-            features |= Target::CUDA;
+            set_feature(Target::CUDA);
         } else if (tok == "cuda_capability_30") {
-            features = features | Target::CUDA | Target::CUDACapability30;
+            set_features(vec(Target::CUDA, Target::CUDACapability30));
         } else if (tok == "cuda_capability_32") {
-            features = features | Target::CUDA | Target::CUDACapability32;
+            set_features(vec(Target::CUDA, Target::CUDACapability32));
         } else if (tok == "cuda_capability_35") {
-            features = features | Target::CUDA | Target::CUDACapability35;
+            set_features(vec(Target::CUDA, Target::CUDACapability35));
         } else if (tok == "cuda_capability_50") {
-            features = features | Target::CUDA | Target::CUDACapability50;
+            set_features(vec(Target::CUDA, Target::CUDACapability50));
         } else if (tok == "opencl") {
-            features |= Target::OpenCL;
+            set_feature(Target::OpenCL);
         } else if (tok == "gpu_debug") {
-            features |= Target::GPUDebug;
+            set_feature(Target::GPUDebug);
         } else if (tok == "opengl") {
-            features |= Target::OpenGL;
+            set_feature(Target::OpenGL);
         } else if (tok == "no_asserts") {
-            features |= Target::NoAsserts;
+            set_feature(Target::NoAsserts);
         } else if (tok == "no_bounds_query") {
-            features |= Target::NoBoundsQuery;
+            set_feature(Target::NoBoundsQuery);
         } else if (tok == "cl_doubles") {
-            features |= Target::CLDoubles;
+            set_feature(Target::CLDoubles);
         } else if (tok == "fma") {
-            features = features | Target::FMA | Target::SSE41 | Target::AVX;
+            set_features(vec(Target::FMA, Target::SSE41, Target::AVX));
         } else if (tok == "fma4") {
-            features = features | Target::FMA4 | Target::SSE41 | Target::AVX;
+            set_features(vec(Target::FMA4, Target::SSE41, Target::AVX));
         } else if (tok == "f16c") {
-            features = features | Target::F16C | Target::SSE41 | Target::AVX;
+            set_features(vec(Target::F16C, Target::SSE41, Target::AVX));
         } else {
             return false;
         }
@@ -339,13 +341,14 @@ std::string Target::to_string() const {
       "armv7s",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
-      "opengl",
+      "opengl"
   };
+  internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])
       + "-" + Internal::int_to_string(bits)
       + "-" + string(os_names[os]);
-  for (size_t i = 0; i < (sizeof(feature_names) / sizeof(feature_names[0])); ++i) {
-      if (has_feature(static_cast<Features>(i))) {
+  for (size_t i = 0; i < FeatureEnd; ++i) {
+      if (has_feature(static_cast<Feature>(i))) {
           result += "-" + string(feature_names[i]);
       }
   }
@@ -463,12 +466,12 @@ DECLARE_LL_INITMOD(posix_math)
 DECLARE_LL_INITMOD(pnacl_math)
 DECLARE_LL_INITMOD(win32_math)
 DECLARE_LL_INITMOD(ptx_dev)
-#if WITH_PTX
+#ifdef WITH_PTX
 DECLARE_LL_INITMOD(ptx_compute_20)
 DECLARE_LL_INITMOD(ptx_compute_30)
 DECLARE_LL_INITMOD(ptx_compute_35)
 #endif
-#if WITH_X86
+#ifdef WITH_X86
 DECLARE_LL_INITMOD(x86_avx)
 DECLARE_LL_INITMOD(x86)
 DECLARE_LL_INITMOD(x86_sse41)
@@ -477,7 +480,7 @@ DECLARE_NO_INITMOD(x86_avx)
 DECLARE_NO_INITMOD(x86)
 DECLARE_NO_INITMOD(x86_sse41)
 #endif
-#if WITH_MIPS
+#ifdef WITH_MIPS
 DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
@@ -807,7 +810,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     return modules[0];
 }
 
-#if WITH_PTX
+#ifdef WITH_PTX
 llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext *c) {
     std::vector<llvm::Module *> modules;
     modules.push_back(get_initmod_ptx_dev_ll(c));
@@ -818,8 +821,8 @@ llvm::Module *get_initial_module_for_ptx_device(Target target, llvm::LLVMContext
     // http://docs.nvidia.com/cuda/libdevice-users-guide/basic-usage.html#linking-with-libdevice
     if (target.has_feature(Target::CUDACapability35)) {
         module = get_initmod_ptx_compute_35_ll(c);
-    } else if (target.has_feature(Target::CUDACapability32) ||
-               target.has_feature(Target::CUDACapability50)) {
+    } else if (target.features_any_of(vec(Target::CUDACapability32,
+                                          Target::CUDACapability50))) {
         // For some reason sm_32 and sm_50 use libdevice 20
         module = get_initmod_ptx_compute_20_ll(c);
     } else if (target.has_feature(Target::CUDACapability30)) {
