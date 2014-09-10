@@ -38,6 +38,7 @@ typedef void GLvoid;
 #define GL_FLOAT 0x1406
 #define GL_MODELVIEW 0x1700
 #define GL_PROJECTION 0x1701
+#define GL_RED 0x1903
 #define GL_RGB 0x1907
 #define GL_RGBA 0x1908
 #define GL_LUMINANCE 0x1909
@@ -132,6 +133,9 @@ typedef void (*PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum t
 
 // ---------- OpenGL 3.0 ----------
 
+#define GL_RG 0x8227
+#define GL_R32F 0x822E
+#define GL_RG32F 0x8230
 #define GL_RGBA32F 0x8814
 #define GL_RGB32F 0x8815
 #define GL_LUMINANCE32F 0x8818
@@ -146,5 +150,9 @@ typedef GLenum (*PFNGLCHECKFRAMEBUFFERSTATUSPROC) (GLenum target);
 typedef void (*PFNGLDELETEFRAMEBUFFERSPROC) (GLsizei n, const GLuint *framebuffers);
 typedef void (*PFNGLFRAMEBUFFERTEXTURE2DPROC) (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 typedef void (*PFNGLGENFRAMEBUFFERSPROC) (GLsizei n, GLuint *framebuffers);
+
+typedef void (*PFNGLGENVERTEXARRAYS)(GLsizei n, GLuint *arrays);
+typedef void (*PFNGLBINDVERTEXARRAY)(GLuint array);
+typedef void (*PFNGLDELETEVERTEXARRAYS)(GLsizei n, const GLuint *arrays);
 
 #endif  // MINI_OPENGL_H

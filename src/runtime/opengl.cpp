@@ -64,7 +64,10 @@ extern "C" int halide_opengl_create_context(void *user_context);
     GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
     GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
     GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
-    GLFUNC(PFNGLGETSTRINGPROC, GetString)
+    GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
+    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);                       \
+    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);                      \
+    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays)
 
 // ---------- Types ----------
 
@@ -125,6 +128,7 @@ struct GlobalState {
     int major_version, minor_version;
 
     // Various objects shared by all filter kernels
+    GLuint vertex_array_object;
     GLuint vertex_shader_id;
     GLuint framebuffer_id;
     GLuint vertex_buffer;
@@ -174,7 +178,7 @@ WEAK const char *var_marker    = "/// VAR ";
         return ERRORCODE;                                       \
     }
 
-// Macro for error checking.
+// Macros for error checking.
 #ifdef DEBUG
 #define LOG_GLERROR(ERR)                                        \
     halide_printf(user_context,                                 \
@@ -414,6 +418,7 @@ WEAK int halide_opengl_init(void *user_context) {
     }
 
     // Initialize pointers to OpenGL functions.
+    // TODO: handle optional functions (e.g., those only present in OpenGL >= 3.0)
 #define GLFUNC(TYPE, VAR)                                               \
     ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR); \
     if (!ST.VAR) {                                                      \
@@ -467,6 +472,9 @@ WEAK int halide_opengl_init(void *user_context) {
     static const GLuint square_indices[] = { 0, 1, 2, 3 };
 
     // Initialize vertex and element buffers.
+    // TODO: OpenGL2
+    ST.GenVertexArrays(1, &ST.vertex_array_object);
+
     GLuint buf;
     ST.GenBuffers(1, &buf);
     ST.BindBuffer(GL_ARRAY_BUFFER, buf);
@@ -533,6 +541,9 @@ WEAK void halide_opengl_release(void *user_context) {
     ST.DeleteBuffers(1, &ST.vertex_buffer);
     ST.DeleteBuffers(1, &ST.element_buffer);
 
+    // TODO: OpenGL2
+    ST.DeleteVertexArrays(1, &ST.vertex_array_object);
+
     ST.vertex_shader_id = 0;
     ST.framebuffer_id = 0;
     ST.vertex_buffer = 0;
@@ -556,8 +567,12 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
         return false;
     }
 
+    // TODO: OpenGL2 - maybe simply disable support for 1- and 2-element buffers for old OpenGL
     if (buf->extent[2] <= 1) {
-        *format = GL_LUMINANCE;
+//        *format = GL_LUMINANCE;
+        *format = GL_RED;
+    } else if (buf->extent[2] == 2) {
+        *format = GL_RG;
     } else if (buf->extent[2] == 3) {
         *format = GL_RGB;
     } else if (buf->extent[2] == 4) {
@@ -582,6 +597,8 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
             case GL_RGBA: *internal_format = GL_RGBA32F; break;
             case GL_RGB: *internal_format = GL_RGB32F; break;
             case GL_LUMINANCE: *internal_format = GL_LUMINANCE32F; break;
+            case GL_RED: *internal_format = GL_R32F; break;
+            case GL_RG: *internal_format = GL_RG32F; break;
             }
         } else {
             *internal_format = *format;
@@ -1253,18 +1270,20 @@ WEAK int halide_opengl_dev_run(
 
     // Execute shader
     GLint position = ST.GetAttribLocation(kernel->program_id, "position");
+    ST.BindVertexArray(ST.vertex_array_object);    // TODO: OpenGL2
     ST.BindBuffer(GL_ARRAY_BUFFER, ST.vertex_buffer);
     ST.VertexAttribPointer(position,
                            2,
                            GL_FLOAT,
                            GL_FALSE,    // normalized?
-                           sizeof(GLfloat)*2,
+                           0,           // packed
                            NULL);
     ST.EnableVertexAttribArray(position);
     ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ST.element_buffer);
     ST.DrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, NULL);
     CHECK_GLERROR(1);
     ST.DisableVertexAttribArray(position);
+    ST.BindVertexArray(0);              // TODO: OpenGL 2
 
     // Cleanup
     for (int i = 0; i < num_active_textures; i++) {
