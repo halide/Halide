@@ -170,6 +170,7 @@ foreach (i ${RUNTIME_CPP} )
                        COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
                        COMMENT "${BC} -> ${INITMOD}")
     list(APPEND INITIAL_MODULES ${INITMOD})
+    list(APPEND INITIAL_MODULES ${INITMOD_D})
   endforeach()
 endforeach()
 foreach (i ${RUNTIME_LL} )
