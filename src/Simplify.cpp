@@ -1279,6 +1279,7 @@ private:
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
+        const Ramp *delta_ramp = delta.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -1368,6 +1369,11 @@ private:
             expr = mutate(mul_a->a < mul_b->a);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
+        } else if (delta_ramp && is_positive_const(delta_ramp->stride)) {
+            Expr last_lane = delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1);
+            mutate(Broadcast::make(last_lane < 0, delta_ramp->width));
+        } else if (delta_ramp && is_negative_const(delta_ramp->stride)) {
+            mutate(Broadcast::make(delta_ramp->base < 0, delta_ramp->width));
         } else {
             expr = LT::make(a, b);
         }
