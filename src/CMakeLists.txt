@@ -34,35 +34,35 @@ else()
 endif()
 
 if (TARGET_NATIVE_CLIENT)
-  add_definitions("-DWITH_NATIVE_CLIENT=1")
+  add_definitions("-DWITH_NATIVE_CLIENT")
 endif()
 
 if (TARGET_X86)
-  add_definitions("-DWITH_X86=1")
+  add_definitions("-DWITH_X86")
 endif()
 
 if (TARGET_ARM)
-  add_definitions("-DWITH_ARM=1")
+  add_definitions("-DWITH_ARM")
 endif()
 
 if (TARGET_AARCH64)
-  add_definitions("-DWITH_AARCH64=1")
+  add_definitions("-DWITH_AARCH64")
 endif()
 
 if (TARGET_PTX)
-  add_definitions("-DWITH_PTX=1")
+  add_definitions("-DWITH_PTX")
 endif()
 
 if (TARGET_OPENCL)
-  add_definitions("-DWITH_OPENCL=1")
+  add_definitions("-DWITH_OPENCL")
 endif()
 
 if (TARGET_OPENGL)
-  add_definitions("-DWITH_OPENGL=1")
+  add_definitions("-DWITH_OPENGL")
 endif()
 
 if (TARGET_MIPS)
-  add_definitions("-DWITH_MIPS=1")
+  add_definitions("-DWITH_MIPS")
 endif()
 
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
@@ -97,13 +97,8 @@ set(RUNTIME_CPP
   osx_host_cpu_count
   tracing
   write_debug_image
-  cuda_debug
-  opencl_debug
-  opengl_debug
   windows_cuda
   windows_opencl
-  windows_cuda_debug
-  windows_opencl_debug
   windows_io
   posix_print
   to_string
@@ -142,22 +137,41 @@ set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
+    set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
     set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+    set(BC_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.bc")
     set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
+    set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+
+    add_custom_command(OUTPUT "${LL_D}"
+                       DEPENDS "${SOURCE}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -g -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
                        COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
+
+    add_custom_command(OUTPUT "${BC_D}"
+                       DEPENDS "${LL_D}"
+                       COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
+		       COMMENT "${LL_D} -> ${BC_D}")
     add_custom_command(OUTPUT "${BC}"
                        DEPENDS "${LL}"
                        COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
 		       COMMENT "${LL} -> ${BC}")
+
+    add_custom_command(OUTPUT "${INITMOD_D}"
+                       DEPENDS "${BC_D}"
+                       COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                       COMMENT "${BC_D} -> ${INITMOD_D}")
     add_custom_command(OUTPUT "${INITMOD}"
                        DEPENDS "${BC}"
                        COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
                        COMMENT "${BC} -> ${INITMOD}")
     list(APPEND INITIAL_MODULES ${INITMOD})
+    list(APPEND INITIAL_MODULES ${INITMOD_D})
   endforeach()
 endforeach()
 foreach (i ${RUNTIME_LL} )

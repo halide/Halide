@@ -55,28 +55,34 @@ using std::stack;
         LLVMInitialize##target##AsmPrinter(); \
 
 // Override above empty init function with macro for supported targets.
-#if WITH_X86
+#ifdef WITH_X86
 #define InitializeX86Target()       InitializeTarget(X86)
 #define InitializeX86AsmParser()    InitializeAsmParser(X86)
 #define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
 #endif
 
-#if WITH_ARM
+#ifdef WITH_ARM
 #define InitializeARMTarget()       InitializeTarget(ARM)
 #define InitializeARMAsmParser()    InitializeAsmParser(ARM)
 #define InitializeARMAsmPrinter()   InitializeAsmPrinter(ARM)
 #endif
 
-#if WITH_PTX
+#ifdef WITH_PTX
 #define InitializeNVPTXTarget()       InitializeTarget(NVPTX)
 #define InitializeNVPTXAsmParser()    InitializeAsmParser(NVPTX)
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
-#if WITH_AARCH64
+#ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
+#endif
+
+#ifdef WITH_MIPS
+#define InitializeMipsTarget()       InitializeTarget(Mips)
+#define InitializeMipsAsmParser()    InitializeAsmParser(Mips)
+#define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
 #endif
 
 CodeGen::CodeGen(Target t) :
@@ -175,6 +181,7 @@ bool CodeGen::llvm_X86_enabled = false;
 bool CodeGen::llvm_ARM_enabled = false;
 bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
+bool CodeGen::llvm_Mips_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name,
                       const vector<Argument> &args,

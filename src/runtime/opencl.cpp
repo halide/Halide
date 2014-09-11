@@ -192,7 +192,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         return CL_INVALID_PLATFORM;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     const cl_uint maxPlatformName = 256;
     char platformName[maxPlatformName];
     err = clGetPlatformInfo( platform, CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
@@ -253,7 +253,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     cl_device_id dev = devices[device];
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     // Declare variables for other state we want to query.
     char device_name[256] = "";
     char device_vendor[256] = "";
@@ -357,7 +357,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -373,7 +373,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
         return result;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -394,7 +394,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         return ctx.error;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -498,7 +498,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         }
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -513,7 +513,7 @@ WEAK int halide_dev_sync(void *user_context) {
     ClContext ctx(user_context);
     halide_assert(user_context, ctx.error == CL_SUCCESS);
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -524,7 +524,7 @@ WEAK int halide_dev_sync(void *user_context) {
         return err;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -603,7 +603,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
         << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
         << " (" << buf->elem_size << " bytes per element)\n";
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -623,7 +623,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     DEBUG_PRINTF(user_context, "    Allocated device buffer %p for buffer %p\n",
                  (void *)buf->dev, buf);
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -648,7 +648,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     }
 
     if (buf->host_dirty) {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         #endif
 
@@ -717,7 +717,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         // to the buffer while the above writes are still running.
         clFinish(ctx.cmd_queue);
 
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
         #endif
@@ -744,7 +744,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     // Need to check dev_dirty again, in case another thread did the
     // copy_to_host before the serialization point above.
     if (buf->dev_dirty) {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         #endif
 
@@ -813,7 +813,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         // bad data.
         clFinish(ctx.cmd_queue);
 
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
         #endif
@@ -843,7 +843,7 @@ WEAK int halide_dev_run(void *user_context,
         return ctx.error;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -860,7 +860,7 @@ WEAK int halide_dev_run(void *user_context,
                              entry_name, get_opencl_error_name(err));
         return err;
     } else {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_create_kernel = halide_current_time_ns(user_context);
         halide_printf( user_context, "%p (%f ms)\n",
                        f, (t_create_kernel - t_before) / 1.0e6 );
@@ -912,7 +912,7 @@ WEAK int halide_dev_run(void *user_context,
     DEBUG_PRINTF( user_context, "    clReleaseKernel %p\n", f );
     clReleaseKernel(f);
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clFinish failed (%d)\n", err);
