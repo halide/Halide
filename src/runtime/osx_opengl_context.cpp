@@ -30,17 +30,17 @@ WEAK int halide_opengl_create_context(void *user_context) {
     void *pf = aglChoosePixelFormat(NULL, 0, attrib);
     if (!pf) {
         halide_error(user_context, "Could not create pixel format\n");
-        return 1;
+        return -1;
     }
     ctx = aglCreateContext(pf, NULL);
     if (!ctx || aglGetError()) {
         halide_error(user_context, "Could not create context\n");
-        return 1;
+        return -1;
     }
     aglDestroyPixelFormat(pf);
     if (!aglSetCurrentContext(ctx)) {
         halide_error(user_context, "Could not activate OpenGL context\n");
-        return 1;
+        return -1;
     }
     return 0;
 }
