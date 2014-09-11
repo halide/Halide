@@ -134,76 +134,83 @@ WEAK bool validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0)
     size_t real_size;
     cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
     if (result != CL_SUCCESS) {
-        halide_printf(user_context, "CL: Bad device pointer %p: clGetMemObjectInfo returned %s\n",
-                      (void *)buf->dev, get_opencl_error_name(result));
+        error(user_context) << "CL: Bad device pointer " << (void *)buf->dev
+                            << ": clGetMemObjectInfo returned "
+                            << get_opencl_error_name(result);
         return false;
     }
 
-    DEBUG_PRINTF( user_context, "CL: validate %p: asked for %lld, actual allocated %lld\n",
-                  (void*)buf->dev, size, real_size );
+    debug(user_context) << "CL: validate " << (void *)buf->dev
+                        << ": asked for " << size
+                        << ", actual allocated " << real_size << "\n";
 
-    if (size) halide_assert(user_context, real_size >= size && "Validating pointer with insufficient size");
+    if (size) {
+        halide_assert(user_context, real_size >= size && "Validating pointer with insufficient size");
+    }
     return true;
 }
 
 // Initializes the context used by the default implementation
 // of halide_acquire_context.
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
-    DEBUG_PRINTF( user_context, "    create_opencl_context (user_context: %p)\n", user_context );
+    debug(user_context)
+        << "    create_opencl_context (user_context: " << user_context << ")\n";
 
     halide_assert(user_context, ctx != NULL && *ctx == NULL);
     halide_assert(user_context, q != NULL && *q == NULL);
 
     cl_int err = 0;
 
-    const cl_uint maxPlatforms = 4;
-    cl_platform_id platforms[maxPlatforms];
-    cl_uint platformCount = 0;
+    const cl_uint max_platforms = 4;
+    cl_platform_id platforms[max_platforms];
+    cl_uint platform_count = 0;
 
-    err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
+    err = clGetPlatformIDs(max_platforms, platforms, &platform_count);
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clGetPlatformIDs failed (%s)\n",
-                             get_opencl_error_name(err));
+        error(user_context) << "CL: clGetPlatformIDs failed: "
+                            << get_opencl_error_name(err);
         return err;
     }
 
     cl_platform_id platform = NULL;
 
     // Find the requested platform, or the first if none specified.
-    const char * name = halide_get_ocl_platform_name(user_context);
+    const char *name = halide_get_ocl_platform_name(user_context);
     if (name != NULL) {
-        for (cl_uint i = 0; i < platformCount; ++i) {
-            const cl_uint maxPlatformName = 256;
-            char platformName[maxPlatformName];
-            err = clGetPlatformInfo( platforms[i], CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
+        for (cl_uint i = 0; i < platform_count; ++i) {
+            const cl_uint max_platform_name = 256;
+            char platform_name[max_platform_name];
+            err = clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, max_platform_name, platform_name, NULL );
             if (err != CL_SUCCESS) continue;
 
             // A platform matches the request if it is a substring of the platform name.
-            if (strstr(platformName, name)) {
+            if (strstr(platform_name, name)) {
                 platform = platforms[i];
                 break;
             }
         }
-    } else if (platformCount > 0) {
+    } else if (platform_count > 0) {
         platform = platforms[0];
     }
     if (platform == NULL){
-        halide_error(user_context, "CL: Failed to find platform\n");
+        error(user_context) << "CL: Failed to find platform\n";
         return CL_INVALID_PLATFORM;
     }
 
     #ifdef DEBUG_RUNTIME
-    const cl_uint maxPlatformName = 256;
-    char platformName[maxPlatformName];
-    err = clGetPlatformInfo( platform, CL_PLATFORM_NAME, maxPlatformName, platformName, NULL );
+    const cl_uint max_platform_name = 256;
+    char platform_name[max_platform_name];
+    err = clGetPlatformInfo(platform, CL_PLATFORM_NAME, max_platform_name, platform_name, NULL );
     if (err != CL_SUCCESS) {
-        halide_printf(user_context, "    clGetPlatformInfo(CL_PLATFORM_NAME) failed (%s)\n",
-                      get_opencl_error_name(err));
+        debug(user_context) << "    clGetPlatformInfo(CL_PLATFORM_NAME) failed: "
+                            << get_opencl_error_name(err) << "\n";
         // This is just debug info, report the error but don't fail context creation due to it.
         //return err;
     } else {
-        halide_printf(user_context, "    Got platform '%s', about to create context (t=%lld)\n",
-                      platformName, halide_current_time_ns(user_context));
+        debug(user_context) << "    Got platform '" << platform_name
+                            << "', about to create context (t="
+                            << halide_current_time_ns(user_context)
+                            << ")\n";
     }
     #endif
 
@@ -231,10 +238,10 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     const cl_uint maxDevices = 4;
     cl_device_id devices[maxDevices];
     cl_uint deviceCount = 0;
-    err = clGetDeviceIDs( platform, device_type, maxDevices, devices, &deviceCount );
+    err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount );
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clGetDeviceIDs failed (%s)\n",
-                             get_opencl_error_name(err));
+        error(user_context) << "CL: clGetDeviceIDs failed: "
+                            << get_opencl_error_name(err);
         return err;
     }
 
@@ -247,7 +254,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     }
 
     if (device < 0 || device >= deviceCount) {
-        halide_error_varargs(user_context, "CL: Failed to get device %d\n", device);
+        error(user_context) << "CL: Failed to get device: " << device;
         return CL_DEVICE_NOT_FOUND;
     }
 
@@ -288,7 +295,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     for (int i = 0; infos[i].dst; i++) {
         err = clGetDeviceInfo(dev, infos[i].param, infos[i].sz, infos[i].dst, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetDeviceInfo failed (%s)\n", get_opencl_error_name(err));
+            error(user_context) << "CL: clGetDeviceInfo failed: "
+                                << get_opencl_error_name(err);
             return err;
         }
     }
@@ -312,26 +320,26 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     // Create context and command queue.
     cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
-    DEBUG_PRINTF( user_context, "    clCreateContext -> " );
+    debug(user_context) << "    clCreateContext -> ";
     *ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%s", get_opencl_error_name(err) );
-        halide_error_varargs(user_context, "CL: clCreateContext failed (%s)\n",
-                             get_opencl_error_name(err));
+        debug(user_context) << get_opencl_error_name(err);
+        error(user_context) << "CL: clCreateContext failed: "
+                            << get_opencl_error_name(err);
         return err;
     } else {
-        DEBUG_PRINTF( user_context, "%p\n", *ctx );
+        debug(user_context) << *ctx << "\n";
     }
 
-    DEBUG_PRINTF(user_context, "    clCreateCommandQueue ");
+    debug(user_context) << "    clCreateCommandQueue ";
     *q = clCreateCommandQueue(*ctx, dev, 0, &err);
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%s", get_opencl_error_name(err) );
-        halide_error_varargs(user_context, "CL: clCreateCommandQueue failed (%d)\n",
-                             get_opencl_error_name(err));
+        debug(user_context) << get_opencl_error_name(err);
+        error(user_context) << "CL: clCreateCommandQueue failed: "
+                            << get_opencl_error_name(err);
         return err;
     } else {
-        DEBUG_PRINTF( user_context, "%p\n", *q );
+        debug(user_context) << *q << "\n";
     }
 
     return err;
@@ -350,7 +358,9 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
       return 0;
     }
 
-    DEBUG_PRINTF( user_context, "CL: halide_dev_free (user_context: %p, buf: %p)\n", user_context, buf );
+    debug(user_context)
+        << "CL: halide_dev_free (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
@@ -362,20 +372,20 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     #endif
 
     halide_assert(user_context, validate_dev_pointer(user_context, buf));
-    DEBUG_PRINTF(user_context, "    clReleaseMemObject %p\n", (cl_mem)buf->dev );
+    debug(user_context) << "    clReleaseMemObject " << (void *)buf->dev << "\n";
     cl_int result = clReleaseMemObject((cl_mem)buf->dev);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
     buf->dev = 0;
     if (result != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clReleaseMemObject failed (%s)",
-                             get_opencl_error_name(result));
+        error(user_context) << "CL: clReleaseMemObject failed: "
+                            << get_opencl_error_name(result);
         return result;
     }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -386,8 +396,10 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
     debug(user_context)
         << "CL: halide_init_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
-        << ", program: " << src
-        << ", " << size << ")\n";
+        << ", program:\n";
+    #ifdef DEBUG_RUNTIME
+    halide_print(user_context, src);
+    #endif
 
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
@@ -419,8 +431,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
 
         err = clGetContextInfo(ctx.context, CL_CONTEXT_DEVICES, sizeof(dev), &dev, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed (%s)\n",
-                                 get_opencl_error_name(err));
+            error(user_context) << "CL: clGetContextInfo(CL_CONTEXT_DEVICES) failed: "
+                                << get_opencl_error_name(err);
             return err;
         }
 
@@ -430,16 +442,16 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         cl_ulong max_constant_buffer_size = 0;
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, sizeof(max_constant_buffer_size), &max_constant_buffer_size, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed (%s)\n",
-                                 get_opencl_error_name(err));
+            error(user_context) << "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE) failed: "
+                                << get_opencl_error_name(err);
             return err;
         }
         // Get the max number of constant arguments supported by this OpenCL implementation.
         cl_uint max_constant_args = 0;
         err = clGetDeviceInfo(dev, CL_DEVICE_MAX_CONSTANT_ARGS, sizeof(max_constant_args), &max_constant_args, NULL);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed (%s)\n",
-                                 get_opencl_error_name(err));
+            error(user_context) << "CL: clGetDeviceInfo (CL_DEVICE_MAX_CONSTANT_ARGS) failed: "
+                                << get_opencl_error_name(err);
             return err;
         }
 
@@ -449,23 +461,25 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
                 << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
 
         const char * sources[] = { src };
-        DEBUG_PRINTF( user_context, "    clCreateProgramWithSource -> " );
+        debug(user_context) << "    clCreateProgramWithSource -> ";
         cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
         if (err != CL_SUCCESS) {
-            DEBUG_PRINTF( user_context, "%s\n", get_opencl_error_name(err) );
-            halide_error_varargs(user_context, "CL: clCreateProgramWithSource failed (%s)\n",
-                                 get_opencl_error_name(err));
+            debug(user_context) << get_opencl_error_name(err) << "\n";
+            error(user_context) << "CL: clCreateProgramWithSource failed: "
+                                << get_opencl_error_name(err);
             return err;
         } else {
-            DEBUG_PRINTF( user_context, "%p\n", program );
+            debug(user_context) << (void *)program << "\n";
         }
         (*state)->program = program;
 
-        DEBUG_PRINTF( user_context, "    clBuildProgram %p %s\n", program, options.str());
+        debug(user_context) << "    clBuildProgram " << (void *)program
+                            << " " << options.str() << "\n";
         err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clBuildProgram failed (%s)\n",
-                                 get_opencl_error_name(err));
+            print(user_context) << "CL: clBuildProgram failed: "
+                                << get_opencl_error_name(err);
+
 
             // Allocate an appropriately sized buffer for the build log.
             size_t len = 0;
@@ -484,9 +498,10 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
                                                 CL_PROGRAM_BUILD_LOG,
                                                 len, buffer,
                                                 NULL) == CL_SUCCESS) {
-                halide_printf(user_context, "    Build Log:\n %s\n-----\n", buffer);
+                print(user_context) << "    Build Log:\n "
+                                    << buffer << " \n-----\n";
             } else {
-                halide_printf(user_context, "    clGetProgramBuildInfo failed\n");
+                error(user_context) << "    clGetProgramBuildInfo failed";
             }
 
             if (buffer) {
@@ -500,7 +515,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return 0;
@@ -508,7 +523,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
 
 // Used to generate correct timings when tracing
 WEAK int halide_dev_sync(void *user_context) {
-    DEBUG_PRINTF( user_context, "CL: halide_dev_sync (user_context: %p)\n", user_context );
+    debug(user_context) << "CL: halide_dev_sync (user_context: " << user_context << ")\n";
 
     ClContext ctx(user_context);
     halide_assert(user_context, ctx.error == CL_SUCCESS);
@@ -519,21 +534,22 @@ WEAK int halide_dev_sync(void *user_context) {
 
     cl_int err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clFinish failed (%s)\n",
-                             get_opencl_error_name(err));
+        error(user_context) << "CL: clFinish failed: "
+                            << get_opencl_error_name(err);
         return err;
     }
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return CL_SUCCESS;
 }
 
 WEAK void halide_release(void *user_context) {
-    DEBUG_PRINTF( user_context, "CL: halide_release (user_context: %p)\n", user_context );
+    debug(user_context)
+        << "CL: halide_release (user_context: " << user_context << ")\n";
 
     // The ClContext object does not allow the context storage to be modified,
     // so we use halide_acquire_context directly.
@@ -556,7 +572,7 @@ WEAK void halide_release(void *user_context) {
     module_state *state = state_list;
     while (state) {
         if (state->program) {
-            DEBUG_PRINTF(user_context, "    clReleaseProgram %p\n", state->program);
+            debug(user_context) << "    clReleaseProgram " << state->program << "\n";
             err = clReleaseProgram(state->program);
             halide_assert(user_context, err == CL_SUCCESS);
             state->program = NULL;
@@ -566,12 +582,12 @@ WEAK void halide_release(void *user_context) {
 
     // Release the context itself, if we created it.
     if (ctx == weak_cl_ctx) {
-        DEBUG_PRINTF( user_context, "    clReleaseCommandQueue %p\n", weak_cl_q );
+        debug(user_context) << "    clReleaseCommandQueue " << weak_cl_q << "\n";
         err = clReleaseCommandQueue(weak_cl_q);
         halide_assert(user_context, err == CL_SUCCESS);
         weak_cl_q = NULL;
 
-        DEBUG_PRINTF( user_context, "    clReleaseContext %p\n", weak_cl_ctx );
+        debug(user_context) << "    clReleaseContext " << weak_cl_ctx << "\n";
         err = clReleaseContext(weak_cl_ctx);
         halide_assert(user_context, err == CL_SUCCESS);
         weak_cl_ctx = NULL;
@@ -581,7 +597,9 @@ WEAK void halide_release(void *user_context) {
 }
 
 WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
-    DEBUG_PRINTF( user_context, "CL: halide_dev_malloc (user_context: %p, buf: %p)\n", user_context, buf );
+    debug(user_context)
+        << "CL: halide_dev_malloc (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
@@ -608,24 +626,24 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     #endif
 
     cl_int err;
-    DEBUG_PRINTF( user_context, "    clCreateBuffer -> ", size );
+    debug(user_context) << "    clCreateBuffer -> " << size << " ";
     buf->dev = (uint64_t)clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
     if (err != CL_SUCCESS || buf->dev == 0) {
-        DEBUG_PRINTF( user_context, "%s\n",
-                      get_opencl_error_name(err));
-        halide_error_varargs(user_context, "CL: clCreateBuffer failed (%s)\n",
-                             get_opencl_error_name(err));
+        debug(user_context) << get_opencl_error_name(err) << "\n";
+        error(user_context) << "CL: clCreateBuffer failed: "
+                            << get_opencl_error_name(err);
         return err;
     } else {
-        DEBUG_PRINTF( user_context, "%p\n", (cl_mem)buf->dev );
+        debug(user_context) << (void *)buf->dev << "\n";
     }
 
-    DEBUG_PRINTF(user_context, "    Allocated device buffer %p for buffer %p\n",
-                 (void *)buf->dev, buf);
+    debug(user_context)
+        << "    Allocated device buffer " << (void *)buf->dev
+        << " for buffer " << buf << "\n";
 
     #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
     return CL_SUCCESS;
@@ -637,7 +655,9 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         return err;
     }
 
-    DEBUG_PRINTF(user_context, "CL: halide_copy_to_dev (user_context: %p, buf: %p)\n", user_context, buf );
+    debug(user_context)
+        << "CL: halide_copy_to_dev (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
     // redundant calls to clEnqueueWriteBuffer when multiple threads are trying to copy
@@ -681,8 +701,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                                                       0, NULL, NULL);
 
                 if (err != CL_SUCCESS) {
-                    halide_error_varargs(user_context, "CL: clEnqueueWriteBufferRect failed (%s)\n",
-                                         get_opencl_error_name(err));
+                    error(user_context) << "CL: clEnqueueWriteBufferRect failed: "
+                                        << get_opencl_error_name(err);
                     return err;
                 }
 #else
@@ -703,8 +723,8 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
                                                           CL_FALSE, off, size, src, 0, NULL, NULL);
                         if (err != CL_SUCCESS) {
-                            halide_error_varargs(user_context, "CL: clEnqueueWriteBuffer failed (%s)\n",
-                                                 get_opencl_error_name(err));
+                            error(user_context) << "CL: clEnqueueWriteBuffer failed: "
+                                                << get_opencl_error_name(err);
                             return err;
                         }
                     }
@@ -719,7 +739,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
-        halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
         #endif
     }
     buf->host_dirty = false;
@@ -731,7 +751,9 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         return 0;
     }
 
-    DEBUG_PRINTF(user_context, "CL: halide_copy_to_host (user_context: %p, buf: %p)\n", user_context, buf );
+    debug(user_context)
+        << "CL: halide_copy_to_host (user_context: " << user_context
+        << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
     // redundant calls to clEnqueueReadBuffer when multiple threads are trying to copy
@@ -765,7 +787,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 
                 debug(user_context)
                     << "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
-                    << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
+                    << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
                     << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
                     << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
@@ -777,8 +799,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                                                      0, NULL, NULL);
 
                 if (err != CL_SUCCESS) {
-                    halide_error_varargs(user_context, "CL: clEnqueueReadBufferRect failed (%s)\n",
-                                         get_opencl_error_name(err));
+                    error(user_context) << "CL: clEnqueueReadBufferRect failed: "
+                                        << get_opencl_error_name(err);
                     return err;
                 }
 #else
@@ -799,8 +821,8 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
                                                          CL_FALSE, off, size, dst, 0, NULL, NULL);
                         if (err != CL_SUCCESS) {
-                            halide_error_varargs(user_context, "CL: clEnqueueReadBuffer failed (%s)\n",
-                                                 get_opencl_error_name(err));
+                            error(user_context) << "CL: clEnqueueReadBuffer failed: "
+                                                << get_opencl_error_name(err);
                             return err;
                         }
                     }
@@ -815,7 +837,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
 
         #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
-        halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
         #endif
     }
     buf->dev_dirty = false;
@@ -852,18 +874,17 @@ WEAK int halide_dev_run(void *user_context,
     cl_program program = ((module_state*)state_ptr)->program;
 
     halide_assert(user_context, program);
-    DEBUG_PRINTF( user_context, "    clCreateKernel %s -> ", entry_name );
+    debug(user_context) << "    clCreateKernel " << entry_name << " -> ";
     cl_kernel f = clCreateKernel(program, entry_name, &err);
     if (err != CL_SUCCESS) {
-        DEBUG_PRINTF( user_context, "%s\n", get_opencl_error_name(err) );
-        halide_error_varargs(user_context, "CL: clCreateKernel (%s) failed (%s)\n",
-                             entry_name, get_opencl_error_name(err));
+        debug(user_context) << get_opencl_error_name(err) << "\n";
+        error(user_context) << "CL: clCreateKernel " << entry_name << " failed: "
+                            << get_opencl_error_name(err) << "\n";
         return err;
     } else {
         #ifdef DEBUG_RUNTIME
         uint64_t t_create_kernel = halide_current_time_ns(user_context);
-        halide_printf( user_context, "%p (%f ms)\n",
-                       f, (t_create_kernel - t_before) / 1.0e6 );
+        debug(user_context) << "    Time: " << (t_create_kernel - t_before) / 1.0e6 << " ms\n";
         #endif
     }
 
@@ -874,22 +895,25 @@ WEAK int halide_dev_run(void *user_context,
     // Set args
     int i = 0;
     while (arg_sizes[i] != 0) {
-        DEBUG_PRINTF(user_context, "    clSetKernelArg %i %i [0x%x ...]\n", i, arg_sizes[i], *(int *)args[i]);
+        debug(user_context) << "    clSetKernelArg " << i
+                            << " " << arg_sizes[i]
+                            << " [" << (*((void **)args[i])) << " ...]\n";
         cl_int err = clSetKernelArg(f, i, arg_sizes[i], args[i]);
         if (err != CL_SUCCESS) {
-            halide_error_varargs(user_context, "CL: clSetKernelArg failed (%s)\n",
-                                 get_opencl_error_name(err));
+            error(user_context) << "CL: clSetKernelArg failed: "
+                                << get_opencl_error_name(err);
             return err;
         }
         i++;
     }
     // Set the shared mem buffer last
     // Always set at least 1 byte of shmem, to keep the launch happy
-    DEBUG_PRINTF(user_context, "    clSetKernelArg %i %i [NULL]\n", i, shared_mem_bytes);
+    debug(user_context)
+        << "    clSetKernelArg " << i << " " << shared_mem_bytes << " [NULL]\n";
     err = clSetKernelArg(f, i, (shared_mem_bytes > 0) ? shared_mem_bytes : 1, NULL);
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clSetKernelArg failed (%s)\n",
-                             get_opencl_error_name(err));
+        error(user_context) << "CL: clSetKernelArg failed "
+                            << get_opencl_error_name(err);
         return err;
     }
 
@@ -905,21 +929,22 @@ WEAK int halide_dev_run(void *user_context,
                                  0, NULL, NULL);
     debug(user_context) << get_opencl_error_name(err) << "\n";
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clEnqueueNDRangeKernel failed (%s)\n", get_opencl_error_name(err));
+        error(user_context) << "CL: clEnqueueNDRangeKernel failed: "
+                            << get_opencl_error_name(err) << "\n";
         return err;
     }
 
-    DEBUG_PRINTF( user_context, "    clReleaseKernel %p\n", f );
+    debug(user_context) << "    clReleaseKernel " << (void *)f << "\n";
     clReleaseKernel(f);
 
     #ifdef DEBUG_RUNTIME
     err = clFinish(ctx.cmd_queue);
     if (err != CL_SUCCESS) {
-        halide_error_varargs(user_context, "CL: clFinish failed (%d)\n", err);
+        error(user_context) << "CL: clFinish failed (" << err << ")\n";
         return err;
     }
     uint64_t t_after = halide_current_time_ns(user_context);
-    halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
     return 0;
 }

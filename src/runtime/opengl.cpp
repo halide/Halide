@@ -166,16 +166,14 @@ WEAK const char *var_marker    = "/// VAR ";
 // functions.
 #define CHECK_INITIALIZED(ERRORCODE)                            \
     if (!ST.initialized) {                                      \
-        halide_error(user_context, "OpenGL runtime not initialized.\n"); \
+        error(user_context) << "OpenGL runtime not initialized.";   \
         return ERRORCODE;                                       \
     }
 
 // Macro for error checking.
 #ifdef DEBUG_RUNTIME
 #define LOG_GLERROR(ERR)                                        \
-    halide_printf(user_context,                                 \
-                  "%s:%d: OpenGL error 0x%04x\n",               \
-                  __FILE__, __LINE__, (ERR))
+    error(user_context) << __FILE__ << ":" << __LINE__ << ": OpenGL error " << (ERR);
 #else
 #define LOG_GLERROR(ERR)
 #endif
@@ -184,7 +182,7 @@ WEAK const char *var_marker    = "/// VAR ";
         GLenum err = global_state.GetError();                           \
         if (err != GL_NO_ERROR) {                                       \
             LOG_GLERROR(err);                                           \
-            halide_error(user_context, "OpenGL error");                 \
+            error(user_context) << "OpenGL error";                      \
             return ERRORCODE;                                           \
         }} while (0)
 
@@ -205,7 +203,7 @@ WEAK GLuint get_texture_id(buffer_t *buf) {
     return buf->dev & 0xffffffff;
 }
 
-WEAK void print_buffer(void *user_context, buffer_t *buf) {
+WEAK void debug_buffer(void *user_context, buffer_t *buf) {
     debug(user_context)
         << "  dev: " << buf->dev << "\n"
         << "  host: " << buf->host << "\n"
@@ -232,12 +230,12 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
     GLint shader_ok = 0;
     ST.GetShaderiv(shader, GL_COMPILE_STATUS, &shader_ok);
     if (!shader_ok) {
-        halide_printf(user_context, "Could not compile shader:\n");
+        print(user_context) << "Could not compile shader:\n";
         GLint log_len;
         ST.GetShaderiv(shader, GL_INFO_LOG_LENGTH, &log_len);
         char *log = (char *)malloc(log_len);
         ST.GetShaderInfoLog(shader, log_len, NULL, log);
-        halide_printf(user_context, "%s", log);
+        print(user_context) << log << "\n";
         free(log);
         ST.DeleteShader(shader);
         return 0;
@@ -277,7 +275,7 @@ WEAK Argument *parse_argument(void *user_context, const char *src,
         type = ARGTYPE_UINT32;
     }
     if (type == ARGTYPE_NONE) {
-        halide_error(user_context, "Internal error: argument type not supported");
+        error(user_context) << "Internal error: argument type not supported";
         return NULL;
     }
 
@@ -303,7 +301,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
         // Android logcat output clips at ~1000 character chunks by default;
         // to avoid clipping the interesting stuff, emit a line at a time.
         // This is less efficient, but it's DEBUG-only.
-        halide_printf(user_context, "Compiling GLSL kernel (size=%d):\n", size);
+        debug(user_context) << "Compiling GLSL kernel (size = " << size << "):\n";
         const int kBufSize = 255;
         char buf[kBufSize + 1];
         const char* s = src;
@@ -313,7 +311,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
                 buf[d++] = *s++;
             }
             buf[d++] = '\0';
-            halide_printf(user_context, "%s\n", buf);
+            debug(user_context) << buf << "\n";
             d = 0;
             while (*s == '\n' || *s == '\0') {
                 s++;
@@ -338,7 +336,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
-                halide_error(user_context, "Invalid VAR marker");
+                error(user_context) << "Invalid VAR marker";
                 goto error;
             }
         } else if ((args = match_prefix(line, input_marker))) {
@@ -347,7 +345,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
-                halide_error(user_context, "Invalid IN_BUFFER marker");
+                error(user_context) << "Invalid IN_BUFFER marker";
                 goto error;
             }
         } else if ((args = match_prefix(line, output_marker))) {
@@ -356,7 +354,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
-                halide_error(user_context, "Invalid OUT_BUFFER marker");
+                error(user_context) << "Invalid OUT_BUFFER marker";
                 goto error;
             }
         } else {
@@ -405,16 +403,16 @@ WEAK int halide_opengl_init(void *user_context) {
 
     // Make a context if there isn't one
     if (halide_opengl_create_context(user_context)) {
-        halide_printf(user_context, "Failed to make opengl context\n");
+        print(user_context) << "Failed to make opengl context\n";
         return 1;
     }
 
     // Initialize pointers to OpenGL functions.
-#define GLFUNC(TYPE, VAR)                                               \
-    ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR); \
-    if (!ST.VAR) {                                                      \
-        halide_printf(user_context, "Could not load function pointer for %s\n", "gl" #VAR); \
-        return 1;                                                         \
+#define GLFUNC(TYPE, VAR)                                                      \
+    ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR);    \
+    if (!ST.VAR) {                                                             \
+        error(user_context) << "Could not load function pointer for gl" #VAR ; \
+        return 1;                                                              \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
@@ -430,7 +428,7 @@ WEAK int halide_opengl_init(void *user_context) {
     ST.vertex_shader_id = make_shader(user_context, GL_VERTEX_SHADER,
                                       vertex_shader_src, NULL);
     if (ST.vertex_shader_id == 0) {
-        halide_error(user_context, "Failed to create vertex shader");
+        error(user_context) << "Failed to create vertex shader";
         return 1;
     }
 
@@ -471,9 +469,7 @@ WEAK int halide_opengl_init(void *user_context) {
 WEAK void halide_opengl_release(void *user_context) {
     if (!ST.initialized) return;
 
-#ifdef DEBUG_RUNTIME
-    halide_printf(user_context, "halide_opengl_release\n");
-#endif
+    debug(user_context) << "halide_opengl_release\n";
     ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
@@ -498,13 +494,11 @@ WEAK void halide_opengl_release(void *user_context) {
         free(tex);
         tex = next;
     }
-#ifdef DEBUG_RUNTIME
+
     if (freed_textures > 0) {
-        halide_printf(user_context,
-            "halide_opengl_release: deleted %d dangling texture(s).\n",
-            freed_textures);
+        debug(user_context) << "halide_opengl_release: deleted "
+                            << freed_textures << " dangling texture(s).\n";
     }
-#endif
 
     ST.DeleteBuffers(1, &ST.vertex_buffer);
     ST.DeleteBuffers(1, &ST.element_buffer);
@@ -520,9 +514,9 @@ WEAK void halide_opengl_release(void *user_context) {
 
 // Determine OpenGL texture format and channel type for a given buffer_t.
 WEAK bool get_texture_format(void *user_context,
-                               buffer_t *buf,
-                               GLint *format,
-                               GLint *type) {
+                             buffer_t *buf,
+                             GLint *format,
+                             GLint *type) {
     if (buf->extent[2] <= 1) {
         *format = GL_LUMINANCE;
     } else if (buf->extent[2] == 3) {
@@ -530,7 +524,9 @@ WEAK bool get_texture_format(void *user_context,
     } else if (buf->extent[2] == 4) {
         *format = GL_RGBA;
     } else {
-        halide_error(user_context, "GLSL: Only 1, 3, or 4 color channels are supported.");
+        error(user_context)
+            << "GLSL: Buffer has " << buf->extent[2] << " channels. "
+            << "Only 1, 3, or 4 color channels are supported.";
         return false;
     }
 
@@ -539,7 +535,9 @@ WEAK bool get_texture_format(void *user_context,
     } else if (buf->elem_size == 2) {
         *type = GL_UNSIGNED_SHORT;
     } else {
-        halide_error(user_context, "Only uint8 and uint16 textures are supported");
+        error(user_context)
+            << "GLSL: Buffer has elem_size " << buf->elem_size
+            << ". Only uint8 and uint16 textures are supported";
         return false;
     }
     return true;
@@ -562,7 +560,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
     }
 
     if (!buf) {
-        halide_error(user_context, "Invalid buffer");
+        error(user_context) << "Invalid buffer";
         return 1;
     }
 
@@ -580,17 +578,18 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
         CHECK_GLERROR(1);
         if (width < buf->extent[0] || height < buf->extent[1]) {
-#ifdef DEBUG_RUNTIME
-            halide_printf(user_context, "Texture size: %dx%d, buffer size: %dx%d\n",
-                          width, height, buf->extent[0], buf->extent[1]);
-#endif
-            halide_error(user_context, "Existing texture is smaller than buffer");
+
+            error(user_context)
+                << "Existing texture is smaller than buffer. "
+                << "Texture size: " << width << "x" << height
+                << ", buffer size: " << buf->extent[0] << "x" << buf->extent[1] << "\n";
+
             return 1;
         }
 #endif
     } else {
         if (buf->extent[3] > 1) {
-            halide_error(user_context, "3D textures are not supported");
+            error(user_context) << "3D textures are not supported";
             return 1;
         }
 
@@ -609,7 +608,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
         // Create empty texture here and fill it with glTexSubImage2D later.
         GLint type = GL_UNSIGNED_BYTE;
         if (!get_texture_format(user_context, buf, &format, &type)) {
-            halide_error(user_context, "Invalid texture format\n");
+            error(user_context) << "Invalid texture format";
             return 1;
         }
         width = buf->extent[0];
@@ -621,9 +620,8 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
 
         buf->dev = tex;
         halide_allocated = true;
-#ifdef DEBUG_RUNTIME
-        halide_printf(user_context, "Allocated texture %d of size %d x %d\n", tex, width, height);
-#endif
+        debug(user_context) << "Allocated texture " << tex
+                            << " of size " << width << " x " << height << "\n";
 
         ST.BindTexture(GL_TEXTURE_2D, 0);
     }
@@ -670,15 +668,13 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
         }
     }
     if (!texinfo) {
-        halide_error(user_context, "Internal error: texture not found.\n");
+        error(user_context) << "Internal error: texture " << tex << " not found.";
         return 1;
     }
 
     // Delete texture if it was allocated by us.
     if (texinfo->halide_allocated) {
-#ifdef DEBUG_RUNTIME
-        halide_printf(user_context, "Deleting texture %d\n", tex);
-#endif
+        debug(user_context) << "Deleting texture " << tex << "\n";
         ST.DeleteTextures(1, &tex);
         CHECK_GLERROR(1);
         buf->dev = 0;
@@ -710,7 +706,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
     if (!mod->kernel) {
         KernelInfo *kernel = create_kernel(user_context, src, size);
         if (!kernel) {
-            halide_error(user_context, "Invalid kernel\n");
+            error(user_context) << "Invalid kernel: " << src;
             return -1;
         }
 
@@ -726,12 +722,12 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         GLint status;
         ST.GetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
-            halide_printf(user_context, "Could not link GLSL program:\n");
             GLint log_len;
             ST.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
             char *log = (char*) malloc(log_len);
             ST.GetProgramInfoLog(program, log_len, NULL, log);
-            halide_printf(user_context, "%s", log);
+            error(user_context) << "Could not link GLSL program:\n"
+                                << log << "\n";
             free(log);
             ST.DeleteProgram(program);
             program = 0;
@@ -805,24 +801,20 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     }
 
     if (!buf->host || !buf->dev) {
-#ifdef DEBUG_RUNTIME
-        print_buffer(user_context, buf);
-#endif
-        halide_error(user_context, "Invalid copy_to_dev operation\n");
+        debug_buffer(user_context, buf);
+        error(user_context) << "Invalid copy_to_dev operation: host or dev NULL.\n";
         return 1;
     }
 
     GLuint tex = get_texture_id(buf);
-#ifdef DEBUG_RUNTIME
-    halide_printf(user_context, "halide_copy_to_dev: %d\n", tex);
-#endif
+    debug(user_context) << "halide_copy_to_dev: " << tex << "\n";
 
     ST.BindTexture(GL_TEXTURE_2D, tex);
     CHECK_GLERROR(1);
 
     GLint format, type;
     if (!get_texture_format(user_context, buf, &format, &type)) {
-        halide_error(user_context, "Invalid texture format\n");
+        error(user_context) << "Invalid texture format";
         return 1;
     }
     GLint width = buf->extent[0];
@@ -844,9 +836,8 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
                          format, type, host_ptr);
         CHECK_GLERROR(1);
     } else {
-        #ifdef DEBUG_RUNTIME
-        halide_printf(user_context, "Warning: In copy_to_dev, host buffer is not interleaved. Doing slow interleave.\n");
-        #endif
+        debug(user_context)
+            << "Warning: In copy_to_dev, host buffer is not interleaved. Doing slow interleave.\n";
 
         size_t size = width * height * buf->extent[2] * buf->elem_size;
         void *tmp = halide_malloc(user_context, size);
@@ -886,9 +877,9 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
     // Check that framebuffer is set up correctly
     GLenum status = ST.CheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_FRAMEBUFFER_COMPLETE) {
-        halide_printf(user_context, "Setting up GL framebuffer %d failed (%x)\n",
-                      ST.framebuffer_id, status);
         ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
+        error(user_context)
+            << "Setting up GL framebuffer " << ST.framebuffer_id << " failed " << status;
         return 1;
     }
     ST.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
@@ -904,21 +895,19 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     }
 
     if (!buf->host || !buf->dev) {
-        #ifdef DEBUG_RUNTIME
-        print_buffer(user_context, buf);
-        #endif
-        halide_error(user_context, "Invalid copy_to_host operation: host or dev NULL.\n");
+        debug_buffer(user_context, buf);
+        error(user_context) << "Invalid copy_to_host operation: host or dev NULL.\n";
         return 1;
     }
 
     #ifdef DEBUG_RUNTIME
     GLuint tex = get_texture_id(buf);
-    halide_printf(user_context, "halide_copy_to_host: %d\n", tex);
+    debug(user_context) << "halide_copy_to_host: " << tex << "\n";
     #endif
 
     GLint format, type;
     if (!get_texture_format(user_context, buf, &format, &type)) {
-        halide_error(user_context, "Invalid texture format\n");
+        error(user_context) << "Invalid texture format";
         return 1;
     }
     GLint width = buf->extent[0], height = buf->extent[1];
@@ -936,16 +925,14 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
              buf->min[3] * buf->stride[3]);
         get_pixels(user_context, buf, format, type, host_ptr);
     } else {
-        #ifdef DEBUG_RUNTIME
-        halide_printf(user_context,
-                      "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
-        #endif
+        debug(user_context)
+            << "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n";
 
         size_t stride = width * buf->extent[2] * buf->elem_size;
         size_t size = height * stride;
         uint8_t *tmp = (uint8_t*)halide_malloc(user_context, size);
         if (!tmp) {
-            halide_error(user_context, "halide_malloc failed inside copy_to_host\n");
+            error(user_context) << "halide_malloc failed inside copy_to_host";
             return -1;
         }
 
@@ -998,13 +985,13 @@ WEAK int halide_opengl_dev_run(
 
     ModuleState *mod = (ModuleState *)state_ptr;
     if (!mod) {
-        halide_error(user_context, "Internal error: module state is NULL\n");
+        error(user_context) << "Internal error: module state is NULL";
         return -1;
     }
 
     KernelInfo *kernel = mod->kernel;
     if (!kernel) {
-        halide_printf(user_context, "Internal error: unknown kernel named '%s'\n", entry_name);
+        error(user_context) << "Internal error: unknown kernel named '" << entry_name << "'";
         return 1;
     }
 
@@ -1018,10 +1005,9 @@ WEAK int halide_opengl_dev_run(
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
         if (!kernel_arg) {
-            halide_printf(user_context, "Argument %d: size=%d value=%p\n", i,
-                          arg_sizes[i], args[i]);
-            halide_error(user_context,
-                         "Too many arguments passed to halide_opengl_dev_run");
+            error(user_context)
+                << "Too many arguments passed to halide_opengl_dev_run\n"
+                << "Argument " << i << ": size=" << i << " value=" << args[i];
             return 1;
         }
 
@@ -1039,7 +1025,7 @@ WEAK int halide_opengl_dev_run(
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
             CHECK_GLERROR(1);
             if (loc == -1) {
-                halide_error(user_context, "No sampler defined for input texture.\n");
+                error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
             GLuint tex = *((GLuint *)args[i]);
@@ -1096,9 +1082,8 @@ WEAK int halide_opengl_dev_run(
                 uint32_t value = *((uint32_t*)args[i]);
                 GLint signed_value;
                 if (value > 0x7fffffff) {
-                    halide_error_varargs(user_context,
-                                         "GLSL: argument '%' is too large for GLint\n",
-                                         kernel_arg->name);
+                    error(user_context)
+                        << "GLSL: argument '" << kernel_arg->name << "' is too large for GLint";
                     return -1;
                 }
                 signed_value = static_cast<GLint>(value);
@@ -1106,13 +1091,13 @@ WEAK int halide_opengl_dev_run(
                 break;
             }
             case ARGTYPE_NONE:
-                halide_error(user_context, "Unknown kernel argument type");
+                error(user_context) << "Unknown kernel argument type";
                 return 1;
             }
         }
     }
     if (kernel_arg) {
-        halide_error(user_context, "Too few arguments passed to halide_opengl_dev_run");
+        error(user_context) << "Too few arguments passed to halide_opengl_dev_run";
         return 1;
     }
 
@@ -1134,8 +1119,8 @@ WEAK int halide_opengl_dev_run(
 
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
-            halide_error(user_context,
-                         "OpenGL ES 2.0 only supports one single output texture");
+            error(user_context)
+                << "OpenGL ES 2.0 only supports one single output texture";
             return 1;
         }
 
@@ -1143,9 +1128,8 @@ WEAK int halide_opengl_dev_run(
 
         // Check to see if the object name is actually a FBO
         if (bind_render_targets) {
-#ifdef DEBUG_RUNTIME
-            halide_printf(user_context, "Output texture %d: %d\n", num_output_textures, tex);
-#endif
+            debug(user_context)
+                << "Output texture " << num_output_textures << ": " << tex << "\n";
             ST.FramebufferTexture2D(GL_FRAMEBUFFER,
                                     GL_COLOR_ATTACHMENT0 + num_output_textures,
                                     GL_TEXTURE_2D, tex, 0);
@@ -1154,7 +1138,7 @@ WEAK int halide_opengl_dev_run(
 
         TextureInfo *texinfo = find_texture(tex);
         if (!texinfo) {
-            halide_error(user_context, "Undefined output texture");
+            error(user_context) << "Undefined output texture";
             return 1;
         }
         output_min[0] = texinfo->min[0];
@@ -1165,7 +1149,7 @@ WEAK int halide_opengl_dev_run(
     }
     // TODO: GL_MAX_DRAW_BUFFERS
     if (num_output_textures == 0) {
-        halide_printf(user_context, "Warning: kernel has no output\n");
+        error(user_context) << "kernel has no output";
         // TODO: cleanup
         return 1;
     } else {
@@ -1186,8 +1170,9 @@ WEAK int halide_opengl_dev_run(
         GLenum status = ST.CheckFramebufferStatus(GL_FRAMEBUFFER);
         CHECK_GLERROR(1);
         if (status != GL_FRAMEBUFFER_COMPLETE) {
-            halide_printf(user_context, "Setting up GL framebuffer %d failed (%x)\n",
-                          ST.framebuffer_id, status);
+            error(user_context)
+                << "Setting up GL framebuffer " << ST.framebuffer_id
+                << " failed (" << status << ")";
             // TODO: cleanup
             return 1;
         }
