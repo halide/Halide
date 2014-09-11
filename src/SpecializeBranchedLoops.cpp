@@ -379,7 +379,6 @@ private:
 
     void visit(const Store *op) {
         if (expr_branches_in_var(name, op->value)) {
-            std::cout << "Branching Store node: " << Stmt(op);
             std::vector<Branch> expr_branches;
             collect_branches(op->value, name, min, extent, expr_branches, scope);
 
@@ -397,7 +396,6 @@ private:
             Stmt normalized = normalize_if_stmts(op);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
-            std::cout << "Branching IfThenElse node: " << Stmt(op);
 
             if (!solve.same_as(if_stmt->condition)) {
                 Branch b1, b2;
@@ -465,24 +463,14 @@ private:
                 Branch &last = branches.back();
                 bounds.push(op->name, Interval(last.min, last.min + last.extent - 1));
                 stmt = simplify(last.stmt, true, bounds);
-                std::cout << "======================================================\n";
-                std::cout << "simplifying loop body " << op->name << " for branch (" << last.min << ", " << last.extent << "):\n"
-                          << last.stmt << "simplified body:\n" << stmt;
                 stmt = For::make(op->name, last.min, last.extent, op->for_type, mutate(stmt));
-                std::cout << "======================================================\n"
-                          << "new loop:\n" << stmt;
                 bounds.pop(op->name);
 
               for (int i = branches.size()-2; i >= 0; --i) {
                 Branch &next = branches[i];
                 bounds.push(op->name, Interval(next.min, next.min + next.extent - 1));
                 Stmt next_stmt = simplify(next.stmt, true, bounds);
-                std::cout << "======================================================\n";
-                std::cout << "simplifying loop body " << op->name << " for branch (" << next.min << ", " << next.extent << "):\n"
-                          << next.stmt << "simplified:\n" << next_stmt;
                 stmt = Block::make(For::make(op->name, next.min, next.extent, op->for_type, mutate(next_stmt)), stmt);
-                std::cout << "======================================================\n"
-                          << "new loop:\n" << stmt;
                 bounds.pop(op->name);
 
               }
@@ -500,7 +488,7 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-#if 1
+#if 0
     SpecializeBranchedLoops specialize;
 
     std::cout << "Specializing branched loops in stmt:\n" << s << std::endl
