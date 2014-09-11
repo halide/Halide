@@ -35,7 +35,7 @@ struct Target {
     /** Optional features a target can have. */
     enum Feature {
         JIT,  ///< Generate code that will run immediately inside the calling process.
-        GPUDebug,  ///< Increase the level of checking and the verbosity of the gpu runtimes.
+        Debug,  ///< Turn on debug info and output for runtime code.
         NoAsserts,  ///< Disable all runtime checks, for slightly tighter code.
         NoBoundsQuery, ///< Disable the bounds querying functionality.
 
@@ -108,6 +108,26 @@ struct Target {
             }
         }
         return true;
+    }
+
+    /** Return a copy of the target with the given feature set.
+     * This is convenient when enabling certain features (e.g. NoBoundsQuery)
+     * in an initialization list, where the target to be mutated may be
+     * a const reference. */
+    Target with_feature(Feature f) const {
+        Target copy = *this;
+        copy.set_feature(f);
+        return copy;
+    }
+
+    /** Return a copy of the target with the given feature cleared.
+     * This is convenient when disabling certain features (e.g. NoBoundsQuery)
+     * in an initialization list, where the target to be mutated may be
+     * a const reference. */
+    Target without_feature(Feature f) const {
+        Target copy = *this;
+        copy.set_feature(f, false);
+        return copy;
     }
 
     /** Is OpenCL or CUDA enabled in this target? I.e. is

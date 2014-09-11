@@ -14,6 +14,30 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
+// Visitor and helper function to test if a piece of IR uses an extern image.
+class UsesExternImage : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *c) {
+        if (c->call_type == Call::Image) {
+            result = true;
+        } else {
+            IRVisitor::visit(c);
+        }
+    }
+public:
+    UsesExternImage() : result(false) {}
+    bool result;
+};
+
+inline bool uses_extern_image(Stmt s) {
+    UsesExternImage uses;
+    s.accept(&uses);
+    return uses.result;
+}
+}
+
 class FlattenDimensions : public IRMutator {
 public:
     FlattenDimensions(const map<string, Function> &e)
@@ -256,10 +280,11 @@ private:
             // If there is only one value, we don't need to worry
             // about atomicity.
             result = flatten_provide(provide);
-        } else if (!realizations.contains(provide->name)) {
-            // If the provide is not a realization, it might be
-            // aliased. Flatten it atomically because we can't
-            // prove the boxes don't overlap.
+        } else if (!realizations.contains(provide->name) &&
+                   uses_extern_image(provide)) {
+            // If the provide is not a realization and it uses an
+            // input image, it might be aliased. Flatten it atomically
+            // because we can't prove the boxes don't overlap.
             result = flatten_provide_atomic(provide);
         } else {
             Box provided = box_provided(Stmt(provide), provide->name);
