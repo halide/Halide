@@ -34,7 +34,6 @@ extern "C" {
 extern int64_t halide_current_time_ns(void *user_context);
 extern void free(void *);
 extern void *malloc(size_t);
-extern int snprintf(char *, size_t, const char *, ...);
 extern const char * strstr(const char *, const char *);
 extern int atoi(const char *);
 
@@ -141,7 +140,7 @@ WEAK bool validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0)
     }
 
     DEBUG_PRINTF( user_context, "CL: validate %p: asked for %lld, actual allocated %lld\n",
-                  (void*)buf->dev, (long long)size, (long long)real_size );
+                  (void*)buf->dev, size, real_size );
 
     if (size) halide_assert(user_context, real_size >= size && "Validating pointer with insufficient size");
     return true;
@@ -204,7 +203,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         //return err;
     } else {
         halide_printf(user_context, "    Got platform '%s', about to create context (t=%lld)\n",
-                      platformName, (long long)halide_current_time_ns(user_context));
+                      platformName, halide_current_time_ns(user_context));
     }
     #endif
 
@@ -294,25 +293,20 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         }
     }
 
-    halide_printf(user_context,
-                  "      device name: %s\n"
-                  "      device vendor: %s\n"
-                  "      device profile: %s\n"
-                  "      global mem size: %d MB\n"
-                  "      max mem alloc size: %d MB\n"
-                  "      local mem size: %lu\n"
-                  "      max compute units: %d\n"
-                  "      max workgroup size: %lu\n"
-                  "      max work item dimensions: %d\n"
-                  "      max work item sizes: %lux%lux%lux%lu\n",
-                  device_name, device_vendor, device_profile,
-                  (int)(global_mem_size/(1024*1024)),
-                  (int)(max_mem_alloc_size/(1024*1024)),
-                  local_mem_size,
-                  max_compute_units, (cl_ulong)max_work_group_size, max_work_item_dimensions,
-                  (cl_ulong)max_work_item_sizes[0], (cl_ulong)max_work_item_sizes[1],
-                  (cl_ulong)max_work_item_sizes[2], (cl_ulong)max_work_item_sizes[3]);
-
+    debug(user_context)
+        << "      device name: " << device_name << "\n"
+        << "      device vendor: " << device_vendor << "\n"
+        << "      device profile: " << device_profile << "\n"
+        << "      global mem size: " << global_mem_size/(1024*1024) << " MB\n"
+        << "      max mem alloc size: " << max_mem_alloc_size/(1024*1024) << " MB\n"
+        << "      local mem size: " << local_mem_size << "\n"
+        << "      max compute units: " << max_compute_units << "\n"
+        << "      max workgroup size: " << max_work_group_size << "\n"
+        << "      max work item dimensions: " << max_work_item_dimensions << "\n"
+        << "      max work item sizes: " << max_work_item_sizes[0]
+        << "x" << max_work_item_sizes[1]
+        << "x" << max_work_item_sizes[2]
+        << "x" << max_work_item_sizes[3] << "\n";
     #endif
 
 
@@ -389,8 +383,11 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
 
 
 WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* src, int size) {
-    DEBUG_PRINTF( user_context, "CL: halide_init_kernels (user_context: %p, state_ptr: %p, program: %p, %i)\n",
-                  user_context, state_ptr, src, size );
+    debug(user_context)
+        << "CL: halide_init_kernels (user_context: " << user_context
+        << ", state_ptr: " << state_ptr
+        << ", program: " << src
+        << ", " << size << ")\n";
 
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
@@ -447,11 +444,9 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         }
 
         // Build the compile argument options.
-        char options[256];
-        snprintf(options, sizeof(options),
-                 "-D MAX_CONSTANT_BUFFER_SIZE=%lld -D MAX_CONSTANT_ARGS=%i",
-                 max_constant_buffer_size,
-                 max_constant_args);
+        stringstream options(user_context);
+        options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
+                << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
 
         const char * sources[] = { src };
         DEBUG_PRINTF( user_context, "    clCreateProgramWithSource -> " );
@@ -466,8 +461,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         }
         (*state)->program = program;
 
-        DEBUG_PRINTF( user_context, "    clBuildProgram %p %s\n", program, options );
-        err = clBuildProgram(program, 1, devices, options, NULL, NULL );
+        DEBUG_PRINTF( user_context, "    clBuildProgram %p %s\n", program, options.str());
+        err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
         if (err != CL_SUCCESS) {
             halide_error_varargs(user_context, "CL: clBuildProgram failed (%s)\n",
                                  get_opencl_error_name(err));
@@ -602,14 +597,11 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
-    DEBUG_PRINTF(user_context, "    Allocating buffer of %lld bytes, "
-                 "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
-                 (long long)size,
-                 (long long)buf->extent[0], (long long)buf->extent[1],
-                 (long long)buf->extent[2], (long long)buf->extent[3],
-                 (long long)buf->stride[0], (long long)buf->stride[1],
-                 (long long)buf->stride[2], (long long)buf->stride[3],
-                 buf->elem_size);
+    debug(user_context)
+        << "    Allocating buffer of " << size << " bytes,"
+        << " extents: " << buf->extent[0] << "x" << buf->extent[1] << "x" << buf->extent[2] << "x" << buf->extent[3]
+        << " strides: " << buf->stride[0] << "x" << buf->stride[1] << "x" << buf->stride[2] << "x" << buf->stride[3]
+        << " (" << buf->elem_size << " bytes per element)\n";
 
     #ifdef DEBUG
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -675,11 +667,11 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                 size_t offset[3] = { off, 0, 0 };
                 size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
-                DEBUG_PRINTF( user_context, "    clEnqueueWriteBufferRect ((%d, %d), (%p -> %p) + %d, %dx%dx%d bytes, %dx%d)\n",
-                              z, w,
-                              (void *)c.src, c.dst, (int)off,
-                              (int)region[0], (int)region[1], (int)region[2],
-                              (int)c.stride_bytes[0], (int)c.stride_bytes[1]);
+                debug(user_context)
+                    << "    clEnqueueWriteBufferRect ((" << z << ", " << w << "), "
+                    << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
+                    << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+                    << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
                 cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
                                                       offset, offset, region,
@@ -704,9 +696,10 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
 
-                        DEBUG_PRINTF( user_context, "    clEnqueueWriteBuffer ((%d, %d, %d, %d), %lld bytes, %p -> %p)\n",
-                                      x, y, z, w,
-                                      (long long)size, src, (void *)dst );
+                        debug(user_context)
+                            << "    clEnqueueWriteBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
+                            << size << " bytes, " << src << " -> " << (void *)dst << ")\n";
+
                         cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
                                                           CL_FALSE, off, size, src, 0, NULL, NULL);
                         if (err != CL_SUCCESS) {
@@ -770,11 +763,11 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                 size_t offset[3] = { off, 0, 0 };
                 size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
-                DEBUG_PRINTF( user_context, "    clEnqueueReadBufferRect ((%d, %d), (%p -> %p) + %d, %dx%dx%d bytes, %dx%d)\n",
-                              z, w,
-                              (void *)c.src, c.dst, (int)off,
-                              (int)region[0], (int)region[1], (int)region[2],
-                              (int)c.stride_bytes[0], (int)c.stride_bytes[1]);
+                debug(user_context)
+                    << "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
+                    << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
+                    << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+                    << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
                 cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
                                                      offset, offset, region,
@@ -799,9 +792,9 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
 
-                        DEBUG_PRINTF( user_context, "    clEnqueueReadBuffer ((%d, %d, %d, %d), %lld bytes, %p -> %p)\n",
-                                      x, y, z, w,
-                                      (long long)size, (void *)src, dst );
+                        debug(user_context)
+                            << "    clEnqueueReadBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
+                            << size << " bytes, " << src << " -> " << dst << ")\n";
 
                         cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
                                                          CL_FALSE, off, size, dst, 0, NULL, NULL);
@@ -837,11 +830,12 @@ WEAK int halide_dev_run(void *user_context,
                         int shared_mem_bytes,
                         size_t arg_sizes[],
                         void* args[]) {
-    DEBUG_PRINTF( user_context, "CL: halide_dev_run (user_context: %p, entry: %s, blocks: %dx%dx%d, threads: %dx%dx%d, shmem: %d)\n",
-                  user_context, entry_name,
-                  blocksX, blocksY, blocksZ,
-                  threadsX, threadsY, threadsZ,
-                  shared_mem_bytes );
+    debug(user_context)
+        << "CL: halide_dev_run (user_context: " << user_context << ", "
+        << "entry: " << entry_name << ", "
+        << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
+        << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
+        << "shmem: " << shared_mem_bytes << "\n";
 
     cl_int err;
     ClContext ctx(user_context);
@@ -900,15 +894,16 @@ WEAK int halide_dev_run(void *user_context,
     }
 
     // Launch kernel
-    DEBUG_PRINTF( user_context, "    clEnqueueNDRangeKernel %dx%dx%d, %dx%dx%d -> ",
-                  blocksX, blocksY, blocksZ,
-                  threadsX, threadsY, threadsZ );
+    debug(user_context)
+        << "    clEnqueueNDRangeKernel "
+        << blocksX << "x" << blocksY << "x" << blocksZ << ", "
+        << threadsX << "x" << threadsY << "x" << threadsZ << " -> ";
     err = clEnqueueNDRangeKernel(ctx.cmd_queue, f,
                                  // NDRange
                                  3, NULL, global_dim, local_dim,
                                  // Events
                                  0, NULL, NULL);
-    DEBUG_PRINTF( user_context, "%s\n", get_opencl_error_name(err) );
+    debug(user_context) << get_opencl_error_name(err) << "\n";
     if (err != CL_SUCCESS) {
         halide_error_varargs(user_context, "CL: clEnqueueNDRangeKernel failed (%s)\n", get_opencl_error_name(err));
         return err;

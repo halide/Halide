@@ -451,6 +451,7 @@ DECLARE_CPP_INITMOD(posix_print)
 DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
+DECLARE_CPP_INITMOD(to_string)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -727,6 +728,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     modules.push_back(get_initmod_posix_error_handler(c, bits_64));
     modules.push_back(get_initmod_posix_print(c, bits_64));
     modules.push_back(get_initmod_cache(c, bits_64));
+    modules.push_back(get_initmod_to_string(c, bits_64));
 
     // These modules are optional
     if (t.arch == Target::X86) {

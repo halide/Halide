@@ -207,17 +207,18 @@ WEAK GLuint get_texture_id(buffer_t *buf) {
 }
 
 WEAK void print_buffer(void *user_context, buffer_t *buf) {
-    halide_printf(user_context, "  dev: %ul\n", buf->dev);
-    halide_printf(user_context, "  host: %p\n", buf->host);
-    halide_printf(user_context, "  extent: %d %d %d %d\n",
-                  buf->extent[0], buf->extent[1], buf->extent[2], buf->extent[3]);
-    halide_printf(user_context, "  stride: %d %d %d %d\n",
-                  buf->stride[0], buf->stride[1], buf->stride[2], buf->stride[3]);
-    halide_printf(user_context, "  min: %d %d %d %d\n",
-                  buf->min[0], buf->min[1], buf->min[2], buf->min[3]);
-    halide_printf(user_context, "  elem_size: %d\n", buf->elem_size);
-    halide_printf(user_context, "  host_dirty: %d, dev_dirty: %d\n",
-                  buf->host_dirty, buf->dev_dirty);
+    debug(user_context)
+        << "  dev: " << buf->dev << "\n"
+        << "  host: " << buf->host << "\n"
+        << "  extent: " << buf->extent[0] << " " << buf->extent[1]
+        << " " << buf->extent[2] << " " << buf->extent[3] <<  "\n"
+        << "  stride: " << buf->stride[0] << " " << buf->stride[1]
+        << " " << buf->stride[2] << " " << buf->stride[3] <<  "\n"
+        << "  min: " << buf->min[0] << " " << buf->min[1]
+        << " " << buf->min[2] << " " << buf->min[3] <<  "\n"
+        << "  elem_size: " << buf->elem_size << "\n"
+        << "  host_dirty: " << buf->host_dirty << "\n"
+        << "  dev_dirty: " << buf->dev_dirty << "\n";
 }
 
 WEAK GLuint make_shader(void *user_context, GLenum type,
