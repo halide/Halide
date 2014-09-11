@@ -92,7 +92,7 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
 // halide runtime.
 namespace Halide { namespace Runtime { namespace Internal {
 
-enum Type {DebugPrinter = 0,
+enum Type {BasicPrinter = 0,
            ErrorPrinter = 1,
            StringStreamPrinter = 2};
 
@@ -117,32 +117,32 @@ public:
     }
 
     const Printer &operator<<(int64_t arg) const {
-        dst = halide_int64_to_string(dst, end, arg, 0);
+        dst = halide_int64_to_string(dst, end, arg, 1);
         return *this;
     }
 
     const Printer &operator<<(int32_t arg) const {
-        dst = halide_int64_to_string(dst, end, arg, 0);
+        dst = halide_int64_to_string(dst, end, arg, 1);
         return *this;
     }
 
     const Printer &operator<<(uint64_t arg) const {
-        dst = halide_uint64_to_string(dst, end, arg, 0);
+        dst = halide_uint64_to_string(dst, end, arg, 1);
         return *this;
     }
 
     const Printer &operator<<(uint32_t arg) const {
-        dst = halide_uint64_to_string(dst, end, arg, 0);
+        dst = halide_uint64_to_string(dst, end, arg, 1);
         return *this;
     }
 
     const Printer &operator<<(double arg) const {
-        dst = halide_double_to_string(dst, end, arg, true);
+        dst = halide_double_to_string(dst, end, arg, 1);
         return *this;
     }
 
     const Printer &operator<<(float arg) const {
-        dst = halide_double_to_string(dst, end, arg, false);
+        dst = halide_double_to_string(dst, end, arg, 0);
         return *this;
     }
 
@@ -159,11 +159,7 @@ public:
     ~Printer() {
         if (type == ErrorPrinter) {
             halide_error(user_context, buf);
-        } else if (type == DebugPrinter) {
-            if (dst < end - 1) {
-                dst[0] = '\n';
-                dst[1] = 0;
-            }
+        } else if (type == BasicPrinter) {
             halide_print(user_context, buf);
         } else {
             // It's a stringstream. Do nothing.
@@ -171,40 +167,25 @@ public:
     }
 };
 
+// A class that supports << with all the same types as Printer, but does nothing.
+class SinkStream {
+public:
+    SinkStream(void *user_context) {}
+};
+template<typename T>
+SinkStream operator<<(const SinkStream &s, T) {
+    return s;
+}
+
+typedef Printer<BasicPrinter> print;
 typedef Printer<ErrorPrinter> error;
-typedef Printer<DebugPrinter> debug;
 typedef Printer<StringStreamPrinter> stringstream;
 
-// temporary code. delete me once all uses of the below functions has been replaced.
-template<typename A>
-WEAK void halide_error_varargs(void *ctx, const char *fmt, A a) {
-    error(ctx) << fmt << a;
-}
-
-template<typename A, typename B>
-WEAK void halide_error_varargs(void *ctx, const char *fmt, A a, B b) {
-    error(ctx) << fmt << a << b;
-}
-
-WEAK void halide_printf(void *ctx, const char *fmt) {
-    debug(ctx) << fmt;
-}
-
-template<typename A>
-WEAK void halide_printf(void *ctx, const char *fmt, A a) {
-    debug(ctx) << fmt << a;
-}
-
-template<typename A, typename B>
-WEAK void halide_printf(void *ctx, const char *fmt, A a, B b) {
-    debug(ctx) << fmt << a << b;
-}
-
-template<typename A, typename B, typename C>
-WEAK void halide_printf(void *ctx, const char *fmt, A a, B b, C c) {
-    debug(ctx) << fmt << a << b << c;
-}
-
+#ifdef DEBUG_RUNTIME
+typedef Printer<BasicPrinter> debug;
+#else
+typedef SinkStream debug;
+#endif
 
 }}}
 

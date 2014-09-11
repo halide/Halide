@@ -223,17 +223,16 @@ WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scienti
 
 WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg) {
     const char *hex_digits = "0123456789abcdef";
-    char buf[19] = {0};
+    char buf[20] = {0};
+    char *buf_ptr = buf+18;
     uint64_t bits = (uint64_t)arg;
     for (int i = 0; i < 16; i++) {
-        buf[17-i] = hex_digits[(bits >> (i*4)) & 15];
+        *buf_ptr-- = hex_digits[bits & 15];
+        bits >>= 4;
+        if (!bits) break;
     }
-    char *buf_ptr = buf;
-    if (sizeof(arg) == 4) {
-        buf_ptr += 8;
-    }
-    buf_ptr[0] = '0';
-    buf_ptr[1] = 'x';
+    *buf_ptr-- = 'x';
+    *buf_ptr = '0';
     return halide_string_to_string(dst, end, buf_ptr);
 }
 
