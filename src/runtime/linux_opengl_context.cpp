@@ -22,7 +22,6 @@ extern int XSync(void *, int);
 extern GLXContext glXGetCurrentContext();
 extern int glXMakeContextCurrent(void *, unsigned long, unsigned long, void *);
 
-
 #define GLX_RENDER_TYPE 0x8011
 #define GLX_RGBA_TYPE 0x8014
 #define GLX_RGBA_BIT 1
@@ -43,7 +42,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 // Helper to check for extension string presence. Adapted from:
 //   http://www.opengl.org/resources/features/OGLextensions/
-bool extension_supported(const char *extlist, const char *extension) {
+WEAK bool extension_supported(const char *extlist, const char *extension) {
     // Extension names should not have spaces.
     if (strchr(extension, ' ') != NULL || *extension == '\0')
         return false;
@@ -72,6 +71,9 @@ WEAK void *halide_opengl_get_proc_address(void *user_context, const char *name) 
 
 // Initialize OpenGL
 WEAK int halide_opengl_create_context(void *user_context) {
+    const int desired_major_version = 3;
+    const int desired_minor_version = 2;
+
     if (glXGetCurrentContext()) {
         // Already have a context
         return 0;
@@ -105,50 +107,31 @@ WEAK int halide_opengl_create_context(void *user_context) {
         halide_error(user_context, "Could not get framebuffer config.\n");
         return -1;
     }
-
     void *fbconfig = fbconfigs[0];
 
     const char *glxexts = glXQueryExtensionsString(dpy, screen);
+    void *share_list = NULL;
+    int direct = 1;
+    void *context = NULL;
 
-    // NOTE: It is not necessary to create or make current to a context before
-    // calling glXGetProcAddressARB
     glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
     glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
         glXGetProcAddressARB("glXCreateContextAttribsARB");
 
-    void *context = 0;
-
-    if (!extension_supported(glxexts, "GLX_ARB_create_context") ||
-        !glXCreateContextAttribsARB) {
-        context = glXCreateNewContext(dpy, fbconfig,
-                                      GLX_RGBA_TYPE,
-                                      NULL /* share list */, 1 /* direct */);
-    } else {
-        int desired_major_version = 3;
-        int desired_minor_version = 2;
-        // bool compatibility_profile = false;
-
+    if (extension_supported(glxexts, "GLX_ARB_create_context") &&
+        glXCreateContextAttribsARB) {
         int context_attribs[] = {
             GLX_CONTEXT_MAJOR_VERSION_ARB, desired_major_version,
             GLX_CONTEXT_MINOR_VERSION_ARB, desired_minor_version,
-            // TODO: compatibility?
             0
         };
-
-        context = glXCreateContextAttribsARB(dpy, fbconfig, NULL /* */, 1 /* direct */,
-                                             context_attribs);
-//        XSync(dpy, 0 /* ??? */);
-        if (context == 0) {
-            halide_printf(user_context, "Opening 3.0 context failed, trying compatibility context\n");
-            context_attribs[1] = 2;
-            context_attribs[3] = 0;
-            context = glXCreateContextAttribsARB(dpy, fbconfig, NULL /* */, 1 /* direct */,
-                                                 context_attribs);
-
-        }
-        halide_printf(user_context, "Opened %d.%d context\n", context_attribs[1], context_attribs[3]);
+        context = glXCreateContextAttribsARB(dpy, fbconfig, share_list, direct,
+                                      context_attribs);
     }
-
+    if (!context) {
+        // Open a legacy context
+        context = glXCreateNewContext(dpy, fbconfig, GLX_RGBA_TYPE, share_list, direct);
+    }
     if (!context) {
         halide_error(user_context, "Could not create OpenGL context.\n");
         return -1;
@@ -161,7 +144,6 @@ WEAK int halide_opengl_create_context(void *user_context) {
     };
     unsigned long pbuffer = glXCreatePbuffer(dpy, fbconfig, pbuffer_attribs);
 
-    // clean up:
     XFree(fbconfigs);
     XSync(dpy, 0);
 
