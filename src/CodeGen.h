@@ -114,6 +114,7 @@ protected:
     static bool llvm_ARM_enabled;
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
+    static bool llvm_Mips_enabled;
 
     llvm::Module *module;
     bool owns_module;
@@ -313,7 +314,6 @@ protected:
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
     llvm::Value *interleave_vectors(Type, const std::vector<Expr>&);
-
 
 private:
 

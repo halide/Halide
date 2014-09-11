@@ -422,8 +422,11 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
     // Zip two real DFTs X and Y into one complex DFT Z = X + j*Y
     Func zipped("zipped");
     // Construct the whole DFT domain of X and Y via conjugate
-    // symmetry.
-    Tuple X = selectz(n1 < N1/2 + 1,
+    // symmetry. At n1 = N1/2, both branches are equal (the dft is
+    // real, so the conjugate is a no-op), so the slightly less
+    // intuitive form of this expression still works, but vectorizes
+    // more cleanly than n1 <= N1/2.
+    Tuple X = selectz(n1 < N1/2,
                       dft0(n0, clamp(n1, 0, N1/2), _),
                       conj(dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
 
@@ -437,7 +440,7 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
         // the domain, we need to clamp excess accesses.
         n0_Y = clamp(n0_Y, 0, N0 - 1);
     }
-    Tuple Y = selectz(n1 < N1/2 + 1,
+    Tuple Y = selectz(n1 < N1/2,
                       dft0(n0_Y, clamp(n1, 0, N1/2), _),
                       conj(dft0(n0_Y, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));

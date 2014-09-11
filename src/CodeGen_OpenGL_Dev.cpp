@@ -219,7 +219,7 @@ void CodeGen_GLSL::visit(const For *loop) {
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
         loop->body.accept(this);
     } else {
-        user_assert(loop->for_type != For::Parallel) << "Parallel loops aren't allowed inside GLSL\n";
+        user_assert(loop->for_type != For::Parallel) << "GLSL: parallel loops aren't allowed inside kernel.\n";
         CodeGen_C::visit(loop);
     }
 }
@@ -436,22 +436,22 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         // If the color dimension is not vectorized, e.g. it is unrolled, then
         // then we access each channel individually.
         int i = idx->value;
-        internal_assert(0 <= i && i <= 3) <<  "Color channel must be between 0 and 3.\n";
+        internal_assert(0 <= i && i <= 3) <<  "GLSL: color index must be between 0 and 3.\n";
         char suffix[] = "rgba";
         return std::string(".") + suffix[i];
     } else {
-        user_error << "Color index '" << e << "' isn't constant.\n"
+        user_error << "GLSL: color index '" << e << "' must be constant.\n"
                    << "Call .bound() or .set_bounds() to specify the range of the color index.\n";
     }
     return "";
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
-    internal_error << "Load nodes should have been removed by now\n";
+    internal_error << "GLSL: unexpected Load node encountered.\n";
 }
 
 void CodeGen_GLSL::visit(const Store *op) {
-    internal_error << "Store nodes should have been removed by now\n";
+    internal_error << "GLSL: unexpected Store node encountered.\n";
 }
 
 void CodeGen_GLSL::visit(const Evaluate *op) {
@@ -532,12 +532,12 @@ void CodeGen_GLSL::visit(const Call *op) {
             // 'halide_printf'.
             rhs << print_expr(op->args[1]);
         } else {
-            user_error << "GLSL: intrinsic '" << op->name << "' isn't supported\n";
+            user_error << "GLSL: intrinsic '" << op->name << "' isn't supported.\n";
             return;
         }
     } else {
         if (builtin.count(op->name) == 0) {
-            user_error << "GLSL: encountered unknown function '" << op->name << "'\n";
+            user_error << "GLSL: unknown function '" << op->name << "' encountered.\n";
         }
 
         rhs << builtin[op->name] << "(";
@@ -551,7 +551,7 @@ void CodeGen_GLSL::visit(const Call *op) {
 }
 
 void CodeGen_GLSL::visit(const AssertStmt *) {
-    internal_error << "GLSL: Assertions should not be present\n";
+    internal_error << "GLSL: unexpected Assertion node encountered.\n";
 }
 
 void CodeGen_GLSL::visit(const Broadcast *op) {
@@ -576,9 +576,9 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             Type t = args[i].type.element_of();
 
             user_assert(args[i].read != args[i].write) <<
-                "Buffers may only be read OR written inside a kernel loop\n";
+                "GLSL: buffers may only be read OR written inside a kernel loop.\n";
             user_assert(t == UInt(8) || t == UInt(16)) <<
-                "Buffer " << args[i].name << " has invalid type " << t << ".\n";
+                "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << (t == UInt(8) ? "uint8_t " : "uint16_t ")
                    << print_name(args[i].name) << "\n";

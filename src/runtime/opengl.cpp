@@ -107,7 +107,6 @@ struct TextureInfo {
     GLuint id;
     GLint min[4];
     GLint extent[4];
-    GLenum format;                      // internal format: GL_RGBA, ...
     bool halide_allocated;              // allocated by us or host app?
     TextureInfo *next;
 };
@@ -172,7 +171,7 @@ WEAK const char *var_marker    = "/// VAR ";
     }
 
 // Macro for error checking.
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
 #define LOG_GLERROR(ERR)                                        \
     halide_printf(user_context,                                 \
                   "%s:%d: OpenGL error 0x%04x\n",               \
@@ -299,7 +298,7 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
     kernel->shader_id = 0;
     kernel->program_id = 0;
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     {
         // Android logcat output clips at ~1000 character chunks by default;
         // to avoid clipping the interesting stuff, emit a line at a time.
@@ -472,7 +471,7 @@ WEAK int halide_opengl_init(void *user_context) {
 WEAK void halide_opengl_release(void *user_context) {
     if (!ST.initialized) return;
 
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
     halide_printf(user_context, "halide_opengl_release\n");
 #endif
     ST.DeleteShader(ST.vertex_shader_id);
@@ -499,7 +498,7 @@ WEAK void halide_opengl_release(void *user_context) {
         free(tex);
         tex = next;
     }
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
     if (freed_textures > 0) {
         halide_printf(user_context,
             "halide_opengl_release: deleted %d dangling texture(s).\n",
@@ -531,7 +530,7 @@ WEAK bool get_texture_format(void *user_context,
     } else if (buf->extent[2] == 4) {
         *format = GL_RGBA;
     } else {
-        halide_error(user_context, "Only 1, 3, or 4 color channels are supported");
+        halide_error(user_context, "GLSL: Only 1, 3, or 4 color channels are supported.");
         return false;
     }
 
@@ -581,7 +580,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
         ST.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
         CHECK_GLERROR(1);
         if (width < buf->extent[0] || height < buf->extent[1]) {
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
             halide_printf(user_context, "Texture size: %dx%d, buffer size: %dx%d\n",
                           width, height, buf->extent[0], buf->extent[1]);
 #endif
@@ -622,7 +621,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
 
         buf->dev = tex;
         halide_allocated = true;
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
         halide_printf(user_context, "Allocated texture %d of size %d x %d\n", tex, width, height);
 #endif
 
@@ -641,7 +640,6 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
             texinfo->min[i] = buf->min[i];
             texinfo->extent[i] = buf->extent[i];
         }
-        texinfo->format = format;
         texinfo->halide_allocated = halide_allocated;
 
         texinfo->next = ST.textures;
@@ -678,7 +676,7 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
 
     // Delete texture if it was allocated by us.
     if (texinfo->halide_allocated) {
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
         halide_printf(user_context, "Deleting texture %d\n", tex);
 #endif
         ST.DeleteTextures(1, &tex);
@@ -694,8 +692,7 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
 // is responsible for setting up the OpenGL environment and compiling the GLSL
 // code into a fragment shader.
 WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
-                                      const char *src, int size) {
-    // TODO: handle error
+                                    const char *src, int size) {
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -756,12 +753,11 @@ WEAK int halide_opengl_dev_sync(void *user_context) {
 // the app and not by the halide runtime. For example, the buffer_t may be
 // backed by an FBO already bound by the application.
 WEAK uint64_t halide_opengl_output_client_bound() {
-  return HALIDE_GLSL_CLIENT_BOUND;
+    return HALIDE_GLSL_CLIENT_BOUND;
 }
 
 template <class T>
-WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height,
-                                  int channels) {
+WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height, int channels) {
     T *src = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int dstidx = y * width * channels;
@@ -779,8 +775,7 @@ WEAK void halide_to_interleaved(buffer_t *buf, T *dst, int width, int height,
 }
 
 template <class T>
-WEAK void interleaved_to_halide(buffer_t *buf, T *src, int width, int height,
-                                  int channels) {
+WEAK void interleaved_to_halide(buffer_t *buf, T *src, int width, int height, int channels) {
     T *dst = reinterpret_cast<T *>(buf->host);
     for (int y = 0; y < height; y++) {
         int srcidx = y * width * channels;
@@ -810,7 +805,7 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     }
 
     if (!buf->host || !buf->dev) {
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
         print_buffer(user_context, buf);
 #endif
         halide_error(user_context, "Invalid copy_to_dev operation\n");
@@ -818,7 +813,7 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     }
 
     GLuint tex = get_texture_id(buf);
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
     halide_printf(user_context, "halide_copy_to_dev: %d\n", tex);
 #endif
 
@@ -849,7 +844,7 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
                          format, type, host_ptr);
         CHECK_GLERROR(1);
     } else {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         halide_printf(user_context, "Warning: In copy_to_dev, host buffer is not interleaved. Doing slow interleave.\n");
         #endif
 
@@ -909,14 +904,14 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     }
 
     if (!buf->host || !buf->dev) {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         print_buffer(user_context, buf);
         #endif
         halide_error(user_context, "Invalid copy_to_host operation: host or dev NULL.\n");
         return 1;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     GLuint tex = get_texture_id(buf);
     halide_printf(user_context, "halide_copy_to_host: %d\n", tex);
     #endif
@@ -941,7 +936,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
              buf->min[3] * buf->stride[3]);
         get_pixels(user_context, buf, format, type, host_ptr);
     } else {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         halide_printf(user_context,
                       "Warning: In copy_to_host, host buffer is not interleaved. Doing slow deinterleave.\n");
         #endif
@@ -1148,7 +1143,7 @@ WEAK int halide_opengl_dev_run(
 
         // Check to see if the object name is actually a FBO
         if (bind_render_targets) {
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
             halide_printf(user_context, "Output texture %d: %d\n", num_output_textures, tex);
 #endif
             ST.FramebufferTexture2D(GL_FRAMEBUFFER,

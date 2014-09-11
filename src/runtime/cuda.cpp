@@ -152,7 +152,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     DEBUG_PRINTF( user_context, "    Got device %d\n", dev );
 
     // Dump device attributes
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     {
         char name[256];
         name[0] = 0;
@@ -285,7 +285,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
         return ctx.error;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -315,7 +315,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
         }
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -337,7 +337,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     if (ctx.error != CUDA_SUCCESS)
         return ctx.error;
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -354,7 +354,7 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
         return err;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -436,7 +436,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
                         << buf->stride[3] << " "
                         << "(" << buf->elem_size << " bytes per element)\n";
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -454,7 +454,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     halide_assert(user_context, p);
     buf->dev = (uint64_t)p;
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -476,7 +476,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     }
 
     if (buf->host_dirty) {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         #endif
 
@@ -511,7 +511,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         }
 
 
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
         #endif
@@ -535,7 +535,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     // Need to check dev_dirty again, in case another thread did the
     // copy_to_host before the serialization point above.
     if (buf->dev_dirty) {
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_before = halide_current_time_ns(user_context);
         #endif
 
@@ -571,7 +571,7 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
             }
         }
 
-        #ifdef DEBUG
+        #ifdef DEBUG_RUNTIME
         uint64_t t_after = halide_current_time_ns(user_context);
         halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
         #endif
@@ -589,7 +589,7 @@ WEAK int halide_dev_sync(void *user_context) {
         return ctx.error;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -600,7 +600,7 @@ WEAK int halide_dev_sync(void *user_context) {
         return err;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_after = halide_current_time_ns(user_context);
     halide_printf(user_context, "    Time: %f ms\n", (t_after - t_before) / 1.0e6);
     #endif
@@ -629,7 +629,7 @@ WEAK int halide_dev_run(void *user_context,
         return ctx.error;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
@@ -657,7 +657,7 @@ WEAK int halide_dev_run(void *user_context,
         return err;
     }
 
-    #ifdef DEBUG
+    #ifdef DEBUG_RUNTIME
     err = cuCtxSynchronize();
     if (err != CUDA_SUCCESS) {
         halide_error_varargs(user_context, "CUDA: cuCtxSynchronize failed (%s)\n",
