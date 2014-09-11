@@ -84,6 +84,14 @@ private:
 
     using IRVisitor::visit;
 
+    void visit(const IntImm *op) {
+        add_to_constant_term(op);
+    }
+
+    void visit(const FloatImm *op) {
+        add_to_constant_term(op);
+    }
+
     /* We don't deal with these nodes. */
     void visit(const Mod *op) {success = false;}
     void visit(const Min *op) {success = false;}
@@ -360,6 +368,7 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
+                match_types(rhs, var_term.coeff);
                 rhs = simplify(Cast::make(op->a.type(), Div::make(rhs, var_term.coeff)));
                 lhs = simplify(Cast::make(op->a.type(), var_term.var));
                 solved = true;
