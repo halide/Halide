@@ -43,19 +43,11 @@ extern "C" {
  *
  */
 
-/** Define halide_printf to catch debugging output, informational
-  * messages, etc. Main use is to support HL_TRACE functionality and
-  * PrintStmt in IR. Also called by the default halide_error
-  * implementation.
-  *
-  * This function is implemented using \ref halide_print.
-  */
-extern int halide_printf(void *user_context, const char *, ...);
-
-/** Unformatted print used to support halide_printf. This function
- * can be replaced in JITed code by using halide_custom_print
- * and providing an implementation of halide_print in AOT code. See
- * Func::set_custom_print.
+/** Print a message to stdout. Usage is similar to Main use is to
+ * support HL_TRACE functionality and PrintStmt in IR. Also called by
+ * the default halide_error.  This function can be replaced in JITed
+ * code by using halide_custom_print and providing an implementation
+ * of halide_print in AOT code. See Func::set_custom_print.
  */
 extern void halide_print(void *user_context, const char *);
 
@@ -65,10 +57,7 @@ extern void halide_print(void *user_context, const char *);
  * implementation of halide_error in AOT code. See
  * Func::set_error_handler.
  */
-//@{
 extern void halide_error(void *user_context, const char *);
-extern void halide_error_varargs(void *user_context, const char *, ...);
-//@}
 
 /** A macro that calls halide_error if the supplied condition is false. */
 #define halide_assert(user_context, cond) if (!(cond)) halide_error(user_context, #cond);

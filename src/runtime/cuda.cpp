@@ -25,7 +25,6 @@ extern int atoi(const char *);
 extern char *getenv(const char *);
 extern int64_t halide_current_time_ns(void *user_context);
 extern void *malloc(size_t);
-extern int snprintf(char *, size_t, const char *, ...);
 
 WEAK void halide_set_cuda_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
     cuda_ctx_ptr = ctx_ptr;
@@ -120,8 +119,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
-        halide_error_varargs(user_context, "CUDA: cuInit failed (%s)",
-                             get_cuda_error_name(err));
+        error(user_context) << "CUDA: cuInit failed (%s)" << get_cuda_error_name(err);
         return err;
     }
 
@@ -217,21 +215,17 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
                                 cc_major == 3 ? 192 :
                                 cc_major == 5 ? 128 : 0);
 
-        DEBUG_PRINTF(user_context,
-                     "      max threads per block: %d\n"
-                     "      warp size: %d\n"
-                     "      max block size: %d %d %d\n"
-                     "      max grid size: %d %d %d\n"
-                     "      max shared memory per block: %d\n"
-                     "      max constant memory per block: %d\n"
-                     "      compute capability %d.%d\n"
-                     "      cuda cores: %d x %d = %d\n",
-                     max_threads_per_block, warp_size,
-                     max_block_size[0], max_block_size[1], max_block_size[2],
-                     max_grid_size[0], max_grid_size[1], max_grid_size[2],
-                     max_shared_mem, max_constant_mem,
-                     cc_major, cc_minor,
-                     num_cores, threads_per_core, num_cores * threads_per_core);
+        debug(user_context)
+            << "      max threads per block: " << max_threads_per_block << "\n"
+            << "      warp size: " << warp_size << "\n"
+            << "      max block size: " << max_block_size[0]
+            << " " << max_block_size[1] << " " << max_block_size[2] << "\n"
+            << "      max grid size: " << max_grid_size[0]
+            << " " << max_grid_size[1] << " " << max_grid_size[2] << "\n"
+            << "      max shared memory per block: " << max_shared_mem << "\n"
+            << "      max constant memory per block: " << max_constant_mem << "\n"
+            << "      compute capability " << cc_major << "." << cc_minor << "\n"
+            << "      cuda cores: " << num_cores << " x " << threads_per_core << " = " << threads_per_core << "\n";
     }
     #endif
 
@@ -281,8 +275,10 @@ WEAK bool validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0)
 
 extern "C" {
 WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* ptx_src, int size) {
-    DEBUG_PRINTF( user_context, "CUDA: halide_init_kernels (user_context: %p, state_ptr: %p, ptx_src: %p, %i)\n",
-                  user_context, state_ptr, ptx_src, size );
+    debug(user_context) << "CUDA: halide_init_kernels (user_context: " << user_context
+                        << ", state_ptr: " << state_ptr
+                        << ", ptx_src: " << ptx_src
+                        << ", " << size << ")\n";
 
     CudaContext ctx(user_context);
     if (ctx.error != 0) {
@@ -427,14 +423,18 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     halide_assert(user_context, buf->stride[0] >= 0 && buf->stride[1] >= 0 &&
                                 buf->stride[2] >= 0 && buf->stride[3] >= 0);
 
-    DEBUG_PRINTF(user_context, "    allocating buffer of %lld bytes, "
-                 "extents: %lldx%lldx%lldx%lld strides: %lldx%lldx%lldx%lld (%d bytes per element)\n",
-                 (long long)size,
-                 (long long)buf->extent[0], (long long)buf->extent[1],
-                 (long long)buf->extent[2], (long long)buf->extent[3],
-                 (long long)buf->stride[0], (long long)buf->stride[1],
-                 (long long)buf->stride[2], (long long)buf->stride[3],
-                 buf->elem_size);
+    debug(user_context) << "    allocating buffer of " << size << " bytes, "
+                        << "extents: "
+                        << buf->extent[0] << "x"
+                        << buf->extent[1] << "x"
+                        << buf->extent[2] << "x"
+                        << buf->extent[3] << " "
+                        << "strides: "
+                        << buf->stride[0] << "x"
+                        << buf->stride[1] << "x"
+                        << buf->stride[2] << "x"
+                        << buf->stride[3] << " "
+                        << "(" << buf->elem_size << " bytes per element)\n";
 
     #ifdef DEBUG
     uint64_t t_before = halide_current_time_ns(user_context);
@@ -449,7 +449,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
                              get_cuda_error_name(err));
         return err;
     } else {
-        DEBUG_PRINTF( user_context, "%p\n", p );
+        DEBUG_PRINTF( user_context, "%p\n", (void *)p );
     }
     halide_assert(user_context, p);
     buf->dev = (uint64_t)p;
@@ -496,9 +496,9 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
                         void *src = (void *)(c.src + off);
                         CUdeviceptr dst = (CUdeviceptr)(c.dst + off);
                         uint64_t size = c.chunk_size;
-                        DEBUG_PRINTF( user_context, "    cuMemcpyHtoD (%d, %d, %d, %d), %p -> %p, %lld bytes\n",
-                                      x, y, z, w,
-                                      src, (void *)dst, (long long)size );
+                        debug(user_context) << "    cuMemcpyHtoD "
+                                            << "(" << x << ", " << y << ", " << z << ", " << w << "), "
+                                            << src << " -> " << (void *)dst << ", " << size << " bytes\n";
                         CUresult err = cuMemcpyHtoD(dst, src, size);
                         if (err != CUDA_SUCCESS) {
                             halide_error_varargs(user_context, "CUDA: cuMemcpyHtoD failed (%s)",
@@ -555,9 +555,11 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
                         CUdeviceptr src = (CUdeviceptr)(c.src + off);
                         void *dst = (void *)(c.dst + off);
                         uint64_t size = c.chunk_size;
-                        DEBUG_PRINTF( user_context, "    cuMemcpyDtoH (%d, %d, %d, %d), %p -> %p, %lld bytes\n",
-                                      x, y, z, w,
-                                      (void *)src, dst, (long long)size );
+
+                        debug(user_context) << "    cuMemcpyDtoH "
+                                            << "(" << x << ", " << y << ", " << z << ", " << w << "), "
+                                            << (void *)src << " -> " << dst << ", " << size << " bytes\n";
+
                         CUresult err = cuMemcpyDtoH(dst, src, size);
                         if (err != CUDA_SUCCESS) {
                             halide_error_varargs(user_context, "CUDA: cuMemcpyDtoH failed (%s)",
@@ -614,11 +616,12 @@ WEAK int halide_dev_run(void *user_context,
                         int shared_mem_bytes,
                         size_t arg_sizes[],
                         void* args[]) {
-    DEBUG_PRINTF( user_context, "CUDA: halide_dev_run (user_context: %p, entry: %s, blocks: %dx%dx%d, threads: %dx%dx%d, shmem: %d)\n",
-                  user_context, entry_name,
-                  blocksX, blocksY, blocksZ,
-                  threadsX, threadsY, threadsZ,
-                  shared_mem_bytes );
+    debug(user_context) << "CUDA: halide_dev_run ("
+                        << "user_context: " << user_context << ", "
+                        << "entry: " << entry_name << ", "
+                        << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
+                        << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
+                        << "shmem: " << shared_mem_bytes << "\n";
 
     CUresult err;
     CudaContext ctx(user_context);
