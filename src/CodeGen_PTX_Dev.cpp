@@ -331,15 +331,19 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(module));
     }
     #else
-    #if LLVM_VERSION < 36
+    #if LLVM_VERSION == 35
     const DataLayout *TD = Target.getDataLayout();
-    #else
-    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
-    #endif
     if (TD) {
         module->setDataLayout(TD);
     }
     PM.add(new DataLayoutPass(module));
+    #else // llvm >= 3.6
+    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
+    if (TD) {
+        module->setDataLayout(TD);
+    }
+    PM.add(new DataLayoutPass);
+    #endif
     #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose
