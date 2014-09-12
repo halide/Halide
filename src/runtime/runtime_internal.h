@@ -73,8 +73,9 @@ ssize_t write(int fd, const void *buf, size_t bytes);
 void exit(int);
 
 // Similar to strncpy, but with various non-string arguments. Writes
-// arg to dst. Does not write to pointer end or beyond. Returns new
-// pointer to end so that calls can be chained.
+// arg to dst. Does not write to pointer end or beyond. Returns
+// pointer to one beyond the last character written so that calls can
+// be chained.
 WEAK char *halide_string_to_string(char *dst, char *end, const char *arg);
 WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific);
 WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
@@ -162,7 +163,8 @@ public:
     }
 };
 
-// A class that supports << with all the same types as Printer, but does nothing.
+// A class that supports << with all the same types as Printer, but
+// does nothing and should compile to a no-op.
 class SinkStream {
 public:
     SinkStream(void *user_context) {}
