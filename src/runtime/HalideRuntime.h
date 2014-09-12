@@ -43,17 +43,17 @@ extern "C" {
  *
  */
 
-/** Print a message to stdout. Usage is similar to Main use is to
- * support HL_TRACE functionality and PrintStmt in IR. Also called by
- * the default halide_error.  This function can be replaced in JITed
- * code by using halide_custom_print and providing an implementation
- * of halide_print in AOT code. See Func::set_custom_print.
+/** Print a message to stderr. Main use is to support HL_TRACE
+ * functionality, print, and print_when calls. Also called by the default
+ * halide_error.  This function can be replaced in JITed code by using
+ * halide_custom_print and providing an implementation of halide_print
+ * in AOT code. See Func::set_custom_print.
  */
 extern void halide_print(void *user_context, const char *);
 
-/** Define halide_error to catch errors messages at runtime, for
- * example bounds checking failures. This function can be replaced
- * in JITed code by using halide_set_error_handler and providing an
+/** Define halide_error to catch errors messages at runtime (for
+ * example bounds checking failures). This function can be replaced in
+ * JITed code by using halide_set_error_handler and providing an
  * implementation of halide_error in AOT code. See
  * Func::set_error_handler.
  */

@@ -440,7 +440,7 @@ struct LetStmt : public StmtNode<LetStmt> {
 };
 
 /** If the 'condition' is false, then bail out printing the
- * args to stderr */
+ * message to stderr */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
