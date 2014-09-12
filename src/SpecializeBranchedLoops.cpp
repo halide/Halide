@@ -161,6 +161,46 @@ bool expr_branches_in_var(const std::string& name, Expr value) {
     return check.has_branches;
 }
 
+class FindFreeVariables : public IRVisitor {
+public:
+    Scope<Expr> *scope;
+    std::vector<const Variable*> free_vars;
+
+    FindFreeVariables(Scope<Expr>* s) : scope(s) {}
+private:
+    using IRVisitor::visit;
+
+    void visit(const Variable *op) {
+        if (!scope->contains(op->name)) {
+            free_vars.push_back(op);
+        }
+    }
+
+    void visit(const Let *op) {
+        op->value.accept(this);
+        scope->push(op->name, op->value);
+        op->body.accept(this);
+        scope->pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {
+        op->value.accept(this);
+        scope->push(op->name, op->value);
+        op->body.accept(this);
+        scope->pop(op->name);
+    }
+};
+
+size_t num_free_vars(Expr expr, Scope<Expr> *scope) {
+    FindFreeVariables find(scope);
+    expr.accept(&find);
+    return find.free_vars.size();
+}
+
+bool has_free_vars(Expr expr, Scope<Expr> *scope) {
+    return num_free_vars(expr, scope) > 0;
+}
+
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent, std::vector<Branch> &branches, Scope<Expr>* scope);
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent, std::vector<Branch> &branches, Scope<Expr>* scope);
 
@@ -291,8 +331,10 @@ private:
     }
 
     void visit_simple_cond(Expr cond, Expr a, Expr b) {
-        Expr solve = solve_for_linear_variable(cond, name, scope);
+        // Bail out if this condition depends on more than just the current loop variable.
+        if (num_free_vars(cond, scope) > 1) return;
 
+        Expr solve = solve_for_linear_variable(cond, name, scope);
         if (!solve.same_as(cond)) {
             Branch b1, b2;
             build_branches(solve, a, b, b1, b2);
@@ -395,8 +437,11 @@ private:
         if (expr_uses_var(op->condition, name)) {
             Stmt normalized = normalize_if_stmts(op);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
-            Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
 
+            // Bail out if this condition depends on more than just the current loop variable.
+            if (num_free_vars(if_stmt->condition, scope) > 1) return;
+
+            Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
             if (!solve.same_as(if_stmt->condition)) {
                 Branch b1, b2;
                 build_branches(solve, if_stmt->then_case, if_stmt->else_case, b1, b2);
