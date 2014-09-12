@@ -18,7 +18,6 @@ struct ReductionDomainContents;
 struct ReductionVariable {
     std::string var;
     Expr min, extent;
-    ReductionDomainContents *member_of;
 };
 
 struct ReductionDomainContents {
@@ -41,11 +40,6 @@ public:
     ReductionDomain(const std::vector<ReductionVariable> &domain) :
         contents(new ReductionDomainContents) {
         contents.ptr->domain = domain;
-/*
-        for (size_t i = 0; i < contents.ptr->domain.size(); i++) {
-            contents.ptr->domain[i].member_of = contents;
-        }
-*/
     }
 
     /** Is this handle non-NULL */
