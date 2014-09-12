@@ -170,6 +170,9 @@ protected:
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
+    /** Codegen a vector Expr by codegenning each lane and combining. */
+    void scalarize(Expr);
+
     /** Take an llvm Value representing a pointer to a buffer_t,
      * and populate the symbol table with its constituent parts.
      */

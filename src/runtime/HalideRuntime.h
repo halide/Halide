@@ -301,7 +301,7 @@ extern void halide_memoization_cache_set_size(int64_t size);
  *  tuple_count parameters determines the length of the list.
  */
 extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                            buffer_t *realized_bounds, int32_t tuple_count, ... /* list of buffer_t * */);
+                                            buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
 /** Given a cache key for a memoized result, currently constructed
  *  from the Func name and top-level Func name plus the arguments of
@@ -315,7 +315,7 @@ extern bool halide_memoization_cache_lookup(void *user_context, const uint8_t *c
  *  determines the length of the list.
  */
 extern void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                           buffer_t *realized_bounds, int32_t tuple_count, ... /* list of buffer_t * */);
+                                           buffer_t *realized_bounds, int32_t tuple_count, buffer_t **tuple_buffers);
 
 
 /** Free all memory and resources associated with the memoization cache.

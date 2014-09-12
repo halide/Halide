@@ -132,7 +132,7 @@ struct CacheEntry {
 
     CacheEntry(void *context, const uint8_t *cache_key, size_t cache_key_size,
                uint32_t key_hash, const buffer_t &computed_buf,
-               int32_t tuples, va_list tuple_buffers) :
+               int32_t tuples, buffer_t **tuple_buffers) :
         user_context(context),
         next(NULL),
         more_recent(NULL),
@@ -149,7 +149,7 @@ struct CacheEntry {
             key[i] = cache_key[i];
         }
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+            buffer_t *buf = tuple_buffers[i];
             buffer(i) = copy_of_buffer(user_context, *buf);
         }
     }
@@ -292,7 +292,7 @@ WEAK void halide_memoization_cache_set_size(int64_t size) {
 }
 
 WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cache_key, int32_t size,
-                                          buffer_t *computed_bounds, int32_t tuple_count, ...) {
+                                          buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -304,13 +304,10 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
     debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
     {
-        va_list tuple_buffers;
-        va_start(tuple_buffers, tuple_count);
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+            buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
-        va_end(tuple_buffers);
     }
     validate_cache();
 #endif
@@ -325,13 +322,10 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
             bool all_bounds_equal = true;
 
             {
-                va_list tuple_buffers;
-                va_start(tuple_buffers, tuple_count);
                 for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
-                    buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+                    buffer_t *buf = tuple_buffers[i];
                     all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
                 }
-                va_end(tuple_buffers);
             }
 
             if (all_bounds_equal) {
@@ -354,13 +348,10 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
                     most_recently_used = entry;
                 }
 
-                va_list tuple_buffers;
-                va_start(tuple_buffers, tuple_count);
                 for (int32_t i = 0; i < tuple_count; i++) {
-                    buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+                    buffer_t *buf = tuple_buffers[i];
                     copy_from_to(user_context, entry->buffer(i), *buf);
                 }
-                va_end(tuple_buffers);
 
                 return false;
             }
@@ -376,7 +367,7 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
 }
 
 WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cache_key, int32_t size,
-                                         buffer_t *computed_bounds, int32_t tuple_count, ...) {
+                                         buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
@@ -388,13 +379,10 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     debug_print_buffer(user_context, "computed_bounds", *computed_bounds);
 
     {
-        va_list tuple_buffers;
-        va_start(tuple_buffers, tuple_count);
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+            buffer_t *buf = tuple_buffers[i];
             debug_print_buffer(user_context, "Allocation bounds", *buf);
         }
-        va_end(tuple_buffers);
     }
     validate_cache();
 #endif
@@ -409,13 +397,10 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
             bool all_bounds_equal = true;
 
             {
-                va_list tuple_buffers;
-                va_start(tuple_buffers, tuple_count);
                 for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
-                    buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+                    buffer_t *buf = tuple_buffers[i];
                     all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
                 }
-                va_end(tuple_buffers);
             }
             if (all_bounds_equal) {
                 return;
@@ -426,22 +411,17 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 
     uint64_t added_size = 0;
     {
-        va_list tuple_buffers;
-        va_start(tuple_buffers, tuple_count);
         for (int32_t i = 0; i < tuple_count; i++) {
-            buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+            buffer_t *buf = tuple_buffers[i];
             added_size += full_extent(*buf);
         }
-        va_end(tuple_buffers);
     }
     current_cache_size += added_size;
     prune_cache();
 
     void *entry_storage = halide_malloc(user_context, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
-    va_list tuple_buffers;
-    va_start(tuple_buffers, tuple_count);
-    CacheEntry *new_entry = new (entry_storage) CacheEntry(user_context, cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
-    va_end(tuple_buffers);
+    CacheEntry *new_entry =
+        new (entry_storage) CacheEntry(user_context, cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
 
     new_entry->next = cache_entries[index];
     new_entry->less_recent = most_recently_used;
