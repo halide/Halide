@@ -475,38 +475,23 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
                             << " " << options.str() << "\n";
         err = clBuildProgram(program, 1, devices, options.str(), NULL, NULL );
         if (err != CL_SUCCESS) {
-            print(user_context) << "CL: clBuildProgram failed: "
-                                << get_opencl_error_name(err);
-
 
             // Allocate an appropriately sized buffer for the build log.
-            size_t len = 0;
-            char *buffer = NULL;
-            if (clGetProgramBuildInfo(program,
-                                      dev,
-                                      CL_PROGRAM_BUILD_LOG,
-                                      0, NULL,
-                                      &len) == CL_SUCCESS) {
-                buffer = (char*)malloc((++len)*sizeof(char));
-            }
+            char buffer[8192];
 
             // Get build log
-            if (buffer && clGetProgramBuildInfo(program,
-                                                dev,
-                                                CL_PROGRAM_BUILD_LOG,
-                                                len, buffer,
-                                                NULL) == CL_SUCCESS) {
-                print(user_context) << "    Build Log:\n "
-                                    << buffer << " \n-----\n";
+            if (clGetProgramBuildInfo(program, dev,
+                                      CL_PROGRAM_BUILD_LOG,
+                                      sizeof(buffer), buffer,
+                                      NULL) == CL_SUCCESS) {
+                error(user_context) << "CL: clBuildProgram failed: "
+                                    << get_opencl_error_name(err)
+                                    << "\nBuild Log:\n "
+                                    << buffer;
             } else {
-                error(user_context) << "    clGetProgramBuildInfo failed";
+                error(user_context) << "clGetProgramBuildInfo failed";
             }
 
-            if (buffer) {
-                free(buffer);
-            }
-
-            halide_assert(user_context, err == CL_SUCCESS);
             return err;
         }
     }
