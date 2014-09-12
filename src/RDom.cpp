@@ -30,7 +30,7 @@ Expr RVar::extent() const {
     if (_domain.defined()) {
         return _var().extent;
     } else {
-            return undef<int>();
+        return undef<int>();
     }
 }
 
