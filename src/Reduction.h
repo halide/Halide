@@ -12,8 +12,6 @@
 namespace Halide {
 namespace Internal {
 
-struct ReductionDomainContents;
-
 /** A single named dimension of a reduction domain */
 struct ReductionVariable {
     std::string var;
