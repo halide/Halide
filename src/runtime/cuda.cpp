@@ -280,11 +280,8 @@ extern "C" {
 WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* ptx_src, int size) {
     debug(user_context) << "CUDA: halide_init_kernels (user_context: " << user_context
                         << ", state_ptr: " << state_ptr
-                        << ", ptx_src:\n";
-    #ifdef DEBUG_RUNTIME
-    halide_print(user_context, ptx_src);
-    #endif
-
+                        << ", ptx_src: " << (void *)ptx_src
+                        << ", size: " << size << "\n";
 
     CudaContext ctx(user_context);
     if (ctx.error != 0) {

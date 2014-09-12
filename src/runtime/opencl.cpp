@@ -396,10 +396,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
     debug(user_context)
         << "CL: halide_init_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
-        << ", program:\n";
-    #ifdef DEBUG_RUNTIME
-    halide_print(user_context, src);
-    #endif
+        << ", program: " << (void *)src
+        << ", size: " << size << "\n";
 
     ClContext ctx(user_context);
     if (ctx.error != CL_SUCCESS) {
