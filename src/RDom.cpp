@@ -45,14 +45,7 @@ const std::string &RVar::name() const {
 
 template <int N>
 ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
-    ReductionVariable *begin = &vars[0];
-    ReductionVariable *end = &vars[0];
-    for (int i = 0; i < N; i++) {
-        if (vars[i].min.defined()) {
-            end = &vars[i + 1];
-        }
-    }
-    vector<ReductionVariable> d(begin, end);
+    vector<ReductionVariable> d(&vars[0], &vars[N]);
     ReductionDomain dom(d);
     return dom;
 }
