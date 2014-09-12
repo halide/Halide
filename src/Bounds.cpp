@@ -934,10 +934,10 @@ bool boxes_overlap(const Box &a, const Box &b) {
 
     for (size_t i = 0; i < a.size(); i++) {
         if (a[i].max.defined() && b[i].min.defined()) {
-            overlap = overlap && b[i].max > a[i].min;
+            overlap = overlap && b[i].max >= a[i].min;
         }
         if (a[i].min.defined() && b[i].max.defined()) {
-            overlap = overlap && a[i].max > b[i].min;
+            overlap = overlap && a[i].max >= b[i].min;
         }
     }
 
