@@ -1553,6 +1553,18 @@ Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
     }
 }
 
+void CodeGen::scalarize(Expr e) {
+    llvm::Type *result_type = llvm_type_of(e.type());
+
+    Value *result = UndefValue::get(result_type);
+
+    for (int i = 0; i < e.type().width; i++) {
+        Value *v = codegen(extract_lane(e, i));
+        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+    }
+    value = result;
+}
+
 void CodeGen::visit(const Call *op) {
     internal_assert((op->call_type == Call::Extern || op->call_type == Call::Intrinsic))
         << "Can only codegen extern calls and intrinsics\n";
@@ -1911,16 +1923,7 @@ void CodeGen::visit(const Call *op) {
             value = codegen(op->args[1]);
         } else if (op->name == Call::if_then_else) {
             if (op->type.is_vector()) {
-                // Scalarize
-                llvm::Type *result_type = llvm_type_of(op->type);
-
-                Value *result = UndefValue::get(result_type);
-
-                for (int i = 0; i < op->args[0].type().width; i++) {
-                    Value *v = codegen(extract_lane(op, i));
-                    result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
-                }
-                value = result;
+                scalarize(op);
 
             } else {
 
@@ -1946,21 +1949,38 @@ void CodeGen::visit(const Call *op) {
 
                 value = phi;
             }
+        } else if (op->name == Call::make_struct) {
+            if (op->type.is_vector()) {
+                // Make a vector-of-structs
+                scalarize(op);
+            } else {
+                // Codegen each element.
+                assert(!op->args.empty());
+                vector<llvm::Value *> args(op->args.size());
+                vector<llvm::Type *> types(op->args.size());
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    args[i] = codegen(op->args[i]);
+                    types[i] = args[i]->getType();
+                }
+
+                // Create an struct on the stack.
+                StructType *struct_t = StructType::create(types);
+                Value *ptr = create_alloca_at_entry(struct_t, 1);
+
+                // Put the elements in the struct.
+                for (size_t i = 0; i < args.size(); i++) {
+                    Value *field_ptr = builder->CreateConstInBoundsGEP2_32(ptr, 0, i);
+                    builder->CreateStore(args[i], field_ptr);
+                }
+
+                value = ptr;
+            }
+
         } else if (op->name == Call::stringify) {
             assert(!op->args.empty());
 
             if (op->type.is_vector()) {
-                // Scalarize
-                llvm::Type *result_type = llvm_type_of(op->type);
-
-                Value *result = UndefValue::get(result_type);
-
-                for (int i = 0; i < op->args[0].type().width; i++) {
-                    Value *v = codegen(extract_lane(op, i));
-                    result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
-                }
-                value = result;
-
+                scalarize(op);
             } else {
 
                 // Compute the maximum possible size of the message.

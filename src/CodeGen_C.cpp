@@ -864,6 +864,31 @@ void CodeGen_C::visit(const Call *op) {
             string src = print_expr(op->args[1]);
             string size = print_expr(op->args[2]);
             rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
+        } else if (op->name == Call::make_struct) {
+            // Emit a line something like:
+            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+            do_indent();
+            stream << "struct {";
+            // List the types.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
+            }
+            string struct_name = unique_name('s');
+            stream << "}  " << struct_name << " = {";
+            // List the values.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) stream << ", ";
+                stream << values[i];
+            }
+            stream << "};\n";
+            // Return a pointer to it.
+            rhs << "(&" << struct_name << ")";
         } else if (op->name == Call::stringify) {
             // Rewrite to an snprintf
             vector<string> printf_args;
