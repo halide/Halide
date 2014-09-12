@@ -259,6 +259,11 @@ Stmt build_provide_loop_nest(Function f,
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
 
+            if (split.exact) {
+                // If this is a fuse of RVars, we know the size.
+                known_size_dims[split.old_var] = known_size_dims[split.inner]*known_size_dims[split.outer];
+            }
+
         } else {
             // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
