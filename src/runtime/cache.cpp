@@ -16,12 +16,12 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 #if CACHE_DEBUGGING
 WEAK void debug_print_buffer(void *user_context, const char *buf_name, const buffer_t &buf) {
-    halide_printf(user_context, "%s: elem_size %d, (%d, %d, %d) (%d, %d, %d) (%d, %d, %d) (%d, %d, %d)\n",
-                  buf_name, buf.elem_size,
-                  buf.min[0], buf.extent[0], buf.stride[0],
-                  buf.min[1], buf.extent[1], buf.stride[1],
-                  buf.min[2], buf.extent[2], buf.stride[2],
-                  buf.min[3], buf.extent[3], buf.stride[3]);
+    debug(user_context) << buf_name
+                        << ": elem_size " << buf.elem_size << ", "
+                        << "(" << buf.min[0] << ", " << buf.extent[0] << ", " << buf.stride[0] << ") "
+                        << "(" << buf.min[1] << ", " << buf.extent[1] << ", " << buf.stride[1] << ") "
+                        << "(" << buf.min[2] << ", " << buf.extent[2] << ", " << buf.stride[2] << ") "
+                        << "(" << buf.min[3] << ", " << buf.extent[3] << ", " << buf.stride[3] << ")\n";
 }
 
 WEAK char to_hex_char(int val) {
@@ -32,7 +32,7 @@ WEAK char to_hex_char(int val) {
 }
 
 WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *cache_key, int32_t key_size) {
-    halide_printf(user_context, "Key for %s\n", msg);
+    debug(user_context) << "Key for " << msg << "\n";
     char buf[1024];
     bool append_ellipses = false;
     if (key_size > (sizeof(buf) / 2) - 1) { // Each byte in key can take two bytes in output
@@ -54,7 +54,7 @@ WEAK void debug_print_key(void *user_context, const char *msg, const uint8_t *ca
         *buf_ptr++ = '.';
     }
     *buf_ptr++ = '\0';
-    halide_printf(user_context, "%s\n", buf);
+    debug(user_context) << buf << "\n";
 }
 #endif
 
@@ -194,19 +194,20 @@ WEAK int64_t current_cache_size = 0;
 
 #if CACHE_DEBUGGING
 WEAK void validate_cache() {
-    halide_printf(NULL, "validating cache, current size %lld of maximum %lld\n",
-                  current_cache_size, max_cache_size);
+    print(NULL) << "validating cache, "
+                << "current size " << current_cache_size
+                << " of maximum " << max_cache_size << "\n";
     int entries_in_hash_table = 0;
     for (int i = 0; i < kHashTableSize; i++) {
         CacheEntry *entry = cache_entries[i];
         while (entry != NULL) {
             entries_in_hash_table++;
             if (entry->more_recent == NULL && entry != most_recently_used) {
-                halide_printf(NULL, "cache invalid case 1\n");
+                halide_print(NULL, "cache invalid case 1\n");
                 __builtin_trap();
             }
             if (entry->less_recent == NULL && entry != least_recently_used) {
-                halide_printf(NULL, "cache invalid case 2\n");
+                halide_print(NULL, "cache invalid case 2\n");
                 __builtin_trap();
             }
             entry = entry->next;
@@ -224,13 +225,15 @@ WEAK void validate_cache() {
         entries_from_lru++;
         lru_chain = lru_chain->more_recent;
     }
-    halide_printf(NULL, "hash entries %d, mru entries %d, lru entries %d\n", entries_in_hash_table, entries_from_mru, entries_from_lru);
+    print(NULL) << "hash entries " << entries_in_hash_table
+                << ", mru entries " << entries_from_mru
+                << ", lru entries " << entries_from_lru << "\n";
     if (entries_in_hash_table != entries_from_mru) {
-        halide_printf(NULL, "cache invalid case 3\n");
+        halide_print(NULL, "cache invalid case 3\n");
         __builtin_trap();
     }
     if (entries_in_hash_table != entries_from_lru) {
-        halide_printf(NULL, "cache invalid case 4\n");
+        halide_print(NULL, "cache invalid case 4\n");
         __builtin_trap();
     }
 }
