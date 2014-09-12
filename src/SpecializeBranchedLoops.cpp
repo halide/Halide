@@ -108,8 +108,11 @@ class BranchesInVar : public IRVisitor {
 public:
     std::string name;
     bool has_branches;
+    bool branch_on_minmax;
 
-    BranchesInVar(const std::string& n) : name(n), has_branches(false) {}
+    BranchesInVar(const std::string& n, bool minmax) :
+            name(n), has_branches(false), branch_on_minmax(minmax)
+    {}
 
 private:
     using IRVisitor::visit;
@@ -131,8 +134,9 @@ private:
     }
 
     void visit(const Min *op) {
-        if (expr_uses_var(op->a, name) ||
-            expr_uses_var(op->b, name)) {
+        if (branch_on_minmax &&
+            (expr_uses_var(op->a, name) ||
+             expr_uses_var(op->b, name))) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -140,8 +144,9 @@ private:
     }
 
     void visit(const Max *op) {
-        if (expr_uses_var(op->a, name) ||
-            expr_uses_var(op->b, name)) {
+        if (branch_on_minmax &&
+            (expr_uses_var(op->a, name) ||
+             expr_uses_var(op->b, name))) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -149,14 +154,14 @@ private:
     }
 };
 
-bool stmt_branches_in_var(const std::string& name, Stmt body) {
-    BranchesInVar check(name);
+bool stmt_branches_in_var(const std::string& name, Stmt body, bool branch_on_minmax = false) {
+    BranchesInVar check(name, branch_on_minmax);
     body.accept(&check);
     return check.has_branches;
 }
 
-bool expr_branches_in_var(const std::string& name, Expr value) {
-    BranchesInVar check(name);
+bool expr_branches_in_var(const std::string& name, Expr value, bool branch_on_minmax = false) {
+    BranchesInVar check(name, branch_on_minmax);
     value.accept(&check);
     return check.has_branches;
 }
@@ -217,6 +222,8 @@ public:
 
 private:
     using IRVisitor::visit;
+
+    std::vector< std::string > internal_lets;
 
     // Build a pair of branches for 2 exprs, based on a simple inequality conditional.
     // It is assumed that the inequality has been solved and so the variable of interest
@@ -330,6 +337,15 @@ private:
         }
     }
 
+    Stmt wrap_lets(Stmt stmt) {
+        std::vector<std::string>::reverse_iterator iter = internal_lets.rbegin();
+        while (iter != internal_lets.rend()) {
+            const std::string& name = *iter++;
+            stmt = LetStmt::make(name, scope->get(name), stmt);
+        }
+        return stmt;
+    }
+
     void visit_simple_cond(Expr cond, Expr a, Expr b) {
         // Bail out if this condition depends on more than just the current loop variable.
         if (num_free_vars(cond, scope) > 1) return;
@@ -353,7 +369,10 @@ private:
 
             // If we didn't branch any further, push these branches onto the stack.
             if (branches.size() == num_branches) {
+                b1.stmt = wrap_lets(b1.stmt);
                 branches.push_back(b1);
+
+                b2.stmt = wrap_lets(b2.stmt);
                 branches.push_back(b2);
             }
 
@@ -387,7 +406,7 @@ private:
     // }
 
     void visit(const LetStmt *op) {
-        if (expr_branches_in_var(name, op->value)) {
+        if (expr_branches_in_var(name, op->value, true)) {
             std::vector<Branch> expr_branches;
             collect_branches(op->value, name, min, extent, expr_branches, scope);
 
@@ -405,6 +424,7 @@ private:
                 branch.stmt.accept(this);
 
                 if (branches.size() == num_branches) {
+                    branch.stmt = wrap_lets(branch.stmt);
                     branches.push_back(branch);
                 }
                 num_branches = branches.size();
@@ -413,9 +433,11 @@ private:
             min = orig_min;
             extent = orig_extent;
         } else {
+            internal_lets.push_back(op->name);
             scope->push(op->name, op->value);
             op->body.accept(this);
             scope->pop(op->name);
+            internal_lets.pop_back();
         }
     }
 
@@ -426,7 +448,7 @@ private:
 
             for (size_t i = 0; i < expr_branches.size(); ++i) {
                 Branch &branch = expr_branches[i];
-                branch.stmt = Store::make(op->name, branch.expr, op->index);
+                branch.stmt = wrap_lets(Store::make(op->name, branch.expr, op->index));
                 branch.expr = Expr();
                 branches.push_back(branch);
             }
@@ -434,6 +456,7 @@ private:
     }
 
     void visit(const IfThenElse *op) {
+        bool has_else = op->else_case.defined();
         if (expr_uses_var(op->condition, name)) {
             Stmt normalized = normalize_if_stmts(op);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
@@ -454,14 +477,21 @@ private:
                 extent = b1.extent;
                 b1.stmt.accept(this);
 
-                min = b2.min;
-                extent = b2.extent;
-                b2.stmt.accept(this);
+                if (has_else) {
+                  min = b2.min;
+                  extent = b2.extent;
+                  b2.stmt.accept(this);
+                }
 
                 // If we didn't branch any further, push these branches onto the stack.
                 if (branches.size() == num_branches) {
+                    b1.stmt = wrap_lets(b1.stmt);
                     branches.push_back(b1);
-                    branches.push_back(b2);
+
+                    if (has_else) {
+                        b2.stmt = wrap_lets(b2.stmt);
+                        branches.push_back(b2);
+                    }
                 }
 
                 min = orig_min;
@@ -469,7 +499,9 @@ private:
             }
         } else {
             op->then_case.accept(this);
-            op->else_case.accept(this);
+            if (has_else) {
+                op->else_case.accept(this);
+            }
         }
     }
 
@@ -496,32 +528,30 @@ private:
     Scope<Expr> scope;
 
     void visit(const For *op) {
-        if (stmt_branches_in_var(op->name, op->body)) {
+        Stmt body = mutate(op->body);
+
+        if (stmt_branches_in_var(op->name, body)) {
             std::vector<Branch> branches;
-            collect_branches(op->body, op->name, op->min, op->extent, branches, &scope);
+            collect_branches(body, op->name, op->min, op->extent, branches, &scope);
 
             if (branches.empty()) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, mutate(op->body));
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
             } else {
                 Scope<Interval> bounds;
-
-                Branch &last = branches.back();
-                bounds.push(op->name, Interval(last.min, last.min + last.extent - 1));
-                stmt = simplify(last.stmt, true, bounds);
-                stmt = For::make(op->name, last.min, last.extent, op->for_type, mutate(stmt));
-                bounds.pop(op->name);
-
-              for (int i = branches.size()-2; i >= 0; --i) {
-                Branch &next = branches[i];
-                bounds.push(op->name, Interval(next.min, next.min + next.extent - 1));
-                Stmt next_stmt = simplify(next.stmt, true, bounds);
-                stmt = Block::make(For::make(op->name, next.min, next.extent, op->for_type, mutate(next_stmt)), stmt);
-                bounds.pop(op->name);
-
-              }
+                stmt = Evaluate::make(0);
+                for (int i = branches.size()-1; i >= 0; --i) {
+                    Branch &branch = branches[i];
+                    bounds.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
+                    Expr extent = simplify(branch.extent, true, bounds);
+                    if (is_zero(extent)) continue;
+                    Stmt branch_stmt = simplify(branch.stmt, true, bounds);
+                    branch_stmt = For::make(op->name, branch.min, extent, op->for_type, branch_stmt);
+                    stmt = Block::make(branch_stmt, stmt);
+                    bounds.pop(op->name);
+                }
             }
         } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, mutate(op->body));
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
         }
     }
 
