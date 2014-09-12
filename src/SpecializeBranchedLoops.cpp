@@ -126,7 +126,9 @@ private:
     }
 
     void visit(const Select *op) {
-        if (expr_uses_var(op->condition, name)) {
+        if (expr_uses_var(op->condition, name) &&
+            op->condition.type().is_scalar() &&
+            op->true_value.type().is_vector()) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -206,8 +208,10 @@ bool has_free_vars(Expr expr, Scope<Expr> *scope) {
     return num_free_vars(expr, scope) > 0;
 }
 
-void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent, std::vector<Branch> &branches, Scope<Expr>* scope);
-void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent, std::vector<Branch> &branches, Scope<Expr>* scope);
+void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
+                      std::vector<Branch> &branches, Scope<Expr>* scope);
+void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
+                      std::vector<Branch> &branches, Scope<Expr>* scope);
 
 class BranchCollector : public IRVisitor {
 public:
@@ -369,10 +373,7 @@ private:
 
             // If we didn't branch any further, push these branches onto the stack.
             if (branches.size() == num_branches) {
-                b1.stmt = wrap_lets(b1.stmt);
                 branches.push_back(b1);
-
-                b2.stmt = wrap_lets(b2.stmt);
                 branches.push_back(b2);
             }
 
@@ -397,13 +398,15 @@ private:
     void visit(const Min *op) {visit_minormax<Min, LE>(op);}
     void visit(const Max *op) {visit_minormax<Max, GE>(op);}
 
-    // void visit(const Select *op) {
-    //     if (expr_uses_var(op->condition, name)) {
-    //         visit_simple_cond(op->condition, op->true_value, op->false_value);
-    //     } else {
-    //         IRVisitor::visit(op);
-    //     }
-    // }
+    void visit(const Select *op) {
+        if (expr_uses_var(op->condition, name) &&
+            op->condition.type().is_scalar() &&
+            op->true_value.type().is_vector()) {
+            visit_simple_cond(op->condition, op->true_value, op->false_value);
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
 
     void visit(const LetStmt *op) {
         if (expr_branches_in_var(name, op->value, true)) {
