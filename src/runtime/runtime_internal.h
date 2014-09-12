@@ -46,11 +46,6 @@ typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
 #endif
 
-typedef __builtin_va_list va_list;
-#define va_start(ap, param) __builtin_va_start(ap, param)
-#define va_end(ap)          __builtin_va_end(ap)
-#define va_arg(ap, type)    __builtin_va_arg(ap, type)
-
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
