@@ -119,7 +119,8 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
     // Initialize CUDA
     CUresult err = cuInit(0);
     if (err != CUDA_SUCCESS) {
-        error(user_context) << "CUDA: cuInit failed (%s)" << get_cuda_error_name(err);
+        error(user_context) << "CUDA: cuInit failed: "
+                            << get_cuda_error_name(err);
         return err;
     }
 
@@ -160,7 +161,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         debug(user_context) << "      " << name << "\n";
 
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "CUDA: cuDeviceGetName failed (%s)"
+            error(user_context) << "CUDA: cuDeviceGetName failed: "
                                 << get_cuda_error_name(err);
             return err;
         }
@@ -170,7 +171,7 @@ WEAK CUresult create_cuda_context(void *user_context, CUcontext *ctx) {
         debug(user_context) << "      total memory: " << (memory >> 20) << " MB\n";
 
         if (err != CUDA_SUCCESS) {
-            error(user_context) << "CUDA: cuDeviceTotalMem failed (%s)"
+            error(user_context) << "CUDA: cuDeviceTotalMem failed: "
                                 << get_cuda_error_name(err);
             return err;
         }
