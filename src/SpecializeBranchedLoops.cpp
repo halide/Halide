@@ -1,5 +1,4 @@
 #include "SpecializeClampedRamps.h"
-#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "LinearSolve.h"
@@ -18,6 +17,43 @@ bool is_inequality(Expr cond) {
     const GE *ge = cond.as<GE>();
 
     return lt || gt || le || ge;
+}
+
+// The generic version of this class doesn't work for our
+// purposes. We need to dive into the current scope to decide if a
+// variable is used.
+class ExprUsesVar : public IRVisitor {
+    using IRVisitor::visit;
+
+    std::string  name;
+    Scope<Expr> *scope;
+
+    void visit(const Variable *v) {
+        if (v->name == name) {
+            result = true;
+        } else if (scope->contains(v->name)) {
+            scope->get(v->name).accept(this);
+        }
+    }
+
+    void visit(const Let *op) {
+        scope->push(op->name, op->value);
+        op->body.accept(this);
+        scope->pop(op->name);
+    }
+  public:
+    ExprUsesVar(const std::string &var, Scope<Expr> *s) :
+            name(var), scope(s), result(false)
+    {}
+
+    bool result;
+};
+
+/** Test if an expression references the given variable. */
+bool expr_uses_var(Expr expr, const std::string &var, Scope<Expr> *scope) {
+    ExprUsesVar uses_var(var, scope);
+    expr.accept(&uses_var);
+    return uses_var.result;
 }
 
 }
@@ -107,18 +143,19 @@ Stmt normalize_if_stmts(Stmt stmt) {
 class BranchesInVar : public IRVisitor {
 public:
     std::string name;
+    Scope<Expr> *scope;
     bool has_branches;
     bool branch_on_minmax;
 
-    BranchesInVar(const std::string& n, bool minmax) :
-            name(n), has_branches(false), branch_on_minmax(minmax)
+    BranchesInVar(const std::string& n, Scope<Expr> *s, bool minmax) :
+            name(n), scope(s), has_branches(false), branch_on_minmax(minmax)
     {}
 
 private:
     using IRVisitor::visit;
 
     void visit(const IfThenElse *op) {
-        if (expr_uses_var(op->condition, name)) {
+        if (expr_uses_var(op->condition, name, scope)) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -126,7 +163,7 @@ private:
     }
 
     void visit(const Select *op) {
-        if (expr_uses_var(op->condition, name) &&
+        if (expr_uses_var(op->condition, name, scope) &&
             op->condition.type().is_scalar() &&
             op->true_value.type().is_vector()) {
             has_branches = true;
@@ -137,8 +174,8 @@ private:
 
     void visit(const Min *op) {
         if (branch_on_minmax &&
-            (expr_uses_var(op->a, name) ||
-             expr_uses_var(op->b, name))) {
+            (expr_uses_var(op->a, name, scope) ||
+             expr_uses_var(op->b, name, scope))) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -147,8 +184,8 @@ private:
 
     void visit(const Max *op) {
         if (branch_on_minmax &&
-            (expr_uses_var(op->a, name) ||
-             expr_uses_var(op->b, name))) {
+            (expr_uses_var(op->a, name, scope) ||
+             expr_uses_var(op->b, name, scope))) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -156,14 +193,14 @@ private:
     }
 };
 
-bool stmt_branches_in_var(const std::string& name, Stmt body, bool branch_on_minmax = false) {
-    BranchesInVar check(name, branch_on_minmax);
+bool stmt_branches_in_var(const std::string &name, Stmt body, Scope<Expr> *scope, bool branch_on_minmax = false) {
+    BranchesInVar check(name, scope, branch_on_minmax);
     body.accept(&check);
     return check.has_branches;
 }
 
-bool expr_branches_in_var(const std::string& name, Expr value, bool branch_on_minmax = false) {
-    BranchesInVar check(name, branch_on_minmax);
+bool expr_branches_in_var(const std::string &name, Expr value, Scope<Expr> *scope, bool branch_on_minmax = false) {
+    BranchesInVar check(name, scope, branch_on_minmax);
     value.accept(&check);
     return check.has_branches;
 }
@@ -173,7 +210,7 @@ public:
     Scope<Expr> *scope;
     std::vector<const Variable*> free_vars;
 
-    FindFreeVariables(Scope<Expr>* s) : scope(s) {}
+    FindFreeVariables(Scope<Expr> *s) : scope(s) {}
 private:
     using IRVisitor::visit;
 
@@ -209,9 +246,9 @@ bool has_free_vars(Expr expr, Scope<Expr> *scope) {
 }
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr>* scope);
+                      std::vector<Branch> &branches, Scope<Expr> *scope);
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr>* scope);
+                      std::vector<Branch> &branches, Scope<Expr> *scope);
 
 class BranchCollector : public IRVisitor {
 public:
@@ -221,7 +258,7 @@ public:
     Expr min;
     Expr extent;
 
-    BranchCollector(const std::string& n, Expr m, Expr e, Scope<Expr>* s) :
+    BranchCollector(const std::string &n, Expr m, Expr e, Scope<Expr> *s) :
         name(n), scope(s), min(m), extent(e) {}
 
 private:
@@ -387,7 +424,7 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        if (expr_uses_var(a, name) || expr_uses_var(b, name)) {
+        if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
             Expr cond = Cmp::make(a, b);
             visit_simple_cond(cond, a, b);
         } else {
@@ -399,7 +436,7 @@ private:
     void visit(const Max *op) {visit_minormax<Max, GE>(op);}
 
     void visit(const Select *op) {
-        if (expr_uses_var(op->condition, name) &&
+        if (expr_uses_var(op->condition, name, scope) &&
             op->condition.type().is_scalar() &&
             op->true_value.type().is_vector()) {
             visit_simple_cond(op->condition, op->true_value, op->false_value);
@@ -409,7 +446,7 @@ private:
     }
 
     void visit(const LetStmt *op) {
-        if (expr_branches_in_var(name, op->value, true)) {
+        if (expr_branches_in_var(name, op->value, scope, true)) {
             std::vector<Branch> expr_branches;
             collect_branches(op->value, name, min, extent, expr_branches, scope);
 
@@ -445,7 +482,7 @@ private:
     }
 
     void visit(const Store *op) {
-        if (expr_branches_in_var(name, op->value)) {
+        if (expr_branches_in_var(name, op->value, scope, true)) {
             std::vector<Branch> expr_branches;
             collect_branches(op->value, name, min, extent, expr_branches, scope);
 
@@ -460,7 +497,7 @@ private:
 
     void visit(const IfThenElse *op) {
         bool has_else = op->else_case.defined();
-        if (expr_uses_var(op->condition, name)) {
+        if (expr_uses_var(op->condition, name, scope)) {
             Stmt normalized = normalize_if_stmts(op);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
@@ -533,7 +570,7 @@ private:
     void visit(const For *op) {
         Stmt body = mutate(op->body);
 
-        if (stmt_branches_in_var(op->name, body)) {
+        if (stmt_branches_in_var(op->name, body, &scope)) {
             std::vector<Branch> branches;
             collect_branches(body, op->name, op->min, op->extent, branches, &scope);
 
