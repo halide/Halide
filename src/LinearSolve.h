@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "Scope.h"
 #include "Var.h"
 
 namespace Halide {
