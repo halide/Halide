@@ -2127,32 +2127,32 @@ void test_int_cast_constant() {
     Type t = type_of<T>();
 
     int min = t.imin();
-    internal_assert(int_cast_constant(t, min - 1) == (T) (min - 1))
+    internal_assert(int_cast_constant(t, min - 1) == (int)((T)(min - 1)))
         << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, min) == (T) min)
+    internal_assert(int_cast_constant(t, min) == (int)((T)min))
         << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, min + 1) == (T) (min + 1))
+    internal_assert(int_cast_constant(t, min + 1) == (int)((T)(min + 1)))
         << "Simplify test failed: int_cast_constant\n";
 
     int max = t.imax();
-    internal_assert(int_cast_constant(t, max - 1) == (T) (max - 1))
+    internal_assert(int_cast_constant(t, max - 1) == (int)((T)(max - 1)))
         << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, max) == (T) max)
+    internal_assert(int_cast_constant(t, max) == (int)((T)max))
         << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, max + 1) == (T) (max + 1))
+    internal_assert(int_cast_constant(t, max + 1) == (int)((T)(max + 1)))
         << "Simplify test failed: int_cast_constant\n";
 
-    internal_assert((T)int_cast_constant(t, -1) == (T) -1)
+    internal_assert(int_cast_constant(t, -1) == (int)((T)(-1)))
         << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, 0) == (T) 0)
+    internal_assert(int_cast_constant(t, 0) == (int)((T)0))
         << "Simplify test failed: int_cast_constant\n";
-    internal_assert(int_cast_constant(t, 1) == (T) 1)
+    internal_assert(int_cast_constant(t, 1) == (int)((T)1))
         << "Simplify test failed: int_cast_constant\n";
 
     // Test some random integers.
     for (int i = 0; i < 100; i++) {
         int x = rand() - RAND_MAX/2;
-        internal_assert(int_cast_constant(t, x) == (T)x)
+        internal_assert(int_cast_constant(t, x) == (int)((T)x))
             << "Simplify test failed: int_cast_constant\n";
     }
 }
