@@ -11,6 +11,7 @@
 #include "Util.h"
 #include "Bounds.h"
 #include "Simplify.h"
+#include "VaryingAttributes.h"
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -479,6 +480,23 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
     CodeGen_CPU::jit_finalize(ee, module, cleanup_routines);
 }
 
+/** Given an expression for a spatial coordinate and the maximum spatial 
+ *  coordinate in its dimension, this function returns an expression for the
+ *  GL device coordinates of the original expression.
+ */
+Expr deviceCoordinates(Expr v, Expr max_dim) {
+
+    if (v.type() != Float(32)) {
+        v = Cast::make(Float(32),v);
+    }
+    
+    if (max_dim.type() != Float(32)) {
+        max_dim = Cast::make(Float(32),max_dim);
+    }
+    
+    return Sub::make(Mul::make(Div::make(Cast::make(Float(32),v), Cast::make(Float(32),max_dim)),2.0f),1.0f);
+}
+
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
@@ -577,6 +595,98 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
 
+        Value* null_ptr_value = ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
+        Value* gpu_attribute_names = null_ptr_value;
+        Value* gpu_attribute_dims  = null_ptr_value;
+        Value* gpu_num_attributes  = null_ptr_value;
+        Value* gpu_coords_per_dim  = null_ptr_value;
+        Value* gpu_num_coords_dim0 = null_ptr_value;
+        Value* gpu_num_coords_dim1 = null_ptr_value;
+        
+        if (target.features & Target::OpenGL) {
+
+            // GL draw calls that invoke GLSL shader are issued for pairs of
+            // for-loops over spatial x and y dimensions. For each for-loop we create
+            // one scalar vertex attribute for the spatial dimension corresponding to
+            // that loop, plus one scalar attribute for each LetStmt previously
+            // labeled as ".varying"
+            
+            ExpressionMesh mesh;
+            compute_mesh(loop,mesh);
+            
+            // Create an array of null terminated strings containing the attribute
+            // names in the order they appear per vertex channel
+            int num_attributes = mesh.attributes.size();
+            
+            gpu_attribute_names = create_alloca_at_entry(ArrayType::get(llvm::Type::getInt8PtrTy(*context), num_attributes),
+                                                         num_attributes,
+                                                         kernel_name + "_attribute_names");
+            
+            for (int i=0;i!=num_attributes;++i) {
+                
+                CodeGen_GLSL* glsl = dynamic_cast<CodeGen_OpenGL_Dev*>(cgdev)->glc;
+                std::string name = glsl->print_name(mesh.attributes[i] + "_attrib");
+                std::string mangled = replace_all(name, "__", "XX");
+                
+                Value* gpu_attribute = CodeGen::create_string_constant(mangled);
+                builder->CreateStore(gpu_attribute, builder->CreateConstGEP2_64(gpu_attribute_names, 0, i));
+            }
+            
+            // Record the number of attributes
+            gpu_num_attributes = codegen(IntImm::make(num_attributes));
+
+            // Record the dimension that each attribute is defined along
+            gpu_attribute_dims = create_alloca_at_entry(ArrayType::get(CodeGen::i32, num_attributes),
+                                                        num_attributes,
+                                                        kernel_name + "_attribute_dims");
+            for (int i=0;i!=num_attributes;++i) {
+                Value* gpu_attribute_dim = codegen(IntImm::make(mesh.attribute_dims[i]));
+                builder->CreateStore(gpu_attribute_dim, builder->CreateConstGEP2_32(gpu_attribute_dims, 0, i));
+            }
+            
+            // Record the expressions for each dimension
+            int num_coords_dim0 = mesh.coords[0].size();
+            int num_coords_dim1 = mesh.coords[1].size();
+            
+            gpu_num_coords_dim0 = codegen(IntImm::make(num_coords_dim0));
+            gpu_num_coords_dim1 = codegen(IntImm::make(num_coords_dim1));
+            
+            gpu_coords_per_dim = create_alloca_at_entry(ArrayType::get(llvm::Type::getFloatPtrTy(*context), num_attributes),
+                                                        num_attributes,
+                                                        kernel_name + "_coords_per_dim");
+            
+            for (int i=0;i!=num_attributes;++i) {
+                
+                // Create an array of coordinates for this dimension
+                int num_coords = mesh.coords[i].size();
+                Value* gpu_coords = create_alloca_at_entry(ArrayType::get(CodeGen::f32, num_coords),
+                                                           num_coords,
+                                                           kernel_name + "_coords_" + mesh.attributes[i]);
+                for (int c=0;c!=num_coords;++c) {
+                    Expr value = mesh.coords[i][c];
+                    
+                    
+                    // Convert the coordinates in the X and Y dimensions to device
+                    // coordinates
+                    if (i<2) {
+                        value = deviceCoordinates(value,mesh.coords[i][1]);
+                    }
+
+                    // Cast other attributes to floating point
+                    else if (value.type() != Float(32)) {
+                        value = Cast::make(Float(32), value);
+                    }
+                                                        
+                    Value* gpu_coord = codegen(value);
+                    builder->CreateStore(gpu_coord,
+                                         builder->CreateConstGEP2_32(gpu_coords, 0, c));
+                }
+                
+                builder->CreateStore(gpu_coords,
+                                     builder->CreateConstGEP2_64(gpu_coords_per_dim, 0, i));
+            }
+        }
+        
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
@@ -588,7 +698,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
-            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
+            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref"),
+            gpu_attribute_names,
+            gpu_attribute_dims,
+            gpu_num_attributes,
+            gpu_coords_per_dim,
+            gpu_num_coords_dim0,
+            gpu_num_coords_dim1,
         };
 
         llvm::Function* dev_run_fn = module->getFunction("halide_dev_run");

@@ -55,7 +55,7 @@ struct CodeGen_GPU_Dev {
     /** Checks if the buffer is a candidate for constant storage. Most
      * GPUs (APIs) support a constant memory storage class that cannot be
      * written to and performs well for block uniform accesses. */
-    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);
+    static bool is_buffer_constant(Stmt kernel, const std::string &buffer);    
 };
 
 }}
