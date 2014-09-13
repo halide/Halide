@@ -236,7 +236,13 @@ extern int halide_dev_run(void *user_context,
                           int threadsX, int threadsY, int threadsZ,
                           int shared_mem_bytes,
                           size_t arg_sizes[],
-                          void *args[]);
+                          void *args[],
+                          char** attribute_names,
+                          int* attribute_dims,
+                          int num_attributes,
+                          float** coords_per_dim,
+                          int num_coords_dim0,
+                          int num_coords_dim1);
 // @}
 
 /** This function is called to populate the buffer_t.dev field with a constant

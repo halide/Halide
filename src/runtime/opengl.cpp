@@ -2,6 +2,8 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
+#include <sstream>
+
 #include "mini_opengl.h"
 
 // This constant is used to indicate that the application will take
@@ -74,6 +76,7 @@ extern "C" int isdigit(int c);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
+
 enum OpenGLProfile {
     OpenGL,
     OpenGLES
@@ -84,6 +87,7 @@ struct Argument {
     enum Kind {
         Invalid,
         Var,                            // uniform variable
+        Varying,                        // varying attribute
         Inbuf,                          // input texture
         Outbuf                          // output texture
     };
@@ -93,10 +97,22 @@ struct Argument {
         Void, Bool, Float, Int8, Int16, Int32, UInt8, UInt16, UInt32
     };
 
-    char *name;
+    Argument *name;
     Kind kind;
     Type type;
     Argument *next;
+};
+
+static const char* ArgumentTypeGLSLNames[] = {
+    "/*None*/",
+    "bool",
+    "float",
+    "float",
+    "float",
+    "int",
+    "float",
+    "float",
+    "int"
 };
 
 struct KernelInfo {
@@ -134,7 +150,6 @@ struct GlobalState {
     bool have_texture_float;
 
     // Various objects shared by all filter kernels
-    GLuint vertex_shader_id;
     GLuint framebuffer_id;
     GLuint vertex_array_object;
     GLuint vertex_buffer;
@@ -158,22 +173,12 @@ WEAK GlobalState global_state;
 // A list of module-specific state. Each module corresponds to a single Halide filter
 WEAK ModuleState *state_list;
 
-WEAK const char *vertex_shader_src =
-    "attribute vec2 position;\n"
-    "varying vec2 pixcoord;\n"
-    "uniform ivec2 output_min;\n"
-    "uniform ivec2 output_extent;\n"
-    "void main() {\n"
-    "    gl_Position = vec4(position, 0.0, 1.0);\n"
-    "    vec2 texcoord = 0.5 * position + 0.5;\n"
-    "    pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n"
-    "}\n";
-
 WEAK const char *kernel_marker = "/// KERNEL ";
 WEAK const char *input_marker  = "/// IN_BUFFER ";
 WEAK const char *output_marker = "/// OUT_BUFFER ";
-WEAK const char *var_marker    = "/// VAR ";
-
+WEAK const char *uniform_marker    = "/// UNIFORM ";
+WEAK const char *varying_marker    = "/// VARYING ";
+    
 // ---------- Macros ----------
 
 // Convenience macro for accessing state of the OpenGL runtime
@@ -307,7 +312,6 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
 
     kernel->source = strndup(src, size);
     kernel->arguments = NULL;
-    kernel->shader_id = 0;
     kernel->program_id = 0;
 
     #ifdef DEBUG_RUNTIME
@@ -345,12 +349,23 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
         if ((args = match_prefix(line, kernel_marker))) {
             // ignore
         } else if ((args = match_prefix(line, var_marker))) {
-            if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = Argument::Var;
+            if (HalideOpenGLArgument *arg =
+                parse_argument(user_context, args, next_line - 1)) {
+                arg->kind = ARGKIND_UNIFORM;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
-                error(user_context) << "Invalid VAR marker";
+                halide_error(user_context, "Invalid VAR marker");
+                goto error;
+            }
+        } else if ((args = match_prefix(line, varying_marker))) {
+            if (HalideOpenGLArgument *arg =
+                parse_argument(user_context, args, next_line - 1)) {
+                arg->kind = ARGKIND_VARYING;
+                arg->next = kernel->arguments;
+                kernel->arguments = arg;
+            } else {
+                halide_error(user_context, "Invalid VARYING marker");
                 goto error;
             }
         } else if ((args = match_prefix(line, input_marker))) {
@@ -400,7 +415,6 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
 // shader and program.
 WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
     ST.DeleteProgram(kernel->program_id);
-    ST.DeleteShader(kernel->shader_id);
 
     Argument *arg = kernel->arguments;
     while (arg) {
@@ -567,14 +581,6 @@ WEAK int halide_opengl_init(void *user_context) {
     ST.GenFramebuffers(1, &ST.framebuffer_id);
     CHECK_GLERROR(1);
 
-    // Initialize vertex shader.
-    ST.vertex_shader_id = make_shader(user_context, GL_VERTEX_SHADER,
-                                      vertex_shader_src, NULL);
-    if (ST.vertex_shader_id == 0) {
-        error(user_context) << "Failed to create vertex shader";
-        return 1;
-    }
-
     // Initialize vertex and element buffers.
     GLuint buf[2];
     ST.GenBuffers(2, buf);
@@ -603,9 +609,10 @@ WEAK int halide_opengl_init(void *user_context) {
 WEAK void halide_opengl_release(void *user_context) {
     if (!ST.initialized) return;
 
-    debug(user_context) << "halide_opengl_release\n";
+#ifdef DEBUG
+    halide_printf(user_context, "halide_opengl_release\n");
+#endif
 
-    ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
     ModuleState *mod = state_list;
@@ -882,16 +889,61 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         module->kernel = kernel;
     }
 
+
     if (kernel->program_id == 0) {
-        // Compile shader
-        kernel->shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                        kernel->source, NULL);
+
+        // Create the vertex shader        
+        std::ostringstream vertex_src;
+        vertex_src << "attribute float XXvertex_x_attrib;\n"
+                   << "attribute float XXvertex_y_attrib;\n"
+                   << "varying vec2 pixcoord;\n";
+        
+        for (HalideOpenGLArgument* arg = kernel->arguments; arg; arg=arg->next) {
+            if (arg->kind == ARGKIND_VARYING) {
+                vertex_src << "attribute " << ArgumentTypeGLSLNames[arg->type] << " " << arg->name << "_attrib;\n";
+                vertex_src << "varying   " << ArgumentTypeGLSLNames[arg->type] << " " << arg->name << ";\n";
+            }
+        }
+        
+        vertex_src << "uniform ivec2 output_min;\n"
+                   << "uniform ivec2 output_extent;\n"
+                   << "void main() {\n"
+                   << "    vec2 position = vec2(XXvertex_x_attrib, XXvertex_y_attrib);\n"
+                   << "    gl_Position = vec4(position, 0.0, 1.0);\n"
+                   << "    vec2 texcoord = 0.5 * position + 0.5;\n"
+                   << "    pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
+        
+        for (HalideOpenGLArgument* arg = kernel->arguments; arg; arg=arg->next) {
+            if (arg->kind == ARGKIND_VARYING) {
+                vertex_src << "   " << arg->name << " = " << arg->name << "_attrib;\n";
+            }
+        }
+        
+        vertex_src << "}\n";
+
+        
+        // Initialize vertex shader.
+        GLuint vertex_shader_id = halide_opengl_make_shader(user_context,
+                                                        GL_VERTEX_SHADER, vertex_src.str().c_str(), NULL);
+        if (vertex_shader_id == 0) {
+            halide_error(user_context, "Failed to create vertex shader");
+            return 1;
+        }
+        
+        // Create the fragment shader
+        GLuint fragment_shader_id = halide_opengl_make_shader(user_context, GL_FRAGMENT_SHADER,
+                                                      kernel->source, NULL);
 
         // Link GLSL program
         GLuint program = ST.CreateProgram();
-        ST.AttachShader(program, ST.vertex_shader_id);
-        ST.AttachShader(program, kernel->shader_id);
+        ST.AttachShader(program, vertex_shader_id);
+        ST.AttachShader(program, fragment_shader_id);
         ST.LinkProgram(program);
+
+        // Release the individual shaders
+        ST.DeleteShader(vertex_shader_id);
+        ST.DeleteShader(fragment_shader_id);
+        
         GLint status;
         ST.GetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
@@ -1134,7 +1186,17 @@ WEAK void set_float_param(void *user_context, const char *name,
                           GLint loc, GLfloat value) {
     ST.Uniform1fv(loc, 1, &value);
 }
+    
+class IndexSorter {
+public:
+    IndexSorter(float* values_) : values(values_) {  }
+    
+    bool operator()(int a, int b) { return values[a] < values[b]; }
+    float* values;
 
+};
+
+extern "C"
 WEAK int halide_opengl_dev_run(
     void *user_context,
     void *state_ptr,
@@ -1143,7 +1205,13 @@ WEAK int halide_opengl_dev_run(
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
     size_t arg_sizes[],
-    void *args[]) {
+    void *args[],
+    char** attribute_names,
+    int* attribute_dims,
+    int num_attributes,
+    float** coords_per_dim,
+    int num_coords_dim0,
+    int num_coords_dim1) {
     CHECK_INITIALIZED(1);
 
     ModuleState *mod = (ModuleState *)state_ptr;
@@ -1174,8 +1242,11 @@ WEAK int halide_opengl_dev_run(
                 << "Argument " << i << ": size=" << i << " value=" << args[i];
             return 1;
         }
-
+        
+        halide_printf(user_context, "Kernel arg: %s args[%d] pointer value: %p\n",kernel_arg->name,i,args[i]);
+        
         if (kernel_arg->kind == Argument::Outbuf) {
+
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
             GLuint tex = *((GLuint *)args[i]);
@@ -1260,8 +1331,9 @@ WEAK int halide_opengl_dev_run(
             }
         }
     }
-    if (kernel_arg) {
-        error(user_context) << "Too few arguments passed to halide_opengl_dev_run";
+
+    if (kernel_arg && (kernel_arg->kind != Argument::Varying)) {
+        halide_error(user_context, "Too few arguments passed to halide_opengl_dev_run");
         return 1;
     }
 
@@ -1346,41 +1418,154 @@ WEAK int halide_opengl_dev_run(
     GLint loc = ST.GetUniformLocation(kernel->program_id, "output_extent");
     ST.Uniform2iv(loc, 1, output_extent);
     CHECK_GLERROR(1);
+    
     loc = ST.GetUniformLocation(kernel->program_id, "output_min");
     ST.Uniform2iv(loc, 1, output_min);
     CHECK_GLERROR(1);
+    
+    // TODO(abstephensg) This per run setup may move to program load time in halide_init_kernels
 
+    // Sort the coordinates
+    int sorted_order0[num_coords_dim0];
+    for (int i=0;i!=num_coords_dim0;++i)
+        sorted_order0[i] = i;
+
+    int sorted_order1[num_coords_dim1];
+    for (int i=0;i!=num_coords_dim1;++i)
+        sorted_order1[i] = i;
+    
+    std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
+    std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
+    
+#if DEBUG
+    printf("Sorted x coords: ");
+    for (int i=0;i!=num_coords_dim0;++i)
+        printf("%f ",coords_per_dim[0][sorted_order0[i]]);
+    printf("\n");
+    
+    printf("Sorted y coords: ");
+    for (int i=0;i!=num_coords_dim1;++i)
+        printf("%f ",coords_per_dim[1][sorted_order1[i]]);
+    printf("\n");
+#endif
+    
+    // Construct the vertex and element buffers
+    int width = num_coords_dim0;
+    int height = num_coords_dim1;
+
+    int vertex_buffer_size = width*height*num_attributes;
+    float vertex_buffer[vertex_buffer_size];
+
+    int idx = 0;
+    for (int h=0;h!=height;++h) {
+        int j = sorted_order1[h];
+        float y = coords_per_dim[1][j];
+        for (int w=0;w!=width;++w) {
+            int i = sorted_order0[w];
+            float x = coords_per_dim[0][i];
+            
+            vertex_buffer[idx++] = x;
+            vertex_buffer[idx++] = y;
+            
+            for (int a=2;a!=num_attributes;++a) {
+                vertex_buffer[idx++] = coords_per_dim[a][(attribute_dims[a] == 0) ? i : j];
+            }
+        }
+    }
+    
+    int element_buffer_size = (width-1)*(height-1)*6;
+    int element_buffer[element_buffer_size];
+    
+    idx = 0;
+    for (int h=0;h!=(height-1);++h) {
+        for (int w=0;w!=(width-1);++w) {
+            int v = w+h*width;
+            element_buffer[idx++] = v;
+            element_buffer[idx++] = v+1;
+            element_buffer[idx++] = v+width+1;
+            
+            element_buffer[idx++] = v+width+1;
+            element_buffer[idx++] = v+width;
+            element_buffer[idx++] = v;
+        }
+    }
+    
+
+#if DEBUG
+    for (int i=0;i!=vertex_buffer_size;++i) {
+        if (!(i%num_attributes)) {
+            halide_printf(user_context,"\n");
+        }
+        halide_printf(user_context,"%f ",vertex_buffer[i]);
+    }
+    halide_printf(user_context,"\n");
+    halide_printf(user_context,"\n");
+    
+    for (int i=0;i!=element_buffer_size;++i) {
+        if (!(i%3)) {
+            halide_printf(user_context,"\n");
+        }        
+        halide_printf(user_context,"%d ",element_buffer[i]);
+    }
+    halide_printf(user_context,"\n");
+#endif 
+    
     // Setup viewport
     ST.Viewport(0, 0, output_extent[0], output_extent[1]);
 
-    // Execute shader by drawing a screen-filling quad
-    if (ST.have_vertex_array_objects) {
-        ST.BindVertexArray(ST.vertex_array_object);
-    }
-    GLint position = ST.GetAttribLocation(kernel->program_id, "position");
-    ST.EnableVertexAttribArray(position);
-    ST.BindBuffer(GL_ARRAY_BUFFER, ST.vertex_buffer);
-    ST.VertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ST.element_buffer);
-    ST.DrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, NULL);
-    ST.DisableVertexAttribArray(position);
-    ST.BindBuffer(GL_ARRAY_BUFFER, 0);
-    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    if (ST.have_vertex_array_objects) {
-        ST.BindVertexArray(0);
-    }
+    // Setup the vertex and element buffers
+    GLuint vertex_buffer_id;
+    ST.GenBuffers(1,&vertex_buffer_id);
+    ST.BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
+    ST.BufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_buffer_size, vertex_buffer, GL_STATIC_DRAW);
     CHECK_GLERROR(1);
+    
+    GLuint element_buffer_id;
+    ST.GenBuffers(1,&element_buffer_id);
+    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
+    ST.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float)*element_buffer_size, element_buffer, GL_STATIC_DRAW);
+    CHECK_GLERROR(1);
+    
+    // Set up the per vertex attributes
+    GLint attrib_ids[num_attributes];
+    
+    for (int i=0;i!=num_attributes;++i) {
+        GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_names[i]);
+        CHECK_GLERROR(1);
+        
+        ST.VertexAttribPointer(attrib_id, 1, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat)*num_attributes, (void*)(i*sizeof(GLfloat)));
+        CHECK_GLERROR(1);
+        
+        ST.EnableVertexAttribArray(attrib_id);
+        CHECK_GLERROR(1);
+        
+        attrib_ids[i] = attrib_id;
+    }
+
+    // Draw the scene
+    ST.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, NULL);
+    CHECK_GLERROR(1);
+    
+    for (int i=0;i!=num_attributes;++i) {
+        ST.DisableVertexAttribArray(attrib_ids[i]);
+    }
 
     // Cleanup
     for (int i = 0; i < num_active_textures; i++) {
         ST.ActiveTexture(GL_TEXTURE0 + i);
         ST.BindTexture(GL_TEXTURE_2D, 0);
     }
-
+    
     if (bind_render_targets) {
         ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    ST.BindBuffer(GL_ARRAY_BUFFER, 0);
+    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    
+    ST.DeleteBuffers(1,&vertex_buffer_id);
+    ST.DeleteBuffers(1,&element_buffer_id);
+    
     return 0;
 }
 
@@ -1431,18 +1616,30 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t *buf) {
 }
   
 WEAK int halide_dev_run(void *user_context,
-                        void *state_ptr,
-                        const char *entry_name,
-                        int blocksX, int blocksY, int blocksZ,
-                        int threadsX, int threadsY, int threadsZ,
-                        int shared_mem_bytes,
-                        size_t arg_sizes[], void *args[]) {
+                          void *state_ptr,
+                          const char *entry_name,
+                          int blocksX, int blocksY, int blocksZ,
+                          int threadsX, int threadsY, int threadsZ,
+                          int shared_mem_bytes,
+                          size_t arg_sizes[], void *args[],
+                          char** attribute_names,
+                          int* attribute_dims,
+                          int num_attributes,
+                          float** coords_per_dim,
+                          int num_coords_dim0,
+                          int num_coords_dim1) {
     return halide_opengl_dev_run(user_context, state_ptr,
                                  entry_name,
                                  blocksX, blocksY, blocksZ,
                                  threadsX, threadsY, threadsY,
                                  shared_mem_bytes,
-                                 arg_sizes, args);
+                                 arg_sizes, args,
+                                 attribute_names,
+                                 attribute_dims,
+                                 num_attributes,
+                                 coords_per_dim,
+                                 num_coords_dim0,
+                                 num_coords_dim1);
 }
 
 WEAK int halide_dev_sync(void *user_context) {

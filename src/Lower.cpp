@@ -40,6 +40,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
 #include "Memoization.h"
+#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
@@ -1843,6 +1844,12 @@ Stmt lower(Function f, const Target &t) {
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
+    if (t.features & Target::OpenGL) {
+        debug(1) << "Detecting varying attributes...\n" << s << "\n\n";
+        s = find_linear_expressions(s);
+        debug(1) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
+    }
+    
     return s;
 }
 

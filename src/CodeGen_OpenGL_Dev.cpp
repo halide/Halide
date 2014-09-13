@@ -17,18 +17,8 @@ using std::map;
 
 namespace {
 
-std::string replace_all(std::string &str,
-                        const std::string &find,
-                        const std::string &replace) {
-    size_t pos = 0;
-    while ((pos = str.find(find, pos)) != std::string::npos) {
-        str.replace(pos, find.length(), replace);
-        pos += replace.length();
-    }
-    return str;
-}
-
 // Maps Halide types to appropriate GLSL types or emits error if no equivalent
+
 // type is available.
 Type map_type(const Type &type) {
     Type result = type;
@@ -82,6 +72,21 @@ Expr call_builtin(const Type &result_type, const std::string &func,
 }
 
 }
+
+class FindVaryingAttributes : public IRVisitor {
+protected:
+    using IRVisitor::visit;
+    
+    virtual void visit(const LetStmt *op) {
+        if (ends_with(op->name,"varying")) {
+            result[op->name] = op->value;
+        }
+        IRVisitor::visit(op);
+    }
+    
+public:
+    std::map<std::string,Expr> result;
+};
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
@@ -201,6 +206,19 @@ void CodeGen_GLSL::visit(const Cast *op) {
     }
 
     print_assignment(target_type, print_type(target_type) + "(" + print_expr(value) + ")");
+}
+    
+void CodeGen_GLSL::visit(const LetStmt *op) {
+
+    if (op->name.find("varying") != std::string::npos) {
+        
+        // Skip let statements for varying attributes
+        op->body.accept(this);
+        
+        return;
+    }
+    
+    CodeGen_C::visit(op);
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
@@ -424,6 +442,7 @@ void CodeGen_GLSL::visit(const Mod *op) {
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     std::vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
+    debug(2) << e << "\n";
     // The vectorize pass will insert a ramp in the color dimension argument.
     if (expr_match(Ramp::make(w, 1, 4), e, matches)) {
         // No suffix is needed when accessing a full RGBA vector.
@@ -431,6 +450,9 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         return ".rgb";
     } else if (expr_match(Ramp::make(w, 1, 2), e, matches)) {
         return ".rg";
+    } else if (const Variable* v = e.as<Variable>()) {
+        // GLSL 1.0 Section 5.5 supports subscript based vector indexing
+        return std::string("[") + ((e.type()!=Int(32)) ? "(int)" : "") + print_name(v->name) + "]";
     } else if (const IntImm *idx = e.as<IntImm>()) {
         // If the color dimension is not vectorized, e.g. it is unrolled, then
         // then we access each channel individually.
@@ -439,8 +461,7 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
         char suffix[] = "rgba";
         return std::string(".") + suffix[i];
     } else {
-        user_error << "GLSL: color index '" << e << "' must be constant.\n"
-                   << "Call .bound() or .set_bounds() to specify the range of the color index.\n";
+        user_error << "Cannot determine GLSL vector subscript.\n";
     }
     return "";
 }
@@ -591,10 +612,21 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << type_name << " " << print_name(args[i].name) << "\n";
         } else {
-            header << "/// VAR "
+            header << "/// UNIFORM "
                    << CodeGen_C::print_type(args[i].type) << " "
                    << print_name(args[i].name) << "\n";
         }
+    }
+    
+    // Look up let statements for varying attributes that may be interpolated
+    FindVaryingAttributes attributes;
+    stmt.accept(&attributes);
+
+    for (auto r : attributes.result) {
+        const std::string& name = r.first;
+        const Expr& value       = r.second;
+        
+        header << "/// VARYING " << CodeGen_C::print_type(value.type()) << " " << print_name(name) << "\n";
     }
 
     stream << header.str();
@@ -623,8 +655,16 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
                    << print_name(args[i].name) << ";\n";
         }
     }
+    
     // Add pixel position from vertex shader
     stream << "varying vec2 pixcoord;\n";
+    
+    for (auto r : attributes.result) {
+        const std::string& name = r.first;
+        const Expr value        = r.second;
+        
+        stream << "varying " << print_type(value.type()) << " " << print_name(name) << ";\n";
+    }
 
     stream << "void main() {\n";
     indent += 2;

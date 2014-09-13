@@ -6,6 +6,7 @@
 #include "Substitute.h"
 #include "IREquality.h"
 #include "Simplify.h"
+#include "IRMatch.h"
 
 namespace Halide {
 namespace Internal {

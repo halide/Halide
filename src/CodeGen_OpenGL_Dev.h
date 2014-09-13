@@ -31,8 +31,9 @@ public:
     std::string get_current_kernel_name();
     void dump();
 
-private:
     CodeGen_GLSL *glc;
+
+private:
     std::ostringstream src_stream;
     std::string cur_kernel_name;
     Target target;
@@ -50,14 +51,17 @@ public:
 
     EXPORT static void test();
 
+    
+    std::string print_name(const std::string &);
+
 protected:
     using CodeGen_C::visit;
     std::string print_type(Type type);
-    std::string print_name(const std::string &);
 
     void visit(const FloatImm *);
 
     void visit(const Cast *);
+    void visit(const LetStmt *);
     void visit(const For *);
     void visit(const Select *);
 

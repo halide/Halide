@@ -1,5 +1,7 @@
 #include "CodeGen_GPU_Dev.h"
 
+#include "IRMatch.h"
+
 namespace Halide {
 namespace Internal {
 
