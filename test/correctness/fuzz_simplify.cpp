@@ -167,7 +167,7 @@ bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) 
         Expr b_j_v = simplify(substitute(vars, b_j));
         // If the simplifier didn't produce constants, there must be
         // undefined behavior in this expression. Ignore it.
-        if (!is_const(a_j_v) || !is_const(b_j_v)) {
+        if (!Internal::is_const(a_j_v) || !Internal::is_const(b_j_v)) {
             continue;
         }
         if (!equal(a_j_v, b_j_v)) {
