@@ -88,61 +88,74 @@ WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
 // halide runtime.
 namespace Halide { namespace Runtime { namespace Internal {
 
-enum Type {BasicPrinter = 0,
-           ErrorPrinter = 1,
-           StringStreamPrinter = 2};
+enum PrinterType {BasicPrinter = 0,
+                  ErrorPrinter = 1,
+                  StringStreamPrinter = 2};
 
-// A class that can be used like std::cerr for debugging messages from
-// the runtime. Dumps items into a stack array, then prints them when
-// the object leaves scope using halide_print. Abuses the fact that
-// const refs keep objects alive in C++ to defer the print.
+// A class for constructing debug messages from the runtime. Dumps
+// items into a stack array, then prints them when the object leaves
+// scope using halide_print. Think of it as a stringstream that prints
+// when it dies. Use it like this:
+
+// debug(user_context) << "A" << b << c << "\n";
+
+// If you use it like this:
+
+// debug d(user_context);
+// d << "A";
+// d << b;
+// d << c << "\n";
+
+// Then remember the print only happens when the debug object leaves
+// scope, which may print at a confusing time.
+
 template<int type>
 class Printer {
 public:
-    mutable char buf[1024];
-    mutable char *dst, *end;
+    char buf[1024];
+    char *dst, *end;
     void *user_context;
 
     Printer(void *ctx) : dst(buf), end(buf + 1023), user_context(ctx) {
         *end = 0;
     }
 
-    const Printer &operator<<(const char *arg) const {
+    Printer &operator<<(const char *arg) {
         dst = halide_string_to_string(dst, end, arg);
         return *this;
     }
 
-    const Printer &operator<<(int64_t arg) const {
+    Printer &operator<<(int64_t arg) {
         dst = halide_int64_to_string(dst, end, arg, 1);
         return *this;
     }
 
-    const Printer &operator<<(int32_t arg) const {
+    Printer &operator<<(int32_t arg) {
         dst = halide_int64_to_string(dst, end, arg, 1);
         return *this;
     }
 
-    const Printer &operator<<(uint64_t arg) const {
+    Printer &operator<<(uint64_t arg) {
         dst = halide_uint64_to_string(dst, end, arg, 1);
         return *this;
     }
 
-    const Printer &operator<<(uint32_t arg) const {
+    Printer &operator<<(uint32_t arg) {
         dst = halide_uint64_to_string(dst, end, arg, 1);
         return *this;
     }
 
-    const Printer &operator<<(double arg) const {
+    Printer &operator<<(double arg) {
         dst = halide_double_to_string(dst, end, arg, 1);
         return *this;
     }
 
-    const Printer &operator<<(float arg) const {
+    Printer &operator<<(float arg) {
         dst = halide_double_to_string(dst, end, arg, 0);
         return *this;
     }
 
-    const Printer &operator<<(const void *arg) const {
+    Printer &operator<<(const void *arg) {
         dst = halide_pointer_to_string(dst, end, arg);
         return *this;
     }
@@ -165,12 +178,12 @@ public:
 
 // A class that supports << with all the same types as Printer, but
 // does nothing and should compile to a no-op.
-class SinkStream {
+class SinkPrinter {
 public:
-    SinkStream(void *user_context) {}
+    SinkPrinter(void *user_context) {}
 };
 template<typename T>
-SinkStream operator<<(const SinkStream &s, T) {
+SinkPrinter operator<<(const SinkPrinter &s, T) {
     return s;
 }
 
@@ -181,7 +194,7 @@ typedef Printer<StringStreamPrinter> stringstream;
 #ifdef DEBUG_RUNTIME
 typedef Printer<BasicPrinter> debug;
 #else
-typedef SinkStream debug;
+typedef SinkPrinter debug;
 #endif
 
 }}}
