@@ -246,9 +246,13 @@ Stmt build_provide_loop_nest(Function f,
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
 
-            // If this is an RVar fuse, we (should) know the size of the fused loop.
-            if (split.exact) {
-                known_size_dims[split.old_var] = known_size_dims[split.inner]*known_size_dims[split.outer];
+            // Maintain the known size of the fused dim if
+            // possible. This is important for possible later splits.
+            map<string, Expr>::iterator inner_dim = known_size_dims.find(split.inner);
+            map<string, Expr>::iterator outer_dim = known_size_dims.find(split.outer);
+            if (inner_dim != known_size_dims.end() &&
+                outer_dim != known_size_dims.end()) {
+                known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
             }
 
         } else {
