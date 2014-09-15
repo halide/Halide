@@ -2,6 +2,7 @@
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "IR.h"
+#include "Simplify.h"
 
 // This file is largely a port of parts of src/analysis.ml
 namespace Halide {
@@ -173,9 +174,7 @@ int lcm(int a, int b) {
 
 int mod(int a, int m) {
     if (m == 0) return a;
-    a = a % m;
-    if (a < 0) a += m;
-    return a;
+    return mod_imp(a, m);
 }
 
 void ComputeModulusRemainder::visit(const Add *op) {
