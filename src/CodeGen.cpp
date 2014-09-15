@@ -787,9 +787,9 @@ void CodeGen::visit(const Div *op) {
     } else if (op->type.is_uint()) {
         value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
-        // Signed integer division sucks. It should round down (to
-        // make upsampling kernels work across the zero boundary), but
-        // it doesn't.
+        // Signed integer division sucks. It should be defined such
+        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
+        // i.e. Euclidean division.
 
         // If it's a small const power of two, then we can just
         // arithmetic right shift. This rounds towards negative
@@ -802,43 +802,33 @@ void CodeGen::visit(const Div *op) {
             }
         }
 
-        // We get the rounding to work correctly by introducing a pre
-        // and post offset by one. The offsets depend on the sign of
-        // the numerator and denominator
+        // We get rounding to work by examining the implied remainder
+        // and correcting the quotient.
 
-        /* Here's the C code that we're trying to match (due to Len Hamey)
-        T axorb = a ^ b;
-        post = a != 0 ? ((axorb) >> (t.bits-1)) : 0;
-        pre = a < 0 ? -post : post;
-        T num = a + pre;
-        T quo = num / b;
-        T result = quo + post;
+        /* Here's the C code that we're trying to match:
+        int q = a / b;
+        int r = a - q * b;
+        int bs = b >> (t.bits - 1);
+        int rs = r >> (t.bits - 1);
+        return q - (rs & bs) + (rs & ~bs);
         */
 
         Value *a = codegen(op->a), *b = codegen(op->b);
 
-        Value *a_xor_b = builder->CreateXor(a, b);
+        Value *q = builder->CreateSDiv(a, b);
+        Value *r = builder->CreateSub(a, builder->CreateMul(q, b));
         Value *shift = ConstantInt::get(a->getType(), op->a.type().bits-1);
-        Value *a_xor_b_sign = builder->CreateAShr(a_xor_b, shift);
-        Value *zero = ConstantInt::get(a->getType(), 0);
-        Value *a_not_zero = builder->CreateICmpNE(a, zero);
-        Value *post = builder->CreateSelect(a_not_zero, a_xor_b_sign, zero);
-        Value *minus_post = builder->CreateNeg(post);
-        Value *a_lt_zero = builder->CreateICmpSLT(a, zero);
-        Value *pre = builder->CreateSelect(a_lt_zero, minus_post, post);
-        Value *num = builder->CreateAdd(a, pre);
-        Value *quo = builder->CreateSDiv(num, b);
-        value = builder->CreateAdd(quo, post);
+        Value *bs = builder->CreateAShr(b, shift);
+        Value *rs = builder->CreateAShr(r, shift);
+        Value *round_up = builder->CreateAnd(rs, bs);
+        Value *round_down = builder->CreateAnd(rs, builder->CreateNot(bs));
+        value = builder->CreateAdd(builder->CreateSub(q, round_up), round_down);
     }
 }
 
 void CodeGen::visit(const Mod *op) {
-    // To match our definition of division, mod should have this behavior:
-    // 3 % 2 -> 1;
-    // -3 % 2 -> 1;
-    // 3 % -2 -> -1;
-    // -3 % -2 -> -1;
-    // I.e. the remainder should be between zero and b
+    // To match our definition of division, mod should be between 0
+    // and |b|.
 
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
@@ -859,20 +849,18 @@ void CodeGen::visit(const Mod *op) {
             Value *a = codegen(op->a);
             Value *b = codegen(op->b);
 
-            // Match this non-overflowing C code due to Len Hamey
+            // Match this non-overflowing C code
             /*
-              T rem = a % b;
-              rem = rem + (rem != 0 && (rem ^ b) < 0 ? b : 0);
+              T r = a % b;
+              r = r + (r < 0 ? abs(b) : 0);
             */
 
-            Value *rem = builder->CreateSRem(a, b);
-            Value *zero = ConstantInt::get(rem->getType(), 0);
-            Value *rem_not_zero = builder->CreateICmpNE(rem, zero);
-            Value *rem_xor_b = builder->CreateXor(rem, b);
-            Value *rem_xor_b_lt_zero = builder->CreateICmpSLT(rem_xor_b, zero);
-            Value *need_to_add_b = builder->CreateAnd(rem_not_zero, rem_xor_b_lt_zero);
-            Value *offset = builder->CreateSelect(need_to_add_b, b, zero);
-            value = builder->CreateNSWAdd(rem, offset);
+            Value *r = builder->CreateSRem(a, b);
+            Value *zero = ConstantInt::get(r->getType(), 0);
+            Value *b_lt_0 = builder->CreateICmpSLT(b, zero);
+            Value *abs_b = builder->CreateSelect(b_lt_0, builder->CreateNeg(b), b);
+            Value *r_lt_0 = builder->CreateICmpSLT(r, zero);
+            value = builder->CreateSelect(r_lt_0, builder->CreateAdd(r, abs_b), r);
         }
     }
 }
