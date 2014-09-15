@@ -18,7 +18,7 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     // We need gpu_debug to record object creation.
-    target.features |= Target::GPUDebug;
+    target.set_feature(Target::Debug);
 
     for (int i = 0; i < 2; i++) {
         Var x;

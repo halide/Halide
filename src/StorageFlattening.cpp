@@ -14,16 +14,42 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
+// Visitor and helper function to test if a piece of IR uses an extern image.
+class UsesExternImage : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *c) {
+        if (c->call_type == Call::Image) {
+            result = true;
+        } else {
+            IRVisitor::visit(c);
+        }
+    }
+public:
+    UsesExternImage() : result(false) {}
+    bool result;
+};
+
+inline bool uses_extern_image(Stmt s) {
+    UsesExternImage uses;
+    s.accept(&uses);
+    return uses.result;
+}
+}
+
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e)
-        : env(e) {}
+    FlattenDimensions(const string &output, const map<string, Function> &e)
+        : output(output), env(e) {}
     Scope<int> scope;
 private:
+    const string &output;
     const map<string, Function> &env;
     Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
+    Expr flatten_args(const string &name, const vector<Expr> &args,
+                      bool internal) {
         Expr idx = 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
@@ -43,7 +69,7 @@ private:
             mins[i] = Variable::make(Int(32), min_name);
         }
 
-        if (env.find(name) != env.end()) {
+        if (internal) {
             // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
@@ -206,7 +232,8 @@ private:
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
-            Expr idx = mutate(flatten_args(cv.name, provide->args));
+            Expr idx = mutate(flatten_args(cv.name, provide->args,
+                                           provide->name != output));
             Expr var = Variable::make(cv.value.type(), cv.name + ".value");
             Stmt store = Store::make(cv.name, var, idx);
 
@@ -233,7 +260,8 @@ private:
         for (size_t i = 0; i < values.size(); i++) {
             const ProvideValue &cv = values[i];
 
-            Expr idx = mutate(flatten_args(cv.name, provide->args));
+            Expr idx = mutate(flatten_args(cv.name, provide->args,
+                                           provide->name != output));
             Stmt store = Store::make(cv.name, cv.value, idx);
 
             if (result.defined()) {
@@ -255,10 +283,11 @@ private:
             // If there is only one value, we don't need to worry
             // about atomicity.
             result = flatten_provide(provide);
-        } else if (!realizations.contains(provide->name)) {
-            // If the provide is not a realization, it might be
-            // aliased. Flatten it atomically because we can't
-            // prove the boxes don't overlap.
+        } else if (!realizations.contains(provide->name) &&
+                   uses_extern_image(provide)) {
+            // If the provide is not a realization and it uses an
+            // input image, it might be aliased. Flatten it atomically
+            // because we can't prove the boxes don't overlap.
             result = flatten_provide_atomic(provide);
         } else {
             Box provided = box_provided(Stmt(provide), provide->name);
@@ -301,7 +330,8 @@ private:
             Type t = call->type;
             t.bits = t.bytes() * 8;
 
-            Expr idx = mutate(flatten_args(name, call->args));
+            Expr idx = mutate(flatten_args(name, call->args,
+                                           env.find(call->name) != env.end()));
             expr = Load::make(t, name, idx, call->image, call->param);
 
             if (call->type.bits != t.bits) {
@@ -326,8 +356,8 @@ private:
 };
 
 
-Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    return FlattenDimensions(env).mutate(s);
+Stmt storage_flattening(Stmt s, const string &output, const map<string, Function> &env) {
+    return FlattenDimensions(output, env).mutate(s);
 }
 
 }

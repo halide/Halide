@@ -1,6 +1,6 @@
 namespace Halide { namespace Runtime { namespace Internal {
 
-#ifdef DEBUG
+#ifdef DEBUG_RUNTIME
 #define DEBUG_PRINTF halide_printf
 #else
 // This ensures that DEBUG and non-DEBUG have the same semicolon eating behavior.
