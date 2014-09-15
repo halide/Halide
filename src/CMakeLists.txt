@@ -129,6 +129,7 @@ if("${NATIVE_INT_DIR}" STREQUAL "./")
 endif()
 
 # Commands to build initial module objects.
+file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build")
 set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
