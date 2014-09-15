@@ -21,6 +21,24 @@ using std::vector;
 using std::string;
 using std::pair;
 
+namespace {
+int static_sign(Expr x) {
+    if (is_positive_const(x)) {
+        return 1;
+    } else if (is_negative_const(x)) {
+        return -1;
+    } else {
+        Expr zero = make_zero(x.type());
+        if (equal(const_true(), simplify(x > zero))) {
+            return 1;
+        } else if (equal(const_true(), simplify(x < zero))) {
+            return -1;
+        }
+    }
+    return 0;
+}
+}
+
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
@@ -377,7 +395,7 @@ private:
             return;
         }
 
-        if (min_b.same_as(max_b)) {
+        if (equal(min_b, max_b)) {
             if (is_zero(min_b)) {
                 // Divide by zero. Drat.
                 min = Expr();
@@ -398,13 +416,9 @@ private:
             }
         } else {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
-            bool min_is_positive = is_positive_const(min_b) ||
-                equal(const_true(), simplify(min_b > make_zero(min_b.type())));
-            bool max_is_negative = is_negative_const(max_b) ||
-                equal(const_true(), simplify(max_b < make_zero(max_b.type())));
-            if (!equal(min_b, max_b) &&
-                !min_is_positive &&
-                !max_is_negative) {
+            int min_sign = static_sign(min_b);
+            int max_sign = static_sign(max_b);
+            if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
                 min = Expr();
                 max = Expr();
                 return;
@@ -443,7 +457,11 @@ private:
         } else {
             // Only consider B (so A can be undefined)
             min = make_zero(op->type);
-            max = max_b;
+            if (max_b.type().is_uint()) {
+                max = max_b;
+            } else {
+                max = cast(op->type, abs(max_b));
+            }
             if (!max.type().is_float()) {
                 // Integer modulo returns at most one less than the
                 // second arg.
@@ -644,10 +662,17 @@ private:
             Expr min_a = min, max_a = max;
             min = make_zero(op->type);
             if (min_a.defined() && max_a.defined()) {
-                if (op->type.is_uint()) {
-                    max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
+                if (equal(min_a, max_a)) {
+                    min = max = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
                 } else {
-                    max = Max::make(0-min_a, max_a);
+                    min = make_zero(op->type);
+                    if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
+                        max = Max::make(Cast::make(op->type, -min_a), Cast::make(op->type, max_a));
+                    } else {
+                        min_a = Call::make(op->type, Call::abs, vec(min_a), Call::Intrinsic);
+                        max_a = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
+                        max = Max::make(min_a, max_a);
+                    }
                 }
             } else {
                 // If the argument is unbounded on one side, then the max is unbounded.
@@ -934,10 +959,10 @@ bool boxes_overlap(const Box &a, const Box &b) {
 
     for (size_t i = 0; i < a.size(); i++) {
         if (a[i].max.defined() && b[i].min.defined()) {
-            overlap = overlap && b[i].max > a[i].min;
+            overlap = overlap && b[i].max >= a[i].min;
         }
         if (a[i].min.defined() && b[i].max.defined()) {
-            overlap = overlap && a[i].max > b[i].min;
+            overlap = overlap && a[i].max >= b[i].min;
         }
     }
 
