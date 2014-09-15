@@ -204,19 +204,20 @@ int main(int argc, char **argv) {
            kernelInfo[interpolationType].name);
 
     double min = std::numeric_limits<double>::infinity();
-    const unsigned int iters = 20;
+    double avg = 0.0;
+    const unsigned int iters = 10;
 
-    for (unsigned int x = 0; x < iters; ++x) {
+    for (unsigned int i = 0; i < iters; ++i) {
         double before = now();
         final.realize(out);
         double after = now();
-        double amt = after - before;
+        double timediff = after - before;
 
-        std::cout << "   " << amt * 1000 << std::endl;
-        if (amt < min) min = amt;
-
+        min = (timediff < min) ? timediff : min;
+        avg = avg + (timediff - avg) / (i + 1);
+        std::cout << "   " << timediff * 1000 << " (avg=" << avg * 1000 << ")\n";
     }
-    std::cout << " took " << min * 1000 << " msec." << std::endl;
+    std::cout << " took min=" << min * 1000 << ", avg=" << avg * 1000 << " msec." << std::endl;
 
     save(out, outfile);
 }
