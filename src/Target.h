@@ -35,7 +35,7 @@ struct Target {
     /** Optional features a target can have. */
     enum Feature {
         JIT,  ///< Generate code that will run immediately inside the calling process.
-        GPUDebug,  ///< Increase the level of checking and the verbosity of the gpu runtimes.
+        Debug,  ///< Turn on debug info and output for runtime code.
         NoAsserts,  ///< Disable all runtime checks, for slightly tighter code.
         NoBoundsQuery, ///< Disable the bounds querying functionality.
 

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <map>
 
 #include "IRMatch.h"
 #include "IREquality.h"
@@ -8,6 +9,8 @@ namespace Halide {
 namespace Internal {
 
 using std::vector;
+using std::map;
+using std::string;
 
 void expr_match_test() {
     vector<Expr> matches;
@@ -47,10 +50,13 @@ void expr_match_test() {
 class IRMatch : public IRVisitor {
 public:
     bool result;
-    vector<Expr> &matches;
+    vector<Expr> *matches;
+    map<string, Expr> *var_matches;
     Expr expr;
 
-    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(m), expr(e) {
+    IRMatch(Expr e, vector<Expr> &m) : result(true), matches(&m), var_matches(NULL), expr(e) {
+    }
+    IRMatch(Expr e, map<string, Expr> &m) : result(true), matches(NULL), var_matches(&m), expr(e) {
     }
 
     using IRVisitor::visit;
@@ -80,13 +86,27 @@ public:
     }
 
     void visit(const Variable *op) {
-        if (op->type != expr.type()) {
+        if (!result) {
+            return;
+        }
+
+        // Represent 'don't care' types with type.bits == 0.
+        if (op->type.bits != 0 && op->type != expr.type()) {
             result = false;
-        } else if (op->name == "*") {
-            matches.push_back(expr);
-        } else if (result) {
-            const Variable *e = expr.as<Variable>();
-            result = e && (e->name == op->name);
+        } else if (matches) {
+            if (op->name == "*") {
+                matches->push_back(expr);
+            } else {
+                const Variable *e = expr.as<Variable>();
+                result = e && (e->name == op->name);
+            }
+        } else if (var_matches) {
+            Expr &match = (*var_matches)[op->name];
+            if (match.defined()) {
+                result = equal(match, expr);
+            } else {
+                match = expr;
+            }
         }
     }
 
@@ -207,6 +227,23 @@ public:
 
 bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     matches.clear();
+    if (!pattern.defined() && !pattern.defined()) return true;
+    if (!pattern.defined() || !pattern.defined()) return false;
+
+    IRMatch eq(expr, matches);
+    pattern.accept(&eq);
+    if (eq.result) {
+        return true;
+    } else {
+        matches.clear();
+        return false;
+    }
+}
+
+bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
+    // Explicitly don't clear matches. This allows usages to pre-match
+    // some variables.
+
     if (!pattern.defined() && !pattern.defined()) return true;
     if (!pattern.defined() || !pattern.defined()) return false;
 
