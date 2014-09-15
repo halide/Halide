@@ -191,6 +191,16 @@ private:
             IRVisitor::visit(op);
         }
     }
+
+    template<class LetOp>
+    void visit_let(const LetOp *op) {
+        scope->push(op->name, op->value);
+        op->body.accept(this);
+        scope->pop(op->name);
+    }
+
+    void visit(const LetStmt *op) {visit_let(op);}
+    void visit(const Let *op) {visit_let(op);}
 };
 
 bool stmt_branches_in_var(const std::string &name, Stmt body, Scope<Expr> *scope, bool branch_on_minmax = false) {
