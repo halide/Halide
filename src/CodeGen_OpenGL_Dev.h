@@ -48,7 +48,7 @@ public:
                  const std::vector<GPU_Argument> &args,
                  const Target &target);
 
-    static void test();
+    EXPORT static void test();
 
 protected:
     using CodeGen_C::visit;
