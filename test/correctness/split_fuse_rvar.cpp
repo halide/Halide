@@ -23,8 +23,9 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 4; j++) {
-                if (Rg(j, i) != i*4 + j) {
-                    std::cout << "Error! Expected " << i*4 + j << " at g(" << j << ", " << i << "), got " << Rg(j, i) << std::endl;
+                int expected = i*4 + j;
+                if (Rg(j, i) != expected) {
+                    printf("Error! Expected %d at g(%d, %d), got %d", expected, j, i, Rg(j, i));
                     return -1;
                 }
             }
@@ -49,7 +50,7 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < 16; i++) {
             if (Rg(i) != i) {
-                std::cout << "Error! Expected " << i << " at g(" << i << "), got " << Rg(i) << std::endl;
+                printf("Error! Expected %d at g(%d), got %d", i, i, Rg(i));
                 return -1;
             }
         }
