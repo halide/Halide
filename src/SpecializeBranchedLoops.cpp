@@ -1,3 +1,5 @@
+#include <set>
+
 #include "SpecializeClampedRamps.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -217,59 +219,46 @@ bool expr_branches_in_var(const std::string &name, Expr value, Scope<Expr> *scop
 
 class FindFreeVariables : public IRVisitor {
 public:
-    Scope<Expr> *scope;
-    std::vector<const Variable*> free_vars;
+    Scope<int> *free_vars;
+    std::set<std::string> vars;
 
-    FindFreeVariables(Scope<Expr> *s) : scope(s) {}
+    FindFreeVariables(Scope<int> *fv) : free_vars(fv) {}
 private:
     using IRVisitor::visit;
 
     void visit(const Variable *op) {
-        if (!scope->contains(op->name)) {
-            free_vars.push_back(op);
+        if (free_vars->contains(op->name)) {
+            vars.insert(op->name);
         }
-    }
-
-    void visit(const Let *op) {
-        op->value.accept(this);
-        scope->push(op->name, op->value);
-        op->body.accept(this);
-        scope->pop(op->name);
-    }
-
-    void visit(const LetStmt *op) {
-        op->value.accept(this);
-        scope->push(op->name, op->value);
-        op->body.accept(this);
-        scope->pop(op->name);
     }
 };
 
-size_t num_free_vars(Expr expr, Scope<Expr> *scope) {
-    FindFreeVariables find(scope);
+size_t num_free_vars(Expr expr, Scope<int> *free_vars) {
+    FindFreeVariables find(free_vars);
     expr.accept(&find);
-    return find.free_vars.size();
+    return find.vars.size();
 }
 
-bool has_free_vars(Expr expr, Scope<Expr> *scope) {
-    return num_free_vars(expr, scope) > 0;
+bool has_free_vars(Expr expr, Scope<int> *free_vars) {
+    return num_free_vars(expr, free_vars) > 0;
 }
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr> *scope);
+                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars);
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr> *scope);
+                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars);
 
 class BranchCollector : public IRVisitor {
 public:
     std::string name;
     std::vector<Branch> branches;
     Scope<Expr>* scope;
+    Scope<int> *free_vars;
     Expr min;
     Expr extent;
 
-    BranchCollector(const std::string &n, Expr m, Expr e, Scope<Expr> *s) :
-        name(n), scope(s), min(m), extent(e) {}
+    BranchCollector(const std::string &n, Expr m, Expr e, Scope<Expr> *s, Scope<int> *lv) :
+            name(n), scope(s), free_vars(lv), min(m), extent(e) {}
 
 private:
     using IRVisitor::visit;
@@ -399,7 +388,7 @@ private:
 
     void visit_simple_cond(Expr cond, Expr a, Expr b) {
         // Bail out if this condition depends on more than just the current loop variable.
-        if (num_free_vars(cond, scope) > 1) return;
+        if (num_free_vars(cond, free_vars) > 1) return;
 
         Expr solve = solve_for_linear_variable(cond, name, scope);
         if (!solve.same_as(cond)) {
@@ -458,7 +447,7 @@ private:
     void visit(const LetStmt *op) {
         if (expr_branches_in_var(name, op->value, scope, true)) {
             std::vector<Branch> expr_branches;
-            collect_branches(op->value, name, min, extent, expr_branches, scope);
+            collect_branches(op->value, name, min, extent, expr_branches, scope, free_vars);
 
             size_t num_branches = branches.size();
             Expr orig_min = min;
@@ -494,7 +483,7 @@ private:
     void visit(const Store *op) {
         if (expr_branches_in_var(name, op->value, scope, true)) {
             std::vector<Branch> expr_branches;
-            collect_branches(op->value, name, min, extent, expr_branches, scope);
+            collect_branches(op->value, name, min, extent, expr_branches, scope, free_vars);
 
             for (size_t i = 0; i < expr_branches.size(); ++i) {
                 Branch &branch = expr_branches[i];
@@ -512,7 +501,7 @@ private:
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
             // Bail out if this condition depends on more than just the current loop variable.
-            if (num_free_vars(if_stmt->condition, scope) > 1) return;
+            if (num_free_vars(if_stmt->condition, free_vars) > 1) return;
 
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
             if (!solve.same_as(if_stmt->condition)) {
@@ -558,15 +547,15 @@ private:
 };
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr>* scope) {
-    BranchCollector collector(name, min, extent, scope);
+                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars) {
+    BranchCollector collector(name, min, extent, scope, free_vars);
     expr.accept(&collector);
     branches.swap(collector.branches);
 }
 
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr>* scope) {
-    BranchCollector collector(name, min, extent, scope);
+                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars) {
+    BranchCollector collector(name, min, extent, scope, free_vars);
     stmt.accept(&collector);
     branches.swap(collector.branches);
 }
@@ -576,13 +565,15 @@ private:
     using IRVisitor::visit;
 
     Scope<Expr> scope;
+    Scope<int>  loop_vars;
 
     void visit(const For *op) {
+        loop_vars.push(op->name, 0);
         Stmt body = mutate(op->body);
 
         if (stmt_branches_in_var(op->name, body, &scope)) {
             std::vector<Branch> branches;
-            collect_branches(body, op->name, op->min, op->extent, branches, &scope);
+            collect_branches(body, op->name, op->min, op->extent, branches, &scope, &loop_vars);
 
             if (branches.empty()) {
                 stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
@@ -603,6 +594,7 @@ private:
         } else {
             stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
         }
+        loop_vars.pop(op->name);
     }
 
     void visit(const LetStmt *op) {
