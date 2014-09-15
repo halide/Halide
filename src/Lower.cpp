@@ -1714,7 +1714,7 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
-    s = debug_to_file(s, order[order.size()-1], env);
+    s = debug_to_file(s, order.back(), env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
@@ -1732,7 +1732,7 @@ Stmt lower(Function f, const Target &t) {
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env);
+    s = storage_flattening(s, order.back(), env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {

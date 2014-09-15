@@ -182,11 +182,11 @@ public:
         // target.set_feature(Target::CUDA);
 
         // If you want to see all of the OpenCL or CUDA API calls done
-        // by the pipeline, you can also enable the GPUDebug
+        // by the pipeline, you can also enable the Debug
         // flag. This is helpful for figuring out which stages are
         // slow, or when CPU -> GPU copies happen. It hurts
         // performance though, so we'll leave it commented out.
-        // target.set_feature(Target::GPUDebug);
+        // target.set_feature(Target::Debug);
 
         curved.compile_jit(target);
     }

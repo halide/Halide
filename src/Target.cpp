@@ -181,7 +181,7 @@ Target parse_target_string(const std::string &target) {
                    << "and os is linux, windows, osx, nacl, ios, or android. "
                    << "If arch or os are omitted, they default to the host. "
                    << "Features include sse41, avx, avx2, armv7s, cuda, "
-                   << "opencl, no_asserts, no_bounds_query, and gpu_debug.\n"
+                   << "opencl, no_asserts, no_bounds_query, and debug.\n"
                    << "HL_TARGET can also begin with \"host\", which sets the "
                    << "host's architecture, os, and feature set, with the "
                    << "exception of the GPU runtimes, which default to off.\n"
@@ -278,8 +278,8 @@ bool Target::merge_string(const std::string &target) {
             set_features(vec(Target::CUDA, Target::CUDACapability50));
         } else if (tok == "opencl") {
             set_feature(Target::OpenCL);
-        } else if (tok == "gpu_debug") {
-            set_feature(Target::GPUDebug);
+        } else if (tok == "debug" || tok == "gpu_debug") {
+            set_feature(Target::Debug);
         } else if (tok == "opengl") {
             set_feature(Target::OpenGL);
         } else if (tok == "no_asserts") {
@@ -336,7 +336,7 @@ std::string Target::to_string() const {
   };
   // The contents of this array must match Target::Features.
   const char* const feature_names[] = {
-      "jit", "gpu_debug", "no_asserts", "no_bounds_query",
+      "jit", "debug", "no_asserts", "no_bounds_query",
       "sse41", "avx", "avx2", "fma", "fma4", "f16c",
       "armv7s",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
@@ -401,11 +401,18 @@ llvm::Module *parse_bitcode_file(llvm::StringRef buf, llvm::LLVMContext *context
     }
 
 #define DECLARE_CPP_INITMOD(mod) \
+    DECLARE_INITMOD(mod ## _32_debug) \
+    DECLARE_INITMOD(mod ## _64_debug) \
     DECLARE_INITMOD(mod ## _32) \
     DECLARE_INITMOD(mod ## _64) \
-    llvm::Module *get_initmod_##mod(llvm::LLVMContext *context, bool bits_64) { \
-        if (bits_64) return get_initmod_##mod##_64(context);            \
-        return get_initmod_##mod##_32(context);                         \
+    llvm::Module *get_initmod_##mod(llvm::LLVMContext *context, bool bits_64, bool debug) { \
+        if (bits_64) {                                                                      \
+            if (debug) return get_initmod_##mod##_64_debug(context);                        \
+            else return get_initmod_##mod##_64(context);                                    \
+        } else {                                                                            \
+            if (debug) return get_initmod_##mod##_32_debug(context);                        \
+            else return get_initmod_##mod##_32(context);                                    \
+        }                                                                                   \
     }
 
 #define DECLARE_LL_INITMOD(mod) \
@@ -417,9 +424,7 @@ DECLARE_CPP_INITMOD(android_io)
 DECLARE_CPP_INITMOD(android_opengl_context)
 DECLARE_CPP_INITMOD(ios_io)
 DECLARE_CPP_INITMOD(cuda)
-DECLARE_CPP_INITMOD(cuda_debug)
 DECLARE_CPP_INITMOD(windows_cuda)
-DECLARE_CPP_INITMOD(windows_cuda_debug)
 DECLARE_CPP_INITMOD(fake_thread_pool)
 DECLARE_CPP_INITMOD(gcd_thread_pool)
 DECLARE_CPP_INITMOD(linux_clock)
@@ -428,11 +433,8 @@ DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
 DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
-DECLARE_CPP_INITMOD(opencl_debug)
 DECLARE_CPP_INITMOD(windows_opencl)
-DECLARE_CPP_INITMOD(windows_opencl_debug)
 DECLARE_CPP_INITMOD(opengl)
-DECLARE_CPP_INITMOD(opengl_debug)
 DECLARE_CPP_INITMOD(osx_host_cpu_count)
 DECLARE_CPP_INITMOD(posix_allocator)
 DECLARE_CPP_INITMOD(posix_clock)
@@ -675,38 +677,48 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     // and size_t are 32-bit in 64-bit NaCl, and that's the only way
     // in which the 32- and 64-bit runtimes differ.
     bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
+    bool debug = t.has_feature(Target::Debug);
+
+#ifndef USE_MCJIT
+    // -g (debug info) doesn't work with the old JIT, give an
+    // intelligible reason why here.
+    if (debug && t.has_feature(Target::JIT)) {
+        Internal::debug(0) << "The debug runtime is not supported when using JIT on this platform.\n";
+        debug = false;
+    }
+#endif
 
     vector<llvm::Module *> modules;
 
     // OS-dependent modules
     if (t.os == Target::Linux) {
-        modules.push_back(get_initmod_linux_clock(c, bits_64));
-        modules.push_back(get_initmod_posix_io(c, bits_64));
-        modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64));
-        modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+        modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
     } else if (t.os == Target::OSX) {
-        modules.push_back(get_initmod_osx_clock(c, bits_64));
-        modules.push_back(get_initmod_posix_io(c, bits_64));
-        modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+        modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
     } else if (t.os == Target::Android) {
-        modules.push_back(get_initmod_android_clock(c, bits_64));
-        modules.push_back(get_initmod_android_io(c, bits_64));
-        modules.push_back(get_initmod_android_host_cpu_count(c, bits_64));
-        modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_android_clock(c, bits_64, debug));
+        modules.push_back(get_initmod_android_io(c, bits_64, debug));
+        modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
     } else if (t.os == Target::Windows) {
-        modules.push_back(get_initmod_windows_clock(c, bits_64));
-        modules.push_back(get_initmod_windows_io(c, bits_64));
-        modules.push_back(get_initmod_windows_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
+        modules.push_back(get_initmod_windows_io(c, bits_64, debug));
+        modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
     } else if (t.os == Target::IOS) {
-        modules.push_back(get_initmod_posix_clock(c, bits_64));
-        modules.push_back(get_initmod_ios_io(c, bits_64));
-        modules.push_back(get_initmod_gcd_thread_pool(c, bits_64));
+        modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+        modules.push_back(get_initmod_ios_io(c, bits_64, debug));
+        modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
     } else if (t.os == Target::NaCl) {
-        modules.push_back(get_initmod_posix_clock(c, bits_64));
-        modules.push_back(get_initmod_posix_io(c, bits_64));
-        modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64));
-        modules.push_back(get_initmod_posix_thread_pool(c, bits_64));
-        modules.push_back(get_initmod_ssp(c, bits_64));
+        modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+        modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
+        modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+        modules.push_back(get_initmod_ssp(c, bits_64, debug));
     }
 
     // Math intrinsics vary slightly across platforms
@@ -719,14 +731,14 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
 
     // These modules are always used
-    modules.push_back(get_initmod_gpu_device_selection(c, bits_64));
-    modules.push_back(get_initmod_posix_math(c, bits_64));
-    modules.push_back(get_initmod_tracing(c, bits_64));
-    modules.push_back(get_initmod_write_debug_image(c, bits_64));
-    modules.push_back(get_initmod_posix_allocator(c, bits_64));
-    modules.push_back(get_initmod_posix_error_handler(c, bits_64));
-    modules.push_back(get_initmod_posix_print(c, bits_64));
-    modules.push_back(get_initmod_cache(c, bits_64));
+    modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_math(c, bits_64, debug));
+    modules.push_back(get_initmod_tracing(c, bits_64, debug));
+    modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+    modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+    modules.push_back(get_initmod_cache(c, bits_64, debug));
 
     // These modules are optional
     if (t.arch == Target::X86) {
@@ -750,49 +762,29 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     }
     if (t.has_feature(Target::CUDA)) {
         if (t.os == Target::Windows) {
-            if (t.has_feature(Target::GPUDebug)) {
-                modules.push_back(get_initmod_windows_cuda_debug(c, bits_64));
-            } else {
-                modules.push_back(get_initmod_windows_cuda(c, bits_64));
-            }
+            modules.push_back(get_initmod_windows_cuda(c, bits_64, debug));
         } else {
-            if (t.has_feature(Target::GPUDebug)) {
-                modules.push_back(get_initmod_cuda_debug(c, bits_64));
-            } else {
-                modules.push_back(get_initmod_cuda(c, bits_64));
-            }
+            modules.push_back(get_initmod_cuda(c, bits_64, debug));
         }
     } else if (t.has_feature(Target::OpenCL)) {
         if (t.os == Target::Windows) {
-            if (t.has_feature(Target::GPUDebug)) {
-                modules.push_back(get_initmod_windows_opencl_debug(c, bits_64));
-            } else {
-                modules.push_back(get_initmod_windows_opencl(c, bits_64));
-            }
+            modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
         } else {
-            if (t.has_feature(Target::GPUDebug)) {
-                modules.push_back(get_initmod_opencl_debug(c, bits_64));
-            } else {
-                modules.push_back(get_initmod_opencl(c, bits_64));
-            }
+            modules.push_back(get_initmod_opencl(c, bits_64, debug));
         }
     } else if (t.has_feature(Target::OpenGL)) {
-        if (t.has_feature(Target::GPUDebug)) {
-            modules.push_back(get_initmod_opengl_debug(c, bits_64));
-        } else {
-            modules.push_back(get_initmod_opengl(c, bits_64));
-        }
+        modules.push_back(get_initmod_opengl(c, bits_64, debug));
         if (t.os == Target::Linux) {
-            modules.push_back(get_initmod_linux_opengl_context(c, bits_64));
+            modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));
         } else if (t.os == Target::OSX) {
-            modules.push_back(get_initmod_osx_opengl_context(c, bits_64));
+            modules.push_back(get_initmod_osx_opengl_context(c, bits_64, debug));
         } else if (t.os == Target::Android) {
-            modules.push_back(get_initmod_android_opengl_context(c, bits_64));
+            modules.push_back(get_initmod_android_opengl_context(c, bits_64, debug));
         } else {
             // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
         }
     } else {
-        modules.push_back(get_initmod_nogpu(c, bits_64));
+        modules.push_back(get_initmod_nogpu(c, bits_64, debug));
     }
 
     link_modules(modules);

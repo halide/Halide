@@ -262,125 +262,11 @@ Image<T> init(Type t, int unique, int width, int height) {
     return result;
 }
 
-// halide_div is the Halide definition of division, expression in BIG type
-// to avoid overflow issues.  Type cast the result to T.
-template<typename T,typename BIG>
-BIG halide_div(BIG a, BIG b) {
-    Type t = type_of<T>();
-    if (t.is_uint() || t.is_float()) {
-        return a / b;
-    }
-    BIG q = a/b;
-    if (b > 0 && q*b > a) q--;
-    if (less_than_zero(b) && q*b < a) q--;
-    return q;
-}
-
-#define DIV_METHOD 4
-
-// new_div is a new implementation of division, intended to produce the same results
-// as halide_div for various types T.
-template<typename T>
-T new_div(T a, T b) {
-    Type t = type_of<T>();
-    if (t.is_uint() || t.is_float()) {
-        return a / b;
-    }
-    // Correction.  Ensure that the quotient is rounded towards -infinity.
-    T pre, post;
-    // Method 1. Explicit pre and post correction based on signs of a and b.
-#if DIV_METHOD==1
-    if (a < 0 && b < 0) { pre = 0; post = 0; }
-    if (a >= 0 && b >= 0) { pre = 0; post = 0; }
-    if (a >= 0 && b < 0) { pre = a > 0 ? -1 : 0; post = pre; } // Note a == 0 has no correction.
-    if (a < 0 && b >= 0) { pre = 1; post = -1; }
-#endif
-    // Method 2. Logical simplification
-#if DIV_METHOD==2
-    if ((a < 0) ^ (b < 0)) { post = -1; } else { post = 0; }
-    if (a == 0) { post = 0; }
-    if (a < 0) { pre = -post; } else { pre = post; }
-#endif
-    // Method 3. Bit manipulations.
-#if DIV_METHOD==3
-    T axorb = a ^ b;
-    T anotzero = a | (T) (-a);
-    post = (axorb >> (t.bits-1)) & (anotzero >> (t.bits-1));
-    T amask = a >> (t.bits-1);
-    pre = (T)(post ^ amask) - amask;
-#endif
-    // Method 4. Bit manipulations and select.  select is written in C notation.
-#if DIV_METHOD==4
-    T axorb = a ^ b;
-    post = a != 0 ? ((axorb) >> (t.bits-1)) : 0;
-    pre = less_than_zero(a) ? -post : post;
-#endif
-    T num = a + pre;
-    T quo = num / b;
-    T result = quo + post;
-    return result;
-}
-
-// halide_mod is the Halide definition of mod expression in BIG type to
-// avoid overflow issues.  Cast it to type T to use the result.
-template<typename T,typename BIG>
-BIG halide_mod(BIG a, BIG b) {
-    Type t = type_of<T>();
-    if (t.is_uint()) {
-        return a % b;
-    }
-    if (t.is_float()) {
-        return (BIG)((double)a - double(b)*floor(double(a)/double(b)));
-    }
-    BIG rem = (a % b + b) % b; // Halide definition of remainder
-    return rem;
-}
-
-#define MOD_METHOD 4
-
-// new_mod is a new implementation of mod intended to compute the same
-// result as halide_mod for all values of type T.
-template<typename T>
-T new_mod(T a, T b) {
-    Type t = type_of<T>();
-    if (t.is_uint()) {
-        return a % b;
-    }
-    if (t.is_float()) {
-        return (T)((double)a - double(b)*floor(double(a)/double(b)));
-    }
-    T rem = a % b;
-    // Correction.  Ensures that remainder has the same sign as b.
-    // Method 1.  Explicit corrections when signs are opposite.
-#if MOD_METHOD==1
-    if (rem < 0 && b > 0) { rem = rem + b; }
-    if (rem > 0 && b < 0) { rem = rem + b; } // Note rem==0 has no correction applied.
-#endif
-    // Method 2.
-#if MOD_METHOD==2
-    if (((rem < 0) ^ (b < 0)) & (rem != 0)) { rem = rem + b; }
-#endif
-    // Method 3.  Using bit manipulations.
-    // Mask should be -1 in the cases:
-    // (rem ^ b) is negative and (rem | -rem) is negative.
-    // Negative test is implemented by arithmetic right shift
-    // by the word size less 1 bit.
-#if MOD_METHOD==3
-    T mask = (((T)(rem ^ b)) >> (t.bits-1)) & (((T)(rem | -rem)) >> (t.bits-1));
-    rem = rem + (b & mask);
-#endif
-    // Method 4.  Using bit manipulations and select.
-#if MOD_METHOD==4
-    rem = rem + (rem != 0 && less_than_zero(rem ^ b) ? b : 0);
-#endif
-    return rem;
-}
-
-// division tests division operations.
+// division tests division and mod operations.
 // BIG should be uint64_t, int64_t or double as appropriate.
 // T should be a type known to Halide.
 template<typename T,typename BIG,int bits>
-bool division() {
+bool div_mod() {
     int i, j;
     Type t = type_of<T>();
     BIG minval = minimum<T,BIG,bits>();
@@ -392,7 +278,6 @@ bool division() {
     // The parameter bits can be used to control the maximum data value.
     Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
     Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
-    Image<T> out(WIDTH,HEIGHT);
 
     // Filter the input values for the operation to be tested.
     // Cannot divide by zero, so remove zeroes from b.
@@ -408,127 +293,47 @@ bool division() {
         }
     }
 
-    // Compute division result and check it.
+    // Compute division and mod, and check they satisfy the requirements of Euclidean division.
     Func f;
-    f(_) = a / b;  // Using Halide division operation.
-    f.realize(out);
+    Var x, y;
+    f(x, y) = Tuple(a(x, y) / b(x, y), a(x, y) % b(x, y));  // Using Halide division operation.
+    Target target = get_jit_target_from_environment();
+    if (target.has_gpu_feature()) {
+        f.compute_root().gpu_tile(x, y, 16, 16);
+    }
+    Realization R = f.realize(WIDTH, HEIGHT, target);
+    Image<T> q(R[0]);
+    Image<T> r(R[1]);
 
     int ecount = 0;
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
-            T v = halide_div<T,BIG>(a(i,j), b(i,j));
-            if (v != out(i,j) && (ecount++) < 10) {
-                printf ("halide division (%d / %d) yielded %d; expected %d\n", a(i,j), b(i,j), out(i,j), v);
+            T ai = a(i, j);
+            T bi = b(i, j);
+            T qi = q(i, j);
+            T ri = r(i, j);
+
+            if (qi*bi + ri != ai && (ecount++) < 10) {
+                std::cout << "(a/b)*b + a%b != a; a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
+                success = false;
+            } else if (!(0 <= ri && (bi == t.imin() || ri < (T)std::abs((int64_t)bi))) && (ecount++) < 10) {
+                std::cout << "ri is not in the range [0, |b|); a, b = " << (int)ai << ", " << (int)bi << "; q, r = " << (int)qi << ", " << (int)ri << "\n";
                 success = false;
             }
-        }
-    }
 
-    // Explicit checks of the simplifier
-    ecount = 0;
-    for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
-        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
-            T arg_a = a(i,j);
-            T arg_b = b(i,j);
-            T v = (T)halide_div<T,BIG>(arg_a, arg_b);
-            Expr in_e = cast<T>((int) arg_a) / cast<T>((int) arg_b);
-            Expr e = simplify(in_e);
-            Expr eout = cast<T>((int) v);
-            if (! Internal::equal(e, eout) && (ecount++) < 10) {
-                std::cout << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
-                success = false;
-            }
-        }
-    }
+            if (i < SWIDTH && j < SHEIGHT) {
+                Expr ae = cast<T>((int)ai);
+                Expr be = cast<T>((int)bi);
+                Expr qe = simplify(ae/be);
+                Expr re = simplify(ae%be);
 
-    /* Test alternative C implementation to match Halide definition. */
-    ecount = 0;
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            T w = halide_div<T,BIG>(a(i,j), b(i,j));
-            T u = new_div<T>(a(i,j), b(i,j));
-            if (u != w && ecount++ < 10) {
-                printf ("new_div(%d, %d) yielded %d; expected %d\n", a(i,j), b(i,j), u, w);
-            }
-        }
-    }
-
-    return success;
-}
-
-// mod tests mod operations.
-// BIG should be uint64_t or int64_t as appropriate.
-// T should be a type known to Halide.
-template<typename T,typename BIG,int bits>
-bool mod() {
-    int i, j;
-    Type t = type_of<T>();
-    BIG minval = minimum<T,BIG,bits>();
-    bool success = true;
-
-    std::cout << "Test mod of " << t << '\n';
-    t.bits = bits; // Override the bits
-
-    // The parameter bits can be used to control the maximum data value.
-    Image<T> a = init<T,BIG,bits>(t, 1, WIDTH, HEIGHT);
-    Image<T> b = init<T,BIG,bits>(t, 2, WIDTH, HEIGHT);
-    Image<T> out(WIDTH,HEIGHT);
-
-    // Filter the input values for the operation to be tested.
-    // Cannot divide by zero, so remove zeroes from b.
-    // Also, cannot divide the most negative number by -1.
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            if (b(i,j) == 0) {
-                b(i,j) = 1; // Replace zero with one
-            }
-            if (a(i,j) == minval && less_than_zero(minval) && is_negative_one(b(i,j))) {
-                a(i,j) = a(i,j) + 1; // Fix it into range.
-            }
-        }
-    }
-
-    // Compute modulus result and check it.
-    Func f;
-    f(_) = a % b;  // Using Halide mod operation.
-    f.realize(out);
-
-    int ecount = 0;
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            T v = (T)halide_mod<T,BIG>(a(i,j), b(i,j));
-            if (v != out(i,j) && (ecount++) < 10) {
-                printf ("halide mod (%d %% %d) yielded %d; expected %d\n", a(i,j), b(i,j), out(i,j), v);
-                success = false;
-            }
-        }
-    }
-
-    // Explicit checks of the simplifier
-    ecount = 0;
-    for (i = 0; i < std::min(SWIDTH,WIDTH); i++) {
-        for (j = 0; j < std::min(SHEIGHT,HEIGHT); j++) {
-            T arg_a = a(i,j);
-            T arg_b = b(i,j);
-            T v = (T)halide_mod<T,BIG>(arg_a, arg_b);
-            Expr in_e = cast<T>((int) arg_a) % cast<T>((int) arg_b);
-            Expr e = simplify(in_e);
-            Expr eout = cast<T>((int) v);
-            if (! Internal::equal(e, eout) && (ecount++) < 10) {
-                std::cout << "simplify(" << in_e << ") yielded " << e << "; expected " << eout << "\n";
-                success = false;
-            }
-        }
-    }
-
-    /* Test alternative C implementation to match Halide definition. */
-    ecount = 0;
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            T w = halide_mod<T,BIG>(a(i,j), b(i,j));
-            T u = new_mod<T>(a(i,j), b(i,j));
-            if (u != w && ecount++ < 10) {
-                printf ("new_mod(%d, %d) yielded %d; expected %d\n", a(i,j), b(i,j), u, w);
+                if (!Internal::equal(qe, cast<T>((int)qi)) && (ecount++) < 10) {
+                    std::cout << "Compiled a/b != simplified a/b: " << (int)ai << "/" << (int)bi << " = " << (int)qi << " != " << qe << "\n";
+                    success = false;
+                } else if (!Internal::equal(re, cast<T>((int)ri)) && (ecount++) < 10) {
+                    std::cout << "Compiled a%b != simplified a%b: " << (int)ai << "/" << (int)bi << " = " << (int)ri << " != " << re << "\n";
+                    success = false;
+                }
             }
         }
     }
@@ -599,18 +404,13 @@ bool f_mod() {
 int main(int argc, char **argv) {
     bool success = true;
     success &= f_mod<float,double,32>();
-    success &= division<uint8_t,uint64_t,8>();
-    success &= mod<uint8_t,uint64_t,8>();
-    success &= division<uint16_t,uint64_t,16>();
-    success &= mod<uint16_t,uint64_t,16>();
-    success &= division<uint32_t,uint64_t,32>();
-    success &= mod<uint32_t,uint64_t,32>();
-    success &= division<int8_t,int64_t,8>();
-    success &= mod<int8_t,int64_t,8>();
-    success &= division<int16_t,int64_t,16>();
-    success &= mod<int16_t,int64_t,16>();
-    success &= division<int32_t,int64_t,32>();
-    success &= mod<int32_t,int64_t,32>();
+
+    success &= div_mod<uint8_t,uint64_t,8>();
+    success &= div_mod<uint16_t,uint64_t,16>();
+    success &= div_mod<uint32_t,uint64_t,32>();
+    success &= div_mod<int8_t,int64_t,8>();
+    success &= div_mod<int16_t,int64_t,16>();
+    success &= div_mod<int32_t,int64_t,32>();
 
     if (! success) {
         printf ("Failure!\n");
