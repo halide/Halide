@@ -36,7 +36,7 @@ public:
         terms.resize(1);
         terms[0].var = NULL;
 
-        coeff.push(make_one(Int(8)));
+        coeff.push(make_one(Int(32)));
 
         own_scope = scope == NULL;
         if (own_scope) {
@@ -207,7 +207,7 @@ private:
 void collect_terms(std::vector<Term>& old_terms, std::vector<Term>& new_terms) {
     std::map<std::string, int> term_map;
 
-    Term t0 = {make_zero(Int(8)), NULL};
+    Term t0 = {make_zero(Int(32)), NULL};
     new_terms.push_back(t0);
     for (size_t i = 0; i < old_terms.size(); ++i) {
         if (!old_terms[i].coeff.defined())
@@ -223,7 +223,6 @@ void collect_terms(std::vector<Term>& old_terms, std::vector<Term>& new_terms) {
                 new_terms.push_back(old_terms[i]);
             }
         } else {
-
             match_types(new_terms[0].coeff, old_terms[i].coeff);
             new_terms[0].coeff = simplify(Add::make(new_terms[0].coeff, old_terms[i].coeff));
         }
@@ -313,6 +312,17 @@ private:
     void visit(const Load *op) {solved = false;}
     void visit(const Ramp *op) {solved = false;}
     void visit(const Broadcast *op) {solved = false;}
+
+    void visit(const Cast *op) {
+        Expr value = mutate(op->value);
+        if (!value.defined()) {
+            expr = Expr();
+        } else if (value.same_as(op->value)) {
+            expr = op;
+        } else {
+            expr = Cast::make(op->type, value);
+        }
+    }
 
     template<class Cmp>
     void visit_sym_cmp(const Cmp *op) {
