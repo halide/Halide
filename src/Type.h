@@ -2,6 +2,7 @@
 #define HALIDE_TYPE_H
 
 #include <stdint.h>
+#include "Util.h"
 
 /** \file
  * Defines halide types
@@ -77,19 +78,19 @@ struct Type {
     }
 
     /** Can this type represent all values of another type? */
-    bool can_represent(Type other) const;
+    EXPORT bool can_represent(Type other) const;
 
     /** Return an integer which is the maximum value of this type. */
-    int imax() const;
+    EXPORT int imax() const;
 
     /** Return an expression which is the maximum value of this type */
-    Expr max() const;
+    EXPORT Expr max() const;
 
     /** Return an integer which is the minimum value of this type */
-    int imin() const;
+    EXPORT int imin() const;
 
     /** Return an expression which is the minimum value of this type */
-    Expr min() const;
+    EXPORT Expr min() const;
 };
 
 /** Constructing a signed integer type */
