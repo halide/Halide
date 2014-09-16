@@ -13,8 +13,6 @@ extern "C" {
 extern char *getenv(const char *);
 extern int atoi(const char *);
 
-extern int halide_printf(void *user_context, const char *, ...);
-
 #ifndef NULL
 #define NULL 0
 #endif
