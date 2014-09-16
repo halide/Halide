@@ -18,6 +18,10 @@
 extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *name);
 extern "C" int halide_opengl_create_context(void *user_context);
 
+extern "C" void *malloc(size_t);
+extern "C" void free(void*);
+extern "C" int sscanf(const char *, const char *, ...);
+
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
 #define USED_GL_FUNCTIONS                                               \
@@ -201,10 +205,6 @@ WEAK const char *var_marker    = "/// VAR ";
 
 
 // ---------- Helper functions ----------
-
-extern "C" void *malloc(size_t);
-extern "C" void free(void*);
-extern "C" int sscanf(const char *, const char *, ...);
 
 WEAK char *strndup(const char *s, size_t n) {
     char *p = (char*)malloc(n+1);
@@ -494,14 +494,14 @@ WEAK int halide_opengl_init(void *user_context) {
         ST.minor_version = 0;
     }
     init_extensions(user_context);
-    #ifdef DEBUG
-    halide_printf(user_context, "Halide running on OpenGL %s%d.%d!\n",
-                  (ST.profile == OpenGL) ? "" : "ES ", major, minor);
-    halide_printf(user_context, "  vertex_array_objects: %s\n",
-                  ST.have_vertex_array_objects ? "yes" : "no");
-    halide_printf(user_context, "  texture_rg: %s\n",
-                  ST.have_texture_rg ? "yes" : "no");
-    #endif
+    debug(user_context)
+        << "Halide running on OpenGL "
+        << ((ST.profile == OpenGL) ? "" : "ES ")
+        << major << "." << minor << "\n"
+        << "  vertex_array_objects: "
+        << (ST.have_vertex_array_objects ? "yes\n" : "no\n")
+        << "  texture_rg: "
+        << (ST.have_texture_rg ? "yes\n" : "no\n");
 
     // Initialize framebuffer.
     ST.GenFramebuffers(1, &ST.framebuffer_id);
