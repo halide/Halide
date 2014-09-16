@@ -395,6 +395,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
 target_link_libraries(Halide InitialModules ${LIBS})
 
+if (NOT WIN32)
+  target_link_libraries(Halide dl pthread z tinfo)
+endif()
+
 if (NOT HALIDE_SHARED_LIBRARY)
 
 # For the Xcode build, we want the static library version of libHalide.a
