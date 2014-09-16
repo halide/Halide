@@ -43,6 +43,7 @@ typedef void GLvoid;
 #define GL_RGBA 0x1908
 #define GL_LUMINANCE 0x1909
 #define GL_VERSION 0x1F02
+#define GL_EXTENSIONS 0x1F03
 #define GL_NEAREST 0x2600
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_MIN_FILTER 0x2801
@@ -129,10 +130,14 @@ typedef void (*PFNGLUNIFORM2IVPROC) (GLint location, GLsizei count, const GLint 
 typedef void (*PFNGLUNIFORM1FVPROC) (GLint location, GLsizei count, const GLfloat *value);
 typedef void (*PFNGLUSEPROGRAMPROC) (GLuint program);
 typedef void (*PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
+typedef void (*PFNGLGETINTEGERV)(GLenum pname, GLint *data);
 
 
 // ---------- OpenGL 3.0 ----------
 
+#define GL_MAJOR_VERSION 0x821B
+#define GL_MINOR_VERSION 0x821C
+#define GL_NUM_EXTENSIONS 0x821D
 #define GL_RG 0x8227
 #define GL_R32F 0x822E
 #define GL_RG32F 0x8230
@@ -154,5 +159,6 @@ typedef void (*PFNGLGENFRAMEBUFFERSPROC) (GLsizei n, GLuint *framebuffers);
 typedef void (*PFNGLGENVERTEXARRAYS)(GLsizei n, GLuint *arrays);
 typedef void (*PFNGLBINDVERTEXARRAY)(GLuint array);
 typedef void (*PFNGLDELETEVERTEXARRAYS)(GLsizei n, const GLuint *arrays);
+typedef const GLubyte *(*PFNGLGETSTRINGI)(GLenum name, GLuint index);
 
 #endif  // MINI_OPENGL_H
