@@ -1387,16 +1387,23 @@ private:
                 expr = mutate(mul_a->a < mul_b->a);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
+                expr = const_true(delta_ramp->width);
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base >= 0))) {
+                expr = const_false(delta_ramp->width);
+            } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base < 0))) {
+                expr = const_true(delta_ramp->width);
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
+                expr = const_false(delta_ramp->width);
             } else {
                 expr = LT::make(a, b);
             }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
-        } else if (delta_ramp && is_positive_const(delta_ramp->stride)) {
-            Expr last_lane = delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1);
-            mutate(Broadcast::make(last_lane < 0, delta_ramp->width));
-        } else if (delta_ramp && is_negative_const(delta_ramp->stride)) {
-            mutate(Broadcast::make(delta_ramp->base < 0, delta_ramp->width));
         } else {
             expr = LT::make(a, b);
         }
@@ -2600,4 +2607,3 @@ void simplify_test() {
 }
 }
 }
-
