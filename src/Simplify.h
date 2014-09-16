@@ -31,7 +31,7 @@ EXPORT Expr simplify(Expr, bool simplify_lets = true,
 /** Simplify expressions found in a statement, but don't simplify
  * across different statements. This is safe to perform at an earlier
  * stage in lowering than full simplification of a stmt. */
-Stmt simplify_exprs(Stmt);
+EXPORT Stmt simplify_exprs(Stmt);
 
 /** Implementations of division and mod that are specific to Halide.
  * Use these implementations; do not use native C division or mod to
@@ -91,7 +91,7 @@ template<> inline double div_imp<double>(double a, double b) {
 }
 
 
-void simplify_test();
+EXPORT void simplify_test();
 
 }
 }
