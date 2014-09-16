@@ -116,21 +116,19 @@ private:
     bool const_castint(Expr e, int *i) {
         const IntImm *intimm = e.as<IntImm>();
         const Cast *cast = e.as<Cast>();
+        const int max_bits = (int)(sizeof(int) * 8);
         if (intimm) {
             *i = intimm->value;
             return true;
-        } else if (cast && (cast->type.is_int() || cast->type.is_uint()) &&
-                   cast->type.bits <= (int) (sizeof(int) * 8)) {
-            if (const_castint(cast->value, i)) {
-                // When fetching a cast integer, ensure that the
-                // return value is in the correct range (i.e. the
-                // canonical value) for the cast type.
-                *i = int_cast_constant(cast->type, *i);
-                return true;
-            } else {
-                return false;
-            }
-
+        } else if (cast &&
+                   ((cast->type.is_int() && cast->type.bits <= max_bits) ||
+                    (cast->type.is_uint() && cast->type.bits <= max_bits)) &&
+                   const_castint(cast->value, i)) {
+            // When fetching a cast integer, ensure that the
+            // return value is in the correct range (i.e. the
+            // canonical value) for the cast type.
+            *i = int_cast_constant(cast->type, *i);
+            return true;
         } else {
             return false;
         }
@@ -153,11 +151,11 @@ private:
             // outer cast is narrower, the inner cast can be
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
-        } else if (cast && const_castint(cast->value, &i) &&
-                   (cast->type.is_int() || cast->type.bits < cast->value.type().bits || i >= 0)) {
-            // cast of cast of const int can just be cast of const
-            // int (with the int suitably munged to fit in the
-            // intermediate type).
+        } else if (op->type.bits < 64 && cast && const_castint(cast->value, &i)) {
+            // cast of cast of const int can just be cast of const int
+            // (with the int suitably munged to fit in the
+            // intermediate type). We can't do the munging correctly
+            // when the result has > 32 bits.
             // u16(u8(255)) -> u16(255)
             // u16(u8(257)) -> u16(1)
             expr = mutate(Cast::make(op->type, do_indirect_int_cast(cast->type, i)));
@@ -256,9 +254,6 @@ private:
 
         add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
 
-        const Cast *cast_a = a.as<Cast>();
-        const Cast *cast_b = b.as<Cast>();
-
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
@@ -336,12 +331,6 @@ private:
         } else if (mul_a && is_negative_negatable_const(mul_a->b)) {
             // a*-x + b -> b - a*x
             expr = mutate(b - mul_a->a * (-mul_a->b));
-        } else if (cast_a && cast_b &&
-                   cast_a->value.type() == cast_b->value.type() &&
-                   (op->type.is_int() || op->type.is_uint()) &&
-                   is_const(cast_a->value) && is_const(cast_b->value)) {
-            // u8(5) + u8(5) = u8(10)
-            expr = Cast::make(op->type, Add::make(cast_a->value, cast_b->value));
         } else if (min_a && sub_a_b && no_overflow(op->type) && equal(sub_a_b->b, b)) {
             // min(a, b-c) + c -> min(a+c, b)
             expr = mutate(Min::make(Add::make(min_a->a, b), sub_a_b->a));
@@ -2421,6 +2410,12 @@ void simplify_test() {
     check(Cast::make(Int(16), x) << -10, Cast::make(Int(16), x) / 1024);
     // Correctly triggers a warning:
     //check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
+
+    // Check that chains of widening casts don't lose the distinction
+    // between zero-extending and sign-extending.
+    check(Cast::make(UInt(64), Cast::make(UInt(32), Cast::make(Int(8), -1))),
+          Cast::make(UInt(64), Cast::make(UInt(32), -1)));
+
 
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
