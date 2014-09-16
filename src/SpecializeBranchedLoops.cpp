@@ -403,13 +403,18 @@ private:
             extent = b1.extent;
             b1.expr.accept(this);
 
+            // If we didn't branch any further, push these branches onto the stack.
+            if (branches.size() == num_branches) {
+                branches.push_back(b1);
+            }
+            num_branches = branches.size();
+
             min = b2.min;
             extent = b2.extent;
             b2.expr.accept(this);
 
             // If we didn't branch any further, push these branches onto the stack.
             if (branches.size() == num_branches) {
-                branches.push_back(b1);
                 branches.push_back(b2);
             }
 
@@ -516,18 +521,21 @@ private:
                 extent = b1.extent;
                 b1.stmt.accept(this);
 
-                if (has_else) {
-                  min = b2.min;
-                  extent = b2.extent;
-                  b2.stmt.accept(this);
-                }
-
-                // If we didn't branch any further, push these branches onto the stack.
+                // If we didn't branch any further, push this branches onto the stack.
                 if (branches.size() == num_branches) {
                     b1.stmt = wrap_lets(b1.stmt);
                     branches.push_back(b1);
+                }
 
-                    if (has_else) {
+                if (has_else) {
+                    num_branches = branches.size();
+
+                    min = b2.min;
+                    extent = b2.extent;
+                    b2.stmt.accept(this);
+
+                    // If we didn't branch any further, push this branches onto the stack.
+                    if (branches.size() == num_branches) {
                         b2.stmt = wrap_lets(b2.stmt);
                         branches.push_back(b2);
                     }
@@ -571,7 +579,7 @@ private:
         loop_vars.push(op->name, 0);
         Stmt body = mutate(op->body);
 
-        if (stmt_branches_in_var(op->name, body, &scope)) {
+        if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, &scope)) {
             std::vector<Branch> branches;
             collect_branches(body, op->name, op->min, op->extent, branches, &scope, &loop_vars);
 
