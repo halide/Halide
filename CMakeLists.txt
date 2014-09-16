@@ -89,8 +89,6 @@ function(halide_project name folder)
   set_target_properties("${name}" PROPERTIES FOLDER "${folder}")
   if (WIN32)
     set_target_properties("${name}" PROPERTIES LINK_FLAGS "/STACK:8388608,1048576")
-  else()
-    set_target_properties("${name}" PROPERTIES LINK_FLAGS "-ldl -lpthread -lz")
   endif()
 endfunction(halide_project)
 

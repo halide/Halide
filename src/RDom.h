@@ -43,17 +43,17 @@ public:
     }
 
     /** The minimum value that this variable will take on */
-    Expr min() const;
+    EXPORT Expr min() const;
 
     /** The number that this variable will take on. The maximum value
      * of this variable will be min() + extent() - 1 */
-    Expr extent() const;
+    EXPORT Expr extent() const;
 
     /** The reduction domain this is associated with. */
-    Internal::ReductionDomain domain() const {return _domain;}
+    EXPORT Internal::ReductionDomain domain() const {return _domain;}
 
     /** The name of this reduction variable */
-    const std::string &name() const;
+    EXPORT const std::string &name() const;
 
     /** Reduction variables can be used as expressions. */
     EXPORT operator Expr() const;
