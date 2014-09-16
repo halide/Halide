@@ -60,7 +60,7 @@ void IRPrinter::test() {
     Stmt store2 = Store::make("out", call + 1, x);
     Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , store2);
     Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
-    Stmt assertion = AssertStmt::make(y > 3, "y is greater than %d", vec<Expr>(3));
+    Stmt assertion = AssertStmt::make(y > 3, vec<Expr>(Expr("y is greater than "), 3));
     Stmt block = Block::make(assertion, pipeline);
     Stmt let_stmt = LetStmt::make("y", 17, block);
     Stmt allocate = Allocate::make("buf", f32, vec(Expr(1023)), const_true(), let_stmt);
@@ -70,7 +70,7 @@ void IRPrinter::test() {
     std::string correct_source = \
         "allocate buf[float32 * 1023]\n"
         "let y = 17\n"
-        "assert((y > 3), \"y is greater than %d\", 3)\n"
+        "assert((y > 3), stringify(\"y is greater than \", 3))\n"
         "produce buf {\n"
         "  parallel (x, -2, (y + 2)) {\n"
         "    buf[(y - 1)] = ((x*17)/(x - 3))\n"
@@ -386,11 +386,8 @@ void IRPrinter::visit(const AssertStmt *op) {
     do_indent();
     stream << "assert(";
     print(op->condition);
-    stream << ", " << '"' << op->message << '"';
-    for (size_t i = 0; i < op->args.size(); i++) {
-        stream << ", ";
-        print(op->args[i]);
-    }
+    stream << ", ";
+    print(op->message);
     stream << ")\n";
 }
 

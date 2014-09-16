@@ -255,10 +255,11 @@ public:
 
         const AssertStmt *s = stmt.as<AssertStmt>();
 
-        if (compare_names(s->message, op->message)) return;
-
         expr = s->condition;
         op->condition.accept(this);
+
+        expr = s->message;
+        op->message.accept(this);
     }
 
     void visit(const Pipeline *op) {
