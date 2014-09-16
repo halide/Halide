@@ -56,6 +56,17 @@ public:
         alignment_info.set_containing_scope(ai);
         bounds_info.set_containing_scope(bi);
     }
+
+    /*
+    // Uncomment to debug all Expr mutations.
+    Expr mutate(Expr e) {
+        Expr new_e = IRMutator::mutate(e);
+        debug(0) << e << " -> " << new_e << "\n";
+        return new_e;
+    }
+    using IRMutator::mutate;
+    */
+
 private:
     bool simplify_lets;
 
@@ -837,6 +848,8 @@ private:
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Min *min_a = a.as<Min>();
@@ -881,7 +894,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -943,9 +956,6 @@ private:
         } else if (max_a && equal(max_a->b, b)) {
             // min(max(x, y), y) -> y
             expr = b;
-        } else if (min_a && is_simple_const(min_a->b) && is_simple_const(b)) {
-            // min(min(x, 4), 5) -> min(x, 4)
-            expr = Min::make(min_a->a, mutate(Min::make(min_a->b, b)));
         } else if (min_a && (equal(min_a->b, b) || equal(min_a->a, b))) {
             // min(min(x, y), y) -> min(x, y)
             expr = a;
@@ -961,7 +971,6 @@ private:
         } else if (min_a && min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
             // min(min(min(min(min(x, y), z), w), l), y) -> min(min(min(min(x, y), z), w), l)
             expr = a;
-
         } else if (max_a && max_b && equal(max_a->a, max_b->a)) {
             // Distributive law for min/max
             // min(max(x, y), max(x, z)) -> max(min(y, z), x)
@@ -1000,7 +1009,14 @@ private:
         } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
-
+        } else if (min_a && is_simple_const(min_a->b)) {
+            if (is_simple_const(b)) {
+                // min(min(x, 4), 5) -> min(x, 4)
+                expr = Min::make(min_a->a, mutate(Min::make(b, min_a->b)));
+            } else {
+                // min(min(x, 4), y) -> min(min(x, y), 4)
+                expr = mutate(Min::make(Min::make(min_a->a, b), min_a->b));
+            }
         } else if (div_a && div_b &&
                    const_int(div_a->b, &ia) && ia &&
                    const_int(div_b->b, &ib) &&
@@ -1010,6 +1026,24 @@ private:
                 expr = mutate(min(div_a->a, div_b->a) / ia);
             } else {
                 expr = mutate(max(div_a->a, div_b->a) / ia);
+            }
+        } else if (mul_a && mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia == ib)) {
+            if (ia > 0) {
+                expr = mutate(min(mul_a->a, mul_b->a) * ia);
+            } else {
+                expr = mutate(max(mul_a->a, mul_b->a) * ia);
+            }
+        } else if (mul_a && const_int(mul_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ia && (ib % ia == 0)) {
+            // min(x*8, 24) -> min(x, 3)*8
+            if (ia > 0) {
+                expr = mutate(min(mul_a->a, ib/ia) * ia);
+            } else {
+                expr = mutate(max(mul_a->a, ib/ia) * ia);
             }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -1034,6 +1068,8 @@ private:
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Max *max_a = a.as<Max>();
@@ -1071,7 +1107,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1119,9 +1155,6 @@ private:
         } else if (min_a && equal(min_a->b, b)) {
             // max(min(x, y), y) -> y
             expr = b;
-        } else if (max_a && is_simple_const(max_a->b) && is_simple_const(b)) {
-            // max(max(x, 4), 5) -> max(x, 5)
-            expr = Max::make(max_a->a, mutate(Max::make(max_a->b, b)));
         } else if (max_a && (equal(max_a->b, b) || equal(max_a->a, b))) {
             // max(max(x, y), y) -> max(x, y)
             expr = a;
@@ -1176,7 +1209,14 @@ private:
         } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->a)) {
             // max(a + b, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
-
+        } else if (max_a && is_simple_const(max_a->b)) {
+            if (is_simple_const(b)) {
+                // max(max(x, 4), 5) -> max(x, 4)
+                expr = Max::make(max_a->a, mutate(Max::make(b, max_a->b)));
+            } else {
+                // max(max(x, 4), y) -> max(max(x, y), 4)
+                expr = mutate(Max::make(Max::make(max_a->a, b), max_a->b));
+            }
         } else if (div_a && div_b &&
                    const_int(div_a->b, &ia) && ia &&
                    const_int(div_b->b, &ib) &&
@@ -1186,6 +1226,24 @@ private:
                 expr = mutate(max(div_a->a, div_b->a) / ia);
             } else {
                 expr = mutate(min(div_a->a, div_b->a) / ia);
+            }
+        } else if (mul_a && mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia == ib)) {
+            if (ia > 0) {
+                expr = mutate(max(mul_a->a, mul_b->a) * ia);
+            } else {
+                expr = mutate(min(mul_a->a, mul_b->a) * ia);
+            }
+        } else if (mul_a && const_int(mul_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ia && (ib % ia == 0)) {
+            // max(x*8, 24) -> max(x, 3)*8
+            if (ia > 0) {
+                expr = mutate(max(mul_a->a, ib/ia) * ia);
+            } else {
+                expr = mutate(min(mul_a->a, ib/ia) * ia);
             }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -2443,6 +2501,19 @@ void simplify_test() {
 
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
+
+    check(min(x*43, y*43), min(x, y)*43);
+    check(max(x*43, y*43), max(x, y)*43);
+    check(min(x*-43, y*-43), max(x, y)*-43);
+    check(max(x*-43, y*-43), min(x, y)*-43);
+
+    check(min(min(x, 4), y), min(min(x, y), 4));
+    check(max(max(x, 4), y), max(max(x, y), 4));
+
+    check(min(x*8, 24), min(x, 3)*8);
+    check(max(x*8, 24), max(x, 3)*8);
+    check(min(x*-8, 24), max(x, -3)*-8);
+    check(max(x*-8, 24), min(x, -3)*-8);
 
     //check(max(x, 16) - 16, max(x + -16, 0));
     //check(min(x, -4) + 7, min(x + 7, 3));
