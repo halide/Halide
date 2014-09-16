@@ -71,21 +71,28 @@ WEAK size_t full_extent(const buffer_t &buf) {
 }
 
 WEAK void copy_from_to(void *user_context, const buffer_t &from, buffer_t &to) {
-    size_t buffer_size = full_extent(from);;
     halide_assert(user_context, from.elem_size == to.elem_size);
     for (int i = 0; i < 4; i++) {
         halide_assert(user_context, from.extent[i] == to.extent[i]);
         halide_assert(user_context, from.stride[i] == to.stride[i]);
     }
+#if 0
+    size_t buffer_size = full_extent(from);;
     memcpy(to.host, from.host, buffer_size * from.elem_size);
+#else
+    to.host = from.host;
+#endif
 }
 
 WEAK buffer_t copy_of_buffer(void *user_context, const buffer_t &buf) {
     buffer_t result = buf;
+#if 0
     size_t buffer_size = full_extent(result);
     // TODO: ERROR RETURN
     result.host = (uint8_t *)halide_malloc(user_context, buffer_size * result.elem_size);
+#else   
     copy_from_to(user_context, buf, result);
+#endif
     return result;
 }
 
@@ -379,7 +386,8 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
                 va_start(tuple_buffers, tuple_count);
                 for (int32_t i = 0; i < tuple_count; i++) {
                     buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
-                    copy_from_to(user_context, entry->buffer(i), *buf);
+                    //copy_from_to(user_context, entry->buffer(i), *buf);
+                    *buf = entry->buffer(i);
                 }
                 va_end(tuple_buffers);
 
@@ -390,6 +398,16 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
         }
         entry = entry->next;
     }
+
+    va_list tuple_buffers;
+    va_start(tuple_buffers, tuple_count);
+    for (int32_t i = 0; i < tuple_count; i++) {
+        buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+        size_t buffer_size = full_extent(*buf);
+        // TODO: ERROR RETURN
+        buf->host = (uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size);
+    }
+    va_end(tuple_buffers);
 
 #if CACHE_DEBUGGING
     validate_cache();
@@ -429,17 +447,27 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
             entry->tuple_count == tuple_count) {
 
             bool all_bounds_equal = true;
-
+            bool no_host_pointers_equal = true;
             {
                 va_list tuple_buffers;
                 va_start(tuple_buffers, tuple_count);
                 for (int32_t i = 0; all_bounds_equal && i < tuple_count; i++) {
                     buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
                     all_bounds_equal = bounds_equal(entry->buffer(i), *buf);
+                    if (entry->buffer(i).host == buf->host) {
+                        no_host_pointers_equal = false;
+                    }
                 }
                 va_end(tuple_buffers);
             }
             if (all_bounds_equal) {
+                halide_assert(user_context, no_host_pointers_equal);
+                va_list tuple_buffers;
+                va_start(tuple_buffers, tuple_count);
+                for (int32_t i = 0; i < tuple_count; i++) {
+                    halide_dev_free(user_context, &entry->buffer(i));
+                    halide_free(user_context, entry->buffer(i).host);
+                }               
                 return;
             }
         }
