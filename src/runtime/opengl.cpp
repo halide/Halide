@@ -68,7 +68,9 @@ extern "C" int sscanf(const char *, const char *, ...);
     GLFUNC(PFNGLDISABLEVERTEXATTRIBARRAYPROC, DisableVertexAttribArray); \
     GLFUNC(PFNGLPIXELSTOREIPROC, PixelStorei);                          \
     GLFUNC(PFNGLREADPIXELS, ReadPixels);                                \
-    GLFUNC(PFNGLGETSTRINGPROC, GetString)
+    GLFUNC(PFNGLGETSTRINGPROC, GetString);                              \
+    GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                              \
+    GLFUNC(PFNGLGETSTRINGI, GetStringi)
 
 // ---------- Types ----------
 
@@ -443,6 +445,34 @@ WEAK int load_gl_func(void *user_context, const char *name, void **ptr) {
     return 0;
 }
 
+WEAK bool extension_supported(void *user_context, const char *name) {
+    if (ST.major_version >= 3) {
+        GLint num_extensions = 0;
+        ST.GetIntegerv(GL_NUM_EXTENSIONS, &num_extensions);
+        for (int i = 0; i < num_extensions; i++) {
+            const char *ext = (const char *)ST.GetStringi(GL_EXTENSIONS, i);
+            if (strcmp(ext, name) == 0) {
+                return true;
+            }
+        }
+    } else {
+        const char *start = (const char *)ST.GetString(GL_EXTENSIONS);
+        if (!start) {
+            return false;
+        }
+        while (const char *pos = strstr(start, name)) {
+            const char *end = pos + strlen(name);
+            // Ensure the found match is a full word, not a substring.
+            if ((pos == start || pos[-1] == ' ') &&
+                (*end == ' ' || *end == '\0')) {
+                return true;
+            }
+            start = end;
+        }
+    }
+    return false;
+}
+
 // Check for availability of various version- and extension-specific features
 // and hook up functions pointers as necessary
 WEAK void init_extensions(void *user_context) {
@@ -453,13 +483,22 @@ WEAK void init_extensions(void *user_context) {
         load_gl_func(user_context, "glBindVertexArray", (void**)&ST.BindVertexArray);
         load_gl_func(user_context, "glDeleteVertexArrays", (void**)&ST.DeleteVertexArrays);
     }
-    // TODO: optionally, check for texture_rg extension
-    ST.have_texture_rg = ST.profile == OpenGL && ST.major_version >= 3;
+
+    // texture_rg
+    if (ST.profile == OpenGL) {
+        ST.have_texture_rg = ST.major_version >= 3 ||
+            extension_supported(user_context, "GL_ARB_texture_rg");
+    } else {
+        ST.have_texture_rg = ST.major_version >= 3 ||
+            extension_supported(user_context, "GL_EXT_texture_rg");
+    }
 }
 
 // Initialize the runtime, in particular all fields in halide_opengl_state.
 WEAK int halide_opengl_init(void *user_context) {
-    if (ST.initialized) return 0;
+    if (ST.initialized) {
+        return 0;
+    }
 
     global_state = GlobalState();
 
