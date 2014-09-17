@@ -46,6 +46,8 @@ svn up $ROOT\llvm
 $COMMIT = git show HEAD | head -n1 | cut -b8-
 $DATE = date +%Y_%m_%d
 
+if (true) {
+
 # Build latest llvm
 cd $ROOT\llvm
 if (! (Test-Path build-64)) {
@@ -121,7 +123,7 @@ if ($LastExitCode) {
 }
 
 cd $ROOT
-if (! (Test-Path build_32_pnacl)) {
+if (! (Test-Path build_32_pnacl)) { 
   mkdir build_32_pnacl
 }
 cd build_32_pnacl
@@ -131,6 +133,7 @@ MSBuild.exe /m /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
   exit $LastExitCode
+}
 }
 
 # Run the tests
