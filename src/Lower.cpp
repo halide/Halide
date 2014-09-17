@@ -1518,7 +1518,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
 
                 std::string extent0_name = f.name() + ".0.extent." + dim;
                 if (replace_with_constrained.count(extent0_name) > 0 ) {
-                    min_constrained = replace_with_constrained[extent0_name];
+                    extent_constrained = replace_with_constrained[extent0_name];
                 } else {
                     extent_constrained = Variable::make(Int(32), extent0_name);
                 }
