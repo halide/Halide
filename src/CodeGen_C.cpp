@@ -149,8 +149,8 @@ const string preamble =
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-    "template<typename T> T mod(T a, T b) {T result = a % b; if (result < 0) result += b; return result;}\n"
-    "template<typename T> T sdiv(T a, T b) {return (a - mod(a, b))/b;}\n"
+    "template<typename T> T smod(T a, T b) {T result = a % b; if (result < 0) result += b < 0 ? -b : b; return result;}\n"
+    "template<typename T> T sdiv(T a, T b) {T q = a / b; T r = a - q*b; int bs = b >> (8*sizeof(T) - 1); int rs = r >> (8*sizeof(T) - 1); return q - (rs & bs) + (rs & ~bs);}\n"
 
     // This may look wasteful, but it's the right way to do
     // it. Compilers understand memcpy and will convert it to a no-op
@@ -569,8 +569,10 @@ void CodeGen_C::visit(const Mod *op) {
         ostringstream oss;
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "smod", vec(op->a, op->b), Call::Extern));
     } else {
-        print_expr(Call::make(op->type, "mod", vec(op->a, op->b), Call::Extern));
+        visit_binop(op->type, op->a, op->b, "%");
     }
 }
 

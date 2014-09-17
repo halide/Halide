@@ -18,8 +18,13 @@ namespace Halide {
  * single-dimensional RDom to an RVar. */
 class RVar {
     std::string _name;
-    Expr _min, _extent;
     Internal::ReductionDomain _domain;
+    int _index;
+
+    const Internal::ReductionVariable &_var() const {
+        return _domain.domain().at(_index);
+    }
+
 public:
     /** An empty reduction variable. */
     RVar() : _name(Internal::make_entity_name(this, "Halide::RVar", 'r')) {}
@@ -33,21 +38,22 @@ public:
 
     /** Construct a reduction variable with the given name and
      * bounds. Must be a member of the given reduction domain. */
-    RVar(std::string name, Expr min, Expr extent, Internal::ReductionDomain domain) :
-        _name(name), _min(min), _extent(extent), _domain(domain) {}
+    RVar(Internal::ReductionDomain domain, int index) :
+        _domain(domain), _index(index) {
+    }
 
     /** The minimum value that this variable will take on */
-    Expr min() const {return _min;}
+    EXPORT Expr min() const;
 
     /** The number that this variable will take on. The maximum value
      * of this variable will be min() + extent() - 1 */
-    Expr extent() const {return _extent;}
+    EXPORT Expr extent() const;
 
     /** The reduction domain this is associated with. */
-    Internal::ReductionDomain domain() const {return _domain;}
+    EXPORT Internal::ReductionDomain domain() const {return _domain;}
 
     /** The name of this reduction variable */
-    const std::string &name() const {return _name;}
+    EXPORT const std::string &name() const;
 
     /** Reduction variables can be used as expressions. */
     EXPORT operator Expr() const;
@@ -172,29 +178,39 @@ public:
  */
 class RDom {
     Internal::ReductionDomain dom;
+
+    void init_vars(std::string name);
+
 public:
     /** Construct an undefined reduction domain. */
     EXPORT RDom() {}
 
-    /** Construct a single-dimensional reduction domain with the given
-     * name. If the name is left blank, a unique one is
-     * auto-generated. */
+    /** Construct a one-dimensional reduction domain with the given name. If the name
+     * is left blank, a unique one is auto-generated. */
     EXPORT RDom(Expr min, Expr extent, std::string name = "");
 
-    /** Construct a two-dimensional reduction domain with the given
-     * name. If the name is left blank, a unique one is
-     * auto-generated. */
+    /** Construct a two-dimensional reduction domain with the given name. If the name
+     * is left blank, a unique one is auto-generated. */
     EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, std::string name = "");
 
-    /** Construct a three-dimensional reduction domain with the given
+    /** Construct a multi-dimensional reduction domain with the given
      * name. If the name is left blank, a unique one is
      * auto-generated. */
+    // @{
     EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+                std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+                Expr min4, Expr extent4, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+                Expr min4, Expr extent4, Expr min5, Expr extent5, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+                Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, std::string name = "");
+    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+                Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, Expr min7, Expr extent7,
+                std::string name = "");
+    // @}
 
-    /** Construct a four-dimensional reduction domain with the given
-     * name. If the name is left blank, a unique one is
-     * auto-generated. */
-    EXPORT RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, std::string name = "");
     /** Construct a reduction domain that iterates over all points in
      * a given Buffer, Image, or ImageParam. Has the same
      * dimensionality as the argument. */
@@ -219,7 +235,7 @@ public:
     EXPORT int dimensions() const;
 
     /** Get at one of the dimensions of the reduction domain */
-    EXPORT RVar operator[](int);
+    EXPORT RVar operator[](int) const;
 
     /** Single-dimensional reduction domains can be used as RVars directly. */
     EXPORT operator RVar() const;
@@ -227,8 +243,8 @@ public:
     /** Single-dimensional reduction domains can be also be used as Exprs directly. */
     EXPORT operator Expr() const;
 
-    /** Direct access to the four dimensions of the reduction
-     * domain. Some of these dimensions may be undefined if the
+    /** Direct access to the first four dimensions of the reduction
+     * domain. Some of these variables may be undefined if the
      * reduction domain has fewer than four dimensions. */
     // @{
     RVar x, y, z, w;
