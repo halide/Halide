@@ -136,14 +136,14 @@ bool is_negative_const(Expr e) {
     return false;
 }
 
-bool is_negative_negatable_const(Expr e) {
+bool is_negative_negatable_const(Expr e, Type T) {
     if (const IntImm *i = e.as<IntImm>()) {
         return i->value < 0 &&
-               i->value != e.type().imin();
+               i->value != T.imin();
     }
     if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
     if (const Cast *c = e.as<Cast>()) {
-        return is_negative_negatable_const(c->value);
+        return is_negative_negatable_const(c->value, c->type);
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -153,6 +153,10 @@ bool is_negative_negatable_const(Expr e) {
         return is_negative_negatable_const(b->value);
     }
     return false;
+}
+
+bool is_negative_negatable_const(Expr e) {
+    return is_negative_negatable_const(e, e.type());
 }
 
 bool is_zero(Expr e) {

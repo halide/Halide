@@ -5,6 +5,8 @@
 
 namespace Halide {
 
+using namespace Internal;
+
 using std::string;
 using std::vector;
 
@@ -13,161 +15,222 @@ RVar::operator Expr() const {
         user_error << "Use of undefined RDom dimension: " <<
             (name().empty() ? "<unknown>" : name()) << "\n";
     }
-    return Internal::Variable::make(Int(32), name(), domain());
+    return Variable::make(Int(32), name(), domain());
 }
 
-Internal::ReductionDomain build_domain(string name0, Expr min0, Expr extent0,
-                                       string name1, Expr min1, Expr extent1,
-                                       string name2, Expr min2, Expr extent2,
-                                       string name3, Expr min3, Expr extent3) {
-    vector<Internal::ReductionVariable> d;
-    if (min0.defined()) {
-        Internal::ReductionVariable v = {name0, min0, extent0};
-        d.push_back(v);
+Expr RVar::min() const {
+    if (_domain.defined()) {
+        return _var().min;
+    } else {
+        return Expr();
     }
-    if (min1.defined()) {
-        Internal::ReductionVariable v = {name1, min1, extent1};
-        d.push_back(v);
-    }
-    if (min2.defined()) {
-        Internal::ReductionVariable v = {name2, min2, extent2};
-        d.push_back(v);
-    }
-    if (min3.defined()) {
-        Internal::ReductionVariable v = {name3, min3, extent3};
-        d.push_back(v);
-    }
+}
 
-    Internal::ReductionDomain dom(d);
+Expr RVar::extent() const {
+    if (_domain.defined()) {
+        return _var().extent;
+    } else {
+        return Expr();
+    }
+}
 
+const std::string &RVar::name() const {
+    if (_domain.defined()) {
+        return _var().var;
+    } else {
+        return _name;
+    }
+}
+
+
+template <int N>
+ReductionDomain build_domain(ReductionVariable (&vars)[N]) {
+    vector<ReductionVariable> d(&vars[0], &vars[N]);
+    ReductionDomain dom(d);
     return dom;
 }
 
-RDom::RDom(Internal::ReductionDomain d) : dom(d) {
-    const std::vector<Internal::ReductionVariable> &vars = dom.domain();
-    if (vars.size() > 0) {
-        x = RVar(vars[0].var, vars[0].min, vars[0].extent, d);
+// This just initializes the predefined x, y, z, w members of RDom.
+void RDom::init_vars(string name) {
+    static string var_names[] = { "x", "y", "z", "w" };
+
+    const std::vector<ReductionVariable> &dom_vars = dom.domain();
+    RVar *vars[] = { &x, &y, &z, &w };
+
+    for (size_t i = 0; i < sizeof(vars)/sizeof(vars[0]); i++) {
+        if (i < dom_vars.size()) {
+            *(vars[i]) = RVar(dom, i);
+        } else {
+            *(vars[i]) = RVar(name + "." + var_names[i]);
+        }
     }
-    if (vars.size() > 1) {
-        y = RVar(vars[1].var, vars[1].min, vars[1].extent, d);
-    }
-    if (vars.size() > 2) {
-        z = RVar(vars[2].var, vars[2].min, vars[2].extent, d);
-    }
-    if (vars.size() > 3) {
-        w = RVar(vars[3].var, vars[3].min, vars[3].extent, d);
-    }
+}
+
+RDom::RDom(ReductionDomain d) : dom(d) {
+    init_vars("");
 }
 
 // We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.
 RDom::RDom(Expr min, Expr extent, string name) {
-    min = cast<int>(min);
-    extent = cast<int>(extent);
-    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
-    dom = build_domain(name + ".x$r", min, extent,
-                       "", Expr(), Expr(),
-                       "", Expr(), Expr(),
-                       "", Expr(), Expr());
-    x = RVar(name + ".x$r", min, extent, dom);
-    y = RVar(name + ".y");
-    z = RVar(name + ".z");
-    w = RVar(name + ".w");
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min), cast<int>(extent) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
-    min0 = cast<int>(min0);
-    extent0 = cast<int>(extent0);
-    min1 = cast<int>(min1);
-    extent1 = cast<int>(extent1);
-    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
-    dom = build_domain(name + ".x$r", min0, extent0,
-                       name + ".y$r", min1, extent1,
-                       "", Expr(), Expr(),
-                       "", Expr(), Expr());
-    x = RVar(name + ".x$r", min0, extent0, dom);
-    y = RVar(name + ".y$r", min1, extent1, dom);
-    z = RVar(name + ".z");
-    w = RVar(name + ".w");
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
-    min0 = cast<int>(min0);
-    extent0 = cast<int>(extent0);
-    min1 = cast<int>(min1);
-    extent1 = cast<int>(extent1);
-    min2 = cast<int>(min2);
-    extent2 = cast<int>(extent2);
-    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
-    dom = build_domain(name + ".x$r", min0, extent0,
-                       name + ".y$r", min1, extent1,
-                       name + ".z$r", min2, extent2,
-                       "", Expr(), Expr());
-    x = RVar(name + ".x$r", min0, extent0, dom);
-    y = RVar(name + ".y$r", min1, extent1, dom);
-    z = RVar(name + ".z$r", min2, extent2, dom);
-    w = RVar(name + ".w");
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
 }
 
-RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3, string name) {
-    min0 = cast<int>(min0);
-    extent0 = cast<int>(extent0);
-    min1 = cast<int>(min1);
-    extent1 = cast<int>(extent1);
-    min2 = cast<int>(min2);
-    extent2 = cast<int>(extent2);
-    min3 = cast<int>(min3);
-    extent3 = cast<int>(extent3);
-    if (name == "") name = Internal::make_entity_name(this, "Halide::RDom", 'r');
-    dom = build_domain(name + ".x$r", min0, extent0,
-                       name + ".y$r", min1, extent1,
-                       name + ".z$r", min2, extent2,
-                       name + ".w$r", min3, extent3);
-    x = RVar(name + ".x$r", min0, extent0, dom);
-    y = RVar(name + ".y$r", min1, extent1, dom);
-    z = RVar(name + ".z$r", min2, extent2, dom);
-    w = RVar(name + ".w$r", min3, extent3, dom);
+RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+           string name) {
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
+}
+
+RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+           Expr min4, Expr extent4, string name) {
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
+        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
+}
+
+RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+           Expr min4, Expr extent4, Expr min5, Expr extent5, string name) {
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
+        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
+        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
+}
+
+RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+           Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, string name) {
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
+        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
+        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
+        { name + ".6$r", cast<int>(min6), cast<int>(extent6) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
+}
+
+RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
+           Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, Expr min7, Expr extent7,
+           string name) {
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    ReductionVariable vars[] = {
+        { name + ".x$r", cast<int>(min0), cast<int>(extent0) },
+        { name + ".y$r", cast<int>(min1), cast<int>(extent1) },
+        { name + ".z$r", cast<int>(min2), cast<int>(extent2) },
+        { name + ".w$r", cast<int>(min3), cast<int>(extent3) },
+        { name + ".4$r", cast<int>(min4), cast<int>(extent4) },
+        { name + ".5$r", cast<int>(min5), cast<int>(extent5) },
+        { name + ".6$r", cast<int>(min6), cast<int>(extent6) },
+        { name + ".7$r", cast<int>(min7), cast<int>(extent7) },
+    };
+    dom = build_domain(vars);
+    init_vars(name);
 }
 
 RDom::RDom(Buffer b) {
-    Expr min[4], extent[4];
-    for (int i = 0; i < 4; i++) {
-        if (b.dimensions() > i) {
-            min[i] = b.min(i);
-            extent[i] = b.extent(i);
-        }
+    static string var_names[] = {"x$r", "y$r", "z$r", "w$r"};
+    std::vector<ReductionVariable> vars;
+    for (int i = 0; i < b.dimensions(); i++) {
+        ReductionVariable var = {
+            b.name() + "." + var_names[i],
+            b.min(i),
+            b.extent(i)
+        };
+        vars.push_back(var);
     }
-    string names[] = {b.name() + ".x$r", b.name() + ".y$r", b.name() + ".z$r", b.name() + ".w$r"};
-    dom = build_domain(names[0], min[0], extent[0],
-                       names[1], min[1], extent[1],
-                       names[2], min[2], extent[2],
-                       names[3], min[3], extent[3]);
-    RVar *vars[] = {&x, &y, &z, &w};
-    for (int i = 0; i < 4; i++) {
-        if (b.dimensions() > i) {
-            *(vars[i]) = RVar(names[i], min[i], extent[i], dom);
-        }
-    }
+
+    dom = ReductionDomain(vars);
+    init_vars(b.name());
 }
 
 RDom::RDom(ImageParam p) {
-    Expr min[4], extent[4];
-    for (int i = 0; i < 4; i++) {
-        if (p.dimensions() > i) {
-            min[i] = 0;
-            extent[i] = p.extent(i);
-        }
+    static string var_names[] = {"x$r", "y$r", "z$r", "w$r"};
+    std::vector<ReductionVariable> vars;
+    for (int i = 0; i < p.dimensions(); i++) {
+        ReductionVariable var = {
+            p.name() + "." + var_names[i],
+            p.min(i),
+            p.extent(i)
+        };
+        vars.push_back(var);
     }
-    string names[] = {p.name() + ".x$r", p.name() + ".y$r", p.name() + ".z$r", p.name() + ".w$r"};
-    dom = build_domain(names[0], min[0], extent[0],
-                       names[1], min[1], extent[1],
-                       names[2], min[2], extent[2],
-                       names[3], min[3], extent[3]);
-    RVar *vars[] = {&x, &y, &z, &w};
-    for (int i = 0; i < 4; i++) {
-        if (p.dimensions() > i) {
-            *(vars[i]) = RVar(names[i], min[i], extent[i], dom);
-        }
-    }
+
+    dom = ReductionDomain(vars);
+    init_vars(p.name());
 }
 
 
@@ -175,11 +238,14 @@ int RDom::dimensions() const {
     return (int)dom.domain().size();
 }
 
-RVar RDom::operator[](int i) {
+RVar RDom::operator[](int i) const {
     if (i == 0) return x;
     if (i == 1) return y;
     if (i == 2) return z;
     if (i == 3) return w;
+    if (i < dimensions()) {
+        return RVar(dom, i);
+    }
     user_error << "Reduction domain index out of bounds: " << i << "\n";
     return x; // Keep the compiler happy
 }

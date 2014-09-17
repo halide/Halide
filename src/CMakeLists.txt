@@ -7,10 +7,14 @@ if (MSVC)
   add_definitions("-D_CRT_SECURE_NO_WARNINGS")
   add_definitions("-D_SCL_SECURE_NO_WARNINGS")
   add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
+  # -g produces dwarf debugging info, which is not useful on windows
+  #  (and fails to compile due to llvm bug 15393)
+  set(RUNTIME_DEBUG_FLAG "")
 else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")
   add_definitions("-std=c++11")
+  set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
 if (HALIDE_SHARED_LIBRARY)
@@ -147,7 +151,7 @@ foreach (i ${RUNTIME_CPP} )
 
     add_custom_command(OUTPUT "${LL_D}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -g -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
                        COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
@@ -391,6 +395,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   ${HEADER_FILES})
 
 target_link_libraries(Halide InitialModules ${LIBS})
+
+if (NOT WIN32)
+  target_link_libraries(Halide dl pthread z tinfo)
+endif()
 
 if (NOT HALIDE_SHARED_LIBRARY)
 
