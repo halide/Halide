@@ -15,7 +15,7 @@
 #include "Bounds.h"
 #include "Deinterleave.h"
 
-#if defined(_WIN32)
+#ifdef _MSC_VER
 #define snprintf _snprintf
 #endif
 
