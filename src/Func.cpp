@@ -218,14 +218,14 @@ int Func::dimensions() const {
 }
 
 FuncRefVar Func::operator()() const {
-    // Bulk up the argument list using implicit vars
+    // Bulk up the vars using implicit vars
     vector<Var> args;
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
 
 FuncRefVar Func::operator()(Var x) const {
-    // Bulk up the argument list using implicit vars
+    // Bulk up the vars using implicit vars
     vector<Var> args = vec(x);
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
@@ -368,6 +368,10 @@ bool var_name_match(string candidate, string var) {
 }
 }
 
+const std::string &Stage::name() const {
+    return stage_name;
+}
+
 void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
     bool found = false;
     vector<Dim> &dims = schedule.dims();
@@ -380,7 +384,8 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
             // validate that this doesn't introduce a race condition.
             if (!dims[i].pure && var.is_rvar && (t == For::Vectorized || t == For::Parallel)) {
                 user_assert(schedule.allow_race_conditions())
-                    << "Marking var " << var.name()
+                    << "In schedule for " << stage_name
+                    << ", marking var " << var.name()
                     << " as parallel or vectorized may introduce a race"
                     << " condition resulting in incorrect output."
                     << " It is possible to override this error using"
@@ -394,23 +399,25 @@ void Stage::set_dim_type(VarOrRVar var, For::ForType t) {
 
         } else if (t == For::Vectorized) {
             user_assert(dims[i].for_type != For::Vectorized)
-                << "Can't vectorize across " << var.name()
+                << "In schedule for " << stage_name
+                << ", can't vectorize across " << var.name()
                 << " because Func is already vectorized across " << dims[i].var << "\n";
         }
     }
 
     if (!found) {
-        user_error << "Could not find dimension "
+        user_error << "In schedule for " << stage_name
+                   << ", could not find dimension "
                    << var.name()
                    << " to mark as " << t
-                   << " in argument list for function\n"
+                   << " in vars for function\n"
                    << dump_argument_list();
     }
 }
 
-std::string Stage::dump_argument_list() {
+std::string Stage::dump_argument_list() const {
     std::ostringstream oss;
-    oss << "Argument list:";
+    oss << "Vars:";
     for (size_t i = 0; i < schedule.dims().size(); i++) {
         oss << " " << schedule.dims()[i].var;
     }
@@ -419,10 +426,25 @@ std::string Stage::dump_argument_list() {
 }
 
 void Stage::split(const string &old, const string &outer, const string &inner, Expr factor, bool exact) {
+    vector<Dim> &dims = schedule.dims();
+
+    // Check that the new names aren't already in the dims list.
+    for (size_t i = 0; i < dims.size(); i++) {
+        string new_names[2] = {inner, outer};
+        for (int j = 0; j < 2; j++) {
+            if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != old) {
+                user_error << "In schedule for " << stage_name
+                           << ", Can't create var " << new_names[j]
+                           << " using a split or tile, because " << new_names[j]
+                           << " is already used in this Func's schedule elsewhere.\n" << dump_argument_list();
+            }
+        }
+    }
+
     // Replace the old dimension with the new dimensions in the dims list
     bool found = false;
     string inner_name, outer_name, old_name;
-    vector<Dim> &dims = schedule.dims();
+
     for (size_t i = 0; (!found) && i < dims.size(); i++) {
         if (var_name_match(dims[i].var, old)) {
             found = true;
@@ -437,7 +459,8 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
     }
 
     if (!found) {
-        user_error << "Could not find split dimension in argument list: "
+        user_error << "In schedule for " << stage_name
+                   << "Could not find split dimension: "
                    << old
                    << "\n"
                    << dump_argument_list();
@@ -488,7 +511,8 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
         }
     }
     if (!found_outer) {
-        user_error << "Could not find outer fuse dimension in argument list: "
+        user_error << "In schedule for " << stage_name
+                   << ", could not find outer fuse dimension: "
                    << outer.name()
                    << "\n"
                    << dump_argument_list();
@@ -505,10 +529,11 @@ Stage &Stage::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     }
 
     if (!found_inner) {
-        dump_argument_list();
-        user_error << "Could not find inner fuse dimension in argument list: "
+        user_error << "In schedule for " << stage_name
+                   << "Could not find inner fuse dimension: "
                    << inner.name()
-                   << "\n";
+                   << "\n"
+                   << dump_argument_list();
     }
 
     // Add the fuse to the splits list
@@ -524,22 +549,26 @@ Stage Stage::specialize(Expr condition) {
     // specialization.
     for (size_t i = 0; i < schedule.specializations().size(); i++) {
         if (equal(condition, schedule.specializations()[i].condition)) {
-            return Stage(schedule.specializations()[i].schedule);
+            return Stage(schedule.specializations()[i].schedule, stage_name);
         }
     }
 
     const Specialization &s = schedule.add_specialization(condition);
 
-    return Stage(s.schedule);
+    return Stage(s.schedule, stage_name);
 }
 
 Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
     if (old_var.is_rvar) {
-        user_assert(new_var.is_rvar) << "Can't rename RVar " << old_var.name()
-                                     << " to Var " << new_var.name() << "\n";
+        user_assert(new_var.is_rvar)
+            << "In schedule for " << stage_name
+            << ", can't rename RVar " << old_var.name()
+            << " to Var " << new_var.name() << "\n";
     } else {
-        user_assert(!new_var.is_rvar) << "Can't rename Var " << old_var.name()
-                                      << " to RVar " << new_var.name() << "\n";
+        user_assert(!new_var.is_rvar)
+            << "In schedule for " << stage_name
+            << ", can't rename Var " << old_var.name()
+            << " to RVar " << new_var.name() << "\n";
     }
 
     // Replace the old dimension with the new dimensions in the dims list
@@ -557,10 +586,12 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
     string new_name = old_name + "." + new_var.name();
 
     if (!found) {
-        user_error << "Could not find rename dimension in argument list: "
-                   << old_var.name()
-                   << "\n";
-        dump_argument_list();
+        user_error
+            << "In schedule for " << stage_name
+            << ", could not find rename dimension: "
+            << old_var.name()
+            << "\n"
+            << dump_argument_list();
 
     }
 
@@ -571,9 +602,12 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
         if (schedule.splits()[i-1].is_fuse()) {
             if (schedule.splits()[i-1].inner == old_name ||
                 schedule.splits()[i-1].outer == old_name) {
-                user_error << "Can't rename a variable " << old_name
-                           << " because it has already been fused into "
-                           << schedule.splits()[i-1].old_var << "\n";
+                user_error
+                    << "In schedule for " << stage_name
+                    << ", can't rename variable " << old_name
+                    << " because it has already been fused into "
+                    << schedule.splits()[i-1].old_var << "\n"
+                    << dump_argument_list();
             }
             if (schedule.splits()[i-1].old_var == old_name) {
                 schedule.splits()[i-1].old_var = new_name;
@@ -592,8 +626,11 @@ Stage &Stage::rename(VarOrRVar old_var, VarOrRVar new_var) {
                 break;
             }
             if (schedule.splits()[i-1].old_var == old_name) {
-                user_error << "Can't rename a variable " << old_name
-                           << " because it has already been renamed or split.\n";
+                user_error
+                    << "In schedule for " << stage_name
+                    << ", can't rename a variable " << old_name
+                    << " because it has already been renamed or split.\n"
+                    << dump_argument_list();
             }
         }
     }
@@ -691,7 +728,7 @@ Stage &Stage::tile(VarOrRVar x, VarOrRVar y,
 
 namespace {
 // An helper function for reordering vars in a schedule.
-void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size) {
+void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size, const Stage &stage) {
     vector<Dim> dims = dims_old;
 
     // Tag all the vars with their locations in the dims list.
@@ -704,7 +741,11 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size) {
                 found = true;
             }
         }
-        user_assert(found) << "Could not find var " << vars[i].name() << " to reorder in the vars list\n";
+        user_assert(found)
+            << "In schedule for " << stage.name()
+            << ", could not find var " << vars[i].name()
+            << " to reorder in the argumemt list.\n"
+            << stage.dump_argument_list();
     }
 
     // Look for illegal reorderings
@@ -714,9 +755,11 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size) {
             if (dims[idx[j]].pure) continue;
 
             if (idx[i] > idx[j]) {
-                user_error << "Can't reorder RVars " << vars[i].name()
-                           << " and " << vars[j].name()
-                           << " because it may change the meaning of the algorithm.\n";
+                user_error
+                    << "In schedule for " << stage.name()
+                    << ", can't reorder RVars " << vars[i].name()
+                    << " and " << vars[j].name()
+                    << " because it may change the meaning of the algorithm.\n";
             }
         }
     }
@@ -734,61 +777,61 @@ void reorder_vars(vector<Dim> &dims_old, const VarOrRVar *vars, size_t size) {
 }
 
 Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
-    reorder_vars(schedule.dims(), &vars[0], vars.size());
+    reorder_vars(schedule.dims(), &vars[0], vars.size(), *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y) {
     VarOrRVar vars[] = {x, y};
-    reorder_vars(schedule.dims(), vars, 2);
+    reorder_vars(schedule.dims(), vars, 2, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
     VarOrRVar vars[] = {x, y, z};
-    reorder_vars(schedule.dims(), vars, 3);
+    reorder_vars(schedule.dims(), vars, 3, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     VarOrRVar vars[] = {x, y, z, w};
-    reorder_vars(schedule.dims(), vars, 4);
+    reorder_vars(schedule.dims(), vars, 4, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t) {
     VarOrRVar vars[] = {x, y, z, w, t};
-    reorder_vars(schedule.dims(), vars, 5);
+    reorder_vars(schedule.dims(), vars, 5, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2};
-    reorder_vars(schedule.dims(), vars, 6);
+    reorder_vars(schedule.dims(), vars, 6, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3};
-    reorder_vars(schedule.dims(), vars, 7);
+    reorder_vars(schedule.dims(), vars, 7, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4};
-    reorder_vars(schedule.dims(), vars, 8);
+    reorder_vars(schedule.dims(), vars, 8, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5};
-    reorder_vars(schedule.dims(), vars, 9);
+    reorder_vars(schedule.dims(), vars, 9, *this);
     return *this;
 }
 
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4, VarOrRVar t5, VarOrRVar t6) {
     VarOrRVar vars[] = {x, y, z, w, t1, t2, t3, t4, t5, t6};
-    reorder_vars(schedule.dims(), vars, 10);
+    reorder_vars(schedule.dims(), vars, 10, *this);
     return *this;
 }
 
@@ -917,24 +960,24 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
 
 Func &Func::split(VarOrRVar old, VarOrRVar outer, VarOrRVar inner, Expr factor) {
     invalidate_cache();
-    Stage(func.schedule()).split(old, outer, inner, factor);
+    Stage(func.schedule(), name()).split(old, outer, inner, factor);
     return *this;
 }
 
 Func &Func::fuse(VarOrRVar inner, VarOrRVar outer, VarOrRVar fused) {
     invalidate_cache();
-    Stage(func.schedule()).fuse(inner, outer, fused);
+    Stage(func.schedule(), name()).fuse(inner, outer, fused);
     return *this;
 }
 
 Func &Func::rename(VarOrRVar old_name, VarOrRVar new_name) {
     invalidate_cache();
-    Stage(func.schedule()).rename(old_name, new_name);
+    Stage(func.schedule(), name()).rename(old_name, new_name);
     return *this;
 }
 
 Func &Func::allow_race_conditions() {
-    Stage(func.schedule()).allow_race_conditions();
+    Stage(func.schedule(), name()).allow_race_conditions();
     return *this;
 }
 
@@ -946,48 +989,48 @@ Func &Func::memoize() {
 
 Stage Func::specialize(Expr c) {
     invalidate_cache();
-    return Stage(func.schedule()).specialize(c);
+    return Stage(func.schedule(), name()).specialize(c);
 }
 
 Func &Func::serial(VarOrRVar var) {
     invalidate_cache();
-    Stage(func.schedule()).serial(var);
+    Stage(func.schedule(), name()).serial(var);
     return *this;
 }
 
 Func &Func::parallel(VarOrRVar var) {
     invalidate_cache();
-    Stage(func.schedule()).parallel(var);
+    Stage(func.schedule(), name()).parallel(var);
     return *this;
 }
 
 Func &Func::vectorize(VarOrRVar var) {
     invalidate_cache();
-    Stage(func.schedule()).vectorize(var);
+    Stage(func.schedule(), name()).vectorize(var);
     return *this;
 }
 
 Func &Func::unroll(VarOrRVar var) {
     invalidate_cache();
-    Stage(func.schedule()).unroll(var);
+    Stage(func.schedule(), name()).unroll(var);
     return *this;
 }
 
 Func &Func::parallel(VarOrRVar var, Expr factor) {
     invalidate_cache();
-    Stage(func.schedule()).parallel(var, factor);
+    Stage(func.schedule(), name()).parallel(var, factor);
     return *this;
 }
 
 Func &Func::vectorize(VarOrRVar var, int factor) {
     invalidate_cache();
-    Stage(func.schedule()).vectorize(var, factor);
+    Stage(func.schedule(), name()).vectorize(var, factor);
     return *this;
 }
 
 Func &Func::unroll(VarOrRVar var, int factor) {
     invalidate_cache();
-    Stage(func.schedule()).unroll(var, factor);
+    Stage(func.schedule(), name()).unroll(var, factor);
     return *this;
 }
 
@@ -1015,7 +1058,7 @@ Func &Func::tile(VarOrRVar x, VarOrRVar y,
                  VarOrRVar xi, VarOrRVar yi,
                  Expr xfactor, Expr yfactor) {
     invalidate_cache();
-    Stage(func.schedule()).tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
+    Stage(func.schedule(), name()).tile(x, y, xo, yo, xi, yi, xfactor, yfactor);
     return *this;
 }
 
@@ -1023,59 +1066,59 @@ Func &Func::tile(VarOrRVar x, VarOrRVar y,
                  VarOrRVar xi, VarOrRVar yi,
                  Expr xfactor, Expr yfactor) {
     invalidate_cache();
-    Stage(func.schedule()).tile(x, y, xi, yi, xfactor, yfactor);
+    Stage(func.schedule(), name()).tile(x, y, xi, yi, xfactor, yfactor);
     return *this;
 }
 
 Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(vars);
+    Stage(func.schedule(), name()).reorder(vars);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y);
+    Stage(func.schedule(), name()).reorder(x, y);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z);
+    Stage(func.schedule(), name()).reorder(x, y, z);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w);
+    Stage(func.schedule(), name()).reorder(x, y, z, w);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w, t);
+    Stage(func.schedule(), name()).reorder(x, y, z, w, t);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w, t1, t2);
+    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w, t1, t2, t3);
+    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3);
     return *this;
 }
 
 Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4);
+    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4);
     return *this;
 }
 
@@ -1083,7 +1126,7 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
                     VarOrRVar t5) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
+    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5);
     return *this;
 }
 
@@ -1091,85 +1134,85 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
                     VarOrRVar t1, VarOrRVar t2, VarOrRVar t3, VarOrRVar t4,
                     VarOrRVar t5, VarOrRVar t6) {
     invalidate_cache();
-    Stage(func.schedule()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
+    Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
     return *this;
 }
 
 Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_threads(tx, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_threads(tx, ty, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, ty, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_threads(tx, ty, tz, gpu_api);
+    Stage(func.schedule(), name()).gpu_threads(tx, ty, tz, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_blocks(VarOrRVar bx, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_blocks(bx, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_blocks(bx, by, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, by, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_blocks(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_blocks(bx, by, bz, gpu_api);
+    Stage(func.schedule(), name()).gpu_blocks(bx, by, bz, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_single_thread(GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_single_thread(gpu_api);
+    Stage(func.schedule(), name()).gpu_single_thread(gpu_api);
     return *this;
 }
 
 Func &Func::gpu(VarOrRVar bx, VarOrRVar tx, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu(bx, tx, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, tx, gpu_api);
     return *this;
 }
 
 Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar tx, VarOrRVar ty, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu(bx, by, tx, ty, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, by, tx, ty, gpu_api);
     return *this;
 }
 
 Func &Func::gpu(VarOrRVar bx, VarOrRVar by, VarOrRVar bz, VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu(bx, by, bz, tx, ty, tz, gpu_api);
+    Stage(func.schedule(), name()).gpu(bx, by, bz, tx, ty, tz, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_tile(VarOrRVar x, int x_size, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_tile(x, x_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, x_size, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, int x_size, int y_size, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_tile(x, y, x_size, y_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, y, x_size, y_size, gpu_api);
     return *this;
 }
 
 Func &Func::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z, int x_size, int y_size, int z_size, GPUAPI gpu_api) {
     invalidate_cache();
-    Stage(func.schedule()).gpu_tile(x, y, z, x_size, y_size, z_size, gpu_api);
+    Stage(func.schedule(), name()).gpu_tile(x, y, z, x_size, y_size, z_size, gpu_api);
     return *this;
 }
 
@@ -1182,7 +1225,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule()).gpu_blocks(x, y);
+    Stage(func.schedule(), name()).gpu_blocks(x, y);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
@@ -1314,7 +1357,8 @@ void Func::debug_to_file(const string &filename) {
 
 Stage Func::update(int idx) {
     invalidate_cache();
-    return Stage(func.update_schedule(idx));
+    return Stage(func.update_schedule(idx),
+                 name() + ".update(" + int_to_string(idx) + ")");
 }
 
 void Func::invalidate_cache() {
@@ -1323,7 +1367,7 @@ void Func::invalidate_cache() {
 }
 
 Func::operator Stage() const {
-    return Stage(func.schedule());
+    return Stage(func.schedule(), name());
 }
 
 FuncRefVar::FuncRefVar(Internal::Function f, const vector<Var> &a, int placeholder_pos) : func(f) {
@@ -1411,7 +1455,7 @@ Stage FuncRefVar::operator=(const Tuple &e) {
     vector<string> a = args_with_implicit_vars(e.as_vector());
     func.define(a, e.as_vector());
 
-    return Stage(func.schedule());
+    return Stage(func.schedule(), func.name());
 }
 
 Stage FuncRefVar::operator=(const FuncRefVar &e) {
@@ -1560,7 +1604,9 @@ Stage FuncRefExpr::operator=(const Tuple &e) {
     vector<Expr> a = args_with_implicit_vars(e.as_vector());
     func.define_update(args, e.as_vector());
 
-    return Stage(func.update_schedule(func.updates().size() - 1));
+    int update_stage = func.updates().size() - 1;
+    return Stage(func.update_schedule(update_stage),
+                 func.name() + ".update(" + int_to_string(update_stage) + ")");
 }
 
 Stage FuncRefExpr::operator=(const FuncRefExpr &e) {
@@ -1890,7 +1936,7 @@ void validate_arguments(const string &output,
             err << "Generated code refers to ";
             if (arg.is_buffer) err << "image ";
             err << "parameter " << arg.name
-                << ", which was not found in the argument list\n";
+                << ", which was not found in the argument list.\n";
 
             err << "\nArgument list specified: ";
             for (size_t i = 0; i < args.size(); i++) {
