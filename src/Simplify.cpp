@@ -1843,7 +1843,7 @@ private:
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
         internal_assert(!var_info.contains(op->name))
-            << "Simplify only works on code where every name is unique\n";
+            << "Simplify only works on code where every name is unique. Repeated name: " << op->name << "\n";
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
