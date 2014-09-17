@@ -440,14 +440,15 @@ struct LetStmt : public StmtNode<LetStmt> {
 };
 
 /** If the 'condition' is false, then bail out printing the
- * 'message' to stderr */
+ * message to stderr */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
-    std::string message;
-    std::vector<Expr> args;
+    Expr message;
 
-    EXPORT static Stmt make(Expr condition, std::string message, const std::vector<Expr> &args);
+    EXPORT static Stmt make(Expr condition, const char *message);
+    EXPORT static Stmt make(Expr condition, Expr message);
+    EXPORT static Stmt make(Expr condition, const std::vector<Expr> &message);
 };
 
 /** This node is a helpful annotation to do with permissions. The
@@ -637,6 +638,8 @@ struct Call : public ExprNode<Call> {
         trace_expr,
         glsl_texture_load,
         glsl_texture_store,
+        make_struct,
+        stringify,
         memoize_expr,
         copy_memory;
 
