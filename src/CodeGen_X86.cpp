@@ -61,6 +61,9 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
             triple.setObjectFormat(llvm::Triple::ELF);
             #endif
         }
+        #if LLVM_VERSION >= 36
+        triple.setEnvironment(llvm::Triple::MSVC);
+        #endif
     } else if (target.os == Target::Android) {
         triple.setOS(llvm::Triple::Linux);
         triple.setEnvironment(llvm::Triple::Android);
