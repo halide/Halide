@@ -53,7 +53,10 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     } else if (target.os == Target::Windows) {
         triple.setVendor(llvm::Triple::PC);
         triple.setOS(llvm::Triple::Win32);
-        if (target.features & Target::JIT) {
+#if LLVM_VERSION >= 36
+        triple.setEnvironment(llvm::Triple::MSVC);
+#endif
+        if (target.has_feature(Target::JIT)) {
             // Use ELF for jitting
             #if LLVM_VERSION < 35
             triple.setEnvironment(llvm::Triple::ELF);
@@ -69,7 +72,7 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
             std::cerr << "Warning: x86-64 android is untested\n";
         }
     } else if (target.os == Target::NaCl) {
-        #if WITH_NATIVE_CLIENT
+        #ifdef WITH_NATIVE_CLIENT
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::GNU);
         #else
@@ -213,6 +216,62 @@ Expr lossless_cast(Type t, Expr e) {
     return Expr();
 }
 
+// i32(i16_a)*i32(i16_b) +/- i32(i16_c)*i32(i16_d) can be done by
+// interleaving a, c, and b, d, and then using pmaddwd. We
+// recognize it here, and implement it in the initial module.
+bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
+    Type t = a.type();
+    internal_assert(b.type() == t);
+
+    const Mul *ma = a.as<Mul>();
+    const Mul *mb = b.as<Mul>();
+
+    if (!(ma && mb && t.is_int() &&
+          t.bits == 32 && (t.width == 4 || t.width == 8))) {
+        return false;
+    }
+
+    Type narrow = t;
+    narrow.bits = 16;
+    vector<Expr> args = vec(lossless_cast(narrow, ma->a),
+                            lossless_cast(narrow, ma->b),
+                            lossless_cast(narrow, mb->a),
+                            lossless_cast(narrow, mb->b));
+    if (!args[0].defined() || !args[1].defined() ||
+        !args[2].defined() || !args[3].defined()) {
+        return false;
+    }
+
+    result.swap(args);
+    return true;
+}
+
+}
+
+
+void CodeGen_X86::visit(const Add *op) {
+    vector<Expr> matches;
+    if (should_use_pmaddwd(op->a, op->b, matches)) {
+        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+    } else {
+        CodeGen::visit(op);
+    }
+}
+
+
+void CodeGen_X86::visit(const Sub *op) {
+    vector<Expr> matches;
+    if (should_use_pmaddwd(op->a, op->b, matches)) {
+        // Negate one of the factors in the second expression
+        if (is_const(matches[2])) {
+            matches[2] = -matches[2];
+        } else {
+            matches[3] = -matches[3];
+        }
+        codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
+    } else {
+        CodeGen::visit(op);
+    }
 }
 
 void CodeGen_X86::visit(const Cast *op) {
@@ -265,7 +324,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-        if (!(target.features | Target::SSE41) && pattern.needs_sse_41) continue;
+        if (!target.has_feature(Target::SSE41) && pattern.needs_sse_41) continue;
         if (expr_match(pattern.pattern, op, matches)) {
             bool ok = true;
             if (pattern.wide_op) {
@@ -337,7 +396,7 @@ void CodeGen_X86::visit(const Div *op) {
     vector<Expr> matches;
     if (is_one(op->a) &&
         (op->type == Float(32, 4) ||
-         ((target.features & Target::AVX) &&
+         (target.has_feature(Target::AVX) &&
           op->type == Float(32, 8)))) {
         // Reciprocal and reciprocal square root
         Expr w = Variable::make(op->type, "*");
@@ -486,7 +545,7 @@ void CodeGen_X86::visit(const Div *op) {
 }
 
 void CodeGen_X86::visit(const Min *op) {
-    bool use_sse_41 = target.features & Target::SSE41;
+    bool use_sse_41 = target.has_feature(Target::SSE41);
     if (op->type == UInt(8, 16)) {
         value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
@@ -505,7 +564,7 @@ void CodeGen_X86::visit(const Min *op) {
 }
 
 void CodeGen_X86::visit(const Max *op) {
-    bool use_sse_41 = target.features & Target::SSE41;
+    bool use_sse_41 = target.has_feature(Target::SSE41);
     if (op->type == UInt(8, 16)) {
         value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
     } else if (use_sse_41 && op->type == Int(8, 16)) {
@@ -653,9 +712,9 @@ void CodeGen_X86::test() {
 }
 
 string CodeGen_X86::mcpu() const {
-    if (target.features & Target::AVX) return "corei7-avx";
+    if (target.has_feature(Target::AVX)) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
-    if (target.features & Target::SSE41) return "penryn";
+    if (target.has_feature(Target::SSE41)) return "penryn";
     // Default should not include SSSE3, hence "k8" rather than "core2"
     return "k8";
 }
@@ -665,15 +724,15 @@ string CodeGen_X86::mattrs() const {
     std::string separator;
     #if LLVM_VERSION >= 35
     // These attrs only exist in llvm 3.5+
-    if (target.features & Target::FMA) {
+    if (target.has_feature(Target::FMA)) {
         features += "+fma";
         separator = " ";
     }
-    if (target.features & Target::FMA4) {
+    if (target.has_feature(Target::FMA4)) {
         features += separator + "+fma4";
         separator = " ";
     }
-    if (target.features & Target::F16C) {
+    if (target.has_feature(Target::F16C)) {
         features += separator + "+f16c";
         separator = " ";
     }

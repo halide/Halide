@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 
 #include "HalideRuntime.h"
-#include "mini_string.h"
 
 extern "C" {
 
@@ -26,18 +25,27 @@ extern long dispatch_semaphore_wait(dispatch_semaphore_t dsema, dispatch_time_t 
 extern long dispatch_semaphore_signal(dispatch_semaphore_t dsema);
 extern void dispatch_release(void *object);
 
-namespace {
+}
+
+namespace Halide { namespace Runtime { namespace Internal {
+
 struct gcd_mutex {
     dispatch_once_t once;
     dispatch_semaphore_t semaphore;
 };
 
-void init_mutex(void *mutex_arg) {
+WEAK void init_mutex(void *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
     mutex->semaphore = dispatch_semaphore_create(1);
 }
 
-}
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
     gcd_mutex *mutex = (gcd_mutex *)mutex_arg;
@@ -64,16 +72,11 @@ WEAK void halide_shutdown_thread_pool() {
 WEAK void halide_set_num_threads(int) {
 }
 
-WEAK int (*halide_custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
-                                  int, uint8_t *);
 
-  WEAK void halide_set_custom_do_task(int (*f)(void *, int (*)(void *, int, uint8_t *),
-                                               int, uint8_t *)) {
+WEAK void halide_set_custom_do_task(int (*f)(void *, int (*)(void *, int, uint8_t *),
+                                             int, uint8_t *)) {
     halide_custom_do_task = f;
 }
-
-WEAK int (*halide_custom_do_par_for)(void *, int (*)(void *, int, uint8_t *), int,
-                                     int, uint8_t *);
 
 WEAK void halide_set_custom_do_par_for(int (*f)(void *, int (*)(void *, int, uint8_t *),
                                                 int, int, uint8_t *)) {

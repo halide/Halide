@@ -1,9 +1,18 @@
 #include <Halide.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 using namespace Halide;
 
 int main() {
+
+    // This test must be run with an OpenGL target
+    const Target &target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::OpenGL))  {
+        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
+        return 1;
+    }
+
     Image<uint8_t> input(255, 10, 3);
     for (int y=0; y<input.height(); y++) {
         for (int x=0; x<input.width(); x++) {

@@ -70,35 +70,35 @@ bin subdirectory in your path. (This works well on OS X and Ubuntu.)
 
 If you want to build it yourself, first check it out from subversion:
 
-% svn co https://llvm.org/svn/llvm-project/llvm/branches/release_33 llvm3.3
-% svn co https://llvm.org/svn/llvm-project/cfe/branches/release_33 llvm3.3/tools/clang
+    % svn co https://llvm.org/svn/llvm-project/llvm/branches/release_33 llvm3.3
+    % svn co https://llvm.org/svn/llvm-project/cfe/branches/release_33 llvm3.3/tools/clang
 
 Then build it like so:
 
-% cd llvm3.3
-% ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
-% make -j8
+    % cd llvm3.3
+    % ./configure --disable-terminfo --enable-optimized --enable-assertions --with-clang --enable-targets=x86,arm,nvptx
+    % make -j8
 
 (Users of OSX 10.8+ may need to explicitly specify GCC vs Clang,
 prepending "CC=gcc CXX=g++" to the configure command.)
 
 Then finally tell Halide's Makefile about it like so:
 
-% export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
-% export CLANG=<path to llvm>/Release+Asserts/bin/clang
+    % export LLVM_CONFIG=<path to llvm>/Release+Asserts/bin/llvm-config
+    % export CLANG=<path to llvm>/Release+Asserts/bin/clang
 
 If you wish to use cmake to build llvm, the build procedure is:
 
-% cd llvm3.3
-% mkdir build
-% cd build
-% cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-% make -j8
+    % cd llvm3.3
+    % mkdir build
+    % cd build
+    % cmake -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+    % make -j8
 
 then to point Halide to it:
 
-export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
-export CLANG=<path to llvm>/build/bin/clang
+    export LLVM_CONFIG=<path to llvm>/build/bin/llvm-config
+    export CLANG=<path to llvm>/build/bin/clang
 
 On Ubuntu llvm 3.2 also works, but you should omit --disable-terminfo
 or -DLLVM_ENABLE_TERMINFO=OFF when configuring it.
@@ -123,18 +123,23 @@ necessary for AOT compiling 32-bit Halide pipelines. The 64-bit
 version of Halide cross-compiles 32-bit code just fine.
 
 To get a 32-bit llvm, configure and compile it like so:
-  % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
-  % CC="gcc -m32" CXX="g++ -m32" make
+
+    % CC="gcc -m32" CXX="g++ -m32" ./configure --enable-targets=x86,arm,nvptx --enable-assertions --enable-optimized --build=i686-pc-linux-gnu
+    % CC="gcc -m32" CXX="g++ -m32" make
 
 To generate a 32-bit Halide, compile it like so:
-  % HL_TARGET=x86-32 LD="ld -melf_i386" CC="gcc -m32" CXX="g++ -m32" make
+
+    % HL_TARGET=x86-32 LD="ld -melf_i386" CC="gcc -m32" CXX="g++ -m32" make
 
 You should then be able to run the JIT tests with a 32-bit target:
-  % CXX="g++ -m32 -msse4" make build_tests
-  % HL_TARGET=x86-32-sse41 make run_tests
+
+    % CXX="g++ -m32 -msse4" make build_tests
+    % HL_TARGET=x86-32-sse41 make run_tests
 
 If you have a 32-bit libpng, you can also run the apps in 32-bit:
-  % HL_TARGET=x86-32-sse41 CXX="g++ -m32 -msse4" make test_apps
+
+    % HL_TARGET=x86-32-sse41 CXX="g++ -m32 -msse4" make test_apps
+
 The tests should pass, but the tutorials will fail to compile unless
 you manually supply a 32-bit libpng.
 
@@ -150,40 +155,47 @@ Native Client targets.
 
 In order to build Halide with Native Client support, one will need the
 PNaCl llvm tree from:
+
     http://git.chromium.org/native_client/pnacl-llvm.git
+
 and, for good measure, PNaCl's version of clang:
+
     http://git.chromium.org/native_client/pnacl-clang.git
+
 To check these out:
-  % git clone http://git.chromium.org/native_client/pnacl-llvm.git pnacl-llvm
-  % cd pnacl-llvm/tools
-  % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
-  % cd ../..
+
+    % git clone http://git.chromium.org/native_client/pnacl-llvm.git pnacl-llvm
+    % cd pnacl-llvm/tools
+    % git clone http://git.chromium.org/native_client/pnacl-clang.git clang
+    % cd ../..
 
 To enable all Halide targets, build it like so:
-  % mkdir build
-  % cd build
-  % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
-  % make -j8
+
+    % mkdir build
+    % cd build
+    % cmake -DLLVM_TARGETS_TO_BUILD="X86;ARM;NVPTX" -DLLVM_ENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release ..
+    % make -j8
 
 It will possibly be helpful to get the entire dev tree for
 PNaCl. Documentation for this is here:
+
     http://www.chromium.org/nativeclient/pnacl/developing-pnacl
 
 To use generated code in an application, you'll of course also need
 the Native Client SDK:
+
     https://developer.chrome.com/native-client/sdk/download
 
 Once The Native Client prerequisites are in place, set the following
 variables (on the command line or by editing the Makefile):
 
- Point LLVM_CONFIG to the llvm-config that lives in your pnacl llvm
- build. E.g:
+Point LLVM_CONFIG to the llvm-config that lives in your pnacl llvm build. E.g:
 
-  % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/build/bin/llvm-config
+    % export LLVM_CONFIG=<path-to-Halide>/llvm/pnacl-llvm/build/bin/llvm-config
 
- Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
+Change WITH_NATIVE_CLIENT to "true" (or any non-empty value):
 
-  % export WITH_NATIVE_CLIENT=true
+    % export WITH_NATIVE_CLIENT=true
 
 With these variables set, run make. This will build a Halide lib
 capable of generating native client objects. Neither the tests nor
@@ -220,8 +232,8 @@ power, you must also specify a CPU target for those parts of the filter that
 cannot or should not be computed on the GPU. Examples of valid target
 specifiers are
 
-  host-opengl
-  x86-opengl-gpu_debug
+    host-opengl
+    x86-opengl-gpu_debug
 
 Adding "gpu_debug", as in the second example, adds additional logging output
 and is highly recommended during development.
@@ -236,14 +248,14 @@ for which the color index is a compile-time constant can be scheduled.  The
 main consequence is that the range of color variables must be explicitly
 specified for both input and output buffers before scheduling:
 
-  ImageParam input;
-  Func f;
-  Var x, y, c;
-  f(x, y, c) = ...;
-
-  input.set_bounds(2, 0, 3);   // specify color range for input
-  f.bound(c, 0, 3);            // and output
-  f.glsl(x, y, c);
+    ImageParam input;
+    Func f;
+    Var x, y, c;
+    f(x, y, c) = ...;
+  
+    input.set_bounds(2, 0, 3);   // specify color range for input
+    f.bound(c, 0, 3);            // and output
+    f.glsl(x, y, c);
 
 
 JIT Compilation
@@ -267,13 +279,13 @@ On Linux, OS X, and Android, Halide creates its own OpenGL context unless the
 current thread already has an active context.  On other platforms you have to
 link implementations of the following two functions with your Halide code:
 
-  extern "C" int halide_opengl_create_context(void *) {
-      return 0;  // if successful
-  }
-
-  extern "C" void *halide_opengl_get_proc_addr(void *, const char *name) {
-      ...
-  }
+    extern "C" int halide_opengl_create_context(void *) {
+        return 0;  // if successful
+    }
+  
+    extern "C" void *halide_opengl_get_proc_addr(void *, const char *name) {
+        ...
+    }
 
 Halide allocates and deletes textures as necessary.  Applications may manage
 the textures by hand by setting the 'dev' field in buffer_t; this is most

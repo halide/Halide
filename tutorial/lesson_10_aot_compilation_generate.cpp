@@ -38,13 +38,15 @@ int main(int argc, char **argv) {
     // The pipeline will depend on one scalar parameter.
     Param<uint8_t> offset;
 
-    // And take one grayscale 8-bit input buffer. The first parameter
-    // gives the type of a pixel, and the second specifies the number
-    // of dimensions (not the number of channels!). For a grayscale
-    // image this is 2; for a color image it's three.
+    // And take one grayscale 8-bit input buffer. The first
+    // constructor argument gives the type of a pixel, and the second
+    // specifies the number of dimensions (not the number of
+    // channels!). For a grayscale image this is two; for a color
+    // image it's three. Currently, four dimensions is the maximum for
+    // inputs and outputs.
     ImageParam input(type_of<uint8_t>(), 2);
 
-    // If we were jit-compiling, this would just be an int and an
+    // If we were jit-compiling, these would just be an int and an
     // Image, but because we want to compile the pipeline once and
     // have it work for any value of the parameter, we need to make a
     // Param object, which can be used like an Expr, and an ImageParam

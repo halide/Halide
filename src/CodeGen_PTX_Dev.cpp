@@ -8,7 +8,7 @@
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
-#if WITH_PTX
+#ifdef WITH_PTX
 namespace llvm { ModulePass *createNVVMReflectPass(const StringMap<int>& Mapping); }
 #endif
 
@@ -126,7 +126,7 @@ void CodeGen_PTX_Dev::init_module() {
 
     CodeGen::init_module();
 
-    #if WITH_PTX
+    #ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
     #endif
 
@@ -210,13 +210,13 @@ string CodeGen_PTX_Dev::march() const {
 }
 
 string CodeGen_PTX_Dev::mcpu() const {
-    if (target.features & Target::CUDACapability50) {
+    if (target.has_feature(Target::CUDACapability50)) {
         return "sm_50";
-    } else if (target.features & Target::CUDACapability35) {
+    } else if (target.has_feature(Target::CUDACapability35)) {
         return "sm_35";
-    } else if (target.features & Target::CUDACapability32) {
+    } else if (target.has_feature(Target::CUDACapability32)) {
         return "sm_32";
-    } else if (target.features & Target::CUDACapability30) {
+    } else if (target.has_feature(Target::CUDACapability30)) {
         return "sm_30";
     } else {
         return "sm_20";
@@ -224,8 +224,8 @@ string CodeGen_PTX_Dev::mcpu() const {
 }
 
 string CodeGen_PTX_Dev::mattrs() const {
-    if (target.features & (Target::CUDACapability32 |
-                           Target::CUDACapability50)) {
+    if (target.features_any_of(vec(Target::CUDACapability32,
+                                   Target::CUDACapability50))) {
         // Need ptx isa 4.0. llvm < 3.5 doesn't support it.
         #if LLVM_VERSION < 35
         user_error << "This version of Halide was linked against llvm 3.4 or earlier, "
@@ -247,7 +247,7 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
 
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
-    #if WITH_PTX
+    #ifdef WITH_PTX
 
     debug(2) << "In CodeGen_PTX_Dev::compile_to_src";
 
@@ -331,15 +331,19 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         PM.add(new DataLayout(module));
     }
     #else
-    #if LLVM_VERSION < 36
+    #if LLVM_VERSION == 35
     const DataLayout *TD = Target.getDataLayout();
-    #else
-    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
-    #endif
     if (TD) {
         module->setDataLayout(TD);
     }
     PM.add(new DataLayoutPass(module));
+    #else // llvm >= 3.6
+    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
+    if (TD) {
+        module->setDataLayout(TD);
+    }
+    PM.add(new DataLayoutPass);
+    #endif
     #endif
 
     // NVidia's libdevice library uses a __nvvm_reflect to choose

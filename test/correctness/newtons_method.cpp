@@ -11,8 +11,8 @@ template<typename T>
 int find_pi() {
     // Skip test if data type is not supported by the target.
     Target target = get_jit_target_from_environment();
-    if ((target.features & Target::OpenCL) != 0 &&
-        (target.features & Target::CLDoubles) == 0 &&
+    if (target.has_feature(Target::OpenCL) &&
+        !target.has_feature(Target::CLDoubles) &&
         type_of<T>() == type_of<double>()) {
         return 0;
     }

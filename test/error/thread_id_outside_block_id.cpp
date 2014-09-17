@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     Target t = get_jit_target_from_environment();
-    t.features |= Target::CUDA;
+    t.set_feature(Target::CUDA);
 
     Func f;
     Var x;

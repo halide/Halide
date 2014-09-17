@@ -42,7 +42,7 @@
 namespace Halide {
 namespace Internal {
 
-/** Build small vectors of up to 6 elements. If we used C++11 and
+/** Build small vectors of up to 10 elements. If we used C++11 and
  * had vector initializers, this would not be necessary, but we
  * don't want to rely on C++11 support. */
 //@{
@@ -127,6 +127,37 @@ std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g, T h) {
     v[5] = f;
     v[6] = g;
     v[7] = h;
+    return v;
+}
+
+template<typename T>
+std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g, T h, T i) {
+    std::vector<T> v(9);
+    v[0] = a;
+    v[1] = b;
+    v[2] = c;
+    v[3] = d;
+    v[4] = e;
+    v[5] = f;
+    v[6] = g;
+    v[7] = h;
+    v[8] = i;
+    return v;
+}
+
+template<typename T>
+std::vector<T> vec(T a, T b, T c, T d, T e, T f, T g, T h, T i, T j) {
+    std::vector<T> v(10);
+    v[0] = a;
+    v[1] = b;
+    v[2] = c;
+    v[3] = d;
+    v[4] = e;
+    v[5] = f;
+    v[6] = g;
+    v[7] = h;
+    v[8] = i;
+    v[9] = j;
     return v;
 }
 // @}

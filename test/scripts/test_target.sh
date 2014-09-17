@@ -37,6 +37,7 @@ echo Testing target $HL_TARGET with llvm $LLVM
 echo Using LD = $LD
 echo Using CC = $CC
 echo Using CXX = $CXX
+rm -rf distrib/*
 make clean &&
 make -j8 build_tests || exit 1
 make distrib || exit 1
@@ -52,8 +53,8 @@ elif [[ "$HL_TARGET" == *nacl ]]; then
 
     # Also check that the nacl apps compile.
     make -C apps/HelloNaCl clean &&
-    make -C apps/nacl_demos &&
-    make -C apps/HelloNaCl clean &&
+    make -C apps/nacl_demos clean &&
+    make -C apps/HelloNaCl &&
     make -C apps/nacl_demos &&
     echo "Halide builds but tests not run."
 else
@@ -61,7 +62,6 @@ else
     make test_errors -j8 &&
     make test_static -j8 &&
     make test_tutorials -j8 &&
-    make test_opengl &&
     make test_performance &&
     make test_apps &&
     echo "All tests pass"

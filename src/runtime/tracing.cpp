@@ -4,33 +4,32 @@
 
 extern "C" {
 
-extern char *getenv(const char *);
-extern int snprintf(char *str, size_t size, const char *format, ...);
-
-extern int open(const char *filename, int opts, int mode);
-extern int close(int fd);
-typedef ptrdiff_t ssize_t;
-extern ssize_t write(int fd, const void *buf, size_t bytes);
-
 typedef int32_t (*trace_fn)(void *, const halide_trace_event *);
 
-WEAK trace_fn halide_custom_trace = NULL;
-
-WEAK void halide_set_custom_trace(trace_fn t) {
-    halide_custom_trace = t;
 }
 
+namespace Halide { namespace Runtime { namespace Internal {
+
+WEAK trace_fn halide_custom_trace = NULL;
 WEAK int halide_trace_file = 0;
 WEAK int halide_trace_file_lock = 0;
 WEAK bool halide_trace_file_initialized = false;
 WEAK bool halide_trace_file_internally_opened = false;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+WEAK void halide_set_custom_trace(trace_fn t) {
+    halide_custom_trace = t;
+}
 
 WEAK void halide_set_trace_file(int fd) {
     halide_trace_file = fd;
     halide_trace_file_initialized = true;
 }
 
-    extern int errno;
+extern int errno;
 
 #define O_APPEND 1024
 #define O_CREAT 64
@@ -118,9 +117,7 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
             halide_assert(user_context, written == total_bytes && "Can't write to trace file");
 
         } else {
-            char buf[256];
-            char *buf_ptr = &buf[0];
-            char *buf_end = &buf[255];
+            stringstream ss(user_context);
 
             // Round up bits to 8, 16, 32, or 64
             int print_bits = 8;
@@ -140,81 +137,74 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
             // Only print out the value on stores and loads.
             bool print_value = (e->event < 2);
 
-            if (buf_ptr < buf_end) {
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%s %s.%d[",
-                                    event_types[e->event], e->func, e->value_index);
-            }
+            ss << event_types[e->event] << " " << e->func << "." << e->value_index << "[";
             if (e->vector_width > 1) {
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "<");
+                ss << "<";
             }
-            for (int i = 0; i < e->dimensions && buf_ptr < buf_end; i++) {
+            for (int i = 0; i < e->dimensions; i++) {
                 if (i > 0) {
                     if ((e->vector_width > 1) && (i % e->vector_width) == 0) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">, <");
+                        ss << ">, <";
                     } else {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
+                        ss << ", ";
                     }
                 }
-                buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", e->coordinates[i]);
+                ss << e->coordinates[i];
             }
-            if (buf_ptr < buf_end) {
-                if (e->vector_width > 1) {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">]");
-                } else {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "]");
-                }
+            if (e->vector_width > 1) {
+                ss << ">]";
+            } else {
+                ss << "]";
             }
 
             if (print_value) {
-                if (buf_ptr < buf_end) {
-                    if (e->vector_width > 1) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, " = <");
-                    } else {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, " = ");
-                    }
+                if (e->vector_width > 1) {
+                    ss << " = <";
+                } else {
+                    ss << " = ";
                 }
-                for (int i = 0; i < e->vector_width && buf_ptr < buf_end; i++) {
+                for (int i = 0; i < e->vector_width; i++) {
                     if (i > 0) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ", ");
+                        ss << ", ";
                     }
                     if (e->type_code == 0) {
                         if (print_bits == 8) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int8_t *)(e->value))[i]);
+                            ss << ((int8_t *)(e->value))[i];
                         } else if (print_bits == 16) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int16_t *)(e->value))[i]);
+                            ss << ((int16_t *)(e->value))[i];
                         } else if (print_bits == 32) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", ((int32_t *)(e->value))[i]);
+                            ss << ((int32_t *)(e->value))[i];
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%d", (int32_t)((int64_t *)(e->value))[i]);
+                            ss << ((int64_t *)(e->value))[i];
                         }
                     } else if (e->type_code == 1) {
                         if (print_bits == 8) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint8_t *)(e->value))[i]);
-                            if (buf_ptr > buf_end) buf_ptr = buf_end;
+                            ss << ((uint8_t *)(e->value))[i];
                         } else if (print_bits == 16) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint16_t *)(e->value))[i]);
+                            ss << ((uint16_t *)(e->value))[i];
                         } else if (print_bits == 32) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", ((uint32_t *)(e->value))[i]);
+                            ss << ((uint32_t *)(e->value))[i];
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%u", (uint32_t)((uint64_t *)(e->value))[i]);
+                            ss << ((uint64_t *)(e->value))[i];
                         }
                     } else if (e->type_code == 2) {
                         halide_assert(user_context, print_bits >= 32 && "Tracing a bad type");
                         if (print_bits == 32) {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%f", ((float *)(e->value))[i]);
+                            ss << ((float *)(e->value))[i];
                         } else {
-                            buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%g", ((double *)(e->value))[i]);
+                            ss << ((double *)(e->value))[i];
                         }
                     } else if (e->type_code == 3) {
-                        buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, "%p", ((void **)(e->value))[i]);
+                        ss << ((void **)(e->value))[i];
                     }
                 }
-                if (e->vector_width > 1 && buf_ptr < buf_end) {
-                    buf_ptr += snprintf(buf_ptr, buf_end - buf_ptr, ">");
+                if (e->vector_width > 1) {
+                    ss << ">";
                 }
             }
+            ss << "\n";
 
-            halide_printf(user_context, "%s\n", buf);
+            halide_print(user_context, ss.str());
         }
 
         return my_id;

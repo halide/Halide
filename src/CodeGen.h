@@ -114,6 +114,7 @@ protected:
     static bool llvm_ARM_enabled;
     static bool llvm_AArch64_enabled;
     static bool llvm_NVPTX_enabled;
+    static bool llvm_Mips_enabled;
 
     llvm::Module *module;
     bool owns_module;
@@ -169,6 +170,9 @@ protected:
     /** Emit code that runs a statement. */
     void codegen(Stmt);
 
+    /** Codegen a vector Expr by codegenning each lane and combining. */
+    void scalarize(Expr);
+
     /** Take an llvm Value representing a pointer to a buffer_t,
      * and populate the symbol table with its constituent parts.
      */
@@ -177,9 +181,15 @@ protected:
     /** Add a definition of buffer_t to the module if it isn't already there. */
     void define_buffer_t();
 
-    /** Codegen an assertion. If false, it bails out and calls the error handler. */
-    void create_assertion(llvm::Value *condition, const std::string &message,
-                          const std::vector<llvm::Value *> &args = std::vector<llvm::Value *>());
+    /** Codegen an assertion. If false, it bails out and calls the
+     * error handler. Either set message to non-NULL *or* pass a
+     * vector of Expr arguments to print.  */
+    // @{
+    void create_assertion(llvm::Value *condition, Expr message);
+    void create_assertion(llvm::Value *condition, const char *message) {
+        create_assertion(condition, StringImm::make(message));
+    }
+    // @}
 
     /** Put a string constant in the module as a global variable and return a pointer to it. */
     llvm::Constant *create_string_constant(const std::string &str);
@@ -223,7 +233,7 @@ protected:
     /** Mark a load or store with type-based-alias-analysis metadata
      * so that llvm knows it can reorder loads and stores across
      * different buffers */
-    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer);
+    void add_tbaa_metadata(llvm::Instruction *inst, std::string buffer, Expr index);
 
     using IRVisitor::visit;
 
@@ -303,7 +313,10 @@ protected:
 
     llvm::Value *get_user_context() const;
 
-
+    /** Implementation of the intrinsic call to
+     * interleave_vectors. This implementation allows for interleaving
+     * an arbitrary number of vectors.*/
+    llvm::Value *interleave_vectors(Type, const std::vector<Expr>&);
 
 private:
 

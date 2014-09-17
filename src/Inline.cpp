@@ -22,7 +22,7 @@ class Inliner : public IRMutator {
     // Sanity check that this is a reasonable function to inline
     void check(Function f) {
 
-        internal_assert(!f.has_reduction_definition());
+        internal_assert(!f.has_update_definition());
 
         const Schedule &s = f.schedule();
 

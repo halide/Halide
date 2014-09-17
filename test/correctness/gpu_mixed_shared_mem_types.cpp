@@ -43,8 +43,8 @@ int main(int argc, char **argv) {
     for (uint64_t x = 0; x < output.width(); x++) {
         uint64_t correct = n_types * (x / 16) + offset;
         if (output(x) != correct) {
-            printf("output(%lld) = %lld instead of %lld\n",
-                   x, output(x), correct);
+            printf("output(%d) = %d instead of %d\n",
+                   (unsigned int)x, (unsigned int)output(x), (unsigned int)correct);
             return -1;
         }
     }

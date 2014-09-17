@@ -107,7 +107,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                      << " along loop variable " << loop_var << "\n"
                      << "Region provided:\n";
 
-            string prefix = func.name() + ".s" + int_to_string(func.reductions().size()) + ".";
+            string prefix = func.name() + ".s" + int_to_string(func.updates().size()) + ".";
             for (int i = 0; i < func.dimensions(); i++) {
                 // Look up the region required of this function's last stage
                 string var = prefix + func.args()[i];
@@ -143,8 +143,8 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
 
             // If the function is not pure in the given dimension, give up
             bool pure = true;
-            for (size_t i = 0; i < func.reductions().size(); i++) {
-                const Variable *var = func.reductions()[i].args[dim_idx].as<Variable>();
+            for (size_t i = 0; i < func.updates().size(); i++) {
+                const Variable *var = func.updates()[i].args[dim_idx].as<Variable>();
                 if (!var) {
                     pure = false;
                 } else if (var->name != dim) {
@@ -217,7 +217,7 @@ class SlidingWindowOnFunctionAndLoop : public IRMutator {
                 replacements[prefix + dim + ".max"] = new_max;
             }
 
-            for (size_t i = 0; i < func.reductions().size(); i++) {
+            for (size_t i = 0; i < func.updates().size(); i++) {
                 string n = func.name() + ".s" + int_to_string(i) + "." + dim;
                 replacements[n + ".min"] = Variable::make(Int(32), prefix + dim + ".min");
                 replacements[n + ".max"] = Variable::make(Int(32), prefix + dim + ".max");

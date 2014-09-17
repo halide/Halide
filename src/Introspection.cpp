@@ -158,15 +158,7 @@ public:
 
         debug(2) << "Loading " << binary << "\n";
 
-        llvm::object::ObjectFile *obj = load_object_file(binary);
-        if (obj) {
-            working = true;
-            parse_object_file(obj);
-            delete obj;
-        } else {
-            debug(1) << "Could not load object file: " << binary << "\n";
-            working = false;
-        }
+        load_and_parse_object_file(binary);
     }
 
     int count_trailing_zeros(int64_t x) {
@@ -625,21 +617,50 @@ public:
 
 private:
 
-    llvm::object::ObjectFile *load_object_file(const std::string &binary) {
-        // Open the object file in question
-        #if LLVM_VERSION > 34
+    void load_and_parse_object_file(const std::string &binary) {
+        llvm::object::ObjectFile *obj = NULL;
+
+        // Open the object file in question. The API to do this keeps changing.
+        #if LLVM_VERSION >= 36
+
+        llvm::ErrorOr<llvm::object::OwningBinary<llvm::object::ObjectFile> > maybe_obj =
+            llvm::object::ObjectFile::createObjectFile(binary);
+
+        if (!maybe_obj) {
+            debug(1) << "Failed to load binary:" << binary << "\n";
+            return;
+        }
+
+        obj = maybe_obj.get().getBinary().get();
+
+        #elif LLVM_VERSION >= 35
+
         llvm::ErrorOr<std::unique_ptr<llvm::object::ObjectFile> > maybe_obj =
             llvm::object::ObjectFile::createObjectFile(binary);
 
         if (!maybe_obj) {
             debug(1) << "Failed to load binary:" << binary << "\n";
-            return NULL;
+            return;
         }
 
-        return maybe_obj.get().release();
+        obj = maybe_obj.get().get();
+
         #else
-        return llvm::object::ObjectFile::createObjectFile(binary);
+        obj = llvm::object::ObjectFile::createObjectFile(binary);
         #endif
+
+        if (obj) {
+            working = true;
+            parse_object_file(obj);
+
+            #if LLVM_VERSION < 35
+            // It's not memory-managed in older LLVMs.
+            delete obj;
+            #endif
+        } else {
+            debug(1) << "Could not load object file: " << binary << "\n";
+            working = false;
+        }
     }
 
     void parse_object_file(llvm::object::ObjectFile *obj) {

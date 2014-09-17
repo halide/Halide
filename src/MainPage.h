@@ -29,7 +29,7 @@
  *
  * For defining, scheduling, and evaluating basic pipelines:
  *
- * Halide::Func, Halide::Var
+ * Halide::Func, Halide::Stage, Halide::Var
  *
  * Our image data type:
  *
@@ -63,4 +63,8 @@
  * \example tutorial/lesson_07_multi_stage_pipelines.cpp
  * \example tutorial/lesson_08_scheduling_2.cpp
  * \example tutorial/lesson_09_update_definitions.cpp
+ * \example tutorial/lesson_10_aot_compilation_generate.cpp
+ * \example tutorial/lesson_10_aot_compilation_run.cpp
+ * \example tutorial/lesson_11_cross_compilation.cpp
+ * \example tutorial/lesson_12_using_the_gpu.cpp
  */

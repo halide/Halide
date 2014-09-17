@@ -50,9 +50,9 @@ void populate_environment(Function f, map<string, Function> &env, bool recursive
         f.values()[i].accept(&calls);
     }
 
-    // Consider reductions
-    for (size_t j = 0; j < f.reductions().size(); j++) {
-        ReductionDefinition r = f.reductions()[j];
+    // Consider updates
+    for (size_t j = 0; j < f.updates().size(); j++) {
+        UpdateDefinition r = f.updates()[j];
         for (size_t i = 0; i < r.values.size(); i++) {
             r.values[i].accept(&calls);
         }

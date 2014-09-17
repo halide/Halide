@@ -4,6 +4,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
+#include "Bounds.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,15 +14,42 @@ using std::string;
 using std::vector;
 using std::map;
 
+namespace {
+// Visitor and helper function to test if a piece of IR uses an extern image.
+class UsesExternImage : public IRVisitor {
+    using IRVisitor::visit;
+
+    void visit(const Call *c) {
+        if (c->call_type == Call::Image) {
+            result = true;
+        } else {
+            IRVisitor::visit(c);
+        }
+    }
+public:
+    UsesExternImage() : result(false) {}
+    bool result;
+};
+
+inline bool uses_extern_image(Stmt s) {
+    UsesExternImage uses;
+    s.accept(&uses);
+    return uses.result;
+}
+}
+
 class FlattenDimensions : public IRMutator {
 public:
-    FlattenDimensions(const map<string, Function> &e)
-        : env(e) {}
+    FlattenDimensions(const string &output, const map<string, Function> &e)
+        : output(output), env(e) {}
     Scope<int> scope;
 private:
+    const string &output;
     const map<string, Function> &env;
+    Scope<int> realizations;
 
-    Expr flatten_args(const string &name, const vector<Expr> &args) {
+    Expr flatten_args(const string &name, const vector<Expr> &args,
+                      bool internal) {
         Expr idx = 0;
         vector<Expr> mins(args.size()), strides(args.size());
 
@@ -41,7 +69,7 @@ private:
             mins[i] = Variable::make(Int(32), min_name);
         }
 
-        if (env.find(name) != env.end()) {
+        if (internal) {
             // f(x, y) -> f[(x-xmin)*xstride + (y-ymin)*ystride] This
             // strategy makes sense when we expect x to cancel with
             // something in xmin.  We use this for internal allocations
@@ -68,6 +96,8 @@ private:
     using IRMutator::visit;
 
     void visit(const Realize *realize) {
+        realizations.push(realize->name, 1);
+
         Stmt body = mutate(realize->body);
 
         // Compute the size
@@ -77,6 +107,8 @@ private:
           extents[i] = mutate(extents[i]);
         }
         Expr condition = mutate(realize->condition);
+
+        realizations.pop(realize->name);
 
         vector<int> storage_permutation;
         {
@@ -164,50 +196,113 @@ private:
         }
     }
 
-    void visit(const Provide *provide) {
+    struct ProvideValue {
+        Expr value;
+        string name;
+    };
 
-        vector<Expr> values(provide->values.size());
+    void flatten_provide_values(vector<ProvideValue> &values, const Provide *provide) {
+        values.resize(provide->values.size());
+
         for (size_t i = 0; i < values.size(); i++) {
-            values[i] = mutate(provide->values[i]);
+            Expr value = mutate(provide->values[i]);
 
             // Promote the type to be a multiple of 8 bits
-            Type t = values[i].type();
+            Type t = value.type();
             t.bits = t.bytes() * 8;
-            if (t.bits != values[i].type().bits) {
-                values[i] = Cast::make(t, values[i]);
+            if (t.bits != value.type().bits) {
+                value = Cast::make(t, value);
+            }
+
+            values[i].value = value;
+            if (values.size() > 1) {
+                values[i].name = provide->name + "." + int_to_string(i);
+            } else {
+                values[i].name = provide->name;
+            }
+        }
+    }
+
+    // Lower a set of provides
+    Stmt flatten_provide_atomic(const Provide *provide) {
+        vector<ProvideValue> values;
+        flatten_provide_values(values, provide);
+
+        Stmt result;
+        for (size_t i = 0; i < values.size(); i++) {
+            const ProvideValue &cv = values[i];
+
+            Expr idx = mutate(flatten_args(cv.name, provide->args,
+                                           provide->name != output));
+            Expr var = Variable::make(cv.value.type(), cv.name + ".value");
+            Stmt store = Store::make(cv.name, var, idx);
+
+            if (result.defined()) {
+                result = Block::make(result, store);
+            } else {
+                result = store;
             }
         }
 
-        if (values.size() == 1) {
-            Expr idx = mutate(flatten_args(provide->name, provide->args));
-            stmt = Store::make(provide->name, values[0], idx);
+        for (size_t i = values.size(); i > 0; i--) {
+            const ProvideValue &cv = values[i-1];
+
+            result = LetStmt::make(cv.name + ".value", cv.value, result);
+        }
+        return result;
+    }
+
+    Stmt flatten_provide(const Provide *provide) {
+        vector<ProvideValue> values;
+        flatten_provide_values(values, provide);
+
+        Stmt result;
+        for (size_t i = 0; i < values.size(); i++) {
+            const ProvideValue &cv = values[i];
+
+            Expr idx = mutate(flatten_args(cv.name, provide->args,
+                                           provide->name != output));
+            Stmt store = Store::make(cv.name, cv.value, idx);
+
+            if (result.defined()) {
+                result = Block::make(result, store);
+            } else {
+                result = store;
+            }
+        }
+        return result;
+    }
+
+    void visit(const Provide *provide) {
+        Stmt result;
+
+        // Handle the provide atomically if necessary. This logic is
+        // currently very conservative, it will lower many provides
+        // atomically that do not require it.
+        if (provide->values.size() == 1) {
+            // If there is only one value, we don't need to worry
+            // about atomicity.
+            result = flatten_provide(provide);
+        } else if (!realizations.contains(provide->name) &&
+                   uses_extern_image(provide)) {
+            // If the provide is not a realization and it uses an
+            // input image, it might be aliased. Flatten it atomically
+            // because we can't prove the boxes don't overlap.
+            result = flatten_provide_atomic(provide);
         } else {
+            Box provided = box_provided(Stmt(provide), provide->name);
+            Box required = box_required(Stmt(provide), provide->name);
 
-            vector<string> names(provide->values.size());
-            Stmt result;
-
-            // Store the values by name
-            for (size_t i = 0; i < provide->values.size(); i++) {
-                string name = provide->name + "." + int_to_string(i);
-                Expr idx = mutate(flatten_args(name, provide->args));
-                names[i] = name + ".value";
-                Expr var = Variable::make(values[i].type(), names[i]);
-                Stmt store = Store::make(name, var, idx);
-
-                if (result.defined()) {
-                    result = Block::make(result, store);
-                } else {
-                    result = store;
-                }
+            if (boxes_overlap(provided, required)) {
+                // The boxes provided and required might overlap, so
+                // the provide must be done atomically.
+                result = flatten_provide_atomic(provide);
+            } else {
+                // The boxes don't overlap.
+                result = flatten_provide(provide);
             }
-
-            // Add the let statements that define the values
-            for (size_t i = provide->values.size(); i > 0; i--) {
-                result = LetStmt::make(names[i-1], values[i-1], result);
-            }
-
-            stmt = result;
         }
+        stmt = result;
     }
 
     void visit(const Call *call) {
@@ -235,7 +330,8 @@ private:
             Type t = call->type;
             t.bits = t.bytes() * 8;
 
-            Expr idx = mutate(flatten_args(name, call->args));
+            Expr idx = mutate(flatten_args(name, call->args,
+                                           env.find(call->name) != env.end()));
             expr = Load::make(t, name, idx, call->image, call->param);
 
             if (call->type.bits != t.bits) {
@@ -260,8 +356,8 @@ private:
 };
 
 
-Stmt storage_flattening(Stmt s, const map<string, Function> &env) {
-    return FlattenDimensions(env).mutate(s);
+Stmt storage_flattening(Stmt s, const string &output, const map<string, Function> &env) {
+    return FlattenDimensions(output, env).mutate(s);
 }
 
 }

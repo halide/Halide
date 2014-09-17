@@ -30,29 +30,41 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y"), xi("xi"), yi("yi"), t("t");
 
-    // Brighten the image
+    // Break the input into tiles.
+    Func tiled("tiled");
+    tiled(xi, yi, x, y) = image(x*tile_size + xi, y*tile_size + yi);
+
+    // Brighten each tile of the image
     Func brighter("brighter");
-    brighter(x, y) = my_powf(image(x, y), 0.8f);
+    brighter(xi, yi, x, y) = my_powf(tiled(xi, yi, x, y), 0.8f);
 
-    // Select either the brighter or the input depending on the bitmap
+    // Select either the brighter tile or the input tile depending on the bitmap
+    Func output_tiles("output_tiles");
+    output_tiles(xi, yi, x, y) = select(bitmap(x, y), brighter(xi, yi, x, y), tiled(xi, yi, x, y));
+
+    // Collapse back down into 2D
     Func output("output");
-    output(x, y) = select(bitmap(x/tile_size, y/tile_size), brighter(x, y), image(x, y));
+    output(x, y) = output_tiles(x % tile_size, y % tile_size,
+                                x / tile_size, y / tile_size);
 
-    // Compute the output in tiles of the appropriate size
-    output.tile(x, y, xi, yi, tile_size, tile_size);
+    // Compute the output in tiles of the appropriate size to simplify
+    // the mod and div above. Not important for the stage skipping behavior.
+    output.bound(x, 0, (image.extent(0)/tile_size)*tile_size)
+          .bound(y, 0, (image.extent(1)/tile_size)*tile_size)
+          .tile(x, y, xi, yi, tile_size, tile_size);
 
     // Vectorize within tiles. We would also parallelize across tiles,
     // but that introduces a race condition in the call_count.
-    output.vectorize(xi, 4).fuse(x, y, t);
+    output.vectorize(xi, 4);
 
-    // Compute brighter per output tile
-    brighter.compute_at(output, t);
+    // Compute brighter per tile of output_tiles. This puts it inside
+    // the loop over x and y, which makes the condition in the select
+    // a constant. This is the important part of the schedule!
+    brighter.compute_at(output_tiles, x);
 
-    // Assert that the output is a whole number of tiles. Otherwise
-    // the tiles in the schedule don't match up to the tiles in the
-    // algorithm, and you can't safely skip any work.
-    output.bound(x, 0, (image.extent(0)/tile_size)*tile_size);
-    output.bound(y, 0, (image.extent(1)/tile_size)*tile_size);
+    // Schedule output_tiles per output tile. This choice is unimportant.
+    output_tiles.compute_at(output, x);
+
     output.compile_jit();
 
     Image<bool> bitmap_buf(10, 10);
@@ -72,7 +84,7 @@ int main(int argc, char **argv) {
     // Check the right number of calls to powf occurred
     if (call_count != tile_size*tile_size) {
         printf("call_count = %d instead of %d\n", call_count, tile_size * tile_size);
-        //return -1;
+        return -1;
     }
 
     // Check the output is correct

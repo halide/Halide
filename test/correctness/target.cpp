@@ -2,6 +2,8 @@
 #include <Halide.h>
 
 using namespace Halide;
+// TODO(zalman): this is ugly. Likely C++11 is the answer...
+using Halide::Internal::vec;
 
 int main(int argc, char **argv) {
     Target t1, t2;
@@ -32,7 +34,7 @@ int main(int argc, char **argv) {
     }
 
     // Full specification round-trip:
-    t1 = Target(Target::Linux, Target::X86, 32, Target::SSE41);
+    t1 = Target(Target::Linux, Target::X86, 32, vec(Target::SSE41));
     ts = t1.to_string();
     if (ts != "x86-32-linux-sse41") {
        printf("to_string failure: %s\n", ts.c_str());
@@ -48,12 +50,11 @@ int main(int argc, char **argv) {
     }
 
     // Full specification round-trip, crazy features
-    int64_t features = Target::JIT | Target::SSE41 | Target::AVX |
-            Target::AVX2 | Target::CUDA | Target::OpenCL | Target::OpenGL |
-            Target::GPUDebug;
-    t1 = Target(Target::Android, Target::ARM, 32, features);
+    t1 = Target(Target::Android, Target::ARM, 32,
+                vec(Target::JIT, Target::SSE41, Target::AVX, Target::AVX2,
+                    Target::CUDA, Target::OpenCL, Target::OpenGL, Target::Debug));
     ts = t1.to_string();
-    if (ts != "arm-32-android-jit-sse41-avx-avx2-cuda-opencl-opengl-gpu_debug") {
+    if (ts != "arm-32-android-jit-debug-sse41-avx-avx2-cuda-opencl-opengl") {
        printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
@@ -67,7 +68,7 @@ int main(int argc, char **argv) {
     }
 
     // Partial specification merging: os,arch,bits get replaced; features get combined
-    t2 = Target(Target::Linux, Target::X86, 64, Target::OpenCL);
+    t2 = Target(Target::Linux, Target::X86, 64, vec(Target::OpenCL));
     if (!t2.merge_string("x86-32-sse41")) {
        printf("merge_string failure: %s\n", ts.c_str());
        return -1;
@@ -95,6 +96,25 @@ int main(int argc, char **argv) {
     ts = "opencl-host";
     if (t2.from_string(ts)) {
        printf("from_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+
+    // with_feature
+    t1 = Target(Target::Linux, Target::X86, 32, vec(Target::SSE41));
+    t2 = t1.with_feature(Target::NoAsserts).with_feature(Target::NoBoundsQuery);
+    ts = t2.to_string();
+    if (ts != "x86-32-linux-no_asserts-no_bounds_query-sse41") {
+       printf("to_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+
+    // without_feature
+    t1 = Target(Target::Linux, Target::X86, 32, vec(Target::SSE41, Target::NoAsserts));
+    // Note that NoBoundsQuery wasn't set here, so 'without' is a no-op
+    t2 = t1.without_feature(Target::NoAsserts).without_feature(Target::NoBoundsQuery);
+    ts = t2.to_string();
+    if (ts != "x86-32-linux-sse41") {
+       printf("to_string failure: %s\n", ts.c_str());
        return -1;
     }
 

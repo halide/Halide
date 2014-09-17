@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 
     Target t = get_jit_target_from_environment();
 
-    if (t.features & (Target::OpenCL | Target::CUDA)) {
+    if (t.has_feature(Target::OpenCL) || t.has_feature(Target::CUDA)) {
         f.cuda_tile(x, y, 16, 16);
 
         // This allocates a buffer, does gpu compute into it, and then

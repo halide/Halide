@@ -55,28 +55,34 @@ using std::stack;
         LLVMInitialize##target##AsmPrinter(); \
 
 // Override above empty init function with macro for supported targets.
-#if WITH_X86
+#ifdef WITH_X86
 #define InitializeX86Target()       InitializeTarget(X86)
 #define InitializeX86AsmParser()    InitializeAsmParser(X86)
 #define InitializeX86AsmPrinter()   InitializeAsmPrinter(X86)
 #endif
 
-#if WITH_ARM
+#ifdef WITH_ARM
 #define InitializeARMTarget()       InitializeTarget(ARM)
 #define InitializeARMAsmParser()    InitializeAsmParser(ARM)
 #define InitializeARMAsmPrinter()   InitializeAsmPrinter(ARM)
 #endif
 
-#if WITH_PTX
+#ifdef WITH_PTX
 #define InitializeNVPTXTarget()       InitializeTarget(NVPTX)
 #define InitializeNVPTXAsmParser()    InitializeAsmParser(NVPTX)
 #define InitializeNVPTXAsmPrinter()   InitializeAsmPrinter(NVPTX)
 #endif
 
-#if WITH_AARCH64
+#ifdef WITH_AARCH64
 #define InitializeAArch64Target()       InitializeTarget(AArch64)
 #define InitializeAArch64AsmParser()    InitializeAsmParser(AArch64)
 #define InitializeAArch64AsmPrinter()   InitializeAsmPrinter(AArch64)
+#endif
+
+#ifdef WITH_MIPS
+#define InitializeMipsTarget()       InitializeTarget(Mips)
+#define InitializeMipsAsmParser()    InitializeAsmParser(Mips)
+#define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
 #endif
 
 CodeGen::CodeGen(Target t) :
@@ -175,6 +181,7 @@ bool CodeGen::llvm_X86_enabled = false;
 bool CodeGen::llvm_ARM_enabled = false;
 bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
+bool CodeGen::llvm_Mips_enabled = false;
 
 void CodeGen::compile(Stmt stmt, string name,
                       const vector<Argument> &args,
@@ -396,9 +403,16 @@ void CodeGen::compile_to_bitcode(const string &filename) {
     string error_string;
 #if LLVM_VERSION < 35
     raw_fd_ostream out(filename.c_str(), error_string);
-#else
+#elif LLVM_VERSION == 35
     raw_fd_ostream out(filename.c_str(), error_string, llvm::sys::fs::F_None);
+#else // llvm 3.6
+    std::error_code err;
+    raw_fd_ostream out(filename.c_str(), err, llvm::sys::fs::F_None);
+    if (err) error_string = err.message();
 #endif
+    internal_assert(error_string.empty())
+        << "Error opening output " << filename << ": " << error_string << "\n";
+
     WriteBitcodeToFile(module, out);
 }
 
@@ -451,8 +465,12 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Figure out where we are going to send the output.
 #if LLVM_VERSION < 35
     raw_fd_ostream raw_out(filename.c_str(), error_string);
-#else
+#elif LLVM_VERSION == 35
     raw_fd_ostream raw_out(filename.c_str(), error_string, llvm::sys::fs::F_None);
+#else // llvm 3.6
+    std::error_code err;
+    raw_fd_ostream raw_out(filename.c_str(), err, llvm::sys::fs::F_None);
+    if (err) error_string = err.message();
 #endif
     internal_assert(error_string.empty())
         << "Error opening output " << filename << ": " << error_string << "\n";
@@ -769,9 +787,9 @@ void CodeGen::visit(const Div *op) {
     } else if (op->type.is_uint()) {
         value = builder->CreateUDiv(codegen(op->a), codegen(op->b));
     } else {
-        // Signed integer division sucks. It should round down (to
-        // make upsampling kernels work across the zero boundary), but
-        // it doesn't.
+        // Signed integer division sucks. It should be defined such
+        // that it satisifies (a/b)*b + a%b = a, where 0 <= a%b < |b|,
+        // i.e. Euclidean division.
 
         // If it's a small const power of two, then we can just
         // arithmetic right shift. This rounds towards negative
@@ -784,43 +802,33 @@ void CodeGen::visit(const Div *op) {
             }
         }
 
-        // We get the rounding to work correctly by introducing a pre
-        // and post offset by one. The offsets depend on the sign of
-        // the numerator and denominator
+        // We get rounding to work by examining the implied remainder
+        // and correcting the quotient.
 
-        /* Here's the C code that we're trying to match (due to Len Hamey)
-        T axorb = a ^ b;
-        post = a != 0 ? ((axorb) >> (t.bits-1)) : 0;
-        pre = a < 0 ? -post : post;
-        T num = a + pre;
-        T quo = num / b;
-        T result = quo + post;
+        /* Here's the C code that we're trying to match:
+        int q = a / b;
+        int r = a - q * b;
+        int bs = b >> (t.bits - 1);
+        int rs = r >> (t.bits - 1);
+        return q - (rs & bs) + (rs & ~bs);
         */
 
         Value *a = codegen(op->a), *b = codegen(op->b);
 
-        Value *a_xor_b = builder->CreateXor(a, b);
+        Value *q = builder->CreateSDiv(a, b);
+        Value *r = builder->CreateSub(a, builder->CreateMul(q, b));
         Value *shift = ConstantInt::get(a->getType(), op->a.type().bits-1);
-        Value *a_xor_b_sign = builder->CreateAShr(a_xor_b, shift);
-        Value *zero = ConstantInt::get(a->getType(), 0);
-        Value *a_not_zero = builder->CreateICmpNE(a, zero);
-        Value *post = builder->CreateSelect(a_not_zero, a_xor_b_sign, zero);
-        Value *minus_post = builder->CreateNeg(post);
-        Value *a_lt_zero = builder->CreateICmpSLT(a, zero);
-        Value *pre = builder->CreateSelect(a_lt_zero, minus_post, post);
-        Value *num = builder->CreateAdd(a, pre);
-        Value *quo = builder->CreateSDiv(num, b);
-        value = builder->CreateAdd(quo, post);
+        Value *bs = builder->CreateAShr(b, shift);
+        Value *rs = builder->CreateAShr(r, shift);
+        Value *round_up = builder->CreateAnd(rs, bs);
+        Value *round_down = builder->CreateAnd(rs, builder->CreateNot(bs));
+        value = builder->CreateAdd(builder->CreateSub(q, round_up), round_down);
     }
 }
 
 void CodeGen::visit(const Mod *op) {
-    // To match our definition of division, mod should have this behavior:
-    // 3 % 2 -> 1;
-    // -3 % 2 -> 1;
-    // 3 % -2 -> -1;
-    // -3 % -2 -> -1;
-    // I.e. the remainder should be between zero and b
+    // To match our definition of division, mod should be between 0
+    // and |b|.
 
     if (op->type.is_float()) {
         value = codegen(simplify(op->a - op->b * floor(op->a/op->b)));
@@ -841,20 +849,18 @@ void CodeGen::visit(const Mod *op) {
             Value *a = codegen(op->a);
             Value *b = codegen(op->b);
 
-            // Match this non-overflowing C code due to Len Hamey
+            // Match this non-overflowing C code
             /*
-              T rem = a % b;
-              rem = rem + (rem != 0 && (rem ^ b) < 0 ? b : 0);
+              T r = a % b;
+              r = r + (r < 0 ? abs(b) : 0);
             */
 
-            Value *rem = builder->CreateSRem(a, b);
-            Value *zero = ConstantInt::get(rem->getType(), 0);
-            Value *rem_not_zero = builder->CreateICmpNE(rem, zero);
-            Value *rem_xor_b = builder->CreateXor(rem, b);
-            Value *rem_xor_b_lt_zero = builder->CreateICmpSLT(rem_xor_b, zero);
-            Value *need_to_add_b = builder->CreateAnd(rem_not_zero, rem_xor_b_lt_zero);
-            Value *offset = builder->CreateSelect(need_to_add_b, b, zero);
-            value = builder->CreateNSWAdd(rem, offset);
+            Value *r = builder->CreateSRem(a, b);
+            Value *zero = ConstantInt::get(r->getType(), 0);
+            Value *b_lt_0 = builder->CreateICmpSLT(b, zero);
+            Value *abs_b = builder->CreateSelect(b_lt_0, builder->CreateNeg(b), b);
+            Value *r_lt_0 = builder->CreateICmpSLT(r, zero);
+            value = builder->CreateSelect(r_lt_0, builder->CreateAdd(r, abs_b), r);
         }
     }
 }
@@ -1077,11 +1083,68 @@ Value *CodeGen::codegen_buffer_pointer(string buffer, Halide::Type type, Value *
     return builder->CreateInBoundsGEP(base_address, index);
 }
 
-void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer) {
+namespace {
+int next_power_of_two(int x) {
+    for (int p2 = 1; ; p2 *= 2) {
+        if (p2 >= x) {
+            return p2;
+        }
+    }
+    // unreachable.
+}
+}
+
+void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr index) {
+
+    // If the index is constant, we generate some TBAA info that helps
+    // LLVM understand our loads/stores aren't aliased.
+    bool constant_index = false;
+    int base = 0;
+    int width = 1;
+
+    if (index.defined()) {
+        if (const Ramp *ramp = index.as<Ramp>()) {
+            const int *pstride = as_const_int(ramp->stride);
+            const int *pbase = as_const_int(ramp->base);
+            if (pstride && pbase) {
+                // We want to find the smallest aligned width and offset
+                // that contains this ramp.
+                int stride = *pstride;
+                base = *pbase;
+                assert(base >= 0);
+                width = next_power_of_two(ramp->width * stride);
+
+                while (base % width) {
+                    base -= base % width;
+                    width *= 2;
+                }
+                constant_index = true;
+            }
+        } else {
+            const int *pbase = as_const_int(index);
+            if (pbase) {
+                base = *pbase;
+                constant_index = true;
+            }
+        }
+    }
+
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    MDNode *tbaa_root = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
-    MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa_root));
+    MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
+    tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa));
+    // We also add metadata for constant indices to allow loads and
+    // stores to the same buffer to get reordered.
+    if (constant_index) {
+        for (int w = 1024; w >= width; w /= 2) {
+            int b = (base / w) * w;
+
+            std::stringstream level;
+            level << buffer << ".width" << w << ".base" << b;
+            tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, level.str()), tbaa));
+        }
+    }
+
     inst->setMetadata("tbaa", tbaa);
 }
 
@@ -1094,7 +1157,7 @@ void CodeGen::visit(const Load *op) {
         // Scalar loads
         Value *ptr = codegen_buffer_pointer(op->name, op->type, op->index);
         LoadInst *load = builder->CreateAlignedLoad(ptr, op->type.bytes());
-        add_tbaa_metadata(load, op->name);
+        add_tbaa_metadata(load, op->name, op->index);
         value = load;
     } else {
         int alignment = op->type.bytes(); // The size of a single element
@@ -1119,7 +1182,7 @@ void CodeGen::visit(const Load *op) {
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), ramp->base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             LoadInst *load = builder->CreateAlignedLoad(ptr, alignment);
-            add_tbaa_metadata(load, op->name);
+            add_tbaa_metadata(load, op->name, op->index);
             value = load;
         } else if (ramp && stride && stride->value == 2) {
             // Load two vectors worth and then shuffle
@@ -1181,7 +1244,7 @@ void CodeGen::visit(const Load *op) {
             Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
             ptr = builder->CreatePointerCast(ptr, llvm_type_of(op->type)->getPointerTo());
             LoadInst *vec = builder->CreateAlignedLoad(ptr, alignment);
-            add_tbaa_metadata(vec, op->name);
+            add_tbaa_metadata(vec, op->name, op->index);
             Value *undef = UndefValue::get(vec->getType());
 
             vector<Constant *> indices(ramp->width);
@@ -1197,7 +1260,7 @@ void CodeGen::visit(const Load *op) {
             for (int i = 0; i < ramp->width; i++) {
                 Value *lane = ConstantInt::get(i32, i);
                 LoadInst *val = builder->CreateLoad(ptr);
-                add_tbaa_metadata(val, op->name);
+                add_tbaa_metadata(val, op->name, op->index);
                 value = builder->CreateInsertElement(value, val, lane);
                 ptr = builder->CreateInBoundsGEP(ptr, stride);
             }
@@ -1212,7 +1275,7 @@ void CodeGen::visit(const Load *op) {
                 Expr idx = extract_lane(op->index, i);
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
-                add_tbaa_metadata(val, op->name);
+                add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
             value = vec;
@@ -1224,7 +1287,7 @@ void CodeGen::visit(const Load *op) {
                 Value *idx = builder->CreateExtractElement(index, ConstantInt::get(i32, i));
                 Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), idx);
                 LoadInst *val = builder->CreateLoad(ptr);
-                add_tbaa_metadata(val, op->name);
+                add_tbaa_metadata(val, op->name, op->index);
                 vec = builder->CreateInsertElement(vec, val, ConstantInt::get(i32, i));
             }
             value = vec;
@@ -1300,11 +1363,10 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_do_par_for",
         "halide_do_task",
         "halide_error",
-        "halide_error_varargs",
         "halide_free",
         "halide_init_kernels",
         "halide_malloc",
-        "halide_printf",
+        "halide_print",
         "halide_profiling_timer",
         "halide_release",
         "halide_start_clock",
@@ -1320,6 +1382,175 @@ bool CodeGen::function_takes_user_context(const string &name) {
         }
     }
     return false;
+}
+
+Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
+    if(vecs.size() == 1) {
+        return codegen(vecs[0]);
+    } else if(vecs.size() == 2) {
+        Expr a = vecs[0], b = vecs[1];
+        debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
+
+        vector<Constant *> indices(type.width);
+        for (int i = 0; i < type.width; i++) {
+            int idx = i/2;
+            if (i % 2 == 1) idx += a.type().width;
+            indices[i] = ConstantInt::get(i32, idx);
+        }
+
+        return builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+    } else if(vecs.size() == 3) {
+        Expr a = vecs[0], b = vecs[1], c = vecs[2];
+        debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << "\n";
+
+        // First we shuffle a & b together...
+        vector<Constant *> indices(type.width);
+        for (int i = 0; i < type.width; i++) {
+            if (i % 3 == 0) {
+                indices[i] = ConstantInt::get(i32, i/3);
+            } else if (i % 3 == 1) {
+                indices[i] = ConstantInt::get(i32, i/3 + a.type().width);
+            } else {
+                indices[i] = UndefValue::get(i32);
+            }
+        }
+
+        Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+
+        // Then we create a vector of the output size that contains c...
+        for (int i = 0; i < type.width; i++) {
+            if (i < c.type().width) {
+                indices[i] = ConstantInt::get(i32, i);
+            } else {
+                indices[i] = UndefValue::get(i32);
+            }
+        }
+
+        Value *none = UndefValue::get(llvm_type_of(c.type()));
+        Value *value_c = builder->CreateShuffleVector(codegen(c), none, ConstantVector::get(indices));
+
+        // Finally, we shuffle the above 2 vectors together into the result.
+        for (int i = 0; i < type.width; i++) {
+            if (i % 3 < 2) {
+                indices[i] = ConstantInt::get(i32, i);
+            } else {
+                indices[i] = ConstantInt::get(i32, i/3 + type.width);
+            }
+        }
+
+        return builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
+    } else if(vecs.size() == 4) {
+        Expr a = vecs[0], b = vecs[1], c = vecs[2], d = vecs[3];
+        debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
+
+        int half_width = type.width / 2;
+        vector<Constant *> indices(half_width);
+        for (int i = 0; i < half_width; i++) {
+            int idx = i/2;
+            if (i % 2 == 1) idx += a.type().width;
+            indices[i] = ConstantInt::get(i32, idx);
+        }
+
+        // First we shuffle a & b together...
+        Value *value_ab = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
+
+        // Next we shuffle c & d together...
+        Value *value_cd = builder->CreateShuffleVector(codegen(c), codegen(d), ConstantVector::get(indices));
+
+        // Now we reinterpret the shuffled vectors as vectors of pairs...
+        Type t = a.type();
+        t.bits *= 2;
+        Value *vec_ab = builder->CreateBitCast(value_ab, llvm_type_of(t));
+        Value *vec_cd = builder->CreateBitCast(value_cd, llvm_type_of(t));
+
+        // Finally, we shuffle the above 2 vectors together into the result.
+        Value *vec = builder->CreateShuffleVector(vec_ab, vec_cd, ConstantVector::get(indices));
+        return builder->CreateBitCast(vec, llvm_type_of(type));
+    } else {
+        Type even_t = type;
+        Type odd_t  = type;
+        even_t.width = odd_t.width = 0;
+        std::vector<Expr> even_vecs, odd_vecs;
+        int odd_num_vecs = vecs.size() % 2;
+        for (size_t i = 0; i < vecs.size() - odd_num_vecs; ++i) {
+            if (i % 2 == 0) {
+                even_t.width += vecs[i].type().width;
+                even_vecs.push_back(vecs[i]);
+            } else {
+                odd_t.width += vecs[i].type().width;
+                odd_vecs.push_back(vecs[i]);
+            }
+        }
+
+        Expr last;
+        if (odd_num_vecs) {
+            last = vecs.back();
+        }
+
+        Value* a = interleave_vectors(even_t, even_vecs);
+        Value* b = interleave_vectors(odd_t, odd_vecs);
+
+        if (odd_num_vecs == 0 ) {
+            vector<Constant *> indices(type.width);
+            for (int i = 0; i < type.width; i++) {
+                int idx = i/2;
+                if (i % 2 == 1) idx += even_t.width;
+                indices[i] = ConstantInt::get(i32, idx);
+            }
+
+            return builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+        } else {
+            vector<Constant *> indices(type.width);
+            for (int i = 0, idx = 0; i < type.width; i++) {
+                if (i % vecs.size() < vecs.size()-1) {
+                    if (idx % 2 == 0) {
+                        indices[i] = ConstantInt::get(i32, idx / 2);
+                    } else {
+                        indices[i] = ConstantInt::get(i32, idx / 2 + even_t.width);
+                    }
+
+                    ++idx;
+                } else {
+                    indices[i] = UndefValue::get(i32);
+                }
+            }
+
+            Value *ab = builder->CreateShuffleVector(a, b, ConstantVector::get(indices));
+
+            for (int i = 0; i < type.width; i++) {
+                if (i < last.type().width) {
+                    indices[i] = ConstantInt::get(i32, i);
+                } else {
+                    indices[i] = UndefValue::get(i32);
+                }
+            }
+
+            Value *none = UndefValue::get(llvm_type_of(last.type()));
+            Value *c = builder->CreateShuffleVector(codegen(last), none, ConstantVector::get(indices));
+
+            for (int i = 0; i < type.width; i++) {
+                if (i % vecs.size() < vecs.size()-1) {
+                    indices[i] = ConstantInt::get(i32, i);
+                } else {
+                    indices[i] = ConstantInt::get(i32, i/vecs.size() + type.width);
+                }
+            }
+
+            return builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
+        }
+    }
+}
+
+void CodeGen::scalarize(Expr e) {
+    llvm::Type *result_type = llvm_type_of(e.type());
+
+    Value *result = UndefValue::get(result_type);
+
+    for (int i = 0; i < e.type().width; i++) {
+        Value *v = codegen(extract_lane(e, i));
+        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+    }
+    value = result;
 }
 
 void CodeGen::visit(const Call *op) {
@@ -1347,19 +1578,8 @@ void CodeGen::visit(const Call *op) {
             }
 
         } else if (op->name == Call::interleave_vectors) {
-            internal_assert(op->args.size() == 2);
-            Expr a = op->args[0], b = op->args[1];
-            debug(3) << "Vectors to interleave: " << a << ", " << b << "\n";
-
-            vector<Constant *> indices(op->type.width);
-            for (int i = 0; i < op->type.width; i++) {
-                int idx = i/2;
-                if (i % 2 == 1) idx += a.type().width;
-                indices[i] = ConstantInt::get(i32, idx);
-            }
-
-            value = builder->CreateShuffleVector(codegen(a), codegen(b), ConstantVector::get(indices));
-
+            internal_assert(0 < op->args.size());
+            value = interleave_vectors(op->type, op->args);
         } else if (op->name == Call::debug_to_file) {
             internal_assert(op->args.size() == 9);
             const StringImm *filename = op->args[0].as<StringImm>();
@@ -1691,16 +1911,7 @@ void CodeGen::visit(const Call *op) {
             value = codegen(op->args[1]);
         } else if (op->name == Call::if_then_else) {
             if (op->type.is_vector()) {
-                // Scalarize
-                llvm::Type *result_type = llvm_type_of(op->type);
-
-                Value *result = UndefValue::get(result_type);
-
-                for (int i = 0; i < op->args[0].type().width; i++) {
-                    Value *v = codegen(extract_lane(op, i));
-                    result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
-                }
-                value = result;
+                scalarize(op);
 
             } else {
 
@@ -1725,6 +1936,115 @@ void CodeGen::visit(const Call *op) {
                 phi->addIncoming(false_value, false_bb);
 
                 value = phi;
+            }
+        } else if (op->name == Call::make_struct) {
+            if (op->type.is_vector()) {
+                // Make a vector-of-structs
+                scalarize(op);
+            } else {
+                // Codegen each element.
+                assert(!op->args.empty());
+                vector<llvm::Value *> args(op->args.size());
+                vector<llvm::Type *> types(op->args.size());
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    args[i] = codegen(op->args[i]);
+                    types[i] = args[i]->getType();
+                }
+
+                // Create an struct on the stack.
+                StructType *struct_t = StructType::create(types);
+                Value *ptr = create_alloca_at_entry(struct_t, 1);
+
+                // Put the elements in the struct.
+                for (size_t i = 0; i < args.size(); i++) {
+                    Value *field_ptr = builder->CreateConstInBoundsGEP2_32(ptr, 0, i);
+                    builder->CreateStore(args[i], field_ptr);
+                }
+
+                value = ptr;
+            }
+
+        } else if (op->name == Call::stringify) {
+            assert(!op->args.empty());
+
+            if (op->type.is_vector()) {
+                scalarize(op);
+            } else {
+
+                // Compute the maximum possible size of the message.
+                int buf_size = 1; // One for the terminating zero.
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    Type t = op->args[i].type();
+                    if (op->args[i].as<StringImm>()) {
+                        buf_size += op->args[i].as<StringImm>()->value.size();
+                    } else if (t.is_int() || t.is_uint()) {
+                        buf_size += 19; // 2^64 = 18446744073709551616
+                    } else if (t.is_float()) {
+                        if (t.bits == 32) {
+                            buf_size += 47; // %f format of max negative float
+                        } else {
+                            buf_size += 14; // Scientific notation with 6 decimal places.
+                        }
+                    } else {
+                        internal_assert(t.is_handle());
+                        buf_size += 18; // 0x0123456789abcdef
+                    }
+                }
+                // Round up to a multiple of 16 bytes.
+                buf_size = ((buf_size + 15)/16)*16;
+
+                // Clamp to at most 8k.
+                if (buf_size > 8192) buf_size = 8192;
+
+                // Allocate a stack array to hold the message.
+                llvm::Value *buf = create_alloca_at_entry(i8, buf_size);
+
+                llvm::Value *dst = buf;
+                llvm::Value *buf_end = builder->CreateConstGEP1_32(buf, buf_size);
+
+                llvm::Function *append_string  = module->getFunction("halide_string_to_string");
+                llvm::Function *append_int64   = module->getFunction("halide_int64_to_string");
+                llvm::Function *append_uint64  = module->getFunction("halide_uint64_to_string");
+                llvm::Function *append_double  = module->getFunction("halide_double_to_string");
+                llvm::Function *append_pointer = module->getFunction("halide_pointer_to_string");
+
+                internal_assert(append_string);
+                internal_assert(append_int64);
+                internal_assert(append_uint64);
+                internal_assert(append_double);
+                internal_assert(append_pointer);
+
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    const StringImm *s = op->args[i].as<StringImm>();
+                    Type t = op->args[i].type();
+                    internal_assert(t.width == 1);
+                    vector<Value *> call_args(2);
+                    call_args[0] = dst;
+                    call_args[1] = buf_end;
+
+                    if (s) {
+                        call_args.push_back(codegen(op->args[i]));
+                        dst = builder->CreateCall(append_string, call_args);
+                    } else if (t.is_int()) {
+                        call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
+                        call_args.push_back(ConstantInt::get(i32, 1));
+                        dst = builder->CreateCall(append_int64, call_args);
+                    } else if (t.is_uint()) {
+                        call_args.push_back(codegen(Cast::make(UInt(64), op->args[i])));
+                        call_args.push_back(ConstantInt::get(i32, 1));
+                        dst = builder->CreateCall(append_uint64, call_args);
+                    } else if (t.is_float()) {
+                        call_args.push_back(codegen(Cast::make(Float(64), op->args[i])));
+                        // Use scientific notation for doubles
+                        call_args.push_back(ConstantInt::get(i32, t.bits == 64 ? 1 : 0));
+                        dst = builder->CreateCall(append_double, call_args);
+                    } else {
+                        internal_assert(t.is_handle());
+                        call_args.push_back(codegen(op->args[i]));
+                        dst = builder->CreateCall(append_pointer, call_args);
+                    }
+                }
+                value = buf;
             }
         } else if (op->name == Call::memoize_expr) {
             // Used as an annotation for caching, should be invisible to
@@ -1909,11 +2229,7 @@ void CodeGen::visit(const LetStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    vector<Value *> args(op->args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i] = codegen(op->args[i]);
-    }
-    create_assertion(codegen(op->condition), op->message, args);
+    create_assertion(codegen(op->condition), op->message);
 }
 
 Constant *CodeGen::create_string_constant(const string &s) {
@@ -1946,9 +2262,9 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
     return ptr;
 }
 
-void CodeGen::create_assertion(Value *cond, const string &message, const vector<Value *> &args) {
+void CodeGen::create_assertion(Value *cond, Expr message) {
 
-    if (target.features & Halide::Target::NoAsserts) return;
+    if (target.has_feature(Target::NoAsserts)) return;
 
     // If the condition is a vector, fold it down to a scalar
     VectorType *vt = dyn_cast<VectorType>(cond->getType());
@@ -1962,8 +2278,8 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     }
 
     // Make a new basic block for the assert
-    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert failed: " + message, function);
-    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded: " + message, function);
+    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert failed", function);
+    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded", function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
     builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb, very_likely_branch);
@@ -1971,17 +2287,18 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     // Build the failure case
     builder->SetInsertPoint(assert_fails_bb);
 
-    vector<Value *> call_args(2);
-    call_args[0] = get_user_context();
-    call_args[1] = create_string_constant(message);
-    call_args.insert(call_args.end(), args.begin(), args.end());
+    // Codegen the message here, inside the failure case. This may be
+    // expensive, and the calls that build the string may appear to be
+    // side-effecting to llvm, so it's important to do the codegen
+    // right here.
+    llvm::Value *msg = codegen(message);
 
     // Call the error handler
-    llvm::Function *error_handler = module->getFunction("halide_error_varargs");
+    llvm::Function *error_handler = module->getFunction("halide_error");
     internal_assert(error_handler)
-        << "Could not find halide_error_varargs in initial module\n";
+        << "Could not find halide_error in initial module\n";
     debug(4) << "Creating call to error handlers\n";
-    builder->CreateCall(error_handler, call_args);
+    builder->CreateCall(error_handler, vec<llvm::Value *>(get_user_context(), msg));
 
     // Do any architecture-specific cleanup necessary
     debug(4) << "Creating cleanup code\n";
@@ -2151,7 +2468,7 @@ void CodeGen::visit(const Store *op) {
     if (value_type.is_scalar()) {
         Value *ptr = codegen_buffer_pointer(op->name, value_type, op->index);
         StoreInst *store = builder->CreateAlignedStore(val, ptr, op->value.type().bytes());
-        add_tbaa_metadata(store, op->name);
+        add_tbaa_metadata(store, op->name, op->index);
     } else {
         int alignment = op->value.type().bytes();
         const Ramp *ramp = op->index.as<Ramp>();
@@ -2173,7 +2490,7 @@ void CodeGen::visit(const Store *op) {
                 alignment = op->value.type().element_of().bytes();
             }
             StoreInst *store = builder->CreateAlignedStore(val, ptr2, alignment);
-            add_tbaa_metadata(store, op->name);
+            add_tbaa_metadata(store, op->name, op->index);
         } else if (ramp) {
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
             const IntImm *const_stride = ramp->stride.as<IntImm>();
@@ -2186,11 +2503,11 @@ void CodeGen::visit(const Store *op) {
                     // Use a constant offset from the base pointer
                     Value *p = builder->CreateConstInBoundsGEP1_32(ptr, const_stride->value * i);
                     StoreInst *store = builder->CreateStore(v, p);
-                    add_tbaa_metadata(store, op->name);
+                    add_tbaa_metadata(store, op->name, op->index);
                 } else {
                     // Increment the pointer by the stride for each element
                     StoreInst *store = builder->CreateStore(v, ptr);
-                    add_tbaa_metadata(store, op->name);
+                    add_tbaa_metadata(store, op->name, op->index);
                     ptr = builder->CreateInBoundsGEP(ptr, stride);
                 }
             }
@@ -2203,7 +2520,7 @@ void CodeGen::visit(const Store *op) {
                 Value *v = builder->CreateExtractElement(val, lane);
                 Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), idx);
                 StoreInst *store = builder->CreateStore(v, ptr);
-                add_tbaa_metadata(store, op->name);
+                add_tbaa_metadata(store, op->name, op->index);
             }
         }
     }

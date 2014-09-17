@@ -5,7 +5,7 @@ using namespace Halide;
 
 int main(int argc, char **argv) {
     // This test is only relevant for opencl
-    if (get_jit_target_from_environment().features & Target::OpenCL) {
+    if (get_jit_target_from_environment().has_feature(Target::OpenCL)) {
 
         Func f, g, h;
         Var x;

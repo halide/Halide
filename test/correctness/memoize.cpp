@@ -110,13 +110,13 @@ int main(int argc, char **argv) {
                                   UInt(8), 2);
 
         Func f, g;
-	Var x, y;
+        Var x, y;
         f() = count_calls(coord, coord);
         f.compute_root().memoize();
 
-	g(x, y) = f();
+        g(x, y) = f();
 
-	coord.set(0);
+        coord.set(0);
         Image<uint8_t> out1 = g.realize(256, 256);
         Image<uint8_t> out2 = g.realize(256, 256);
 
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
         }
         assert(call_count == 1);
 
-	coord.set(1);
+        coord.set(1);
         Image<uint8_t> out3 = g.realize(256, 256);
         Image<uint8_t> out4 = g.realize(256, 256);
 
@@ -415,7 +415,64 @@ int main(int argc, char **argv) {
             }
         }
         // TODO work out an assertion on call count here.
-        printf("Call count is %d.\n", call_count_with_arg);
+        fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+    }
+
+    {
+        // Test flushing entire cache with a single element larger than the cache
+        Param<float> val;
+
+        call_count_with_arg = 0;
+        Func count_calls;
+        count_calls.define_extern("count_calls_with_arg",
+                                  Internal::vec(ExternFuncArgument(cast<uint8_t>(val))),
+                                  UInt(8), 2);
+
+        Func f;
+        Var x, y, xi, yi;
+        f(x, y) = count_calls(x, y) + cast<uint8_t>(x);
+        count_calls.compute_root().memoize();
+
+        Func g;
+        g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
+        g.memoization_cache_set_size(1000000);
+
+        for (int v = 0; v < 1000; v++) {
+            int r = rand() % 256;
+            val.set((float)r);
+            Image<uint8_t> out1 = g.realize(128, 128);
+
+            for (int32_t i = 0; i < 100; i++) {
+                for (int32_t j = 0; j < 100; j++) {
+                    assert(out1(i, j) == (uint8_t)(3 * r + i + (i - 1) + (i + 1)));
+                }
+            }
+        }
+
+        // TODO work out an assertion on call count here.
+        fprintf(stderr, "Call count before oversize realize is %d.\n", call_count_with_arg);
+        call_count_with_arg = 0;
+
+        Image<uint8_t> big = g.realize(1024, 1024);
+        Image<uint8_t> big2 = g.realize(1024, 1024);
+
+        // TODO work out an assertion on call count here.
+        fprintf(stderr, "Call count after oversize realize is %d.\n", call_count_with_arg);
+
+        call_count_with_arg = 0;
+        for (int v = 0; v < 1000; v++) {
+            int r = rand() % 256;
+            val.set((float)r);
+            Image<uint8_t> out1 = g.realize(128, 128);
+
+            for (int32_t i = 0; i < 100; i++) {
+                for (int32_t j = 0; j < 100; j++) {
+                    assert(out1(i, j) == (uint8_t)(3 * r + i + (i - 1) + (i + 1)));
+                }
+            }
+        }
+
+        fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
     }
 
     {
@@ -451,7 +508,7 @@ int main(int argc, char **argv) {
 
         // TODO work out an assertion on call counts here.
         for (int i = 0; i < 8; i++) {
-          printf("Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
+          fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
     }
 
@@ -480,11 +537,7 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 3; i++) {
           stage[i].compute_root();
         }
-#if DYNAMIC_SKIP_STAGE_BUG_FIXED // This makes the test fail to compile
         stage[3].compute_root().memoize();
-#else
-        stage[3].compute_root();
-#endif
         val.set(23.0f);
         Image<uint8_t> result = stage[3].realize(128, 128);
 
@@ -495,7 +548,7 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < 4; i++) {
-          printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+          fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
         result = stage[3].realize(128, 128);
@@ -506,11 +559,11 @@ int main(int argc, char **argv) {
         }
 
         for (int i = 0; i < 4; i++) {
-            printf("Call count for stage %d is %d.\n", i, call_count_staged[i]);
+            fprintf(stderr, "Call count for stage %d is %d.\n", i, call_count_staged[i]);
         }
 
     }
 
-    printf("Success!\n");
+    fprintf(stderr, "Success!\n");
     return 0;
 }

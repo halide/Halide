@@ -7,6 +7,8 @@
 
 #include "CodeGen_ARM.h"
 #include "CodeGen_X86.h"
+#include "CodeGen_MIPS.h"
+#include "CodeGen_PNaCl.h"
 
 namespace Halide {
 namespace Internal {
@@ -21,7 +23,7 @@ public:
 
     /** Create a GPU code generator. GPU target is selected via
      * CodeGen_GPU_Options. Processor features can be enabled using the
-     * appropriate flags from CodeGen_X86_Options */
+     * appropriate flags from Target */
     CodeGen_GPU_Host(Target);
 
     virtual ~CodeGen_GPU_Host();
@@ -30,7 +32,7 @@ public:
      * statement, the name of the function produced, and the arguments
      * to the function produced. After calling this, call
      * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the x86 machine
+     * CodeGen::compile_to_function_pointer to get at the generated machine
      * code. */
     void compile(Stmt stmt, std::string name,
                  const std::vector<Argument> &args,

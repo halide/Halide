@@ -66,7 +66,7 @@ public:
 
 bool can_parallelize_rvar(const string &v,
                           const string &f,
-                          const ReductionDefinition &r) {
+                          const UpdateDefinition &r) {
     FindLoads find(f);
     for (size_t i = 0; i < r.values.size(); i++) {
         r.values[i].accept(&find);

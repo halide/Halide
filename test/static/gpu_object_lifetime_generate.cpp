@@ -17,7 +17,7 @@ int main(int argc, char **argv) {
         f.gpu_tile(x, 16);
     }
     // The test requires gpu_debug to examine the output.
-    target.features |= Target::GPUDebug;
+    target.set_feature(Target::Debug);
 
     f.compile_to_file("func_gpu_object_lifetime", target);
 

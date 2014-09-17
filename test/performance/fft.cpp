@@ -286,7 +286,7 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
         if (S == N/R) {
             v.vectorize(n0);
             V.vectorize(V.args()[2]);
-            for (int i = 0; i < V.num_reduction_definitions(); i++) {
+            for (int i = 0; i < V.num_update_definitions(); i++) {
                 V.update(i).vectorize(V.args()[2]);
             }
         }
@@ -422,8 +422,11 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
     // Zip two real DFTs X and Y into one complex DFT Z = X + j*Y
     Func zipped("zipped");
     // Construct the whole DFT domain of X and Y via conjugate
-    // symmetry.
-    Tuple X = selectz(n1 < N1/2 + 1,
+    // symmetry. At n1 = N1/2, both branches are equal (the dft is
+    // real, so the conjugate is a no-op), so the slightly less
+    // intuitive form of this expression still works, but vectorizes
+    // more cleanly than n1 <= N1/2.
+    Tuple X = selectz(n1 < N1/2,
                       dft0(n0, clamp(n1, 0, N1/2), _),
                       conj(dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
 
@@ -437,7 +440,7 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
         // the domain, we need to clamp excess accesses.
         n0_Y = clamp(n0_Y, 0, N0 - 1);
     }
-    Tuple Y = selectz(n1 < N1/2 + 1,
+    Tuple Y = selectz(n1 < N1/2,
                       dft0(n0_Y, clamp(n1, 0, N1/2), _),
                       conj(dft0(n0_Y, clamp((N1 - n1)%N1, 0, N1/2), _)));
     zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
@@ -614,10 +617,6 @@ int main(int argc, char **argv) {
     c2c_in(x, y, rep) = Tuple(in(x, y), 0.0f);
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
-    // Zero the strides of the rep variable to benchmark pure FFT
-    // performance (as if input/output buffers were cached).
-    R_c2c[0].raw_buffer()->stride[2] = 0;
-    R_c2c[1].raw_buffer()->stride[2] = 0;
 
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
@@ -632,15 +631,13 @@ int main(int argc, char **argv) {
     Func bench_r2cT = fft2d_r2cT(r2cT_in, W, H);
     // Due to padding for vectorization, this has asserts that fail,
     // but are harmless (padding is overwritten, but no more).
-    if ((target.features & Target::NoAsserts) == 0) {
+    if (!target.has_feature(Target::NoAsserts)) {
         Func clamp_r2cT;
         clamp_r2cT(x, y, rep) = bench_r2cT(clamp(x, 0, H/2), y, rep);
         clamp_r2cT.compute_root().vectorize(x, 8);
         bench_r2cT = clamp_r2cT;
     }
     Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, reps, target);
-    R_r2cT[0].raw_buffer()->stride[2] = 0;
-    R_r2cT[1].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
@@ -657,7 +654,6 @@ int main(int argc, char **argv) {
     cT2r_in(x, y, rep) = Tuple(cT(x, y), cT(x, y));
     Func bench_cT2r = fft2d_cT2r(cT2r_in, W, H);
     Realization R_cT2r = bench_cT2r.realize(W, H, reps, target);
-    R_cT2r[0].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {

@@ -27,6 +27,8 @@ typedef unsigned __INT8_TYPE__ uint8_t;
 typedef __SIZE_TYPE__ size_t;
 typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
+typedef ptrdiff_t ssize_t;
+
 #define NULL 0
 #define WEAK __attribute__((weak))
 
@@ -44,10 +46,160 @@ typedef uint32_t uintptr_t;
 typedef int32_t intptr_t;
 #endif
 
-typedef __builtin_va_list va_list;
-#define va_start(ap, param) __builtin_va_start(ap, param)
-#define va_end(ap)          __builtin_va_end(ap)
-#define va_arg(ap, type)    __builtin_va_arg(ap, type)
+#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
+
+// Commonly-used extern functions
+extern "C" {
+WEAK int64_t halide_current_time_ns(void *user_context);
+WEAK void halide_print(void *user_context, const char *msg);
+WEAK void halide_error(void *user_context, const char *msg);
+
+char *getenv(const char *);
+void free(void *);
+void *malloc(size_t);
+const char *strstr(const char *, const char *);
+int atoi(const char *);
+int strcmp(const char* s, const char* t);
+int strncmp(const char* s, const char* t, size_t n);
+size_t strlen(const char* s);
+char *strchr(const char* s, char c);
+void* memcpy(void* s1, const void* s2, size_t n);
+int memcmp(const void* s1, const void* s2, size_t n);
+void *memset(void *s, int val, size_t n);
+int open(const char *filename, int opts, int mode);
+int close(int fd);
+ssize_t write(int fd, const void *buf, size_t bytes);
+void exit(int);
+
+// Similar to strncpy, but with various non-string arguments. Writes
+// arg to dst. Does not write to pointer end or beyond. Returns
+// pointer to one beyond the last character written so that calls can
+// be chained.
+WEAK char *halide_string_to_string(char *dst, char *end, const char *arg);
+WEAK char *halide_double_to_string(char *dst, char *end, double arg, int scientific);
+WEAK char *halide_int64_to_string(char *dst, char *end, int64_t arg, int digits);
+WEAK char *halide_uint64_to_string(char *dst, char *end, uint64_t arg, int digits);
+WEAK char *halide_pointer_to_string(char *dst, char *end, const void *arg);
+
+}
+
+// A convenient namespace for weak functions that are internal to the
+// halide runtime.
+namespace Halide { namespace Runtime { namespace Internal {
+
+enum PrinterType {BasicPrinter = 0,
+                  ErrorPrinter = 1,
+                  StringStreamPrinter = 2};
+
+// A class for constructing debug messages from the runtime. Dumps
+// items into a stack array, then prints them when the object leaves
+// scope using halide_print. Think of it as a stringstream that prints
+// when it dies. Use it like this:
+
+// debug(user_context) << "A" << b << c << "\n";
+
+// If you use it like this:
+
+// debug d(user_context);
+// d << "A";
+// d << b;
+// d << c << "\n";
+
+// Then remember the print only happens when the debug object leaves
+// scope, which may print at a confusing time.
+
+template<int type>
+class Printer {
+public:
+    char buf[1024];
+    char *dst, *end;
+    void *user_context;
+
+    Printer(void *ctx) : dst(buf), end(buf + 1023), user_context(ctx) {
+        *end = 0;
+    }
+
+    Printer &operator<<(const char *arg) {
+        dst = halide_string_to_string(dst, end, arg);
+        return *this;
+    }
+
+    Printer &operator<<(int64_t arg) {
+        dst = halide_int64_to_string(dst, end, arg, 1);
+        return *this;
+    }
+
+    Printer &operator<<(int32_t arg) {
+        dst = halide_int64_to_string(dst, end, arg, 1);
+        return *this;
+    }
+
+    Printer &operator<<(uint64_t arg) {
+        dst = halide_uint64_to_string(dst, end, arg, 1);
+        return *this;
+    }
+
+    Printer &operator<<(uint32_t arg) {
+        dst = halide_uint64_to_string(dst, end, arg, 1);
+        return *this;
+    }
+
+    Printer &operator<<(double arg) {
+        dst = halide_double_to_string(dst, end, arg, 1);
+        return *this;
+    }
+
+    Printer &operator<<(float arg) {
+        dst = halide_double_to_string(dst, end, arg, 0);
+        return *this;
+    }
+
+    Printer &operator<<(const void *arg) {
+        dst = halide_pointer_to_string(dst, end, arg);
+        return *this;
+    }
+
+    // Use it like a stringstream.
+    const char *str() {
+        return buf;
+    }
+
+    ~Printer() {
+        if (type == ErrorPrinter) {
+            halide_error(user_context, buf);
+        } else if (type == BasicPrinter) {
+            halide_print(user_context, buf);
+        } else {
+            // It's a stringstream. Do nothing.
+        }
+    }
+};
+
+// A class that supports << with all the same types as Printer, but
+// does nothing and should compile to a no-op.
+class SinkPrinter {
+public:
+    SinkPrinter(void *user_context) {}
+};
+template<typename T>
+SinkPrinter operator<<(const SinkPrinter &s, T) {
+    return s;
+}
+
+typedef Printer<BasicPrinter> print;
+typedef Printer<ErrorPrinter> error;
+typedef Printer<StringStreamPrinter> stringstream;
+
+#ifdef DEBUG_RUNTIME
+typedef Printer<BasicPrinter> debug;
+#else
+typedef SinkPrinter debug;
+#endif
+
+}}}
+
+using namespace Halide::Runtime::Internal;
 
 #endif
 

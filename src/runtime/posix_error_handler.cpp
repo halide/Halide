@@ -1,29 +1,23 @@
 #include "runtime_internal.h"
 
-extern "C" {
-
-extern int halide_printf(void *, const char *, ...);
-extern int vsnprintf(char *, size_t, const char *, va_list);
-extern void exit(int);
+namespace Halide { namespace Runtime { namespace Internal {
 
 WEAK void (*halide_error_handler)(void *, const char *) = NULL;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
 
 WEAK void halide_error(void *user_context, const char *msg) {
     if (halide_error_handler) {
         (*halide_error_handler)(user_context, msg);
-    }  else {
-        halide_printf(user_context, "Error: %s\n", msg);
+    } else {
+        char buf[4096];
+        char *dst = halide_string_to_string(buf, buf + 4096, "Error: ");
+        halide_string_to_string(dst, buf + 4096, msg);
+        halide_print(user_context, buf);
         exit(1);
     }
-}
-
-WEAK void halide_error_varargs(void *user_context, const char *msg, ...) {
-    char buf[4096];
-    va_list args;
-    va_start(args, msg);
-    vsnprintf(buf, 4096, msg, args);
-    va_end(args);
-    halide_error(user_context, buf);
 }
 
 WEAK void halide_set_error_handler(void (*handler)(void *, const char *)) {

@@ -1,9 +1,17 @@
 #include <Halide.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 using namespace Halide;
 
 int main() {
+    // This test must be run with an OpenGL target
+    const Target &target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::OpenGL))  {
+        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
+        return 1;
+    }
+
     Func f;
     Var x, y, c;
 
@@ -11,8 +19,7 @@ int main() {
                                       c == 1, 127, 12));
 
     Image<uint8_t> out(10, 10, 3);
-    f.bound(c, 0, 3);
-    f.glsl(x, y, c);
+    f.bound(c, 0, 3).glsl(x, y, c);
     f.realize(out);
 
     out.copy_to_host();

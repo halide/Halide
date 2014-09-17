@@ -49,7 +49,7 @@ public:
             // Note that this is tacked on to the front of the block, since it must come
             // before the calls to halide_current_time_ns.
             Expr begin_clock_call = Call::make(Int(32), "halide_start_clock", vector<Expr>(), Call::Extern);
-            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock", vector<Expr>());
+            Stmt begin_clock = AssertStmt::make(begin_clock_call == 0, "Failed to start clock");
             s = Block::make(begin_clock, s);
 
             // Do a little calibration: make a loop that does a large number of calls to add_ticks
@@ -84,9 +84,8 @@ public:
             for (map<string, int>::const_iterator it = indices.begin(); it != indices.end(); ++it) {
                 int idx = it->second;
                 Expr val = Load::make(UInt(64), kBufName, idx, Buffer(), Parameter());
-                Expr print_val = Call::make(Int(32), "halide_printf",
-                                            vec<Expr>(it->first + " %llu\n", val), Call::Extern);
-                Stmt print_stmt = AssertStmt::make(print_val > 0, "halide_printf failed", vector<Expr>());
+                Expr print_val = print(it->first, val);
+                Stmt print_stmt = Evaluate::make(print_val);
                 s = Block::make(s, print_stmt);
             }
 

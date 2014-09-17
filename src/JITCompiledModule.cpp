@@ -132,12 +132,19 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     options.PositionIndependentExecutable = true;
     options.UseInitArray = false;
 
+    #if LLVM_VERSION > 35
+    EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));
+    #else
     EngineBuilder engine_builder(m);
+    #endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
     #ifdef USE_MCJIT
+    #if LLVM_VERSION < 36
+    // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
+    #endif
     JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
     engine_builder.setJITMemoryManager(memory_manager);
     #else

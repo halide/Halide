@@ -29,13 +29,13 @@ WEAK int halide_opengl_create_context(void *user_context) {
     void *dpy = XOpenDisplay(NULL);
     if (!dpy) {
         halide_error(user_context, "Could not open X11 display.\n");
-        return 1;
+        return -1;
     }
 
     // GLX supported?
     if (!glXQueryExtension(dpy, NULL, NULL)) {
         halide_error(user_context, "GLX not supported by X server.\n");
-        return 1;
+        return -1;
     }
 
     int screen = XDefaultScreen(dpy);
@@ -52,7 +52,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
     void** fb_config = glXChooseFBConfig(dpy, screen, attribs, &num_configs);
     if (!num_configs) {
         halide_error(user_context, "Could not get framebuffer config.\n");
-        return 1;
+        return -1;
     }
 
     void *ctx = glXCreateNewContext(dpy, fb_config[0],
@@ -60,7 +60,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
                                     NULL /* share list */, 1 /* direct */);
     if (!ctx) {
         halide_error(user_context, "Could not create OpenGL context.\n");
-        return 1;
+        return -1;
     }
 
     int pbuffer_attribs[] = {
@@ -76,7 +76,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
 
     if (!glXMakeContextCurrent(dpy, pbuffer, pbuffer, ctx)) {
         halide_error(user_context, "Could not make context current.\n");
-        return 1;
+        return -1;
     }
 
     return 0;

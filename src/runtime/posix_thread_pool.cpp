@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 
 #include "HalideRuntime.h"
-#include "mini_string.h"
 
 // TODO: This code currently doesn't work on OS X (Darwin) as we do
 // not initialize the pthread_mutex_t using PTHREAD_MUTEX_INITIALIZER
@@ -50,11 +49,16 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 extern char *getenv(const char *);
 extern int atoi(const char *);
 
-extern int halide_printf(void *user_context, const char *, ...);
+} // extern "C"
 
-#ifndef NULL
-#define NULL 0
-#endif
+namespace Halide { namespace Runtime { namespace Internal {
+
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
+WEAK int halide_num_threads;
+WEAK bool halide_thread_pool_initialized = false;
 
 struct work {
     work *next_job;
@@ -69,7 +73,7 @@ struct work {
 
 // The work queue and thread pool is weak, so one big work queue is shared by all halide functions
 #define MAX_THREADS 64
-WEAK struct {
+struct halide_work_queue_t {
     // all fields are protected by this mutex.
     pthread_mutex_t mutex;
 
@@ -88,7 +92,12 @@ WEAK struct {
         return !shutdown;
     }
 
-} halide_work_queue;
+};
+WEAK halide_work_queue_t halide_work_queue;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
 
 WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
     pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
@@ -106,8 +115,6 @@ WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
     pthread_mutex_unlock(mutex);
 }
 
-WEAK int halide_num_threads;
-WEAK bool halide_thread_pool_initialized = false;
 
 WEAK void halide_shutdown_thread_pool() {
     if (!halide_thread_pool_initialized) return;
@@ -129,9 +136,8 @@ WEAK void halide_shutdown_thread_pool() {
     //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
     // Tidy up
     pthread_mutex_destroy(&halide_work_queue.mutex);
-    // Reset it to zero in case we call another do_par_for
-    pthread_mutex_t uninitialized_mutex = {0};
-    halide_work_queue.mutex = uninitialized_mutex;
+    // Reinitialize in case we call another do_par_for
+    pthread_mutex_init(&halide_work_queue.mutex, NULL);
     pthread_cond_destroy(&halide_work_queue.state_change);
     halide_thread_pool_initialized = false;
 }
@@ -148,15 +154,10 @@ WEAK void halide_set_num_threads(int n) {
     halide_num_threads = n;
 }
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
-
 WEAK void halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)) {
     halide_custom_do_task = f;
 }
 
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 
 WEAK void halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)) {
     halide_custom_do_par_for = f;
@@ -171,6 +172,9 @@ WEAK int halide_do_task(void *user_context, halide_task f, int idx,
     }
 }
 
+} // extern "C"
+
+namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -232,7 +236,9 @@ WEAK void *halide_worker_thread(void *void_arg) {
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
 }
+}}} // namespace Halide::Runtime::Internal
 
+extern "C" {
 extern int halide_host_cpu_count();
 
 WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
@@ -304,4 +310,4 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     return job.exit_status;
 }
 
-}
+} // extern "C"

@@ -6,16 +6,7 @@
  */
 
 #include "IntrusivePtr.h"
-
-#ifdef COMPILING_HALIDE
-#define _COMPILING_HALIDE
-#undef COMPILING_HALIDE
-#endif
 #include "runtime/HalideRuntime.h"
-#ifdef _COMPILING_HALIDE
-#define COMPILING_HALIDE
-#undef _COMPILING_HALIDE
-#endif
 
 namespace llvm {
 class Module;

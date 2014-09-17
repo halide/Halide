@@ -218,7 +218,17 @@ Stmt build_provide_loop_nest(Function f,
             //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
 
-            // Don't put the let here, put it just inside the loop over outer
+            if (split.exact) {
+                // The bounds of the old reduction variable need to be
+                // explicitly defined for the benefit of producers
+                // that feed into this stage. They run from base to
+                // base + split factor.
+                stmt = LetStmt::make(prefix + split.old_var + ".min",
+                                     base_var, stmt);
+                stmt = LetStmt::make(prefix + split.old_var + ".max",
+                                     base_var + split.factor - 1, stmt);
+            }
+
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
@@ -235,6 +245,15 @@ Stmt build_provide_loop_nest(Function f,
             //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
+
+            // Maintain the known size of the fused dim if
+            // possible. This is important for possible later splits.
+            map<string, Expr>::iterator inner_dim = known_size_dims.find(split.inner);
+            map<string, Expr>::iterator outer_dim = known_size_dims.find(split.outer);
+            if (inner_dim != known_size_dims.end() &&
+                outer_dim != known_size_dims.end()) {
+                known_size_dims[split.old_var] = inner_dim->second*outer_dim->second;
+            }
 
         } else {
             // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
@@ -482,9 +501,9 @@ Stmt build_produce(Function f) {
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
-        Stmt check = AssertStmt::make(EQ::make(result, 0), "Call to external func " +
-                                      extern_name + " returned non-zero value: %d",
-                                      vec<Expr>(result));
+        Stmt check = AssertStmt::make(EQ::make(result, 0),
+                                      vec<Expr>("Call to external func " + extern_name +
+                                                " returned non-zero value: ", result));
         check = LetStmt::make(result_name, e, check);
 
         for (size_t i = 0; i < lets.size(); i++) {
@@ -517,8 +536,8 @@ vector<Stmt> build_update(Function f) {
 
     vector<Stmt> updates;
 
-    for (size_t i = 0; i < f.reductions().size(); i++) {
-        ReductionDefinition r = f.reductions()[i];
+    for (size_t i = 0; i < f.updates().size(); i++) {
+        UpdateDefinition r = f.updates()[i];
 
         string prefix = f.name() + ".s" + int_to_string(i+1) + ".";
 
@@ -534,7 +553,7 @@ vector<Stmt> build_update(Function f) {
             Expr s = r.args[i];
             s = qualify(prefix, s);
             site[i] = s;
-            debug(2) << "Reduction site " << i << " = " << s << "\n";
+            debug(2) << "Update site " << i << " = " << s << "\n";
         }
 
         Stmt loop = build_provide_loop_nest(f, prefix, site, values, r.schedule, true);
@@ -575,7 +594,7 @@ pair<Stmt, Stmt> build_production(Function func) {
 // large to cover the inferred bounds required.
 Stmt inject_explicit_bounds(Stmt body, Function func) {
     const Schedule &s = func.schedule();
-    for (size_t stage = 0; stage <= func.reductions().size(); stage++) {
+    for (size_t stage = 0; stage <= func.updates().size(); stage++) {
         for (size_t i = 0; i < s.bounds().size(); i++) {
             Bound b = s.bounds()[i];
             Expr max_val = (b.extent + b.min) - 1;
@@ -586,15 +605,17 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
             Expr check = (min_val <= min_var) && (max_val >= max_var);
-            string error_msg = ("Bounds given for " + b.var + " in " + func.name() +
-                                " (from %d to %d) don't cover required region (from %d to %d)");
-            vector<Expr> args = vec<Expr>(min_val, max_val, min_var, max_var);
+            vector<Expr> error_msg = vec<Expr>(
+                "Bounds given for " + b.var + " in " + func.name() +
+                " (from ", min_val, Expr(" to "), max_val,
+                Expr(") don't cover required region (from "),
+                min_var, Expr(" to "), max_var, Expr(")"));
 
             // bounds inference has already respected these values for us
             //body = LetStmt::make(prefix + ".min", min_val, body);
             //body = LetStmt::make(prefix + ".max", max_val, body);
 
-            body = Block::make(AssertStmt::make(check, error_msg, args), body);
+            body = Block::make(AssertStmt::make(check, error_msg), body);
         }
     }
 
@@ -667,7 +688,7 @@ private:
 
         // This is also the point at which we inject explicit bounds
         // for this realization.
-        if (target.features & Target::NoAsserts) {
+        if (target.has_feature(Target::NoAsserts)) {
             return s;
         } else {
             return inject_explicit_bounds(s, func);
@@ -761,7 +782,7 @@ private:
         }
     }
 
-    // If we're an inline reduction or extern, we may need to inject a realization here
+    // If we're an inline update or extern, we may need to inject a realization here
     virtual void visit(const Provide *op) {
         if (op->name != func.name() &&
             !func.is_pure() &&
@@ -881,7 +902,7 @@ Stmt create_initial_loop_nest(Function f, const Target &t) {
     Stmt s = r.first;
     // This must be in a pipeline so that bounds inference understands the update step
     s = Pipeline::make(f.name(), r.first, r.second, Evaluate::make(0));
-    if (t.features & Target::NoAsserts) {
+    if (t.has_feature(Target::NoAsserts)) {
         return s;
     } else {
         return inject_explicit_bounds(s, f);
@@ -1003,13 +1024,13 @@ void validate_schedule(Function f, Stmt s, bool is_output) {
 
     // Emit a warning if only some of the steps have been scheduled.
     bool any_scheduled = f.schedule().touched();
-    for (size_t i = 0; i < f.reductions().size(); i++) {
-        const ReductionDefinition &r = f.reductions()[i];
+    for (size_t i = 0; i < f.updates().size(); i++) {
+        const UpdateDefinition &r = f.updates()[i];
         any_scheduled = any_scheduled || r.schedule.touched();
     }
     if (any_scheduled) {
-        for (size_t i = 0; i < f.reductions().size(); i++) {
-            const ReductionDefinition &r = f.reductions()[i];
+        for (size_t i = 0; i < f.updates().size(); i++) {
+            const UpdateDefinition &r = f.updates()[i];
             if (!r.schedule.touched()) {
                 std::cerr << "Warning: Update step " << i
                           << " of function " << f.name()
@@ -1116,7 +1137,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
         if (i == order.size()) continue;
 
         if (f.has_pure_definition() &&
-            !f.has_reduction_definition() &&
+            !f.has_update_definition() &&
             f.schedule().compute_level().is_inline()) {
             debug(1) << "Inlining " << order[i-1] << '\n';
             s = inline_function(s, f);
@@ -1190,7 +1211,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
         s = LetStmt::make(lets[i].first, lets[i].second, s);
     }
 
-    if (t.features & Target::NoAsserts) {
+    if (t.has_feature(Target::NoAsserts)) {
         asserts.clear();
     }
 
@@ -1198,7 +1219,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     for (size_t i = 0; i < asserts.size(); i++) {
         std::ostringstream oss;
         oss << "Static bounds constraint on parameter violated: " << asserts[i];
-        s = Block::make(AssertStmt::make(asserts[i], oss.str(), vector<Expr>()), s);
+        s = Block::make(AssertStmt::make(asserts[i], oss.str()), s);
     }
 
     return s;
@@ -1214,8 +1235,8 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 // requirements.
 Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds &fb) {
 
-    bool no_asserts = t.features & Target::NoAsserts;
-    bool no_bounds_query = t.features & Target::NoBoundsQuery;
+    bool no_asserts = t.has_feature(Target::NoAsserts);
+    bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
 
     // First hunt for all the referenced buffers
     FindBuffers finder;
@@ -1329,12 +1350,16 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             int correct_size = type.bytes();
             ostringstream error_msg;
             error_msg << error_name << " has type " << type
-                      << ", but elem_size of the buffer_t passed in is "
-                      << "%d instead of " << correct_size;
-            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error_msg.str(), vec<Expr>(elem_size)));
+                      << ", but elem_size of the buffer_t passed in is ";
+            vector<Expr> args;
+            args.push_back(error_msg.str());
+            args.push_back(elem_size);
+            args.push_back(Expr(" instead of "));
+            args.push_back(correct_size);
+            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, args));
         }
 
-        if (touched.used.defined()) {
+        if (touched.maybe_unused()) {
             debug(3) << "Image " << name << " is only used when " << touched.used << "\n";
         }
 
@@ -1359,13 +1384,10 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             Expr min_required = touched[j].min;
             Expr extent_required = touched[j].max + 1 - touched[j].min;
 
-            if (touched.used.defined()) {
+            if (touched.maybe_unused()) {
                 min_required = select(touched.used, min_required, actual_min);
                 extent_required = select(touched.used, extent_required, actual_extent);
             }
-
-            string error_msg_extent = error_name + " is accessed at %d, which is beyond the max (%d) in dimension " + dim;
-            string error_msg_min = error_name + " is accessed at %d, which is before the min (%d) in dimension " + dim;
 
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
@@ -1376,18 +1398,30 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             lets_required.push_back(make_pair(extent_required_name, extent_required));
             lets_required.push_back(make_pair(min_required_name, min_required));
 
-            asserts_required.push_back(AssertStmt::make(actual_min <= min_required_var, error_msg_min,
-                                                        vec<Expr>(min_required_var, actual_min)));
+            vector<Expr> error_msg_min = vec<Expr>(
+                error_name + " is accessed at ",
+                min_required,
+                Expr(", which is before the min ("),
+                actual_min,
+                ") in dimension " + dim);
+
+            asserts_required.push_back(AssertStmt::make(actual_min <= min_required_var, error_msg_min));
 
             Expr actual_max = actual_min + actual_extent - 1;
             Expr max_required = min_required_var + extent_required_var - 1;
 
-            if (touched.used.defined()) {
+            if (touched.maybe_unused()) {
                 max_required = select(touched.used, max_required, actual_max);
             }
-            asserts_required.push_back(AssertStmt::make(actual_max >= max_required,
-                                                        error_msg_extent,
-                                                        vec<Expr>(max_required, actual_max)));
+
+            vector<Expr> error_msg_extent = vec<Expr>(
+                error_name + " is accessed at ",
+                max_required,
+                Expr(", which is beyond the max ("),
+                actual_max,
+                ") in dimension " + dim);
+
+            asserts_required.push_back(AssertStmt::make(actual_max >= max_required, error_msg_extent));
 
             // Come up with a required stride to use in bounds
             // inference mode. We don't assert it. It's just used to
@@ -1415,8 +1449,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             // systems.
             Expr max_size = cast<int64_t>(0x7fffffff);
             Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
-                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1",
-                                          std::vector<Expr>());
+                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1");
             dims_no_overflow_asserts.push_back(check);
 
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
@@ -1430,7 +1463,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
                     Stmt check = AssertStmt::make(this_dim_var <= max_size,
                                                   "Product of extents for buffer " + name +
-                                                  " exceeds 2^31 - 1", std::vector<Expr>());
+                                                  " exceeds 2^31 - 1");
                     dims_no_overflow_asserts.push_back(check);
                 }
             }
@@ -1490,8 +1523,19 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                     stride_constrained = image.stride(i);
                 }
 
-                min_constrained = Variable::make(Int(32), f.name() + ".0.min." + dim);
-                extent_constrained = Variable::make(Int(32), f.name() + ".0.extent." + dim);
+                std::string min0_name = f.name() + ".0.min." + dim;
+                if (replace_with_constrained.count(min0_name) > 0 ) {
+                    min_constrained = replace_with_constrained[min0_name];
+                } else {
+                    min_constrained = Variable::make(Int(32), min0_name);
+                }
+
+                std::string extent0_name = f.name() + ".0.extent." + dim;
+                if (replace_with_constrained.count(extent0_name) > 0 ) {
+                    extent_constrained = replace_with_constrained[extent0_name];
+                } else {
+                    extent_constrained = Variable::make(Int(32), extent0_name);
+                }
             } else if (image.defined() && (int)i < image.dimensions()) {
                 stride_constrained = image.stride(i);
                 extent_constrained = image.extent(i);
@@ -1534,7 +1578,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                           (min_proposed + extent_proposed >=
                            min_required + extent_required));
             string error = "Applying the constraints to the required region made it smaller";
-            asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
+            asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error));
 
             // stride_required is just a suggestion. It's ok if the
             // constraints shuffle them around in ways that make it
@@ -1559,7 +1603,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             lets_constrained.push_back(make_pair(constraints[i].first + ".constrained", value));
 
             // Check the var passed in equals the constrained version (when not in inference mode)
-            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error.str(), vector<Expr>()));
+            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error.str()));
         }
     }
 
@@ -1704,7 +1748,7 @@ Stmt lower(Function f, const Target &t) {
     debug(2) << "Lowering after storage folding:\n" << s << '\n';
 
     debug(1) << "Injecting debug_to_file calls...\n";
-    s = debug_to_file(s, order[order.size()-1], env);
+    s = debug_to_file(s, order.back(), env);
     debug(2) << "Lowering after injecting debug_to_file calls:\n" << s << '\n';
 
     debug(1) << "Simplifying...\n"; // without removing dead lets, because storage flattening needs the strides
@@ -1715,17 +1759,17 @@ Stmt lower(Function f, const Target &t) {
     s = skip_stages(s, order);
     debug(2) << "Lowering after dynamically skipping stages:\n" << s << "\n\n";
 
-    if (t.features & Target::OpenGL) {
+    if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting OpenGL texture intrinsics...\n";
         s = inject_opengl_intrinsics(s);
         debug(2) << "Lowering after OpenGL intrinsics:\n" << s << "\n\n";
     }
 
     debug(1) << "Performing storage flattening...\n";
-    s = storage_flattening(s, env);
+    s = storage_flattening(s, order.back(), env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
-    if (t.has_gpu_feature() || t.features & Target::OpenGL) {
+    if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
@@ -1765,7 +1809,7 @@ Stmt lower(Function f, const Target &t) {
     debug(1) << "Specializing clamped ramps...\n";
     s = specialize_clamped_ramps(s);
     s = simplify(s);
-    debug(2) << "Loering after specializing clamped ramps:\n" << s << "\n\n";
+    debug(2) << "Lowering after specializing clamped ramps:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
     s = inject_early_frees(s);

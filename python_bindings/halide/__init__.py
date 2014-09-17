@@ -34,7 +34,7 @@ FuncRefExprType = FuncRefExpr
 FuncRefVarType = FuncRefVar
 VarOrRVarType = VarOrRVar
 ArgumentType = Argument
-ScheduleHandleType = ScheduleHandle
+StageType = Stage
 
 GPU_Default = 0
 GPU_CUDA = 1
@@ -600,50 +600,50 @@ class Func(object):
         """
 
 # ----------------------------------------------------
-# ScheduleHandle
+# Stage
 # ----------------------------------------------------
 
-_allow_race_conditions1 = ScheduleHandleType.allow_race_conditions
-_gpu1 = ScheduleHandleType.gpu
-_gpu_blocks1 = ScheduleHandleType.gpu_blocks
-_gpu_single_thread1 = ScheduleHandleType.gpu_single_thread
-_gpu_threads1 = ScheduleHandleType.gpu_threads
-_gpu_tile1 = ScheduleHandleType.gpu_tile
-_serial1 = ScheduleHandleType.serial
-_split1 = ScheduleHandleType.split
-_fuse1 = ScheduleHandleType.fuse
-_tile1 = ScheduleHandleType.tile
-_reorder1 = ScheduleHandleType.reorder
-_parallel1 = ScheduleHandleType.parallel
-_vectorize1 = ScheduleHandleType.vectorize
-_unroll1 = ScheduleHandleType.unroll
+_allow_race_conditions1 = StageType.allow_race_conditions
+_gpu1 = StageType.gpu
+_gpu_blocks1 = StageType.gpu_blocks
+_gpu_single_thread1 = StageType.gpu_single_thread
+_gpu_threads1 = StageType.gpu_threads
+_gpu_tile1 = StageType.gpu_tile
+_serial1 = StageType.serial
+_split1 = StageType.split
+_fuse1 = StageType.fuse
+_tile1 = StageType.tile
+_reorder1 = StageType.reorder
+_parallel1 = StageType.parallel
+_vectorize1 = StageType.vectorize
+_unroll1 = StageType.unroll
 
-#ScheduleHandle.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[1], ImageTypes)) else _realize(x,to_dynimage(a[1]))
-ScheduleHandle.allow_race_conditions = lambda self: _allow_race_conditions1(self)
+#Stage.realize = lambda x, *a: _realize(x,*a) if not (len(a)==1 and isinstance(a[1], ImageTypes)) else _realize(x,to_dynimage(a[1]))
+Stage.allow_race_conditions = lambda self: _allow_race_conditions1(self)
 
-ScheduleHandle.gpu_blocks = lambda self, *a: _gpu_blocks1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.gpu_single_thread = lambda self, *a: _gpu_single_thread1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.gpu_threads = lambda self, *a: _gpu_threads1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.gpu_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
+Stage.gpu_blocks = lambda self, *a: _gpu_blocks1(self, *wrap_gpu_args_int(a))
+Stage.gpu_single_thread = lambda self, *a: _gpu_single_thread1(self, *wrap_gpu_args_int(a))
+Stage.gpu_threads = lambda self, *a: _gpu_threads1(self, *wrap_gpu_args_int(a))
+Stage.gpu_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
 
-ScheduleHandle.serial = lambda self, *a: _serial1(self, *wrap_gpu_args(a))
-ScheduleHandle.fuse = lambda self, *a: _fuse1(self, *wrap_gpu_args(a))
-ScheduleHandle.split = lambda self, *a: _split1(self, *wrap_gpu_args(a))
-ScheduleHandle.tile = lambda self, *a: _tile1(self, *wrap_gpu_args(a))
-ScheduleHandle.reorder = lambda self, *a: _reorder1(self, *wrap_gpu_args(a))
-ScheduleHandle.parallel = lambda self, *a: _parallel1(self, *wrap_gpu_args(a))
-ScheduleHandle.vectorize = lambda self, *a: _vectorize1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.unroll = lambda self, *a: _unroll1(self, *wrap_gpu_args_int(a))
+Stage.serial = lambda self, *a: _serial1(self, *wrap_gpu_args(a))
+Stage.fuse = lambda self, *a: _fuse1(self, *wrap_gpu_args(a))
+Stage.split = lambda self, *a: _split1(self, *wrap_gpu_args(a))
+Stage.tile = lambda self, *a: _tile1(self, *wrap_gpu_args(a))
+Stage.reorder = lambda self, *a: _reorder1(self, *wrap_gpu_args(a))
+Stage.parallel = lambda self, *a: _parallel1(self, *wrap_gpu_args(a))
+Stage.vectorize = lambda self, *a: _vectorize1(self, *wrap_gpu_args_int(a))
+Stage.unroll = lambda self, *a: _unroll1(self, *wrap_gpu_args_int(a))
 
 # Deprecated
-ScheduleHandle.cuda_blocks = lambda self, *a: _gpu_blocks1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.cuda_single_thread = lambda self, *a: _gpu_single_thread1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.cuda_threads = lambda self, *a: _gpu_threads1(self, *wrap_gpu_args_int(a))
-ScheduleHandle.cuda_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
+Stage.cuda_blocks = lambda self, *a: _gpu_blocks1(self, *wrap_gpu_args_int(a))
+Stage.cuda_single_thread = lambda self, *a: _gpu_single_thread1(self, *wrap_gpu_args_int(a))
+Stage.cuda_threads = lambda self, *a: _gpu_threads1(self, *wrap_gpu_args_int(a))
+Stage.cuda_tile = lambda self, *a: _gpu_tile1(self, *wrap_gpu_args(a))
 
 
 
-class ScheduleHandle(object):
+class Stage(object):
     """
     Scheduling calls that control how the domain of this update is
     traversed. This class represents one stage in a Halide

@@ -136,14 +136,14 @@ bool is_negative_const(Expr e) {
     return false;
 }
 
-bool is_negative_negatable_const(Expr e) {
+bool is_negative_negatable_const(Expr e, Type T) {
     if (const IntImm *i = e.as<IntImm>()) {
         return i->value < 0 &&
-               i->value != e.type().imin();
+               i->value != T.imin();
     }
     if (const FloatImm *f = e.as<FloatImm>()) return f->value < 0.0f;
     if (const Cast *c = e.as<Cast>()) {
-        return is_negative_negatable_const(c->value);
+        return is_negative_negatable_const(c->value, c->type);
     }
     if (const Ramp *r = e.as<Ramp>()) {
         // slightly conservative
@@ -153,6 +153,10 @@ bool is_negative_negatable_const(Expr e) {
         return is_negative_negatable_const(b->value);
     }
     return false;
+}
+
+bool is_negative_negatable_const(Expr e) {
+    return is_negative_negatable_const(e, e.type());
 }
 
 bool is_zero(Expr e) {
@@ -552,46 +556,32 @@ Expr fast_exp(Expr x_full) {
 }
 
 Expr print(const std::vector<Expr> &args) {
-    std::vector<Expr> printf_args;
-    // Generate a format string.
-    std::ostringstream sstr;
+    // Insert spaces between each expr.
+    std::vector<Expr> print_args(args.size()*2);
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type().is_float()) {
-            // %f in a halide_printf causes mysterious problems on
-            // windows due to calling convention disagreements between
-            // llvm and msvc. To avoid the issues, we hack in float
-            // printing using int printing. If you fix this, Andrew
-            // owes you a beer.
-            Expr integer_part = cast<int>(args[i]); // Should round towards zero.
-            Expr frac_part = abs(args[i]) - abs(integer_part);
-            frac_part *= 100000; // Use 5 decimal places.
-            frac_part = cast<int>(frac_part);
-            sstr << "%d.%05d "; // Pad the fractional part with zeros.
-            printf_args.push_back(integer_part);
-            printf_args.push_back(frac_part);
-            //printf_args.push_back(cast(Float(64), args[i]));
-        } else if (args[i].as<Internal::StringImm>() != NULL) {
-            sstr << "%s ";
-            printf_args.push_back(args[i]);
-        } else if (args[i].type().is_handle()) {
-            sstr << "%p ";
-            printf_args.push_back(args[i]);
-        } else if (args[i].type().is_int()) {
-            sstr << "%lld ";
-            printf_args.push_back(cast(Int(64), args[i]));
-        } else if (args[i].type().is_uint()) {
-            sstr << "%llu ";
-            printf_args.push_back(cast(UInt(64), args[i]));
+        print_args[i*2] = args[i];
+        if (i < args.size() - 1) {
+            print_args[i*2+1] = Expr(" ");
+        } else {
+            print_args[i*2+1] = Expr("\n");
         }
     }
-    sstr << '\n';
 
-    printf_args.insert(printf_args.begin(), sstr.str());
+    // Concat all the args at runtime using stringify.
+    Expr combined_string =
+        Internal::Call::make(Handle(), Internal::Call::stringify,
+                             print_args, Internal::Call::Intrinsic);
 
-    Expr call = Internal::Call::make(Int(32), "halide_printf", printf_args, Internal::Call::Extern);
-    call = Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                                Internal::vec<Expr>(call, args[0]), Internal::Call::Intrinsic);
-    return call;
+    // Call halide_print.
+    Expr print_call =
+        Internal::Call::make(Int(32), "halide_print",
+                             Internal::vec<Expr>(combined_string), Internal::Call::Extern);
+
+    // Return the first argument.
+    Expr result =
+        Internal::Call::make(args[0].type(), Internal::Call::return_second,
+                             Internal::vec<Expr>(print_call, args[0]), Internal::Call::Intrinsic);
+    return result;
 }
 
 Expr print_when(Expr condition, const std::vector<Expr> &args) {

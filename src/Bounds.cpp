@@ -21,6 +21,24 @@ using std::vector;
 using std::string;
 using std::pair;
 
+namespace {
+int static_sign(Expr x) {
+    if (is_positive_const(x)) {
+        return 1;
+    } else if (is_negative_const(x)) {
+        return -1;
+    } else {
+        Expr zero = make_zero(x.type());
+        if (equal(const_true(), simplify(x > zero))) {
+            return 1;
+        } else if (equal(const_true(), simplify(x < zero))) {
+            return -1;
+        }
+    }
+    return 0;
+}
+}
+
 class Bounds : public IRVisitor {
 public:
     Expr min, max;
@@ -377,7 +395,7 @@ private:
             return;
         }
 
-        if (min_b.same_as(max_b)) {
+        if (equal(min_b, max_b)) {
             if (is_zero(min_b)) {
                 // Divide by zero. Drat.
                 min = Expr();
@@ -398,13 +416,9 @@ private:
             }
         } else {
             // if we can't statically prove that the divisor can't span zero, then we're unbounded
-            bool min_is_positive = is_positive_const(min_b) ||
-                equal(const_true(), simplify(min_b > make_zero(min_b.type())));
-            bool max_is_negative = is_negative_const(max_b) ||
-                equal(const_true(), simplify(max_b < make_zero(max_b.type())));
-            if (!equal(min_b, max_b) &&
-                !min_is_positive &&
-                !max_is_negative) {
+            int min_sign = static_sign(min_b);
+            int max_sign = static_sign(max_b);
+            if (min_sign != max_sign || min_sign == 0 || max_sign == 0) {
                 min = Expr();
                 max = Expr();
                 return;
@@ -443,7 +457,11 @@ private:
         } else {
             // Only consider B (so A can be undefined)
             min = make_zero(op->type);
-            max = max_b;
+            if (max_b.type().is_uint()) {
+                max = max_b;
+            } else {
+                max = cast(op->type, abs(max_b));
+            }
             if (!max.type().is_float()) {
                 // Integer modulo returns at most one less than the
                 // second arg.
@@ -644,10 +662,17 @@ private:
             Expr min_a = min, max_a = max;
             min = make_zero(op->type);
             if (min_a.defined() && max_a.defined()) {
-                if (op->type.is_uint()) {
-                    max = Max::make(cast(op->type, 0-min_a), cast(op->type, max_a));
+                if (equal(min_a, max_a)) {
+                    min = max = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
                 } else {
-                    max = Max::make(0-min_a, max_a);
+                    min = make_zero(op->type);
+                    if (op->args[0].type().is_int() && op->args[0].type().bits == 32) {
+                        max = Max::make(Cast::make(op->type, -min_a), Cast::make(op->type, max_a));
+                    } else {
+                        min_a = Call::make(op->type, Call::abs, vec(min_a), Call::Intrinsic);
+                        max_a = Call::make(op->type, Call::abs, vec(max_a), Call::Intrinsic);
+                        max = Max::make(min_a, max_a);
+                    }
                 }
             } else {
                 // If the argument is unbounded on one side, then the max is unbounded.
@@ -856,10 +881,13 @@ void merge_boxes(Box &a, const Box &b) {
 
     internal_assert(a.size() == b.size());
 
+    bool a_maybe_unused = a.maybe_unused();
+    bool b_maybe_unused = b.maybe_unused();
+
     for (size_t i = 0; i < a.size(); i++) {
         if (!a[i].min.same_as(b[i].min)) {
             if (a[i].min.defined() && b[i].min.defined()) {
-                if (a.used.defined() && b.used.defined()) {
+                if (a_maybe_unused && b_maybe_unused) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].min = select(a.used, a[i].min, b[i].min);
                     } else {
@@ -867,9 +895,9 @@ void merge_boxes(Box &a, const Box &b) {
                                           a.used, a[i].min,
                                           b[i].min);
                     }
-                } else if (a.used.defined()) {
+                } else if (a_maybe_unused) {
                     a[i].min = select(a.used, simple_min(a[i].min, b[i].min), b[i].min);
-                } else if (b.used.defined()) {
+                } else if (b_maybe_unused) {
                     a[i].min = select(b.used, simple_min(a[i].min, b[i].min), a[i].min);
                 } else {
                     a[i].min = simple_min(a[i].min, b[i].min);
@@ -880,7 +908,7 @@ void merge_boxes(Box &a, const Box &b) {
         }
         if (!a[i].max.same_as(b[i].max)) {
             if (a[i].max.defined() && b[i].max.defined()) {
-                if (a.used.defined() && b.used.defined()) {
+                if (a_maybe_unused && b_maybe_unused) {
                     if (equal(a.used, !b.used) || equal(!a.used, b.used)) {
                         a[i].max = select(a.used, a[i].max, b[i].max);
                     } else {
@@ -888,9 +916,9 @@ void merge_boxes(Box &a, const Box &b) {
                                           a.used, a[i].max,
                                           b[i].max);
                     }
-                } else if (a.used.defined()) {
+                } else if (a_maybe_unused) {
                     a[i].max = select(a.used, simple_max(a[i].max, b[i].max), b[i].max);
-                } else if (b.used.defined()) {
+                } else if (b_maybe_unused) {
                     a[i].max = select(b.used, simple_max(a[i].max, b[i].max), a[i].max);
                 } else {
                     a[i].max = simple_max(a[i].max, b[i].max);
@@ -901,7 +929,7 @@ void merge_boxes(Box &a, const Box &b) {
         }
     }
 
-    if (a.used.defined() && b.used.defined()) {
+    if (a_maybe_unused && b_maybe_unused) {
         if (!equal(a.used, b.used)) {
             a.used = simplify(a.used || b.used);
             if (is_one(a.used)) {
@@ -911,6 +939,34 @@ void merge_boxes(Box &a, const Box &b) {
     } else {
         a.used = Expr();
     }
+}
+
+bool boxes_overlap(const Box &a, const Box &b) {
+    // If one box is scalar and the other is not, the boxes cannot
+    // overlap.
+    if (a.size() != b.size() && (a.size() == 0 || b.size() == 0)) {
+        return false;
+    }
+
+    internal_assert(a.size() == b.size());
+
+    bool a_maybe_unused = a.maybe_unused();
+    bool b_maybe_unused = b.maybe_unused();
+
+    // Overlapping requires both boxes to be used.
+    Expr overlap = ((a_maybe_unused ? a.used : const_true()) &&
+                    (b_maybe_unused ? b.used : const_true()));
+
+    for (size_t i = 0; i < a.size(); i++) {
+        if (a[i].max.defined() && b[i].min.defined()) {
+            overlap = overlap && b[i].max >= a[i].min;
+        }
+        if (a[i].min.defined() && b[i].max.defined()) {
+            overlap = overlap && a[i].max >= b[i].min;
+        }
+    }
+
+    return !is_zero(simplify(overlap));
 }
 
 // Compute the box produced by a statement
@@ -975,6 +1031,7 @@ private:
         }
 
         Box b(op->args.size());
+        b.used = const_true();
         for (size_t i = 0; i < op->args.size(); i++) {
             op->args[i].accept(this);
             b[i] = bounds_of_expr_in_scope(op->args[i], scope, func_bounds);
@@ -1089,13 +1146,13 @@ private:
 
                 //debug(0) << " Merging boxes for " << iter->first << "\n";
 
-                if (then_box.used.defined()) {
+                if (then_box.maybe_unused()) {
                     then_box.used = then_box.used && op->condition;
                 } else {
                     then_box.used = op->condition;
                 }
 
-                if (else_box.used.defined()) {
+                if (else_box.maybe_unused()) {
                     else_box.used = else_box.used && !op->condition;
                 } else {
                     else_box.used = !op->condition;
@@ -1250,7 +1307,7 @@ FuncValueBounds compute_function_value_bounds(const vector<string> &order,
             Interval result;
 
             if (f.has_pure_definition() &&
-                !f.has_reduction_definition() &&
+                !f.has_update_definition() &&
                 !f.has_extern_definition()) {
 
                 // Make a scope that says the args could be anything.

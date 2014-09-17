@@ -3,8 +3,7 @@
 
 #include "HalideRuntime.h"
 
-// Avoid ODR violations
-namespace {
+namespace Halide { namespace Runtime { namespace Internal {
 
 // An RAII mutex locking operation
 struct ScopedMutexLock {
@@ -19,6 +18,6 @@ struct ScopedMutexLock {
     }
 };
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 #endif

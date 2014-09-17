@@ -349,39 +349,48 @@ void check_sse_all() {
 
     // skip dot product and argmin
 
+    check("pmaddwd", 4, i32(i16_1) * 3 + i32(i16_2) * 4);
+    check("pmaddwd", 4, i32(i16_1) * 3 - i32(i16_2) * 4);
+
+    if (use_avx2) {
+        check("vpmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
+    } else {
+        check("pmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
+    }
+
     // llvm doesn't distinguish between signed and unsigned multiplies
     //check("pmuldq", 4, i64(i32_1) * i64(i32_2));
     if (use_sse41) {
-    check("pmuludq", 4, u64(u32_1) * u64(u32_2));
-    check("pmulld", 4, i32_1 * i32_2);
+        check("pmuludq", 4, u64(u32_1) * u64(u32_2));
+        check("pmulld", 4, i32_1 * i32_2);
 
-    check("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
-    check("blendvpd", 2, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-    check("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
+        check("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
+        check("blendvpd", 2, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+        check("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
 
-    check("pmaxsb", 16, max(i8_1, i8_2));
-    check("pminsb", 16, min(i8_1, i8_2));
-    check("pmaxuw", 8, max(u16_1, u16_2));
-    check("pminuw", 8, min(u16_1, u16_2));
-    check("pmaxud", 4, max(u32_1, u32_2));
-    check("pminud", 4, min(u32_1, u32_2));
-    check("pmaxsd", 4, max(i32_1, i32_2));
-    check("pminsd", 4, min(i32_1, i32_2));
+        check("pmaxsb", 16, max(i8_1, i8_2));
+        check("pminsb", 16, min(i8_1, i8_2));
+        check("pmaxuw", 8, max(u16_1, u16_2));
+        check("pminuw", 8, min(u16_1, u16_2));
+        check("pmaxud", 4, max(u32_1, u32_2));
+        check("pminud", 4, min(u32_1, u32_2));
+        check("pmaxsd", 4, max(i32_1, i32_2));
+        check("pminsd", 4, min(i32_1, i32_2));
 
-    check("roundps", 4, round(f32_1));
-    check("roundpd", 2, round(f64_1));
-    check("roundps", 4, floor(f32_1));
-    check("roundpd", 2, floor(f64_1));
-    check("roundps", 4, ceil(f32_1));
-    check("roundpd", 2, ceil(f64_1));
+        check("roundps", 4, round(f32_1));
+        check("roundpd", 2, round(f64_1));
+        check("roundps", 4, floor(f32_1));
+        check("roundpd", 2, floor(f64_1));
+        check("roundps", 4, ceil(f32_1));
+        check("roundpd", 2, ceil(f64_1));
 
-    check("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
-    check("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
+        check("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
+        check("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
     }
 
     // SSE 4.2
     if (use_sse42) {
-    check("pcmpgtq", 2, select(i64_1 > i64_2, i64(1), i64(2)));
+        check("pcmpgtq", 2, select(i64_1 > i64_2, i64(1), i64(2)));
     }
 
     // AVX
@@ -1350,14 +1359,49 @@ void check_neon_all() {
                 tmp2.compute_root().vectorize(x, width/bits);
                 char *op = (char *)malloc(32);
                 snprintf(op, 32, "vst2.%d", bits);
-                check(op, width/bits, tmp2(0, 0) + tmp2(0, 63));
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
             }
         }
     }
 
     // VST3	X	-	Store three-element structures
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 192; width <= 384; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*3) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                tmp2(x, y) = select(x%3 == 0, tmp1(x/3),
+                                    x%3 == 1, tmp1(x/3 + 16),
+                                    tmp1(x/3 + 32));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst3.%d", bits);
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+            }
+        }
+    }
+
     // VST4	X	-	Store four-element structures
-    // Not supported for now. We need a better syntax for interleaving to take advantage of these
+    for (int sign = 0; sign <= 1; sign++) {
+        for (int width = 256; width <= 512; width *= 2) {
+            for (int bits = 8; bits < 64; bits *= 2) {
+                if (width <= bits*4) continue;
+                Func tmp1, tmp2;
+                tmp1(x) = cast(sign ? Int(bits) : UInt(bits), x);
+                tmp1.compute_root();
+                tmp2(x, y) = select(x%4 == 0, tmp1(x/4),
+                                    x%4 == 1, tmp1(x/4 + 16),
+                                    x%4 == 2, tmp1(x/4 + 32),
+                                    tmp1(x/4 + 48));
+                tmp2.compute_root().vectorize(x, width/bits);
+                char *op = (char *)malloc(32);
+                snprintf(op, 32, "vst4.%d", bits);
+                check(op, width/bits, tmp2(0, 0) + tmp2(0, 127));
+            }
+        }
+    }
 
     // VSTM	X	F, D	Store Multiple Registers
     // VSTR	X	F, D	Store Register
@@ -1438,9 +1482,9 @@ int main(int argc, char **argv) {
 
     target = get_target_from_environment();
 
-    use_avx2 = target.features & Target::AVX2;
-    use_avx = use_avx2 | (target.features & Target::AVX);
-    use_sse41 = use_avx | (target.features & Target::SSE41);
+    use_avx2 = target.has_feature(Target::AVX2);
+    use_avx = use_avx2 || target.has_feature(Target::AVX);
+    use_sse41 = use_avx || target.has_feature(Target::SSE41);
 
     // There's no separate target for SSSE3; we currently enable it in
     // lockstep with SSE4.1

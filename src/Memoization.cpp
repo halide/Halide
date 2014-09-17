@@ -26,22 +26,22 @@ public:
             }
         }
 
-        const std::vector<ReductionDefinition> &reductions =
-            function.reductions();
-        for (size_t i = 0; i < reductions.size(); i++) {
-            const std::vector<Expr> &values = reductions[i].values;
+        const std::vector<UpdateDefinition> &updates =
+            function.updates();
+        for (size_t i = 0; i < updates.size(); i++) {
+            const std::vector<Expr> &values = updates[i].values;
             for (size_t j = 0; j < values.size(); j++) {
                 values[j].accept(this);
             }
 
-            const std::vector<Expr> &args = reductions[i].args;
+            const std::vector<Expr> &args = updates[i].args;
             for (size_t j = 0; j < args.size(); j++) {
                 args[j].accept(this);
             }
 
-            if (reductions[i].domain.defined()) {
+            if (updates[i].domain.defined()) {
                 const std::vector<ReductionVariable> &rvars =
-                    reductions[i].domain.domain();
+                    updates[i].domain.domain();
                 for (size_t j = 0; j < rvars.size(); j++) {
                     rvars[j].min.accept(this);
                     rvars[j].extent.accept(this);
@@ -326,13 +326,16 @@ public:
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
+        std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
             }
         }
+        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
+
         return Call::make(Bool(1), "halide_memoization_cache_lookup", args, Call::Extern);
     }
 
@@ -346,13 +349,15 @@ public:
         args.push_back(key_size());
         args.push_back(Variable::make(type_of<buffer_t *>(), computed_bounds_name));
         args.push_back(tuple_count);
+        std::vector<Expr> buffers;
         if (tuple_count == 1) {
-            args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
+            buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + ".buffer"));
         } else {
             for (int32_t i = 0; i < tuple_count; i++) {
-                args.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
+                buffers.push_back(Variable::make(type_of<buffer_t *>(), storage_base_name + "." + int_to_string(i) + ".buffer"));
             }
         }
+        args.push_back(Call::make(type_of<buffer_t **>(), Call::make_struct, buffers, Call::Intrinsic));
 
         // This is actually a void call. How to indicate that? Look at Extern_ stuff.
         return Evaluate::make(Call::make(Bool(), "halide_memoization_cache_store", args, Call::Extern));
@@ -417,7 +422,7 @@ private:
             Expr null_handle = Call::make(Handle(), Call::null_handle, std::vector<Expr>(), Call::Intrinsic);
             computed_bounds_args.push_back(null_handle);
             computed_bounds_args.push_back(f.output_types()[0].bytes());
-            std::string max_stage_num = int_to_string(f.reductions().size());
+            std::string max_stage_num = int_to_string(f.updates().size());
             for (int32_t i = 0; i < f.dimensions(); i++) {
                 Expr min = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".min");
                 Expr max = Variable::make(Int(32), op->name + ".s" + max_stage_num + "." + f.args()[i] + ".max");

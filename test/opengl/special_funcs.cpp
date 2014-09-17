@@ -1,10 +1,12 @@
 #include <Halide.h>
 #include <stdio.h>
 #include <algorithm>
+#include <stdlib.h>
 
 using namespace Halide;
 
-#define CHECK_EQ(a, b) do {                                             \
+#define CHECK_EQ(a, b)                                                  \
+    do {                                                                \
         if ((a) != (b)) {                                               \
             fprintf(stderr, "Error: %s != %s for y=%d. Actual values: %d != %d\n", #a, #b, y, a, b); \
             return 1;                                                   \
@@ -12,6 +14,13 @@ using namespace Halide;
     } while(false)
 
 int main() {
+    // This test must be run with an OpenGL target
+    const Target &target = get_jit_target_from_environment();
+    if (!target.has_feature(Target::OpenGL))  {
+        fprintf(stderr,"ERROR: This test must be run with an OpenGL target, e.g. by setting HL_JIT_TARGET=host-opengl.\n");
+        return 1;
+    }
+
     Func f;
     Var x, y, c;
 

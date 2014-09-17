@@ -84,8 +84,7 @@ class DebugToFile : public IRMutator {
             Expr call = Call::make(Int(32), Call::debug_to_file, args, Call::Intrinsic);
             Stmt body = AssertStmt::make(call == 0,
                                          "Failed to dump function " +
-                                         f.name() + " to file " + f.debug_file(),
-                                         vector<Expr>());
+                                         f.name() + " to file " + f.debug_file());
             body = Block::make(mutate(op->body), body);
 
             stmt = Realize::make(op->name, op->types, op->bounds, op->condition, body);

@@ -14,7 +14,7 @@
 
 // Native client llvm relies on global flags to control sandboxing on
 // arm, because they expect you to be coming from the command line.
-#if WITH_NATIVE_CLIENT
+#ifdef WITH_NATIVE_CLIENT
 #if LLVM_VERSION < 34
 #include <llvm/Support/CommandLine.h>
 namespace llvm {
@@ -333,7 +333,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
     llvm::Triple triple;
 
     if (target.bits == 32) {
-        if (target.features & Target::ARMv7s) {
+        if (target.has_feature(Target::ARMv7s)) {
             triple.setArchName("armv7s");
         } else {
             triple.setArch(llvm::Triple::arm);
@@ -355,7 +355,7 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
         triple.setVendor(llvm::Triple::Apple);
     } else if (target.os == Target::NaCl) {
         user_assert(target.bits == 32) << "ARM NaCl must be 32-bit\n";
-        #if WITH_NATIVE_CLIENT
+        #ifdef WITH_NATIVE_CLIENT
         triple.setOS(llvm::Triple::NaCl);
         triple.setEnvironment(llvm::Triple::EABI);
         // The ARM Nacl backend relies on global switches being set to do
@@ -1168,14 +1168,34 @@ void CodeGen_ARM::visit(const Store *op) {
     }
     const Call *call = rhs.as<Call>();
 
+    // Interleaving store instructions only exist for certain types.
+    bool type_ok_for_vst = false;
+    if (call && !call->args.empty()) {
+        Type t = call->args[0].type();
+        type_ok_for_vst =
+            (t == UInt(8, 16) || t == UInt(8, 8) ||
+             t == UInt(16, 8) || t == UInt(16, 4) ||
+             t == UInt(32, 4) || t == UInt(32, 2) ||
+             t == UInt(64, 2) || t == UInt(64, 1) ||
+             t == Int(8, 16) || t == Int(8, 8) ||
+             t == Int(16, 8) || t == Int(16, 4) ||
+             t == Int(32, 4) || t == Int(32, 2) ||
+             t == Int(64, 2) || t == Int(64, 1) ||
+             t == Float(32, 2) || t == Float(32, 4));
+    }
+
     if (is_one(ramp->stride) &&
         call && call->call_type == Call::Intrinsic &&
-        call->name == Call::interleave_vectors) {
-        internal_assert(call->args.size() == 2)
-            << "Wrong number of args to interleave vectors: " << call->args.size() << "\n";
-        vector<Value *> args(call->args.size() + 2);
+        call->name == Call::interleave_vectors &&
+        type_ok_for_vst &&
+        2 <= call->args.size() && call->args.size() <= 4) {
+
+        const int num_vecs = call->args.size();
+        vector<Value *> args(num_vecs + 1);
 
         Type t = call->args[0].type();
+
+        // Assume element-aligned.
         int alignment = t.bytes();
 
         Value *ptr = codegen_buffer_pointer(op->name, call->type.element_of(), ramp->base);
@@ -1187,33 +1207,22 @@ void CodeGen_ARM::visit(const Store *op) {
         }
 
         args[0] = ptr; // The pointer
-        args[1] = codegen(call->args[0]);
-        args[2] = codegen(call->args[1]);
-        args[3] = ConstantInt::get(i32, alignment);
+        for (int i = 0; i < num_vecs; ++i) {
+            args[i+1] = codegen(call->args[i]);
+        }
 
-        Instruction *store = NULL;
-        if (t == Int(8, 8) || t == UInt(8, 8)) {
-            store = call_void_intrin("vst2.v8i8", args);
-        } else if (t == Int(8, 16) || t == UInt(8, 16)) {
-            store = call_void_intrin("vst2.v16i8", args);
-        } else if (t == Int(16, 4) || t == UInt(16, 4)) {
-            store = call_void_intrin("vst2.v4i16", args);
-        } else if (t == Int(16, 8) || t == UInt(16, 8)) {
-            store = call_void_intrin("vst2.v8i16", args);
-        } else if (t == Int(32, 2) || t == UInt(32, 2)) {
-            store = call_void_intrin("vst2.v2i32", args);
-        } else if (t == Int(32, 4) || t == UInt(32, 4)) {
-            store = call_void_intrin("vst2.v4i32", args);
-        } else if (t == Float(32, 2)) {
-            store = call_void_intrin("vst2.v2f32", args);
-        } else if (t == Float(32, 4)) {
-            store = call_void_intrin("vst2.v4f32", args);
+        args.push_back(ConstantInt::get(i32, alignment));
+
+        std::ostringstream instr;
+        instr << "vst" << num_vecs << ".v" << t.width;
+        if (t.is_float()) {
+            instr << "f" << t.bits;
         } else {
-            CodeGen::visit(op);
+            instr << "i" << t.bits;
         }
-        if (store) {
-            add_tbaa_metadata(store, op->name);
-        }
+
+        Instruction *store = call_void_intrin(instr.str(), args);
+        add_tbaa_metadata(store, op->name, op->index);
 
         for (size_t i = 0; i < lets.size(); i++) {
             sym_pop(lets[i].first);
@@ -1245,7 +1254,7 @@ void CodeGen_ARM::visit(const Store *op) {
             debug(4) << "Creating call to " << builtin.str() << "\n";
             Instruction *store = builder->CreateCall(fn, vec(base, stride, val));
             (void)store;
-            add_tbaa_metadata(store, op->name);
+            add_tbaa_metadata(store, op->name, op->index);
             return;
         }
     }
@@ -1337,7 +1346,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
 
         if (group) {
-            add_tbaa_metadata(dyn_cast<Instruction>(group), op->name);
+            add_tbaa_metadata(dyn_cast<Instruction>(group), op->name, op->index);
             debug(4) << "Extracting element " << offset << " from resulting struct\n";
             value = builder->CreateExtractValue(group, vec((unsigned int)offset));
             return;
@@ -1358,7 +1367,7 @@ void CodeGen_ARM::visit(const Load *op) {
             Value *stride = codegen(ramp->stride * op->type.bytes());
             debug(4) << "Creating call to " << builtin.str() << "\n";
             Instruction *load = builder->CreateCall(fn, vec(base, stride), builtin.str());
-            add_tbaa_metadata(load, op->name);
+            add_tbaa_metadata(load, op->name, op->index);
             value = load;
             return;
         }
@@ -1382,7 +1391,7 @@ void CodeGen_ARM::visit(const Call *op) {
 
 string CodeGen_ARM::mcpu() const {
     if (target.bits == 32) {
-        if (target.features & Target::ARMv7s) {
+        if (target.has_feature(Target::ARMv7s)) {
             return "swift";
         } else {
             return "cortex-a9";
@@ -1409,7 +1418,7 @@ bool CodeGen_ARM::use_soft_float_abi() const {
     // exhaustive anyway. It is not clear the armv7s case is necessary either.
     return target.bits == 32 &&
         ((target.os == Target::Android) ||
-         (target.os == Target::IOS && ((target.features & Target::ARMv7s) == 0)));
+         (target.os == Target::IOS && !target.has_feature(Target::ARMv7s)));
 }
 
 }}

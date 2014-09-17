@@ -1,8 +1,7 @@
 #ifndef HALIDE_SCOPED_SPIN_LOCK_H
 #define HALIDE_SCOPED_SPIN_LOCK_H
 
-// Avoid ODR violations
-namespace {
+namespace Halide { namespace Runtime { namespace Internal {
 
 // An RAII spin lock.
 struct ScopedSpinLock {
@@ -17,6 +16,6 @@ struct ScopedSpinLock {
     }
 };
 
-}
+}}} // namespace Halide::Runtime::Internal
 
 #endif

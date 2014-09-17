@@ -45,15 +45,17 @@ const string preamble =
     "#include <float.h>\n"
     "#include <assert.h>\n"
     "#include <string.h>\n"
+    "#include <stdio.h>\n"
     "#include <stdint.h>\n"
     "\n"
     "extern \"C\" void *halide_malloc(void *ctx, size_t);\n"
     "extern \"C\" void halide_free(void *ctx, void *ptr);\n"
+    "extern \"C\" void *halide_print(void *ctx, const void *str);\n"
+    "extern \"C\" void *halide_error(void *ctx, const void *str);\n"
     "extern \"C\" int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
     "extern \"C\" int halide_start_clock(void *ctx);\n"
     "extern \"C\" int64_t halide_current_time_ns(void *ctx);\n"
     "extern \"C\" uint64_t halide_profiling_timer(void *ctx);\n"
-    "extern \"C\" int halide_printf(void *ctx, const char *fmt, ...);\n"
     "\n"
 
     // TODO: this next chunk is copy-pasted from posix_math.cpp. A
@@ -147,8 +149,8 @@ const string preamble =
     "\n"
     "template<typename T> T max(T a, T b) {if (a > b) return a; return b;}\n"
     "template<typename T> T min(T a, T b) {if (a < b) return a; return b;}\n"
-    "template<typename T> T mod(T a, T b) {T result = a % b; if (result < 0) result += b; return result;}\n"
-    "template<typename T> T sdiv(T a, T b) {return (a - mod(a, b))/b;}\n"
+    "template<typename T> T smod(T a, T b) {T result = a % b; if (result < 0) result += b < 0 ? -b : b; return result;}\n"
+    "template<typename T> T sdiv(T a, T b) {T q = a / b; T r = a - q*b; int bs = b >> (8*sizeof(T) - 1); int rs = r >> (8*sizeof(T) - 1); return q - (rs & bs) + (rs & ~bs);}\n"
 
     // This may look wasteful, but it's the right way to do
     // it. Compilers understand memcpy and will convert it to a no-op
@@ -567,8 +569,10 @@ void CodeGen_C::visit(const Mod *op) {
         ostringstream oss;
         oss << print_expr(op->a) << " & " << ((1 << bits)-1);
         print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "smod", vec(op->a, op->b), Call::Extern));
     } else {
-        print_expr(Call::make(op->type, "mod", vec(op->a, op->b), Call::Extern));
+        visit_binop(op->type, op->a, op->b, "%");
     }
 }
 
@@ -862,6 +866,69 @@ void CodeGen_C::visit(const Call *op) {
             string src = print_expr(op->args[1]);
             string size = print_expr(op->args[2]);
             rhs << "memcpy(" << dest << ", " << src << ", " << size << ")";
+        } else if (op->name == Call::make_struct) {
+            // Emit a line something like:
+            // struct {const int f_0, const char f_1, const int f_2} foo = {3, 'c', 4};
+
+            // Get the args
+            vector<string> values;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                values.push_back(print_expr(op->args[i]));
+            }
+            do_indent();
+            stream << "struct {";
+            // List the types.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                stream << "const " << print_type(op->args[i].type()) << " f_" << i << "; ";
+            }
+            string struct_name = unique_name('s');
+            stream << "}  " << struct_name << " = {";
+            // List the values.
+            for (size_t i = 0; i < op->args.size(); i++) {
+                if (i > 0) stream << ", ";
+                stream << values[i];
+            }
+            stream << "};\n";
+            // Return a pointer to it.
+            rhs << "(&" << struct_name << ")";
+        } else if (op->name == Call::stringify) {
+            // Rewrite to an snprintf
+            vector<string> printf_args;
+            string format_string = "";
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Type t = op->args[i].type();
+                printf_args.push_back(print_expr(op->args[i]));
+                if (t.is_int()) {
+                    format_string += "%lld";
+                    printf_args[i] = "(long long)(" + printf_args[i] + ")";
+                } else if (t.is_uint()) {
+                    format_string += "%llu";
+                    printf_args[i] = "(long long unsigned)(" + printf_args[i] + ")";
+                } else if (t.is_float()) {
+                    if (t.bits == 32) {
+                        format_string += "%f";
+                    } else {
+                        format_string += "%e";
+                    }
+                } else if (op->args[i].as<StringImm>()) {
+                    format_string += "%s";
+                } else {
+                    internal_assert(t.is_handle());
+                    format_string += "%p";
+                }
+
+            }
+            string buf_name = unique_name('b');
+            do_indent();
+            stream << "char " << buf_name << "[1024];\n";
+            do_indent();
+            stream << "snprintf(" << buf_name << ", 1024, \"" << format_string << "\"";
+            for (size_t i = 0; i < printf_args.size(); i++) {
+                stream << ", " << printf_args[i];
+            }
+            stream << ");\n";
+            rhs << buf_name;
+
         } else {
             // TODO: other intrinsics
             internal_error << "Unhandled intrinsic in C backend: " << op->name << '\n';
@@ -968,31 +1035,23 @@ void CodeGen_C::visit(const LetStmt *op) {
 void CodeGen_C::visit(const AssertStmt *op) {
     string id_cond = print_expr(op->condition);
 
-    vector<string> id_args(op->args.size());
-    for (size_t i = 0; i < op->args.size(); i++) {
-        id_args[i] = print_expr(op->args[i]);
-    }
-
     do_indent();
-    // Halide asserts have different semantics to C asserts. The
-    // conditions sometimes contain necessary side-effects, and
-    // they're supposed to make the containing function return -1, so
-    // we can't use the C version of assert. Instead we convert to an
-    // if statement.
+    // Halide asserts have different semantics to C asserts.  They're
+    // supposed to clean up and make the containing function return
+    // -1, so we can't use the C version of assert. Instead we convert
+    // to an if statement.
 
-    stream << "if (!" << id_cond << ") {\n";
+    stream << "if (!" << id_cond << ") ";
+    open_scope();
+    string id_msg = print_expr(op->message);
     do_indent();
-    stream << " halide_printf("
+    stream << "halide_error("
            << (have_user_context ? "__user_context_, " : "NULL, ")
-           << Expr(op->message + "\n");
-    for (size_t i = 0; i < op->args.size(); i++) {
-        stream << ", " << id_args[i];
-    }
-    stream << ");\n";
+           << id_msg
+           << ");\n";
     do_indent();
-    stream << " return -1;\n";
-    do_indent();
-    stream << "}\n";
+    stream << "return -1;\n";
+    close_scope("");
 }
 
 void CodeGen_C::visit(const Pipeline *op) {
@@ -1088,10 +1147,12 @@ void CodeGen_C::visit(const Allocate *op) {
           " * sizeof(" << print_type(op->type) << ")) > ((int64_t(1) << 31) - 1)))\n";
         open_scope();
         do_indent();
-        stream << "halide_printf("
+        stream << "halide_error("
                << (have_user_context ? "__user_context_" : "NULL")
                << ", \"32-bit signed overflow computing size of allocation "
                << op->name << "\\n\");\n";
+        do_indent();
+        stream << "return -1;\n";
         close_scope("overflow test " + op->name);
     }
 
@@ -1242,7 +1303,8 @@ void CodeGen_C::test() {
         " int64_t _1 = _0 * _beta;\n"
         " if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
-        "  halide_printf(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "  halide_error(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "  return -1;\n"
         " } // overflow test tmp.heap\n"
         " int64_t _2 = _1;\n"
         " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
@@ -1253,8 +1315,10 @@ void CodeGen_C::test() {
         "  bool _5 = _3 < 1;\n"
         "  if (_5)\n"
         "  {\n"
-        "   int64_t _6 = (int64_t)(3);\n"
-        "   int32_t _7 = halide_printf(__user_context_, \"%lld \\n\", _6);\n"
+        "   char b0[1024];\n"
+        "   snprintf(b0, 1024, \"%lld%s\", (long long)(3), \"\\n\");\n"
+        "   void * _6 = b0;\n"
+        "   int32_t _7 = halide_print(__user_context_, _6);\n"
         "   int32_t _8 = (_7, 3);\n"
         "   _4 = _8;\n"
         "  } // if _5\n"

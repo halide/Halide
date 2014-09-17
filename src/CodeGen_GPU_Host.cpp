@@ -176,8 +176,19 @@ protected:
         if (op->call_type == Call::Intrinsic &&
             (op->name == Call::glsl_texture_load ||
              op->name == Call::glsl_texture_store)) {
-            internal_assert(op->args[0].as<StringImm>());
-            string bufname = op->args[0].as<StringImm>()->value;
+
+            // The argument to the call is either a StringImm or a broadcasted
+            // StringImm if this is part of a vectorized expression
+
+            const StringImm* string_imm = op->args[0].as<StringImm>();
+            if (!string_imm) {
+                internal_assert(op->args[0].as<Broadcast>());
+                string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
+            }
+
+            internal_assert(string_imm);
+
+            string bufname = string_imm->value;
             BufferRef &ref = buffers[bufname];
             ref.type = op->type;
 
@@ -244,13 +255,13 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
 template<typename CodeGen_CPU>
 CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
 {
-    if (t.features & Target::CUDA) {
+    if (t.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
         return new CodeGen_PTX_Dev(t);
-    } else if (t.features & Target::OpenCL) {
+    } else if (t.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
         return new CodeGen_OpenCL_Dev(t);
-    } else if (t.features & Target::OpenGL) {
+    } else if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
         return new CodeGen_OpenGL_Dev(t);
     } else {
@@ -333,7 +344,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
     // Make sure extern cuda calls inside the module point to the
     // right things. If cuda is already linked in we should be
     // fine. If not we need to tell llvm to load it.
-    if (target.features & Target::CUDA && !lib_cuda_linked) {
+    if (target.has_feature(Target::CUDA) && !lib_cuda_linked) {
         // First check if libCuda has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (have_symbol("cuInit")) {
@@ -365,7 +376,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
 
         cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
 
-    } else if (target.features & Target::OpenCL) {
+    } else if (target.has_feature(Target::OpenCL)) {
         // First check if libOpenCL has already been linked
         // in. If so we shouldn't need to set any mappings.
         if (have_symbol("clCreateContext")) {
@@ -397,7 +408,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
 
         clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
 
-    } else if (target.features & Target::OpenGL) {
+    } else if (target.has_feature(Target::OpenGL)) {
         if (target.os == Target::Linux) {
             if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
                 debug(1) << "OpenGL support code already linked in...\n";
@@ -429,7 +440,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module,
                                                  vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
-    if (target.features & Target::CUDA) {
+    if (target.has_feature(Target::CUDA)) {
         // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
         // CUDA behaves much better when you don't initialize >2 contexts.
         llvm::Function *fn = module->getFunction("halide_set_cuda_context");
@@ -439,7 +450,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
         void (*set_cuda_context)(CUcontext *, volatile int *) =
             reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
         set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
-    } else if (target.features & Target::OpenCL) {
+    } else if (target.has_feature(Target::OpenCL)) {
         // Share the same cl_ctx, cl_q across all OpenCL modules.
         llvm::Function *fn = module->getFunction("halide_set_cl_context");
         internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
@@ -609,5 +620,12 @@ template class CodeGen_GPU_Host<CodeGen_X86>;
 template class CodeGen_GPU_Host<CodeGen_ARM>;
 #endif
 
+#ifdef WITH_MIPS
+template class CodeGen_GPU_Host<CodeGen_MIPS>;
+#endif
+
+#ifdef WITH_PNACL
+template class CodeGen_GPU_Host<CodeGen_PNaCl>;
+#endif
 
 }}

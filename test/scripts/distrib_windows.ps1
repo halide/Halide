@@ -53,7 +53,7 @@ if (! (Test-Path build-64)) {
 }
 cd build-64
 cmake -D LLVM_ENABLE_TERMINFO=OFF -D LLVM_TARGETS_TO_BUILD='X86;ARM;NVPTX;AArch64' -D LLVM_ENABLE_ASSERTIONS=ON -D CMAKE_BUILD_TYPE=Release -G "Visual Studio 12 Win64" ..
-MSBuild.exe /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
+MSBuild.exe /m /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
 
 cd $ROOT\llvm
 if (! (Test-Path build-32)) {
@@ -61,7 +61,7 @@ if (! (Test-Path build-32)) {
 }
 cd build-32
 cmake -D LLVM_ENABLE_TERMINFO=OFF -D LLVM_TARGETS_TO_BUILD='X86;ARM;NVPTX;AArch64' -D LLVM_ENABLE_ASSERTIONS=ON -D CMAKE_BUILD_TYPE=Release -D LLVM_BUILD_32_BITS=ON -G "Visual Studio 12" ..
-MSBuild.exe /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
+MSBuild.exe /m /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
 
 #cd $ROOT\pnacl-llvm
 #if (! (Test-Path build-64)) {
@@ -79,7 +79,6 @@ MSBuild.exe /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
 #cmake -D LLVM_ENABLE_TERMINFO=OFF -D LLVM_TARGETS_TO_BUILD='X86;ARM;NVPTX;AArch64' -D LLVM_ENABLE_ASSERTIONS=ON -D CMAKE_BUILD_TYPE=Release -D LLVM_BUILD_32_BITS=ON -G "Visual Studio 12" ..
 #MSBuild.exe /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
 
-
 # Build Halide
 cd $ROOT
 if (! (Test-Path build_64_trunk)) {
@@ -87,7 +86,7 @@ if (! (Test-Path build_64_trunk)) {
 }
 cd build_64_trunk
 cmake -D LLVM_BIN=$ROOT\llvm\build-64\Release\bin -D LLVM_INCLUDE="$ROOT\llvm\include;$ROOT\llvm\build-64\include" -D LLVM_LIB=$ROOT\llvm\build-64\Release\lib -D LLVM_VERSION=36 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=OFF -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_SPIR=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=ON -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12 Win64" ..
-MSBuild.exe /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
+MSBuild.exe /m /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
   exit $LastExitCode
@@ -100,7 +99,7 @@ if (! (Test-Path build_32_trunk)) {
 }
 cd build_32_trunk
 cmake -D LLVM_BIN=$ROOT\llvm\build-32\Release\bin -D LLVM_INCLUDE="$ROOT\llvm\include;$ROOT\llvm\build-32\include" -D LLVM_LIB=$ROOT\llvm\build-32\Release\lib -D LLVM_VERSION=36 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=OFF -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_SPIR=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=ON -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12" ..
-MSBuild.exe /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
+MSBuild.exe /m /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
   exit $LastExitCode
@@ -115,20 +114,20 @@ if (! (Test-Path build_64_pnacl)) {
 cd build_64_pnacl
 # nacl-sdk-bin contains clang.exe, llvm-as.exe, and the required dlls scavenged from the nacl sdk version pepper_35
 cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-64\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-64\lib\Release -D LLVM_VERSION=34 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12 Win64" ..
-MSBuild.exe /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
+MSBuild.exe /m /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
   exit $LastExitCode
 }
 
 cd $ROOT
-if (! (Test-Path build_32_pnacl)) { 
+if (! (Test-Path build_32_pnacl)) {
   mkdir build_32_pnacl
 }
 cd build_32_pnacl
 # nacl-sdk-bin contains clang.exe, llvm-as.exe, and the required dlls scavenged from the nacl sdk version pepper_35
 cmake -D LLVM_BIN=$ROOT\pnacl-llvm\nacl-sdk-bin -D LLVM_INCLUDE="$ROOT\pnacl-llvm\include;$ROOT\pnacl-llvm\build-32\include" -D LLVM_LIB=$ROOT\pnacl-llvm\build-32\lib\Release -D LLVM_VERSION=34 -D TARGET_ARM=ON -D TARGET_NATIVE_CLIENT=ON -D TARGET_OPENCL=ON -D TARGET_PTX=ON -D TARGET_X86=ON -D WITH_TEST_CORRECTNESS=ON -D WITH_TEST_ERROR=ON -D WITH_TEST_WARNING=ON -D WITH_TEST_PERFORMANCE=ON -D WITH_TEST_STATIC=OFF -D HALIDE_SHARED_LIBRARY=ON -G "Visual Studio 12" ..
-MSBuild.exe /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
+MSBuild.exe /m /t:Build /p:Configuration="Release" .\All_BUILD.vcxproj
 if ($LastExitCode) {
   echo "Build failed!"
   exit $LastExitCode

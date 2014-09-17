@@ -213,11 +213,11 @@ int main(int argc, char **argv) {
     // Scheduling update steps
     {
         // The pure variables in an update step and can be
-        // parallelized, vectorized, split, etc as usual. The
-        // variables that are part of the reduction domain (e.g. r.x
-        // in our histogram example) can't be modified, as this risks
-        // changing the meaning of the update step (because the
-        // function may recursively refer back to itself).
+        // parallelized, vectorized, split, etc as usual.
+
+        // Vectorizing, splitting, or parallelize the variables that
+        // are part of the reduction domain is trickier. We'll cover
+        // that in a later lesson.
 
         // Consider the definition:
         Func f;
@@ -240,7 +240,7 @@ int main(int argc, char **argv) {
         // use y.
         f.update(0).vectorize(x, 4);
 
-        // No we parallelize the second update step in chunks of size
+        // Now we parallelize the second update step in chunks of size
         // 4.
         Var yo, yi;
         f.update(1).split(y, yo, yi, 4).parallel(yo);

@@ -27,6 +27,22 @@ namespace Internal {
  */
 
 bool expr_match(Expr pattern, Expr expr, std::vector<Expr> &result);
+
+/** Does the first expression have the same structure as the second?
+ * Variables are matched consistently. The first time a variable is
+ * matched, it assumes the value of the matching part of the second
+ * expression. Subsequent matches must be equal to the first match.
+ *
+ * For example:
+ \code
+ Var x("x"), y("y");
+ match(x*(x + 1), a*(a + b), result)
+ \endcode
+ * should return true, and set result["x"] = a, and result["y"] = b.
+ */
+
+bool expr_match(Expr pattern, Expr expr, std::map<std::string, Expr> &result);
+
 void expr_match_test();
 
 }

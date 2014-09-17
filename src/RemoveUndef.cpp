@@ -220,32 +220,23 @@ private:
             return;
         }
 
-        vector<Expr > new_args(op->args.size());
-        bool changed = false;
-
-        // Mutate the args
-        for (size_t i = 0; i < op->args.size(); i++) {
-            Expr old_arg = op->args[i];
-            Expr new_arg = mutate(old_arg);
-            if (!new_arg.defined()) {
-                stmt = Stmt();
-                return;
-            }
-            if (!new_arg.same_as(old_arg)) changed = true;
-            new_args[i] = new_arg;
+        Expr message = mutate(op->message);
+        if (!expr.defined()) {
+            stmt = Stmt();
+            return;
         }
 
-        if (condition.same_as(op->condition) && !changed) {
+        if (condition.same_as(op->condition) && message.same_as(op->message)) {
             stmt = op;
         } else {
-            stmt = AssertStmt::make(condition, op->message, new_args);
+            stmt = AssertStmt::make(condition, message);
         }
     }
 
     void visit(const Pipeline *op) {
         Stmt produce = mutate(op->produce);
         if (!produce.defined()) {
-            produce = AssertStmt::make(const_true(), "Produce step elided due to use of Halide::undef", vector<Expr>());
+            produce = Evaluate::make(Expr("Produce step elided due to use of Halide::undef"));
         }
         Stmt update = mutate(op->update);
         Stmt consume = mutate(op->consume);

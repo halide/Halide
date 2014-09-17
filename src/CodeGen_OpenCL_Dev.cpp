@@ -104,6 +104,33 @@ string simt_intrinsic(const string &name) {
 }
 }
 
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " >> " << bits;
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
+    } else {
+        visit_binop(op->type, op->a, op->b, "/");
+    }
+}
+
+void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
+    int bits;
+    if (is_const_power_of_two(op->b, &bits)) {
+        ostringstream oss;
+        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
+        print_assignment(op->type, oss.str());
+    } else if (op->type.is_int()) {
+        print_expr(Call::make(op->type, "smod_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
+    } else {
+        visit_binop(op->type, op->a, op->b, "%");
+    }
+}
+
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const For *loop) {
     if (is_gpu_var(loop->name)) {
         internal_assert(loop->for_type == For::Parallel) << "kernel loop must be parallel\n";
@@ -470,6 +497,28 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     }
 }
 
+static string smod_def(string T) {
+    ostringstream ss;
+    ss << T << " smod_" << T << "(" << T << " a, " << T << " b) {\n";
+    ss << T << " r = a % b;\n";
+    ss << "if (r < 0) { r += b < 0 ? -b : b; }\n";
+    ss << "return r;\n";
+    ss << "}\n";
+    return ss.str();
+}
+
+static string sdiv_def(string T) {
+    ostringstream ss;
+    ss << T << " sdiv_" << T << "(" << T << " a, " << T << " b) {\n";
+    ss << T << " q = a / b;\n";
+    ss << T << " r = a - q*b;\n";
+    ss << T << " bs = b >> (8*sizeof(" << T << ") - 1);\n";
+    ss << T << " rs = r >> (8*sizeof(" << T << ") - 1);\n";
+    ss << "return q - (rs&bs) + (rs&~bs);\n";
+    ss << "}\n";
+    return ss.str();
+}
+
 void CodeGen_OpenCL_Dev::init_module() {
     debug(2) << "OpenCL device codegen init_module\n";
 
@@ -489,8 +538,14 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float neg_inf_f32() { return -INFINITY; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
-               << "#define mod(a, b) (((a % b) < 0) ? ((a % b) + b) : (a % b))\n"
-               << "#define sdiv(a, b) ((a - mod(a, b))/b)\n"
+               << smod_def("char") << "\n"
+               << smod_def("short") << "\n"
+               << smod_def("int") << "\n"
+               << smod_def("long") << "\n"
+               << sdiv_def("char") << "\n"
+               << sdiv_def("short") << "\n"
+               << sdiv_def("int") << "\n"
+               << sdiv_def("long") << "\n"
                << "#define sqrt_f32 sqrt \n"
                << "#define sin_f32 sin \n"
                << "#define cos_f32 cos \n"
@@ -520,7 +575,7 @@ void CodeGen_OpenCL_Dev::init_module() {
     // __shared always has address space __local.
     src_stream << "#define __address_space___shared __local\n";
 
-    if ((target.features & Target::CLDoubles) != 0) {
+    if (target.has_feature(Target::CLDoubles)) {
         src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
         src_stream << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"

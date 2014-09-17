@@ -5,8 +5,10 @@
  * Defines the structure that describes a Halide target.
  */
 
+#include <bitset>
 #include <stdint.h>
 #include <string>
+#include "Error.h"
 #include "Util.h"
 
 namespace llvm {
@@ -25,45 +27,115 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl} arch;
+    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
 
     /** Optional features a target can have. */
-    enum Features {JIT       = 1 << 0,  ///< Generate code that will run immediately inside the calling process.
-                   SSE41     = 1 << 1,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
-                   AVX       = 1 << 2,  ///< Use AVX 1 instructions. Only relevant on x86.
-                   AVX2      = 1 << 3,  ///< Use AVX 2 instructions. Only relevant on x86.
-                   CUDA      = 1 << 4,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
-                   OpenCL    = 1 << 5,  ///< Enable the OpenCL runtime.
-                   OpenGL    = 1 << 6,  ///< Enable the OpenGL runtime.
-                   GPUDebug  = 1 << 7,  ///< Increase the level of checking and the verbosity of the gpu runtimes.
-                   NoAsserts = 1 << 8,  ///< Disable all runtime checks, for slightly tighter code.
-                   NoBoundsQuery = 1 << 9, ///< Disable the bounds querying functionality.
-                   ARMv7s    = 1 << 10,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
-                   CLDoubles = 1 << 11, ///< Enable double support on OpenCL targets
-                   FMA       = 1 << 12, ///< Enable x86 FMA instruction
-                   FMA4      = 1 << 13, ///< Enable x86 (AMD) FMA4 instruction set
-                   F16C      = 1 << 14, ///< Enable x86 16-bit float support
-                   CUDACapability30    = 1 << 15, ///< Enable CUDA compute capability 3.0 (Kepler)
-                   CUDACapability32    = 1 << 16, ///< Enable CUDA compute capability 3.2 (Tegra K1)
-                   CUDACapability35    = 1 << 17, ///< Enable CUDA compute capability 3.5 (Kepler)
-                   CUDACapability50    = 1 << 18  ///< Enable CUDA compute capability 5.0 (Maxwell)
+    enum Feature {
+        JIT,  ///< Generate code that will run immediately inside the calling process.
+        Debug,  ///< Turn on debug info and output for runtime code.
+        NoAsserts,  ///< Disable all runtime checks, for slightly tighter code.
+        NoBoundsQuery, ///< Disable the bounds querying functionality.
+
+        SSE41,  ///< Use SSE 4.1 and earlier instructions. Only relevant on x86.
+        AVX,  ///< Use AVX 1 instructions. Only relevant on x86.
+        AVX2,  ///< Use AVX 2 instructions. Only relevant on x86.
+        FMA,  ///< Enable x86 FMA instruction
+        FMA4,  ///< Enable x86 (AMD) FMA4 instruction set
+        F16C,  ///< Enable x86 16-bit float support
+
+        ARMv7s,  ///< Generate code for ARMv7s. Only relevant for 32-bit ARM.
+
+        CUDA,  ///< Enable the CUDA runtime. Defaults to compute capability 2.0 (Fermi)
+        CUDACapability30,  ///< Enable CUDA compute capability 3.0 (Kepler)
+        CUDACapability32,  ///< Enable CUDA compute capability 3.2 (Tegra K1)
+        CUDACapability35,  ///< Enable CUDA compute capability 3.5 (Kepler)
+        CUDACapability50,  ///< Enable CUDA compute capability 5.0 (Maxwell)
+
+        OpenCL,  ///< Enable the OpenCL runtime.
+        CLDoubles,  ///< Enable double support on OpenCL targets
+
+        OpenGL,  ///< Enable the OpenGL runtime.
+
+        FeatureEnd
+        // NOTE: Changes to this enum must be reflected in the definition of
+        // to_string()!
     };
 
-    /** A bitmask that stores the active features. */
-    uint64_t features;
+    Target() : os(OSUnknown), arch(ArchUnknown), bits(0) {}
+    Target(OS o, Arch a, int b, std::vector<Feature> initial_features = std::vector<Feature>())
+        : os(o), arch(a), bits(b) {
+        for (size_t i = 0; i < initial_features.size(); i++) {
+            set_feature(initial_features[i]);
+        }
+    }
 
-    Target() : os(OSUnknown), arch(ArchUnknown), bits(0), features(0) {}
-    Target(OS o, Arch a, int b, uint64_t f) : os(o), arch(a), bits(b), features(f) {}
+    void set_feature(Feature f, bool value = true) {
+        user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+        features.set(f, value);
+    }
+
+    void set_features(std::vector<Feature> features_to_set, bool value = true) {
+        for (size_t i = 0; i < features_to_set.size(); i++) {
+            set_feature(features_to_set[i]);
+        }
+    }
+
+    bool has_feature(Feature f) const {
+        user_assert(f < FeatureEnd) << "Invalid Target feature.\n";
+        return features[f];
+    }
+
+    bool features_any_of(std::vector<Feature> test_features) const {
+        for (size_t i = 0; i < test_features.size(); i++) {
+            user_assert(test_features[i] < FeatureEnd) << "Invalid Target feature.\n";
+
+            if (features[test_features[i]]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool features_all_of(std::vector<Feature> test_features) const {
+        for (size_t i = 0; i < test_features.size(); i++) {
+            user_assert(test_features[i] < FeatureEnd) << "Invalid Target feature.\n";
+
+            if (!features[test_features[i]]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Return a copy of the target with the given feature set.
+     * This is convenient when enabling certain features (e.g. NoBoundsQuery)
+     * in an initialization list, where the target to be mutated may be
+     * a const reference. */
+    Target with_feature(Feature f) const {
+        Target copy = *this;
+        copy.set_feature(f);
+        return copy;
+    }
+
+    /** Return a copy of the target with the given feature cleared.
+     * This is convenient when disabling certain features (e.g. NoBoundsQuery)
+     * in an initialization list, where the target to be mutated may be
+     * a const reference. */
+    Target without_feature(Feature f) const {
+        Target copy = *this;
+        copy.set_feature(f, false);
+        return copy;
+    }
 
     /** Is OpenCL or CUDA enabled in this target? I.e. is
      * Func::gpu_tile and similar going to work? We do not include
      * OpenGL, because it is not capable of gpgpu, and is not
      * scheduled via Func::gpu_tile. */
     bool has_gpu_feature() const {
-        return (features & (CUDA|OpenCL)) != 0;
+        return has_feature(CUDA) || has_feature(OpenCL);
     }
 
     bool operator==(const Target &other) const {
@@ -82,8 +154,8 @@ struct Target {
      *
      *   arch-bits-os-feature1-feature2...featureN.
      *
-     * Note that is guaranteed that t2.from_string(t1.to_string()) == t1
-     * ,but not that from_string(s).to_string() == s (since there can be
+     * Note that is guaranteed that t2.from_string(t1.to_string()) == t1,
+     * but not that from_string(s).to_string() == s (since there can be
      * multiple strings that parse to the same Target)...
      * *unless* t1 contains 'unknown' fields (in which case you'll get a string
      * that can't be parsed, which is intentional).
@@ -117,9 +189,13 @@ struct Target {
      * Like merge_string(), but reset the contents of 'this' first.
      */
     EXPORT bool from_string(const std::string &target) {
-	*this = Target();
-	return merge_string(target);
+        *this = Target();
+        return merge_string(target);
     }
+
+private:
+    /** A bitmask that stores the active features. */
+    std::bitset<FeatureEnd> features;
 };
 
 /** Return the target corresponding to the host machine. */

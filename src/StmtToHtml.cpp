@@ -2,6 +2,7 @@
 #include "IROperator.h"
 #include "Scope.h"
 
+#include <iterator>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -337,7 +338,6 @@ public:
         std::vector<Expr> args;
         args.push_back(op->condition);
         args.push_back(op->message);
-        std::copy(op->args.begin(), op->args.end(), std::back_inserter(args));
         print_list(symbol("assert") + "(", args, ")");
         stream << close_div();
     }

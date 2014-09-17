@@ -7,10 +7,14 @@ if (MSVC)
   add_definitions("-D_CRT_SECURE_NO_WARNINGS")
   add_definitions("-D_SCL_SECURE_NO_WARNINGS")
   add_definitions("/wd4244 /wd4267 /wd4800 /wd4996")
+  # -g produces dwarf debugging info, which is not useful on windows
+  #  (and fails to compile due to llvm bug 15393)
+  set(RUNTIME_DEBUG_FLAG "")
 else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")
   add_definitions("-std=c++11")
+  set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
 if (HALIDE_SHARED_LIBRARY)
@@ -23,6 +27,7 @@ endif()
 include_directories ( "${LLVM_INCLUDE}")
 link_directories ("${LLVM_LIB}")
 
+set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(WIN32)
   file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
 else()
@@ -32,34 +37,36 @@ else()
   string(REPLACE " " ";" LIBS "${LIBS_SPACES}")
 endif()
 
-message("${LLVM_LIB} ${LIBS}")
-
 if (TARGET_NATIVE_CLIENT)
-  add_definitions("-DWITH_NATIVE_CLIENT=1")
+  add_definitions("-DWITH_NATIVE_CLIENT")
 endif()
 
 if (TARGET_X86)
-  add_definitions("-DWITH_X86=1")
+  add_definitions("-DWITH_X86")
 endif()
 
 if (TARGET_ARM)
-  add_definitions("-DWITH_ARM=1")
+  add_definitions("-DWITH_ARM")
 endif()
 
 if (TARGET_AARCH64)
-  add_definitions("-DWITH_AARCH64=1")
+  add_definitions("-DWITH_AARCH64")
 endif()
 
 if (TARGET_PTX)
-  add_definitions("-DWITH_PTX=1")
+  add_definitions("-DWITH_PTX")
 endif()
 
 if (TARGET_OPENCL)
-  add_definitions("-DWITH_OPENCL=1")
+  add_definitions("-DWITH_OPENCL")
 endif()
 
 if (TARGET_OPENGL)
-  add_definitions("-DWITH_OPENGL=1")
+  add_definitions("-DWITH_OPENGL")
+endif()
+
+if (TARGET_MIPS)
+  add_definitions("-DWITH_MIPS")
 endif()
 
 add_definitions("-DLLVM_VERSION=${LLVM_VERSION}")
@@ -85,9 +92,7 @@ set(RUNTIME_CPP
   windows_clock
   posix_error_handler
   posix_io
-  nacl_io
   ssp
-  osx_io
   posix_math
   posix_thread_pool
   windows_thread_pool
@@ -96,15 +101,11 @@ set(RUNTIME_CPP
   osx_host_cpu_count
   tracing
   write_debug_image
-  cuda_debug
-  opencl_debug
-  opengl_debug
   windows_cuda
   windows_opencl
-  windows_cuda_debug
-  windows_opencl_debug
   windows_io
   posix_print
+  to_string
   cache
   nacl_host_cpu_count)
 set (RUNTIME_LL
@@ -116,7 +117,8 @@ set (RUNTIME_LL
   x86
   x86_sse41
   win32_math
-  pnacl_math)
+  pnacl_math
+  mips)
 set (RUNTIME_BC
   compute_20
   compute_30
@@ -132,28 +134,49 @@ if("${NATIVE_INT_DIR}" STREQUAL "./")
 endif()
 
 # Commands to build initial module objects.
+file(MAKE_DIRECTORY "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build")
+set (CXX_WARNING_FLAGS -Wall -Werror -Wno-unused-function -Wcast-qual)
 set (INITMOD_PREFIX "_initmod_")
 set (ARCHS 32 64)
 set(INITIAL_MODULES )
 foreach (i ${RUNTIME_CPP} )
   foreach (j ${ARCHS} )
     set(SOURCE "${NATIVE_RUNTIME_DIR}${i}.cpp")
+    set(LL_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.ll")
     set(LL "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.ll")
+    set(BC_D "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}_debug.bc")
     set(BC "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/${NATIVE_INT_DIR}initmod.${i}_${j}.bc")
+    set(INITMOD_D "${INITMOD_PREFIX}${i}_${j}_debug.cpp")
     set(INITMOD "${INITMOD_PREFIX}${i}_${j}.cpp")
+
+    add_custom_command(OUTPUT "${LL_D}"
+                       DEPENDS "${SOURCE}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} ${RUNTIME_DEBUG_FLAG} -DDEBUG_RUNTIME -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL_D}"
+                       COMMENT "${SOURCE} -> ${LL_D}")
     add_custom_command(OUTPUT "${LL}"
                        DEPENDS "${SOURCE}"
-                       COMMAND ${CLANG} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
+                       COMMAND ${CLANG} ${CXX_WARNING_FLAGS} -fno-ms-compatibility -ffreestanding -fno-blocks -fno-exceptions -m${j} "-I${NATIVE_RUNTIME_DIR}" -DCOMPILING_HALIDE_RUNTIME "-DLLVM_VERSION=${LLVM_VERSION}" -DBITS_${j} -emit-llvm -S "${SOURCE}" -o "${LL}"
                        COMMENT "${SOURCE} -> ${LL}")
+
+    add_custom_command(OUTPUT "${BC_D}"
+                       DEPENDS "${LL_D}"
+                       COMMAND "${LLVM_AS}" "${LL_D}" -o "${BC_D}"
+		       COMMENT "${LL_D} -> ${BC_D}")
     add_custom_command(OUTPUT "${BC}"
                        DEPENDS "${LL}"
                        COMMAND "${LLVM_AS}" "${LL}" -o "${BC}"
 		       COMMENT "${LL} -> ${BC}")
+
+    add_custom_command(OUTPUT "${INITMOD_D}"
+                       DEPENDS "${BC_D}"
+                       COMMAND bitcode2cpp "${i}_${j}_debug" < "${BC_D}" > "${INITMOD_D}"
+                       COMMENT "${BC_D} -> ${INITMOD_D}")
     add_custom_command(OUTPUT "${INITMOD}"
                        DEPENDS "${BC}"
                        COMMAND bitcode2cpp "${i}_${j}" < "${BC}" > "${INITMOD}"
                        COMMENT "${BC} -> ${INITMOD}")
     list(APPEND INITIAL_MODULES ${INITMOD})
+    list(APPEND INITIAL_MODULES ${INITMOD_D})
   endforeach()
 endforeach()
 foreach (i ${RUNTIME_LL} )
@@ -271,7 +294,8 @@ set(HEADER_FILES
   UnifyDuplicateLets.h
   HumanReadableStmt.h
   StmtToHtml.h
-  Memoization.h)
+  Memoization.h
+  CodeGen_MIPS.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -366,10 +390,50 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   HumanReadableStmt.cpp
   StmtToHtml.cpp
   Memoization.cpp
+  CodeGen_MIPS.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
 target_link_libraries(Halide InitialModules ${LIBS})
+
+if (NOT WIN32)
+  target_link_libraries(Halide dl pthread z tinfo)
+endif()
+
+if (NOT HALIDE_SHARED_LIBRARY)
+
+# For the Xcode build, we want the static library version of libHalide.a
+# to include all of its dependencies so that other projects can link to the
+# library without having to worry about which version of LLVM or the initial
+# modules it was built with. This is accomplished by adding an additional file
+# list to the link line containing all of these dependencies
+
+if (XCODE)
+
+# Create a
+set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
+
+# Determine the location of libInitialModules.a so we can include the path to it
+# in the link file list
+IF (CMAKE_BUILD_TYPE)
+  set(InitialModulesPath ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/${CMAKE_BUILD_TYPE}/libInitialModules.a)
+ELSE()
+  set(InitialModulesPath ${CMAKE_ARCHIVE_OUTPUT_DIRECTORY}/Debug/libInitialModules.a)
+ENDIF()
+
+# We need a newline delimited list of the lib files
+execute_process(COMMAND "${LLVM_CONFIG}" --libfiles OUTPUT_VARIABLE LIBS)
+string(REPLACE " " "\n" LIBS ${LIBS})
+
+# Write the archive file dependencies to a new LinkFileList
+file(WRITE ${EXTRA_LINKFILELIST} "${LIBS}${InitialModulesPath}\n")
+
+set_target_properties(Halide PROPERTIES XCODE_ATTRIBUTE_OTHER_LIBTOOLFLAGS "-filelist ${EXTRA_LINKFILELIST}")
+
+endif(XCODE)
+
+endif (NOT HALIDE_SHARED_LIBRARY)
+
 # if this is a DLL, don't link dependencies to this set of libs.
 #if (HALIDE_SHARED_LIBRARY)
 #  set_target_properties(Halide PROPERTIES LINK_INTERFACE_LIBRARIES "")
