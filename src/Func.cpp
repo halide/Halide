@@ -432,7 +432,7 @@ void Stage::split(const string &old, const string &outer, const string &inner, E
     for (size_t i = 0; i < dims.size(); i++) {
         string new_names[2] = {inner, outer};
         for (int j = 0; j < 2; j++) {
-            if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != outer) {
+            if (var_name_match(dims[i].var, new_names[j]) && new_names[j] != old) {
                 user_error << "In schedule for " << stage_name
                            << ", Can't create var " << new_names[j]
                            << " using a split or tile, because " << new_names[j]
