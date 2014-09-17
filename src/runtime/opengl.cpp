@@ -131,6 +131,9 @@ struct GlobalState {
     // Information about the OpenGL platform we're running on.
     OpenGLProfile profile;
     int major_version, minor_version;
+    bool have_vertex_array_objects;
+    bool have_texture_rg;
+    bool have_texture_float;
 
     // Various objects shared by all filter kernels
     GLuint vertex_shader_id;
@@ -143,9 +146,6 @@ struct GlobalState {
     TextureInfo *textures;
 
     ModuleState *state_list;
-
-    bool have_vertex_array_objects;
-    bool have_texture_rg;
 
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
@@ -439,7 +439,7 @@ WEAK int load_gl_func(void *user_context, const char *name, void **ptr) {
     void *p = halide_opengl_get_proc_address(user_context, name);
     if (!p) {
         error(user_context) << "Could not load function pointer for " << name;
-        return 1;
+        return -1;
     }
     *ptr = p;
     return 0;
@@ -476,7 +476,6 @@ WEAK bool extension_supported(void *user_context, const char *name) {
 // Check for availability of various version- and extension-specific features
 // and hook up functions pointers as necessary
 WEAK void init_extensions(void *user_context) {
-    // vertex_array_objects
     if (ST.major_version >= 3) {
         ST.have_vertex_array_objects = true;
         load_gl_func(user_context, "glGenVertexArrays", (void**)&ST.GenVertexArrays);
@@ -484,14 +483,19 @@ WEAK void init_extensions(void *user_context) {
         load_gl_func(user_context, "glDeleteVertexArrays", (void**)&ST.DeleteVertexArrays);
     }
 
-    // texture_rg
-    if (ST.profile == OpenGL) {
-        ST.have_texture_rg = ST.major_version >= 3 ||
-            extension_supported(user_context, "GL_ARB_texture_rg");
-    } else {
-        ST.have_texture_rg = ST.major_version >= 3 ||
-            extension_supported(user_context, "GL_EXT_texture_rg");
-    }
+    ST.have_texture_rg =
+        ST.major_version >= 3 ||
+        (ST.profile == OpenGL &&
+         extension_supported(user_context, "GL_ARB_texture_rg")) ||
+        (ST.profile == OpenGLES &&
+         extension_supported(user_context, "GL_EXT_texture_rg"));
+
+    ST.have_texture_float =
+        (ST.major_version >= 3) ||
+        (ST.profile == OpenGL &&
+         extension_supported(user_context, "GL_ARB_texture_float")) ||
+        (ST.profile == OpenGLES &&
+         extension_supported(user_context, "GL_OES_texture_float"));
 }
 
 // Initialize the runtime, in particular all fields in halide_opengl_state.
@@ -510,13 +514,12 @@ WEAK int halide_opengl_init(void *user_context) {
 
     // Initialize pointers to core OpenGL functions.
 #define GLFUNC(TYPE, VAR)                                               \
-    ST.VAR = (TYPE)halide_opengl_get_proc_address(user_context, "gl" #VAR); \
-    if (!ST.VAR) {                                                      \
-        error(user_context) << "Could not load function pointer for gl" #VAR; \
-        return 1;                                                       \
+    if (load_gl_func(user_context, "gl" #VAR, (void**)&ST.VAR) < 0) {   \
+        return -1;                                                      \
     }
     USED_GL_FUNCTIONS;
 #undef GLFUNC
+
     const char *version = (const char *)ST.GetString(GL_VERSION);
     int major, minor;
     if (sscanf(version, "OpenGL ES %d.%d", &major, &minor) == 2) {
@@ -540,7 +543,9 @@ WEAK int halide_opengl_init(void *user_context) {
         << "  vertex_array_objects: "
         << (ST.have_vertex_array_objects ? "yes\n" : "no\n")
         << "  texture_rg: "
-        << (ST.have_texture_rg ? "yes\n" : "no\n");
+        << (ST.have_texture_rg ? "yes\n" : "no\n")
+        << "  texture_float: "
+        << (ST.have_texture_float ? "yes\n" : "no\n");
 
     // Initialize framebuffer.
     ST.GenFramebuffers(1, &ST.framebuffer_id);
