@@ -13,13 +13,11 @@ extern "C" void halide_print(void *user_context, const char *message) {
     messages.push_back(message);
 }
 
+#ifdef _MSC_VER
+#define snprintf _snprintf
+#endif
 
 int main(int argc, char **argv) {
-    #ifdef _WIN32
-    printf("Skipping test because use of varags on windows under older llvms (e.g. pnacl) crashes.");
-    return 0;
-    #endif
-
     Var x;
 
     {
@@ -127,10 +125,10 @@ int main(int argc, char **argv) {
         // Make sure we cover some special values.
         e = select(x == 0, 0.0f,
                    x == 1, -0.0f,
-                   x == 2, 1.0f/0.0f,
-                   x == 3, (-1.0f)/0.0f,
-                   x == 4, (0.0f)/(0.0f),
-                   x == 5, (-0.0f)/(0.0f),
+                   x == 2, std::numeric_limits<float>::infinity(),
+                   x == 3, -std::numeric_limits<float>::infinity(),
+                   x == 4, std::numeric_limits<float>::quiet_NaN(),
+                   x == 5, -std::numeric_limits<float>::quiet_NaN(),
                    x == 6, std::numeric_limits<float>::max(),
                    x == 7, std::numeric_limits<float>::min(),
                    x == 8, -std::numeric_limits<float>::max(),
