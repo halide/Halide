@@ -129,10 +129,13 @@ int main(int argc, char **argv) {
                    x == 3, -std::numeric_limits<float>::infinity(),
                    x == 4, std::numeric_limits<float>::quiet_NaN(),
                    x == 5, -std::numeric_limits<float>::quiet_NaN(),
-                   x == 6, std::numeric_limits<float>::max(),
-                   x == 7, std::numeric_limits<float>::min(),
-                   x == 8, -std::numeric_limits<float>::max(),
+                   e);
+        e = select(x == 6, std::numeric_limits<float>::denorm_min(),
+                   x == 7, -std::numeric_limits<float>::denorm_min(),
+                   x == 8, std::numeric_limits<float>::min(),
                    x == 9, -std::numeric_limits<float>::min(),
+                   x == 10, std::numeric_limits<float>::max(),
+                   x == 11, -std::numeric_limits<float>::max(),
                    e);
 
         f(x) = print(e);
