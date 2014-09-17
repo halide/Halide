@@ -1698,34 +1698,34 @@ private:
         } else if (op->call_type == Call::Intrinsic &&
                    (op->name == Call::shift_left ||
                     op->name == Call::shift_right)) {
-          Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-          int ib = 0;
+            Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+            int ib = 0;
 
-          if (const_castint(b, &ib)) {
-            Type t = op->type;
+            if (const_castint(b, &ib)) {
+                Type t = op->type;
 
-            bool shift_left = op->name == Call::shift_left;
-            if (ib < 0) {
-              shift_left = !shift_left;
-              ib = -ib;
+                bool shift_left = op->name == Call::shift_left;
+                if (ib < 0) {
+                    shift_left = !shift_left;
+                    ib = -ib;
+                }
+
+                if (ib < std::min(t.bits, 32)) {
+                    ib = 1 << ib;
+                    b = make_const(t, ib);
+
+                    if (shift_left) {
+                        expr = mutate(Mul::make(a, b));
+                    } else {
+                        expr = mutate(Div::make(a, b));
+                    }
+
+                    return;
+                } else {
+                    user_warning << "Cannot replace bit shift with arithmetic "
+                                 << "operator (integer overflow).\n";
+                }
             }
-
-            if (ib < std::min(t.bits, 32)) {
-              ib = 1 << ib;
-              b = make_const(t, ib);
-
-              if (shift_left) {
-                expr = mutate(Mul::make(a, b));
-              } else {
-                expr = mutate(Div::make(a, b));
-              }
-
-              return;
-            } else {
-              user_warning << "Cannot replace bit shift with arithmetic "
-                           << "operator (integer overflow).\n";
-            }
-          }
         }
 
         IRMutator::visit(op);
