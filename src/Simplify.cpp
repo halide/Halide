@@ -1695,9 +1695,11 @@ private:
                     }
                 }
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   (op->name == Call::shift_left ||
-                    op->name == Call::shift_right)) {
+        }
+
+        if (op->call_type == Call::Intrinsic &&
+            (op->name == Call::shift_left ||
+             op->name == Call::shift_right)) {
             Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
             int ib = 0;
 
@@ -1719,16 +1721,74 @@ private:
                     } else {
                         expr = mutate(Div::make(a, b));
                     }
-
                     return;
                 } else {
                     user_warning << "Cannot replace bit shift with arithmetic "
                                  << "operator (integer overflow).\n";
                 }
             }
-        }
 
-        IRMutator::visit(op);
+            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                expr = op;
+            } else if (op->name == Call::shift_left) {
+                expr = a << b;
+            } else {
+                expr = a >> b;
+            }
+        } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::stringify) {
+            // Eagerly concat constant arguments to a stringify.
+            bool changed = false;
+            std::vector<Expr> new_args;
+            const StringImm *last = NULL;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr arg = mutate(op->args[i]);
+                if (!arg.same_as(op->args[i])) {
+                    changed = true;
+                }
+                const StringImm *string_imm = arg.as<StringImm>();
+                const IntImm    *int_imm    = arg.as<IntImm>();
+                const FloatImm  *float_imm  = arg.as<FloatImm>();
+                // We use snprintf here rather than stringstreams,
+                // because the runtime's float printing is guaranteed
+                // to match snprintf.
+                char buf[64]; // Large enough to hold the biggest float literal.
+                if (last && string_imm) {
+                    new_args.back() = last->value + string_imm->value;
+                    changed = true;
+                } else if (int_imm) {
+                    snprintf(buf, sizeof(buf), "%d", int_imm->value);
+                    if (last) {
+                        new_args.back() = last->value + buf;
+                    } else {
+                        new_args.push_back(string(buf));
+                    }
+                    changed = true;
+                } else if (last && float_imm) {
+                    snprintf(buf, sizeof(buf), "%f", float_imm->value);
+                    if (last) {
+                        new_args.back() = last->value + buf;
+                    } else {
+                        new_args.push_back(string(buf));
+                    }
+                    changed = true;
+                } else {
+                    new_args.push_back(arg);
+                }
+                last = new_args.back().as<StringImm>();
+            }
+
+            if (new_args.size() == 1 && new_args[0].as<StringImm>()) {
+                // stringify of a string constant is just the string constant
+                expr = new_args[0];
+            } else if (changed) {
+                expr = Call::make(op->type, op->name, new_args, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else {
+            IRMutator::visit(op);
+        }
     }
 
 
@@ -2486,16 +2546,16 @@ void simplify_test() {
     check(b1 && b1, b1);
     check(b1 || b1, b1);
 
-    Expr vec = Variable::make(Int(32, 4), "vec");
+    v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
     check(Let::make("x", 3, x+4), 7);
 
     // Check ramps in lets get pushed inwards
-    check(Let::make("vec", Ramp::make(x*2+7, 3, 4), vec + Expr(Broadcast::make(2, 4))),
+    check(Let::make("v", Ramp::make(x*2+7, 3, 4), v + Expr(Broadcast::make(2, 4))),
           Ramp::make(x*2+9, 3, 4));
 
     // Check broadcasts in lets get pushed inwards
-    check(Let::make("vec", Broadcast::make(x, 4), vec + Expr(Broadcast::make(2, 4))),
+    check(Let::make("v", Broadcast::make(x, 4), v + Expr(Broadcast::make(2, 4))),
           Broadcast::make(x+2, 4));
 
     // Check that dead lets get stripped
@@ -2505,6 +2565,13 @@ void simplify_test() {
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+
+    // Check that constant args to a stringify get combined
+    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, string(" "), 4), Call::Intrinsic),
+          string("3 4"));
+
+    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, x, 4, string(", "), 3.4f), Call::Intrinsic),
+          Call::make(Handle(), Call::stringify, vec<Expr>(string("3"), x, string("4, 3.400000")), Call::Intrinsic));
 
     std::cout << "Simplify test passed" << std::endl;
 }
