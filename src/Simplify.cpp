@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <stdio.h>
 
 #include "Simplify.h"
 #include "IROperator.h"
@@ -13,6 +14,10 @@
 #include "Substitute.h"
 #include "Bounds.h"
 #include "Deinterleave.h"
+
+#if defined(_WIN32)
+#define snprintf _snprintf
+#endif
 
 namespace Halide {
 namespace Internal {
