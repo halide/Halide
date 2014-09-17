@@ -194,7 +194,7 @@ class InjectBufferCopies : public IRMutator {
                 Expr copy = Call::make(Int(32), "halide_copy_to_" + direction, vec(buffer), Call::Extern);
                 Stmt check = AssertStmt::make(copy == 0,
                                               "Failed to copy buffer " + iter->first +
-                                              " to " + direction + ".", vector<Expr>());
+                                              " to " + direction + ".");
                 s = Block::make(check, s);
             }
         }
@@ -273,7 +273,7 @@ class InjectBufferCopies : public IRMutator {
         Expr buf = Variable::make(Handle(), buf_name + ".buffer");
         Expr call = Call::make(Int(32), "halide_dev_malloc", vec(buf), Call::Extern);
         string msg = "Failed to allocate device buffer for " + buf_name;
-        return AssertStmt::make(call == 0, msg, vector<Expr>());
+        return AssertStmt::make(call == 0, msg);
     }
 
     void visit(const Pipeline *op) {
@@ -521,7 +521,7 @@ class InjectDevFrees : public IRMutator {
         if (needs_freeing.count(buf_name)) {
             Expr buf = Variable::make(Handle(), buf_name);
             Expr free_call = Call::make(Int(32), "halide_dev_free", vec(buf), Call::Extern);
-            Stmt check = AssertStmt::make(free_call == 0, "Failed to free device buffer for " + op->name, vector<Expr>());
+            Stmt check = AssertStmt::make(free_call == 0, "Failed to free device buffer for " + op->name);
             stmt = Block::make(check, op);
         } else {
             stmt = op;
