@@ -42,7 +42,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 
 // Helper to check for extension string presence. Adapted from:
 //   http://www.opengl.org/resources/features/OGLextensions/
-WEAK bool extension_supported(const char *extlist, const char *extension) {
+WEAK bool glx_extension_supported(const char *extlist, const char *extension) {
     // Extension names should not have spaces.
     if (strchr(extension, ' ') != NULL || *extension == '\0')
         return false;
@@ -118,7 +118,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
     glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
         glXGetProcAddressARB("glXCreateContextAttribsARB");
 
-    if (extension_supported(glxexts, "GLX_ARB_create_context") &&
+    if (glx_extension_supported(glxexts, "GLX_ARB_create_context") &&
         glXCreateContextAttribsARB) {
         int context_attribs[] = {
             GLX_CONTEXT_MAJOR_VERSION_ARB, desired_major_version,
