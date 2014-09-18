@@ -49,9 +49,17 @@ class Stage {
     Internal::Schedule schedule;
     void set_dim_type(VarOrRVar var, Internal::For::ForType t);
     void split(const std::string &old, const std::string &outer, const std::string &inner, Expr factor, bool exact);
-    std::string dump_argument_list();
+    std::string stage_name;
 public:
-    Stage(Internal::Schedule s) : schedule(s) {s.touched();}
+    Stage(Internal::Schedule s, const std::string &n) :
+        schedule(s), stage_name(n) {s.touched();}
+
+    /** Return a string describing the current var list taking into
+     * account all the splits, reorders, and tiles. */
+    EXPORT std::string dump_argument_list() const;
+
+    /** Return the name of this stage, e.g. "f.update(2)" */
+    EXPORT const std::string &name() const;
 
     /** Scheduling calls that control how the domain of this stage is
      * traversed. See the documentation for Func for the meanings. */

@@ -1523,8 +1523,19 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                     stride_constrained = image.stride(i);
                 }
 
-                min_constrained = Variable::make(Int(32), f.name() + ".0.min." + dim);
-                extent_constrained = Variable::make(Int(32), f.name() + ".0.extent." + dim);
+                std::string min0_name = f.name() + ".0.min." + dim;
+                if (replace_with_constrained.count(min0_name) > 0 ) {
+                    min_constrained = replace_with_constrained[min0_name];
+                } else {
+                    min_constrained = Variable::make(Int(32), min0_name);
+                }
+
+                std::string extent0_name = f.name() + ".0.extent." + dim;
+                if (replace_with_constrained.count(extent0_name) > 0 ) {
+                    extent_constrained = replace_with_constrained[extent0_name];
+                } else {
+                    extent_constrained = Variable::make(Int(32), extent0_name);
+                }
             } else if (image.defined() && (int)i < image.dimensions()) {
                 stride_constrained = image.stride(i);
                 extent_constrained = image.extent(i);
