@@ -524,8 +524,8 @@ WEAK int halide_opengl_init(void *user_context) {
 
     // Make a context if there isn't one
     if (halide_opengl_create_context(user_context)) {
-        print(user_context) << "Failed to make OpenGL context\n";
-        return 1;
+        error(user_context) << "Failed to make OpenGL context";
+        return -1;
     }
 
     // Initialize pointers to core OpenGL functions.
@@ -660,7 +660,7 @@ WEAK bool get_texture_format(void *user_context, buffer_t *buf,
 
     const int channels = buf->extent[2];
     if (channels <= 2 && !ST.have_texture_rg) {
-        error(user_context) << "GLSL: This version of OpenGL doesn't support <=2 channels.\n";
+        error(user_context) << "GLSL: This version of OpenGL doesn't support <=2 channels.";
         return false;
     }
     if (channels == 1) {
@@ -740,7 +740,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
             error(user_context)
                 << "Existing texture is smaller than buffer. "
                 << "Texture size: " << width << "x" << height
-                << ", buffer size: " << buf->extent[0] << "x" << buf->extent[1] << "\n";
+                << ", buffer size: " << buf->extent[0] << "x" << buf->extent[1];
 
             return 1;
         }
@@ -768,7 +768,7 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
         GLint format = 0;
         GLint type = GL_UNSIGNED_BYTE;
         if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
-            error(user_context) << "Invalid texture format\n";
+            error(user_context) << "Invalid texture format";
             return 1;
         }
         width = buf->extent[0];
@@ -885,7 +885,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
             ST.GetProgramiv(program, GL_INFO_LOG_LENGTH, &log_len);
             char *log = (char*) malloc(log_len);
             ST.GetProgramInfoLog(program, log_len, NULL, log);
-            error(user_context) << "Could not link GLSL program:\n"
+            debug(user_context) << "Could not link GLSL program:\n"
                                 << log << "\n";
             free(log);
             ST.DeleteProgram(program);
@@ -961,7 +961,7 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
 
     if (!buf->host || !buf->dev) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_dev operation: host or dev NULL.\n";
+        error(user_context) << "Invalid copy_to_dev operation: host or dev NULL";
         return 1;
     }
 
@@ -973,7 +973,7 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
 
     GLint internal_format, format, type;
     if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
-        error(user_context) << "Invalid texture format\n";
+        error(user_context) << "Invalid texture format";
         return 1;
     }
     GLint width = buf->extent[0];
@@ -1055,7 +1055,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
     if (!buf->host || !buf->dev) {
         debug_buffer(user_context, buf);
-        error(user_context) << "Invalid copy_to_host operation: host or dev NULL.\n";
+        error(user_context) << "Invalid copy_to_host operation: host or dev NULL";
         return 1;
     }
 
