@@ -53,6 +53,9 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     } else if (target.os == Target::Windows) {
         triple.setVendor(llvm::Triple::PC);
         triple.setOS(llvm::Triple::Win32);
+#if LLVM_VERSION >= 36
+        triple.setEnvironment(llvm::Triple::MSVC);
+#endif
         if (target.has_feature(Target::JIT)) {
             // Use ELF for jitting
             #if LLVM_VERSION < 35

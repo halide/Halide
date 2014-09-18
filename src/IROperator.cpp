@@ -567,19 +567,6 @@ Expr print(const std::vector<Expr> &args) {
         }
     }
 
-    // Concat adjacent string immediates eagerly.
-    size_t i = 0;
-    while (i+1 < print_args.size()) {
-        const Internal::StringImm *a = print_args[i].as<Internal::StringImm>();
-        const Internal::StringImm *b = print_args[i+1].as<Internal::StringImm>();
-        if (a && b) {
-            print_args[i] = a->value + b->value;
-            print_args.erase(print_args.begin() + i + 1);
-        } else {
-            i++;
-        }
-    }
-
     // Concat all the args at runtime using stringify.
     Expr combined_string =
         Internal::Call::make(Handle(), Internal::Call::stringify,
