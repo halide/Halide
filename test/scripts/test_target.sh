@@ -37,7 +37,6 @@ echo Testing target $HL_TARGET with llvm $LLVM
 echo Using LD = $LD
 echo Using CC = $CC
 echo Using CXX = $CXX
-rm -rf distrib/*
 make clean &&
 make -j8 build_tests || exit 1
 make distrib || exit 1
