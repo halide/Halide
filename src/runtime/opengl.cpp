@@ -18,9 +18,7 @@
 extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *name);
 extern "C" int halide_opengl_create_context(void *user_context);
 
-extern "C" void *malloc(size_t);
-extern "C" void free(void*);
-extern "C" int sscanf(const char *, const char *, ...);
+extern "C" int isdigit(int c);
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
@@ -498,6 +496,24 @@ WEAK void init_extensions(void *user_context) {
          extension_supported(user_context, "GL_OES_texture_float"));
 }
 
+WEAK const char *parse_int(const char *str, int *val) {
+    if (!isdigit(*str)) return NULL;
+    int v = 0;
+    do {
+        v = 10 * v + (*str++ - '0');
+    } while (isdigit(*str));
+    *val = v;
+    return str;
+}
+
+WEAK const char *parse_opengl_version(const char *str, int *major, int *minor) {
+    str = parse_int(str, major);
+    if (str == NULL || *str != '.') {
+        return NULL;
+    }
+    return parse_int(str + 1, minor);
+}
+
 // Initialize the runtime, in particular all fields in halide_opengl_state.
 WEAK int halide_opengl_init(void *user_context) {
     if (ST.initialized) {
@@ -521,12 +537,13 @@ WEAK int halide_opengl_init(void *user_context) {
 #undef GLFUNC
 
     const char *version = (const char *)ST.GetString(GL_VERSION);
+    const char *gles_version = match_prefix(version, "OpenGL ES ");
     int major, minor;
-    if (sscanf(version, "OpenGL ES %d.%d", &major, &minor) == 2) {
+    if (gles_version && parse_opengl_version(gles_version, &major, &minor)) {
         ST.profile = OpenGLES;
         ST.major_version = major;
         ST.minor_version = minor;
-    } else if (sscanf(version, "%d.%d", &major, &minor) == 2) {
+    } else if (parse_opengl_version(version, &major, &minor)) {
         ST.profile = OpenGL;
         ST.major_version = major;
         ST.minor_version = minor;
