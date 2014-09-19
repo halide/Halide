@@ -73,13 +73,13 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -std=c++98 -stdlib=libc++"
     export GXX="clang++ -std=c++98 -stdlib=libc++"
     export CC="clang"
-    export LLVMS="pnacl trunk release-3.3 release-3.4"
+    export LLVMS="trunk release-3.5 release-3.4 pnacl"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
-    export LLVMS="trunk release-3.2 release-3.3 release-3.4 pnacl"
+    export LLVMS="release-3.5 trunk release-3.4 pnacl"
 fi
 
 
@@ -103,10 +103,6 @@ for LLVM in ${LLVMS}; do
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
-    elif [[ "$LLVM" == release-3.2 ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_32
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_32
-        LLVM_TARGETS="X86;ARM;NVPTX"
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
@@ -114,6 +110,10 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == release-3.4 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+    elif [[ "$LLVM" == release-3.5 ]]; then
+        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
+        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
     fi
 
