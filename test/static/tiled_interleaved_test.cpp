@@ -61,7 +61,11 @@ int main(int argc, char **argv) {
     out.stride[2] = 1;
     out.elem_size = 4;
 
-    tiled_interleaved(&in, &out);
+    int result = tiled_interleaved(&in, &out);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     printf("Success!\n");
     return 0;

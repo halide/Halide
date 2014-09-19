@@ -37,22 +37,38 @@ int main(int argc, char **argv) {
     Image<float> inverse_transformed(input.width(), input.height(), 1);
 
     printf("haar_x\n");
-    haar_x(input, transformed);    
+    int result = haar_x(input, transformed);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
     printf("saving result...\n");
     save_transformed(transformed, "haar_x.png");
 
     printf("inverse_haar_x\n");
-    inverse_haar_x(transformed, inverse_transformed);
+    result = inverse_haar_x(transformed, inverse_transformed);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
     printf("saving result...\n");
     save(inverse_transformed, "inverse_haar_x.png");
 
     printf("daubechies_x\n");
-    daubechies_x(input, transformed);    
+    result = daubechies_x(input, transformed);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
     printf("saving result...\n");
     save_transformed(transformed, "daubechies_x.png");
 
     printf("inverse_daubechies_x\n");
-    inverse_daubechies_x(transformed, inverse_transformed);
+    result = inverse_daubechies_x(transformed, inverse_transformed);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
     printf("saving result...\n");
     save(inverse_transformed, "inverse_daubechies_x.png");
 
