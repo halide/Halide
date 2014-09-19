@@ -829,6 +829,23 @@ public:
             buffers[op->name] = r;
         }
     }
+
+    void visit(const Variable *op) {
+        if (ends_with(op->name, ".buffer") &&
+            op->param.defined() &&
+            op->param.is_buffer() &&
+            buffers.find(op->param.name()) == buffers.end()) {
+            Result r;
+            r.param = op->param;
+            r.type = op->param.type();
+            // We don't know the dimensionality from the Param
+            // alone. Treating it as zero dimensional skips all the
+            // min/extent checks, which is what we want anyway for
+            // image parameters that are only used by buffer handle.
+            r.dimensions = 0;
+            buffers[op->param.name()] = r;
+        }
+    }
 };
 
 /* Find all the externally referenced scalar parameters */
