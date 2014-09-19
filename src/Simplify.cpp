@@ -1385,8 +1385,6 @@ private:
                        equal(mul_a->b, mul_b->b)) {
                 // Divide both sides by a constant
                 expr = mutate(mul_a->a < mul_b->a);
-            } else if (a.same_as(op->a) && b.same_as(op->b)) {
-                expr = op;
             } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
                 expr = const_true(delta_ramp->width);
@@ -1396,9 +1394,11 @@ private:
             } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base < 0))) {
                 expr = const_true(delta_ramp->width);
-            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+            } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
                 expr = const_false(delta_ramp->width);
+            } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                expr = op;
             } else {
                 expr = LT::make(a, b);
             }
@@ -2135,6 +2135,30 @@ void check(Stmt a, Stmt b) {
     }
 }
 
+void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
+    //debug(0) << "Checking that " << a << " -> " << b << "\n";
+    Expr simpler = simplify(a, true, bi);
+    if (!equal(simpler, b)) {
+        internal_error
+            << "\nSimplification failure:\n"
+            << "Input: " << a << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: " << b << '\n';
+    }
+}
+
+void check_in_bounds(Stmt a, Stmt b, const Scope<Interval> &bi) {
+    //debug(0) << "Checking that " << a << " -> " << b << "\n";
+    Stmt simpler = simplify(a, true, bi);
+    if (!equal(simpler, b)) {
+        internal_error
+            << "\nSimplification failure:\n"
+            << "Input: " << a << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: " << b << '\n';
+    }
+}
+
 template <typename T>
 void test_int_cast_constant() {
     Type t = type_of<T>();
@@ -2602,6 +2626,14 @@ void simplify_test() {
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+
+    // Check if we can simplify away comparison on vector types considering bounds.
+    Scope<Interval> bounds_info;
+    bounds_info.push("x", Interval(0,4));
+    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(0,4),  const_false(4), bounds_info);
+    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(8,4),  const_true(4),  bounds_info);
+    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(-4,4), const_false(4), bounds_info);
+    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(5,4),  const_true(4),  bounds_info);
 
     std::cout << "Simplify test passed" << std::endl;
 }
