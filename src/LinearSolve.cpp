@@ -28,28 +28,19 @@ class HasVariable : public IRVisitor {
 
 class CollectLinearTerms : public IRVisitor {
 public:
-    Scope<Expr>* scope;
+    Scope<Expr> scope;
     std::vector<Term> terms;
     bool success;
 
-  CollectLinearTerms(Scope<Expr> *s) : scope(s), success(true) {
+    CollectLinearTerms(const Scope<Expr> *s = NULL) : success(true) {
         terms.resize(1);
         terms[0].var = NULL;
 
         coeff.push(make_one(Int(32)));
 
-        own_scope = scope == NULL;
-        if (own_scope) {
-          scope = new Scope<Expr>;
-        }
-    }
-
-    virtual ~CollectLinearTerms() {
-        if (own_scope)
-            delete scope;
+        scope.set_containing_scope(s);
     }
 private:
-    bool own_scope;
     SmallStack<Expr> coeff;
 
     bool has_var(Expr e) {
@@ -58,27 +49,13 @@ private:
         return check.has_var;
     }
 
-    Expr normalize_type(Expr e) {
-        if (e.type().is_int() || e.type().is_uint()) {
-            return simplify(Cast::make(Int(32), e));
-        } else {
-            return e;
-        }
-    }
-
-    void match_coeff_type(Expr& e) {
-        e = normalize_type(e);
-        match_types(coeff.top_ref(), e);
-    }
-
     void add_to_constant_term(Expr e) {
-        match_coeff_type(e);
+        internal_assert(!e.type().is_uint()) << "cannot perform solve with uint types.\n";
 
         if (terms[0].coeff.defined()) {
-            match_types(terms[0].coeff, e);
-            terms[0].coeff = simplify(Add::make(terms[0].coeff, Mul::make(coeff.top(), e)));
+            terms[0].coeff = simplify(terms[0].coeff + (coeff.top() * e));
         } else {
-            terms[0].coeff = simplify(Mul::make(coeff.top(), e));
+            terms[0].coeff = simplify(coeff.top() * e);
         }
     }
 
@@ -131,9 +108,7 @@ private:
             add_to_constant_term(op->a);
         }
 
-        Expr neg(-1);
-        match_coeff_type(neg);
-        coeff.push(Mul::make(neg, coeff.top_ref()));
+        coeff.push(-coeff.top_ref());
         if (has_var(op->b)) {
             op->b.accept(this);
         } else {
@@ -144,7 +119,7 @@ private:
 
     void visit(const Div *op) {
         // We don't simplify across integer division.
-        if (op->type.is_int()) {
+        if (op->type.is_int() || op->type.is_uint()) {
             success = false;
             return;
         }
@@ -155,8 +130,9 @@ private:
         if (has_var(b)) {
             success = false;
         } else if (has_var(a)) {
-            match_coeff_type(b);
-            coeff.push(Div::make(coeff.top(), b));
+            internal_assert(!b.type().is_uint()) << "cannot perform solve with uint types.\n";
+
+            coeff.push(coeff.top() / b);
             a.accept(this);
             coeff.pop();
         } else {
@@ -174,13 +150,15 @@ private:
         if (a_has_var && b_has_var) {
             success = false;
         } else if (a_has_var) {
-            match_coeff_type(b);
-            coeff.push(Mul::make(coeff.top(), b));
+            internal_assert(!b.type().is_uint()) << "cannot perform solve with uint types.\n";
+
+            coeff.push(coeff.top() * b);
             a.accept(this);
             coeff.pop();
         } else if (b_has_var) {
-            match_coeff_type(a);
-            coeff.push(Mul::make(coeff.top(), a));
+            internal_assert(!a.type().is_uint()) << "cannot perform solve with uint types.\n";
+
+            coeff.push(coeff.top() * a);
             b.accept(this);
             coeff.pop();
         } else {
@@ -189,14 +167,14 @@ private:
     }
 
     void visit(const Let *op) {
-        scope->push(op->name, op->value);
+        scope.push(op->name, op->value);
         op->body.accept(this);
-        scope->pop(op->name);
+        scope.pop(op->name);
     }
 
     void visit(const Variable *op) {
-        if (scope->contains(op->name)) {
-            scope->get(op->name).accept(this);
+        if (scope.contains(op->name)) {
+            scope.get(op->name).accept(this);
         } else {
             Term t = {simplify(coeff.top()), op};
             terms.push_back(t);
@@ -257,39 +235,40 @@ Expr linear_expr(const std::vector<Term>& terms) {
     return simplify(expr);
 }
 
-bool collect_linear_terms(Expr e, std::vector<Term>& terms, Scope<Expr>* scope) {
-  CollectLinearTerms linear_terms(scope);
-  e.accept(&linear_terms);
-  if (linear_terms.success) {
-      collect_terms(linear_terms.terms, terms);
-      return true;
-  } else {
-      return false;
-  }
+bool collect_linear_terms(Expr e, std::vector<Term>& terms) {
+    CollectLinearTerms linear_terms();
+    e.accept(&linear_terms);
+    if (linear_terms.success) {
+        collect_terms(linear_terms.terms, terms);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<Expr> &scope) {
+    CollectLinearTerms linear_terms(&scope);
+    e.accept(&linear_terms);
+    if (linear_terms.success) {
+        collect_terms(linear_terms.terms, terms);
+        return true;
+    } else {
+        return false;
+    }
 }
 
 
 class SolveForLinearVariable : public IRMutator {
 public:
     std::string  var_name;
-    Scope<Expr>* scope;
+    Scope<Expr>  scope;
     bool solved;
 
-    SolveForLinearVariable(const std::string& var, Scope<Expr> *s) :
-            var_name(var), scope(s), solved(false) {
-        own_scope = scope == 0;
-        if (own_scope) {
-            scope = new Scope<Expr>;
-        }
-    }
-
-    virtual ~SolveForLinearVariable() {
-        if (own_scope)
-            delete scope;
+    SolveForLinearVariable(const std::string& var, const Scope<Expr> *s = NULL) :
+            var_name(var), solved(false) {
+        scope.set_containing_scope(s);
     }
 private:
-    bool own_scope;
-
     using IRVisitor::visit;
 
     int find_var(const std::vector<Term>& terms) {
@@ -332,8 +311,8 @@ private:
         std::vector<Term> lhs_terms;
         std::vector<Term> rhs_terms;
 
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, scope);
+        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, &scope);
+        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, &scope);
 
         if (lhs_is_linear && rhs_is_linear) {
             int lhs_var = find_var(lhs_terms);
@@ -344,12 +323,7 @@ private:
                     // First, move the instance of loop var from RHS to LHS.
                     Term t1 = lhs_terms[lhs_var];
                     Term t2 = rhs_terms[rhs_var];
-
-                    Expr neg(-1);
-                    match_types(neg, t2.coeff);
-                    t2.coeff = simplify(Mul::make(neg, t2.coeff));
-
-                    lhs_terms[lhs_var].coeff = simplify(Add::make(t1.coeff, t2.coeff));
+                    lhs_terms[lhs_var].coeff = simplify(t1.coeff - t2.coeff);
                     rhs_terms[rhs_var] = rhs_terms.back();
                     rhs_terms.pop_back();
                 } else {
@@ -365,9 +339,7 @@ private:
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
                     if (i != lhs_var) {
                         Term t = lhs_terms[i];
-                        Expr neg(-1);
-                        match_types(neg, t.coeff);
-                        t.coeff = simplify(Mul::make(neg, t.coeff));
+                        t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);
                     }
                 }
@@ -378,8 +350,7 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                match_types(rhs, var_term.coeff);
-                rhs = simplify(Cast::make(op->a.type(), Div::make(rhs, var_term.coeff)));
+                rhs = simplify(Cast::make(op->a.type(), rhs / var_term.coeff));
                 lhs = simplify(Cast::make(op->a.type(), var_term.var));
                 solved = true;
             }
@@ -398,8 +369,8 @@ private:
         std::vector<Term> lhs_terms;
         std::vector<Term> rhs_terms;
 
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, scope);
+        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, &scope);
+        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, &scope);
 
         if (lhs_is_linear && rhs_is_linear) {
             int lhs_var = find_var(lhs_terms);
@@ -410,8 +381,9 @@ private:
             if (rhs_var > -1) {
                 if (lhs_var > -1) {
                     // First, move the instance of loop var from RHS to LHS.
-                    lhs_terms[lhs_var].coeff = simplify(Add::make(lhs_terms[lhs_var].coeff,
-                                                                  rhs_terms[rhs_var].coeff));
+                    Term t1 = lhs_terms[lhs_var];
+                    Term t2 = rhs_terms[rhs_var];
+                    lhs_terms[lhs_var].coeff = simplify(t1.coeff - t2.coeff);
                     rhs_terms[rhs_var] = rhs_terms.back();
                     rhs_terms.pop_back();
                 } else {
@@ -428,9 +400,7 @@ private:
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
                     if (i != lhs_var) {
                         Term t = lhs_terms[i];
-                        Expr neg(-1);
-                        match_types(neg, t.coeff);
-                        t.coeff = simplify(Mul::make(neg, t.coeff));
+                        t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);
                     }
                 }
@@ -441,8 +411,7 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                match_types(rhs, var_term.coeff);
-                rhs = simplify(Cast::make(op->a.type(), Div::make(rhs, var_term.coeff)));
+                rhs = simplify(Cast::make(op->a.type(), rhs / var_term.coeff));
                 lhs = simplify(Cast::make(op->a.type(), var_term.var));
                 solved = true;
             }
@@ -465,14 +434,24 @@ private:
     void visit(const GE *op) {visit_asym_cmp<GE, LE>(op);}
 
     void visit(const Let *op) {
-        scope->push(op->name, op->value);
+        scope.push(op->name, op->value);
         mutate(op->body);
-        scope->pop(op->name);
+        scope.pop(op->name);
     }
 };
 
-Expr solve_for_linear_variable(Expr e, Var x, Scope<Expr>* scope) {
-    SolveForLinearVariable solver(x.name(), scope);
+Expr solve_for_linear_variable(Expr e, Var x) {
+    SolveForLinearVariable solver(x.name());
+    Expr s = solver.mutate(e);
+    if (solver.solved) {
+        return s;
+    } else {
+        return e;
+    }
+}
+
+Expr solve_for_linear_variable(Expr e, Var x, const Scope<Expr> &scope) {
+    SolveForLinearVariable solver(x.name(), &scope);
     Expr s = solver.mutate(e);
     if (solver.solved) {
         return s;
