@@ -2299,22 +2299,30 @@ extern "C" void buffered_error_handler(void *ctx, const char *message) {
     if (ctx) {
         error_buffer *buf = (error_buffer *)ctx;
         size_t len = strlen(message);
+
+        if (len && message[len-1] != '\n') {
+            // Claim some extra space for a newline.
+            len++;
+        }
+
         // Atomically claim some space in the buffer
 #ifdef WIN32
-        int old_end = _InterlockedExchangeAdd((volatile long *)(&buf->end), len + 1);
+        int old_end = _InterlockedExchangeAdd((volatile long *)(&buf->end), len);
 #else
-        int old_end = __sync_fetch_and_add(&buf->end, len + 1);
+        int old_end = __sync_fetch_and_add(&buf->end, len);
 #endif
 
-        if (old_end + len >= max_error_buffer_size - 2) {
+        if (old_end + len >= max_error_buffer_size - 1) {
             // Out of space
             return;
         }
 
-        for (size_t i = 0; i < len; i++) {
+        for (size_t i = 0; i < len - 1; i++) {
             buf->buf[old_end + i] = message[i];
         }
-        buf->buf[old_end + len] = '\n';
+        if (buf->buf[old_end + len - 2] != '\n') {
+            buf->buf[old_end + len - 1] = '\n';
+        }
     }
 }
 
