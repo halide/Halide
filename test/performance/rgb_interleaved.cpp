@@ -11,7 +11,7 @@ void test_deinterleave() {
     Var x, y, c;
 
     dst(x, y, c) = src(x, y, c);
- 
+
     src.set_stride(0, 3);
     src.set_stride(2, 1);
     src.set_extent(2, 3);
@@ -150,7 +150,7 @@ void test_interleave(bool fast) {
     } else {
         dst.reorder(c, x, y).vectorize(x, 16);
     }
- 
+
     // Run test many times to avoid timing jitter
     const int iterations = 20;
 

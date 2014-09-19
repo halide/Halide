@@ -148,6 +148,60 @@ Matrix::Matrix(Expr m, Expr n, const std::vector<Expr>& c) : is_large(false), nr
     }
 }
 
+Matrix::Matrix(ImageParam img) : is_large(true) {
+    if (img.dimensions() == 1) {
+        nrows = img.width();
+        ncols = 1;
+
+        if (is_size_const(nrows)) {
+            const int nr = *Internal::as_const_int(nrows);
+
+            if (nr <= 4) {
+                is_large = false;
+                coeffs.resize(nr);
+
+                for (int i = 0; i < nr; ++i) {
+                    coeffs[i] = img(i);
+                }
+
+                return;
+            }
+        }
+
+        x = Var("x");
+        y = Var("y");
+        func(x, y) = img(x);
+    } else {
+        internal_assert(img.dimensions() == 2);
+
+        nrows = img.width();
+        ncols = img.height();
+
+        if (is_size_const(nrows) && is_size_const(ncols)) {
+            const int nr = *Internal::as_const_int(nrows);
+            const int nc = *Internal::as_const_int(ncols);
+
+            if (nr <= 4 && nc <= 4) {
+                is_large = false;
+                coeffs.resize(nr*nc);
+
+                for (int j = 0; j < nc; ++j) {
+                    for (int i = 0; i < nr; ++i) {
+                        const int idx = small_offset(i, j);
+                        coeffs[idx] = img(i, j);
+                    }
+                }
+
+                return;
+            }
+        }
+
+        x = Var("x");
+        y = Var("y");
+        func(x, y) = img(x, y);
+    }
+}
+
 Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
     internal_assert(is_int(nrows));
     internal_assert(is_int(ncols));
@@ -174,8 +228,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
 
             x = f.args()[0];
             y = Var("y");
-            func(x, y) = Halide::undef(f.output_types()[0]);
-            func(x, 0) = f(x);
+            func(x, y) = f(x);
         } else {  // is_one(nrows)
             if (is_size_const(ncols)) {
                 const int nc = *Internal::as_const_int(ncols);
@@ -194,8 +247,7 @@ Matrix::Matrix(Expr m, Expr n, Func f) : is_large(true), nrows(m), ncols(n) {
 
             x = Var("y");
             y = f.args()[0];
-            func(x, y) = Halide::undef(f.output_types()[0]);
-            func(0, y) = f(y);
+            func(x, y) = f(y);
         }
     } else {
         internal_assert(f.dimensions() == 2);
@@ -599,10 +651,47 @@ Matrix operator*(Matrix a, Matrix b) {
         }
     }
 
-    Func prod("matrix_prod");
     Var x("x"), y("y");
-    RDom z(0, a.nrows, "z");
-    prod(x, y) = sum(a.func(x, z) * b.func(z, y));
+    Var tx("tx"), ty("ty");
+    Var ttx("ttx"), tty("tty");
+
+    Func prod("matrix_prod");
+    Func Bt("Bt"), A("A");
+    Bt(x, y) = b.func(y, x);
+    A(x, y)  = a.func(x, y);
+
+    const Expr sum_size  = a.ncols;
+    const int  vec_size  = 8;
+    const int  tile_size = 16;
+
+    Func dot("row_dot");
+    RDom sum_vecs(0, sum_size/vec_size);
+    Var z("z");
+    dot(z, x, y) += A(sum_vecs*vec_size + z, x) * Bt(sum_vecs*vec_size + z, y);
+
+    RDom sum_lanes(0, vec_size);
+    prod(x, y) = sum(dot(sum_lanes, x, y));
+
+    prod.bound(x, 0, (a.nrows/tile_size)*tile_size).bound(y, 0, (b.ncols/tile_size)*tile_size)
+        .tile(x, y, tx, ty, x, y, tile_size, tile_size)
+        .tile(x, y, ttx, tty, x, y, vec_size, vec_size)
+        .parallel(ty);
+
+    dot.compute_at(prod, ttx).vectorize(z);
+    dot.update()
+            .reorder(z, x, y, sum_vecs).vectorize(z)
+            .unroll(x).unroll(y);
+
+    // Compute B transpose per-core as needed in 16x16 tiles.
+    // a.func.compute_at(dot, sum_vecs).bound(x, 0, a.nrows).bound(y, 0, a.ncols);
+    Bt.compute_at(prod, ty).bound(x, 0, (b.ncols/tile_size)*tile_size).bound(y, 0, (b.nrows/tile_size)*tile_size)
+            .tile(x, y, tx, ty, x, y, tile_size, tile_size);
+
+    // B.compute_at(prod, ty)
+    //         .tile(x, y, tx, ty, x, y, tile_size, tile_size);
+
+    prod.output_buffer().set_min(0,0).set_min(1,0);
+
     return Matrix(prod_nrows, prod_ncols, prod);
 }
 

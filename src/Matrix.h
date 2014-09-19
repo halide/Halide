@@ -107,6 +107,7 @@ class Matrix {
     EXPORT Matrix(Expr m, Expr n, Type t);
     EXPORT Matrix(Expr m, Expr n, Func f);
     EXPORT Matrix(Expr m, Expr n, const std::vector<Expr>& c);
+    EXPORT Matrix(ImageParam img);
 
 #ifdef WITH_EIGEN
     template<class M>
