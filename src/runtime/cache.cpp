@@ -393,15 +393,12 @@ WEAK bool halide_memoization_cache_lookup(void *user_context, const uint8_t *cac
         entry = entry->next;
     }
 
-    va_list tuple_buffers;
-    va_start(tuple_buffers, tuple_count);
     for (int32_t i = 0; i < tuple_count; i++) {
-        buffer_t *buf = va_arg(tuple_buffers, buffer_t *);
+        buffer_t *buf = tuple_buffers[i];
         size_t buffer_size = full_extent(*buf);
         // TODO: ERROR RETURN
         buf->host = (uint8_t *)halide_malloc(user_context, buffer_size * buf->elem_size);
     }
-    va_end(tuple_buffers);
 
 #if CACHE_DEBUGGING
     validate_cache();
@@ -492,7 +489,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
 #endif
 }
 
-WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, buffer_t **) {
+WEAK void halide_memoization_cache_release(void *user_context, const uint8_t *cache_key, int32_t size, buffer_t *computed_bounds, int32_t tuple_count, buffer_t **tuple_buffers) {
     uint32_t h = djb_hash(cache_key, size);
     uint32_t index = h % kHashTableSize;
 
