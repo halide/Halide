@@ -1405,12 +1405,12 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_dev_run(void *user_context,
-                          void *state_ptr,
-                          const char *entry_name,
-                          int blocksX, int blocksY, int blocksZ,
-                          int threadsX, int threadsY, int threadsZ,
-                          int shared_mem_bytes,
-                          size_t arg_sizes[], void *args[]) {
+                        void *state_ptr,
+                        const char *entry_name,
+                        int blocksX, int blocksY, int blocksZ,
+                        int threadsX, int threadsY, int threadsZ,
+                        int shared_mem_bytes,
+                        size_t arg_sizes[], void *args[]) {
     return halide_opengl_dev_run(user_context, state_ptr,
                                  entry_name,
                                  blocksX, blocksY, blocksZ,
