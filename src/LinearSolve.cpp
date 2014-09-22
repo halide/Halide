@@ -236,7 +236,7 @@ Expr linear_expr(const std::vector<Term>& terms) {
 }
 
 bool collect_linear_terms(Expr e, std::vector<Term>& terms) {
-    CollectLinearTerms linear_terms();
+    CollectLinearTerms linear_terms;
     e.accept(&linear_terms);
     if (linear_terms.success) {
         collect_terms(linear_terms.terms, terms);
@@ -311,8 +311,8 @@ private:
         std::vector<Term> lhs_terms;
         std::vector<Term> rhs_terms;
 
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, &scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, &scope);
+        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, scope);
+        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, scope);
 
         if (lhs_is_linear && rhs_is_linear) {
             int lhs_var = find_var(lhs_terms);
@@ -337,7 +337,7 @@ private:
                 // At this point we know that the variable we want
                 // only appears on the left hand side.
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
-                    if (i != lhs_var) {
+                  if ((int)i != lhs_var) {
                         Term t = lhs_terms[i];
                         t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);
@@ -369,8 +369,8 @@ private:
         std::vector<Term> lhs_terms;
         std::vector<Term> rhs_terms;
 
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, &scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, &scope);
+        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, scope);
+        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, scope);
 
         if (lhs_is_linear && rhs_is_linear) {
             int lhs_var = find_var(lhs_terms);
@@ -398,7 +398,7 @@ private:
                 // At this point we know that the variable we want
                 // only appears on the left hand side.
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
-                    if (i != lhs_var) {
+                  if ((int)i != lhs_var) {
                         Term t = lhs_terms[i];
                         t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);

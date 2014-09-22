@@ -2147,18 +2147,6 @@ void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
     }
 }
 
-void check_in_bounds(Stmt a, Stmt b, const Scope<Interval> &bi) {
-    //debug(0) << "Checking that " << a << " -> " << b << "\n";
-    Stmt simpler = simplify(a, true, bi);
-    if (!equal(simpler, b)) {
-        internal_error
-            << "\nSimplification failure:\n"
-            << "Input: " << a << '\n'
-            << "Output: " << simpler << '\n'
-            << "Expected output: " << b << '\n';
-    }
-}
-
 template <typename T>
 void test_int_cast_constant() {
     Type t = type_of<T>();

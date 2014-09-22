@@ -76,6 +76,8 @@ bool check_terms(const std::vector<Term> &expected_terms, const std::vector<Term
             return false;
         }
     }
+
+    return true;
 }
 
 bool test_collect_linear_terms() {

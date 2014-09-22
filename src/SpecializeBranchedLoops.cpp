@@ -12,91 +12,43 @@ namespace Internal {
 
 namespace {
 
-bool is_inequality(Expr cond) {
-    const LT *lt = cond.as<LT>();
-    const GT *gt = cond.as<GT>();
-    const LE *le = cond.as<LE>();
-    const GE *ge = cond.as<GE>();
-
-    return lt || gt || le || ge;
-}
-
 // The generic version of this class doesn't work for our
 // purposes. We need to dive into the current scope to decide if a
 // variable is used.
 class ExprUsesVar : public IRVisitor {
     using IRVisitor::visit;
 
-    std::string  name;
-    Scope<Expr> *scope;
+    std::string name;
+    Scope<Expr> scope;
 
     void visit(const Variable *v) {
         if (v->name == name) {
             result = true;
-        } else if (scope->contains(v->name)) {
-            scope->get(v->name).accept(this);
+        } else if (scope.contains(v->name)) {
+            scope.get(v->name).accept(this);
         }
     }
 
     void visit(const Let *op) {
-        scope->push(op->name, op->value);
+        scope.push(op->name, op->value);
         op->body.accept(this);
-        scope->pop(op->name);
+        scope.pop(op->name);
     }
   public:
-    ExprUsesVar(const std::string &var, Scope<Expr> *s) :
-            name(var), scope(s), result(false)
-    {}
+    ExprUsesVar(const std::string &var, const Scope<Expr> *s) :
+            name(var), result(false)
+    {
+        scope.set_containing_scope(s);
+    }
 
     bool result;
 };
 
 /** Test if an expression references the given variable. */
-bool expr_uses_var(Expr expr, const std::string &var, Scope<Expr> *scope) {
-    ExprUsesVar uses_var(var, scope);
+bool expr_uses_var(Expr expr, const std::string &var, const Scope<Expr> &scope) {
+    ExprUsesVar uses_var(var, &scope);
     expr.accept(&uses_var);
     return uses_var.result;
-}
-
-}
-
-struct Branch {
-    Expr min;
-    Expr extent;
-    Expr expr;
-    Stmt stmt;
-};
-
-class NegateExpr : public IRMutator {
-public:
-    NegateExpr() {}
-
-private:
-    using IRVisitor::visit;
-
-    void visit(const Not *op) {
-        expr = mutate(op->a);
-    }
-
-    template<class Op, class Nop>
-    void visit_binary(const Op *op) {
-        Expr a = mutate(op->a);
-        Expr b = mutate(op->b);
-        expr = Nop::make(a, b);
-    }
-
-    void visit(const And *op) {visit_binary<And, Or>(op);}
-    void visit(const Or *op)  {visit_binary<Or, And>(op);}
-    void visit(const EQ *op)  {visit_binary<EQ, NE>(op);}
-    void visit(const NE *op)  {visit_binary<NE, EQ>(op);}
-    void visit(const GT *op)  {visit_binary<GT, LE>(op);}
-    void visit(const LT *op)  {visit_binary<LT, GE>(op);}
-    void visit(const GE *op)  {visit_binary<GE, LT>(op);}
-    void visit(const LE *op)  {visit_binary<LE, GT>(op);}
-};
-
-Expr negate(Expr cond) {
-    return NegateExpr().mutate(cond);
 }
 
 class NormalizeIfStmts : public IRMutator {
@@ -106,13 +58,16 @@ public:
 private:
     using IRVisitor::visit;
 
+    bool in_if_stmt;
     Stmt then_case;
     Stmt else_case;
 
     void visit(const IfThenElse *op) {
+        in_if_stmt = true;
         then_case = op->then_case;
         else_case = op->else_case;
         Expr cond = mutate(op->condition);
+        in_if_stmt = false;
         stmt = IfThenElse::make(cond, mutate(then_case), mutate(else_case));
         if (!cond.same_as(op->condition)) {
             stmt = mutate(stmt);
@@ -120,17 +75,33 @@ private:
     }
 
     void visit(const Not *op) {
-        expr = mutate(negate(op->a));
+        if (in_if_stmt) {
+            if (!else_case.defined()) {
+                else_case = Evaluate::make(0);
+            }
+            std::swap(then_case, else_case);
+            expr = mutate(op->a);
+        } else {
+            expr = op;
+        }
     }
 
     void visit(const And *op) {
-        then_case = IfThenElse::make(op->b, then_case, else_case);
-        expr = op->a;
+        if (in_if_stmt) {
+            then_case = IfThenElse::make(op->b, then_case, else_case);
+            expr = op->a;
+        } else {
+            expr = op;
+        }
     }
 
     void visit(const Or *op) {
-        else_case = IfThenElse::make(op->b, then_case, else_case);
-        expr = op->a;
+        if (in_if_stmt) {
+            else_case = IfThenElse::make(op->b, then_case, else_case);
+            expr = op->a;
+        } else {
+            expr = op;
+        }
     }
 
     void visit(const Store *op) {
@@ -142,16 +113,27 @@ Stmt normalize_if_stmts(Stmt stmt) {
     return NormalizeIfStmts().mutate(stmt);
 }
 
+}
+
+struct Branch {
+    Expr min;
+    Expr extent;
+    Expr expr;
+    Stmt stmt;
+};
+
 class BranchesInVar : public IRVisitor {
 public:
     std::string name;
-    Scope<Expr> *scope;
+    Scope<Expr> scope;
     bool has_branches;
     bool branch_on_minmax;
 
-    BranchesInVar(const std::string& n, Scope<Expr> *s, bool minmax) :
-            name(n), scope(s), has_branches(false), branch_on_minmax(minmax)
-    {}
+    BranchesInVar(const std::string& n, const Scope<Expr> *s, bool minmax) :
+            name(n), has_branches(false), branch_on_minmax(minmax)
+    {
+        scope.set_containing_scope(s);
+    }
 
 private:
     using IRVisitor::visit;
@@ -196,69 +178,77 @@ private:
 
     template<class LetOp>
     void visit_let(const LetOp *op) {
-        scope->push(op->name, op->value);
+        scope.push(op->name, op->value);
         op->body.accept(this);
-        scope->pop(op->name);
+        scope.pop(op->name);
     }
 
     void visit(const LetStmt *op) {visit_let(op);}
     void visit(const Let *op) {visit_let(op);}
 };
 
-bool stmt_branches_in_var(const std::string &name, Stmt body, Scope<Expr> *scope, bool branch_on_minmax = false) {
-    BranchesInVar check(name, scope, branch_on_minmax);
+bool stmt_branches_in_var(const std::string &name, Stmt body, const Scope<Expr> &scope,
+                          bool branch_on_minmax = false) {
+    BranchesInVar check(name, &scope, branch_on_minmax);
     body.accept(&check);
     return check.has_branches;
 }
 
-bool expr_branches_in_var(const std::string &name, Expr value, Scope<Expr> *scope, bool branch_on_minmax = false) {
-    BranchesInVar check(name, scope, branch_on_minmax);
+bool expr_branches_in_var(const std::string &name, Expr value, const Scope<Expr> &scope,
+                          bool branch_on_minmax = false) {
+    BranchesInVar check(name, &scope, branch_on_minmax);
     value.accept(&check);
     return check.has_branches;
 }
 
 class FindFreeVariables : public IRVisitor {
 public:
-    Scope<int> *free_vars;
+    const Scope<int> &free_vars;
     std::set<std::string> vars;
 
-    FindFreeVariables(Scope<int> *fv) : free_vars(fv) {}
+    FindFreeVariables(const Scope<int> &fv) : free_vars(fv) {}
 private:
     using IRVisitor::visit;
 
     void visit(const Variable *op) {
-        if (free_vars->contains(op->name)) {
+        if (free_vars.contains(op->name)) {
             vars.insert(op->name);
         }
     }
 };
 
-size_t num_free_vars(Expr expr, Scope<int> *free_vars) {
+size_t num_free_vars(Expr expr, const Scope<int> &free_vars) {
     FindFreeVariables find(free_vars);
     expr.accept(&find);
     return find.vars.size();
 }
 
-bool has_free_vars(Expr expr, Scope<int> *free_vars) {
+bool has_free_vars(Expr expr, const Scope<int> &free_vars) {
     return num_free_vars(expr, free_vars) > 0;
 }
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars);
+                      std::vector<Branch> &branches, const Scope<Expr> &scope,
+                      const Scope<int> &free_vars);
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars);
+                      std::vector<Branch> &branches, const Scope<Expr> &scope,
+                      const Scope<int> &free_vars);
 
 class BranchCollector : public IRVisitor {
 public:
     std::string name;
     std::vector<Branch> branches;
-    Scope<Expr>* scope;
-    Scope<int> *free_vars;
+    Scope<Expr> scope;
+    const Scope<int> &free_vars;
     Expr min;
     Expr extent;
 
-    BranchCollector(const std::string &n, Expr m, Expr e, Scope<Expr> *s, Scope<int> *lv) :
-            name(n), scope(s), free_vars(lv), min(m), extent(e) {}
+    BranchCollector(const std::string &n, Expr m, Expr e, const Scope<Expr> *s,
+                    const Scope<int> &lv) :
+        name(n), free_vars(lv), min(m), extent(e)
+    {
+        scope.set_containing_scope(s);
+    }
 
 private:
     using IRVisitor::visit;
@@ -381,7 +371,7 @@ private:
         std::vector<std::string>::reverse_iterator iter = internal_lets.rbegin();
         while (iter != internal_lets.rend()) {
             const std::string& name = *iter++;
-            stmt = LetStmt::make(name, scope->get(name), stmt);
+            stmt = LetStmt::make(name, scope.get(name), stmt);
         }
         return stmt;
     }
@@ -478,9 +468,9 @@ private:
             extent = orig_extent;
         } else {
             internal_lets.push_back(op->name);
-            scope->push(op->name, op->value);
+            scope.push(op->name, op->value);
             op->body.accept(this);
-            scope->pop(op->name);
+            scope.pop(op->name);
             internal_lets.pop_back();
         }
     }
@@ -555,15 +545,17 @@ private:
 };
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars) {
-    BranchCollector collector(name, min, extent, scope, free_vars);
+                      std::vector<Branch> &branches, const Scope<Expr> &scope,
+                      const Scope<int> &free_vars) {
+    BranchCollector collector(name, min, extent, &scope, free_vars);
     expr.accept(&collector);
     branches.swap(collector.branches);
 }
 
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, Scope<Expr> *scope, Scope<int> *free_vars) {
-    BranchCollector collector(name, min, extent, scope, free_vars);
+                      std::vector<Branch> &branches, const Scope<Expr> &scope,
+                      const Scope<int> &free_vars) {
+    BranchCollector collector(name, min, extent, &scope, free_vars);
     stmt.accept(&collector);
     branches.swap(collector.branches);
 }
@@ -579,9 +571,9 @@ private:
         loop_vars.push(op->name, 0);
         Stmt body = mutate(op->body);
 
-        if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, &scope)) {
+        if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, scope)) {
             std::vector<Branch> branches;
-            collect_branches(body, op->name, op->min, op->extent, branches, &scope, &loop_vars);
+            collect_branches(body, op->name, op->min, op->extent, branches, scope, loop_vars);
 
             if (branches.empty()) {
                 stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
@@ -613,18 +605,7 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-#if 0
-    SpecializeBranchedLoops specialize;
-
-    std::cout << "Specializing branched loops in stmt:\n" << s << std::endl
-              << "======================================================\n";
-    Stmt ss = specialize.mutate(s);
-    std::cout << "======================================================\n"
-              << ss;
-    return ss;
-#else
     return SpecializeBranchedLoops().mutate(s);
-#endif
 }
 
 }
