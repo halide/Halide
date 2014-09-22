@@ -22,6 +22,7 @@ class HalideGLView extends GLSurfaceView {
         System.loadLibrary("android_halide_gl_native");
     }
     private static native void processTextureHalide(int dst, int width, int height);
+    private static native void halideContextLost();
 
     private static final android.opengl.GLES20 gl = new android.opengl.GLES20();
 
@@ -130,6 +131,7 @@ class HalideGLView extends GLSurfaceView {
 
         @Override
         public void onSurfaceChanged(GL10 unused, int w, int h) {
+            halideContextLost();
             int[] textures = { output };
             gl.glDeleteTextures(1, textures, 0);
             output = createTexture(w, h);

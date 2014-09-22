@@ -540,6 +540,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_opengl_get_proc_address",
                        "halide_opengl_create_context",
                        "halide_opengl_output_client_bound",
+                       "halide_opengl_context_lost",
                        "halide_set_custom_print",
                        "halide_print",
                        "halide_set_gpu_device",

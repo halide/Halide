@@ -37,3 +37,12 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     }
     time += 1.0f/16.0f;
 }
+
+extern "C" void halide_opengl_context_lost(void *user_context);
+
+extern "C"
+JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_halideContextLost(
+    JNIEnv * env, jobject obj) {
+
+    halide_opengl_context_lost(NULL);
+}
