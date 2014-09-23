@@ -11,7 +11,8 @@
 #define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"halide_native",__VA_ARGS__)
 #define  LOGE(...)  __android_log_print(ANDROID_LOG_ERROR,"halide_native",__VA_ARGS__)
 
-#define DEBUG 1
+extern "C" void halide_opengl_context_lost(void *user_context);
+extern "C" uint64_t halide_opengl_output_client_bound(void *user_context);
 
 extern "C"
 JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processTextureHalide(
@@ -29,7 +30,12 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     dstBuf.min[2] = 0;
     dstBuf.elem_size = 1;
     dstBuf.host = NULL;
-    dstBuf.dev = dst;
+    if (dst == 0) {
+        // Let Halide render directly to the current framebuffer.
+        dstBuf.dev = halide_opengl_output_client_bound(NULL);
+    } else {
+        dstBuf.dev = dst;
+    }
 
     static float time = 0.0f;
     if (int err = halide_gl_filter(time, &dstBuf)) {
@@ -37,8 +43,6 @@ JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_processT
     }
     time += 1.0f/16.0f;
 }
-
-extern "C" void halide_opengl_context_lost(void *user_context);
 
 extern "C"
 JNIEXPORT void JNICALL Java_org_halide_1lang_hellohalidegl_HalideGLView_halideContextLost(

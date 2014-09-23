@@ -295,8 +295,8 @@ correct format, but in general that's the responsibility of the application.
 
 It is possible to let render directly to the current framebuffer; to do this,
 set the `dev` field of the output buffer to the value returned by
-`halide_opengl_client_bound`.  The example in apps/HelloAndroidGL demonstrates
-this technique.
+`halide_opengl_outputclient_bound`.  The example in apps/HelloAndroidGL
+demonstrates this technique.
 
 Some operating systems can delete the OpenGL context of suspended
 applications. If this happens, Halide needs to re-initialize itself with the

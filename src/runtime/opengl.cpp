@@ -647,11 +647,7 @@ WEAK void halide_opengl_release(void *user_context) {
     ST = GlobalState();
 }
 
-// Forget all state associated with the previous OpenGL context.  This is
-// similar to halide_opengl_release, except that we assume that all OpenGL
-// resources have already been reclaimed by the OS, so deleting them again
-// would potentially be disastrous...
-WEAK extern "C" void halide_opengl_context_lost(void *user_context) {
+extern "C" WEAK void halide_opengl_context_lost(void *user_context) {
     if (!ST.initialized) return;
 
     debug(user_context) << "halide_opengl_context_lost\n";
@@ -933,11 +929,7 @@ WEAK int halide_opengl_dev_sync(void *user_context) {
     return 0;
 }
 
-// This function is called to populate the buffer_t.dev field with a constant
-// indicating that the OpenGL object corresponding to the buffer_t is bound by
-// the app and not by the Halide runtime. For example, the buffer_t may be
-// backed by an FBO already bound by the application.
-WEAK uint64_t halide_opengl_output_client_bound() {
+extern "C" WEAK uint64_t halide_opengl_output_client_bound() {
     return HALIDE_GLSL_CLIENT_BOUND;
 }
 
