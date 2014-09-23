@@ -26,6 +26,11 @@ class HalideGLView extends GLSurfaceView {
 
     private static final android.opengl.GLES20 gl = new android.opengl.GLES20();
 
+    // If set to true, let Halide render directly to the framebuffer.
+    // Otherwise, Halide renders to a texture which we then blit to the
+    // screen.
+    private boolean halideDirectRender = true;
+
     HalideGLView(Context context) {
         super(context);
         setEGLContextClientVersion(2);
@@ -143,30 +148,36 @@ class HalideGLView extends GLSurfaceView {
         public void onDrawFrame(GL10 unused) {
             Log.d("Hello", "onDrawFrame");
 
-            // Call Halide filter
-            processTextureHalide(output, surfaceWidth, surfaceHeight);
+            if (halideDirectRender) {
+                // Call Halide filter; 0 as the texture ID in this case
+                // indicates render to framebuffer.
+                processTextureHalide(0, surfaceWidth, surfaceHeight);
+            } else {
+                // Call Halide filter
+                processTextureHalide(output, surfaceWidth, surfaceHeight);
 
-            // Draw result to screen
-            gl.glViewport(0, 0, surfaceWidth, surfaceHeight);
+                // Draw result to screen
+                gl.glViewport(0, 0, surfaceWidth, surfaceHeight);
 
-            gl.glUseProgram(program);
+                gl.glUseProgram(program);
 
-            int positionLoc = gl.glGetAttribLocation(program, "position");
-            quad_vertices.position(0);
-            gl.glVertexAttribPointer(positionLoc, 2, gl.GL_FLOAT, false, 0, quad_vertices);
-            gl.glEnableVertexAttribArray(positionLoc);
+                int positionLoc = gl.glGetAttribLocation(program, "position");
+                quad_vertices.position(0);
+                gl.glVertexAttribPointer(positionLoc, 2, gl.GL_FLOAT, false, 0, quad_vertices);
+                gl.glEnableVertexAttribArray(positionLoc);
 
-            int texLoc = gl.glGetUniformLocation(program, "tex");
-            gl.glUniform1i(texLoc, 0);
-            gl.glActiveTexture(gl.GL_TEXTURE0);
-            gl.glBindTexture(gl.GL_TEXTURE_2D, output);
+                int texLoc = gl.glGetUniformLocation(program, "tex");
+                gl.glUniform1i(texLoc, 0);
+                gl.glActiveTexture(gl.GL_TEXTURE0);
+                gl.glBindTexture(gl.GL_TEXTURE_2D, output);
 
-            gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4);
+                gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4);
 
-            gl.glDisableVertexAttribArray(positionLoc);
-            gl.glBindTexture(gl.GL_TEXTURE_2D, 0);
-            gl.glUseProgram(0);
-            gl.glDisableVertexAttribArray(0);
+                gl.glDisableVertexAttribArray(positionLoc);
+                gl.glBindTexture(gl.GL_TEXTURE_2D, 0);
+                gl.glUseProgram(0);
+                gl.glDisableVertexAttribArray(0);
+            }
         }
     }
 }
