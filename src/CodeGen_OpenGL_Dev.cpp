@@ -634,7 +634,8 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 }
 
 namespace {
-// Replace all temporary variables names like _1234 with '$'.
+// Replace all temporary variables names like _1234 with '$'. This is done to
+// make the individual tests below self-contained.
 string normalize_temporaries(const string &s) {
     string result;
     for (size_t i = 0; i < s.size(); ) {
