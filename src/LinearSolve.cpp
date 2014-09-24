@@ -35,9 +35,7 @@ public:
     CollectLinearTerms(const Scope<Expr> *s = NULL) : success(true) {
         terms.resize(1);
         terms[0].var = NULL;
-
-        coeff.push(make_one(Int(32)));
-
+        coeff.push(1);
         scope.set_containing_scope(s);
     }
 private:
@@ -201,8 +199,7 @@ void collect_terms(std::vector<Term>& old_terms, std::vector<Term>& new_terms) {
                 new_terms.push_back(old_terms[i]);
             }
         } else {
-            match_types(new_terms[0].coeff, old_terms[i].coeff);
-            new_terms[0].coeff = simplify(Add::make(new_terms[0].coeff, old_terms[i].coeff));
+            new_terms[0].coeff = simplify(new_terms[0].coeff + old_terms[i].coeff);
         }
     }
 }
@@ -218,17 +215,9 @@ Expr linear_expr(const std::vector<Term>& terms) {
 
     for (size_t i = 1; i < terms.size(); ++i) {
         if (terms[i].var) {
-            Expr c = terms[i].coeff;
-            Expr var = terms[i].var;
-            match_types(c, var);
-
-            Expr prod = Mul::make(c, var);
-            match_types(prod, expr);
-            expr = Add::make(expr, prod);
+            expr += terms[i].coeff * terms[i].var;
         } else {
-            Expr c = terms[i].coeff;
-            match_types(c, expr);
-            expr = Add::make(expr, c);
+            expr += terms[i].coeff;
         }
     }
 

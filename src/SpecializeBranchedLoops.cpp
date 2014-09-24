@@ -55,11 +55,14 @@ bool expr_uses_var(Expr expr, const std::string &var, const Scope<Expr> &scope) 
 
 class NormalizeIfStmts : public IRMutator {
 public:
-    NormalizeIfStmts() {}
+    NormalizeIfStmts(const Scope<Expr> *s) {
+        scope.set_containing_scope(s);
+    }
 
 private:
     using IRVisitor::visit;
 
+    Scope<Expr> scope;
     bool in_if_stmt;
     std::stack<Stmt> then_case;
     std::stack<Stmt> else_case;
@@ -115,30 +118,54 @@ private:
     void visit(const Store *op) {
         stmt = op;
     }
+
+    void visit(const Variable *op) {
+        if (scope.contains(op->name)) {
+            Expr val = scope.get(op->name);
+            expr = mutate(val);
+        } else {
+            expr = op;
+        }
+    }
+
+    template<class LetOp>
+    void visit_let(const LetOp *op) {
+        scope.push(op->name, op->value);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
+    void visit(const Let *op) {visit_let(op);}
+    void visit(const LetStmt *op) {visit_let(op);}
 };
 
-Stmt normalize_if_stmts(Stmt stmt) {
-    return NormalizeIfStmts().mutate(stmt);
+Stmt normalize_if_stmts(Stmt stmt, const Scope<Expr> &scope) {
+    return NormalizeIfStmts(&scope).mutate(stmt);
 }
 
 class NormalizeSelect : public IRMutator {
 public:
-    NormalizeSelect() {}
+    NormalizeSelect(const Scope<Expr> *s) {
+        scope.set_containing_scope(s);
+    }
 
 private:
     using IRVisitor::visit;
 
-    bool in_select;
+    Scope<Expr> scope;
+    bool in_select_cond;
     std::stack<Expr> true_value;
     std::stack<Expr> false_value;
 
     void visit(const Select *op) {
-        in_select = true;
+        bool old_in_select_cond = in_select_cond;
+        in_select_cond = true;
         true_value.push(op->true_value);
         false_value.push(op->false_value);
         Expr cond = mutate(op->condition);
-        in_select = false;
+        in_select_cond = false;
         expr = Select::make(cond, mutate(true_value.top()), mutate(false_value.top()));
+        in_select_cond = old_in_select_cond;
         true_value.pop();
         false_value.pop();
         if (!cond.same_as(op->condition)) {
@@ -147,7 +174,7 @@ private:
     }
 
     void visit(const Not *op) {
-        if (in_select) {
+        if (in_select_cond) {
             std::swap(true_value.top(), false_value.top());
             expr = mutate(op->a);
         } else {
@@ -156,7 +183,7 @@ private:
     }
 
     void visit(const And *op) {
-        if (in_select) {
+        if (in_select_cond) {
             true_value.top() = Select::make(op->b, true_value.top(), false_value.top());
             expr = op->a;
         } else {
@@ -165,17 +192,36 @@ private:
     }
 
     void visit(const Or *op) {
-        if (in_select) {
+        if (in_select_cond) {
             false_value.top() = Select::make(op->b, true_value.top(), false_value.top());
             expr = op->a;
         } else {
             expr = op;
         }
     }
+
+    void visit(const Variable *op) {
+        if (scope.contains(op->name)) {
+            Expr val = scope.get(op->name);
+            expr = mutate(val);
+        } else {
+            expr = op;
+        }
+    }
+
+    template<class LetOp>
+    void visit_let(const LetOp *op) {
+        scope.push(op->name, op->value);
+        op->body.accept(this);
+        scope.pop(op->name);
+    }
+
+    void visit(const Let *op) {visit_let(op);}
+    void visit(const LetStmt *op) {visit_let(op);}
 };
 
-Expr normalize_select(Expr expr) {
-    return NormalizeSelect().mutate(expr);
+Expr normalize_select(Expr expr, const Scope<Expr> &scope) {
+    return NormalizeSelect(&scope).mutate(expr);
 }
 
 }
@@ -243,6 +289,7 @@ private:
 
     template<class LetOp>
     void visit_let(const LetOp *op) {
+        op->value.accept(this);
         scope.push(op->name, op->value);
         op->body.accept(this);
         scope.pop(op->name);
@@ -417,7 +464,7 @@ private:
     }
 
     template<class Op, class Cmp>
-    void visit_minormax(const Op *op) {
+    void visit_min_or_max(const Op *op) {
         Expr a = op->a;
         Expr b = op->b;
 
@@ -429,14 +476,14 @@ private:
         }
     }
 
-    void visit(const Min *op) {visit_minormax<Min, LE>(op);}
-    void visit(const Max *op) {visit_minormax<Max, GE>(op);}
+    void visit(const Min *op) {visit_min_or_max<Min, LE>(op);}
+    void visit(const Max *op) {visit_min_or_max<Max, GE>(op);}
 
     void visit(const Select *op) {
         if (expr_uses_var(op->condition, name, scope) &&
             op->condition.type().is_scalar() &&
             op->true_value.type().is_vector()) {
-            Expr select = normalize_select(op);
+            Expr select = normalize_select(op, scope);
             // debug(0) << "Branching on normalized select: " << select << "\n";
             op = select.as<Select>();
             visit_simple_cond(op->condition, op->true_value, op->false_value);
@@ -498,7 +545,7 @@ private:
     void visit(const IfThenElse *op) {
         bool has_else = op->else_case.defined();
         if (expr_uses_var(op->condition, name, scope)) {
-            Stmt normalized = normalize_if_stmts(op);
+            Stmt normalized = normalize_if_stmts(op, scope);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
             // debug(0) << "Branching normalized if:\n" << Stmt(if_stmt) << "\n";
@@ -778,6 +825,22 @@ void specialize_branched_loops_test() {
                                                       Ramp::make(x, 1, 4),
                                                       Broadcast::make(0, 4)), y);
         Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        stmt = For::make("y", 0, 11, For::Serial, stmt);
+        Stmt branched = specialize_branched_loops(stmt);
+        check_num_branches(branched, "y", 3);
+        Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
+        check_branch_intervals(branched, "y", ivals);
+    }
+
+    {
+        // More complex case involving multiple logical operators, branching into 5 loops
+        Expr cond = 0 < y && y < 10;
+        Expr cond_var = Variable::make(Bool(), "cond");
+        Stmt branch = Store::make("out", Select::make(cond_var,
+                                                      Ramp::make(x, 1, 4),
+                                                      Broadcast::make(0, 4)), y);
+        Stmt stmt = LetStmt::make("cond", cond, branch);
+        stmt = For::make("x", 0, 10, For::Serial, stmt);
         stmt = For::make("y", 0, 11, For::Serial, stmt);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "y", 3);
