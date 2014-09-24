@@ -81,6 +81,7 @@ private:
     void visit(const Or *op) {success = false;}
     void visit(const Not *op) {success = false;}
     void visit(const Select *op) {success = false;}
+    void visit(const Call *op) {success = false;}
     void visit(const Load *op) {success = false;}
     void visit(const Ramp *op) {success = false;}
     void visit(const Broadcast *op) {success = false;}
@@ -277,6 +278,7 @@ private:
     void visit(const Min *op) {solved = false;}
     void visit(const Max *op) {solved = false;}
     void visit(const Select *op) {solved = false;}
+    void visit(const Call *op) {solved = false;}
     void visit(const Load *op) {solved = false;}
     void visit(const Ramp *op) {solved = false;}
     void visit(const Broadcast *op) {solved = false;}
