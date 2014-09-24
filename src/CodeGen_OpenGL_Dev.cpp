@@ -633,6 +633,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     stream << "}\n";
 }
 
+namespace {
 // Replace all temporary variables names like _1234 with '$'.
 string normalize_temporaries(const string &s) {
     string result;
@@ -660,6 +661,7 @@ void check(Expr e, const string &result) {
             << "  Actual source code:\n" << src;
     }
 }
+}  // namespace
 
 void CodeGen_GLSL::test() {
     vector<Expr> e;
