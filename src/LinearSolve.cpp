@@ -341,8 +341,15 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                rhs = simplify(Cast::make(op->a.type(), rhs / var_term.coeff));
-                lhs = simplify(Cast::make(op->a.type(), var_term.var));
+                if (var_term.var.type().is_int()) {
+                  // If we are dealing with integer types, then we
+                  // don't divide by the coefficient in the solver.
+                  rhs = simplify(Cast::make(var_term.var.type(), rhs));
+                  lhs = simplify(var_term.coeff * var_term.var);
+                } else {
+                  rhs = simplify(Cast::make(var_term.var.type(), rhs / var_term.coeff));
+                  lhs = var_term.var;
+                }
                 solved = true;
             }
 
@@ -353,7 +360,7 @@ private:
     }
 
     template<class Cmp, class Op>
-    void visit_asym_cmp(const Cmp *op) {
+    void visit_asym_cmp(const Cmp *op, bool is_greater) {
         Expr lhs = op->a;
         Expr rhs = op->b;
 
@@ -402,8 +409,22 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                rhs = simplify(Cast::make(op->a.type(), rhs / var_term.coeff));
-                lhs = simplify(Cast::make(op->a.type(), var_term.var));
+                if (is_negative_const(var_term.coeff)) {
+                    var_term.coeff = simplify(-var_term.coeff);
+                    rhs = simplify(-rhs);
+                    swapped = !swapped;
+                }
+
+                if (var_term.var.type().is_int() && is_greater != swapped) {
+                    // If we are wrting a greater than comparison of integers,
+                    // then the RHS should be rounded up.
+                    rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                } else {
+                    rhs = rhs / var_term.coeff;
+                }
+
+                rhs = simplify(Cast::make(var_term.var.type(), rhs));
+                lhs = var_term.var;
                 solved = true;
             }
 
@@ -419,10 +440,10 @@ private:
 
     void visit(const EQ *op) {visit_sym_cmp<EQ>(op);}
     void visit(const NE *op) {visit_sym_cmp<NE>(op);}
-    void visit(const LT *op) {visit_asym_cmp<LT, GT>(op);}
-    void visit(const LE *op) {visit_asym_cmp<LE, GE>(op);}
-    void visit(const GT *op) {visit_asym_cmp<GT, LT>(op);}
-    void visit(const GE *op) {visit_asym_cmp<GE, LE>(op);}
+    void visit(const LT *op) {visit_asym_cmp<LT, GT>(op, false);}
+    void visit(const LE *op) {visit_asym_cmp<LE, GE>(op, false);}
+    void visit(const GT *op) {visit_asym_cmp<GT, LT>(op, true);}
+    void visit(const GE *op) {visit_asym_cmp<GE, LE>(op, true);}
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);

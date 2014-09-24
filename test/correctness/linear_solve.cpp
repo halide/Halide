@@ -83,9 +83,9 @@ bool check_terms(const std::vector<Term> &expected_terms, const std::vector<Term
 bool test_collect_linear_terms() {
     Var x("x"), y("y"), z("z");
 
-    Expr x_var = Variable::make(Int(32), "x");
-    Expr y_var = Variable::make(Int(32), "y");
-    Expr z_var = Variable::make(Int(32), "z");
+    Expr x_var = Variable::make(Float(32), "x");
+    Expr y_var = Variable::make(Float(32), "y");
+    Expr z_var = Variable::make(Float(32), "z");
 
     /* Simplify an expression by collecting linear terms:
      *
