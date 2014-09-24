@@ -20,6 +20,8 @@ namespace Internal {
  */
 Stmt specialize_branched_loops(Stmt s);
 
+EXPORT void specialize_branched_loops_test();
+
 }
 }
 
