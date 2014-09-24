@@ -21,6 +21,8 @@
 #else
 #include <llvm/ExecutionEngine/JIT.h>
 #endif
+#include <llvm/ExecutionEngine/JITEventListener.h>
+
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
