@@ -8,6 +8,10 @@
 #include "CodeGen_Posix.h"
 #include "Target.h"
 
+namespace llvm {
+class JITEventListener;
+}
+
 namespace Halide {
 namespace Internal {
 
@@ -29,6 +33,9 @@ public:
                  const std::vector<Buffer> &images_to_embed);
 
     static void test();
+    
+    void jit_init(llvm::ExecutionEngine *, llvm::Module *) override;    
+    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *) override;
 
 protected:
 
@@ -55,6 +62,9 @@ protected:
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+
+private:
+    llvm::JITEventListener* jitEventListener;
 };
 
 }}
