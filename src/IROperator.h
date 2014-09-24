@@ -735,8 +735,7 @@ inline Expr exp(Expr x) {
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "exp_f64", vec(x), Internal::Call::Extern);
     } else {
-        // return Internal::Call::make(Float(32), "exp_f32", vec(cast<float>(x)), Internal::Call::Extern);
-        return Internal::halide_exp(cast<float>(x));
+        return Internal::Call::make(Float(32), "exp_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -752,8 +751,7 @@ inline Expr log(Expr x) {
     if (x.type() == Float(64)) {
         return Internal::Call::make(Float(64), "log_f64", vec(x), Internal::Call::Extern);
     } else {
-        // return Internal::Call::make(Float(32), "log_f32", vec(cast<float>(x)), Internal::Call::Extern);
-        return Internal::halide_log(cast<float>(x));
+        return Internal::Call::make(Float(32), "log_f32", vec(cast<float>(x)), Internal::Call::Extern);
     }
 }
 
@@ -776,7 +774,7 @@ inline Expr pow(Expr x, Expr y) {
     } else {
         x = cast<float>(x);
         y = cast<float>(y);
-        return Internal::halide_exp(Internal::halide_log(x) * y);
+        return Internal::Call::make(Float(32), "pow_f32", vec(x, y), Internal::Call::Extern);
     }
 }
 
