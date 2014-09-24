@@ -11,174 +11,225 @@ namespace Internal {
 using std::vector;
 using std::string;
 using std::map;
-using std::set;
 using std::pair;
-using std::make_pair;
 
-struct RemoveLets : public IRMutator {
-    set<Expr, ExprDeepCompare> canonical;
-    vector<map<Expr, Expr, ExprCompare> > replacement;
-
-    RemoveLets() {
-        enter_scope();
+// Some expressions are not worth lifting out into lets, even if they
+// occur redundantly many times. This list should mirror the list in
+// the simplifier for lets, otherwise they'll just fight with each
+// other pointlessly.
+bool should_extract(Expr e) {
+    if (is_const(e)) {
+        return false;
     }
 
-    Expr canonicalize(Expr e) {
-        set<Expr, ExprDeepCompare>::iterator i = canonical.find(e);
-        if (i != canonical.end()) {
-            return *i;
-        } else {
-            canonical.insert(e);
-            return e;
-        }
+    if (e.as<Variable>()) {
+        return false;
     }
 
-    using IRMutator::mutate;
+    // StringImms are necessary because the GL backend uses them as markers.
+    if (e.as<StringImm>()) {
+        return false;
+    }
+
+    if (const Broadcast *a = e.as<Broadcast>()) {
+        return should_extract(a->value);
+    }
+
+    if (const Cast *a = e.as<Cast>()) {
+        return should_extract(a->value);
+    }
+
+    if (const Add *a = e.as<Add>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
+
+    if (const Sub *a = e.as<Sub>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
+
+    if (const Mul *a = e.as<Mul>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
+
+    if (const Div *a = e.as<Div>()) {
+        return !(is_const(a->a) || is_const(a->b));
+    }
+
+    if (const Ramp *a = e.as<Ramp>()) {
+        return !is_const(a->stride);
+    }
+
+    return true;
+
+}
+
+// A global-value-numbering of expressions. Returns canonical form of
+// the Expr and writes out a global value numbering as a side-effect.
+class GVN : public IRMutator {
+public:
+    struct Entry {
+        Expr expr;
+        int use_count;
+    };
+    vector<Entry> entries;
+
+    typedef map<Expr, int, IRCachingDeepCompare<8> > CacheType;
+    CacheType numbering;
+
+    map<Expr, int, ExprCompare> shallow_numbering;
+
+    map<string, int> let_substitutions;
+    int number;
+
+    GVN() : number(0) {}
+
+    Stmt mutate(Stmt s) {
+        internal_error << "Can't call GVN on a Stmt: " << s << "\n";
+        return Stmt();
+    }
 
     Expr mutate(Expr e) {
-        e = canonicalize(e);
-
-        Expr r = find_replacement(e);
-        if (r.defined()) {
-            return r;
-        } else {
-            Expr new_expr = canonicalize(IRMutator::mutate(e));
-            add_replacement(e, new_expr);
-            return new_expr;
+        // Early out if we've already seen this exact Expr.
+        {
+            map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
+            if (iter != shallow_numbering.end()) {
+                number = iter->second;
+                entries[number].use_count++;
+                return entries[number].expr;
+            }
         }
 
-
-    }
-
-    Expr find_replacement(Expr e) {
-        for (size_t i = replacement.size(); i > 0; i--) {
-            map<Expr, Expr, ExprCompare>::iterator iter = replacement[i-1].find(e);
-            if (iter != replacement[i-1].end()) return iter->second;
+        // If e is a var, check if it has been redirected to an existing numbering.
+        if (const Variable *var = e.as<Variable>()) {
+            map<string, int>::iterator iter = let_substitutions.find(var->name);
+            if (iter != let_substitutions.end()) {
+                number = iter->second;
+                entries[number].use_count++;
+                return entries[number].expr;
+            }
         }
-        return Expr();
+
+        // If e already has an entry, return that.
+        CacheType::iterator iter = numbering.find(e);
+        if (iter != numbering.end()) {
+            number = iter->second;
+            entries[number].use_count++;
+            return entries[number].expr;
+        }
+
+        // Rebuild using things already in the numbering.
+        Expr old_e = e;
+        e = IRMutator::mutate(e);
+
+        // See if it's there in another form after being rebuilt
+        // (e.g. because it was a let variable).
+        iter = numbering.find(e);
+        if (iter != numbering.end()) {
+            number = iter->second;
+            shallow_numbering[old_e] = number;
+            entries[number].use_count++;
+            return entries[number].expr;
+        }
+
+        // Add it to the numbering.
+        Entry entry = {e, 1};
+        number = (int)entries.size();
+        numbering[e] = number;
+        shallow_numbering[e] = number;
+        entries.push_back(entry);
+        return e;
     }
 
-    void add_replacement(Expr key, Expr value) {
-        replacement[replacement.size()-1][key] = value;
-    }
-
-    void enter_scope() {
-        replacement.resize(replacement.size()+1);
-    }
-
-    void leave_scope() {
-        replacement.pop_back();
-    }
 
     using IRMutator::visit;
 
     void visit(const Let *let) {
-        Expr var = canonicalize(Variable::make(let->value.type(), let->name));
+        // Visit the value and add it to the numbering.
+        Expr value = mutate(let->value);
 
-        Expr new_value = mutate(let->value);
-        enter_scope();
-        add_replacement(var, new_value);
-        expr = mutate(let->body);
-        leave_scope();
+        // Make references to the variable point to the value instead.
+        //let_substitutions[let->name] = number;
+        numbering[Variable::make(value.type(), let->name)] = number;
+
+        // Visit the body and add it to the numbering.
+        Expr body = mutate(let->body);
+
+        // Just return the body. We've removed the Let.
+        expr = body;
     }
 
-    void visit(const LetStmt *let) {
-        Expr var = canonicalize(Variable::make(let->value.type(), let->name));
-        Expr new_value = mutate(let->value);
-        enter_scope();
-        add_replacement(var, new_value);
-        stmt = mutate(let->body);
-        leave_scope();
-    }
 };
 
-Expr remove_lets(Expr e) {
-    return RemoveLets().mutate(e);
-}
+/** Rebuild an expression using a map of replacements. Works on graphs without exploding. */
+class Replacer : public IRMutator {
+public:
+    map<Expr, Expr, ExprCompare> replacements;
+    Replacer(const map<Expr, Expr, ExprCompare> &r) : replacements(r) {}
 
-Stmt remove_lets(Stmt s) {
-    return RemoveLets().mutate(s);
-}
-
-struct ReplaceExpr : public IRMutator {
     using IRMutator::mutate;
 
-    map<Expr, Expr, ExprCompare> mutated;
-
     Expr mutate(Expr e) {
-        map<Expr, Expr, ExprCompare>::iterator iter = mutated.find(e);
-        if (iter != mutated.end()) {
+        map<Expr, Expr, ExprCompare>::iterator iter = replacements.find(e);
+
+        if (iter != replacements.end()) {
             return iter->second;
-        } else {
-            Expr new_expr = IRMutator::mutate(e);
-            mutated[e] = new_expr;
-            return new_expr;
         }
-    }
-};
 
-Expr replace_expr(Expr e, Expr old_expr, Expr replacement) {
-    ReplaceExpr r;
-    r.mutated[old_expr] = replacement;
-    return r.mutate(e);
-}
+        // Rebuild it, replacing children.
+        Expr new_e = IRMutator::mutate(e);
 
-struct FindOneCommonSubexpression : public IRGraphVisitor {
-    Expr result;
+        // In case we encounter this expr again.
+        replacements[e] = new_e;
 
-    using IRGraphVisitor::include;
-
-    void include(const Expr &e) {
-        if (result.defined()) return;
-
-        set<const IRNode *>::iterator iter = visited.find(e.ptr);
-
-        if (iter != visited.end()) {
-            if (e.as<Variable>() ||
-                is_const(e) ||
-                e.as<StringImm>() ||
-                (e.as<Broadcast>() && e.as<Broadcast>()->value.as<StringImm>())) {
-                return;
-            }
-
-            result = e;
-        } else {
-            e.accept(this);
-            visited.insert(e.ptr);
-        }
+        return new_e;
     }
 };
 
 Expr common_subexpression_elimination(Expr e) {
 
-    // debug(0) << "Input to letify " << e << "\n";
+    // Early-out for trivial cases.
+    if (!should_extract(e)) return e;
 
-    e = remove_lets(e);
+    debug(4) << "\n\n\nInput to letify " << e << "\n";
 
-    // debug(0) << "Deletified letify " << e << "\n";
+    GVN gvn;
+    e = gvn.mutate(e);
 
+    debug(4) << "Canonical form without lets " << e << "\n";
+
+    // Figure out which ones we'll pull out as lets and variables.
     vector<pair<string, Expr> > lets;
-
-    while (1) {
-        FindOneCommonSubexpression finder;
-        finder.include(e);
-        if (!finder.result.defined()) break;
-
-        // debug(0) << "\nHoisting out " << finder.result << " from " << e << "\n";
-
-        string name = unique_name('t');
-
-        lets.push_back(make_pair(name, finder.result));
-
-        e = replace_expr(e, finder.result, Variable::make(finder.result.type(), name));
-        // debug(0) << "Result: " << e << "\n";
+    vector<Expr> new_version(gvn.entries.size());
+    map<Expr, Expr, ExprCompare> replacements;
+    for (size_t i = 0; i < gvn.entries.size(); i++) {
+        const GVN::Entry &e = gvn.entries[i];
+        Expr old = e.expr;
+        if (e.use_count > 1 && should_extract(e.expr)) {
+            string name = unique_name('t');
+            lets.push_back(make_pair(name, e.expr));
+            // Point references to this expr to the variable instead.
+            replacements[e.expr] = Variable::make(e.expr.type(), name);
+        }
+        debug(4) << i << ": " << e.expr << ", " << e.use_count << "\n";
     }
 
+    // Rebuild the expr to include references to the variables:
+    Replacer replacer(replacements);
+    e = replacer.mutate(e);
+
+    debug(4) << "With variables " << e << "\n";
+
+    // Wrap the final expr in the lets.
     for (size_t i = lets.size(); i > 0; i--) {
-        e = Let::make(lets[i-1].first, lets[i-1].second, e);
+        Expr value = lets[i-1].second;
+        // Drop this variable as an acceptible replacement for this expr.
+        replacer.replacements.erase(value);
+        // Use containing lets in the value
+        value = replacer.mutate(lets[i-1].second);
+        e = Let::make(lets[i-1].first, value, e);
     }
 
-    // debug(0) << "Output of letify " << e << "\n";
+    debug(4) << "With lets: " << e << "\n";
 
     return e;
 }
@@ -194,6 +245,103 @@ public:
 
 Stmt common_subexpression_elimination(Stmt s) {
     return LetifyStmt().mutate(s);
+}
+
+
+// Testing code.
+
+// Normalize all names in an expr so that expr compares can be done
+// without worrying about mere name differences.
+class NormalizeVarNames : public IRMutator {
+    int counter = 0;
+
+    map<string, string> new_names;
+
+    using IRMutator::visit;
+
+    void visit(const Variable *var) {
+        map<string, string>::iterator iter = new_names.find(var->name);
+        if (iter == new_names.end()) {
+            expr = var;
+        } else {
+            expr = Variable::make(var->type, iter->second);
+        }
+    }
+
+    void visit(const Let *let) {
+        string new_name = "t" + int_to_string(counter++);
+        new_names[let->name] = new_name;
+        Expr value = mutate(let->value);
+        Expr body = mutate(let->body);
+        expr = Let::make(new_name, value, body);
+    }
+};
+
+void check(Expr in, Expr correct) {
+    Expr result = common_subexpression_elimination(in);
+    NormalizeVarNames n;
+    result = n.mutate(result);
+    //correct = n.mutate(correct);
+    return;
+    internal_assert(equal(result, correct))
+        << "Incorrect CSE:\n" << in
+        << "\nbecame:\n" << result
+        << "\ninstead of:\n" << correct << "\n";
+}
+
+// Construct a nested block of lets. Variables of the form "tn" refer
+// to expr n in the vector.
+Expr ssa_block(vector<Expr> exprs) {
+    Expr e = exprs.back();
+    for (size_t i = exprs.size() - 1; i > 0; i--) {
+        string name = "t" + int_to_string(i-1);
+        e = Let::make(name, exprs[i-1], e);
+    }
+    return e;
+}
+
+void cse_test() {
+    Expr x = Variable::make(Int(32), "x");
+    Expr t[32];
+    for (int i = 0; i < 32; i++) {
+        t[i] = Variable::make(Int(32), "t" + int_to_string(i));
+    }
+    Expr e, correct;
+
+    // Test a simple case.
+    e = ((x*x + x)*(x*x + x)) + x*x;
+    e += e;
+    correct = ssa_block(vec(x*x,                  // x*x
+                            t[0] + x,             // x*x + x
+                            t[1] * t[1] + t[0],   // (x*x + x)*(x*x + x) + x*x
+                            t[2] + t[2]));
+    check(e, correct);
+
+    // Check for idempotence (also checks a case with lets)
+    check(correct, correct);
+
+    // Check a case with redundant lets
+    e = ssa_block(vec(x*x,
+                      x*x,
+                      t[0] / t[1],
+                      t[1] / t[1],
+                      t[2] % t[3],
+                      (t[4] + x*x) + x*x));
+    correct = ssa_block(vec(x*x,
+                            t[0] / t[0],
+                            t[1] % t[1],
+                            (t[2] + t[0]) + t[0]));
+    check(e, correct);
+
+    // Test it scales OK.
+    e = x;
+    for (int i = 0; i < 100; i++) {
+        e = e*e + e + i;
+        e = e*e - e * i;
+    }
+    Expr result = common_subexpression_elimination(e);
+
+    debug(0) << "common_subexpression_elimination test passed\n";
 }
 
 }
