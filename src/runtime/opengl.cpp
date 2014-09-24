@@ -647,26 +647,6 @@ WEAK void halide_opengl_release(void *user_context) {
     ST = GlobalState();
 }
 
-extern "C" WEAK void halide_opengl_context_lost(void *user_context) {
-    if (!ST.initialized) return;
-
-    debug(user_context) << "halide_opengl_context_lost\n";
-    for (ModuleState *mod = state_list; mod; mod = mod->next) {
-        // Reset program handle to force recompilation.
-        mod->kernel->program_id = 0;
-    }
-
-    TextureInfo *tex = ST.textures;
-    while (tex) {
-        TextureInfo *next = tex->next;
-        free(tex);
-        tex = next;
-    }
-
-    ST = GlobalState();
-    return;
-}
-
 // Determine OpenGL texture format and channel type for a given buffer_t.
 WEAK bool get_texture_format(void *user_context, buffer_t *buf,
                              GLint *internal_format, GLint *format, GLint *type) {
@@ -927,10 +907,6 @@ WEAK int halide_opengl_dev_sync(void *user_context) {
     CHECK_INITIALIZED(1);
     // TODO: glFinish()
     return 0;
-}
-
-extern "C" WEAK uint64_t halide_opengl_output_client_bound() {
-    return HALIDE_GLSL_CLIENT_BOUND;
 }
 
 template <class T>
@@ -1404,9 +1380,34 @@ WEAK int halide_opengl_dev_run(
 
 }}} // namespace Halide::Runtime::Internal
 
+extern "C" {
+
+WEAK void halide_opengl_context_lost(void *user_context) {
+    if (!ST.initialized) return;
+
+    debug(user_context) << "halide_opengl_context_lost\n";
+    for (ModuleState *mod = state_list; mod; mod = mod->next) {
+        // Reset program handle to force recompilation.
+        mod->kernel->program_id = 0;
+    }
+
+    TextureInfo *tex = ST.textures;
+    while (tex) {
+        TextureInfo *next = tex->next;
+        free(tex);
+        tex = next;
+    }
+
+    ST = GlobalState();
+    return;
+}
+
+WEAK uint64_t halide_opengl_output_client_bound() {
+    return HALIDE_GLSL_CLIENT_BOUND;
+}
+
 //  Create wrappers that satisfy old naming conventions
 
-extern "C" {
 WEAK void halide_release(void *user_context) {
     halide_opengl_release(user_context);
 }
