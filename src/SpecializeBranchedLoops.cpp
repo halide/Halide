@@ -111,13 +111,9 @@ private:
         }
     }
 
-    void visit(const Select *op) {
-        expr = op;
-    }
-
-    void visit(const Store *op) {
-        stmt = op;
-    }
+    void visit(const Call *op)   {expr = op;}
+    void visit(const Select *op) {expr = op;}
+    void visit(const Store *op)  {stmt = op;}
 
     void visit(const Variable *op) {
         if (scope.contains(op->name)) {
@@ -199,6 +195,8 @@ private:
             expr = op;
         }
     }
+
+    void visit(const Call *op)   {expr = op;}
 
     void visit(const Variable *op) {
         if (scope.contains(op->name)) {
@@ -550,7 +548,8 @@ private:
 
             // debug(0) << "Branching normalized if:\n" << Stmt(if_stmt) << "\n";
 
-            // Bail out if this condition depends on more than just the current loop variable.
+            // Bail out if this condition depends on more than just
+            // the current loop variable.
             if (num_free_vars(if_stmt->condition, free_vars) > 1) return;
 
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
