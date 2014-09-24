@@ -820,10 +820,11 @@ inline Expr fast_pow(Expr x, Expr y) {
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr floor(Expr x) {
     user_assert(x.defined()) << "floor of undefined Expr\n";
-    if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "floor_f64", vec(x), Internal::Call::Extern);
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(x.type(), "floor_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "floor_f32", vec(cast<float>(x)), Internal::Call::Extern);
+        Type t = Float(32, x.type().width);
+        return Internal::Call::make(t, "floor_f32", vec(cast(t, x)), Internal::Call::Extern);
     }
 }
 
@@ -833,10 +834,11 @@ inline Expr floor(Expr x) {
  * point, despite being a whole number. Vectorizes cleanly. */
 inline Expr ceil(Expr x) {
     user_assert(x.defined()) << "ceil of undefined Expr\n";
-    if (x.type() == Float(64)) {
-        return Internal::Call::make(Float(64), "ceil_f64", vec(x), Internal::Call::Extern);
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(x.type(), "ceil_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "ceil_f32", vec(cast<float>(x)), Internal::Call::Extern);
+        Type t = Float(32, x.type().width);
+        return Internal::Call::make(t, "ceil_f32", vec(cast(t, x)), Internal::Call::Extern);
     }
 }
 
@@ -846,10 +848,11 @@ inline Expr ceil(Expr x) {
  * number. On ties, we round up. Vectorizes cleanly. */
 inline Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
-    if (x.type() == Float(64)) {
+    if (x.type().element_of() == Float(64)) {
         return Internal::Call::make(Float(64), "round_f64", vec(x), Internal::Call::Extern);
     } else {
-        return Internal::Call::make(Float(32), "round_f32", vec(cast<float>(x)), Internal::Call::Extern);
+        Type t = Float(32, x.type().width);
+        return Internal::Call::make(t, "round_f32", vec(cast(t, x)), Internal::Call::Extern);
     }
 }
 
