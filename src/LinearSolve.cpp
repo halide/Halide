@@ -341,13 +341,13 @@ private:
                 rhs_terms.swap(lhs_terms);
 
                 rhs = linear_expr(rhs_terms);
-                if (var_term.var.type().is_int()) {
+                if (var_term.var->type.is_int()) {
                   // If we are dealing with integer types, then we
                   // don't divide by the coefficient in the solver.
-                  rhs = simplify(Cast::make(var_term.var.type(), rhs));
+                  rhs = simplify(Cast::make(var_term.var->type, rhs));
                   lhs = simplify(var_term.coeff * var_term.var);
                 } else {
-                  rhs = simplify(Cast::make(var_term.var.type(), rhs / var_term.coeff));
+                  rhs = simplify(Cast::make(var_term.var->type, rhs / var_term.coeff));
                   lhs = var_term.var;
                 }
                 solved = true;
@@ -415,7 +415,7 @@ private:
                     swapped = !swapped;
                 }
 
-                if (var_term.var.type().is_int() && is_greater != swapped) {
+                if (var_term.var->type.is_int() && is_greater != swapped) {
                     // If we are wrting a greater than comparison of integers,
                     // then the RHS should be rounded up.
                     rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
@@ -423,7 +423,7 @@ private:
                     rhs = rhs / var_term.coeff;
                 }
 
-                rhs = simplify(Cast::make(var_term.var.type(), rhs));
+                rhs = simplify(Cast::make(var_term.var->type, rhs));
                 lhs = var_term.var;
                 solved = true;
             }
