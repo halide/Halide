@@ -207,7 +207,7 @@ Expr common_subexpression_elimination(Expr e) {
     vector<pair<string, Expr> > lets;
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
-    for (size_t i = 0; i < gvn.entries.size()-1; i++) {
+    for (size_t i = 0; i < gvn.entries.size() - 1; i++) {
         const GVN::Entry &e = gvn.entries[i];
         Expr old = e.expr;
         if (e.use_count > 1 && should_extract(e.expr)) {
@@ -230,7 +230,7 @@ Expr common_subexpression_elimination(Expr e) {
         Expr value = lets[i-1].second;
         // Drop this variable as an acceptible replacement for this expr.
         replacer.replacements.erase(value);
-        // Use containing lets in the value
+        // Use containing lets in the value.
         value = replacer.mutate(lets[i-1].second);
         e = Let::make(lets[i-1].first, value, e);
     }
