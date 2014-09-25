@@ -2,7 +2,7 @@
 #define HALIDE_RUNTIME_INTERNAL_H
 
 #if __STDC_HOSTED__
-//#error "Halide runtime files must be compiled with clang in freestanding mode."
+#error "Halide runtime files must be compiled with clang in freestanding mode."
 #endif
 
 #ifdef __UINT8_TYPE__

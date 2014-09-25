@@ -34,12 +34,8 @@ extern "C" {
 extern int64_t halide_current_time_ns(void *user_context);
 extern void free(void *);
 extern void *malloc(size_t);
-<<<<<<< HEAD
-extern const char * strstr(const char *, const char *);
-=======
 extern int snprintf(char *, size_t, const char *, ...);
 extern char * strstr(const char *, const char *);
->>>>>>> strstr returns char* not const char*
 extern int atoi(const char *);
 
 WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
@@ -839,13 +835,20 @@ WEAK int halide_dev_run(void *user_context,
                         int threadsX, int threadsY, int threadsZ,
                         int shared_mem_bytes,
                         size_t arg_sizes[],
-                        void* args[]) {
+                        void* args[],
+                        char** attribute_names,
+                        int num_attributes,
+                        float** coords_per_dim,
+                        int num_coords_dim0,
+                        int num_coords_dim1) {
+
     debug(user_context)
         << "CL: halide_dev_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
         << "shmem: " << shared_mem_bytes << "\n";
+
 
     cl_int err;
     ClContext ctx(user_context);
