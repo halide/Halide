@@ -723,13 +723,7 @@ WEAK TextureInfo *find_texture(GLuint tex) {
 
 // Allocate a new texture matching the dimension and color format of the
 // specified buffer.
-extern "C"
-WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf)
-  
-#ifndef HALIDE_APP
-;
-#else
-  {
+WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf) {
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }
@@ -820,7 +814,6 @@ WEAK int halide_opengl_dev_malloc(void *user_context, buffer_t *buf)
     }
     return 0;
 }
-#endif
 
 // Delete all texture information associated with a buffer. The OpenGL texture
 // itself is only deleted if it was actually allocated by Halide and not
@@ -1193,7 +1186,6 @@ public:
     
     bool operator()(int a, int b) { return values[a] < values[b]; }
     float* values;
-
 };
 
 extern "C"
@@ -1436,7 +1428,7 @@ WEAK int halide_opengl_dev_run(
     std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
     std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
     
-#if DEBUG
+#if DEBUG_MESH
     printf("Sorted x coords: ");
     for (int i=0;i!=num_coords_dim0;++i)
         printf("%f ",coords_per_dim[0][sorted_order0[i]]);
@@ -1490,7 +1482,7 @@ WEAK int halide_opengl_dev_run(
     }
     
 
-#if DEBUG
+#if DEBUG_MESH
     for (int i=0;i!=vertex_buffer_size;++i) {
         if (!(i%num_attributes)) {
             halide_printf(user_context,"\n");
@@ -1613,7 +1605,11 @@ WEAK int halide_dev_free(void *user_context, buffer_t *buf) {
 WEAK int halide_copy_to_host(void *user_context, buffer_t *buf) {
     return halide_opengl_copy_to_host(user_context, buf);
 }
-  
+
+WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf) {
+    return halide_opengl_copy_to_dev(user_context, buf);
+}
+
 WEAK int halide_dev_run(void *user_context,
                           void *state_ptr,
                           const char *entry_name,
@@ -1648,14 +1644,3 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr,
     return halide_opengl_init_kernels(user_context, state_ptr, src, size);
 }
 }
-
-extern "C"
-WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf)
-#ifndef HALIDE_APP
-;
-#else
-{
-  return halide_opengl_copy_to_dev(user_context, buf);
-}
-#endif
-

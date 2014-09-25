@@ -2296,9 +2296,6 @@ struct error_buffer {
 };
 
 extern "C" void buffered_error_handler(void *ctx, const char *message) {
-  
-    debug(0) << "DEBUG ERROR: " << message << "\n";
-  
     if (ctx) {
         error_buffer *buf = (error_buffer *)ctx;
         size_t len = strlen(message);
