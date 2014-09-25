@@ -427,6 +427,7 @@ bool equal(Stmt a, Stmt b) {
 
 
 // Testing code
+namespace {
 
 IRDeepCompare::CmpResult flip_result(IRDeepCompare::CmpResult r) {
     switch(r) {
@@ -458,6 +459,8 @@ void check_not_equal(Expr a, Expr b) {
         << " when comparing:\n" << a
         << "\nand\n" << b << "\n";
 }
+
+} // namespace
 
 void ir_equality_test() {
     Expr x = Variable::make(Int(32), "x");
