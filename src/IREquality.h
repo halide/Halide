@@ -52,7 +52,7 @@ private:
      * the old value is evicted. Provides minor compile-time
      * improvements, but more importantly, it guards against certain
      * types of pathological behavior (comparing graph-structured
-     * Exprs to each other.). We only track equal exprs, because
+     * Exprs to each other). We only track equal exprs, because
      * comparing non-equal exprs tends to early-out very quickly, so
      * it's not worth the insertion and lookup cost. */
     struct Cache {
@@ -142,8 +142,8 @@ private:
 
 };
 
-// Make it possible to set the cache size in the type, for easier use
-// as an STL comparator.
+/** A deep IR compare class with the cache size in the type, for
+ *  easier use with STL. */
 template<int cache_bits>
 class IRCachingDeepCompare : public IRDeepCompare {
 public:
