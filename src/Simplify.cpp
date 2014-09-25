@@ -1348,6 +1348,7 @@ private:
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
+        const Ramp *delta_ramp = delta.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -1436,6 +1437,18 @@ private:
                        equal(mul_a->b, mul_b->b)) {
                 // Divide both sides by a constant
                 expr = mutate(mul_a->a < mul_b->a);
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
+                expr = const_true(delta_ramp->width);
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base >= 0))) {
+                expr = const_false(delta_ramp->width);
+            } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base < 0))) {
+                expr = const_true(delta_ramp->width);
+            } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
+                expr = const_false(delta_ramp->width);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -2249,6 +2262,18 @@ void check(Stmt a, Stmt b) {
     }
 }
 
+void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
+    //debug(0) << "Checking that " << a << " -> " << b << "\n";
+    Expr simpler = simplify(a, true, bi);
+    if (!equal(simpler, b)) {
+        internal_error
+            << "\nSimplification failure:\n"
+            << "Input: " << a << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: " << b << '\n';
+    }
+}
+
 template <typename T>
 void test_int_cast_constant() {
     Type t = type_of<T>();
@@ -2745,6 +2770,14 @@ void simplify_test() {
 
     check(Call::make(Handle(), Call::stringify, vec<Expr>(3, x, 4, string(", "), 3.4f), Call::Intrinsic),
           Call::make(Handle(), Call::stringify, vec<Expr>(string("3"), x, string("4, 3.400000")), Call::Intrinsic));
+
+    // Check if we can simplify away comparison on vector types considering bounds.
+    Scope<Interval> bounds_info;
+    bounds_info.push("x", Interval(0,4));
+    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(0,4),  const_false(4), bounds_info);
+    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(8,4),  const_true(4),  bounds_info);
+    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(-4,4), const_false(4), bounds_info);
+    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(5,4),  const_true(4),  bounds_info);
 
     std::cout << "Simplify test passed" << std::endl;
 }

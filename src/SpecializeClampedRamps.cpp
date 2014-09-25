@@ -77,7 +77,7 @@ private:
         if (value.same_as(op->value) && body.same_as(op->body)) {
             expr = op;
         } else {
-            expr = Let::make(op->name, op->value, op->body);
+            expr = Let::make(op->name, value, body);
         }
 
         min_predicate = substitute(op->name, value, min_predicate);
@@ -90,7 +90,7 @@ class SpecializeClampedRamps : public IRMutator {
 
     void visit(const Store *op) {
         PredicateFinder p;
-        Stmt simpler_store = p.mutate(op);
+        Stmt simpler_store = simplify(p.mutate(op));
         if (simpler_store.same_as(op)) {
             stmt = op;
         } else {
@@ -102,7 +102,7 @@ class SpecializeClampedRamps : public IRMutator {
     void visit(const LetStmt *op) {
         PredicateFinder p;
         Stmt body = mutate(op->body);
-        Expr simpler_value = p.mutate(op->value);
+        Expr simpler_value = simplify(p.mutate(op->value));
         if (body.same_as(op->body) && simpler_value.same_as(op->value)) {
             stmt = op;
         } else if (simpler_value.same_as(op->value)) {
