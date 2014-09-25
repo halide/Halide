@@ -116,9 +116,14 @@ private:
     void visit(const Store *op)  {stmt = op;}
 
     void visit(const Variable *op) {
-        if (scope.contains(op->name)) {
+      if (in_if_stmt && op->type == Bool() && scope.contains(op->name)) {
             Expr val = scope.get(op->name);
-            expr = mutate(val);
+            Expr new_val = mutate(val);
+            if (new_val.same_as(val)) {
+              expr = op;
+            } else {
+              expr = new_val;
+            }
         } else {
             expr = op;
         }
@@ -199,9 +204,14 @@ private:
     void visit(const Call *op)   {expr = op;}
 
     void visit(const Variable *op) {
-        if (scope.contains(op->name)) {
+      if (in_select_cond && op->type == Bool() && scope.contains(op->name)) {
             Expr val = scope.get(op->name);
-            expr = mutate(val);
+            Expr new_val = mutate(val);
+            if (new_val.same_as(val)) {
+              expr = op;
+            } else {
+              expr = new_val;
+            }
         } else {
             expr = op;
         }
