@@ -33,9 +33,9 @@ public:
                  const std::vector<Buffer> &images_to_embed);
 
     static void test();
-    
-    void jit_init(llvm::ExecutionEngine *, llvm::Module *) override;    
-    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *) override;
+
+    void jit_init(llvm::ExecutionEngine *, llvm::Module *);
+    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *);
 
 protected:
 
