@@ -21,6 +21,8 @@
 #else
 #include <llvm/ExecutionEngine/JIT.h>
 #endif
+#include <llvm/ExecutionEngine/JITEventListener.h>
+
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
@@ -33,7 +35,9 @@
 
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
+#if LLVM_VERSION < 36
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
+#endif
 #include <llvm/PassManager.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FormattedStream.h>

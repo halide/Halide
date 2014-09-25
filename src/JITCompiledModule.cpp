@@ -144,9 +144,9 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
     #if LLVM_VERSION < 36
     // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
-    #endif
     JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
     engine_builder.setJITMemoryManager(memory_manager);
+    #endif
     #else
     engine_builder.setUseMCJIT(false);
     #endif

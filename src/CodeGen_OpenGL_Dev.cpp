@@ -67,8 +67,7 @@ Type map_type(const Type &type) {
 // Most GLSL builtins are only defined for float arguments, so we may have to
 // introduce type casts around the arguments and the entire function call.
 // TODO: handle vector types
-Expr call_builtin(const Type &result_type,
-                  const std::string &func,
+Expr call_builtin(const Type &result_type, const std::string &func,
                   const std::vector<Expr> &args) {
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -481,10 +480,8 @@ void CodeGen_GLSL::visit(const Call *op) {
             // Determine the halide buffer associated with this load
             string buffername = string_imm->value;
 
-            internal_assert(op->type == UInt(8, 1) || op->type == UInt(8, 2) ||
-                            op->type == UInt(8, 3) || op->type == UInt(8, 4) ||
-                            op->type == UInt(16, 1) || op->type == UInt(16, 2) ||
-                            op->type == UInt(16, 3) || op->type == UInt(16, 4));
+            internal_assert((op->type.code == Type::UInt || op->type.code == Type::Float) &&
+                            (op->type.width >= 1 && op->type.width <= 4));
 
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
@@ -493,15 +490,19 @@ void CodeGen_GLSL::visit(const Call *op) {
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
                 << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
-                << get_vector_suffix(op->args[4])
-                << " * " << op->type.imax() << ".0";
+                << get_vector_suffix(op->args[4]);
+            if (op->type.is_uint())
+                rhs << " * " << op->type.imax() << ".0";
 
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
             do_indent();
             stream << "gl_FragColor" << get_vector_suffix(op->args[4])
-                   << " = " << sval << " / " << op->args[5].type().imax() << ".0;\n";
+                   << " = " << sval;
+            if (op->args[5].type().is_uint())
+                stream << " / " << op->args[5].type().imax() << ".0";
+            stream << ";\n";
             // glsl_texture_store is called only for its side effect; there is
             // no return value.
             id = "";
@@ -577,11 +578,18 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
 
             user_assert(args[i].read != args[i].write) <<
                 "GLSL: buffers may only be read OR written inside a kernel loop.\n";
-            user_assert(t == UInt(8) || t == UInt(16)) <<
-                "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
+            std::string type_name;
+            if (t == UInt(8)) {
+                type_name = "uint8_t";
+            } else if (t == UInt(16)) {
+                type_name = "uint16_t";
+            } else if (t == Float(32)) {
+                type_name = "float";
+            } else {
+                user_error << "GLSL: buffer " << args[i].name << " has invalid type " << t << ".\n";
+            }
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
-                   << (t == UInt(8) ? "uint8_t " : "uint16_t ")
-                   << print_name(args[i].name) << "\n";
+                   << type_name << " " << print_name(args[i].name) << "\n";
         } else {
             header << "/// VAR "
                    << CodeGen_C::print_type(args[i].type) << " "
@@ -625,57 +633,81 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     stream << "}\n";
 }
 
+namespace {
+// Replace all temporary variables names like _1234 with '$'. This is done to
+// make the individual tests below self-contained.
+string normalize_temporaries(const string &s) {
+    string result;
+    for (size_t i = 0; i < s.size(); ) {
+        if (s[i] == '_') {
+            result += '$';
+            for (i++; i < s.size() && isdigit(s[i]); i++) {
+            }
+        } else {
+            result += s[i++];
+        }
+    }
+    return result;
+}
+
+void check(Expr e, const string &result) {
+    ostringstream source;
+    CodeGen_GLSL cg(source);
+    Evaluate::make(e).accept(&cg);
+    string src = normalize_temporaries(source.str());
+    if (src != result) {
+        internal_error
+            << "Codegen failed for " << e << "\n"
+            << "  Correct source code:\n" << result
+            << "  Actual source code:\n" << src;
+    }
+}
+}  // namespace
+
 void CodeGen_GLSL::test() {
     vector<Expr> e;
 
-    e.push_back(Min::make(Expr(1), Expr(5)));
-    e.push_back(Max::make(Expr(1), Expr(5)));
-    // Lerp with both integer and float weight
-    e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)));
-    e.push_back(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f));
-    e.push_back(sin(3.0f));
-    e.push_back(abs(-2));
-    e.push_back(Halide::print(3.0f));
-    e.push_back(-2/Expr(3));  // Test rounding behavior of integer division.
-    e.push_back(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
-                             Broadcast::make(1.f, 4),
-                             Broadcast::make(2.f, 4)));
+    check(Min::make(Expr(1), Expr(5)),
+          "float $ = min(1.0000000, 5.0000000);\n"
+          "int $ = int($);\n");
 
-    ostringstream source;
-    CodeGen_GLSL cg(source);
-    for (size_t i = 0; i < e.size(); i++) {
-        Evaluate::make(e[i]).accept(&cg);
-    }
+    check(Max::make(Expr(1), Expr(5)),
+          "float $ = max(1.0000000, 5.0000000);\n"
+          "int $ = int($);\n");
 
-    string src = source.str();
-    std::string correct_source =
-        "float _0 = min(1.0000000, 5.0000000);\n"
-        "int _1 = int(_0);\n"
-        "float _2 = max(1.0000000, 5.0000000);\n"
-        "int _3 = int(_2);\n"
-        "float _4 = mix(0.0000000, 255.00000, 0.49803922);\n"
-        "float _5 = mix(0.0000000, 255.00000, 0.30000001);\n"
-        "float _6 = sin(3.0000000);\n"
-        "float _7 = abs(-2.0000000);\n"
-        "int _8 = int(_7);\n"
-        "float _9 = 3.0000000;\n"
-        "float _10 = floor(-0.66666669);\n"
-        "int _11 = int(_10);\n"
-        "vec4 _12 = vec4(2.0000000, 1.0000000, 2.0000000, 2.0000000);\n";
+    // Lerp with integer weight
+    check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)),
+          "float $ = mix(0.0000000, 255.00000, 0.49803922);\n");
 
-    if (src != correct_source) {
-        int diff = 0;
-        while (src[diff] == correct_source[diff]) diff++;
-        int diff_end = diff + 1;
-        while (diff > 0 && src[diff] != '\n') diff--;
-        while (diff_end < (int)src.size() && src[diff_end] != '\n') diff_end++;
+    // Lerp with float weight
+    check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f),
+          "float $ = mix(0.0000000, 255.00000, 0.30000001);\n");
 
-        internal_error
-            << "Correct source code:\n" << correct_source
-            << "Actual source code:\n" << src
-            << "\nDifference starts at: " << src.substr(diff, diff_end - diff) << "\n";
+    check(sin(3.0f), "float $ = sin(3.0000000);\n");
 
-    }
+    // use float version of abs in GLSL
+    check(abs(-2),
+          "float $ = abs(-2.0000000);\n"
+          "int $ = int($);\n");
+
+    check(Halide::print(3.0f), "float $ = 3.0000000;\n");
+
+    // Test rounding behavior of integer division.
+    check(-2/Expr(3),
+          "float $ = floor(-0.66666669);\n"
+          "int $ = int($);\n");
+
+    check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
+                       Broadcast::make(1.f, 4),
+                       Broadcast::make(2.f, 4)),
+          "vec4 $ = vec4(2.0000000, 1.0000000, 2.0000000, 2.0000000);\n");
+
+    check(log(1.0f), "float $ = log(1.0000000);\n");
+    check(exp(1.0f), "float $ = exp(1.0000000);\n");
+
+    // Integer powers are expanded
+    check(pow(1.4f, 2), "float $ = 1.4000000 * 1.4000000;\n");
+    check(pow(1.0f, 2.1f), "float $ = pow(1.0000000, 2.0999999);\n");
 
     std::cout << "CodeGen_GLSL test passed\n";
 }
