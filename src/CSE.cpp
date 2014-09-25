@@ -201,13 +201,6 @@ Expr common_subexpression_elimination(Expr e) {
     GVN gvn;
     e = gvn.mutate(e);
 
-    /*
-    for (size_t i = 0; i < gvn.entries.size(); i++) {
-        gvn.entries[i].use_count = 0;
-        gvn.entries[i].expr.accept(&gvn);
-    }
-    */
-
     debug(4) << "Canonical form without lets " << e << "\n";
 
     // Figure out which ones we'll pull out as lets and variables.
