@@ -15,6 +15,8 @@ using std::string;
 using std::map;
 using std::pair;
 
+namespace {
+
 // Some expressions are not worth lifting out into lets, even if they
 // occur redundantly many times. This list should mirror the list in
 // the simplifier for lets, otherwise they'll just fight with each
@@ -191,6 +193,8 @@ public:
     }
 };
 
+} // namespace
+
 Expr common_subexpression_elimination(Expr e) {
 
     // Early-out for trivial cases.
@@ -240,7 +244,9 @@ Expr common_subexpression_elimination(Expr e) {
     return e;
 }
 
-class LetifyStmt : public IRMutator {
+namespace {
+
+class CSEEveryExprInStmt : public IRMutator {
 public:
     using IRMutator::mutate;
 
@@ -249,12 +255,16 @@ public:
     }
 };
 
+} // namespace
+
 Stmt common_subexpression_elimination(Stmt s) {
-    return LetifyStmt().mutate(s);
+    return CSEEveryExprInStmt().mutate(s);
 }
 
 
 // Testing code.
+
+namespace {
 
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
@@ -303,6 +313,8 @@ Expr ssa_block(vector<Expr> exprs) {
     }
     return e;
 }
+
+} // namespace
 
 void cse_test() {
     Expr x = Variable::make(Int(32), "x");
