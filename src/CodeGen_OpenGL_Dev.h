@@ -61,7 +61,7 @@ protected:
     void visit(const FloatImm *);
 
     void visit(const Cast *);
-    void visit(const LetStmt *);
+    void visit(const Let *);
     void visit(const For *);
     void visit(const Select *);
 

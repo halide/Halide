@@ -4,6 +4,7 @@
 #include "IROperator.h"
 #include "Debug.h"
 #include "Simplify.h"
+#include "VaryingAttributes.h"
 #include <iomanip>
 #include <map>
 
@@ -17,8 +18,32 @@ using std::map;
 
 namespace {
 
-// Maps Halide types to appropriate GLSL types or emits error if no equivalent
-
+class Scalarize : public IRMutator {
+public:
+    using IRMutator::visit;
+    
+    virtual void visit(const Cast *op) {
+        Type t = op->type;
+        t.width = 1;
+        expr = Cast::make(t, mutate(op->value));
+    }
+    virtual void visit(const Variable *op) {
+        Type t = op->type;
+        t.width = 1;
+        expr = Cast::make(t,Variable::make(op->type, op->name, op->image, op->param, op->reduction_domain));
+    }
+    virtual void visit(const Broadcast *op) {
+        expr = mutate(op->value);
+    }
+};
+    
+Expr scalarize(Expr e) {
+    
+    Scalarize s;
+    return s.mutate(e);
+};
+    
+// Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
 Type map_type(const Type &type) {
     Type result = type;
@@ -72,21 +97,6 @@ Expr call_builtin(const Type &result_type, const std::string &func,
 }
 
 }
-
-class FindVaryingAttributes : public IRVisitor {
-protected:
-    using IRVisitor::visit;
-    
-    virtual void visit(const LetStmt *op) {
-        if (ends_with(op->name,"varying")) {
-            result[op->name] = op->value;
-        }
-        IRVisitor::visit(op);
-    }
-    
-public:
-    std::map<std::string,Expr> result;
-};
 
 CodeGen_OpenGL_Dev::CodeGen_OpenGL_Dev(const Target &target)
     : target(target) {
@@ -208,9 +218,9 @@ void CodeGen_GLSL::visit(const Cast *op) {
     print_assignment(target_type, print_type(target_type) + "(" + print_expr(value) + ")");
 }
     
-void CodeGen_GLSL::visit(const LetStmt *op) {
+void CodeGen_GLSL::visit(const Let *op) {
 
-    if (op->name.find("varying") != std::string::npos) {
+    if (op->name.find(".varying") != std::string::npos) {
         
         // Skip let statements for varying attributes
         op->body.accept(this);
@@ -442,28 +452,19 @@ void CodeGen_GLSL::visit(const Mod *op) {
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     std::vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
-    debug(2) << e << "\n";
+
     // The vectorize pass will insert a ramp in the color dimension argument.
     if (expr_match(Ramp::make(w, 1, 4), e, matches)) {
         // No suffix is needed when accessing a full RGBA vector.
+        return "";
     } else if (expr_match(Ramp::make(w, 1, 3), e, matches)) {
         return ".rgb";
     } else if (expr_match(Ramp::make(w, 1, 2), e, matches)) {
         return ".rg";
-    } else if (const Variable* v = e.as<Variable>()) {
-        // GLSL 1.0 Section 5.5 supports subscript based vector indexing
-        return std::string("[") + ((e.type()!=Int(32)) ? "(int)" : "") + print_name(v->name) + "]";
-    } else if (const IntImm *idx = e.as<IntImm>()) {
-        // If the color dimension is not vectorized, e.g. it is unrolled, then
-        // then we access each channel individually.
-        int i = idx->value;
-        internal_assert(0 <= i && i <= 3) <<  "GLSL: color index must be between 0 and 3.\n";
-        char suffix[] = "rgba";
-        return std::string(".") + suffix[i];
     } else {
-        user_error << "Cannot determine GLSL vector subscript.\n";
+        // GLSL 1.0 Section 5.5 supports subscript based vector indexing
+        return std::string("[") + ((e.type()!=Int(32)) ? "(int)" : "") + print_expr(e) + "]";
     }
-    return "";
 }
 
 void CodeGen_GLSL::visit(const Load *op) {
@@ -506,15 +507,15 @@ void CodeGen_GLSL::visit(const Call *op) {
 
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
-            // we use only the first element
-
+            // we un-vectorize the expression with scalarize(...)
+            
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
-                << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
+                << print_expr(scalarize(op->args[2])) << ", "
+                << print_expr(scalarize(op->args[3])) << "))"
                 << get_vector_suffix(op->args[4]);
             if (op->type.is_uint())
                 rhs << " * " << op->type.imax() << ".0";
-
+          
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);
@@ -611,6 +612,10 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             }
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << type_name << " " << print_name(args[i].name) << "\n";
+        } else if (ends_with(args[i].name, ".varying")) {
+            header << "/// VARYING "
+                   << CodeGen_C::print_type(args[i].type) << " "
+                   << print_name(args[i].name) << "\n";
         } else {
             header << "/// UNIFORM "
                    << CodeGen_C::print_type(args[i].type) << " "
@@ -618,17 +623,6 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         }
     }
     
-    // Look up let statements for varying attributes that may be interpolated
-    FindVaryingAttributes attributes;
-    stmt.accept(&attributes);
-
-    for (auto r : attributes.result) {
-        const std::string& name = r.first;
-        const Expr& value       = r.second;
-        
-        header << "/// VARYING " << CodeGen_C::print_type(value.type()) << " " << print_name(name) << "\n";
-    }
-
     stream << header.str();
 
     // TODO: we need a better way to switch between the different OpenGL
@@ -649,6 +643,10 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer && args[i].read) {
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
+        } else if (ends_with(args[i].name, ".varying")) {
+            stream << "varying "
+            << print_type(args[i].type) << " "
+            << print_name(args[i].name) << ";\n";
         } else if (!args[i].is_buffer) {
             stream << "uniform "
                    << print_type(args[i].type) << " "
@@ -659,13 +657,6 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     // Add pixel position from vertex shader
     stream << "varying vec2 pixcoord;\n";
     
-    for (auto r : attributes.result) {
-        const std::string& name = r.first;
-        const Expr value        = r.second;
-        
-        stream << "varying " << print_type(value.type()) << " " << print_name(name) << ";\n";
-    }
-
     stream << "void main() {\n";
     indent += 2;
     print(stmt);
