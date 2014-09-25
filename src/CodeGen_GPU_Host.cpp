@@ -516,9 +516,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                  << bounds.num_blocks[2] << ", "
                  << bounds.num_blocks[3] << ") blocks\n";
 
-        // compute a closure over the state passed into the kernel
-        GPU_Host_Closure c(loop, loop->name);
-
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name, false);
         for (size_t i = 0; i < kernel_name.size(); i++) {
@@ -526,93 +523,28 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
-
-        vector<GPU_Argument> closure_args = c.arguments();
-        for (size_t i = 0; i < closure_args.size(); i++) {
-            if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
-                closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
-            }
-        }
-
-        cgdev->add_kernel(loop, kernel_name, closure_args);
-
-        // get the actual name of the generated kernel for this loop
-        kernel_name = cgdev->get_current_kernel_name();
-        debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
-        Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
-
-        llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
-
-        // build the kernel arguments array
-        llvm::PointerType *arg_t = i8->getPointerTo(); // void*
-        int num_args = (int)closure_args.size();
-
-        // NULL-terminated list
-        Value *gpu_args_arr =
-            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_args");
-
-        // NULL-terminated list of size_t's
-        Value *gpu_arg_sizes_arr =
-            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1),
-                                   num_args+1,
-                                   kernel_name + "_arg_sizes");
-
-        for (int i = 0; i < num_args; i++) {
-            // get the closure argument
-            string name = closure_args[i].name;
-            Value *val;
-
-            if (closure_args[i].is_buffer) {
-                // If it's a buffer, dereference the dev handle
-                val = buffer_dev(sym_get(name + ".buffer"));
-            } else {
-                // Otherwise just look up the symbol
-                val = sym_get(name);
-            }
-
-            // allocate stack space to mirror the closure element. It
-            // might be in a register and we need a pointer to it for
-            // the gpu args array.
-            Value *ptr = builder->CreateAlloca(val->getType(), NULL, name+".stack");
-            // store the closure value into the stack space
-            builder->CreateStore(val, ptr);
-
-            // store a void* pointer to the argument into the gpu_args_arr
-            Value *bits = builder->CreateBitCast(ptr, arg_t);
-            builder->CreateStore(bits,
-                                 builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
-
-            // store the size of the argument
-            int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
-            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
-                                 builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
-        }
-        // NULL-terminate the lists
-        builder->CreateStore(ConstantPointerNull::get(arg_t),
-                             builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
-        builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
-                             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
-
+        
         Value* null_ptr_value = ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
         Value* gpu_attribute_names = null_ptr_value;
-        Value* gpu_attribute_dims  = null_ptr_value;
         Value* gpu_num_attributes  = null_ptr_value;
         Value* gpu_coords_per_dim  = null_ptr_value;
         Value* gpu_num_coords_dim0 = null_ptr_value;
         Value* gpu_num_coords_dim1 = null_ptr_value;
         
+        std::map<std::string,Expr> varying;
+        
+        Stmt loop_stmt;
+        
         if (target.features & Target::OpenGL) {
-
-            // GL draw calls that invoke GLSL shader are issued for pairs of
+            
+            // GL draw calls that invoke the GLSL shader are issued for pairs of
             // for-loops over spatial x and y dimensions. For each for-loop we create
             // one scalar vertex attribute for the spatial dimension corresponding to
-            // that loop, plus one scalar attribute for each LetStmt previously
+            // that loop, plus one scalar attribute for each Let expression previously
             // labeled as ".varying"
             
             ExpressionMesh mesh;
-            compute_mesh(loop,mesh);
+            loop_stmt = setup_mesh(loop,mesh,varying);
             
             // Create an array of null terminated strings containing the attribute
             // names in the order they appear per vertex channel
@@ -634,15 +566,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             
             // Record the number of attributes
             gpu_num_attributes = codegen(IntImm::make(num_attributes));
-
-            // Record the dimension that each attribute is defined along
-            gpu_attribute_dims = create_alloca_at_entry(ArrayType::get(CodeGen::i32, num_attributes),
-                                                        num_attributes,
-                                                        kernel_name + "_attribute_dims");
-            for (int i=0;i!=num_attributes;++i) {
-                Value* gpu_attribute_dim = codegen(IntImm::make(mesh.attribute_dims[i]));
-                builder->CreateStore(gpu_attribute_dim, builder->CreateConstGEP2_32(gpu_attribute_dims, 0, i));
-            }
             
             // Record the expressions for each dimension
             int num_coords_dim0 = mesh.coords[0].size();
@@ -686,6 +609,83 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                                      builder->CreateConstGEP2_64(gpu_coords_per_dim, 0, i));
             }
         }
+
+        // compute a closure over the state passed into the kernel
+        GPU_Host_Closure c(loop_stmt, loop->name);
+        
+        vector<GPU_Argument> closure_args = c.arguments();
+        for (size_t i = 0; i < closure_args.size(); i++) {
+            if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
+                closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
+            }
+        }
+
+        cgdev->add_kernel(loop_stmt, kernel_name, closure_args);
+
+        // get the actual name of the generated kernel for this loop
+        kernel_name = cgdev->get_current_kernel_name();
+        debug(2) << "Compiled launch to kernel \"" << kernel_name << "\"\n";
+        Value *entry_name_str = builder->CreateGlobalStringPtr(kernel_name, "entry_name");
+
+        llvm::Type *target_size_t_type = (target.bits == 32) ? i32 : i64;
+
+        // build the kernel arguments array
+        llvm::PointerType *arg_t = i8->getPointerTo(); // void*
+        int num_args = (int)closure_args.size();
+
+        // NULL-terminated list
+        Value *gpu_args_arr =
+            create_alloca_at_entry(ArrayType::get(arg_t, num_args+1),
+                                   num_args+1,
+                                   kernel_name + "_args");
+
+        // NULL-terminated list of size_t's
+        Value *gpu_arg_sizes_arr =
+            create_alloca_at_entry(ArrayType::get(target_size_t_type, num_args+1),
+                                   num_args+1,
+                                   kernel_name + "_arg_sizes");
+
+        for (int i = 0; i < num_args; i++) {
+            // get the closure argument
+            string name = closure_args[i].name;
+            Value *val;
+
+            if (closure_args[i].is_buffer) {
+                // If it's a buffer, dereference the dev handle
+                val = buffer_dev(sym_get(name + ".buffer"));
+            } else if (ends_with(name, ".varying")) {
+                // Expressions for varying attributes are passed in the
+                // expression mesh. Pass a non-NULL value in the argument array
+                // to keep it in sync with the argument names encoded in the
+                // shader header
+                val = ConstantInt::get(target_size_t_type, 1);
+            } else {
+                // Otherwise just look up the symbol
+                val = sym_get(name);
+            }
+
+            // allocate stack space to mirror the closure element. It
+            // might be in a register and we need a pointer to it for
+            // the gpu args array.
+            Value *ptr = builder->CreateAlloca(val->getType(), NULL, name+".stack");
+            // store the closure value into the stack space
+            builder->CreateStore(val, ptr);
+
+            // store a void* pointer to the argument into the gpu_args_arr
+            Value *bits = builder->CreateBitCast(ptr, arg_t);
+            builder->CreateStore(bits,
+                                 builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
+
+            // store the size of the argument
+            int size_bits = (closure_args[i].is_buffer) ? target.bits : closure_args[i].type.bits;
+            builder->CreateStore(ConstantInt::get(target_size_t_type, size_bits/8),
+                                 builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, i));
+        }
+        // NULL-terminate the lists
+        builder->CreateStore(ConstantPointerNull::get(arg_t),
+                             builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
+        builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
+                             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
         
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
@@ -700,7 +700,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref"),
             gpu_attribute_names,
-            gpu_attribute_dims,
             gpu_num_attributes,
             gpu_coords_per_dim,
             gpu_num_coords_dim0,

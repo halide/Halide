@@ -1207,7 +1207,6 @@ WEAK int halide_opengl_dev_run(
     size_t arg_sizes[],
     void *args[],
     char** attribute_names,
-    int* attribute_dims,
     int num_attributes,
     float** coords_per_dim,
     int num_coords_dim0,
@@ -1332,7 +1331,7 @@ WEAK int halide_opengl_dev_run(
         }
     }
 
-    if (kernel_arg && (kernel_arg->kind != Argument::Varying)) {
+    if (kernel_arg) {
         halide_error(user_context, "Too few arguments passed to halide_opengl_dev_run");
         return 1;
     }
@@ -1468,7 +1467,7 @@ WEAK int halide_opengl_dev_run(
             vertex_buffer[idx++] = y;
             
             for (int a=2;a!=num_attributes;++a) {
-                vertex_buffer[idx++] = coords_per_dim[a][(attribute_dims[a] == 0) ? i : j];
+                vertex_buffer[idx++] = coords_per_dim[a][j*width+i];
             }
         }
     }
@@ -1623,7 +1622,6 @@ WEAK int halide_dev_run(void *user_context,
                           int shared_mem_bytes,
                           size_t arg_sizes[], void *args[],
                           char** attribute_names,
-                          int* attribute_dims,
                           int num_attributes,
                           float** coords_per_dim,
                           int num_coords_dim0,
@@ -1635,7 +1633,6 @@ WEAK int halide_dev_run(void *user_context,
                                  shared_mem_bytes,
                                  arg_sizes, args,
                                  attribute_names,
-                                 attribute_dims,
                                  num_attributes,
                                  coords_per_dim,
                                  num_coords_dim0,

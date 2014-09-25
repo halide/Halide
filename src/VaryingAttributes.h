@@ -19,20 +19,17 @@ namespace Internal {
      * out of the generated fragment shader into a varying attribute
      */
     Stmt find_linear_expressions(Stmt s);
-
+   
     struct ExpressionMesh {
 
         // Unsorted coordinate expressions along each spatial dimension
         std::vector<std::vector<Expr>> coords;
 
         // Attribute names, including the x and y coordinates
-        std::vector<std::string> attributes;
-        
-        // The dimension along which each attribute is defined
-        std::vector<int>         attribute_dims;        
+        std::vector<std::string> attributes;        
     };
     
-    void compute_mesh(const For* op, ExpressionMesh& result);
+    Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr>& varyings);
 }
 }
 
