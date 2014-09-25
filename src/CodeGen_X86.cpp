@@ -20,7 +20,7 @@ using std::string;
 using namespace llvm;
 
 CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
-                                     jitEventListener(nullptr) {
+                                     jitEventListener(NULL) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
