@@ -30,16 +30,18 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &
         return result;
     }
 
+    // If in the future we have hashes for Exprs, this is a good place
+    // to compare the hashes:
     /*
-      uint64_t ha = a.hash(), hb = b.hash();
-      if (ha < hb) {
-      result = LessThan;
-      return;
-      }
-      if (ha > hb) {
-      result = GreaterThan;
-      return;
-      }
+    uint64_t ha = a.hash(), hb = b.hash();
+    if (ha < hb) {
+        result = LessThan;
+        return;
+    }
+    if (ha > hb) {
+        result = GreaterThan;
+        return;
+    }
     */
 
     const void *ta = a.ptr->type_info();
