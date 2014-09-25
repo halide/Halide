@@ -303,14 +303,16 @@ void match_types(Expr &a, Expr &b) {
 
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
-    Expr int_version = reinterpret<int>(input);
+    Type type = input.type();
+    Type int_type = Int(32, type.width);
+    Expr int_version = reinterpret(int_type, input);
 
     // single precision = SEEE EEEE EMMM MMMM MMMM MMMM MMMM MMMM
     // exponent mask    = 0111 1111 1000 0000 0000 0000 0000 0000
     //                    0x7  0xF  0x8  0x0  0x0  0x0  0x0  0x0
     // non-exponent     = 1000 0000 0111 1111 1111 1111 1111 1111
     //                  = 0x8  0x0  0x7  0xF  0xF  0xF  0xF  0xF
-    int non_exponent_mask = 0x807fffff;
+    Expr non_exponent_mask = make_const(int_type, 0x807fffff);
 
     // Extract a version with no exponent (between 1.0 and 2.0)
     Expr no_exponent = int_version & non_exponent_mask;
@@ -326,7 +328,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 
     Expr blended = (int_version & non_exponent_mask) | (new_biased_exponent << 23);
 
-    *reduced = reinterpret<float>(blended);
+    *reduced = reinterpret(type, blended);
 
     /*
     // Floats represent exponents using 8 bits, which encode the range
@@ -352,18 +354,11 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 }
 
 Expr halide_log(Expr x_full) {
-    internal_assert(x_full.type() == Float(32));
+    Type type = x_full.type();
+    internal_assert(type.element_of() == Float(32));
 
-    if (is_const(x_full)) {
-        x_full = simplify(x_full);
-        const float * f = as_const_float(x_full);
-        if (f) {
-            return logf(*f);
-        }
-    }
-
-    Expr nan = Call::make(Float(32), "nan_f32", std::vector<Expr>(), Call::Extern);
-    Expr neg_inf = Call::make(Float(32), "neg_inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr nan = Call::make(type, "nan_f32", std::vector<Expr>(), Call::Extern);
+    Expr neg_inf = Call::make(type, "neg_inf_f32", std::vector<Expr>(), Call::Extern);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
@@ -371,7 +366,7 @@ Expr halide_log(Expr x_full) {
 
     // Avoid producing nans or infs by generating ln(1.0f) instead and
     // then fixing it later.
-    Expr patched = select(exceptional, 1.0f, x_full);
+    Expr patched = select(exceptional, make_one(type), x_full);
     Expr reduced, exponent;
     range_reduce_log(patched, &reduced, &exponent);
 
@@ -392,21 +387,14 @@ Expr halide_log(Expr x_full) {
     Expr x1 = reduced - 1.0f;
     Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
-    result += cast<float>(exponent) * logf(2.0);
+    result += cast(type, exponent) * logf(2.0);
 
     return select(exceptional, select(use_nan, nan, neg_inf), result);
 }
 
 Expr halide_exp(Expr x_full) {
-    internal_assert(x_full.type() == Float(32));
-
-    if (is_const(x_full)) {
-        x_full = simplify(x_full);
-        const float * f = as_const_float(x_full);
-        if (f) {
-            return logf(*f);
-        }
-    }
+    Type type = x_full.type();
+    internal_assert(type.element_of() == Float(32));
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
@@ -414,7 +402,7 @@ Expr halide_exp(Expr x_full) {
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
-    Expr k = cast<int>(k_real);
+    Expr k = cast(Int(32, type.width), k_real);
 
     Expr x = x_full - k_real * ln2_part1;
     x -= k_real * ln2_part2;
@@ -434,16 +422,16 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = Call::make(Float(32), "inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr inf = Call::make(type, "inf_f32", std::vector<Expr>(), Call::Extern);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
-    Expr two_to_the_n = reinterpret<float>(biased << 23);
+    Expr two_to_the_n = reinterpret(type, biased << 23);
     result *= two_to_the_n;
 
     // Catch overflow and underflow
     result = select(biased < 255, result, inf);
-    result = select(biased > 0, result, 0.0f);
+    result = select(biased > 0, result, make_zero(type));
 
     return result;
 }
@@ -556,46 +544,32 @@ Expr fast_exp(Expr x_full) {
 }
 
 Expr print(const std::vector<Expr> &args) {
-    std::vector<Expr> printf_args;
-    // Generate a format string.
-    std::ostringstream sstr;
+    // Insert spaces between each expr.
+    std::vector<Expr> print_args(args.size()*2);
     for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].type().is_float()) {
-            // %f in a halide_printf causes mysterious problems on
-            // windows due to calling convention disagreements between
-            // llvm and msvc. To avoid the issues, we hack in float
-            // printing using int printing. If you fix this, Andrew
-            // owes you a beer.
-            Expr integer_part = cast<int>(args[i]); // Should round towards zero.
-            Expr frac_part = abs(args[i]) - abs(integer_part);
-            frac_part *= 100000; // Use 5 decimal places.
-            frac_part = cast<int>(frac_part);
-            sstr << "%d.%05d "; // Pad the fractional part with zeros.
-            printf_args.push_back(integer_part);
-            printf_args.push_back(frac_part);
-            //printf_args.push_back(cast(Float(64), args[i]));
-        } else if (args[i].as<Internal::StringImm>() != NULL) {
-            sstr << "%s ";
-            printf_args.push_back(args[i]);
-        } else if (args[i].type().is_handle()) {
-            sstr << "%p ";
-            printf_args.push_back(args[i]);
-        } else if (args[i].type().is_int()) {
-            sstr << "%lld ";
-            printf_args.push_back(cast(Int(64), args[i]));
-        } else if (args[i].type().is_uint()) {
-            sstr << "%llu ";
-            printf_args.push_back(cast(UInt(64), args[i]));
+        print_args[i*2] = args[i];
+        if (i < args.size() - 1) {
+            print_args[i*2+1] = Expr(" ");
+        } else {
+            print_args[i*2+1] = Expr("\n");
         }
     }
-    sstr << '\n';
 
-    printf_args.insert(printf_args.begin(), sstr.str());
+    // Concat all the args at runtime using stringify.
+    Expr combined_string =
+        Internal::Call::make(Handle(), Internal::Call::stringify,
+                             print_args, Internal::Call::Intrinsic);
 
-    Expr call = Internal::Call::make(Int(32), "halide_printf", printf_args, Internal::Call::Extern);
-    call = Internal::Call::make(args[0].type(), Internal::Call::return_second,
-                                Internal::vec<Expr>(call, args[0]), Internal::Call::Intrinsic);
-    return call;
+    // Call halide_print.
+    Expr print_call =
+        Internal::Call::make(Int(32), "halide_print",
+                             Internal::vec<Expr>(combined_string), Internal::Call::Extern);
+
+    // Return the first argument.
+    Expr result =
+        Internal::Call::make(args[0].type(), Internal::Call::return_second,
+                             Internal::vec<Expr>(print_call, args[0]), Internal::Call::Intrinsic);
+    return result;
 }
 
 Expr print_when(Expr condition, const std::vector<Expr> &args) {

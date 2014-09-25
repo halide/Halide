@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <stdio.h>
 
 #include "Simplify.h"
 #include "IROperator.h"
@@ -13,6 +14,10 @@
 #include "Substitute.h"
 #include "Bounds.h"
 #include "Deinterleave.h"
+
+#ifdef _MSC_VER
+#define snprintf _snprintf
+#endif
 
 namespace Halide {
 namespace Internal {
@@ -56,6 +61,17 @@ public:
         alignment_info.set_containing_scope(ai);
         bounds_info.set_containing_scope(bi);
     }
+
+    /*
+    // Uncomment to debug all Expr mutations.
+    Expr mutate(Expr e) {
+        Expr new_e = IRMutator::mutate(e);
+        debug(0) << e << " -> " << new_e << "\n";
+        return new_e;
+    }
+    using IRMutator::mutate;
+    */
+
 private:
     bool simplify_lets;
 
@@ -116,21 +132,19 @@ private:
     bool const_castint(Expr e, int *i) {
         const IntImm *intimm = e.as<IntImm>();
         const Cast *cast = e.as<Cast>();
+        const int max_bits = (int)(sizeof(int) * 8);
         if (intimm) {
             *i = intimm->value;
             return true;
-        } else if (cast && (cast->type.is_int() || cast->type.is_uint()) &&
-                   cast->type.bits <= (int) (sizeof(int) * 8)) {
-            if (const_castint(cast->value, i)) {
-                // When fetching a cast integer, ensure that the
-                // return value is in the correct range (i.e. the
-                // canonical value) for the cast type.
-                *i = int_cast_constant(cast->type, *i);
-                return true;
-            } else {
-                return false;
-            }
-
+        } else if (cast &&
+                   ((cast->type.is_int() && cast->type.bits <= max_bits) ||
+                    (cast->type.is_uint() && cast->type.bits <= max_bits)) &&
+                   const_castint(cast->value, i)) {
+            // When fetching a cast integer, ensure that the
+            // return value is in the correct range (i.e. the
+            // canonical value) for the cast type.
+            *i = int_cast_constant(cast->type, *i);
+            return true;
         } else {
             return false;
         }
@@ -153,11 +167,11 @@ private:
             // outer cast is narrower, the inner cast can be
             // eliminated.
             expr = mutate(Cast::make(op->type, cast->value));
-        } else if (cast && const_castint(cast->value, &i) &&
-                   (cast->type.is_int() || cast->type.bits < cast->value.type().bits || i >= 0)) {
-            // cast of cast of const int can just be cast of const
-            // int (with the int suitably munged to fit in the
-            // intermediate type).
+        } else if (op->type.bits < 64 && cast && const_castint(cast->value, &i)) {
+            // cast of cast of const int can just be cast of const int
+            // (with the int suitably munged to fit in the
+            // intermediate type). We can't do the munging correctly
+            // when the result has > 32 bits.
             // u16(u8(255)) -> u16(255)
             // u16(u8(257)) -> u16(1)
             expr = mutate(Cast::make(op->type, do_indirect_int_cast(cast->type, i)));
@@ -256,9 +270,6 @@ private:
 
         add_a_a = div_a ? div_a->a.as<Add>() : add_a_a;
 
-        const Cast *cast_a = a.as<Cast>();
-        const Cast *cast_b = b.as<Cast>();
-
         const Select *select_a = a.as<Select>();
         const Select *select_b = b.as<Select>();
 
@@ -336,12 +347,6 @@ private:
         } else if (mul_a && is_negative_negatable_const(mul_a->b)) {
             // a*-x + b -> b - a*x
             expr = mutate(b - mul_a->a * (-mul_a->b));
-        } else if (cast_a && cast_b &&
-                   cast_a->value.type() == cast_b->value.type() &&
-                   (op->type.is_int() || op->type.is_uint()) &&
-                   is_const(cast_a->value) && is_const(cast_b->value)) {
-            // u8(5) + u8(5) = u8(10)
-            expr = Cast::make(op->type, Add::make(cast_a->value, cast_b->value));
         } else if (min_a && sub_a_b && no_overflow(op->type) && equal(sub_a_b->b, b)) {
             // min(a, b-c) + c -> min(a+c, b)
             expr = mutate(Min::make(Add::make(min_a->a, b), sub_a_b->a));
@@ -848,6 +853,8 @@ private:
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Min *min_a = a.as<Min>();
@@ -892,7 +899,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Min::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -954,9 +961,6 @@ private:
         } else if (max_a && equal(max_a->b, b)) {
             // min(max(x, y), y) -> y
             expr = b;
-        } else if (min_a && is_simple_const(min_a->b) && is_simple_const(b)) {
-            // min(min(x, 4), 5) -> min(x, 4)
-            expr = Min::make(min_a->a, mutate(Min::make(min_a->b, b)));
         } else if (min_a && (equal(min_a->b, b) || equal(min_a->a, b))) {
             // min(min(x, y), y) -> min(x, y)
             expr = a;
@@ -972,7 +976,6 @@ private:
         } else if (min_a && min_a_a_a_a && equal(min_a_a_a_a->b, b)) {
             // min(min(min(min(min(x, y), z), w), l), y) -> min(min(min(min(x, y), z), w), l)
             expr = a;
-
         } else if (max_a && max_b && equal(max_a->a, max_b->a)) {
             // Distributive law for min/max
             // min(max(x, y), max(x, z)) -> max(min(y, z), x)
@@ -1011,7 +1014,14 @@ private:
         } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->a)) {
             // min(a + b, b + c) -> min(a, c) + b
             expr = mutate(min(add_a->a, add_b->b)) + add_a->b;
-
+        } else if (min_a && is_simple_const(min_a->b)) {
+            if (is_simple_const(b)) {
+                // min(min(x, 4), 5) -> min(x, 4)
+                expr = Min::make(min_a->a, mutate(Min::make(b, min_a->b)));
+            } else {
+                // min(min(x, 4), y) -> min(min(x, y), 4)
+                expr = mutate(Min::make(Min::make(min_a->a, b), min_a->b));
+            }
         } else if (div_a && div_b &&
                    const_int(div_a->b, &ia) && ia &&
                    const_int(div_b->b, &ib) &&
@@ -1021,6 +1031,24 @@ private:
                 expr = mutate(min(div_a->a, div_b->a) / ia);
             } else {
                 expr = mutate(max(div_a->a, div_b->a) / ia);
+            }
+        } else if (mul_a && mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia == ib)) {
+            if (ia > 0) {
+                expr = mutate(min(mul_a->a, mul_b->a) * ia);
+            } else {
+                expr = mutate(max(mul_a->a, mul_b->a) * ia);
+            }
+        } else if (mul_a && const_int(mul_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ia && (ib % ia == 0)) {
+            // min(x*8, 24) -> min(x, 3)*8
+            if (ia > 0) {
+                expr = mutate(min(mul_a->a, ib/ia) * ia);
+            } else {
+                expr = mutate(max(mul_a->a, ib/ia) * ia);
             }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -1045,6 +1073,8 @@ private:
         const Add *add_b = b.as<Add>();
         const Div *div_a = a.as<Div>();
         const Div *div_b = b.as<Div>();
+        const Mul *mul_a = a.as<Mul>();
+        const Mul *mul_b = b.as<Mul>();
         const Sub *sub_a = a.as<Sub>();
         const Sub *sub_b = b.as<Sub>();
         const Max *max_a = a.as<Max>();
@@ -1082,7 +1112,7 @@ private:
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Max::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
             return;
-        } else if (op->type == Int(32) && is_simple_const(b)) {
+        } else if (op->type == Int(32) && a.as<Variable>() && is_simple_const(b)) {
             Expr delta = mutate(a - b);
             Interval id = bounds_of_expr_in_scope(delta, bounds_info);
             id.min = mutate(id.min);
@@ -1130,9 +1160,6 @@ private:
         } else if (min_a && equal(min_a->b, b)) {
             // max(min(x, y), y) -> y
             expr = b;
-        } else if (max_a && is_simple_const(max_a->b) && is_simple_const(b)) {
-            // max(max(x, 4), 5) -> max(x, 5)
-            expr = Max::make(max_a->a, mutate(Max::make(max_a->b, b)));
         } else if (max_a && (equal(max_a->b, b) || equal(max_a->a, b))) {
             // max(max(x, y), y) -> max(x, y)
             expr = a;
@@ -1187,7 +1214,14 @@ private:
         } else if (add_a && add_b && no_overflow(op->type) && equal(add_a->b, add_b->a)) {
             // max(a + b, b + c) -> max(a, c) + b
             expr = mutate(max(add_a->a, add_b->b)) + add_a->b;
-
+        } else if (max_a && is_simple_const(max_a->b)) {
+            if (is_simple_const(b)) {
+                // max(max(x, 4), 5) -> max(x, 4)
+                expr = Max::make(max_a->a, mutate(Max::make(b, max_a->b)));
+            } else {
+                // max(max(x, 4), y) -> max(max(x, y), 4)
+                expr = mutate(Max::make(Max::make(max_a->a, b), max_a->b));
+            }
         } else if (div_a && div_b &&
                    const_int(div_a->b, &ia) && ia &&
                    const_int(div_b->b, &ib) &&
@@ -1197,6 +1231,24 @@ private:
                 expr = mutate(max(div_a->a, div_b->a) / ia);
             } else {
                 expr = mutate(min(div_a->a, div_b->a) / ia);
+            }
+        } else if (mul_a && mul_b &&
+                   const_int(mul_a->b, &ia) &&
+                   const_int(mul_b->b, &ib) &&
+                   (ia == ib)) {
+            if (ia > 0) {
+                expr = mutate(max(mul_a->a, mul_b->a) * ia);
+            } else {
+                expr = mutate(min(mul_a->a, mul_b->a) * ia);
+            }
+        } else if (mul_a && const_int(mul_a->b, &ia) &&
+                   const_int(b, &ib) &&
+                   ia && (ib % ia == 0)) {
+            // max(x*8, 24) -> max(x, 3)*8
+            if (ia > 0) {
+                expr = mutate(max(mul_a->a, ib/ia) * ia);
+            } else {
+                expr = mutate(min(mul_a->a, ib/ia) * ia);
             }
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
@@ -1746,70 +1798,145 @@ private:
                     }
                 }
             }
-        } else if (op->call_type == Call::Intrinsic) {
-            if (op->name == Call::shift_left ||
-                op->name == Call::shift_right) {
-
-                Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
-                int ib = 0;
-
-                if (const_castint(b, &ib)) {
-                    Type t = op->type;
-
-                    bool shift_left = op->name == Call::shift_left;
-                    if (ib < 0) {
-                        shift_left = !shift_left;
-                        ib = -ib;
-                    }
-
-                    if (ib < std::min(t.bits, 32)) {
-                        ib = 1 << ib;
-                        b = make_const(t, ib);
-
-                        if (shift_left) {
-                            expr = mutate(Mul::make(a, b));
-                        } else {
-                            expr = mutate(Div::make(a, b));
-                        }
-
-                        return;
-                    } else {
-                        user_warning << "Cannot replace bit shift with arithmetic "
-                                     << "operator (integer overflow).\n";
-                    }
-                }
-            } else if (op->name == Call::abs) {
-                // Constant evaluate abs(x).
-                Expr a = mutate(op->args[0]);
-                Type ta = a.type();
-                int ia = 0;
-                if (ta.is_int() && const_castint(a, &ia) && ia != ta.imin()) {
-                    if (ia < 0) {
-                        ia = -ia;
-                    }
-                    expr = Cast::make(op->type, ia);
-                    return;
-                } else if (ta.is_uint()) {
-                    // abs(uint) is a no-op.
-                    expr = a;
-                    return;
-                }
-                if (!a.same_as(op->args[0])) {
-                    expr = abs(a);
-                    return;
-                }
-            }
         }
 
-        IRMutator::visit(op);
+        if (op->call_type == Call::Intrinsic &&
+            (op->name == Call::shift_left ||
+             op->name == Call::shift_right)) {
+            Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+            int ib = 0;
+
+            if (const_castint(b, &ib)) {
+                Type t = op->type;
+
+                bool shift_left = op->name == Call::shift_left;
+                if (ib < 0) {
+                    shift_left = !shift_left;
+                    ib = -ib;
+                }
+
+                if (ib < std::min(t.bits, 32)) {
+                    ib = 1 << ib;
+                    b = make_const(t, ib);
+
+                    if (shift_left) {
+                        expr = mutate(Mul::make(a, b));
+                    } else {
+                        expr = mutate(Div::make(a, b));
+                    }
+                    return;
+                } else {
+                    user_warning << "Cannot replace bit shift with arithmetic "
+                                 << "operator (integer overflow).\n";
+                }
+            }
+
+            if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                expr = op;
+            } else if (op->name == Call::shift_left) {
+                expr = a << b;
+            } else {
+                expr = a >> b;
+            }
+        } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::abs) {
+            // Constant evaluate abs(x).
+            Expr a = mutate(op->args[0]);
+            Type ta = a.type();
+            int ia = 0;
+            if (ta.is_int() && const_castint(a, &ia) && ia != ta.imin()) {
+                if (ia < 0) {
+                    ia = -ia;
+                }
+                expr = Cast::make(op->type, ia);
+            } else if (ta.is_uint()) {
+                // abs(uint) is a no-op.
+                expr = a;
+            } else if (a.same_as(op->args[0])) {
+                expr = op;
+                } else {
+                expr = abs(a);
+            }
+        } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::stringify) {
+            // Eagerly concat constant arguments to a stringify.
+            bool changed = false;
+            std::vector<Expr> new_args;
+            const StringImm *last = NULL;
+            for (size_t i = 0; i < op->args.size(); i++) {
+                Expr arg = mutate(op->args[i]);
+                if (!arg.same_as(op->args[i])) {
+                    changed = true;
+                }
+                const StringImm *string_imm = arg.as<StringImm>();
+                const IntImm    *int_imm    = arg.as<IntImm>();
+                const FloatImm  *float_imm  = arg.as<FloatImm>();
+                // We use snprintf here rather than stringstreams,
+                // because the runtime's float printing is guaranteed
+                // to match snprintf.
+                char buf[64]; // Large enough to hold the biggest float literal.
+                if (last && string_imm) {
+                    new_args.back() = last->value + string_imm->value;
+                    changed = true;
+                } else if (int_imm) {
+                    snprintf(buf, sizeof(buf), "%d", int_imm->value);
+                    if (last) {
+                        new_args.back() = last->value + buf;
+                    } else {
+                        new_args.push_back(string(buf));
+                    }
+                    changed = true;
+                } else if (last && float_imm) {
+                    snprintf(buf, sizeof(buf), "%f", float_imm->value);
+                    if (last) {
+                        new_args.back() = last->value + buf;
+                    } else {
+                        new_args.push_back(string(buf));
+                    }
+                    changed = true;
+                } else {
+                    new_args.push_back(arg);
+                }
+                last = new_args.back().as<StringImm>();
+            }
+
+            if (new_args.size() == 1 && new_args[0].as<StringImm>()) {
+                // stringify of a string constant is just the string constant
+                expr = new_args[0];
+            } else if (changed) {
+                expr = Call::make(op->type, op->name, new_args, op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::Extern &&
+                   op->name == "log_f32") {
+            Expr arg = mutate(op->args[0]);
+            if (const float *f = as_const_float(arg)) {
+                expr = logf(*f);
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::Extern &&
+                   op->name == "exp_f32") {
+            Expr arg = mutate(op->args[0]);
+            if (const float *f = as_const_float(arg)) {
+                expr = expf(*f);
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+            } else {
+                expr = op;
+            }
+        } else {
+            IRMutator::visit(op);
+        }
     }
-
-
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
         internal_assert(!var_info.contains(op->name))
-            << "Simplify only works on code where every name is unique\n";
+            << "Simplify only works on code where every name is unique. Repeated name: " << op->name << "\n";
 
         // If the value is trivial, make a note of it in the scope so
         // we can subs it in later
@@ -2447,6 +2574,12 @@ void simplify_test() {
     // Correctly triggers a warning:
     //check(Cast::make(Int(16), x) << 20, Cast::make(Int(16), x) << 20);
 
+    // Check that chains of widening casts don't lose the distinction
+    // between zero-extending and sign-extending.
+    check(Cast::make(UInt(64), Cast::make(UInt(32), Cast::make(Int(8), -1))),
+          Cast::make(UInt(64), Cast::make(UInt(32), -1)));
+
+
     // Some quaternary rules with cancellations
     check((x + y) - (z + y), x - z);
     check((x + y) - (y + z), x - z);
@@ -2473,6 +2606,22 @@ void simplify_test() {
 
     check(min(123 - x, 1 - x), 1 - x);
     check(max(123 - x, 1 - x), 123 - x);
+
+    check(min(x*43, y*43), min(x, y)*43);
+    check(max(x*43, y*43), max(x, y)*43);
+    check(min(x*-43, y*-43), max(x, y)*-43);
+    check(max(x*-43, y*-43), min(x, y)*-43);
+
+    check(min(min(x, 4), y), min(min(x, y), 4));
+    check(max(max(x, 4), y), max(max(x, y), 4));
+
+    check(min(x*8, 24), min(x, 3)*8);
+    check(max(x*8, 24), max(x, 3)*8);
+    check(min(x*-8, 24), max(x, -3)*-8);
+    check(max(x*-8, 24), min(x, -3)*-8);
+
+    check(log(0.5f + 0.5f), 0.0f);
+    check(exp(log(2.0f)), 2.0f);
 
     //check(max(x, 16) - 16, max(x + -16, 0));
     //check(min(x, -4) + 7, min(x + 7, 3));
@@ -2595,16 +2744,16 @@ void simplify_test() {
     check(b1 && b1, b1);
     check(b1 || b1, b1);
 
-    Expr vec = Variable::make(Int(32, 4), "vec");
+    v = Variable::make(Int(32, 4), "v");
     // Check constants get pushed inwards
     check(Let::make("x", 3, x+4), 7);
 
     // Check ramps in lets get pushed inwards
-    check(Let::make("vec", Ramp::make(x*2+7, 3, 4), vec + Expr(Broadcast::make(2, 4))),
+    check(Let::make("v", Ramp::make(x*2+7, 3, 4), v + Expr(Broadcast::make(2, 4))),
           Ramp::make(x*2+9, 3, 4));
 
     // Check broadcasts in lets get pushed inwards
-    check(Let::make("vec", Broadcast::make(x, 4), vec + Expr(Broadcast::make(2, 4))),
+    check(Let::make("v", Broadcast::make(x, 4), v + Expr(Broadcast::make(2, 4))),
           Broadcast::make(x+2, 4));
 
     // Check that dead lets get stripped
@@ -2614,6 +2763,13 @@ void simplify_test() {
     // Test case with most negative 32-bit number, as constant to check that it is not negated.
     check(((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)),
           ((x * (int32_t)0x80000000) + (y + z * (int32_t)0x80000000)));
+
+    // Check that constant args to a stringify get combined
+    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, string(" "), 4), Call::Intrinsic),
+          string("3 4"));
+
+    check(Call::make(Handle(), Call::stringify, vec<Expr>(3, x, 4, string(", "), 3.4f), Call::Intrinsic),
+          Call::make(Handle(), Call::stringify, vec<Expr>(string("3"), x, string("4, 3.400000")), Call::Intrinsic));
 
     // Check if we can simplify away comparison on vector types considering bounds.
     Scope<Interval> bounds_info;

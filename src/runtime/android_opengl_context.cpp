@@ -58,8 +58,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
 
     EGLDisplay display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY || !eglInitialize(display, 0, 0)) {
-        halide_error_varargs(user_context,
-                             "Could not initialize EGL display %d", eglGetError());
+        error(user_context) << "Could not initialize EGL display: " << eglGetError();
         return 1;
     }
 
@@ -76,9 +75,8 @@ WEAK int halide_opengl_create_context(void *user_context) {
     int numconfig;
     eglChooseConfig(display, attribs, &config, 1, &numconfig);
     if (numconfig != 1) {
-        halide_error_varargs(user_context,
-                             "Error: eglChooseConfig(): config not found %d - %d.\n",
-                             eglGetError(), numconfig);
+        error(user_context) << "eglChooseConfig(): config not found: "
+                            << eglGetError() << " - " << numconfig;
         return -1;
     }
 
@@ -89,8 +87,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT,
                                           context_attribs);
     if (context == EGL_NO_CONTEXT) {
-        halide_error_varargs(user_context,
-                             "Error: eglCreateContext failed - %d.\n", eglGetError());
+        error(user_context) << "Error: eglCreateContext failed: " << eglGetError();
         return -1;
     }
 
@@ -101,8 +98,7 @@ WEAK int halide_opengl_create_context(void *user_context) {
     };
     EGLSurface surface = eglCreatePbufferSurface(display, config,  surface_attribs);
     if (surface == EGL_NO_SURFACE) {
-        halide_error_varargs(user_context,
-                             "Error: Could not create EGL window surface: %d\n", eglGetError());
+        error(user_context) << "Error: Could not create EGL window surface: " << eglGetError();
         return -1;
     }
 

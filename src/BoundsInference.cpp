@@ -300,8 +300,10 @@ public:
             // Check if it succeeded
             string result_name = unique_name('t');
             Expr result = Variable::make(Int(32), result_name);
-            Stmt check = AssertStmt::make(EQ::make(result, 0), "Bounds inference call to external func " +
-                                          extern_name + " returned non-zero value: %d", vec<Expr>(result));
+            vector<Expr> error_message = vec<Expr>("Bounds inference call to external func " + extern_name +
+                                                   " returned non-zero value:", result);
+            Stmt check = AssertStmt::make(EQ::make(result, 0), error_message);
+
             check = LetStmt::make(result_name, e, check);
 
             // Now inner code is free to extract the fields from the buffer_t

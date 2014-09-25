@@ -502,9 +502,9 @@ Stmt build_produce(Function f) {
         string result_name = unique_name('t');
         Expr result = Variable::make(Int(32), result_name);
         // Check if it succeeded
-        Stmt check = AssertStmt::make(EQ::make(result, 0), "Call to external func " +
-                                      extern_name + " returned non-zero value: %d",
-                                      vec<Expr>(result));
+        Stmt check = AssertStmt::make(EQ::make(result, 0),
+                                      vec<Expr>("Call to external func " + extern_name +
+                                                " returned non-zero value: ", result));
         check = LetStmt::make(result_name, e, check);
 
         for (size_t i = 0; i < lets.size(); i++) {
@@ -606,15 +606,17 @@ Stmt inject_explicit_bounds(Stmt body, Function func) {
             Expr min_var = Variable::make(Int(32), min_name);
             Expr max_var = Variable::make(Int(32), max_name);
             Expr check = (min_val <= min_var) && (max_val >= max_var);
-            string error_msg = ("Bounds given for " + b.var + " in " + func.name() +
-                                " (from %d to %d) don't cover required region (from %d to %d)");
-            vector<Expr> args = vec<Expr>(min_val, max_val, min_var, max_var);
+            vector<Expr> error_msg = vec<Expr>(
+                "Bounds given for " + b.var + " in " + func.name() +
+                " (from ", min_val, Expr(" to "), max_val,
+                Expr(") don't cover required region (from "),
+                min_var, Expr(" to "), max_var, Expr(")"));
 
             // bounds inference has already respected these values for us
             //body = LetStmt::make(prefix + ".min", min_val, body);
             //body = LetStmt::make(prefix + ".max", max_val, body);
 
-            body = Block::make(AssertStmt::make(check, error_msg, args), body);
+            body = Block::make(AssertStmt::make(check, error_msg), body);
         }
     }
 
@@ -826,6 +828,23 @@ public:
             r.type = op->type.element_of();
             r.dimensions = (int)op->args.size();
             buffers[op->name] = r;
+        }
+    }
+
+    void visit(const Variable *op) {
+        if (ends_with(op->name, ".buffer") &&
+            op->param.defined() &&
+            op->param.is_buffer() &&
+            buffers.find(op->param.name()) == buffers.end()) {
+            Result r;
+            r.param = op->param;
+            r.type = op->param.type();
+            // We don't know the dimensionality from the Param
+            // alone. Treating it as zero dimensional skips all the
+            // min/extent checks, which is what we want anyway for
+            // image parameters that are only used by buffer handle.
+            r.dimensions = 0;
+            buffers[op->param.name()] = r;
         }
     }
 };
@@ -1218,7 +1237,7 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
     for (size_t i = 0; i < asserts.size(); i++) {
         std::ostringstream oss;
         oss << "Static bounds constraint on parameter violated: " << asserts[i];
-        s = Block::make(AssertStmt::make(asserts[i], oss.str(), vector<Expr>()), s);
+        s = Block::make(AssertStmt::make(asserts[i], oss.str()), s);
     }
 
     return s;
@@ -1349,9 +1368,13 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             int correct_size = type.bytes();
             ostringstream error_msg;
             error_msg << error_name << " has type " << type
-                      << ", but elem_size of the buffer_t passed in is "
-                      << "%d instead of " << correct_size;
-            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, error_msg.str(), vec<Expr>(elem_size)));
+                      << ", but elem_size of the buffer_t passed in is ";
+            vector<Expr> args;
+            args.push_back(error_msg.str());
+            args.push_back(elem_size);
+            args.push_back(Expr(" instead of "));
+            args.push_back(correct_size);
+            asserts_elem_size.push_back(AssertStmt::make(elem_size == correct_size, args));
         }
 
         if (touched.maybe_unused()) {
@@ -1384,9 +1407,6 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                 extent_required = select(touched.used, extent_required, actual_extent);
             }
 
-            string error_msg_extent = error_name + " is accessed at %d, which is beyond the max (%d) in dimension " + dim;
-            string error_msg_min = error_name + " is accessed at %d, which is before the min (%d) in dimension " + dim;
-
             string min_required_name = name + ".min." + dim + ".required";
             string extent_required_name = name + ".extent." + dim + ".required";
 
@@ -1396,8 +1416,14 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             lets_required.push_back(make_pair(extent_required_name, extent_required));
             lets_required.push_back(make_pair(min_required_name, min_required));
 
-            asserts_required.push_back(AssertStmt::make(actual_min <= min_required_var, error_msg_min,
-                                                        vec<Expr>(min_required_var, actual_min)));
+            vector<Expr> error_msg_min = vec<Expr>(
+                error_name + " is accessed at ",
+                min_required,
+                Expr(", which is before the min ("),
+                actual_min,
+                ") in dimension " + dim);
+
+            asserts_required.push_back(AssertStmt::make(actual_min <= min_required_var, error_msg_min));
 
             Expr actual_max = actual_min + actual_extent - 1;
             Expr max_required = min_required_var + extent_required_var - 1;
@@ -1405,9 +1431,15 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             if (touched.maybe_unused()) {
                 max_required = select(touched.used, max_required, actual_max);
             }
-            asserts_required.push_back(AssertStmt::make(actual_max >= max_required,
-                                                        error_msg_extent,
-                                                        vec<Expr>(max_required, actual_max)));
+
+            vector<Expr> error_msg_extent = vec<Expr>(
+                error_name + " is accessed at ",
+                max_required,
+                Expr(", which is beyond the max ("),
+                actual_max,
+                ") in dimension " + dim);
+
+            asserts_required.push_back(AssertStmt::make(actual_max >= max_required, error_msg_extent));
 
             // Come up with a required stride to use in bounds
             // inference mode. We don't assert it. It's just used to
@@ -1435,8 +1467,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             // systems.
             Expr max_size = cast<int64_t>(0x7fffffff);
             Stmt check = AssertStmt::make((cast<int64_t>(actual_extent) * actual_stride) <= max_size,
-                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1",
-                                          std::vector<Expr>());
+                                          "Total allocation for buffer " + name + " exceeds 2^31 - 1");
             dims_no_overflow_asserts.push_back(check);
 
             // Don't repeat extents check for secondary buffers as extents must be the same as for the first one.
@@ -1450,7 +1481,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                     lets_overflow.push_back(make_pair(name + ".total_extent." + dim, this_dim));
                     Stmt check = AssertStmt::make(this_dim_var <= max_size,
                                                   "Product of extents for buffer " + name +
-                                                  " exceeds 2^31 - 1", std::vector<Expr>());
+                                                  " exceeds 2^31 - 1");
                     dims_no_overflow_asserts.push_back(check);
                 }
             }
@@ -1510,8 +1541,19 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                     stride_constrained = image.stride(i);
                 }
 
-                min_constrained = Variable::make(Int(32), f.name() + ".0.min." + dim);
-                extent_constrained = Variable::make(Int(32), f.name() + ".0.extent." + dim);
+                std::string min0_name = f.name() + ".0.min." + dim;
+                if (replace_with_constrained.count(min0_name) > 0 ) {
+                    min_constrained = replace_with_constrained[min0_name];
+                } else {
+                    min_constrained = Variable::make(Int(32), min0_name);
+                }
+
+                std::string extent0_name = f.name() + ".0.extent." + dim;
+                if (replace_with_constrained.count(extent0_name) > 0 ) {
+                    extent_constrained = replace_with_constrained[extent0_name];
+                } else {
+                    extent_constrained = Variable::make(Int(32), extent0_name);
+                }
             } else if (image.defined() && (int)i < image.dimensions()) {
                 stride_constrained = image.stride(i);
                 extent_constrained = image.extent(i);
@@ -1554,7 +1596,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
                           (min_proposed + extent_proposed >=
                            min_required + extent_required));
             string error = "Applying the constraints to the required region made it smaller";
-            asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error, vector<Expr>()));
+            asserts_proposed.push_back(AssertStmt::make((!inference_mode) || check, error));
 
             // stride_required is just a suggestion. It's ok if the
             // constraints shuffle them around in ways that make it
@@ -1579,7 +1621,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
             lets_constrained.push_back(make_pair(constraints[i].first + ".constrained", value));
 
             // Check the var passed in equals the constrained version (when not in inference mode)
-            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error.str(), vector<Expr>()));
+            asserts_constrained.push_back(AssertStmt::make(var == constrained_var, error.str()));
         }
     }
 

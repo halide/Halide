@@ -49,8 +49,6 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 extern char *getenv(const char *);
 extern int atoi(const char *);
 
-extern int halide_printf(void *user_context, const char *, ...);
-
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {

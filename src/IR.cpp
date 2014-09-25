@@ -320,14 +320,23 @@ Stmt LetStmt::make(std::string name, Expr value, Stmt body) {
     return node;
 }
 
-Stmt AssertStmt::make(Expr condition, std::string message, const std::vector<Expr> &args) {
+Stmt AssertStmt::make(Expr condition, Expr message) {
     internal_assert(condition.defined()) << "AssertStmt of undefined\n";
 
     AssertStmt *node = new AssertStmt;
     node->condition = condition;
     node->message = message;
-    node->args = args;
     return node;
+}
+
+Stmt AssertStmt::make(Expr condition, const char * message) {
+    return AssertStmt::make(condition, Expr(message));
+}
+
+Stmt AssertStmt::make(Expr condition, const std::vector<Expr> &message) {
+    internal_assert(!message.empty()) << "Assert with empty message\n";
+    Expr m = Call::make(Handle(), Call::stringify, message, Call::Intrinsic);
+    return AssertStmt::make(condition, m);
 }
 
 Stmt Pipeline::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
@@ -576,6 +585,8 @@ const string Call::return_second = "return_second";
 const string Call::if_then_else = "if_then_else";
 const string Call::glsl_texture_load = "glsl_texture_load";
 const string Call::glsl_texture_store = "glsl_texture_store";
+const string Call::make_struct = "make_struct";
+const string Call::stringify = "stringify";
 const string Call::memoize_expr = "memoize_expr";
 const string Call::copy_memory = "copy_memory";
 

@@ -105,6 +105,7 @@ set(RUNTIME_CPP
   windows_opencl
   windows_io
   posix_print
+  to_string
   cache
   nacl_host_cpu_count)
 set (RUNTIME_LL
