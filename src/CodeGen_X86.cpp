@@ -19,7 +19,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t), 
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
                                      jitEventListener(nullptr) {
 
     #if !(WITH_X86)
@@ -745,19 +745,20 @@ bool CodeGen_X86::use_soft_float_abi() const {
     return false;
 }
 
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *) 
+void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
 {
     jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
-    if ( jitEventListener != nullptr ) {
+    if (jitEventListener) {
         ee->RegisterJITEventListener(jitEventListener);
     }
 }
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *) 
+
+void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *)
 {
-    if ( jitEventListener != nullptr ) {
+    if (jitEventListener) {
         ee->UnregisterJITEventListener(jitEventListener);
         delete jitEventListener;
-        jitEventListener = nullptr;
+        jitEventListener = NULL;
     }
 }
 
