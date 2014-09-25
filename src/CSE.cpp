@@ -4,6 +4,8 @@
 #include "IRMutator.h"
 #include "IREquality.h"
 #include "IROperator.h"
+#include "Scope.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -78,7 +80,7 @@ public:
 
     map<Expr, int, ExprCompare> shallow_numbering;
 
-    map<string, int> let_substitutions;
+    Scope<int> let_substitutions;
     int number;
 
     GVN() : number(0) {}
@@ -101,9 +103,8 @@ public:
 
         // If e is a var, check if it has been redirected to an existing numbering.
         if (const Variable *var = e.as<Variable>()) {
-            map<string, int>::iterator iter = let_substitutions.find(var->name);
-            if (iter != let_substitutions.end()) {
-                number = iter->second;
+            if (let_substitutions.contains(var->name)) {
+                number = let_substitutions.get(var->name);
                 entries[number].use_count++;
                 return entries[number].expr;
             }
@@ -113,6 +114,7 @@ public:
         CacheType::iterator iter = numbering.find(e);
         if (iter != numbering.end()) {
             number = iter->second;
+            shallow_numbering[e] = number;
             entries[number].use_count++;
             return entries[number].expr;
         }
@@ -147,12 +149,16 @@ public:
         // Visit the value and add it to the numbering.
         Expr value = mutate(let->value);
 
+        // Let values don't count in the use-count. They'll count each time the Var is used.
+        entries[number].use_count--;
+
         // Make references to the variable point to the value instead.
-        //let_substitutions[let->name] = number;
-        numbering[Variable::make(value.type(), let->name)] = number;
+        let_substitutions.push(let->name, number);
 
         // Visit the body and add it to the numbering.
         Expr body = mutate(let->body);
+
+        let_substitutions.pop(let->name);
 
         // Just return the body. We've removed the Let.
         expr = body;
@@ -195,13 +201,20 @@ Expr common_subexpression_elimination(Expr e) {
     GVN gvn;
     e = gvn.mutate(e);
 
+    /*
+    for (size_t i = 0; i < gvn.entries.size(); i++) {
+        gvn.entries[i].use_count = 0;
+        gvn.entries[i].expr.accept(&gvn);
+    }
+    */
+
     debug(4) << "Canonical form without lets " << e << "\n";
 
     // Figure out which ones we'll pull out as lets and variables.
     vector<pair<string, Expr> > lets;
     vector<Expr> new_version(gvn.entries.size());
     map<Expr, Expr, ExprCompare> replacements;
-    for (size_t i = 0; i < gvn.entries.size(); i++) {
+    for (size_t i = 0; i < gvn.entries.size()-1; i++) {
         const GVN::Entry &e = gvn.entries[i];
         Expr old = e.expr;
         if (e.use_count > 1 && should_extract(e.expr)) {
@@ -281,8 +294,6 @@ void check(Expr in, Expr correct) {
     Expr result = common_subexpression_elimination(in);
     NormalizeVarNames n;
     result = n.mutate(result);
-    //correct = n.mutate(correct);
-    return;
     internal_assert(equal(result, correct))
         << "Incorrect CSE:\n" << in
         << "\nbecame:\n" << result
@@ -329,8 +340,28 @@ void cse_test() {
                       (t[4] + x*x) + x*x));
     correct = ssa_block(vec(x*x,
                             t[0] / t[0],
-                            t[1] % t[1],
-                            (t[2] + t[0]) + t[0]));
+                            (t[1] % t[1] + t[0]) + t[0]));
+    check(e, correct);
+
+    // Check a case with nested lets with shared subexpressions
+    // between the lets, and repeated names.
+    Expr e1 = ssa_block(vec(x*x,                  // a = x*x
+                            t[0] + x,             // b = a + x
+                            t[1] * t[1] * t[0])); // c = b * b * a
+    Expr e2 = ssa_block(vec(x*x,                  // a again
+                            t[0] - x,             // d = a - x
+                            t[1] * t[1] * t[0])); // e = d * d * a
+    e = ssa_block(vec(e1 + x*x,                   // f = c + a
+                      e1 + e2,                    // g = c + e
+                      t[0] + t[0] * t[1]));       // h = f + f * g
+
+    correct = ssa_block(vec(x*x,                // t0 = a = x*x
+                            t[0] + x,           // t1 = b = a + x     = t0 + x
+                            t[1] * t[1] * t[0], // t2 = c = b * b * a = t1 * t1 * t0
+                            t[2] + t[0],        // t3 = f = c + a     = t2 + t0
+                            t[0] - x,           // t4 = d = a - x     = t0 - x
+                            t[4] * t[4] * t[0], // t5 = e = d * d * a = t4 * t4 * t0
+                            t[3] + t[3] * (t[2] + t[5]))); // h (with g substituted in)
     check(e, correct);
 
     // Test it scales OK.
