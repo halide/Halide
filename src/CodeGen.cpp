@@ -1363,11 +1363,10 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_do_par_for",
         "halide_do_task",
         "halide_error",
-        "halide_error_varargs",
         "halide_free",
         "halide_init_kernels",
         "halide_malloc",
-        "halide_printf",
+        "halide_print",
         "halide_profiling_timer",
         "halide_release",
         "halide_start_clock",
@@ -1540,6 +1539,18 @@ Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
             return builder->CreateShuffleVector(ab, c, ConstantVector::get(indices));
         }
     }
+}
+
+void CodeGen::scalarize(Expr e) {
+    llvm::Type *result_type = llvm_type_of(e.type());
+
+    Value *result = UndefValue::get(result_type);
+
+    for (int i = 0; i < e.type().width; i++) {
+        Value *v = codegen(extract_lane(e, i));
+        result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
+    }
+    value = result;
 }
 
 void CodeGen::visit(const Call *op) {
@@ -1900,16 +1911,7 @@ void CodeGen::visit(const Call *op) {
             value = codegen(op->args[1]);
         } else if (op->name == Call::if_then_else) {
             if (op->type.is_vector()) {
-                // Scalarize
-                llvm::Type *result_type = llvm_type_of(op->type);
-
-                Value *result = UndefValue::get(result_type);
-
-                for (int i = 0; i < op->args[0].type().width; i++) {
-                    Value *v = codegen(extract_lane(op, i));
-                    result = builder->CreateInsertElement(result, v, ConstantInt::get(i32, i));
-                }
-                value = result;
+                scalarize(op);
 
             } else {
 
@@ -1935,6 +1937,115 @@ void CodeGen::visit(const Call *op) {
 
                 value = phi;
             }
+        } else if (op->name == Call::make_struct) {
+            if (op->type.is_vector()) {
+                // Make a vector-of-structs
+                scalarize(op);
+            } else {
+                // Codegen each element.
+                assert(!op->args.empty());
+                vector<llvm::Value *> args(op->args.size());
+                vector<llvm::Type *> types(op->args.size());
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    args[i] = codegen(op->args[i]);
+                    types[i] = args[i]->getType();
+                }
+
+                // Create an struct on the stack.
+                StructType *struct_t = StructType::create(types);
+                Value *ptr = create_alloca_at_entry(struct_t, 1);
+
+                // Put the elements in the struct.
+                for (size_t i = 0; i < args.size(); i++) {
+                    Value *field_ptr = builder->CreateConstInBoundsGEP2_32(ptr, 0, i);
+                    builder->CreateStore(args[i], field_ptr);
+                }
+
+                value = ptr;
+            }
+
+        } else if (op->name == Call::stringify) {
+            assert(!op->args.empty());
+
+            if (op->type.is_vector()) {
+                scalarize(op);
+            } else {
+
+                // Compute the maximum possible size of the message.
+                int buf_size = 1; // One for the terminating zero.
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    Type t = op->args[i].type();
+                    if (op->args[i].as<StringImm>()) {
+                        buf_size += op->args[i].as<StringImm>()->value.size();
+                    } else if (t.is_int() || t.is_uint()) {
+                        buf_size += 19; // 2^64 = 18446744073709551616
+                    } else if (t.is_float()) {
+                        if (t.bits == 32) {
+                            buf_size += 47; // %f format of max negative float
+                        } else {
+                            buf_size += 14; // Scientific notation with 6 decimal places.
+                        }
+                    } else {
+                        internal_assert(t.is_handle());
+                        buf_size += 18; // 0x0123456789abcdef
+                    }
+                }
+                // Round up to a multiple of 16 bytes.
+                buf_size = ((buf_size + 15)/16)*16;
+
+                // Clamp to at most 8k.
+                if (buf_size > 8192) buf_size = 8192;
+
+                // Allocate a stack array to hold the message.
+                llvm::Value *buf = create_alloca_at_entry(i8, buf_size);
+
+                llvm::Value *dst = buf;
+                llvm::Value *buf_end = builder->CreateConstGEP1_32(buf, buf_size);
+
+                llvm::Function *append_string  = module->getFunction("halide_string_to_string");
+                llvm::Function *append_int64   = module->getFunction("halide_int64_to_string");
+                llvm::Function *append_uint64  = module->getFunction("halide_uint64_to_string");
+                llvm::Function *append_double  = module->getFunction("halide_double_to_string");
+                llvm::Function *append_pointer = module->getFunction("halide_pointer_to_string");
+
+                internal_assert(append_string);
+                internal_assert(append_int64);
+                internal_assert(append_uint64);
+                internal_assert(append_double);
+                internal_assert(append_pointer);
+
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    const StringImm *s = op->args[i].as<StringImm>();
+                    Type t = op->args[i].type();
+                    internal_assert(t.width == 1);
+                    vector<Value *> call_args(2);
+                    call_args[0] = dst;
+                    call_args[1] = buf_end;
+
+                    if (s) {
+                        call_args.push_back(codegen(op->args[i]));
+                        dst = builder->CreateCall(append_string, call_args);
+                    } else if (t.is_int()) {
+                        call_args.push_back(codegen(Cast::make(Int(64), op->args[i])));
+                        call_args.push_back(ConstantInt::get(i32, 1));
+                        dst = builder->CreateCall(append_int64, call_args);
+                    } else if (t.is_uint()) {
+                        call_args.push_back(codegen(Cast::make(UInt(64), op->args[i])));
+                        call_args.push_back(ConstantInt::get(i32, 1));
+                        dst = builder->CreateCall(append_uint64, call_args);
+                    } else if (t.is_float()) {
+                        call_args.push_back(codegen(Cast::make(Float(64), op->args[i])));
+                        // Use scientific notation for doubles
+                        call_args.push_back(ConstantInt::get(i32, t.bits == 64 ? 1 : 0));
+                        dst = builder->CreateCall(append_double, call_args);
+                    } else {
+                        internal_assert(t.is_handle());
+                        call_args.push_back(codegen(op->args[i]));
+                        dst = builder->CreateCall(append_pointer, call_args);
+                    }
+                }
+                value = buf;
+            }
         } else if (op->name == Call::memoize_expr) {
             // Used as an annotation for caching, should be invisible to
             // codegen. Ignore arguments beyond the first as they are only
@@ -1948,8 +2059,17 @@ void CodeGen::visit(const Call *op) {
         } else {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
-
-
+    } else if (op->call_type == Call::Extern && op->name == "pow_f32") {
+        Expr x = op->args[0];
+        Expr y = op->args[1];
+        Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
+        e.accept(this);
+    } else if (op->call_type == Call::Extern && op->name == "log_f32") {
+        Expr e = Internal::halide_log(op->args[0]);
+        e.accept(this);
+    } else if (op->call_type == Call::Extern && op->name == "exp_f32") {
+        Expr e = Internal::halide_exp(op->args[0]);
+        e.accept(this);
     } else {
         // It's an extern call.
 
@@ -2118,11 +2238,7 @@ void CodeGen::visit(const LetStmt *op) {
 }
 
 void CodeGen::visit(const AssertStmt *op) {
-    vector<Value *> args(op->args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        args[i] = codegen(op->args[i]);
-    }
-    create_assertion(codegen(op->condition), op->message, args);
+    create_assertion(codegen(op->condition), op->message);
 }
 
 Constant *CodeGen::create_string_constant(const string &s) {
@@ -2155,7 +2271,7 @@ Constant *CodeGen::create_constant_binary_blob(const vector<char> &data, const s
     return ptr;
 }
 
-void CodeGen::create_assertion(Value *cond, const string &message, const vector<Value *> &args) {
+void CodeGen::create_assertion(Value *cond, Expr message) {
 
     if (target.has_feature(Target::NoAsserts)) return;
 
@@ -2171,8 +2287,8 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     }
 
     // Make a new basic block for the assert
-    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert failed: " + message, function);
-    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded: " + message, function);
+    BasicBlock *assert_fails_bb = BasicBlock::Create(*context, "assert failed", function);
+    BasicBlock *assert_succeeds_bb = BasicBlock::Create(*context, "assert succeeded", function);
 
     // If the condition fails, enter the assert body, otherwise, enter the block after
     builder->CreateCondBr(cond, assert_succeeds_bb, assert_fails_bb, very_likely_branch);
@@ -2180,17 +2296,18 @@ void CodeGen::create_assertion(Value *cond, const string &message, const vector<
     // Build the failure case
     builder->SetInsertPoint(assert_fails_bb);
 
-    vector<Value *> call_args(2);
-    call_args[0] = get_user_context();
-    call_args[1] = create_string_constant(message);
-    call_args.insert(call_args.end(), args.begin(), args.end());
+    // Codegen the message here, inside the failure case. This may be
+    // expensive, and the calls that build the string may appear to be
+    // side-effecting to llvm, so it's important to do the codegen
+    // right here.
+    llvm::Value *msg = codegen(message);
 
     // Call the error handler
-    llvm::Function *error_handler = module->getFunction("halide_error_varargs");
+    llvm::Function *error_handler = module->getFunction("halide_error");
     internal_assert(error_handler)
-        << "Could not find halide_error_varargs in initial module\n";
+        << "Could not find halide_error in initial module\n";
     debug(4) << "Creating call to error handlers\n";
-    builder->CreateCall(error_handler, call_args);
+    builder->CreateCall(error_handler, vec<llvm::Value *>(get_user_context(), msg));
 
     // Do any architecture-specific cleanup necessary
     debug(4) << "Creating cleanup code\n";
