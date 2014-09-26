@@ -408,14 +408,16 @@ private:
         Expr ext1, ext2;
         if (le) {
             ext1 = simplify(Min::make(le->b - min1 + 1, extent));
-        } else if(lt) {
+        } else if (lt) {
             ext1 = simplify(Min::make(lt->b - min1, extent));
-        } else if(ge) {
+        } else if (ge) {
             ext1 = simplify(Min::make(ge->b - min1, extent));
             std::swap(a, b);
-        } else if(gt) {
+        } else if (gt) {
             ext1 = simplify(Min::make(gt->b - min1 + 1, extent));
             std::swap(a, b);
+        } else {
+            debug(0) << "Bug: can't handle " << cond << " here, about to crash\n";
         }
 
         min2 = simplify(min1 + ext1);
@@ -768,6 +770,18 @@ void specialize_branched_loops_test() {
         Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
         Stmt branched = specialize_branched_loops(stmt);
         Interval ivals[] = {Interval(0,1), Interval(1,8), Interval(9,1)};
+        check_num_branches(branched, "x", 3);
+        check_branch_intervals(branched, "x", ivals);
+    }
+
+    {
+        // Case using an equality.
+        Expr cond = x == 5;
+        Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
+                                       Store::make("out", 0, x));
+        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+        Stmt branched = specialize_branched_loops(stmt);
+        Interval ivals[] = {Interval(0,5), Interval(5,1), Interval(6,4)};
         check_num_branches(branched, "x", 3);
         check_branch_intervals(branched, "x", ivals);
     }
