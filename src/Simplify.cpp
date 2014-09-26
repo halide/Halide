@@ -1895,12 +1895,30 @@ private:
             } else {
                 expr = op;
             }
+        } else if (op->call_type == Call::Extern &&
+                   op->name == "log_f32") {
+            Expr arg = mutate(op->args[0]);
+            if (const float *f = as_const_float(arg)) {
+                expr = logf(*f);
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::Extern &&
+                   op->name == "exp_f32") {
+            Expr arg = mutate(op->args[0]);
+            if (const float *f = as_const_float(arg)) {
+                expr = expf(*f);
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+            } else {
+                expr = op;
+            }
         } else {
             IRMutator::visit(op);
         }
     }
-
-
 
     template<typename T, typename Body>
     Body simplify_let(const T *op) {
@@ -2577,6 +2595,9 @@ void simplify_test() {
     check(min(x*-8, 24), max(x, -3)*-8);
     check(max(x*-8, 24), min(x, -3)*-8);
 
+    check(log(0.5f + 0.5f), 0.0f);
+    check(exp(log(2.0f)), 2.0f);
+
     //check(max(x, 16) - 16, max(x + -16, 0));
     //check(min(x, -4) + 7, min(x + 7, 3));
 
@@ -2729,4 +2750,3 @@ void simplify_test() {
 }
 }
 }
-

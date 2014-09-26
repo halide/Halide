@@ -121,7 +121,7 @@ if ($LastExitCode) {
 }
 
 cd $ROOT
-if (! (Test-Path build_32_pnacl)) {
+if (! (Test-Path build_32_pnacl)) { 
   mkdir build_32_pnacl
 }
 cd build_32_pnacl

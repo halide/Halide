@@ -13,8 +13,14 @@ WEAK void halide_error(void *user_context, const char *msg) {
         (*halide_error_handler)(user_context, msg);
     } else {
         char buf[4096];
-        char *dst = halide_string_to_string(buf, buf + 4096, "Error: ");
-        halide_string_to_string(dst, buf + 4096, msg);
+        char *dst = halide_string_to_string(buf, buf + 4095, "Error: ");
+        dst = halide_string_to_string(dst, buf + 4095, msg);
+        // We still have one character free. Add a newline if there
+        // isn't one already.
+        if (dst[-1] != '\n') {
+            dst[0] = '\n';
+            dst[1] = 0;
+        }
         halide_print(user_context, buf);
         exit(1);
     }
