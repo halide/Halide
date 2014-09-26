@@ -54,12 +54,12 @@ bool expr_uses_var(Expr expr, const std::string &var, const Scope<Expr> &scope) 
 }
 
 class NormalizeIfStmts : public IRMutator {
-public:
+  public:
     NormalizeIfStmts(const Scope<Expr> *s) {
         scope.set_containing_scope(s);
     }
 
-private:
+  private:
     using IRVisitor::visit;
 
     Scope<Expr> scope;
@@ -111,18 +111,36 @@ private:
         }
     }
 
+    void visit(const EQ *op) {
+        if (in_if_stmt) {
+            then_case.top() = IfThenElse::make(op->a >= op->b, then_case.top(), else_case.top());
+            expr = op->a <= op->b;
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const NE *op) {
+        if (in_if_stmt) {
+            else_case.top() = IfThenElse::make(op->a > op->b, then_case.top(), else_case.top());
+            expr = op->a < op->b;
+        } else {
+            expr = op;
+        }
+    }
+
     void visit(const Call *op)   {expr = op;}
     void visit(const Select *op) {expr = op;}
     void visit(const Store *op)  {stmt = op;}
 
     void visit(const Variable *op) {
-      if (in_if_stmt && op->type.is_bool() && scope.contains(op->name)) {
+        if (in_if_stmt && op->type.is_bool() && scope.contains(op->name)) {
             Expr val = scope.get(op->name);
             Expr new_val = mutate(val);
             if (new_val.same_as(val)) {
-              expr = op;
+                expr = op;
             } else {
-              expr = new_val;
+                expr = new_val;
             }
         } else {
             expr = op;
@@ -145,12 +163,12 @@ Stmt normalize_if_stmts(Stmt stmt, const Scope<Expr> &scope) {
 }
 
 class NormalizeSelect : public IRMutator {
-public:
+  public:
     NormalizeSelect(const Scope<Expr> *s) {
         scope.set_containing_scope(s);
     }
 
-private:
+  private:
     using IRVisitor::visit;
 
     Scope<Expr> scope;
@@ -201,16 +219,34 @@ private:
         }
     }
 
+    void visit(const EQ *op) {
+        if (in_select_cond) {
+            true_value.top() = Select::make(op->a >= op->b, true_value.top(), false_value.top());
+            expr = op->a <= op->b;
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const NE *op) {
+        if (in_select_cond) {
+            false_value.top() = Select::make(op->a > op->b, true_value.top(), false_value.top());
+            expr = op->a < op->b;
+        } else {
+            expr = op;
+        }
+    }
+
     void visit(const Call *op)   {expr = op;}
 
     void visit(const Variable *op) {
-      if (in_select_cond && op->type.is_bool() && scope.contains(op->name)) {
+        if (in_select_cond && op->type.is_bool() && scope.contains(op->name)) {
             Expr val = scope.get(op->name);
             Expr new_val = mutate(val);
             if (new_val.same_as(val)) {
-              expr = op;
+                expr = op;
             } else {
-              expr = new_val;
+                expr = new_val;
             }
         } else {
             expr = op;
@@ -242,7 +278,7 @@ struct Branch {
 };
 
 class BranchesInVar : public IRVisitor {
-public:
+  public:
     std::string name;
     Scope<Expr> scope;
     bool has_branches;
@@ -254,7 +290,7 @@ public:
         scope.set_containing_scope(s);
     }
 
-private:
+  private:
     using IRVisitor::visit;
 
     void visit(const IfThenElse *op) {
@@ -322,12 +358,12 @@ bool expr_branches_in_var(const std::string &name, Expr value, const Scope<Expr>
 }
 
 class FindFreeVariables : public IRVisitor {
-public:
+  public:
     const Scope<int> &free_vars;
     std::set<std::string> vars;
 
     FindFreeVariables(const Scope<int> &fv) : free_vars(fv) {}
-private:
+  private:
     using IRVisitor::visit;
 
     void visit(const Variable *op) {
@@ -355,7 +391,7 @@ void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
                       const Scope<int> &free_vars);
 
 class BranchCollector : public IRVisitor {
-public:
+  public:
     std::string name;
     std::vector<Branch> branches;
     Scope<Expr> scope;
@@ -365,12 +401,12 @@ public:
 
     BranchCollector(const std::string &n, Expr m, Expr e, const Scope<Expr> *s,
                     const Scope<int> &lv) :
-        name(n), free_vars(lv), min(m), extent(e)
+            name(n), free_vars(lv), min(m), extent(e)
     {
         scope.set_containing_scope(s);
     }
 
-private:
+  private:
     using IRVisitor::visit;
 
     std::vector< std::string > internal_lets;
@@ -395,7 +431,7 @@ private:
     // It is assumed that the inequality has been solved and so the variable of interest
     // is on the left hand side.
     template<class StmtOrExpr>
-    void build_branches(Expr cond, StmtOrExpr a, StmtOrExpr b, Branch &b1, Branch &b2) {
+    bool build_branches(Expr cond, StmtOrExpr a, StmtOrExpr b, Branch &b1, Branch &b2) {
         const LE *le = cond.as<LE>();
         const GE *ge = cond.as<GE>();
         const LT *lt = cond.as<LT>();
@@ -418,6 +454,7 @@ private:
             std::swap(a, b);
         } else {
             debug(0) << "Bug: can't handle " << cond << " here, about to crash\n";
+            return false;
         }
 
         min2 = simplify(min1 + ext1);
@@ -425,6 +462,8 @@ private:
 
         b1 = make_branch(min1, ext1, a);
         b2 = make_branch(min2, ext2, b);
+
+        return true;
     }
 
     Stmt wrap_lets(Stmt stmt) {
@@ -443,33 +482,33 @@ private:
         Expr solve = solve_for_linear_variable(cond, name, scope);
         if (!solve.same_as(cond)) {
             Branch b1, b2;
-            build_branches(solve, a, b, b1, b2);
+            if (build_branches(solve, a, b, b1, b2)) {
+                size_t num_branches = branches.size();
+                Expr orig_min = min;
+                Expr orig_extent = extent;
 
-            size_t num_branches = branches.size();
-            Expr orig_min = min;
-            Expr orig_extent = extent;
+                min = b1.min;
+                extent = b1.extent;
+                b1.expr.accept(this);
 
-            min = b1.min;
-            extent = b1.extent;
-            b1.expr.accept(this);
+                // If we didn't branch any further, push these branches onto the stack.
+                if (branches.size() == num_branches) {
+                    branches.push_back(b1);
+                }
+                num_branches = branches.size();
 
-            // If we didn't branch any further, push these branches onto the stack.
-            if (branches.size() == num_branches) {
-                branches.push_back(b1);
+                min = b2.min;
+                extent = b2.extent;
+                b2.expr.accept(this);
+
+                // If we didn't branch any further, push these branches onto the stack.
+                if (branches.size() == num_branches) {
+                    branches.push_back(b2);
+                }
+
+                min = orig_min;
+                extent = orig_extent;
             }
-            num_branches = branches.size();
-
-            min = b2.min;
-            extent = b2.extent;
-            b2.expr.accept(this);
-
-            // If we didn't branch any further, push these branches onto the stack.
-            if (branches.size() == num_branches) {
-                branches.push_back(b2);
-            }
-
-            min = orig_min;
-            extent = orig_extent;
         }
     }
 
@@ -567,312 +606,315 @@ private:
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
             if (!solve.same_as(if_stmt->condition)) {
                 Branch b1, b2;
-                build_branches(solve, if_stmt->then_case, if_stmt->else_case, b1, b2);
+                if (build_branches(solve, if_stmt->then_case, if_stmt->else_case, b1, b2)) {
+                    size_t num_branches = branches.size();
+                    Expr orig_min = min;
+                    Expr orig_extent = extent;
 
-                size_t num_branches = branches.size();
-                Expr orig_min = min;
-                Expr orig_extent = extent;
-
-                min = b1.min;
-                extent = b1.extent;
-                b1.stmt.accept(this);
-
-                // If we didn't branch any further, push this branches onto the stack.
-                if (branches.size() == num_branches) {
-                    b1.stmt = wrap_lets(b1.stmt);
-                    branches.push_back(b1);
-                }
-
-                if (has_else) {
-                    num_branches = branches.size();
-
-                    min = b2.min;
-                    extent = b2.extent;
-                    b2.stmt.accept(this);
+                    min = b1.min;
+                    extent = b1.extent;
+                    b1.stmt.accept(this);
 
                     // If we didn't branch any further, push this branches onto the stack.
                     if (branches.size() == num_branches) {
-                        b2.stmt = wrap_lets(b2.stmt);
-                        branches.push_back(b2);
+                        b1.stmt = wrap_lets(b1.stmt);
+                        branches.push_back(b1);
+                    }
+
+                    if (has_else) {
+                        num_branches = branches.size();
+
+                        min = b2.min;
+                        extent = b2.extent;
+                        b2.stmt.accept(this);
+
+                        // If we didn't branch any further, push this
+                        // branches onto the stack.
+                        if (branches.size() == num_branches) {
+                            b2.stmt = wrap_lets(b2.stmt);
+                            branches.push_back(b2);
+                        }
+                    }
+
+                    min = orig_min;
+                    extent = orig_extent;
+
+                    return;
+                }
+            }
+        }
+
+        op->then_case.accept(this);
+        if (has_else) {
+            op->else_case.accept(this);
+        }
+    }
+
+    void visit(const For *op) {
+            size_t b0 = branches.size();
+            op->body.accept(this);
+            for (size_t i = b0; i < branches.size(); ++i) {
+                Branch &b = branches[i];
+                b.stmt = For::make(op->name, op->min, op->extent, op->for_type, b.stmt);
+            }
+        }
+
+    };
+
+    void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
+                          std::vector<Branch> &branches, const Scope<Expr> &scope,
+                          const Scope<int> &free_vars) {
+        BranchCollector collector(name, min, extent, &scope, free_vars);
+        expr.accept(&collector);
+        branches.swap(collector.branches);
+    }
+
+    void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
+                          std::vector<Branch> &branches, const Scope<Expr> &scope,
+                          const Scope<int> &free_vars) {
+        BranchCollector collector(name, min, extent, &scope, free_vars);
+        stmt.accept(&collector);
+        branches.swap(collector.branches);
+    }
+
+    class SpecializeBranchedLoops : public IRMutator {
+      private:
+        using IRVisitor::visit;
+
+        Scope<Expr> scope;
+        Scope<int>  loop_vars;
+
+        void visit(const For *op) {
+            loop_vars.push(op->name, 0);
+            Stmt body = mutate(op->body);
+
+            if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, scope)) {
+                // debug(0) << "Branching loop " << op->name << ". Original body:\n"
+                //          << op->body << "Mutated body:\n" << body;
+
+                std::vector<Branch> branches;
+                collect_branches(body, op->name, op->min, op->extent, branches, scope, loop_vars);
+
+                if (branches.empty()) {
+                    stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+                } else {
+                    Scope<Interval> bounds;
+                    stmt = Evaluate::make(0);
+                    for (int i = branches.size()-1; i >= 0; --i) {
+                        Branch &branch = branches[i];
+                        bounds.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
+                        Expr extent = simplify(branch.extent, true, bounds);
+                        if (is_zero(extent)) continue;
+                        Stmt branch_stmt = simplify(branch.stmt, true, bounds);
+                        branch_stmt = For::make(op->name, branch.min, extent, op->for_type, branch_stmt);
+                        stmt = Block::make(branch_stmt, stmt);
+                        bounds.pop(op->name);
                     }
                 }
-
-                min = orig_min;
-                extent = orig_extent;
-            }
-        } else {
-            op->then_case.accept(this);
-            if (has_else) {
-                op->else_case.accept(this);
-            }
-        }
-    }
-
-    void visit(const For *op) {
-        size_t b0 = branches.size();
-        op->body.accept(this);
-        for (size_t i = b0; i < branches.size(); ++i) {
-            Branch &b = branches[i];
-            b.stmt = For::make(op->name, op->min, op->extent, op->for_type, b.stmt);
-        }
-    }
-
-};
-
-void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars) {
-    BranchCollector collector(name, min, extent, &scope, free_vars);
-    expr.accept(&collector);
-    branches.swap(collector.branches);
-}
-
-void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars) {
-    BranchCollector collector(name, min, extent, &scope, free_vars);
-    stmt.accept(&collector);
-    branches.swap(collector.branches);
-}
-
-class SpecializeBranchedLoops : public IRMutator {
-private:
-    using IRVisitor::visit;
-
-    Scope<Expr> scope;
-    Scope<int>  loop_vars;
-
-    void visit(const For *op) {
-        loop_vars.push(op->name, 0);
-        Stmt body = mutate(op->body);
-
-        if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, scope)) {
-            // debug(0) << "Branching loop " << op->name << ". Original body:\n"
-            //          << op->body << "Mutated body:\n" << body;
-
-            std::vector<Branch> branches;
-            collect_branches(body, op->name, op->min, op->extent, branches, scope, loop_vars);
-
-            if (branches.empty()) {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
             } else {
-                Scope<Interval> bounds;
-                stmt = Evaluate::make(0);
-                for (int i = branches.size()-1; i >= 0; --i) {
-                    Branch &branch = branches[i];
-                    bounds.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
-                    Expr extent = simplify(branch.extent, true, bounds);
-                    if (is_zero(extent)) continue;
-                    Stmt branch_stmt = simplify(branch.stmt, true, bounds);
-                    branch_stmt = For::make(op->name, branch.min, extent, op->for_type, branch_stmt);
-                    stmt = Block::make(branch_stmt, stmt);
-                    bounds.pop(op->name);
-                }
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
             }
-        } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
-        }
-        loop_vars.pop(op->name);
-    }
-
-    void visit(const LetStmt *op) {
-        scope.push(op->name, op->value);
-        stmt = LetStmt::make(op->name, op->value, mutate(op->body));
-        scope.pop(op->name);
-    }
-};
-
-Stmt specialize_branched_loops(Stmt s) {
-    return SpecializeBranchedLoops().mutate(s);
-}
-
-namespace {
-
-class CountLoops : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const For *op) {
-        if (op->name == var) {
-            num_loops++;
-        }
-        op->body.accept(this);
-    }
-
-public:
-    std::string var;
-    int num_loops;
-
-    CountLoops(const std::string &v) : var(v), num_loops(0) {}
-};
-
-int count_loops(Stmt stmt, const std::string &var) {
-    CountLoops counter(var);
-    stmt.accept(&counter);
-    return counter.num_loops;
-}
-
-void check_num_branches(Stmt stmt, const std::string &var, int expected_loops) {
-    int num_loops = count_loops(stmt, var);
-
-    if (num_loops != expected_loops) {
-        internal_error
-            << "Expected stmt to branch into " << expected_loops
-            << " loops, only found " << num_loops << " loops:\n"
-            << stmt << "\n";
-    }
-}
-
-class CheckIntervals : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const For *op) {
-        if (op->name == var) {
-            const Interval &iv = ival[index++];
-            matches = matches && equal(op->min, iv.min)
-                    && equal(op->extent, iv.max);
+            loop_vars.pop(op->name);
         }
 
-        op->body.accept(this);
+        void visit(const LetStmt *op) {
+            scope.push(op->name, op->value);
+            stmt = LetStmt::make(op->name, op->value, mutate(op->body));
+            scope.pop(op->name);
+        }
+    };
+
+    Stmt specialize_branched_loops(Stmt s) {
+        return SpecializeBranchedLoops().mutate(s);
     }
 
-public:
-    std::string var;
-    const Interval* ival;
-    int  index;
-    bool matches;
+    namespace {
 
-    CheckIntervals(const std::string& v, const Interval* i ) :
-            var(v), ival(i), index(0), matches(true)
-    {}
-};
+    class CountLoops : public IRVisitor {
+        using IRVisitor::visit;
 
-void check_branch_intervals(Stmt stmt, const std::string& loop_var,
-                            const Interval* intervals) {
-    CheckIntervals check(loop_var, intervals);
-    stmt.accept(&check);
-    if (!check.matches) {
-        internal_error << "loop branches in unexpected ways:\n" << stmt << "\n";
-    }
-}
+        void visit(const For *op) {
+            if (op->name == var) {
+                num_loops++;
+            }
+            op->body.accept(this);
+        }
 
-}
+      public:
+        std::string var;
+        int num_loops;
 
-void specialize_branched_loops_test() {
+        CountLoops(const std::string &v) : var(v), num_loops(0) {}
+    };
 
-    Expr x = Variable::make(Int(32), "x");
-    Expr y = Variable::make(Int(32), "y");
-
-    {
-        // Basic case of branching into 3 loops
-        Expr cond = 1 <= x && x < 9;
-        Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
-                                       Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        Stmt branched = specialize_branched_loops(stmt);
-        Interval ivals[] = {Interval(0,1), Interval(1,8), Interval(9,1)};
-        check_num_branches(branched, "x", 3);
-        check_branch_intervals(branched, "x", ivals);
+    int count_loops(Stmt stmt, const std::string &var) {
+        CountLoops counter(var);
+        stmt.accept(&counter);
+        return counter.num_loops;
     }
 
-    {
-        // Case using an equality.
-        Expr cond = x == 5;
-        Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
-                                       Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        Stmt branched = specialize_branched_loops(stmt);
-        Interval ivals[] = {Interval(0,5), Interval(5,1), Interval(6,4)};
-        check_num_branches(branched, "x", 3);
-        check_branch_intervals(branched, "x", ivals);
+    void check_num_branches(Stmt stmt, const std::string &var, int expected_loops) {
+        int num_loops = count_loops(stmt, var);
+
+        if (num_loops != expected_loops) {
+            internal_error
+                    << "Expected stmt to branch into " << expected_loops
+                    << " loops, only found " << num_loops << " loops:\n"
+                    << stmt << "\n";
+        }
     }
 
-    {
-        // Basic 2D case, branching into 9 loops
-        Expr tmp = Variable::make(Int(32), "tmp");
-        Expr cond = 1 <= x && x < 9;
-        Stmt branch = IfThenElse::make(cond, Store::make("out", tmp + 1, x),
-                                       Store::make("out", tmp, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+    class CheckIntervals : public IRVisitor {
+        using IRVisitor::visit;
 
-        cond = 1 <= y && y < 9;
-        branch = IfThenElse::make(cond, LetStmt::make("tmp", 1, stmt),
-                                  LetStmt::make("tmp", 0, stmt));
-        stmt = For::make("y", 0, 10, For::Serial, branch);
-        Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "x", 9);
+        void visit(const For *op) {
+            if (op->name == var) {
+                const Interval &iv = ival[index++];
+                matches = matches && equal(op->min, iv.min)
+                        && equal(op->extent, iv.max);
+            }
+
+            op->body.accept(this);
+        }
+
+      public:
+        std::string var;
+        const Interval* ival;
+        int  index;
+        bool matches;
+
+        CheckIntervals(const std::string& v, const Interval* i ) :
+                var(v), ival(i), index(0), matches(true)
+        {}
+    };
+
+    void check_branch_intervals(Stmt stmt, const std::string& loop_var,
+                                const Interval* intervals) {
+        CheckIntervals check(loop_var, intervals);
+        stmt.accept(&check);
+        if (!check.matches) {
+            internal_error << "loop branches in unexpected ways:\n" << stmt << "\n";
+        }
     }
 
-    {
-        // More complex case involving multiple logical operators, branching into 5 loops
-        Expr cond = (1 <= x && x < 4) || (7 <= x && x < 10);
-        Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
-                                       Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 11, For::Serial, branch);
-        Stmt branched = specialize_branched_loops(stmt);
-        Interval ivals[] = {Interval(0,1), Interval(1,3), Interval(4,3),
-                            Interval(7,3), Interval(10,1)};
-        check_num_branches(branched, "x", 5);
-        check_branch_intervals(branched, "x", ivals);
     }
 
-    {
-        // Test that we don't modify loop when we encounter a branch
-        // with a more complex condition that we can't solve.
-        Expr cond = !Cast::make(UInt(1), Select::make(x == 0 || x > 5, 0, 1));
-        Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
-                                       Store::make("out", 0, x));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "x", 1);
-    }
+    void specialize_branched_loops_test() {
 
-    {
-        // Test that we can deal with a block of branch stmts.
-        Expr load = Load::make(Int(32), "out", x, Buffer(), Parameter());
-        Stmt b1 = IfThenElse::make(x < 3, Store::make("out", 0, x),
-                                   Store::make("out", 1, x));
-        Stmt b2 = IfThenElse::make(x < 5, Store::make("out", 10*load, x),
-                                   Store::make("out", 10*load + 1, x));
-        Stmt b3 = IfThenElse::make(x < 7, Store::make("out", 100*load, x),
-                                   Store::make("out", 100*load + 1, x));
-        Stmt branch = Block::make(b1, Block::make(b2, b3));
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "x", 6);
-    }
+        Expr x = Variable::make(Int(32), "x");
+        Expr y = Variable::make(Int(32), "y");
 
-    {
-        // More complex case involving multiple logical operators, branching into 5 loops
-        Expr cond = 0 < y && y < 10;
-        Stmt branch = Store::make("out", Select::make(cond,
-                                                      Ramp::make(x, 1, 4),
-                                                      Broadcast::make(0, 4)), y);
-        Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
-        stmt = For::make("y", 0, 11, For::Serial, stmt);
-        Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "y", 3);
-        Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
-        check_branch_intervals(branched, "y", ivals);
-    }
+        {
+            // Basic case of branching into 3 loops
+            Expr cond = 1 <= x && x < 9;
+            Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
+                                           Store::make("out", 0, x));
+            Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+            Stmt branched = specialize_branched_loops(stmt);
+            Interval ivals[] = {Interval(0,1), Interval(1,8), Interval(9,1)};
+            check_num_branches(branched, "x", 3);
+            check_branch_intervals(branched, "x", ivals);
+        }
 
-    {
-        // More complex case involving multiple logical operators, branching into 5 loops
-        Expr cond = 0 < y && y < 10;
-        Expr cond_var = Variable::make(Bool(), "cond");
-        Stmt branch = Store::make("out", Select::make(cond_var,
-                                                      Ramp::make(x, 1, 4),
-                                                      Broadcast::make(0, 4)), y);
-        Stmt stmt = LetStmt::make("cond", cond, branch);
-        stmt = For::make("x", 0, 10, For::Serial, stmt);
-        stmt = For::make("y", 0, 11, For::Serial, stmt);
-        Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "y", 3);
-        Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
-        check_branch_intervals(branched, "y", ivals);
-    }
+        {
+            // Case using an equality.
+            Expr cond = x == 5;
+            Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
+                                           Store::make("out", 0, x));
+            Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+            Stmt branched = specialize_branched_loops(stmt);
+            Interval ivals[] = {Interval(0,5), Interval(5,1), Interval(6,4)};
+            check_num_branches(branched, "x", 3);
+            check_branch_intervals(branched, "x", ivals);
+        }
 
-    std::cout << "specialize_branched_loops test passed" << std::endl;
-}
+        {
+            // Basic 2D case, branching into 9 loops
+            Expr tmp = Variable::make(Int(32), "tmp");
+            Expr cond = 1 <= x && x < 9;
+            Stmt branch = IfThenElse::make(cond, Store::make("out", tmp + 1, x),
+                                           Store::make("out", tmp, x));
+            Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+
+            cond = 1 <= y && y < 9;
+            branch = IfThenElse::make(cond, LetStmt::make("tmp", 1, stmt),
+                                      LetStmt::make("tmp", 0, stmt));
+            stmt = For::make("y", 0, 10, For::Serial, branch);
+            Stmt branched = specialize_branched_loops(stmt);
+            check_num_branches(branched, "x", 9);
+        }
+
+        {
+            // More complex case involving multiple logical operators, branching into 5 loops
+            Expr cond = (1 <= x && x < 4) || (7 <= x && x < 10);
+            Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
+                                           Store::make("out", 0, x));
+            Stmt stmt = For::make("x", 0, 11, For::Serial, branch);
+            Stmt branched = specialize_branched_loops(stmt);
+            Interval ivals[] = {Interval(0,1), Interval(1,3), Interval(4,3),
+                                Interval(7,3), Interval(10,1)};
+            check_num_branches(branched, "x", 5);
+            check_branch_intervals(branched, "x", ivals);
+        }
+
+        {
+            // Test that we don't modify loop when we encounter a branch
+            // with a more complex condition that we can't solve.
+            Expr cond = !Cast::make(UInt(1), Select::make(x == 0 || x > 5, 0, 1));
+            Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
+                                           Store::make("out", 0, x));
+            Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+            Stmt branched = specialize_branched_loops(stmt);
+            check_num_branches(branched, "x", 1);
+        }
+
+        {
+            // Test that we can deal with a block of branch stmts.
+            Expr load = Load::make(Int(32), "out", x, Buffer(), Parameter());
+            Stmt b1 = IfThenElse::make(x < 3, Store::make("out", 0, x),
+                                       Store::make("out", 1, x));
+            Stmt b2 = IfThenElse::make(x < 5, Store::make("out", 10*load, x),
+                                       Store::make("out", 10*load + 1, x));
+            Stmt b3 = IfThenElse::make(x < 7, Store::make("out", 100*load, x),
+                                       Store::make("out", 100*load + 1, x));
+            Stmt branch = Block::make(b1, Block::make(b2, b3));
+            Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+            Stmt branched = specialize_branched_loops(stmt);
+            check_num_branches(branched, "x", 6);
+        }
+
+        {
+            // Test that we properly branch on select nodes.
+            Expr cond = 0 < y && y < 10;
+            Stmt branch = Store::make("out", Select::make(cond,
+                                                          Ramp::make(x, 1, 4),
+                                                          Broadcast::make(0, 4)), y);
+            Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
+            stmt = For::make("y", 0, 11, For::Serial, stmt);
+            Stmt branched = specialize_branched_loops(stmt);
+            check_num_branches(branched, "y", 3);
+            Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
+            check_branch_intervals(branched, "y", ivals);
+        }
+
+        {
+            // Test that we handle conditions embedded in let stmts.
+            Expr cond = 0 < y && y < 10;
+            Expr cond_var = Variable::make(Bool(), "cond");
+            Stmt branch = Store::make("out", Select::make(cond_var,
+                                                          Ramp::make(x, 1, 4),
+                                                          Broadcast::make(0, 4)), y);
+            Stmt stmt = LetStmt::make("cond", cond, branch);
+            stmt = For::make("x", 0, 10, For::Serial, stmt);
+            stmt = For::make("y", 0, 11, For::Serial, stmt);
+            Stmt branched = specialize_branched_loops(stmt);
+            check_num_branches(branched, "y", 3);
+            Interval ivals[] = {Interval(0,1), Interval(1,9), Interval(10,1)};
+            check_branch_intervals(branched, "y", ivals);
+        }
+
+        std::cout << "specialize_branched_loops test passed" << std::endl;
+    }
 
 }
 }
