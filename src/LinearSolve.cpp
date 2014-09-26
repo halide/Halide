@@ -353,6 +353,7 @@ private:
                 solved = true;
             }
 
+            match_types(lhs, rhs);
             expr = Cmp::make(lhs, rhs);
         } else {
             expr = op;
