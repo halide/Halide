@@ -453,7 +453,6 @@ class BranchCollector : public IRVisitor {
             ext1 = simplify(Min::make(gt->b - min1 + 1, extent));
             std::swap(a, b);
         } else {
-            debug(0) << "Bug: can't handle " << cond << " here, about to crash\n";
             return false;
         }
 
