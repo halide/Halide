@@ -303,8 +303,7 @@ class BranchesInVar : public IRVisitor {
 
     void visit(const Select *op) {
         if (expr_uses_var(op->condition, name, scope) &&
-            op->condition.type().is_scalar() &&
-            op->true_value.type().is_vector()) {
+            op->condition.type().is_scalar()) {
             has_branches = true;
         } else {
             IRVisitor::visit(op);
@@ -611,8 +610,7 @@ class BranchCollector : public IRVisitor {
 
     void visit(const Select *op) {
         if (expr_uses_var(op->condition, name, scope) &&
-            op->condition.type().is_scalar() &&
-            op->true_value.type().is_vector()) {
+            op->condition.type().is_scalar()) {
             Expr select = normalize_select(op, scope);
             // debug(0) << "Branching on normalized select: " << select << "\n";
             op = select.as<Select>();
