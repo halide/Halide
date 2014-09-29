@@ -458,15 +458,47 @@ public:
         Expr min1 = min, min2;
         Expr ext1, ext2;
         if (le) {
-            ext1 = simplify(Min::make(Max::make(le->b - min1 + 1, 0), extent));
+            if (is_zero(le->a)) {
+                if (is_zero(le->b) || is_positive_const(le->b)) {
+                    ext1 = extent;
+                } else {
+                    ext1 = 0;
+                }
+            } else {
+                ext1 = simplify(Min::make(Max::make(le->b - min1 + 1, 0), extent));
+            }
         } else if (lt) {
-            ext1 = simplify(Min::make(Max::make(lt->b - min1, 0), extent));
+            if (is_zero(lt->a)) {
+                if (is_positive_const(lt->b)) {
+                    ext1 = extent;
+                } else {
+                    ext1 = 0;
+                }
+            } else {
+                ext1 = simplify(Min::make(Max::make(lt->b - min1, 0), extent));
+            }
         } else if (ge) {
-            ext1 = simplify(Min::make(Max::make(ge->b - min1, 0), extent));
-            std::swap(a, b);
+            if (is_zero(ge->a)) {
+                if (is_zero(ge->b) || is_negative_const(ge->b)) {
+                    ext1 = extent;
+                } else {
+                    ext1 = 0;
+                }
+            } else {
+                ext1 = simplify(Min::make(Max::make(ge->b - min1, 0), extent));
+                std::swap(a, b);
+            }
         } else if (gt) {
-            ext1 = simplify(Min::make(Max::make(gt->b - min1 + 1, 0), extent));
-            std::swap(a, b);
+            if (is_zero(gt->a)) {
+                if (is_negative_const(gt->b)) {
+                    ext1 = extent;
+                } else {
+                    ext1 = 0;
+                }
+            } else {
+                ext1 = simplify(Min::make(Max::make(gt->b - min1 + 1, 0), extent));
+                std::swap(a, b);
+            }
         } else {
             return false;
         }
