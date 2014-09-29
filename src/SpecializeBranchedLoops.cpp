@@ -787,7 +787,7 @@ private:
                     Branch &branch = branches[i];
                     bounds.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
                     Expr extent = simplify(branch.extent, true, bounds);
-                    if (is_zero(extent)) continue;
+                    if (is_zero(simplify(max(extent, 0)))) continue;
                     Stmt branch_stmt = simplify(branch.stmt, true, bounds);
                     branch_stmt = For::make(op->name, branch.min, extent, op->for_type, branch_stmt);
                     stmt = Block::make(branch_stmt, stmt);
