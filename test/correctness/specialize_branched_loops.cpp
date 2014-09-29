@@ -128,14 +128,13 @@ int main(int argc, char **argv) {
 
         Image<int> result = sum_scan.realize(100);
 
-        int correct = 3;
+        int correct = 0;
         for (int x = 0; x < 100; x++) {
-            correct += x*17;
+            correct += x*17 + 3;
             if (result(x) != correct) {
                 printf("sum scan result(%d) = %d instead of %d\n",
                        x, result(x), correct);
-                break; // Failing. Continue to other tests.
-                //return -1;
+                return -1;
             }
         }
     }
@@ -205,7 +204,6 @@ int main(int argc, char **argv) {
             }
         }
     }
-
 
     printf("Success!\n");
     return 0;

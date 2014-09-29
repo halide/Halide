@@ -14,6 +14,12 @@ namespace Internal {
 
 namespace {
 
+// A compile time variable that limits that maximum depth of
+// recursive branching that we allow. This prevents a
+// combinatorial explosion of code generation.
+static const int maximum_branching_depth = 5;
+
+
 // The generic version of this class doesn't work for our
 // purposes. We need to dive into the current scope to decide if a
 // variable is used.
@@ -68,16 +74,20 @@ class NormalizeIfStmts : public IRMutator {
     std::stack<Stmt> else_case;
 
     void visit(const IfThenElse *op) {
-        in_if_stmt = true;
-        then_case.push(op->then_case);
-        else_case.push(op->else_case);
-        Expr cond = mutate(op->condition);
-        in_if_stmt = false;
-        stmt = IfThenElse::make(cond, mutate(then_case.top()), mutate(else_case.top()));
-        then_case.pop();
-        else_case.pop();
-        if (!cond.same_as(op->condition)) {
-            stmt = mutate(stmt);
+        if (then_case.size() < maximum_branching_depth) {
+            in_if_stmt = true;
+            then_case.push(op->then_case);
+            else_case.push(op->else_case);
+            Expr cond = mutate(op->condition);
+            in_if_stmt = false;
+            stmt = IfThenElse::make(cond, mutate(then_case.top()), mutate(else_case.top()));
+            then_case.pop();
+            else_case.pop();
+            if (!cond.same_as(op->condition)) {
+                stmt = mutate(stmt);
+            }
+        } else {
+            stmt = op;
         }
     }
 
@@ -177,18 +187,22 @@ class NormalizeSelect : public IRMutator {
     std::stack<Expr> false_value;
 
     void visit(const Select *op) {
-        bool old_in_select_cond = in_select_cond;
-        in_select_cond = true;
-        true_value.push(op->true_value);
-        false_value.push(op->false_value);
-        Expr cond = mutate(op->condition);
-        in_select_cond = false;
-        expr = Select::make(cond, mutate(true_value.top()), mutate(false_value.top()));
-        in_select_cond = old_in_select_cond;
-        true_value.pop();
-        false_value.pop();
-        if (!cond.same_as(op->condition)) {
-            expr = mutate(expr);
+        if (true_value.size() < maximum_branching_depth) {
+            bool old_in_select_cond = in_select_cond;
+            in_select_cond = true;
+            true_value.push(op->true_value);
+            false_value.push(op->false_value);
+            Expr cond = mutate(op->condition);
+            in_select_cond = false;
+            expr = Select::make(cond, mutate(true_value.top()), mutate(false_value.top()));
+            in_select_cond = old_in_select_cond;
+            true_value.pop();
+            false_value.pop();
+            if (!cond.same_as(op->condition)) {
+                expr = mutate(expr);
+            }
+        } else {
+            expr = op;
         }
     }
 
@@ -390,7 +404,7 @@ void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
                       const Scope<int> &free_vars);
 
 class BranchCollector : public IRVisitor {
-  public:
+public:
     std::string name;
     std::vector<Branch> branches;
     Scope<Expr> scope;
@@ -400,7 +414,7 @@ class BranchCollector : public IRVisitor {
 
     BranchCollector(const std::string &n, Expr m, Expr e, const Scope<Expr> *s,
                     const Scope<int> &lv) :
-            name(n), free_vars(lv), min(m), extent(e)
+            name(n), free_vars(lv), min(m), extent(e), branch_depth(0)
     {
         scope.set_containing_scope(s);
     }
@@ -409,6 +423,8 @@ class BranchCollector : public IRVisitor {
     using IRVisitor::visit;
 
     std::vector< std::string > internal_lets;
+
+    int branch_depth;
 
     Branch make_branch(Expr min, Expr ext, Expr expr) {
         // debug(0) << "\t\tMaking branch [" << min << ", " << ext << ") w/ "
@@ -436,7 +452,7 @@ class BranchCollector : public IRVisitor {
         const LT *lt = cond.as<LT>();
         const GT *gt = cond.as<GT>();
 
-        // debug(0) << "\tBranching in range [" << min << ", " << extent << ") "
+        // debug(0) << "\tBranching at depth " << branch_depth << " in the range [" << min << ", " << extent << ") "
         //          << "on condition: " << cond << "\n";
 
         Expr min1 = min, min2;
@@ -485,10 +501,13 @@ class BranchCollector : public IRVisitor {
                 Expr orig_min = min;
                 Expr orig_extent = extent;
 
+                branch_depth++;
                 if (!is_zero(b1.extent)) {
-                    min = b1.min;
-                    extent = b1.extent;
-                    b1.expr.accept(this);
+                    if (branch_depth < maximum_branching_depth) {
+                        min = b1.min;
+                        extent = b1.extent;
+                        b1.expr.accept(this);
+                    }
 
                     // If we didn't branch any further, push these branches onto the stack.
                     if (branches.size() == num_branches) {
@@ -498,9 +517,11 @@ class BranchCollector : public IRVisitor {
                 }
 
                 if (!is_zero(b2.extent)) {
-                    min = b2.min;
-                    extent = b2.extent;
-                    b2.expr.accept(this);
+                    if (branch_depth < maximum_branching_depth) {
+                        min = b2.min;
+                        extent = b2.extent;
+                        b2.expr.accept(this);
+                    }
 
                     // If we didn't branch any further, push these branches onto the stack.
                     if (branches.size() == num_branches) {
@@ -510,6 +531,7 @@ class BranchCollector : public IRVisitor {
                     min = orig_min;
                     extent = orig_extent;
                 }
+                branch_depth--;
             }
         }
     }
@@ -824,24 +846,28 @@ class BranchCollector : public IRVisitor {
                     Expr orig_min = min;
                     Expr orig_extent = extent;
 
+                    branch_depth++;
                     if (!is_zero(b1.extent)) {
-                        min = b1.min;
-                        extent = b1.extent;
-                        b1.stmt.accept(this);
+                        if (branch_depth < maximum_branching_depth) {
+                            min = b1.min;
+                            extent = b1.extent;
+                            b1.stmt.accept(this);
+                        }
 
                         // If we didn't branch any further, push this branches onto the stack.
                         if (branches.size() == num_branches) {
                             b1.stmt = wrap_lets(b1.stmt);
                             branches.push_back(b1);
                         }
+                        num_branches = branches.size();
                     }
 
                     if (has_else && !is_zero(b2.extent)) {
-                        num_branches = branches.size();
-
-                        min = b2.min;
-                        extent = b2.extent;
-                        b2.stmt.accept(this);
+                        if (branch_depth < maximum_branching_depth) {
+                            min = b2.min;
+                            extent = b2.extent;
+                            b2.stmt.accept(this);
+                        }
 
                         // If we didn't branch any further, push this
                         // branches onto the stack.
@@ -850,6 +876,7 @@ class BranchCollector : public IRVisitor {
                             branches.push_back(b2);
                         }
                     }
+                    branch_depth--;
 
                     min = orig_min;
                     extent = orig_extent;
