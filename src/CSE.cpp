@@ -30,11 +30,6 @@ bool should_extract(Expr e) {
         return false;
     }
 
-    // StringImms are necessary because the GL backend uses them as markers.
-    if (e.as<StringImm>()) {
-        return false;
-    }
-
     if (const Broadcast *a = e.as<Broadcast>()) {
         return should_extract(a->value);
     }
