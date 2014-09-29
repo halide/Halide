@@ -416,20 +416,25 @@ private:
                     swapped = !swapped;
                 }
 
-                if (var_term.var->type.is_int() &&
-                    ((is_less != swapped && is_open) ||
-                     (is_less == swapped && !is_open))) {
-                  // If we are wrting an integer < or a >=
-                  // comparison than we must use the ceiling of the
-                  // division as the respective bound.
-                  rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                if (is_zero(var_term.coeff)) {
+                    rhs = simplify(Cast::make(var_term.var->type, rhs));
+                    lhs = make_zero(var_term.var->type);
                 } else {
-                    rhs = rhs / var_term.coeff;
-                }
+                    if (var_term.var->type.is_int() &&
+                        ((is_less != swapped && is_open) ||
+                         (is_less == swapped && !is_open))) {
+                        // If we are wrting an integer < or a >=
+                        // comparison than we must use the ceiling of the
+                        // division as the respective bound.
+                        rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                    } else {
+                        rhs = rhs / var_term.coeff;
+                    }
 
-                rhs = simplify(Cast::make(var_term.var->type, rhs));
-                lhs = var_term.var;
-                solved = true;
+                    rhs = simplify(Cast::make(var_term.var->type, rhs));
+                    lhs = var_term.var;
+                    solved = true;
+                }
             }
 
             if (swapped) {
