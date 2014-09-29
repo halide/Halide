@@ -17,7 +17,7 @@ namespace {
 // A compile time variable that limits that maximum depth of
 // recursive branching that we allow. This prevents a
 // combinatorial explosion of code generation.
-static const int maximum_branching_depth = 5;
+static const int maximum_branching_depth = 3;
 
 
 // The generic version of this class doesn't work for our
@@ -817,14 +817,17 @@ public:
             Expr orig_min = min;
             Expr orig_extent = extent;
 
+            branch_depth++;
             for (size_t i = 0; i < expr_branches.size(); ++i) {
                 Branch &branch = expr_branches[i];
-                branch.stmt = substitute(op->name, branch.expr, op->body);
+                branch.stmt = LetStmt::make(op->name, branch.expr, op->body);
                 branch.expr = Expr();
 
-                min = branch.min;
-                extent = branch.extent;
-                branch.stmt.accept(this);
+                if (branch_depth < maximum_branching_depth) {
+                    min = branch.min;
+                    extent = branch.extent;
+                    branch.stmt.accept(this);
+                }
 
                 if (branches.size() == num_branches) {
                     branch.stmt = wrap_lets(branch.stmt);
@@ -832,6 +835,7 @@ public:
                 }
                 num_branches = branches.size();
             }
+            branch_depth--;
 
             min = orig_min;
             extent = orig_extent;
