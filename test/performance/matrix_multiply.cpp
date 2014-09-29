@@ -17,9 +17,7 @@ void print_results(const int N, const int num_iters, const std::string &result, 
     std::stringstream column;
 
     std::cout << std::setw(25) << result;
-
-    column.str(""); column << N << " x " << N;
-    std::cout << std::setw(15) << column.str();
+    std::cout << std::setw(8) << N << " x " << std::setw(4) << N;
 
     column.str(""); column << delta_t/(1000 * num_iters) << " s";
     std::cout << std::setw(20) << column.str();
@@ -53,8 +51,10 @@ void test_matrix_multiply(const int N, const int num_iters) {
     Target t = get_host_target();
     t.set_feature(Target::NoAsserts);
     t.set_feature(Target::NoBoundsQuery);
-    C.function().compile_jit(t);
-    C.function().compile_to_lowered_stmt("mat_mul.stmt", Text, t);
+
+    Func prod = C.function();
+    prod.compile_jit(t);
+    prod.compile_to_lowered_stmt("mat_mul.stmt", Text, t);
 
     // Uncomment to see the generated asm
     // C.compile_to_assembly("/dev/stdout", Internal::vec<Argument>(A, B), "");
@@ -65,7 +65,7 @@ void test_matrix_multiply(const int N, const int num_iters) {
     // Call the routine many times.
     float t1 = current_time();
     for (int i = 0; i < num_iters; i++) {
-        C.function().realize(c);
+        prod.realize(c);
     }
     float t2 = current_time();
 
@@ -168,12 +168,69 @@ void test_eigen_multiply(const int N, const int num_iters) {
 }
 #endif
 
+enum {
+    test_none = 0,
+    test_explicit = 1,
+    test_class = 2,
+    test_eigen = 4,
+    test_all = 7
+};
+
+std::vector<std::string> split_string(const std::string &str, const std::string &delim) {
+    std::vector<std::string> substrs;
+
+    size_t pos = 0;
+    while (pos < str.length()) {
+        size_t next_pos = str.find(delim, pos);
+        if (next_pos == std::string::npos) {
+            next_pos = str.length();
+        }
+        substrs.push_back(str.substr(pos, next_pos-pos));
+        pos = next_pos+1;
+    }
+
+    return substrs;
+}
+
+const int num_default_sizes = 8;
+const int default_sizes[] = {
+    16, 32, 64, 128, 256, 512, 1024, 2048
+};
+
 int main(int argc, char **argv) {
-    const int num_iters = 1;
-    const int test_size[] = {
-        //16, 0
-        16, 32, 64, 128, 256, 512, 1024, 2048, 0
-    };
+    int which_test = test_all;
+    int num_iters = 1;
+    std::vector<int> test_size(default_sizes, default_sizes + num_default_sizes);
+
+    int n = 1;
+    while (n < argc) {
+        std::string flag = argv[n++];
+        if (n >= argc) {
+            break;
+        } else if (flag == "-t" || flag == "--test") {
+            which_test = test_none;
+            std::vector<std::string> test_names = split_string(argv[n++], ",");
+            for (size_t i = 0; i < test_names.size(); ++i) {
+                if (test_names[i] == "explicit") {
+                    which_test |= test_explicit;
+                } else if (test_names[i] == "class") {
+                    which_test |= test_class;
+                } else if (test_names[i] == "eigen") {
+                    which_test |= test_eigen;
+                } else if (test_names[i] == "all") {
+                    which_test |= test_all;
+                }
+            }
+        } else if (flag == "-i" || flag == "--iters") {
+            num_iters = atoi(argv[n++]);
+        } else if (flag == "-s" || flag == "--sizes") {
+            test_size.clear();
+            std::vector<std::string> test_sizes = split_string(argv[n++], ",");
+            for (size_t i = 0; i < test_sizes.size(); ++i) {
+                test_size.push_back(atoi(test_sizes[i].c_str()));
+            }
+        }
+    }
 
     // const int test_size[] = {
     //     2, 3, 4, // Small matrices
@@ -188,17 +245,23 @@ int main(int argc, char **argv) {
               << std::setw(20) << "Data Throughput\n";
     for (int i = 0; i < 80; ++i ) std::cout << '-'; std::cout << "\n";
 
-    for (int i = 0; test_size[i] != 0; ++i) {
-        test_explicit_multiply(test_size[i], num_iters);
+    if (which_test & test_explicit) {
+        for (int i = 0; i < test_size.size(); ++i) {
+            test_explicit_multiply(test_size[i], num_iters);
+        }
     }
 
-    for (int i = 0; test_size[i] != 0; ++i) {
-        test_matrix_multiply(test_size[i], num_iters);
+    if (which_test & test_class) {
+        for (int i = 0; i < test_size.size(); ++i) {
+            test_matrix_multiply(test_size[i], num_iters);
+        }
     }
 
 #ifdef WITH_EIGEN
-    for (int i = 0; test_size[i] != 0; ++i) {
-        test_eigen_multiply(test_size[i], num_iters);
+    if (which_test & test_eigen) {
+        for (int i = 0; i < test_size.size(); ++i) {
+            test_eigen_multiply(test_size[i], num_iters);
+        }
     }
 #endif
 
