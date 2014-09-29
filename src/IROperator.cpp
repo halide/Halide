@@ -51,6 +51,7 @@ namespace Internal {
 bool is_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<FloatImm>()) return true;
+    if (e.as<StringImm>()) return true;
     if (const Cast *c = e.as<Cast>()) {
         return is_const(c->value);
     }
