@@ -1832,6 +1832,7 @@ Stmt lower(Function f, const Target &t) {
     debug(1) << "Specializing branched loops...\n";
     s = specialize_branched_loops(s);
     s = simplify(s);
+    s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
 
     debug(1) << "Injecting early frees...\n";
