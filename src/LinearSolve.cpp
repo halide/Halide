@@ -361,7 +361,7 @@ private:
     }
 
     template<class Cmp, class Op>
-    void visit_asym_cmp(const Cmp *op, bool is_greater) {
+    void visit_asym_cmp(const Cmp *op, bool is_less, bool is_open) {
         Expr lhs = op->a;
         Expr rhs = op->b;
 
@@ -416,10 +416,13 @@ private:
                     swapped = !swapped;
                 }
 
-                if (var_term.var->type.is_int() && is_greater != swapped) {
-                    // If we are wrting a greater than comparison of integers,
-                    // then the RHS should be rounded up.
-                    rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                if (var_term.var->type.is_int() &&
+                    ((is_less != swapped && is_open) ||
+                     (is_less == swapped && !is_open))) {
+                  // If we are wrting an integer < or a >=
+                  // comparison than we must use the ceiling of the
+                  // division as the respective bound.
+                  rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
                 } else {
                     rhs = rhs / var_term.coeff;
                 }
@@ -441,10 +444,10 @@ private:
 
     void visit(const EQ *op) {visit_sym_cmp<EQ>(op);}
     void visit(const NE *op) {visit_sym_cmp<NE>(op);}
-    void visit(const LT *op) {visit_asym_cmp<LT, GT>(op, false);}
-    void visit(const LE *op) {visit_asym_cmp<LE, GE>(op, false);}
-    void visit(const GT *op) {visit_asym_cmp<GT, LT>(op, true);}
-    void visit(const GE *op) {visit_asym_cmp<GE, LE>(op, true);}
+    void visit(const LT *op) {visit_asym_cmp<LT, GT>(op, true, true);}
+    void visit(const LE *op) {visit_asym_cmp<LE, GE>(op, true, false);}
+    void visit(const GT *op) {visit_asym_cmp<GT, LT>(op, false, true);}
+    void visit(const GE *op) {visit_asym_cmp<GE, LE>(op, false, false);}
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);
