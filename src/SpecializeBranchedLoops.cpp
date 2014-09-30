@@ -408,15 +408,16 @@ public:
     std::string name;
     std::vector<Branch> branches;
     Scope<Expr> scope;
-    const Scope<int> &free_vars;
+    Scope<int> free_vars;
     Expr min;
     Expr extent;
 
     BranchCollector(const std::string &n, Expr m, Expr e, const Scope<Expr> *s,
-                    const Scope<int> &lv) :
-            name(n), free_vars(lv), min(m), extent(e), branch_depth(0)
+                    const Scope<int> *lv) :
+            name(n), min(m), extent(e), branch_depth(0)
     {
         scope.set_containing_scope(s);
+        free_vars.set_containing_scope(lv);
     }
 
   private:
@@ -930,11 +931,13 @@ public:
 
     void visit(const For *op) {
         size_t b0 = branches.size();
+        free_vars.push(op->name, 0);
         op->body.accept(this);
         for (size_t i = b0; i < branches.size(); ++i) {
             Branch &b = branches[i];
             b.stmt = For::make(op->name, op->min, op->extent, op->for_type, b.stmt);
         }
+        free_vars.pop(op->name);
     }
 
     void visit(const Block *op) {
@@ -993,7 +996,7 @@ public:
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
                       std::vector<Branch> &branches, const Scope<Expr> &scope,
                       const Scope<int> &free_vars) {
-    BranchCollector collector(name, min, extent, &scope, free_vars);
+    BranchCollector collector(name, min, extent, &scope, &free_vars);
     expr.accept(&collector);
     branches.swap(collector.branches);
 }
@@ -1001,7 +1004,7 @@ void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
                       std::vector<Branch> &branches, const Scope<Expr> &scope,
                       const Scope<int> &free_vars) {
-    BranchCollector collector(name, min, extent, &scope, free_vars);
+    BranchCollector collector(name, min, extent, &scope, &free_vars);
     stmt.accept(&collector);
     branches.swap(collector.branches);
 }
