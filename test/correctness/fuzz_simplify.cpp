@@ -29,13 +29,16 @@ Type random_type(int width) {
     return T;
 }
 
-Expr random_leaf(Type T, bool imm_only = false) {
+Expr random_leaf(Type T, bool overflow_undef = false, bool imm_only = false) {
+    if (T.is_int() && T.bits == 32) {
+        overflow_undef = true;
+    }
     if (T.is_scalar()) {
         int var = rand()%fuzz_var_count + 1;
         if (!imm_only && var < fuzz_var_count) {
             return cast(T, random_var());
         } else {
-            if (T == Int(32)) {
+            if (overflow_undef) {
                 // For Int(32), we don't care about correctness during
                 // overflow, so just use numbers that are unlikely to
                 // overflow.
@@ -46,14 +49,16 @@ Expr random_leaf(Type T, bool imm_only = false) {
         }
     } else {
         if (rand() % 2 == 0) {
-            return Ramp::make(random_leaf(T.element_of()), random_leaf(T.element_of()), T.width);
+            return Ramp::make(random_leaf(T.element_of(), overflow_undef),
+                              random_leaf(T.element_of(), overflow_undef),
+                              T.width);
         } else {
-            return Broadcast::make(random_leaf(T.element_of()), T.width);
+            return Broadcast::make(random_leaf(T.element_of(), overflow_undef), T.width);
         }
     }
 }
 
-Expr random_expr(Type T, int depth);
+Expr random_expr(Type T, int depth, bool overflow_undef = false);
 
 Expr random_condition(Type T, int depth) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
@@ -73,7 +78,7 @@ Expr random_condition(Type T, int depth) {
     return make_bin_op[op](a, b);
 }
 
-Expr random_expr(Type T, int depth) {
+Expr random_expr(Type T, int depth, bool overflow_undef) {
     typedef Expr (*make_bin_op_fn)(Expr, Expr);
     static make_bin_op_fn make_bin_op[] = {
         Add::make,
@@ -90,8 +95,12 @@ Expr random_expr(Type T, int depth) {
         Or::make,
     };
 
+    if (T.is_int() && T.bits == 32) {
+        overflow_undef = true;
+    }
+
     if (depth-- <= 0) {
-        return random_leaf(T);
+        return random_leaf(T, overflow_undef);
     }
 
     const int bin_op_count = sizeof(make_bin_op) / sizeof(make_bin_op[0]);
@@ -102,19 +111,19 @@ Expr random_expr(Type T, int depth) {
     switch(op) {
     case 0: return random_leaf(T);
     case 1: return Select::make(random_condition(T, depth),
-                                random_expr(T, depth),
-                                random_expr(T, depth));
+                                random_expr(T, depth, overflow_undef),
+                                random_expr(T, depth, overflow_undef));
 
     case 2:
         if (T.width != 1) {
-            return Broadcast::make(random_expr(T.element_of(), depth),
+            return Broadcast::make(random_expr(T.element_of(), depth, overflow_undef),
                                    T.width);
         }
         break;
     case 3:
         if (T.width != 1) {
-            return Ramp::make(random_expr(T.element_of(), depth),
-                              random_expr(T.element_of(), depth),
+            return Ramp::make(random_expr(T.element_of(), depth, overflow_undef),
+                              random_expr(T.element_of(), depth, overflow_undef),
                               T.width);
         }
         break;
@@ -138,7 +147,7 @@ Expr random_expr(Type T, int depth) {
         do {
             subT = random_type(T.width);
         } while (subT == T || (subT.is_int() && subT.bits == 32));
-        return Cast::make(T, random_expr(subT, depth));
+        return Cast::make(T, random_expr(subT, depth, overflow_undef));
 
     default:
         make_bin_op_fn maker;
@@ -147,12 +156,12 @@ Expr random_expr(Type T, int depth) {
         } else {
             maker = make_bin_op[op%bin_op_count];
         }
-        Expr a = random_expr(T, depth);
-        Expr b = random_expr(T, depth);
+        Expr a = random_expr(T, depth, overflow_undef);
+        Expr b = random_expr(T, depth, overflow_undef);
         return maker(a, b);
     }
     // If we got here, try again.
-    return random_expr(T, depth);
+    return random_expr(T, depth, overflow_undef);
 }
 
 bool test_simplification(Expr a, Expr b, Type T, const map<string, Expr> &vars) {

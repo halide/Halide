@@ -244,6 +244,7 @@ public:
                                output(x, y, c),
                                reference_output(x, y, c),
                                x, y, c);
+                        exit(0);
                     }
                 }
             }
@@ -251,6 +252,8 @@ public:
 
     }
 };
+
+bool have_opencl();
 
 int main(int argc, char **argv) {
     // Load an input image.
@@ -265,11 +268,34 @@ int main(int argc, char **argv) {
     p1.test_performance();
     p1.curved.realize(reference_output);
 
-    printf("Testing performance on GPU:\n");
-    Pipeline p2(input);
-    p2.schedule_for_gpu();
-    p2.test_performance();
-    p2.test_correctness(reference_output);
+    if (have_opencl()) {
+        printf("Testing performance on GPU:\n");
+        Pipeline p2(input);
+        p2.schedule_for_gpu();
+        p2.test_performance();
+        p2.test_correctness(reference_output);
+    } else {
+        printf("Not testing performance on GPU, because I can't find the opencl library\n");
+    }
 
     return 0;
+}
+
+
+// A helper function to check if OpenCL seems to exist on this machine.
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+bool have_opencl() {
+#ifdef _WIN32
+    return LoadLibrary("opengl.dll") != NULL;
+#elif __APPLE__
+    return dlopen("/System/Library/Frameworks/OpenCL.framework/Versions/Current/OpenCL", RTLD_LAZY) != NULL;
+#else
+    return dlopen("libOpenCL.so", RTLD_LAZY) != NULL;
+#endif
 }
