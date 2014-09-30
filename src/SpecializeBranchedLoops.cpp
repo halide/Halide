@@ -784,7 +784,10 @@ public:
                     while (!index.empty() && index.back() >= arg_branches.back().size()) {
                         arg_branches.pop_back();
                         index.pop_back();
-                        index.back()++;
+
+                        if (!index.empty()) {
+                            index.back()++;
+                        }
                     }
 
                     if (index.empty()) {
