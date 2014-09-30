@@ -740,6 +740,15 @@ public:
         }
     }
 
+    void update_branch(Branch &b, const Cast *op, const std::vector<Expr> &value) {
+        b.expr = Cast::make(op->type, value[0]);
+    }
+
+    void visit(const Cast *op) {
+        std::vector<Expr> children(1, op->value);
+        branch_children(op, children);
+    }
+
     template<class Op>
     void update_binary_op_branch(Branch &b, const Op *op, const std::vector<Expr> &ab) {
         b.expr = Op::make(ab[0], ab[1]);
@@ -828,7 +837,9 @@ public:
     }
 
     void visit(const Call *op) {
-        branch_children(op, op->args);
+        if (op->args.size() > 0) {
+            branch_children(op, op->args);
+        }
     }
 
     void update_branch(Branch &b, const Let *op, std::vector<Expr> &body) {
@@ -995,6 +1006,15 @@ public:
 
     void visit(const Allocate *op) {
         std::vector<Stmt> children(1, op->body);
+        branch_children(op, children);
+    }
+
+    void update_branch(Branch &b, const Evaluate *op, const std::vector<Expr> &value) {
+        b.stmt = Evaluate::make(value[0]);
+    }
+
+    void visit(const Evaluate *op) {
+        std::vector<Expr> children(1, op->value);
         branch_children(op, children);
     }
 };
