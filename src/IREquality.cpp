@@ -1,506 +1,429 @@
 #include "IREquality.h"
+#include "IROperator.h"
 
 namespace Halide {
 namespace Internal {
 
 using std::string;
+using std::vector;
 
-class IREquals : public IRVisitor {
-public:
-    int result;
-    Expr expr;
-    Stmt stmt;
+template<typename T>
+IRDeepCompare::CmpResult IRDeepCompare::compare_scalar(T a, T b) {
+    if (result != Equal) return result;
 
-    IREquals(Expr e) : result(0), expr(e) {
+    if (a < b) {
+        result = LessThan;
+    } else if (a > b) {
+        result = GreaterThan;
     }
 
-    IREquals(Stmt s) : result(0), stmt(s) {
-    }
-
-    void visit(const IntImm *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-        const IntImm *e = expr.as<IntImm>();
-        if (e->value < op->value) {
-            result = -1;
-        } else if (e->value > op->value) {
-            result = 1;
-        }
-    }
-
-    void visit(const FloatImm *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-        const FloatImm *e = expr.as<FloatImm>();
-        if (e->value < op->value) {
-            result = -1;
-        } else if (e->value > op->value) {
-            result = 1;
-        }
-    }
-
-    void visit(const StringImm *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-        const StringImm *e = expr.as<StringImm>();
-        if (e->value < op->value) {
-            result = -1;
-        } else if (e->value > op->value) {
-            result = 1;
-        }
-    }
-
-    int compare_types(Type a, Type b) {
-        if (a.code < b.code) {
-            result = -1;
-        } else if (a.code > b.code) {
-            result = 1;
-        } else if (a.bits < b.bits) {
-            result = -1;
-        } else if (a.bits > b.bits) {
-            result = 1;
-        } else if (a.width < b.width) {
-            result = -1;
-        } else if (a.width > b.width) {
-            result = 1;
-        }
-        return result;
-    }
-
-    int compare_node_types(Expr a, Expr b) {
-        const void *ta = a.ptr->type_info();
-        const void *tb = b.ptr->type_info();
-        if (ta < tb) {
-            result = -1;
-        } else if (ta > tb) {
-            result = 1;
-        }
-        return compare_types(a.type(), b.type());
-    }
-
-    int compare_node_types(Stmt a, Stmt b) {
-        const void *ta = a.ptr->type_info();
-        const void *tb = b.ptr->type_info();
-        if (ta < tb) {
-            result = -1;
-        } else if (ta > tb) {
-            result = 1;
-        }
-        return result;
-    }
-
-    int compare_names(const string &a, const string &b) {
-        result = a.compare(b);
-        if (result < 0) result = -1;
-        if (result > 0) result = 1;
-        return result;
-    }
-
-    void visit(const Cast *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        expr = expr.as<Cast>()->value;
-        op->value.accept(this);
-    }
-
-    void visit(const Variable *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Variable *e = expr.as<Variable>();
-
-        compare_names(e->name, op->name);
-    }
-
-    template<typename T>
-    void visit_binary_operator(const T *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const T *e = expr.as<T>();
-
-        expr = e->a;
-        op->a.accept(this);
-
-        expr = e->b;
-        op->b.accept(this);
-    }
-
-    void visit(const Add *op) {visit_binary_operator(op);}
-    void visit(const Sub *op) {visit_binary_operator(op);}
-    void visit(const Mul *op) {visit_binary_operator(op);}
-    void visit(const Div *op) {visit_binary_operator(op);}
-    void visit(const Mod *op) {visit_binary_operator(op);}
-    void visit(const Min *op) {visit_binary_operator(op);}
-    void visit(const Max *op) {visit_binary_operator(op);}
-    void visit(const EQ *op) {visit_binary_operator(op);}
-    void visit(const NE *op) {visit_binary_operator(op);}
-    void visit(const LT *op) {visit_binary_operator(op);}
-    void visit(const LE *op) {visit_binary_operator(op);}
-    void visit(const GT *op) {visit_binary_operator(op);}
-    void visit(const GE *op) {visit_binary_operator(op);}
-    void visit(const And *op) {visit_binary_operator(op);}
-    void visit(const Or *op) {visit_binary_operator(op);}
-
-    void visit(const Not *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Not *e = expr.as<Not>();
-
-        expr = e->a;
-        op->a.accept(this);
-    }
-
-    void visit(const Select *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Select *e = expr.as<Select>();
-
-        expr = e->condition;
-        op->condition.accept(this);
-
-        expr = e->true_value;
-        op->true_value.accept(this);
-
-        expr = e->false_value;
-        op->false_value.accept(this);
-    }
-
-    void visit(const Load *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Load *e = expr.as<Load>();
-
-        if (compare_names(op->name, e->name)) return;
-
-        expr = e->index;
-        op->index.accept(this);
-    }
-
-    void visit(const Ramp *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Ramp *e = expr.as<Ramp>();
-
-        // No need to compare width because we already compared types
-
-        expr = e->base;
-        op->base.accept(this);
-
-        expr = e->stride;
-        op->stride.accept(this);
-    }
-
-    void visit(const Broadcast *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Broadcast *e = expr.as<Broadcast>();
-
-        expr = e->value;
-        op->value.accept(this);
-    }
-
-    void visit(const Call *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Call *e = expr.as<Call>();
-
-        if (compare_names(e->name, op->name)) return;
-
-        if (e->call_type < op->call_type) {
-            result = -1;
-        } else if (e->call_type > op->call_type) {
-            result = 1;
-        } else if (e->value_index < op->value_index) {
-            result = -1;
-        } else if (e->value_index > op->value_index) {
-            result = 1;
-        } else if (e->args.size() < op->args.size()) {
-            result = -1;
-        } else if (e->args.size() > op->args.size()) {
-            result = 1;
-        } else {
-            for (size_t i = 0; (result == 0) && (i < e->args.size()); i++) {
-                expr = e->args[i];
-                op->args[i].accept(this);
-            }
-        }
-    }
-
-    void visit(const Let *op) {
-        if (result || expr.same_as(op) || compare_node_types(expr, op)) return;
-
-        const Let *e = expr.as<Let>();
-
-        if (compare_names(e->name, op->name)) return;
-
-        expr = e->value;
-        op->value.accept(this);
-
-        expr = e->body;
-        op->body.accept(this);
-    }
-
-    void visit(const LetStmt *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const LetStmt *s = stmt.as<LetStmt>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        expr = s->value;
-        op->value.accept(this);
-
-        stmt = s->body;
-        op->body.accept(this);
-    }
-
-    void visit(const AssertStmt *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const AssertStmt *s = stmt.as<AssertStmt>();
-
-        expr = s->condition;
-        op->condition.accept(this);
-
-        expr = s->message;
-        op->message.accept(this);
-    }
-
-    void visit(const Pipeline *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Pipeline *s = stmt.as<Pipeline>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        if (s->update.defined() && !op->update.defined()) {
-            result = -1;
-        } else if (!s->update.defined() && op->update.defined()) {
-            result = 1;
-        } else {
-            stmt = s->produce;
-            op->produce.accept(this);
-
-            if (s->update.defined()) {
-                stmt = s->update;
-                op->update.accept(this);
-            }
-
-            stmt = s->consume;
-            op->consume.accept(this);
-        }
-    }
-
-    void visit(const For *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const For *s = stmt.as<For>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        if (s->for_type < op->for_type) {
-            result = -1;
-        } else if (s->for_type > op->for_type) {
-            result = 1;
-        } else {
-            expr = s->min;
-            op->min.accept(this);
-
-            expr = s->extent;
-            op->extent.accept(this);
-
-            stmt = s->body;
-            op->body.accept(this);
-        }
-    }
-
-    void visit(const Store *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Store *s = stmt.as<Store>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        expr = s->value;
-        op->value.accept(this);
-        if (result) return;
-
-        expr = s->index;
-        op->index.accept(this);
-    }
-
-    void visit(const Provide *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Provide *s = stmt.as<Provide>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        if (s->args.size() < op->args.size()) {
-            result = -1;
-        } else if (s->args.size() > op->args.size()) {
-            result = 1;
-        } else if (s->values.size() < op->values.size()) {
-            result = -1;
-        } else if (s->values.size() > op->values.size()) {
-            result = 1;
-        } else {
-            for (size_t i = 0; (result == 0) && (i < s->values.size()); i++) {
-                expr = s->values[i];
-                op->values[i].accept(this);
-            }
-            for (size_t i = 0; (result == 0) && (i < s->args.size()); i++) {
-                expr = s->args[i];
-                op->args[i].accept(this);
-            }
-        }
-    }
-
-    void visit(const Allocate *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Allocate *s = stmt.as<Allocate>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        if (s->extents.size() < op->extents.size()) {
-            result = -1;
-        } else if (s->extents.size() > op->extents.size()) {
-            result = 1;
-        } else {
-            for (size_t i = 0; i < s->extents.size(); i++) {
-                expr = s->extents[i];
-                op->extents[i].accept(this);
-            }
-        }
-
-        stmt = s->body;
-        op->body.accept(this);
-
-        expr = s->condition;
-        op->condition.accept(this);
-    }
-
-    void visit(const Realize *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Realize *s = stmt.as<Realize>();
-
-        if (compare_names(s->name, op->name)) return;
-
-        if (s->types.size() < op->types.size()) {
-            result = -1;
-        } else if (s->types.size() > op->types.size()) {
-            result = 1;
-        } else if (s->bounds.size() < op->bounds.size()) {
-            result = -1;
-        } else if (s->bounds.size() > op->bounds.size()) {
-            result = 1;
-        } else {
-            for (size_t i = 0; (result == 0) && (i < s->types.size()); i++) {
-                compare_types(s->types[i], op->types[i]);
-            }
-            for (size_t i = 0; (result == 0) && (i < s->bounds.size()); i++) {
-                expr = s->bounds[i].min;
-                op->bounds[i].min.accept(this);
-
-                expr = s->bounds[i].extent;
-                op->bounds[i].extent.accept(this);
-            }
-
-            stmt = s->body;
-            op->body.accept(this);
-
-            expr = s->condition;
-            op->condition.accept(this);
-        }
-    }
-
-    void visit(const Block *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Block *s = stmt.as<Block>();
-
-        if (!s->rest.defined() && op->rest.defined()) {
-            result = -1;
-        } else if (s->rest.defined() && !op->rest.defined()) {
-            result = 1;
-        } else {
-            stmt = s->first;
-            op->first.accept(this);
-
-            if (result == 0 && s->rest.defined()) {
-                stmt = s->rest;
-                op->rest.accept(this);
-            }
-        }
-    }
-
-    void visit(const Free *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Free *s = stmt.as<Free>();
-
-        compare_names(s->name, op->name);
-    }
-
-    void visit(const IfThenElse *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const IfThenElse *s = stmt.as<IfThenElse>();
-
-        if (!s->else_case.defined() && op->else_case.defined()) {
-            result = -1;
-        } else if (s->else_case.defined() && !op->else_case.defined()) {
-            result = 1;
-        } else {
-
-            expr = s->condition;
-            op->condition.accept(this);
-
-            stmt = s->then_case;
-            op->then_case.accept(this);
-
-            if (result == 0 && s->else_case.defined()) {
-                stmt = s->else_case;
-                op->else_case.accept(this);
-            }
-        }
-    }
-
-    void visit(const Evaluate *op) {
-        if (result || stmt.same_as(op) || compare_node_types(stmt, op)) return;
-
-        const Evaluate *s = stmt.as<Evaluate>();
-
-        expr = s->value;
-        op->value.accept(this);
-    }
-};
-
-int deep_compare(Expr a, Expr b) {
-    // Undefined exprs come first
-    // debug(0) << "deep comparison of " << a << " and " << b << "\n";
-    if (!a.defined() && b.defined()) return -1;
-    if (a.defined() && !b.defined()) return 1;
-    if (!a.defined() && !b.defined()) return 0;
-    IREquals eq(a);
-    b.accept(&eq);
-    return eq.result;
+    return result;
 }
 
-int deep_compare(Stmt a, Stmt b) {
-    // Undefined stmts come first
-    if (!a.defined() && b.defined()) return -1;
-    if (a.defined() && !b.defined()) return 1;
-    if (!a.defined() && !b.defined()) return 0;
-    IREquals eq(a);
-    b.accept(&eq);
-    return eq.result;
+IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &b) {
+    if (result != Equal) {
+        return result;
+    }
+
+    if (a.same_as(b)) {
+        result = Equal;
+        return result;
+    }
+
+    if (!a.defined() && !b.defined()) {
+        result = Equal;
+        return result;
+    }
+
+    if (!a.defined()) {
+        result = LessThan;
+        return result;
+    }
+
+    if (!b.defined()) {
+        result = GreaterThan;
+        return result;
+    }
+
+    // If in the future we have hashes for Exprs, this is a good place
+    // to compare the hashes:
+    // if (compare_scalar(a.hash(), b.hash()) != Equal) {
+    //   return result;
+    // }
+
+    if (compare_scalar(a.ptr->type_info(), b.ptr->type_info()) != Equal) {
+        return result;
+    }
+
+    if (compare_types(a.type(), b.type()) != Equal) {
+        return result;
+    }
+
+    // Check the cache - perhaps these exprs have already been compared and found equal.
+    if (cache.enabled() && cache.contains(a, b)) {
+        result = Equal;
+        return result;
+    }
+
+    expr = a;
+    b.accept(this);
+
+    if (cache.enabled() && result == Equal) {
+        cache.insert(a, b);
+    }
+
+    return result;
 }
 
-EXPORT bool equal(Expr a, Expr b) {
-    return deep_compare(a, b) == 0;
+IRDeepCompare::CmpResult IRDeepCompare::compare_stmt(const Stmt &a, const Stmt &b) {
+    if (result != Equal) {
+        return result;
+    }
+
+    if (a.same_as(b)) {
+        result = Equal;
+        return result;
+    }
+
+    if (!a.defined() && !b.defined()) {
+        result = Equal;
+        return result;
+    }
+
+    if (!a.defined()) {
+        result = LessThan;
+        return result;
+    }
+
+    if (!b.defined()) {
+        result = GreaterThan;
+        return result;
+    }
+
+    if (compare_scalar(a.ptr->type_info(), b.ptr->type_info()) != Equal) {
+        return result;
+    }
+
+    stmt = a;
+    b.accept(this);
+
+    return result;
+}
+
+IRDeepCompare::CmpResult IRDeepCompare::compare_types(Type a, Type b) {
+    if (result != Equal) return result;
+
+    compare_scalar(a.code, b.code);
+    compare_scalar(a.bits, b.bits);
+    compare_scalar(a.width, b.width);
+
+    return result;
+}
+
+IRDeepCompare::CmpResult IRDeepCompare::compare_names(const string &a, const string &b) {
+    if (result != Equal) return result;
+
+    int string_cmp = a.compare(b);
+    if (string_cmp < 0) {
+        result = LessThan;
+    } else if (string_cmp > 0) {
+        result = GreaterThan;
+    }
+
+    return result;
+}
+
+
+IRDeepCompare::CmpResult IRDeepCompare::compare_expr_vector(const vector<Expr> &a, const vector<Expr> &b) {
+    if (result != Equal) return result;
+
+    compare_scalar(a.size(), b.size());
+    for (size_t i = 0; (i < a.size()) && result == Equal; i++) {
+        compare_expr(a[i], b[i]);
+    }
+
+    return result;
+}
+
+bool IRDeepCompare::operator()(const Expr &a, const Expr &b) {
+    result = Equal;
+    compare_expr(a, b);
+    return result == LessThan;
+}
+
+bool IRDeepCompare::operator()(const Stmt &a, const Stmt &b) {
+    result = Equal;
+    compare_stmt(a, b);
+    return result == LessThan;
+}
+
+void IRDeepCompare::visit(const IntImm *op) {
+    const IntImm *e = expr.as<IntImm>();
+    compare_scalar(e->value, op->value);
+}
+
+void IRDeepCompare::visit(const FloatImm *op) {
+    const FloatImm *e = expr.as<FloatImm>();
+    compare_scalar(e->value, op->value);
+}
+
+void IRDeepCompare::visit(const StringImm *op) {
+    const StringImm *e = expr.as<StringImm>();
+    compare_names(e->value, op->value);
+}
+
+void IRDeepCompare::visit(const Cast *op) {
+    compare_expr(expr.as<Cast>()->value, op->value);
+}
+
+void IRDeepCompare::visit(const Variable *op) {
+    const Variable *e = expr.as<Variable>();
+    compare_names(e->name, op->name);
+}
+
+namespace {
+template<typename T>
+void visit_binary_operator(IRDeepCompare *cmp, const T *op, Expr expr) {
+    const T *e = expr.as<T>();
+    cmp->compare_expr(e->a, op->a);
+    cmp->compare_expr(e->b, op->b);
+}
+}
+
+void IRDeepCompare::visit(const Add *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Sub *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Mul *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Div *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Mod *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Min *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Max *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const EQ *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const NE *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const LT *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const LE *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const GT *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const GE *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const And *op) {visit_binary_operator(this, op, expr);}
+void IRDeepCompare::visit(const Or *op) {visit_binary_operator(this, op, expr);}
+
+void IRDeepCompare::visit(const Not *op) {
+    const Not *e = expr.as<Not>();
+    compare_expr(e->a, op->a);
+}
+
+void IRDeepCompare::visit(const Select *op) {
+    const Select *e = expr.as<Select>();
+    compare_expr(e->condition, op->condition);
+    compare_expr(e->true_value, op->true_value);
+    compare_expr(e->false_value, op->false_value);
+
+}
+
+void IRDeepCompare::visit(const Load *op) {
+    const Load *e = expr.as<Load>();
+    compare_names(op->name, e->name);
+    compare_expr(e->index, op->index);
+}
+
+void IRDeepCompare::visit(const Ramp *op) {
+    const Ramp *e = expr.as<Ramp>();
+    // No need to compare width because we already compared types
+    compare_expr(e->base, op->base);
+    compare_expr(e->stride, op->stride);
+}
+
+void IRDeepCompare::visit(const Broadcast *op) {
+    const Broadcast *e = expr.as<Broadcast>();
+    compare_expr(e->value, op->value);
+}
+
+void IRDeepCompare::visit(const Call *op) {
+    const Call *e = expr.as<Call>();
+
+    compare_names(e->name, op->name);
+    compare_scalar(e->call_type, op->call_type);
+    compare_scalar(e->value_index, op->value_index);
+    compare_expr_vector(e->args, op->args);
+}
+
+void IRDeepCompare::visit(const Let *op) {
+    const Let *e = expr.as<Let>();
+
+    compare_names(e->name, op->name);
+    compare_expr(e->value, op->value);
+    compare_expr(e->body, op->body);
+}
+
+void IRDeepCompare::visit(const LetStmt *op) {
+    const LetStmt *s = stmt.as<LetStmt>();
+
+    compare_names(s->name, op->name);
+    compare_expr(s->value, op->value);
+    compare_stmt(s->body, op->body);
+}
+
+void IRDeepCompare::visit(const AssertStmt *op) {
+    const AssertStmt *s = stmt.as<AssertStmt>();
+
+    compare_expr(s->condition, op->condition);
+    compare_expr(s->message, op->message);
+}
+
+void IRDeepCompare::visit(const Pipeline *op) {
+    const Pipeline *s = stmt.as<Pipeline>();
+
+    compare_names(s->name, op->name);
+    compare_stmt(s->produce, op->produce);
+    compare_stmt(s->update, op->update);
+    compare_stmt(s->consume, op->consume);
+}
+
+void IRDeepCompare::visit(const For *op) {
+    const For *s = stmt.as<For>();
+
+    compare_names(s->name, op->name);
+    compare_scalar(s->for_type, op->for_type);
+    compare_expr(s->min, op->min);
+    compare_expr(s->extent, op->extent);
+    compare_stmt(s->body, op->body);
+}
+
+void IRDeepCompare::visit(const Store *op) {
+    const Store *s = stmt.as<Store>();
+
+    compare_names(s->name, op->name);
+
+    compare_expr(s->value, op->value);
+    compare_expr(s->index, op->index);
+}
+
+void IRDeepCompare::visit(const Provide *op) {
+    const Provide *s = stmt.as<Provide>();
+
+    compare_names(s->name, op->name);
+    compare_expr_vector(s->args, op->args);
+    compare_expr_vector(s->values, op->values);
+}
+
+void IRDeepCompare::visit(const Allocate *op) {
+    const Allocate *s = stmt.as<Allocate>();
+
+    compare_names(s->name, op->name);
+    compare_expr_vector(s->extents, op->extents);
+    compare_stmt(s->body, op->body);
+    compare_expr(s->condition, op->condition);
+}
+
+void IRDeepCompare::visit(const Realize *op) {
+    const Realize *s = stmt.as<Realize>();
+
+    compare_names(s->name, op->name);
+    compare_scalar(s->types.size(), op->types.size());
+    compare_scalar(s->bounds.size(), op->bounds.size());
+    for (size_t i = 0; (result == Equal) && (i < s->types.size()); i++) {
+        compare_types(s->types[i], op->types[i]);
+    }
+    for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
+        compare_expr(s->bounds[i].min, op->bounds[i].min);
+        compare_expr(s->bounds[i].extent, op->bounds[i].extent);
+    }
+    compare_stmt(s->body, op->body);
+    compare_expr(s->condition, op->condition);
+}
+
+void IRDeepCompare::visit(const Block *op) {
+    const Block *s = stmt.as<Block>();
+
+    compare_stmt(s->first, op->first);
+    compare_stmt(s->rest, op->rest);
+}
+
+void IRDeepCompare::visit(const Free *op) {
+    const Free *s = stmt.as<Free>();
+
+    compare_names(s->name, op->name);
+}
+
+void IRDeepCompare::visit(const IfThenElse *op) {
+    const IfThenElse *s = stmt.as<IfThenElse>();
+
+    compare_expr(s->condition, op->condition);
+    compare_stmt(s->then_case, op->then_case);
+    compare_stmt(s->else_case, op->else_case);
+}
+
+void IRDeepCompare::visit(const Evaluate *op) {
+    const Evaluate *s = stmt.as<Evaluate>();
+
+    compare_expr(s->value, op->value);
+}
+
+bool equal(Expr a, Expr b) {
+    return IRDeepCompare().compare_expr(a, b) == IRDeepCompare::Equal;
 }
 
 bool equal(Stmt a, Stmt b) {
-    return deep_compare(a, b) == 0;
+    return IRDeepCompare().compare_stmt(a, b) == IRDeepCompare::Equal;
+}
+
+
+// Testing code
+namespace {
+
+IRDeepCompare::CmpResult flip_result(IRDeepCompare::CmpResult r) {
+    switch(r) {
+    case IRDeepCompare::LessThan: return IRDeepCompare::GreaterThan;
+    case IRDeepCompare::Equal: return IRDeepCompare::Equal;
+    case IRDeepCompare::GreaterThan: return IRDeepCompare::LessThan;
+    case IRDeepCompare::Unknown: return IRDeepCompare::Unknown;
+    }
+    return IRDeepCompare::Unknown;
+}
+
+void check_equal(Expr a, Expr b) {
+    IRDeepCompare::CmpResult r = IRDeepCompare(5).compare_expr(a, b);
+    internal_assert(r == IRDeepCompare::Equal)
+        << "Error in ir_equality_test: " << r
+        << " instead of " << IRDeepCompare::Equal
+        << " when comparing:\n" << a
+        << "\nand\n" << b << "\n";
+}
+
+void check_not_equal(Expr a, Expr b) {
+    IRDeepCompare::CmpResult r1 = IRDeepCompare(5).compare_expr(a, b);
+    IRDeepCompare::CmpResult r2 = IRDeepCompare(5).compare_expr(b, a);
+    internal_assert(r1 != IRDeepCompare::Equal &&
+                    r1 != IRDeepCompare::Unknown &&
+                    flip_result(r1) == r2)
+        << "Error in ir_equality_test: " << r1
+        << " is not the opposite of " << r2
+        << " when comparing:\n" << a
+        << "\nand\n" << b << "\n";
+}
+
+} // namespace
+
+void ir_equality_test() {
+    Expr x = Variable::make(Int(32), "x");
+    check_equal(Ramp::make(x, 4, 3), Ramp::make(x, 4, 3));
+    check_not_equal(Ramp::make(x, 2, 3), Ramp::make(x, 4, 3));
+
+    check_equal(x, Variable::make(Int(32), "x"));
+    check_not_equal(x, Variable::make(Int(32), "y"));
+
+    // Something that will hang if IREquality has poor computational
+    // complexity.
+    Expr e1 = x, e2 = x;
+    for (int i = 0; i < 100; i++) {
+        e1 = e1*e1 + e1;
+        e2 = e2*e2 + e2;
+    }
+    check_equal(e1, e2);
+    // These are only discovered to be not equal way down the tree:
+    e2 = e2*e2 + e2;
+    check_not_equal(e1, e2);
+
+    debug(0) << "ir_equality_test passed\n";
 }
 
 }}
