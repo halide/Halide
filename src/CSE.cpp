@@ -264,7 +264,7 @@ namespace {
 // Normalize all names in an expr so that expr compares can be done
 // without worrying about mere name differences.
 class NormalizeVarNames : public IRMutator {
-    int counter = 0;
+    int counter;
 
     map<string, string> new_names;
 
@@ -286,6 +286,9 @@ class NormalizeVarNames : public IRMutator {
         Expr body = mutate(let->body);
         expr = Let::make(new_name, value, body);
     }
+
+public:
+    NormalizeVarNames() : counter(0) {}
 };
 
 void check(Expr in, Expr correct) {
