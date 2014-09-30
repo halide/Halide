@@ -5,11 +5,26 @@ namespace Halide {
 namespace Internal {
 
 using std::string;
+using std::vector;
+
+template<typename T>
+IRDeepCompare::CmpResult IRDeepCompare::compare_scalar(T a, T b) {
+    if (result != Equal) return result;
+
+    if (a < b) {
+        result = LessThan;
+    } else if (a > b) {
+        result = GreaterThan;
+    }
+
+    return result;
+}
 
 IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &b) {
     if (result != Equal) {
         return result;
     }
+
     if (a.same_as(b)) {
         result = Equal;
         return result;
@@ -32,25 +47,11 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &
 
     // If in the future we have hashes for Exprs, this is a good place
     // to compare the hashes:
-    /*
-    uint64_t ha = a.hash(), hb = b.hash();
-    if (ha < hb) {
-        result = LessThan;
-        return;
-    }
-    if (ha > hb) {
-        result = GreaterThan;
-        return;
-    }
-    */
+    // if (compare_scalar(a.hash(), b.hash()) != Equal) {
+    //   return result;
+    // }
 
-    const void *ta = a.ptr->type_info();
-    const void *tb = b.ptr->type_info();
-    if (ta < tb) {
-        result = LessThan;
-        return result;
-    } else if (ta > tb) {
-        result = GreaterThan;
+    if (compare_scalar(a.ptr->type_info(), b.ptr->type_info()) != Equal) {
         return result;
     }
 
@@ -99,18 +100,47 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_stmt(const Stmt &a, const Stmt &
         return result;
     }
 
-    const void *ta = a.ptr->type_info();
-    const void *tb = b.ptr->type_info();
-    if (ta < tb) {
-        result = LessThan;
-        return result;
-    } else if (ta > tb) {
-        result = GreaterThan;
+    if (compare_scalar(a.ptr->type_info(), b.ptr->type_info()) != Equal) {
         return result;
     }
 
     stmt = a;
     b.accept(this);
+
+    return result;
+}
+
+IRDeepCompare::CmpResult IRDeepCompare::compare_types(Type a, Type b) {
+    if (result != Equal) return result;
+
+    compare_scalar(a.code, b.code);
+    compare_scalar(a.bits, b.bits);
+    compare_scalar(a.width, b.width);
+
+    return result;
+}
+
+IRDeepCompare::CmpResult IRDeepCompare::compare_names(const string &a, const string &b) {
+    if (result != Equal) return result;
+
+    int string_cmp = a.compare(b);
+    if (string_cmp < 0) {
+        result = LessThan;
+    } else if (string_cmp > 0) {
+        result = GreaterThan;
+    }
+
+    return result;
+}
+
+
+IRDeepCompare::CmpResult IRDeepCompare::compare_expr_vector(const vector<Expr> &a, const vector<Expr> &b) {
+    if (result != Equal) return result;
+
+    compare_scalar(a.size(), b.size());
+    for (size_t i = 0; (i < a.size()) && result == Equal; i++) {
+        compare_expr(a[i], b[i]);
+    }
 
     return result;
 }
@@ -128,52 +158,18 @@ bool IRDeepCompare::operator()(const Stmt &a, const Stmt &b) {
 }
 
 void IRDeepCompare::visit(const IntImm *op) {
-
     const IntImm *e = expr.as<IntImm>();
-    if (e->value < op->value) {
-        result = LessThan;
-    } else if (e->value > op->value) {
-        result = GreaterThan;
-    }
+    compare_scalar(e->value, op->value);
 }
 
 void IRDeepCompare::visit(const FloatImm *op) {
     const FloatImm *e = expr.as<FloatImm>();
-    if (e->value < op->value) {
-        result = LessThan;
-    } else if (e->value > op->value) {
-        result = GreaterThan;
-    }
+    compare_scalar(e->value, op->value);
 }
 
 void IRDeepCompare::visit(const StringImm *op) {
     const StringImm *e = expr.as<StringImm>();
     compare_names(e->value, op->value);
-}
-
-IRDeepCompare::CmpResult IRDeepCompare::compare_types(Type a, Type b) {
-    if (a.code < b.code) {
-        result = LessThan;
-    } else if (a.code > b.code) {
-        result = GreaterThan;
-    } else if (a.bits < b.bits) {
-        result = LessThan;
-    } else if (a.bits > b.bits) {
-        result = GreaterThan;
-    } else if (a.width < b.width) {
-        result = LessThan;
-    } else if (a.width > b.width) {
-        result = GreaterThan;
-    }
-    return result;
-}
-
-IRDeepCompare::CmpResult IRDeepCompare::compare_names(const string &a, const string &b) {
-    if (result != Equal) return result;
-    int string_cmp = a.compare(b);
-    if (string_cmp < 0) result = LessThan;
-    if (string_cmp > 0) result = GreaterThan;
-    return result;
 }
 
 void IRDeepCompare::visit(const Cast *op) {
@@ -243,25 +239,11 @@ void IRDeepCompare::visit(const Broadcast *op) {
 
 void IRDeepCompare::visit(const Call *op) {
     const Call *e = expr.as<Call>();
-    if (compare_names(e->name, op->name) != Equal) return;
 
-    if (e->call_type < op->call_type) {
-        result = LessThan;
-    } else if (e->call_type > op->call_type) {
-        result = GreaterThan;
-    } else if (e->value_index < op->value_index) {
-        result = LessThan;
-    } else if (e->value_index > op->value_index) {
-        result = GreaterThan;
-    } else if (e->args.size() < op->args.size()) {
-        result = LessThan;
-    } else if (e->args.size() > op->args.size()) {
-        result = GreaterThan;
-    } else {
-        for (size_t i = 0; (result == Equal) && (i < e->args.size()); i++) {
-            compare_expr(e->args[i], op->args[i]);
-        }
-    }
+    compare_names(e->name, op->name);
+    compare_scalar(e->call_type, op->call_type);
+    compare_scalar(e->value_index, op->value_index);
+    compare_expr_vector(e->args, op->args);
 }
 
 void IRDeepCompare::visit(const Let *op) {
@@ -299,17 +281,11 @@ void IRDeepCompare::visit(const Pipeline *op) {
 void IRDeepCompare::visit(const For *op) {
     const For *s = stmt.as<For>();
 
-    if (compare_names(s->name, op->name) != Equal) return;
-
-    if (s->for_type < op->for_type) {
-        result = LessThan;
-    } else if (s->for_type > op->for_type) {
-        result = GreaterThan;
-    } else {
-        compare_expr(s->min, op->min);
-        compare_expr(s->extent, op->extent);
-        compare_stmt(s->body, op->body);
-    }
+    compare_names(s->name, op->name);
+    compare_scalar(s->for_type, op->for_type);
+    compare_expr(s->min, op->min);
+    compare_expr(s->extent, op->extent);
+    compare_stmt(s->body, op->body);
 }
 
 void IRDeepCompare::visit(const Store *op) {
@@ -324,41 +300,16 @@ void IRDeepCompare::visit(const Store *op) {
 void IRDeepCompare::visit(const Provide *op) {
     const Provide *s = stmt.as<Provide>();
 
-    if (compare_names(s->name, op->name) != Equal) return;
-
-    if (s->args.size() < op->args.size()) {
-        result = LessThan;
-    } else if (s->args.size() > op->args.size()) {
-        result = GreaterThan;
-    } else if (s->values.size() < op->values.size()) {
-        result = LessThan;
-    } else if (s->values.size() > op->values.size()) {
-        result = GreaterThan;
-    } else {
-        for (size_t i = 0; (result == Equal) && (i < s->values.size()); i++) {
-            compare_expr(s->values[i], op->values[i]);
-        }
-        for (size_t i = 0; (result == Equal) && (i < s->args.size()); i++) {
-            compare_expr(s->args[i], op->args[i]);
-        }
-    }
+    compare_names(s->name, op->name);
+    compare_expr_vector(s->args, op->args);
+    compare_expr_vector(s->values, op->values);
 }
 
 void IRDeepCompare::visit(const Allocate *op) {
     const Allocate *s = stmt.as<Allocate>();
 
-    if (compare_names(s->name, op->name) != Equal) return;
-
-    if (s->extents.size() < op->extents.size()) {
-        result = LessThan;
-    } else if (s->extents.size() > op->extents.size()) {
-        result = GreaterThan;
-    } else {
-        for (size_t i = 0; i < s->extents.size(); i++) {
-            compare_expr(s->extents[i], op->extents[i]);
-        }
-    }
-
+    compare_names(s->name, op->name);
+    compare_expr_vector(s->extents, op->extents);
     compare_stmt(s->body, op->body);
     compare_expr(s->condition, op->condition);
 }
@@ -366,28 +317,18 @@ void IRDeepCompare::visit(const Allocate *op) {
 void IRDeepCompare::visit(const Realize *op) {
     const Realize *s = stmt.as<Realize>();
 
-    if (compare_names(s->name, op->name) != Equal) return;
-
-    if (s->types.size() < op->types.size()) {
-        result = LessThan;
-    } else if (s->types.size() > op->types.size()) {
-        result = GreaterThan;
-    } else if (s->bounds.size() < op->bounds.size()) {
-        result = LessThan;
-    } else if (s->bounds.size() > op->bounds.size()) {
-        result = GreaterThan;
-    } else {
-        for (size_t i = 0; (result == Equal) && (i < s->types.size()); i++) {
-            compare_types(s->types[i], op->types[i]);
-        }
-        for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
-            compare_expr(s->bounds[i].min, op->bounds[i].min);
-            compare_expr(s->bounds[i].extent, op->bounds[i].extent);
-        }
-
-        compare_stmt(s->body, op->body);
-        compare_expr(s->condition, op->condition);
+    compare_names(s->name, op->name);
+    compare_scalar(s->types.size(), op->types.size());
+    compare_scalar(s->bounds.size(), op->bounds.size());
+    for (size_t i = 0; (result == Equal) && (i < s->types.size()); i++) {
+        compare_types(s->types[i], op->types[i]);
     }
+    for (size_t i = 0; (result == Equal) && (i < s->bounds.size()); i++) {
+        compare_expr(s->bounds[i].min, op->bounds[i].min);
+        compare_expr(s->bounds[i].extent, op->bounds[i].extent);
+    }
+    compare_stmt(s->body, op->body);
+    compare_expr(s->condition, op->condition);
 }
 
 void IRDeepCompare::visit(const Block *op) {

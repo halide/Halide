@@ -99,6 +99,11 @@ private:
 
     CmpResult compare_names(const std::string &a, const std::string &b);
     CmpResult compare_types(Type a, Type b);
+    CmpResult compare_expr_vector(const std::vector<Expr> &a, const std::vector<Expr> &b);
+
+    // Compare two things that already have a well-defined operator<
+    template<typename T>
+    CmpResult compare_scalar(T a, T b);
 
     void visit(const IntImm *);
     void visit(const FloatImm *);
