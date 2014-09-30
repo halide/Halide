@@ -120,6 +120,19 @@ define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinl
        ret double %y
 }
 
+declare float @llvm.trunc.f32(float) nounwind readnone
+declare double @llvm.trunc.f64(double) nounwind readnone
+
+define weak_odr float @trunc_f32(float %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call float @llvm.trunc.f32(float %x) nounwind readnone
+       ret float %y
+}
+
+define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @llvm.trunc.f64(double %x) nounwind readnone
+       ret double %y
+}
+
 declare float @llvm.pow.f32(float, float) nounwind readnone
 declare double @llvm.pow.f64(double, double) nounwind readnone
 
