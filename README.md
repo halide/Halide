@@ -226,17 +226,17 @@ histograms or recursive filters are notoriously hard to express in GLSL.
 Writing OpenGL-Based Filters
 ----------------------------
 
-To enable code generation for OpenGL, include "opengl" in the target specifier
+To enable code generation for OpenGL, include `opengl` in the target specifier
 passed to Halide. Since OpenGL shaders are limited in their computational
 power, you must also specify a CPU target for those parts of the filter that
 cannot or should not be computed on the GPU. Examples of valid target
 specifiers are
 
     host-opengl
-    x86-opengl-gpu_debug
+    x86-opengl-debug
 
-Adding "gpu_debug", as in the second example, adds additional logging output
-and is highly recommended during development.
+Adding `debug`, as in the second example, adds additional logging output and
+is highly recommended during development.
 
 By default, filters compiled for OpenGL targets run completely on the CPU.
 Execution on the GPU must be enabled for individual Funcs by appropriate
@@ -252,7 +252,7 @@ specified for both input and output buffers before scheduling:
     Func f;
     Var x, y, c;
     f(x, y, c) = ...;
-  
+
     input.set_bounds(2, 0, 3);   // specify color range for input
     f.bound(c, 0, 3);            // and output
     f.glsl(x, y, c);
@@ -282,38 +282,64 @@ link implementations of the following two functions with your Halide code:
     extern "C" int halide_opengl_create_context(void *) {
         return 0;  // if successful
     }
-  
+
     extern "C" void *halide_opengl_get_proc_addr(void *, const char *name) {
         ...
     }
 
 Halide allocates and deletes textures as necessary.  Applications may manage
-the textures by hand by setting the 'dev' field in buffer_t; this is most
-useful for reusing image data that is already stored in textures. Some
-rudimentary checks are performed to ensure that externally allocated textures
-have the correct format, but in general that's the responsibility of the
-application.
+the textures by hand by setting the `buffer_t::dev` field; this is most useful
+for reusing image data that is already stored in textures. Some rudimentary
+checks are performed to ensure that externally allocated textures have the
+correct format, but in general that's the responsibility of the application.
+
+It is possible to let render directly to the current framebuffer; to do this,
+set the `dev` field of the output buffer to the value returned by
+`halide_opengl_output_client_bound`.  The example in apps/HelloAndroidGL
+demonstrates this technique.
+
+Some operating systems can delete the OpenGL context of suspended
+applications. If this happens, Halide needs to re-initialize itself with the
+new context after the application resumes. Call `halide_opengl_context_lost`
+to reset Halide's OpenGL state after this has happened.
 
 
 Limitations
 -----------
 
-GLSL shaders can only express a subset of the Halide language.  The current
-implementation of the OpenGL backend targets OpenGL ES 2.0, which has
-additional restrictions, but is widely available on both mobile devices and
-traditional computers. Some limitations include:
-
-  * Only uint8 textures are properly supported so far. uint16 buffers work in
-    principle, but are truncated to 8 bits by many OpenGL implementations.
-    Support for float and half-float textures is planned for the near future.
-
-  * Only 2D images with 1, 3, or 4 color channels can be scheduled;
-
-  * Textures are either read-only or write-only, never read-write;
+The current implementation of the OpenGL backend targets the common subset of
+OpenGL 2.0 and OpenGL ES 2.0 which is widely available on both mobile devices
+and traditional computers.  As a consequence, only a subset of the Halide
+language can be scheduled to run using OpenGL. Some important limitations are:
 
   * Reductions cannot be implemented in GLSL and must be run on the CPU.
 
-The maximum texture size in OpenGL is GL_MAX_TEXTURE_SIZE, which is often
+  * OpenGL ES 2.0 only supports uint8 buffers.
+
+    Support for floating point texture is available, but requires OpenGL (ES)
+    3.0 or the texture_float extension, which may not work on all mobile
+    devices.
+
+  * OpenGL ES 2.0 has very limited support for integer arithmetic. For maximum
+    compatibility, consider doing all computations using floating point, even
+    when using integer textures.
+
+  * Only 2D images with 3 or 4 color channels can be scheduled. Images with
+    one or two channels require OpenGL (ES) 3.0 or the texture_rg extension.
+
+  * Not all builtin functions provided by Halide are currently supported, for
+    example `fast_log`, `fast_exp`, `fast_pow`, `reinterpret`, bit operations,
+    `random_float`, `random_int` cannot be used in GLSL code.
+
+The maximum texture size in OpenGL is `GL_MAX_TEXTURE_SIZE`, which is often
 smaller than the image of interest; on mobile devices, for example,
-GL_MAX_TEXTURE_SIZE is commonly 2048. Tiling must be used to process larger
+`GL_MAX_TEXTURE_SIZE` is commonly 2048. Tiling must be used to process larger
 images.
+
+Planned features:
+
+  * Support for half-float textures and arithmetic
+
+  * Support for integer textures and arithmetic
+
+  * Compute shaders
