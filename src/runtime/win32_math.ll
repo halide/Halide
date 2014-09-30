@@ -118,7 +118,7 @@ declare double @llvm.copysign.f64(double, double) nounwind readnone
 
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone noinline {
        %a = tail call double @abs_f64(double %x) nounwind readnone
-       %z = fadd double %a, 0.5
+       %z = fadd double %a, 0.49999999999999994
        %f = tail call double @floor_f64(double %z) nounwind readnone
        %y = tail call double @llvm.copysign.f64(double %f, double %x)
        ret double %y
