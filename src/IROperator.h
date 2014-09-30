@@ -854,6 +854,19 @@ inline Expr round(Expr x) {
     }
 }
 
+/** Return the integer part of a floating-point expression. If the argument is
+ * not floating-point, it is cast to Float(32). The return value is still in
+ * floating point, despite being a whole number. Vectorizes cleanly. */
+inline Expr trunc(Expr x) {
+    user_assert(x.defined()) << "trunc of undefined Expr\n";
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(Float(64), "trunc_f64", vec(x), Internal::Call::Extern);
+    } else {
+        Type t = Float(32, x.type().width);
+        return Internal::Call::make(t, "trunc_f32", vec(cast(t, x)), Internal::Call::Extern);
+    }
+}
+
 /** Reinterpret the bits of one value as another type. */
 inline Expr reinterpret(Type t, Expr e) {
     user_assert(e.defined()) << "reinterpret of undefined Expr\n";
