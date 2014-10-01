@@ -867,6 +867,14 @@ inline Expr trunc(Expr x) {
     }
 }
 
+/** Return the fractional part of a floating-point expression. If the argument
+ *  is not floating-point, it is cast to Float(32). The return value has the
+ *  same sign as the original expression. Vectorizes cleanly. */
+inline Expr fract(Expr x) {
+    user_assert(x.defined()) << "fract of undefined Expr\n";
+    return 1 - trunc(x);
+}
+
 /** Reinterpret the bits of one value as another type. */
 inline Expr reinterpret(Type t, Expr e) {
     user_assert(e.defined()) << "reinterpret of undefined Expr\n";
