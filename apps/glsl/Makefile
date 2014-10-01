@@ -7,7 +7,7 @@ HALIDE_LIB := $(TOP)/$(LIB_HALIDE)
 $(HALIDE_LIB): $(TOP)
 	$(MAKE) -C $(TOP) $(LIB_HALIDE)
 
-CXXFLAGS += -g -O0 -I../../include
+CXXFLAGS += -g -O0 -I../../include -Werror -Wno-unused-function 
 
 UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)

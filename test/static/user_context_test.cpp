@@ -45,12 +45,20 @@ int main(int argc, char **argv) {
     }
     Image<float> output(10, 10);
 
-    user_context(input, context_pointer, output);
+    int result = user_context(input, context_pointer, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
 
     Image<float> big_output(11, 11);
-    user_context(input, context_pointer, big_output);
+    result = user_context(input, context_pointer, big_output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
     assert(called_error);
 
     printf("Success!\n");

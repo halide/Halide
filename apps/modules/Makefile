@@ -1,7 +1,7 @@
 include ../support/Makefile.inc
 
 HALIDE_LD_FLAGS=../../$(LIB_HALIDE) -lpthread -ldl -lz $(LDFLAGS)
-HALIDE_CXX_FLAGS=-I../../include -g
+HALIDE_CXX_FLAGS=-I../../include -g -Werror -Wno-unused-function 
 
 all: out.png
 

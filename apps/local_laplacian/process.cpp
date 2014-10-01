@@ -21,7 +21,11 @@ int main(int argc, char **argv) {
     unsigned int bestT = 0xffffffff;
     for (int i = 0; i < 5; i++) {
       gettimeofday(&t1, NULL);
-      local_laplacian(levels, alpha/(levels-1), beta, input, output);
+      int result = local_laplacian(levels, alpha/(levels-1), beta, input, output);
+      if (result != 0) {
+          printf("filter failed: %d\n", result);
+          return -1;
+      }
       gettimeofday(&t2, NULL);
       unsigned int t = (t2.tv_sec - t1.tv_sec) * 1000000 + (t2.tv_usec - t1.tv_usec);
       if (t < bestT) bestT = t;
@@ -29,7 +33,11 @@ int main(int argc, char **argv) {
     printf("%u\n", bestT);
 
 
-    local_laplacian(levels, alpha/(levels-1), beta, input, output);
+    int result = local_laplacian(levels, alpha/(levels-1), beta, input, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     save(output, argv[5]);
 

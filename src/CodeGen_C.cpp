@@ -252,10 +252,20 @@ void CodeGen_C::compile_header(const string &name, const vector<Argument> &args)
     // Throw in a definition of a buffer_t
     stream << buffer_t_definition;
 
-    // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
-    // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
+    stream << "#ifndef HALIDE_MUST_USE_RESULT\n";
+    stream << "#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ >= 4)\n";
+    stream << "#define HALIDE_MUST_USE_RESULT "
+              "__attribute__ ((warn_unused_result))\n";
+    stream << "#else\n";
+    stream << "#define HALIDE_MUST_USE_RESULT\n";
+    stream << "#endif\n";
+    stream << "#endif\n";
+
+    // Default HALIDE_FUNCTION_ATTRS to HALIDE_MUST_USE_RESULT;
+    // clients can undef this if they are certain that their implementation
+    // of halide_error() makes checking the  function result unnecessary.
     stream << "#ifndef HALIDE_FUNCTION_ATTRS\n";
-    stream << "#define HALIDE_FUNCTION_ATTRS\n";
+    stream << "#define HALIDE_FUNCTION_ATTRS HALIDE_MUST_USE_RESULT\n";
     stream << "#endif\n";
 
     // Now the function prototype

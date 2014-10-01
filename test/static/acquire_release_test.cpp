@@ -206,7 +206,11 @@ int main(int argc, char **argv) {
 
     Image<float> output(W, H);
 
-    acquire_release(input, output);
+    int result = acquire_release(input, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     output.copy_to_host();
 

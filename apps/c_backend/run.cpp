@@ -45,9 +45,17 @@ int main(int argc, char **argv) {
     Image<uint16_t> out_native(423, 633);
     Image<uint16_t> out_c(423, 633);
 
-    pipeline_native(in, out_native);
+    int result = pipeline_native(in, out_native);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
-    pipeline_c(in, out_c);
+    result = pipeline_c(in, out_c);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     for (int y = 0; y < out_native.height(); y++) {
         for (int x = 0; x < out_native.width(); x++) {

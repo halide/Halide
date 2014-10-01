@@ -1,7 +1,7 @@
 
 NACL_SDK_ROOT ?= $(HOME)/nacl_sdk/pepper_35
 
-WARNINGS := -Wall -Wswitch-enum
+WARNINGS := -Wall -Wswitch-enum -Werror -Wno-unused-function 
 CXXFLAGS := -pthread $(WARNINGS) -I $(NACL_SDK_ROOT)/include -I ../../include
 
 UNAME = $(shell uname)

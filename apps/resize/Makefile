@@ -1,6 +1,6 @@
 include ../support/Makefile.inc
 
-CXXFLAGS += -g -Wall
+CXXFLAGS += -g -Wall -Werror -Wno-unused-function 
 
 .PHONY: clean
 

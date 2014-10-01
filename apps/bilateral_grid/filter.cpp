@@ -21,7 +21,11 @@ int main(int argc, char **argv) {
     Image<float> input = load<float>(argv[1]);
     Image<float> output(input.width(), input.height(), 1);
 
-    bilateral_grid(atof(argv[3]), input, output);
+    int result = bilateral_grid(atof(argv[3]), input, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
 #if 1
     // Timing code
@@ -30,7 +34,11 @@ int main(int argc, char **argv) {
     for (int j = 0; j < 10; j++) {
         gettimeofday(&t1, NULL);
         for (int i = 0; i < 10; i++) {
-            bilateral_grid(atof(argv[3]), input, output);
+            int result = bilateral_grid(atof(argv[3]), input, output);
+            if (result != 0) {
+                printf("filter failed: %d\n", result);
+                return -1;
+            }
         }
         gettimeofday(&t2, NULL);
         double t = (t2.tv_sec - t1.tv_sec)*1000.0 + (t2.tv_usec - t1.tv_usec)/1000.0;

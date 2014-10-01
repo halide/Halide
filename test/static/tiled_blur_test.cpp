@@ -37,7 +37,11 @@ int main(int argc, char **argv) {
 
     printf("Evaluating output over %d x %d in tiles of size 32 x 32\n",
            W, H);
-    tiled_blur(input, output);
+    int result = tiled_blur(input, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     printf("Success!\n");
     return 0;

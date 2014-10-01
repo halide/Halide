@@ -181,13 +181,21 @@ Image<uint16_t> blur_halide(Image<uint16_t> in) {
     Image<uint16_t> out(in.width()-8, in.height()-2);
 
     // Call it once to initialize the halide runtime stuff
-    halide_blur(in, out);
+    int result = halide_blur(in, out);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        exit(-1);
+    }
 
     begin_timing;
 
     // Compute the same region of the output as blur_fast (i.e., we're
     // still being sloppy with boundary conditions)
-    halide_blur(in, out);
+    result = halide_blur(in, out);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        exit(-1);
+    }
 
     end_timing;
 

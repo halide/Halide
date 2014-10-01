@@ -14,7 +14,11 @@ int main(int argc, char **argv) {
     }
     Image<float> output(10, 10, 3);
 
-    embed_image(input, output);
+    int result = embed_image(input, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     // We expected the color channels to be flipped and multiplied by 0.5
     for (int y = 0; y < 10; y++) {
@@ -24,6 +28,7 @@ int main(int argc, char **argv) {
                 if (fabs(output(x, y, c) - correct) > 0.0001f) {
                     printf("output(%d, %d, %d) was %f instead of %f\n",
                            x, y, c, output(x, y, c), correct);
+                    return -1;
                 }
             }
         }

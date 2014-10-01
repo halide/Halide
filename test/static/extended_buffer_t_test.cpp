@@ -16,7 +16,11 @@ int main(int argc, char **argv) {
     fancy_buffer_t fancy_input(input);
     fancy_input.extra_field = 17;
 
-    extended_buffer_t(&fancy_input, output);
+    int result = extended_buffer_t(&fancy_input, output);
+    if (result != 0) {
+        printf("filter failed: %d\n", result);
+        return -1;
+    }
 
     // Output should be input + 17
     for (int y = 0; y < 10; y++) {

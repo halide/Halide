@@ -18,7 +18,11 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 2; i++) {
         Image<int> output(80);
 
-        func_gpu_object_lifetime(output);
+        int result = func_gpu_object_lifetime(output);
+        if (result != 0) {
+            printf("filter failed: %d\n", result);
+            return -1;
+        }
 
         output.copy_to_host();
         output.dev_free();
