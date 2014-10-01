@@ -200,17 +200,17 @@ public:
      * multiple outputs. */
     EXPORT Stage operator=(const Tuple &);
 
-    /** Define this function as a sum reduction over the negative of
-     * the given expression. The expression should refer to some RDom
-     * to sum over. If the function does not already have a pure
-     * definition, this sets it to zero.
-     */
-    EXPORT Stage operator+=(Expr);
-
     /** Define this function as a sum reduction over the given
      * expression. The expression should refer to some RDom to sum
      * over. If the function does not already have a pure definition,
      * this sets it to zero.
+     */
+    EXPORT Stage operator+=(Expr);
+
+    /** Define this function as a sum reduction over the negative of
+     * the given expression. The expression should refer to some RDom
+     * to sum over. If the function does not already have a pure
+     * definition, this sets it to zero.
      */
     EXPORT Stage operator-=(Expr);
 
