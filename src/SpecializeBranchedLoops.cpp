@@ -389,28 +389,31 @@ bool expr_branches_in_var(const std::string &name, Expr value, const Scope<Expr>
 
 class FindFreeVariables : public IRVisitor {
   public:
-    const Scope<int> &free_vars;
+    const Scope<Expr> &scope;
+    const Scope<int>  &free_vars;
     std::set<std::string> vars;
 
-    FindFreeVariables(const Scope<int> &fv) : free_vars(fv) {}
+    FindFreeVariables(const Scope<Expr> &s, const Scope<int> &fv) : scope(s), free_vars(fv) {}
   private:
     using IRVisitor::visit;
 
     void visit(const Variable *op) {
         if (free_vars.contains(op->name)) {
             vars.insert(op->name);
+        } else if (scope.contains(op->name)) {
+            scope.get(op->name).accept(this);
         }
     }
 };
 
-size_t num_free_vars(Expr expr, const Scope<int> &free_vars) {
-    FindFreeVariables find(free_vars);
+size_t num_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_vars) {
+    FindFreeVariables find(scope, free_vars);
     expr.accept(&find);
     return find.vars.size();
 }
 
-bool has_free_vars(Expr expr, const Scope<int> &free_vars) {
-    return num_free_vars(expr, free_vars) > 0;
+bool has_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_vars) {
+    return num_free_vars(expr, scope, free_vars) > 0;
 }
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
@@ -605,7 +608,7 @@ public:
 
     void visit_simple_cond(Expr cond, Expr a, Expr b) {
         // Bail out if this condition depends on more than just the current loop variable.
-        if (num_free_vars(cond, free_vars) > 1) return;
+        if (num_free_vars(cond, scope, free_vars) > 1) return;
 
         Expr solve = solve_for_linear_variable(cond, name, scope);
         if (!solve.same_as(cond)) {
@@ -657,16 +660,12 @@ public:
         branch_children(op, children);
     }
 
-    void visit(const Variable *op) {
-        if (scope.contains(op->name)) {
-            size_t old_num_branches = branches.size();
-            Expr expr = scope.get(op->name);
-            expr.accept(this);
-
-            if (branches.size() > old_num_branches()) {
-            }
-        }
-    }
+    // void visit(const Variable *op) {
+    //     if (scope.contains(op->name)) {
+    //         Expr expr = scope.get(op->name);
+    //         expr.accept(this);
+    //     }
+    // }
 
     template<class Op>
     void update_binary_op_branch(Branch &b, const Op *op, const std::vector<Expr> &ab) {
@@ -799,26 +798,65 @@ public:
     }
 
     void update_branch(Branch &b, const Let *op, std::vector<Expr> &body) {
-        b.expr = Let::make(op->name, op->value, body[0]);
-    }
-
-    void visit(const Let *op) {
-        scope.push(op->name, op->value);
-        std::vector<Expr> body(1, op->body);
-        branch_children(op, body);
-        scope.pop(op->name);
+        b.expr = Let::make(op->name, scope.get(op->name), body[0]);
     }
 
     void update_branch(Branch &b, const LetStmt *op, std::vector<Stmt> &body) {
-        b.stmt = LetStmt::make(op->name, op->value, body[0]);
+        b.stmt = LetStmt::make(op->name, scope.get(op->name), body[0]);
+        // debug(0) << "Updated let branch:\n" << b.stmt << "\n";
     }
 
-    void visit(const LetStmt *op) {
-        scope.push(op->name, op->value);
-        std::vector<Stmt> body(1, op->body);
-        branch_children(op, body);
-        scope.pop(op->name);
+    template<class StmtOrExpr, class LetOp>
+    void visit_let(const LetOp *op) {
+        // First we branch the value of the let.
+        size_t old_num_branches = branches.size();
+        op->value.accept(this);
+
+        if (branches.size() == old_num_branches) {
+            // If the value didn't branch we continue to branch the let body normally.
+            scope.push(op->name, op->value);
+            std::vector<StmtOrExpr> body(1, op->body);
+            branch_children(op, body);
+            scope.pop(op->name);
+        } else {
+            // Collect the branches for the let value
+            std::vector<Branch> let_branches(branches.begin() + old_num_branches, branches.end());
+            branches.erase(branches.begin() + old_num_branches, branches.end());
+
+            // debug(0) << "Branched let " << op->name << " = " << op->value << " into "
+            //          << let_branches.size() << " branches.\n";
+
+            Expr old_min = min;
+            Expr old_extent = extent;
+
+            for (size_t i = 0; i < let_branches.size(); ++i) {
+                min = let_branches[i].min;
+                extent = let_branches[i].extent;
+
+                // debug(0) << "\tBranching body on interval [" << min << ", " << extent << ") with "
+                //          << op->name << " = " << let_branches[i].expr << "\n";
+
+                // Now we branch the body, first pushing the value expr from the current value branch into the scope.
+                old_num_branches = branches.size();
+                scope.push(op->name, let_branches[i].expr);
+                std::vector<StmtOrExpr> body(1, op->body);
+                branch_children(op, body);
+                scope.pop(op->name);
+
+                if (branches.size() == old_num_branches) {
+                    // If the body didn't branch then we need to rebuild the let using the current value branch.
+                    Branch b = make_branch(min, extent, LetOp::make(op->name, let_branches[i].expr, op->body));
+                    branches.push_back(b);
+                }
+            }
+
+            min = old_min;
+            extent = old_extent;
+        }
     }
+
+    void visit(const Let *op) {visit_let<Expr>(op);}
+    void visit(const LetStmt *op) {visit_let<Stmt>(op);}
 
     // AssertStmt
 
@@ -843,48 +881,54 @@ public:
     }
 
     void visit(const For *op) {
-        // First we branch the body of the For loop.
-        free_vars.push(op->name, 0);
+        // First we branch the bounds of the for loop.
         size_t old_num_branches = branches.size();
-        std::vector<Stmt> body(1, op->body);
-        branch_children(op, body);
-        free_vars.pop(op->name);
+        std::vector<Expr> bounds(2, Expr());
+        bounds[0] = op->min;
+        bounds[1] = op->extent;
+        branch_children(op, bounds);
 
-        std::vector<Branch> body_branches;
         if (branches.size() == old_num_branches) {
-            Branch b = make_branch(min, extent, Stmt(op));
-            body_branches.push_back(b);
+            // The bounds exprs didn't branch so we branch the body of the for loop as usual.
+            free_vars.push(op->name, 0);
+            std::vector<Stmt> body(1, op->body);
+            branch_children(op, body);
+            free_vars.pop(op->name);
         } else {
-            body_branches.insert(body_branches.end(), branches.begin() + old_num_branches, branches.end());
+            // Collect all the branches from the bounds exprs
+            std::vector<Branch> bounds_branches(branches.begin() + old_num_branches, branches.end());
             branches.erase(branches.begin() + old_num_branches, branches.end());
-        }
 
-        Expr old_min = min;
-        Expr old_extent = extent;
+            // debug(0) << "Branched for(" << op->name << ", " << op->min << ", " << op->extent
+            //          << ") into  " << bounds_branches.size() << " branches.\n";
 
-        for (size_t i = 0; i < body_branches.size(); ++i) {
-            const For *loop = body_branches[i].stmt.as<For>();
+            Expr old_min = min;
+            Expr old_extent = extent;
 
-            min = body_branches[i].min;
-            extent = body_branches[i].extent;
+            for (size_t i = 0; i < bounds_branches.size(); ++i) {
+                const For *loop = bounds_branches[i].stmt.as<For>();
 
-            std::vector<Expr> bounds(2, Expr());
-            bounds[0] = loop->min;
-            bounds[1] = loop->extent;
+                min = bounds_branches[i].min;
+                extent = bounds_branches[i].extent;
 
-            old_num_branches = branches.size();
-            branch_children(loop, bounds);
-
-            // If we branched the body, but did not branch the bounds
-            // then we need to add the body branches back to the list
-            // here.
-            if (branches.size() == old_num_branches && body_branches.size() > 1) {
-                branches.push_back(body_branches[i]);
+                // debug(0) << "\tBranching for(" << op->name << ") body on interval [" << min << ", " << extent << ")\n";
+                
+                old_num_branches = branches.size();
+                free_vars.push(op->name, 0);
+                std::vector<Stmt> body(1, op->body);
+                branch_children(loop, body);
+                free_vars.pop(op->name);
+                
+                if (branches.size() == old_num_branches) {
+                    // If we branched the bound, but did not branch the body then we add the bounds
+                    // branch to the branches list here.
+                    branches.push_back(bounds_branches[i]);
+                }
             }
+ 
+            min = old_min;
+            extent = old_extent;
         }
-
-        min = old_min;
-        extent = old_extent;
     }
 
     void update_branch(Branch &b, const Store *op, const std::vector<Expr> &args) {
@@ -934,7 +978,7 @@ public:
 
             // Bail out if this condition depends on more than just
             // the current loop variable.
-            if (num_free_vars(if_stmt->condition, free_vars) > 1) return;
+            if (num_free_vars(if_stmt->condition, scope, free_vars) > 1) return;
 
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
             if (!solve.same_as(if_stmt->condition)) {
