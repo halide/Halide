@@ -1702,7 +1702,7 @@ class FuncRefVarT {
 public:
     FuncRefVarT(FuncRefVar untyped) : untyped(untyped) {}
 
-    /* See FuncRefExpr::operator =. Note that unlike basic Func types,
+    /* See FuncRefExpr::operator =. Note that unlike basic Funcs,
      * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
@@ -1724,7 +1724,7 @@ class FuncRefExprT {
 public:
     FuncRefExprT(FuncRefExpr untyped) : untyped(untyped) {}
 
-    /* See FuncRefExpr::operator =. Note that unlike basic Func types,
+    /* See FuncRefExpr::operator =. Note that unlike basic Funcs,
      * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
@@ -1742,28 +1742,14 @@ public:
 template <typename T>
 class FuncT : public Func {
 public:
-    /** Declare a new undefined function with the given name */
+    /** See Func::Func. */
+    // @{
     explicit FuncT(const std::string &name) : Func(name) {}
-
-    /** Declare a new undefined function with an
-     * automatically-generated unique name */
     FuncT() {}
-
-    /** Declare a new function with an automatically-generated unique
-     * name, and define it to return the given expression (which may
-     * not contain free variables). */
     explicit FuncT(Expr e) : Func(e) {}
-
-    /** Construct a new Func to wrap an existing, already-define
-     * Function object. */
     explicit FuncT(Internal::Function f) : Func(f) {}
 
-    /** Construct either the left-hand-side of a definition, or a call
-     * to a functions that happens to only contain vars as
-     * arguments. If the function has already been defined, and fewer
-     * arguments are given than the function has dimensions, then
-     * enough implicit vars are added to the end of the argument list
-     * to make up the difference (see \ref Var::implicit) */
+    /** See Func::operator(). */
     // @{
     FuncRefVarT<T> operator()() const { return Func::operator()(); }
     FuncRefVarT<T> operator()(Var x) const{ return Func::operator()(x); }
@@ -1775,12 +1761,7 @@ public:
     FuncRefVarT<T> operator()(std::vector<Var> vars) const { return Func::operator()(vars); }
     // @}
 
-    /** Either calls to the function, or the left-hand-side of a
-     * update definition (see \ref RDom). If the function has
-     * already been defined, and fewer arguments are given than the
-     * function has dimensions, then enough implicit vars are added to
-     * the end of the argument list to make up the difference. (see
-     * \ref Var::implicit)*/
+    /** See Func::operator(). */
     // @{
     FuncRefExprT<T> operator()(Expr x) const{ return Func::operator()(x); }
     FuncRefExprT<T> operator()(Expr x, Expr y) const { return Func::operator()(x, y); }
@@ -1792,8 +1773,8 @@ public:
     // @}
 };
 
-// Forward operator overload invocations on FuncRefVar/FuncRefExpr to
-// the type the user intended.
+// Forward operator overload invocations on FuncRefVarT/FuncRefExprT to
+// the type the user intended (T).
 
 // TODO: This is obscene. Find a better way... but it is unlikely
 // there is one.
