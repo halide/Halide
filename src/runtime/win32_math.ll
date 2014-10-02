@@ -72,6 +72,7 @@ define weak_odr float @log_f32(float %x) nounwind uwtable readnone alwaysinline 
        ret float %y
 }
 
+declare float @llvm.fabs.f32(float) nounwind readnone
 declare double @llvm.fabs.f64(double) nounwind readnone
 
 define weak_odr double @abs_f64(double %x) nounwind uwtable readnone noinline {
@@ -114,21 +115,33 @@ define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline
        ret float %y
 }
 
+declare float @llvm.copysign.f32(float, float) nounwind readnone
 declare double @llvm.copysign.f64(double, double) nounwind readnone
 
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone noinline {
-       %a = tail call double @abs_f64(double %x) nounwind readnone
-       %z = fadd double %a, 0.49999999999999994
-       %f = tail call double @floor_f64(double %z) nounwind readnone
-       %y = tail call double @llvm.copysign.f64(double %f, double %x)
-       ret double %y
+       %a = call double @llvm.fabs.f64(double %x)
+       %cmp = fcmp oge double %a, 4503599627370496.0
+       br i1 %cmp, label %integral, label %fractional
+fractional:
+       %y = fadd double %a, 4503599627370496.0
+       %z = fsub double %y, 4503599627370496.0
+       %r = call double @llvm.copysign.f64(double %z, double %x)
+       ret double %r
+integral:
+       ret double %x
 }
 
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %xd = fpext float %x to double
-       %yd = tail call double @round_f64(double %xd) nounwind readnone
-       %y = fptrunc double %yd to float
-       ret float %y
+       %a = call float @llvm.fabs.f32(float %x)
+       %cmp = fcmp oge float %a, 8388608.0
+       br i1 %cmp, label %integral, label %fractional
+fractional:
+       %y = fadd float %a, 8388608.0
+       %z = fsub float %y, 8388608.0
+       %r = call float @llvm.copysign.f32(float %z, float %x)
+       ret float %r
+integral:
+       ret float %x
 }
 
 define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone noinline {
