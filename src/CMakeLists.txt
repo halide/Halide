@@ -231,6 +231,7 @@ set(HEADER_FILES
   Extern.h
   FindCalls.h
   Func.h
+  FuncT.h
   Function.h
   Image.h
   InlineReductions.h

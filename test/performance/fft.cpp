@@ -14,20 +14,17 @@ using namespace Halide;
 
 // Halide complex number class.
 class ComplexExpr {
-    Tuple z;
-
 public:
-    ComplexExpr(Tuple z) : z(z) {}
-    ComplexExpr(Expr x, Expr y = 0.0f) : z(Tuple(x, y)) {}
-    ComplexExpr(float x, float y = 0.0f) : z(Tuple(x, y)) {}
+    Expr x, y;
 
-    Expr re() { return z[0]; }
-    Expr im() { return z[1]; }
+    ComplexExpr(Tuple z) : x(z[0]), y(z[1]) {}
+    ComplexExpr(Expr x, Expr y = 0.0f) : x(x), y(y) {}
+    ComplexExpr(float x, float y = 0.0f) : x(x), y(y) {}
 
-    static ComplexExpr make_zero() { return ComplexExpr(0.0f, 0.0f); }
-    static ComplexExpr make_one() { return ComplexExpr(0.0f, 0.0f); }
+    Expr re() { return x; }
+    Expr im() { return y; }
 
-    operator Tuple() const { return z; }
+    operator Tuple() const { return Tuple(x, y); }
 };
 
 Expr re(ComplexExpr z) { return z.re(); }
