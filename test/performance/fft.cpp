@@ -114,7 +114,7 @@ ComplexFunc dft_dim0(ComplexFunc x, int N, float sign) {
     Var n("n");
     ComplexFunc X("X");
     RDom k(0, N);
-    X(n, _) = sum(expj((sign*2*pi*k*n)/N)*x(k, _));
+    X(n, _) = sum(x(k, _)*expj((sign*2*pi*k*n)/N));
     X.unroll(n);
     return X;
 }
@@ -267,7 +267,7 @@ ComplexFunc fft_dim1(ComplexFunc x, const std::vector<int> &NR, float sign, int 
 
         // Write the subtransform and use it as input to the next
         // pass.
-        exchange(add_implicit_args(n0, n1, x)) = ComplexExpr(undef<float>(), undef<float>());
+        exchange(add_implicit_args(n0, n1, x)) = undef_z;
         exchange.bound(n1, 0, N);
 
         RDom rs(0, R, 0, N/R);
@@ -309,7 +309,7 @@ ComplexFunc fft_dim1(ComplexFunc x, const std::vector<int> &NR, float sign, int 
     return x;
 }
 
-// Transpose the first two dimensions of x.
+// Transpose the first two dimensions of f.
 template <typename T>
 T transpose(T f) {
     std::vector<Var> argsT(f.args());
