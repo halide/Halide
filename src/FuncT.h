@@ -16,7 +16,7 @@ class FuncRefVarT : public T {
     FuncRefVar untyped;
 
 public:
-    FuncRefVarT(FuncRefVar untyped) : T(static_cast<Tuple>(untyped)), untyped(untyped) {}
+    FuncRefVarT(FuncRefVar untyped) : untyped(untyped) {}
 
     /* See FuncRefExpr::operator =. Note that unlike basic Funcs,
      * the update definitions do not implicitly define a base case. */
@@ -36,7 +36,7 @@ class FuncRefExprT : public T {
     FuncRefExpr untyped;
 
 public:
-    FuncRefExprT(FuncRefExpr untyped) : T(static_cast<Tuple>(untyped)), untyped(untyped) {}
+    FuncRefExprT(FuncRefExpr untyped) : untyped(untyped) {}
 
     /* See FuncRefExpr::operator =. Note that unlike basic Funcs,
      * the update definitions do not implicitly define a base case. */
