@@ -72,7 +72,7 @@ public:
     };
     vector<Entry> entries;
 
-    typedef map<Expr, int, IRCachingDeepCompare<8> > CacheType;
+    typedef map<ExprWithCompareCache, int> CacheType;
     CacheType numbering;
 
     map<Expr, int, ExprCompare> shallow_numbering;
@@ -80,11 +80,17 @@ public:
     Scope<int> let_substitutions;
     int number;
 
-    GVN() : number(0) {}
+    IRCompareCache cache;
+
+    GVN() : number(0), cache(8) {}
 
     Stmt mutate(Stmt s) {
         internal_error << "Can't call GVN on a Stmt: " << s << "\n";
         return Stmt();
+    }
+
+    ExprWithCompareCache with_cache(Expr e) {
+        return ExprWithCompareCache(e, &cache);
     }
 
     Expr mutate(Expr e) {
@@ -108,7 +114,7 @@ public:
         }
 
         // If e already has an entry, return that.
-        CacheType::iterator iter = numbering.find(e);
+        CacheType::iterator iter = numbering.find(with_cache(e));
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[e] = number;
@@ -122,7 +128,7 @@ public:
 
         // See if it's there in another form after being rebuilt
         // (e.g. because it was a let variable).
-        iter = numbering.find(e);
+        iter = numbering.find(with_cache(e));
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[old_e] = number;
@@ -133,7 +139,7 @@ public:
         // Add it to the numbering.
         Entry entry = {e, 1};
         number = (int)entries.size();
-        numbering[e] = number;
+        numbering[with_cache(e)] = number;
         shallow_numbering[e] = number;
         entries.push_back(entry);
         return e;
