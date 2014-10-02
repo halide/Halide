@@ -118,6 +118,7 @@ define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline
 declare float @llvm.copysign.f32(float, float) nounwind readnone
 declare double @llvm.copysign.f64(double, double) nounwind readnone
 
+; For an explanation how this function works, see round_f32 below.
 define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
        %a = call double @llvm.fabs.f64(double %x) nounwind readnone
        %cmp = fcmp oge double %a, 4503599627370496.0
@@ -131,6 +132,12 @@ integral:
        ret double %x
 }
 
+; Round a floating point number to the nearest integer as follows:
+; - if |x| >= 2^23, it cannot have a fractional component since all mantissa bits are 
+;   used to represent the number itself; in this case, we can return x directly.
+; - otherwise, we compute (|x| + 2^23) - 2^23. The addition produces a number between
+;   2^23 and 2^24 which is rounded by the FPU to the nearest integer by the FPU.
+;   The subtraction brings it back into the range of the original number.
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
        %a = call float @llvm.fabs.f32(float %x) nounwind readnone
        %cmp = fcmp oge float %a, 8388608.0
