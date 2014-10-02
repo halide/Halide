@@ -416,28 +416,23 @@ bool has_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_v
     return num_free_vars(expr, scope, free_vars) > 0;
 }
 
-void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars);
-void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars);
-
 class BranchCollector : public IRVisitor {
 public:
     std::string name;
     std::vector<Branch> branches;
     Scope<Expr> scope;
     Scope<int> free_vars;
+    Scope<Interval> bounds_info;
     Expr min;
     Expr extent;
 
     BranchCollector(const std::string &n, Expr m, Expr e, const Scope<Expr> *s,
-                    const Scope<int> *lv) :
+                    const Scope<int> *lv, const Scope<Interval> *bi) :
             name(n), min(m), extent(e)
     {
         scope.set_containing_scope(s);
         free_vars.set_containing_scope(lv);
+        bounds_info.set_containing_scope(bi);
     }
 
   private:
@@ -490,7 +485,7 @@ public:
                     ext1 = 0;
                 }
             } else {
-                ext1 = simplify(Min::make(Max::make(le->b - min1 + 1, 0), extent));
+                ext1 = simplify(Min::make(max(le->b - min1 + 1, 0), extent), true, bounds_info);
             }
         } else if (lt) {
             if (is_zero(lt->a)) {
@@ -500,7 +495,7 @@ public:
                     ext1 = 0;
                 }
             } else {
-                ext1 = simplify(Min::make(Max::make(lt->b - min1, 0), extent));
+                ext1 = simplify(Min::make(max(lt->b - min1, 0), extent), true, bounds_info);
             }
         } else if (ge) {
             if (is_zero(ge->a)) {
@@ -510,7 +505,7 @@ public:
                     ext1 = 0;
                 }
             } else {
-                ext1 = simplify(Min::make(Max::make(ge->b - min1, 0), extent));
+                ext1 = simplify(Min::make(max(ge->b - min1, 0), extent), true, bounds_info);
                 std::swap(a, b);
             }
         } else if (gt) {
@@ -521,15 +516,15 @@ public:
                     ext1 = 0;
                 }
             } else {
-                ext1 = simplify(Min::make(Max::make(gt->b - min1 + 1, 0), extent));
+                ext1 = simplify(Min::make(max(gt->b - min1 + 1, 0), extent), true, bounds_info);
                 std::swap(a, b);
             }
         } else {
             return false;
         }
 
-        min2 = simplify(min1 + ext1);
-        ext2 = simplify(extent - ext1);
+        min2 = simplify(min1 + ext1, true, bounds_info);
+        ext2 = simplify(max(extent - ext1, 0), true, bounds_info);
 
         b1 = make_branch(min1, ext1, a);
         b2 = make_branch(min2, ext2, b);
@@ -810,7 +805,9 @@ public:
     void visit_let(const LetOp *op) {
         // First we branch the value of the let.
         size_t old_num_branches = branches.size();
-        op->value.accept(this);
+        if (branches.size() < branching_limit) {
+            op->value.accept(this);
+        }
 
         if (branches.size() == old_num_branches) {
             // If the value didn't branch we continue to branch the let body normally.
@@ -881,12 +878,19 @@ public:
     }
 
     void visit(const For *op) {
+        const Variable *loop_ext = op->extent.as<Variable>();
+        if (loop_ext) {
+            bounds_info.push(loop_ext->name, Interval(0, loop_ext->type.max()));
+        }
+
         // First we branch the bounds of the for loop.
         size_t old_num_branches = branches.size();
-        std::vector<Expr> bounds(2, Expr());
-        bounds[0] = op->min;
-        bounds[1] = op->extent;
-        branch_children(op, bounds);
+        if (branches.size() < branching_limit) {
+            std::vector<Expr> bounds(2, Expr());
+            bounds[0] = op->min;
+            bounds[1] = op->extent;
+            branch_children(op, bounds);
+        }
 
         if (branches.size() == old_num_branches) {
             // The bounds exprs didn't branch so we branch the body of the for loop as usual.
@@ -995,9 +999,8 @@ public:
                             b1.stmt.accept(this);
                         }
 
-                        // If we didn't branch any further, push this branches onto the stack.
+                        // If we didn't branch any further, push this branch onto the stack.
                         if (branches.size() == num_branches) {
-                            b1.stmt = b1.stmt;
                             branches.push_back(b1);
                         }
                         num_branches = branches.size();
@@ -1013,7 +1016,6 @@ public:
                         // If we didn't branch any further, push this
                         // branches onto the stack.
                         if (branches.size() == num_branches) {
-                            b2.stmt = b2.stmt;
                             branches.push_back(b2);
                         }
                     }
@@ -1044,16 +1046,16 @@ public:
 
 void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
                       std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars) {
-    BranchCollector collector(name, min, extent, &scope, &free_vars);
+                      const Scope<int> &free_vars, const Scope<Interval> &bounds_info) {
+    BranchCollector collector(name, min, extent, &scope, &free_vars, &bounds_info);
     expr.accept(&collector);
     branches.swap(collector.branches);
 }
 
 void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
                       std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars) {
-    BranchCollector collector(name, min, extent, &scope, &free_vars);
+                      const Scope<int> &free_vars, const Scope<Interval> &bounds_info) {
+    BranchCollector collector(name, min, extent, &scope, &free_vars, &bounds_info);
     stmt.accept(&collector);
     branches.swap(collector.branches);
 }
@@ -1063,10 +1065,17 @@ private:
     using IRVisitor::visit;
 
     Scope<Expr> scope;
-    Scope<int>  loop_vars;
+    Scope<int> loop_vars;
+    Scope<Interval> bounds_info;
 
     void visit(const For *op) {
         loop_vars.push(op->name, 0);
+        
+        const Variable *loop_ext = op->extent.as<Variable>();
+        if (loop_ext) {
+            bounds_info.push(loop_ext->name, Interval(0, loop_ext->type.max()));
+        }
+
         Stmt body = mutate(op->body);
 
         if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, scope)) {
@@ -1074,22 +1083,21 @@ private:
             //          << op->body << "Mutated body:\n" << body;
 
             std::vector<Branch> branches;
-            collect_branches(body, op->name, op->min, op->extent, branches, scope, loop_vars);
+            collect_branches(body, op->name, op->min, op->extent, branches, scope, loop_vars, bounds_info);
 
             if (branches.empty()) {
                 stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
             } else {
-                Scope<Interval> bounds;
                 stmt = Evaluate::make(0);
                 for (int i = branches.size()-1; i >= 0; --i) {
                     Branch &branch = branches[i];
-                    bounds.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
-                    Expr extent = simplify(branch.extent, true, bounds);
-                    if (is_zero(simplify(max(extent, 0)))) continue;
-                    Stmt branch_stmt = simplify(branch.stmt, true, bounds);
+                    bounds_info.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
+                    Expr extent = simplify(branch.extent, true, bounds_info);
+                    if (is_zero(extent)) continue;
+                    Stmt branch_stmt = simplify(branch.stmt, true, bounds_info);
                     branch_stmt = For::make(op->name, branch.min, extent, op->for_type, branch_stmt);
                     stmt = Block::make(branch_stmt, stmt);
-                    bounds.pop(op->name);
+                    bounds_info.pop(op->name);
                 }
             }
         } else {
