@@ -315,7 +315,7 @@ test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
 
-run_tests: test_correctness test_errors test_tutorials test_static test_warnings
+run_tests: test_internal test_correctness test_errors test_tutorials test_static test_warnings
 	make test_performance
 
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
