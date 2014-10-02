@@ -65,6 +65,7 @@ void test_matrix_multiply(const int N, const int num_iters) {
     // Call the routine many times.
     float t1 = current_time();
     for (int i = 0; i < num_iters; i++) {
+        // std::cout << "Iter " << std::setw(4) << i << ": " << (current_time()-t1)/1000.0 << "\n";
         prod.realize(c);
     }
     float t2 = current_time();
@@ -142,6 +143,7 @@ void test_explicit_multiply(const int N, const int num_iters) {
     // Call the routine many times.
     float t1 = current_time();
     for (int i = 0; i < num_iters; i++) {
+        // std::cout << "Iter " << std::setw(4) << i << ": " <<  (current_time()-t1)/1000.0 << "\n";
         C.realize(c);
     }
     float t2 = current_time();
@@ -197,14 +199,29 @@ const int default_sizes[] = {
     16, 32, 64, 128, 256, 512, 1024, 2048
 };
 
+void print_usage() {
+    std::cout << "performance_matrix_multiply [OPTIONS]\n"
+              << "\t--help, -h         \t Print this usage message.\n"
+              << "\t--iters, -i <num>  \t Number of iterations of multiply to run for timing.\n"
+              << "\t--test, -t <tests> \t Comma separated list of multiplies to test.\n"
+              << "\t                   \t Options are {class, explicit, eigen, all}\n"
+              << "\t--sizes, -s <nums> \t Comma separated list of numbers N.\n"
+              << "\t                   \t Will multiply NxN matrix for each N in the list.\n";
+}
+
 int main(int argc, char **argv) {
     int which_test = test_all;
-    int num_iters = 1;
+    int num_iters = 10;
     std::vector<int> test_size(default_sizes, default_sizes + num_default_sizes);
 
     int n = 1;
     while (n < argc) {
         std::string flag = argv[n++];
+        if (flag == "-h" || flag == "--help") {
+            print_usage();
+            return 0;
+        }
+
         if (n >= argc) {
             break;
         } else if (flag == "-t" || flag == "--test") {
