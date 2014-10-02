@@ -387,7 +387,7 @@ bool expr_branches_in_var(const std::string &name, Expr value, const Scope<Expr>
     return check.has_branches;
 }
 
-class FindFreeVariables : public IRVisitor {
+class FindFreeVariables : public IRGraphVisitor {
   public:
     const Scope<Expr> &scope;
     const Scope<int>  &free_vars;
@@ -401,7 +401,7 @@ class FindFreeVariables : public IRVisitor {
         if (free_vars.contains(op->name)) {
             vars.insert(op->name);
         } else if (scope.contains(op->name)) {
-            scope.get(op->name).accept(this);
+            include(scope.get(op->name));
         }
     }
 };
@@ -1276,7 +1276,7 @@ void specialize_branched_loops_test() {
         Stmt branch = Block::make(b1, Block::make(b2, b3));
         Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
         Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "x", 6);
+        check_num_branches(branched, "x", 4);
     }
 
     {
