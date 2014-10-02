@@ -18,21 +18,25 @@ class ComplexExpr {
 
 public:
     ComplexExpr(Tuple z) : z(z) {}
-    ComplexExpr(FuncRefVar z) : z(Tuple(z[0], z[1])) {}
-    ComplexExpr(FuncRefExpr z) : z(Tuple(z[0], z[1])) {}
     ComplexExpr(Expr x, Expr y = 0.0f) : z(Tuple(x, y)) {}
     ComplexExpr(float x, float y = 0.0f) : z(Tuple(x, y)) {}
 
     Expr re() { return z[0]; }
     Expr im() { return z[1]; }
 
+    static ComplexExpr make_zero() { return ComplexExpr(0.0f, 0.0f); }
+    static ComplexExpr make_one() { return ComplexExpr(0.0f, 0.0f); }
+
     operator Tuple() const { return z; }
 };
 
 Expr re(ComplexExpr z) { return z.re(); }
 Expr im(ComplexExpr z) { return z.im(); }
+Expr re(Expr x) { return x; }
+Expr im(Expr x) { return 0.0f; }
 
 ComplexExpr j(0.0f, 1.0f);
+ComplexExpr undef_z(undef<float>(), undef<float>());
 
 // Unary negation.
 ComplexExpr operator -(ComplexExpr z) { return ComplexExpr(-re(z), -im(z)); }
@@ -60,7 +64,6 @@ ComplexExpr select(Expr c, ComplexExpr t, ComplexExpr f) {
 
 typedef FuncT<ComplexExpr> ComplexFunc;
 typedef FuncRefExprT<ComplexExpr> ComplexFuncRefExpr;
-typedef FuncRefVarT<ComplexExpr> ComplexFuncRefVar;
 
 // Compute the product of the integers in R.
 int product(const std::vector<int> &R) {
@@ -120,7 +123,7 @@ ComplexFunc dft_dim0(ComplexFunc x, int N, float sign) {
 ComplexFunc dft2_dim0(ComplexFunc x, float sign) {
     Var n("n");
     ComplexFunc X("X2_dim0");
-    X(add_implicit_args(n, x)) = ComplexExpr(undef<float>(), undef<float>());
+    X(add_implicit_args(n, x)) = undef_z;
 
     ComplexExpr x0 = x(0, _), x1 = x(1, _);
     ComplexFuncRefExpr X0 = X(0, _), X1 = X(1, _);
@@ -134,7 +137,7 @@ ComplexFunc dft2_dim0(ComplexFunc x, float sign) {
 ComplexFunc dft4_dim0(ComplexFunc x, float sign) {
     Var n("n");
     ComplexFunc X("X");
-    X(add_implicit_args(n, x)) = ComplexExpr(undef<float>(), undef<float>());
+    X(add_implicit_args(n, x)) = undef_z;
 
     ComplexExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
     ComplexFuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
@@ -161,7 +164,7 @@ ComplexFunc dft8_dim0(ComplexFunc x, float sign) {
 
     Var n("n");
     ComplexFunc X("X");
-    X(add_implicit_args(n, x)) = ComplexExpr(undef<float>(), undef<float>());
+    X(add_implicit_args(n, x)) = undef_z;
 
     ComplexExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
     ComplexExpr x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);

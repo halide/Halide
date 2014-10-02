@@ -1702,12 +1702,17 @@ class FuncRefVarT {
 public:
     FuncRefVarT(FuncRefVar untyped) : untyped(untyped) {}
 
-    /* See FuncRefExpr::operator =. */
+    /* See FuncRefExpr::operator =. Note that unlike basic Func types,
+     * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
+    Stage operator+=(T x) { return untyped = untyped + x; }
+    Stage operator-=(T x) { return untyped = untyped - x;}
+    Stage operator*=(T x) { return untyped = untyped * x; }
+    Stage operator/=(T x) { return untyped = untyped / x; }
     // @}
 
-    operator T() const { return T(untyped); }
+    operator T() const { return T(static_cast<Tuple>(untyped)); }
 };
 
 /** A typed version of FuncRefExpr. T should be implicitly convertible
@@ -1719,12 +1724,17 @@ class FuncRefExprT {
 public:
     FuncRefExprT(FuncRefExpr untyped) : untyped(untyped) {}
 
-    /* See FuncRefExpr::operator =. */
+    /* See FuncRefExpr::operator =. Note that unlike basic Func types,
+     * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
+    Stage operator+=(T x) { return untyped = untyped + x; }
+    Stage operator-=(T x) { return untyped = untyped - x;}
+    Stage operator*=(T x) { return untyped = untyped * x; }
+    Stage operator/=(T x) { return untyped = untyped / x; }
     // @}
 
-    operator T() const { return T(untyped); }
+    operator T() const { return T(static_cast<Tuple>(untyped)); }
 };
 
 /** A Func that returns a type T. T should be implicitly convertible
@@ -1782,21 +1792,16 @@ public:
     // @}
 };
 
-// Forward operator overload invocations to the type the user intended.
-// TODO: This is obscene. Find a better way.
+// Forward operator overload invocations on FuncRefVar/FuncRefExpr to
+// the type the user intended.
+
+// TODO: This is obscene. Find a better way... but it is unlikely
+// there is one.
  template <typename T>
 T operator - (FuncRefVarT<T> x) { return -static_cast<T>(x); }
 template <typename T>
 T operator ~ (FuncRefVarT<T> x) { return ~static_cast<T>(x); }
 
-template <typename T>
-T operator + (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) + static_cast<T>(b); }
-template <typename T>
-T operator - (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) - static_cast<T>(b); }
-template <typename T>
-T operator * (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) * static_cast<T>(b); }
-template <typename T>
-T operator / (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) / static_cast<T>(b); }
 template <typename T>
 T operator + (FuncRefVarT<T> a, T b) { return static_cast<T>(a) + b; }
 template <typename T>
@@ -1806,6 +1811,8 @@ T operator * (FuncRefVarT<T> a, T b) { return static_cast<T>(a) * b; }
 template <typename T>
 T operator / (FuncRefVarT<T> a, T b) { return static_cast<T>(a) / b; }
 template <typename T>
+T operator % (FuncRefVarT<T> a, T b) { return static_cast<T>(a) % b; }
+template <typename T>
 T operator + (T a, FuncRefVarT<T> b) { return a + static_cast<T>(b); }
 template <typename T>
 T operator - (T a, FuncRefVarT<T> b) { return a - static_cast<T>(b); }
@@ -1813,19 +1820,9 @@ template <typename T>
 T operator * (T a, FuncRefVarT<T> b) { return a * static_cast<T>(b); }
 template <typename T>
 T operator / (T a, FuncRefVarT<T> b) { return a / static_cast<T>(b); }
+template <typename T>
+T operator % (T a, FuncRefVarT<T> b) { return a % static_cast<T>(b); }
 
-template <typename T>
-Expr operator == (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) == static_cast<T>(b); }
-template <typename T>
-Expr operator != (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) != static_cast<T>(b); }
-template <typename T>
-Expr operator <= (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) <= static_cast<T>(b); }
-template <typename T>
-Expr operator >= (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) >= static_cast<T>(b); }
-template <typename T>
-Expr operator < (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) < static_cast<T>(b); }
-template <typename T>
-Expr operator > (FuncRefVarT<T> a, FuncRefVarT<T> b) { return static_cast<T>(a) > static_cast<T>(b); }
 template <typename T>
 Expr operator == (FuncRefVarT<T> a, T b) { return static_cast<T>(a) == b; }
 template <typename T>
@@ -1857,14 +1854,6 @@ template <typename T>
 T operator ~ (FuncRefExprT<T> x) { return ~static_cast<T>(x); }
 
 template <typename T>
-T operator + (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) + static_cast<T>(b); }
-template <typename T>
-T operator - (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) - static_cast<T>(b); }
-template <typename T>
-T operator * (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) * static_cast<T>(b); }
-template <typename T>
-T operator / (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) / static_cast<T>(b); }
-template <typename T>
 T operator + (FuncRefExprT<T> a, T b) { return static_cast<T>(a) + b; }
 template <typename T>
 T operator - (FuncRefExprT<T> a, T b) { return static_cast<T>(a) - b; }
@@ -1873,6 +1862,8 @@ T operator * (FuncRefExprT<T> a, T b) { return static_cast<T>(a) * b; }
 template <typename T>
 T operator / (FuncRefExprT<T> a, T b) { return static_cast<T>(a) / b; }
 template <typename T>
+T operator % (FuncRefExprT<T> a, T b) { return static_cast<T>(a) % b; }
+template <typename T>
 T operator + (T a, FuncRefExprT<T> b) { return a + static_cast<T>(b); }
 template <typename T>
 T operator - (T a, FuncRefExprT<T> b) { return a - static_cast<T>(b); }
@@ -1880,19 +1871,9 @@ template <typename T>
 T operator * (T a, FuncRefExprT<T> b) { return a * static_cast<T>(b); }
 template <typename T>
 T operator / (T a, FuncRefExprT<T> b) { return a / static_cast<T>(b); }
+template <typename T>
+T operator % (T a, FuncRefExprT<T> b) { return a % static_cast<T>(b); }
 
-template <typename T>
-Expr operator == (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) == static_cast<T>(b); }
-template <typename T>
-Expr operator != (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) != static_cast<T>(b); }
-template <typename T>
-Expr operator <= (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) <= static_cast<T>(b); }
-template <typename T>
-Expr operator >= (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) >= static_cast<T>(b); }
-template <typename T>
-Expr operator < (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) < static_cast<T>(b); }
-template <typename T>
-Expr operator > (FuncRefExprT<T> a, FuncRefExprT<T> b) { return static_cast<T>(a) > static_cast<T>(b); }
 template <typename T>
 Expr operator == (FuncRefExprT<T> a, T b) { return static_cast<T>(a) == b; }
 template <typename T>
