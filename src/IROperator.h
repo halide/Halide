@@ -840,10 +840,11 @@ inline Expr ceil(Expr x) {
     }
 }
 
-/** Return the whole number closest to a floating-point expression. If
- * the argument is not floating-point, it is cast to Float(32). The
- * return value is still in floating point, despite being a whole
- * number. On ties, we round up. Vectorizes cleanly. */
+/** Return the whole number closest to a floating-point expression. If the
+ * argument is not floating-point, it is cast to Float(32). The return value
+ * is still in floating point, despite being a whole number. On ties, we
+ * follow IEEE754 conventions and round to the nearest even number. Vectorizes
+ * cleanly. */
 inline Expr round(Expr x) {
     user_assert(x.defined()) << "round of undefined Expr\n";
     if (x.type().element_of() == Float(64)) {
