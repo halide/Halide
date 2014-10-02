@@ -1716,7 +1716,7 @@ public:
 };
 
 /** A typed version of FuncRefExpr. T should be implicitly convertible
- * to/from Expr. */
+ * to/from Tuple. */
 template <typename T>
 class FuncRefExprT {
     FuncRefExpr untyped;
@@ -1738,7 +1738,7 @@ public:
 };
 
 /** A Func that returns a type T. T should be implicitly convertible
- * to/from Expr. */
+ * to/from Tuple. */
 template <typename T>
 class FuncT : public Func {
 public:
