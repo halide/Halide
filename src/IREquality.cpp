@@ -7,8 +7,90 @@ namespace Internal {
 using std::string;
 using std::vector;
 
+namespace {
+
+/** The class that does the work of comparing two IR nodes. */
+class IRComparer : public IRVisitor {
+public:
+
+    /** Different possible results of a comparison. Unknown should
+     * only occur internally due to a cache miss. */
+    enum CmpResult {Unknown, Equal, LessThan, GreaterThan};
+
+    /** The result of the comparison. Should be Equal, LessThan, or GreaterThan. */
+    CmpResult result;
+
+    /** Compare two expressions or statements and return the
+     * result. Returns the result immediately if it is already
+     * non-zero. */
+    // @{
+    CmpResult compare_expr(const Expr &a, const Expr &b);
+    CmpResult compare_stmt(const Stmt &a, const Stmt &b);
+    // @}
+
+    /** If the expressions you're comparing may contain many repeated
+     * subexpressions, it's worth passing in a cache to use.
+     * Currently this is only done in common-subexpression
+     * elimination. */
+    IRComparer(IRCompareCache *c = NULL) : result(Equal), cache(c) {}
+
+private:
+    Expr expr;
+    Stmt stmt;
+    IRCompareCache *cache;
+
+    CmpResult compare_names(const std::string &a, const std::string &b);
+    CmpResult compare_types(Type a, Type b);
+    CmpResult compare_expr_vector(const std::vector<Expr> &a, const std::vector<Expr> &b);
+
+    // Compare two things that already have a well-defined operator<
+    template<typename T>
+    CmpResult compare_scalar(T a, T b);
+
+    void visit(const IntImm *);
+    void visit(const FloatImm *);
+    void visit(const StringImm *);
+    void visit(const Cast *);
+    void visit(const Variable *);
+    void visit(const Add *);
+    void visit(const Sub *);
+    void visit(const Mul *);
+    void visit(const Div *);
+    void visit(const Mod *);
+    void visit(const Min *);
+    void visit(const Max *);
+    void visit(const EQ *);
+    void visit(const NE *);
+    void visit(const LT *);
+    void visit(const LE *);
+    void visit(const GT *);
+    void visit(const GE *);
+    void visit(const And *);
+    void visit(const Or *);
+    void visit(const Not *);
+    void visit(const Select *);
+    void visit(const Load *);
+    void visit(const Ramp *);
+    void visit(const Broadcast *);
+    void visit(const Call *);
+    void visit(const Let *);
+    void visit(const LetStmt *);
+    void visit(const AssertStmt *);
+    void visit(const Pipeline *);
+    void visit(const For *);
+    void visit(const Store *);
+    void visit(const Provide *);
+    void visit(const Allocate *);
+    void visit(const Free *);
+    void visit(const Realize *);
+    void visit(const Block *);
+    void visit(const IfThenElse *);
+    void visit(const Evaluate *);
+
+};
+
 template<typename T>
-IRDeepCompare::CmpResult IRDeepCompare::compare_scalar(T a, T b) {
+IRComparer::CmpResult IRComparer::compare_scalar(T a, T b) {
     if (result != Equal) return result;
 
     if (a < b) {
@@ -20,7 +102,7 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_scalar(T a, T b) {
     return result;
 }
 
-IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &b) {
+IRComparer::CmpResult IRComparer::compare_expr(const Expr &a, const Expr &b) {
     if (result != Equal) {
         return result;
     }
@@ -60,7 +142,7 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &
     }
 
     // Check the cache - perhaps these exprs have already been compared and found equal.
-    if (cache.enabled() && cache.contains(a, b)) {
+    if (cache && cache->contains(a, b)) {
         result = Equal;
         return result;
     }
@@ -68,14 +150,14 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_expr(const Expr &a, const Expr &
     expr = a;
     b.accept(this);
 
-    if (cache.enabled() && result == Equal) {
-        cache.insert(a, b);
+    if (cache && result == Equal) {
+        cache->insert(a, b);
     }
 
     return result;
 }
 
-IRDeepCompare::CmpResult IRDeepCompare::compare_stmt(const Stmt &a, const Stmt &b) {
+IRComparer::CmpResult IRComparer::compare_stmt(const Stmt &a, const Stmt &b) {
     if (result != Equal) {
         return result;
     }
@@ -110,7 +192,7 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_stmt(const Stmt &a, const Stmt &
     return result;
 }
 
-IRDeepCompare::CmpResult IRDeepCompare::compare_types(Type a, Type b) {
+IRComparer::CmpResult IRComparer::compare_types(Type a, Type b) {
     if (result != Equal) return result;
 
     compare_scalar(a.code, b.code);
@@ -120,7 +202,7 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_types(Type a, Type b) {
     return result;
 }
 
-IRDeepCompare::CmpResult IRDeepCompare::compare_names(const string &a, const string &b) {
+IRComparer::CmpResult IRComparer::compare_names(const string &a, const string &b) {
     if (result != Equal) return result;
 
     int string_cmp = a.compare(b);
@@ -134,7 +216,7 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_names(const string &a, const str
 }
 
 
-IRDeepCompare::CmpResult IRDeepCompare::compare_expr_vector(const vector<Expr> &a, const vector<Expr> &b) {
+IRComparer::CmpResult IRComparer::compare_expr_vector(const vector<Expr> &a, const vector<Expr> &b) {
     if (result != Equal) return result;
 
     compare_scalar(a.size(), b.size());
@@ -145,73 +227,61 @@ IRDeepCompare::CmpResult IRDeepCompare::compare_expr_vector(const vector<Expr> &
     return result;
 }
 
-bool IRDeepCompare::operator()(const Expr &a, const Expr &b) {
-    result = Equal;
-    compare_expr(a, b);
-    return result == LessThan;
-}
-
-bool IRDeepCompare::operator()(const Stmt &a, const Stmt &b) {
-    result = Equal;
-    compare_stmt(a, b);
-    return result == LessThan;
-}
-
-void IRDeepCompare::visit(const IntImm *op) {
+void IRComparer::visit(const IntImm *op) {
     const IntImm *e = expr.as<IntImm>();
     compare_scalar(e->value, op->value);
 }
 
-void IRDeepCompare::visit(const FloatImm *op) {
+void IRComparer::visit(const FloatImm *op) {
     const FloatImm *e = expr.as<FloatImm>();
     compare_scalar(e->value, op->value);
 }
 
-void IRDeepCompare::visit(const StringImm *op) {
+void IRComparer::visit(const StringImm *op) {
     const StringImm *e = expr.as<StringImm>();
     compare_names(e->value, op->value);
 }
 
-void IRDeepCompare::visit(const Cast *op) {
+void IRComparer::visit(const Cast *op) {
     compare_expr(expr.as<Cast>()->value, op->value);
 }
 
-void IRDeepCompare::visit(const Variable *op) {
+void IRComparer::visit(const Variable *op) {
     const Variable *e = expr.as<Variable>();
     compare_names(e->name, op->name);
 }
 
 namespace {
 template<typename T>
-void visit_binary_operator(IRDeepCompare *cmp, const T *op, Expr expr) {
+void visit_binary_operator(IRComparer *cmp, const T *op, Expr expr) {
     const T *e = expr.as<T>();
     cmp->compare_expr(e->a, op->a);
     cmp->compare_expr(e->b, op->b);
 }
 }
 
-void IRDeepCompare::visit(const Add *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Sub *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Mul *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Div *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Mod *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Min *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Max *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const EQ *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const NE *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const LT *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const LE *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const GT *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const GE *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const And *op) {visit_binary_operator(this, op, expr);}
-void IRDeepCompare::visit(const Or *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Add *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Sub *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Mul *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Div *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Mod *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Min *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Max *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const EQ *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const NE *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const LT *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const LE *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const GT *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const GE *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const And *op) {visit_binary_operator(this, op, expr);}
+void IRComparer::visit(const Or *op) {visit_binary_operator(this, op, expr);}
 
-void IRDeepCompare::visit(const Not *op) {
+void IRComparer::visit(const Not *op) {
     const Not *e = expr.as<Not>();
     compare_expr(e->a, op->a);
 }
 
-void IRDeepCompare::visit(const Select *op) {
+void IRComparer::visit(const Select *op) {
     const Select *e = expr.as<Select>();
     compare_expr(e->condition, op->condition);
     compare_expr(e->true_value, op->true_value);
@@ -219,25 +289,25 @@ void IRDeepCompare::visit(const Select *op) {
 
 }
 
-void IRDeepCompare::visit(const Load *op) {
+void IRComparer::visit(const Load *op) {
     const Load *e = expr.as<Load>();
     compare_names(op->name, e->name);
     compare_expr(e->index, op->index);
 }
 
-void IRDeepCompare::visit(const Ramp *op) {
+void IRComparer::visit(const Ramp *op) {
     const Ramp *e = expr.as<Ramp>();
     // No need to compare width because we already compared types
     compare_expr(e->base, op->base);
     compare_expr(e->stride, op->stride);
 }
 
-void IRDeepCompare::visit(const Broadcast *op) {
+void IRComparer::visit(const Broadcast *op) {
     const Broadcast *e = expr.as<Broadcast>();
     compare_expr(e->value, op->value);
 }
 
-void IRDeepCompare::visit(const Call *op) {
+void IRComparer::visit(const Call *op) {
     const Call *e = expr.as<Call>();
 
     compare_names(e->name, op->name);
@@ -246,7 +316,7 @@ void IRDeepCompare::visit(const Call *op) {
     compare_expr_vector(e->args, op->args);
 }
 
-void IRDeepCompare::visit(const Let *op) {
+void IRComparer::visit(const Let *op) {
     const Let *e = expr.as<Let>();
 
     compare_names(e->name, op->name);
@@ -254,7 +324,7 @@ void IRDeepCompare::visit(const Let *op) {
     compare_expr(e->body, op->body);
 }
 
-void IRDeepCompare::visit(const LetStmt *op) {
+void IRComparer::visit(const LetStmt *op) {
     const LetStmt *s = stmt.as<LetStmt>();
 
     compare_names(s->name, op->name);
@@ -262,14 +332,14 @@ void IRDeepCompare::visit(const LetStmt *op) {
     compare_stmt(s->body, op->body);
 }
 
-void IRDeepCompare::visit(const AssertStmt *op) {
+void IRComparer::visit(const AssertStmt *op) {
     const AssertStmt *s = stmt.as<AssertStmt>();
 
     compare_expr(s->condition, op->condition);
     compare_expr(s->message, op->message);
 }
 
-void IRDeepCompare::visit(const Pipeline *op) {
+void IRComparer::visit(const Pipeline *op) {
     const Pipeline *s = stmt.as<Pipeline>();
 
     compare_names(s->name, op->name);
@@ -278,7 +348,7 @@ void IRDeepCompare::visit(const Pipeline *op) {
     compare_stmt(s->consume, op->consume);
 }
 
-void IRDeepCompare::visit(const For *op) {
+void IRComparer::visit(const For *op) {
     const For *s = stmt.as<For>();
 
     compare_names(s->name, op->name);
@@ -288,7 +358,7 @@ void IRDeepCompare::visit(const For *op) {
     compare_stmt(s->body, op->body);
 }
 
-void IRDeepCompare::visit(const Store *op) {
+void IRComparer::visit(const Store *op) {
     const Store *s = stmt.as<Store>();
 
     compare_names(s->name, op->name);
@@ -297,7 +367,7 @@ void IRDeepCompare::visit(const Store *op) {
     compare_expr(s->index, op->index);
 }
 
-void IRDeepCompare::visit(const Provide *op) {
+void IRComparer::visit(const Provide *op) {
     const Provide *s = stmt.as<Provide>();
 
     compare_names(s->name, op->name);
@@ -305,7 +375,7 @@ void IRDeepCompare::visit(const Provide *op) {
     compare_expr_vector(s->values, op->values);
 }
 
-void IRDeepCompare::visit(const Allocate *op) {
+void IRComparer::visit(const Allocate *op) {
     const Allocate *s = stmt.as<Allocate>();
 
     compare_names(s->name, op->name);
@@ -314,7 +384,7 @@ void IRDeepCompare::visit(const Allocate *op) {
     compare_expr(s->condition, op->condition);
 }
 
-void IRDeepCompare::visit(const Realize *op) {
+void IRComparer::visit(const Realize *op) {
     const Realize *s = stmt.as<Realize>();
 
     compare_names(s->name, op->name);
@@ -331,20 +401,20 @@ void IRDeepCompare::visit(const Realize *op) {
     compare_expr(s->condition, op->condition);
 }
 
-void IRDeepCompare::visit(const Block *op) {
+void IRComparer::visit(const Block *op) {
     const Block *s = stmt.as<Block>();
 
     compare_stmt(s->first, op->first);
     compare_stmt(s->rest, op->rest);
 }
 
-void IRDeepCompare::visit(const Free *op) {
+void IRComparer::visit(const Free *op) {
     const Free *s = stmt.as<Free>();
 
     compare_names(s->name, op->name);
 }
 
-void IRDeepCompare::visit(const IfThenElse *op) {
+void IRComparer::visit(const IfThenElse *op) {
     const IfThenElse *s = stmt.as<IfThenElse>();
 
     compare_expr(s->condition, op->condition);
@@ -352,48 +422,71 @@ void IRDeepCompare::visit(const IfThenElse *op) {
     compare_stmt(s->else_case, op->else_case);
 }
 
-void IRDeepCompare::visit(const Evaluate *op) {
+void IRComparer::visit(const Evaluate *op) {
     const Evaluate *s = stmt.as<Evaluate>();
 
     compare_expr(s->value, op->value);
 }
 
+} // namespace
+
+
+// Now the methods exposed in the header.
 bool equal(Expr a, Expr b) {
-    return IRDeepCompare().compare_expr(a, b) == IRDeepCompare::Equal;
+    return IRComparer().compare_expr(a, b) == IRComparer::Equal;
 }
 
 bool equal(Stmt a, Stmt b) {
-    return IRDeepCompare().compare_stmt(a, b) == IRDeepCompare::Equal;
+    return IRComparer().compare_stmt(a, b) == IRComparer::Equal;
 }
 
+bool IRDeepCompare::operator()(const Expr &a, const Expr &b) const {
+    IRComparer cmp;
+    cmp.compare_expr(a, b);
+    return cmp.result == IRComparer::LessThan;
+}
+
+bool IRDeepCompare::operator()(const Stmt &a, const Stmt &b) const {
+    IRComparer cmp;
+    cmp.compare_stmt(a, b);
+    return cmp.result == IRComparer::LessThan;
+}
+
+bool ExprWithCompareCache::operator<(const ExprWithCompareCache &other) const {
+    IRComparer cmp(cache);
+    cmp.compare_expr(expr, other.expr);
+    return cmp.result == IRComparer::LessThan;
+}
 
 // Testing code
 namespace {
 
-IRDeepCompare::CmpResult flip_result(IRDeepCompare::CmpResult r) {
+IRComparer::CmpResult flip_result(IRComparer::CmpResult r) {
     switch(r) {
-    case IRDeepCompare::LessThan: return IRDeepCompare::GreaterThan;
-    case IRDeepCompare::Equal: return IRDeepCompare::Equal;
-    case IRDeepCompare::GreaterThan: return IRDeepCompare::LessThan;
-    case IRDeepCompare::Unknown: return IRDeepCompare::Unknown;
+    case IRComparer::LessThan: return IRComparer::GreaterThan;
+    case IRComparer::Equal: return IRComparer::Equal;
+    case IRComparer::GreaterThan: return IRComparer::LessThan;
+    case IRComparer::Unknown: return IRComparer::Unknown;
     }
-    return IRDeepCompare::Unknown;
+    return IRComparer::Unknown;
 }
 
 void check_equal(Expr a, Expr b) {
-    IRDeepCompare::CmpResult r = IRDeepCompare(5).compare_expr(a, b);
-    internal_assert(r == IRDeepCompare::Equal)
+    IRCompareCache cache(5);
+    IRComparer::CmpResult r = IRComparer(&cache).compare_expr(a, b);
+    internal_assert(r == IRComparer::Equal)
         << "Error in ir_equality_test: " << r
-        << " instead of " << IRDeepCompare::Equal
+        << " instead of " << IRComparer::Equal
         << " when comparing:\n" << a
         << "\nand\n" << b << "\n";
 }
 
 void check_not_equal(Expr a, Expr b) {
-    IRDeepCompare::CmpResult r1 = IRDeepCompare(5).compare_expr(a, b);
-    IRDeepCompare::CmpResult r2 = IRDeepCompare(5).compare_expr(b, a);
-    internal_assert(r1 != IRDeepCompare::Equal &&
-                    r1 != IRDeepCompare::Unknown &&
+    IRCompareCache cache(5);
+    IRComparer::CmpResult r1 = IRComparer(&cache).compare_expr(a, b);
+    IRComparer::CmpResult r2 = IRComparer(&cache).compare_expr(b, a);
+    internal_assert(r1 != IRComparer::Equal &&
+                    r1 != IRComparer::Unknown &&
                     flip_result(r1) == r2)
         << "Error in ir_equality_test: " << r1
         << " is not the opposite of " << r2
