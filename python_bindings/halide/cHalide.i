@@ -48,6 +48,9 @@
 %ignore halide_memoization_cache_store;
 %ignore halide_memoization_cache_cleanup;
 
+%ignore halide_opengl_context_lost;
+%ignore halide_opengl_output_client_bound;
+
 %ignore halide_mutex_lock;
 %ignore halide_mutex_unlock;
 %ignore halide_mutex_cleanup;
