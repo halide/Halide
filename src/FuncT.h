@@ -60,6 +60,7 @@ public:
     FuncT() {}
     explicit FuncT(Expr e) : Func(e) {}
     explicit FuncT(Internal::Function f) : Func(f) {}
+    // @}
 
     /** See Func::operator(). */
     // @{
