@@ -24,7 +24,7 @@ class Parameter {
 
 public:
     /** Construct a new undefined handle */
-    Parameter() : contents(NULL) {}
+    EXPORT Parameter();
 
     /** Construct a new parameter of the given type. If the second
      * argument is true, this is a buffer parameter, otherwise, it is
@@ -37,6 +37,10 @@ public:
      * buffer parameter, otherwise, it is a scalar parameter. The
      * parameter will be given a unique auto-generated name. */
     EXPORT Parameter(Type t, bool is_buffer, const std::string &name);
+
+    /** Copy ctor and dtor, needed for ObjectRegistry accounting. */
+    EXPORT Parameter(const Parameter&);
+    EXPORT ~Parameter();
 
     /** Get the type of this parameter */
     EXPORT Type type() const;
