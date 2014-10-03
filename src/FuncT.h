@@ -7,12 +7,13 @@
  */
 
 #include "Func.h"
+#include "Debug.h"
 
 namespace Halide {
 
 /** A typed version of FuncRefVar. */
 template <typename T>
-class FuncRefVarT : public T {
+class FuncRefVarT {
     FuncRefVar untyped;
 
 public:
@@ -27,12 +28,14 @@ public:
     Stage operator*=(T x) { return untyped = untyped * x; }
     Stage operator/=(T x) { return untyped = untyped / x; }
     // @}
+
+    // Convert this FuncT<T>::operator() call to T.
+    operator T() const { return T(static_cast<Tuple>(untyped)); }
 };
 
-/** A typed version of FuncRefExpr. T should be implicitly convertible
- * to/from Tuple. */
+/** A typed version of FuncRefExpr. */
 template <typename T>
-class FuncRefExprT : public T {
+class FuncRefExprT {
     FuncRefExpr untyped;
 
 public:
@@ -47,6 +50,9 @@ public:
     Stage operator*=(T x) { return untyped = untyped * x; }
     Stage operator/=(T x) { return untyped = untyped / x; }
     // @}
+
+    // Convert this FuncT<T>::operator() call to T.
+    operator T() const { return T(static_cast<Tuple>(untyped)); }
 };
 
 /** A Func that returns a type T. T should be implicitly convertible

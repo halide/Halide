@@ -18,7 +18,7 @@ public:
     Expr x, y;
 
     ComplexExpr(Tuple z) : x(z[0]), y(z[1]) {}
-    ComplexExpr(Expr x, Expr y = 0.0f) : x(x), y(y) {}
+    ComplexExpr(Expr x = 0.0f, Expr y = 0.0f) : x(x), y(y) {}
     ComplexExpr(float x, float y = 0.0f) : x(x), y(y) {}
 
     Expr re() { return x; }
@@ -506,7 +506,7 @@ template <typename T>
 ComplexFunc make_complex(Image<T> &re) {
     Var x, y;
     ComplexFunc ret;
-    ret(x, y) = ComplexExpr(re(x, y), 0.0f);
+    ret(x, y) = re(x, y);
     return ret;
 }
 
@@ -566,7 +566,6 @@ int main(int argc, char **argv) {
         // Compute the convolution.
         ComplexFunc dft_filtered("dft_filtered");
         dft_filtered(x, y) = dft_in(x, y)*dft_kernel(x, y);
-        //dft_filtered.compute_root().trace_realizations();
 
         // Compute the inverse DFT to get the result.
         filtered_r2c = fft2d_cT2r(dft_filtered, W, H);
