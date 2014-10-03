@@ -115,54 +115,30 @@ define weak_odr float @ceil_f32(float %x) nounwind uwtable readnone alwaysinline
        ret float %y
 }
 
-declare float @llvm.copysign.f32(float, float) nounwind readnone
-declare double @llvm.copysign.f64(double, double) nounwind readnone
+declare float @llvm.nearbyint.f32(float) nounwind readnone
+declare double @llvm.nearbyint.f64(double) nounwind readnone
 
-; For an explanation how this function works, see round_f32 below.
-define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
-       %a = call double @llvm.fabs.f64(double %x) nounwind readnone
-       %cmp = fcmp oge double %a, 4503599627370496.0
-       br i1 %cmp, label %integral, label %fractional
-fractional:
-       %y = fadd double %a, 4503599627370496.0
-       %z = fsub double %y, 4503599627370496.0
-       %r = call double @llvm.copysign.f64(double %z, double %x) nounwind readnone
-       ret double %r
-integral:
-       ret double %x
-}
-
-; Round a floating point number to the nearest integer as follows:
-; - if |x| >= 2^23, it cannot have a fractional component since all mantissa bits are 
-;   used to represent the number itself; in this case, we can return x directly.
-; - otherwise, we compute (|x| + 2^23) - 2^23. The addition produces a number between
-;   2^23 and 2^24 which is rounded by the FPU to the nearest integer by the FPU.
-;   The subtraction brings it back into the range of the original number.
 define weak_odr float @round_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %a = call float @llvm.fabs.f32(float %x) nounwind readnone
-       %cmp = fcmp oge float %a, 8388608.0
-       br i1 %cmp, label %integral, label %fractional
-fractional:
-       %y = fadd float %a, 8388608.0
-       %z = fsub float %y, 8388608.0
-       %r = call float @llvm.copysign.f32(float %z, float %x) nounwind readnone
-       ret float %r
-integral:
-       ret float %x
+       %y = tail call float @llvm.nearbyint.f32(float %x) nounwind readnone
+       ret float %y
 }
 
-define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone noinline {
-       %a = tail call double @abs_f64(double %x) nounwind readnone
-       %f = tail call double @floor_f64(double %a) nounwind readnone
-       %y = tail call double @llvm.copysign.f64(double %f, double %x) nounwind readnone
+define weak_odr double @round_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @llvm.nearbyint.f64(double %x) nounwind readnone
        ret double %y
 }
 
+declare float @llvm.trunc.f32(float) nounwind readnone
+declare double @llvm.trunc.f64(double) nounwind readnone
+
 define weak_odr float @trunc_f32(float %x) nounwind uwtable readnone alwaysinline {
-       %xd = fpext float %x to double
-       %yd = tail call double @trunc_f64(double %xd) nounwind readnone
-       %y = fptrunc double %yd to float
+       %y = tail call float @llvm.trunc.f32(float %x) nounwind readnone
        ret float %y
+}
+
+define weak_odr double @trunc_f64(double %x) nounwind uwtable readnone alwaysinline {
+       %y = tail call double @llvm.trunc.f64(double %x) nounwind readnone
+       ret double %y
 }
 
 declare double @llvm.pow.f64(double, double) nounwind readnone
