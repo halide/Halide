@@ -2,6 +2,11 @@
 
 // This lesson demonstrates how schedule multi-stage pipelines.
 
+// This lesson can be built by invoking the command:
+//    make tutorial_lesson_08_scheduling_2
+// in a shell with the current directory at the top of the halide source tree.
+// Otherwise, see the platform specific compiler involcations below.
+
 // On linux, you can compile and run it like so:
 // g++ lesson_08*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_08
 // LD_LIBRARY_PATH=../bin ./lesson_08
