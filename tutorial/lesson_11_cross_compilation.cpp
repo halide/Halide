@@ -5,7 +5,7 @@
 // This lesson can be built by invoking the command:
 //    make tutorial_lesson_11_cross_compilation
 // in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform specific compiler involcations below.
+// Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_11*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_11
