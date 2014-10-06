@@ -5,7 +5,7 @@
 // This lesson can be built by invoking the command:
 //    make tutorial_lesson_02_input_image
 // in a shell with the current directory at the top of the halide source tree.
-// Otherwise, see the platform specific compiler involcations below.
+// Otherwise, see the platform-specific compiler invocations below.
 
 // On linux, you can compile and run it like so:
 // g++ lesson_02*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_02
