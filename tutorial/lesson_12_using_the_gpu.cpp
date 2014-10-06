@@ -3,7 +3,7 @@
 // This lesson demonstrates how to use Halide to run code on a GPU.
 
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_12
+// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -lpng -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
