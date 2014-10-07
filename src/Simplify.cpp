@@ -28,9 +28,15 @@ using std::pair;
 using std::make_pair;
 using std::ostringstream;
 
-// Immediates and broadcasts of immediates
+// Things that we can constant fold: Immediates and broadcasts of
+// immediates.
 bool is_simple_const(Expr e) {
-    return (!e.as<Cast>()) && is_const(e);
+    if (e.as<IntImm>()) return true;
+    if (e.as<FloatImm>()) return true;
+    if (const Broadcast *b = e.as<Broadcast>()) {
+        return is_simple_const(b->value);
+    }
+    return false;
 }
 
 // Is a constant representable as a certain type
@@ -62,8 +68,8 @@ public:
         bounds_info.set_containing_scope(bi);
     }
 
-    /*
     // Uncomment to debug all Expr mutations.
+    /*
     Expr mutate(Expr e) {
         Expr new_e = IRMutator::mutate(e);
         debug(0) << e << " -> " << new_e << "\n";
