@@ -26,6 +26,106 @@ void print_results(const int N, const int num_iters, const std::string &result, 
     std::cout << std::setw(20) << column.str();
 }
 
+Func multiply_small_matrices(const int N, Func A, Func B) {
+    Var i("i"), j("j");
+
+    RDom k(0, N, "k");
+    Func C("C");
+    C(i, j)  = Halide::undef(Float(32));
+    C(i, j) += A(i, k) * B(k, j);
+
+    // A.compute_root().bound(i, 0, N).bound(j, 0, N);
+    // B.compute_root().bound(i, 0, N).bound(j, 0, N);
+
+    // At.compute_root()
+    //         .bound(i, 0, N)
+    //         .bound(j, 0, N)
+    //         .vectorize(i).unroll(j);
+
+    C.bound(i, 0, N).bound(j, 0, N);
+    C.update().reorder(i,j,k).vectorize(i).unroll(j);
+
+    C.output_buffer()
+            .set_min(0,0).set_min(1,0)
+            .set_stride(0,1).set_extent(1,N)
+            .set_extent(0,N).set_extent(1,N);
+
+    return C;
+}
+
+void test_small_matrix(const int num_iters) {
+    const int N = 4;
+
+    ImageParam A_in(Float(32), 2, "A_in"), B_in(Float(32), 2, "B_in");
+    A_in.set_min(0,0).set_min(1,0)
+            .set_stride(0,1).set_stride(1,N)
+            .set_extent(0,N).set_extent(1,N);
+
+    B_in.set_min(0,0).set_min(1,0)
+            .set_stride(0,1).set_stride(1,N)
+            .set_extent(0,N).set_extent(1,N);
+
+    Var i("i"), j("j");
+    Func A("A"), B("B");
+    A(i, j) = A_in(i, j);
+    B(i, j) = B_in(i, j);
+    Func C = multiply_small_matrices(4, A, B);
+
+    Image<float> a(N,N), b(N,N), c(N,N);
+
+    // Fill the inputs with junk
+    lambda(i, j, random_float()).realize(a);
+    lambda(i, j, random_float()).realize(b);
+
+    // Note we don't specialize on the matrix size, even though
+    // it's known at compile time in this case. We don't do this
+    // for Eigen either.
+    C.compile_jit();
+
+    // Note we don't specialize on the matrix size, even though
+    // it's known at compile time in this case. We don't do this
+    // for Eigen either.
+    Target t = get_host_target();
+    t.set_feature(Target::NoAsserts);
+    t.set_feature(Target::NoBoundsQuery);
+    C.compile_jit(t);
+    C.compile_to_lowered_stmt("small_mul.stmt", Text, t);
+
+    // Uncomment to see the generated asm
+    // C.compile_to_assembly("/dev/stdout", Internal::vec<Argument>(A, B), "");
+
+    A_in.set(a);
+    B_in.set(b);
+
+    // Call the routine many times.
+    float t1 = current_time();
+    for (int i = 0; i < num_iters; i++) {
+        // std::cout << "Iter " << std::setw(4) << i << ": " <<  (current_time()-t1)/1000.0 << "\n";
+        C.realize(c);
+    }
+    float t2 = current_time();
+
+    print_results(N, num_iters, "Halide small:", t2 - t1);
+
+#ifdef WITH_EIGEN
+    // Allocate some inputs and outputs.
+    Eigen::MatrixXf p(N, N), q(N, N), r(N, N);
+
+    // Fill the inputs with junk
+    p.setRandom(); q.setRandom();
+
+    // Call the routine many times
+    t1 = current_time();
+    for (int i = 0; i < 10; i++) {
+        r = p*q;
+    }
+    t2 = current_time();
+
+    print_results(N, num_iters, "Eigen small:", t2 - t1);
+#endif
+
+}
+
 void test_matrix_multiply(const int N, const int num_iters) {
     ImageParam A_in(Float(32), 2), B_in(Float(32), 2);
 
@@ -175,7 +275,8 @@ enum {
     test_explicit = 1,
     test_class = 2,
     test_eigen = 4,
-    test_all = 7
+    test_small = 8,
+    test_all = 255
 };
 
 std::vector<std::string> split_string(const std::string &str, const std::string &delim) {
@@ -234,6 +335,8 @@ int main(int argc, char **argv) {
                     which_test |= test_class;
                 } else if (test_names[i] == "eigen") {
                     which_test |= test_eigen;
+                } else if (test_names[i] == "small") {
+                    which_test |= test_small;
                 } else if (test_names[i] == "all") {
                     which_test |= test_all;
                 }
@@ -261,6 +364,10 @@ int main(int argc, char **argv) {
               << std::setw(20) << "Average Runtime"
               << std::setw(20) << "Data Throughput\n";
     for (int i = 0; i < 80; ++i ) std::cout << '-'; std::cout << "\n";
+
+    if (which_test & test_small) {
+        test_small_matrix(num_iters);
+    }
 
     if (which_test & test_explicit) {
         for (int i = 0; i < test_size.size(); ++i) {
