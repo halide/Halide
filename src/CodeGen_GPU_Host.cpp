@@ -529,7 +529,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         
         Stmt loop_stmt;
         
-        if (target.features & Target::OpenGL) {
+        if (target.has_feature(Target::OpenGL)) {
             
             // GL draw calls that invoke the GLSL shader are issued for pairs of
             // for-loops over spatial x and y dimensions. For each for-loop we create
@@ -540,6 +540,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             ExpressionMesh mesh;
             loop_stmt = setup_mesh(loop,mesh,varying);
             
+#if 1
             // Create an array of null terminated strings containing the attribute
             // names in the order they appear per vertex channel
             int num_attributes = mesh.attributes.size();
@@ -582,7 +583,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 for (int c=0;c!=num_coords;++c) {
                     Expr value = mesh.coords[i][c];
                     
-                    
                     // Convert the coordinates in the X and Y dimensions to device
                     // coordinates
                     if (i<2) {
@@ -593,7 +593,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                     else if (value.type() != Float(32)) {
                         value = Cast::make(Float(32), value);
                     }
-                                                        
+
                     Value* gpu_coord = codegen(value);
                     builder->CreateStore(gpu_coord,
                                          builder->CreateConstGEP2_32(gpu_coords, 0, c));
@@ -602,6 +602,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 builder->CreateStore(gpu_coords,
                                      builder->CreateConstGEP2_64(gpu_coords_per_dim, 0, i));
             }
+#endif
         }
 
         // compute a closure over the state passed into the kernel

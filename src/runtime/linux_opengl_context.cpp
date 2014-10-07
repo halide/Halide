@@ -34,7 +34,7 @@ extern int glXMakeContextCurrent(void *, unsigned long, unsigned long, void *);
 #define GLX_CONTEXT_MINOR_VERSION_ARB 0x2092
 typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
 
-const char *strstr(const char *, const char *);
+char *strstr(const char *, const char *);
 
 }  // extern "C"
 
