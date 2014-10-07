@@ -199,7 +199,7 @@ public:
 Expr common_subexpression_elimination(Expr e) {
 
     // Early-out for trivial cases.
-    if (!should_extract(e)) return e;
+    if (is_const(e) || e.as<Variable>()) return e;
 
     debug(4) << "\n\n\nInput to letify " << e << "\n";
 
