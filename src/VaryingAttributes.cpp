@@ -1,5 +1,7 @@
 #include "VaryingAttributes.h"
 
+#include <algorithm>
+
 #include "CodeGen_GPU_Dev.h"
 
 #include "IRMutator.h"
@@ -7,7 +9,8 @@
 #include "CSE.h"
 #include "Simplify.h"
 
-#include "LinearSolve.h"
+// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+// #include "LinearSolve.h"
 
 namespace Halide {
 namespace Internal {
@@ -124,6 +127,7 @@ protected:
             // let name at this variable.
             std::string var = unique_name(op->name + ".varying");
             expr = Let::make(var, mutated_value, Let::make(op->name, Variable::make(mutated_value.type(), var), mutated_body));
+
             linear_lets.push_back(expr);
         }
         else {
@@ -148,14 +152,17 @@ protected:
             // to move out of the fragment shader
             for (auto a : linear_lets) {
                 
-                debug(0) << "VARYING ATTRIBUTE: " << a.as<Let>()->name << " = " << a.as<Let>()->value << "\n\n";
+	        // TODO(abstephensg): Prioritize varying attributes in case we run out of slots
+	        debug(1) << "VARYING ATTRIBUTE: " << a.as<Let>()->value.type() << " " << a.as<Let>()->name << " = " << a.as<Let>()->value << "\n\n";
                 
                 // ...
                 
             }
         }
         
-        loop_vars.pop_back();
+	if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+	    loop_vars.pop_back();
+	}
         
         stmt = For::make(op->name, op->min, op->extent, op->for_type, mutated_body);
     }
@@ -645,7 +652,7 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string,Expr>& varyin
         varying.erase(name);
     }
 }
-    
+
 Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr>& varyings)
 {
     // Construct a mesh of expressions to instantiate during runtime
@@ -745,6 +752,9 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                 for (auto var_name : { loop0->name, loop1->name }) {
                     
                     if (contains_variable(eq, var_name)) {
+
+// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+/*
                         Expr solution = solve_for_linear_variable_or_fail(eq, Var(var_name));
                         
                         if (solution.defined()) {
@@ -756,8 +766,11 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                             result.coords[dim].push_back(rhs);
                         }
                         else {
+*/
                             internal_error << "DID NOT SOLVE: " << varying_name << " FOR: " << var_name << " EXPR: " << eq << "\n";
+/*
                         }
+*/
                     }
                 }
             }
@@ -773,7 +786,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
         
         std::string varying_name = v.first;
         
-        debug(2) << "\nVarying: " << varying_name << "\n";
+        debug(1) << "\nVarying: " << varying_name << "\n";
         
         // Iterate over all of the coordinates for the variable in this
         // varying attribute expression
@@ -798,7 +811,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
             if (c.found && (c.result->type != y.type())) {
                 cast_y = Cast::make(c.result->type,y);
             }
-            
+
             for (auto x : result.coords[0]) {
                 
                 // Check if the varying expression contains the y dimension
@@ -811,26 +824,26 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                 if (c.found && (c.result->type != x.type())) {
                     cast_x = Cast::make(c.result->type,x);
                 }
-                
+
                 Expr value = Let::make(loop1->name, cast_y, Let::make(loop0->name, cast_x, v.second));
                 
                 // Clean up the lets and other redundant terms
                 value = simplify(value);
-                
+
                 // Add the expression for the varying attribute value to the vertex list
                 result.coords[attrib_dim].push_back(value);
             }
         }
     }
     
-    debug(2) << "MESH:\n";
+    debug(1) << "MESH:\n";
     
     for (int a=0;a!=result.coords.size();++a) {
         std::string attrib_name = result.attributes[a];
-        debug(2) << attrib_name << " (total: " << result.coords[a].size() << ")\n";
+        debug(1) << attrib_name << " (total: " << result.coords[a].size() << ")\n";
 
         for (auto c : result.coords[a]) {
-            debug(2) << "    " << c << "\n";
+            debug(1) << "    " << c << "\n";
         }
     }
     

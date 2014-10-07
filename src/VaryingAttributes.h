@@ -10,7 +10,6 @@
 #include "IR.h"
 
 #include <vector>
-#include <initializer_list>
 
 namespace Halide {
 namespace Internal {
@@ -23,7 +22,7 @@ namespace Internal {
     struct ExpressionMesh {
 
         // Unsorted coordinate expressions along each spatial dimension
-        std::vector<std::vector<Expr>> coords;
+        std::vector<std::vector<Expr> > coords;
 
         // Attribute names, including the x and y coordinates
         std::vector<std::string> attributes;        

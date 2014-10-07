@@ -3,6 +3,7 @@
 #include "HalideRuntime.h"
 
 #include <sstream>
+#include <algorithm>
 
 #include "mini_opengl.h"
 
@@ -21,6 +22,8 @@ extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *
 extern "C" int halide_opengl_create_context(void *user_context);
 
 extern "C" int isdigit(int c);
+
+#include <stdio.h>
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
@@ -86,7 +89,7 @@ struct Argument {
     // The kind of data stored in an argument
     enum Kind {
         Invalid,
-        Var,                            // uniform variable
+        Uniform,                        // uniform variable
         Varying,                        // varying attribute
         Inbuf,                          // input texture
         Outbuf                          // output texture
@@ -97,22 +100,10 @@ struct Argument {
         Void, Bool, Float, Int8, Int16, Int32, UInt8, UInt16, UInt32
     };
 
-    Argument *name;
+    char *name;
     Kind kind;
     Type type;
     Argument *next;
-};
-
-static const char* ArgumentTypeGLSLNames[] = {
-    "/*None*/",
-    "bool",
-    "float",
-    "float",
-    "float",
-    "int",
-    "float",
-    "float",
-    "int"
 };
 
 struct KernelInfo {
@@ -204,7 +195,7 @@ WEAK const char *varying_marker    = "/// VARYING ";
         GLenum err = global_state.GetError();                           \
         if (err != GL_NO_ERROR) {                                       \
             LOG_GLERROR(err);                                           \
-            error(user_context) << "OpenGL error";                      \
+            error(user_context) << __FILE__ << ":" << __LINE__ << "OpenGL error " << err; \
             return ERRORCODE;                                           \
         }} while (0)
 
@@ -239,6 +230,10 @@ WEAK void debug_buffer(void *user_context, buffer_t *buf) {
 
 WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
+
+    debug(user_context) << "SHADER SOURCE:\n"
+			<< source << "\n";
+
     GLuint shader = ST.CreateShader(type);
     CHECK_GLERROR(1);
     ST.ShaderSource(shader, 1, (const GLchar **)&source, length);
@@ -348,10 +343,10 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
             // ignore
-        } else if ((args = match_prefix(line, var_marker))) {
-            if (HalideOpenGLArgument *arg =
+        } else if ((args = match_prefix(line, uniform_marker))) {
+            if (Argument *arg =
                 parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = ARGKIND_UNIFORM;
+                arg->kind = Argument::Uniform;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
@@ -359,9 +354,9 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
                 goto error;
             }
         } else if ((args = match_prefix(line, varying_marker))) {
-            if (HalideOpenGLArgument *arg =
+            if (Argument *arg =
                 parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = ARGKIND_VARYING;
+                arg->kind = Argument::Varying;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
@@ -438,7 +433,6 @@ WEAK GlobalState::GlobalState() {
     profile = OpenGL;
     major_version = 2;
     minor_version = 0;
-    vertex_shader_id = 0;
     framebuffer_id = 0;
     vertex_array_object = vertex_buffer = element_buffer = 0;
     textures = NULL;
@@ -891,10 +885,10 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
                    << "attribute float XXvertex_y_attrib;\n"
                    << "varying vec2 pixcoord;\n";
         
-        for (HalideOpenGLArgument* arg = kernel->arguments; arg; arg=arg->next) {
-            if (arg->kind == ARGKIND_VARYING) {
-                vertex_src << "attribute " << ArgumentTypeGLSLNames[arg->type] << " " << arg->name << "_attrib;\n";
-                vertex_src << "varying   " << ArgumentTypeGLSLNames[arg->type] << " " << arg->name << ";\n";
+        for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
+	    if (arg->kind == Argument::Varying) {
+                vertex_src << "attribute float " << arg->name << "_attrib;\n";
+                vertex_src << "varying   float " << arg->name << ";\n";
             }
         }
         
@@ -906,8 +900,8 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
                    << "    vec2 texcoord = 0.5 * position + 0.5;\n"
                    << "    pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
         
-        for (HalideOpenGLArgument* arg = kernel->arguments; arg; arg=arg->next) {
-            if (arg->kind == ARGKIND_VARYING) {
+        for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
+        if (arg->kind == Argument::Varying) {
                 vertex_src << "   " << arg->name << " = " << arg->name << "_attrib;\n";
             }
         }
@@ -916,16 +910,37 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
 
         
         // Initialize vertex shader.
-        GLuint vertex_shader_id = halide_opengl_make_shader(user_context,
-                                                        GL_VERTEX_SHADER, vertex_src.str().c_str(), NULL);
+        GLuint vertex_shader_id = make_shader(user_context,
+                                              GL_VERTEX_SHADER, vertex_src.str().c_str(), NULL);
         if (vertex_shader_id == 0) {
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
         }
         
         // Create the fragment shader
-        GLuint fragment_shader_id = halide_opengl_make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                      kernel->source, NULL);
+#if 1
+        GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
+                                                kernel->source, NULL);
+#else
+	const char* debug_src = 
+	  "varying float _a0_varying;\n"
+	  "varying float _a1_varying;\n"
+	  "uniform int _cpu_extent_0;\n"
+	  "uniform int _cpu_extent_1;\n"
+	  "varying float _t0_varying;\n"
+	  "varying vec2 pixcoord;\n"
+	  "void main() {\n"
+	  "  int _gpu_s0_v1XX_block_id_y = int(pixcoord.y);\n"
+	  "  int _gpu_s0_v0XX_block_id_x = int(pixcoord.x);\n"
+	  "  ivec3 _0 = ivec3(_a1_varying, _a0_varying, 12);\n"
+	  "  vec3 _1 = vec3(_0);\n"
+	  "  gl_FragColor.rgb = vec3(int(_a1_varying), int(_a0_varying), 12) / 255.0;\n"
+	  // "  gl_FragColor.rgb = vec3(10*int(pixcoord.x), int(pixcoord.y), 12) / 255.0;\n"
+	  "}\n";
+
+        GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
+                                                debug_src, NULL);
+#endif
 
         // Link GLSL program
         GLuint program = ST.CreateProgram();
@@ -1092,12 +1107,14 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
         return 1;
     }
     ST.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
+
     ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
     return 0;
 }
 
 // Copy image data from texture back to host memory.
 WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
+
     CHECK_INITIALIZED(1);
     if (!buf->dev_dirty) {
         return 0;
@@ -1146,6 +1163,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         }
 
         ST.PixelStorei(GL_PACK_ALIGNMENT, 1);
+
         if (int err = get_pixels(user_context, buf, format, type, tmp)) {
             halide_free(user_context, tmp);
             return err;
@@ -1234,8 +1252,6 @@ WEAK int halide_opengl_dev_run(
             return 1;
         }
         
-        halide_printf(user_context, "Kernel arg: %s args[%d] pointer value: %p\n",kernel_arg->name,i,args[i]);
-        
         if (kernel_arg->kind == Argument::Outbuf) {
 
             // Check if the output buffer will be bound by the client instead of
@@ -1260,7 +1276,7 @@ WEAK int halide_opengl_dev_run(
             ST.Uniform1iv(loc, 1, &num_active_textures);
             num_active_textures++;
             // TODO: check maximum number of active textures
-        } else if (kernel_arg->kind == Argument::Var) {
+        } else if (kernel_arg->kind == Argument::Uniform) {
             GLint loc =
                 ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
             CHECK_GLERROR(1);
@@ -1413,6 +1429,9 @@ WEAK int halide_opengl_dev_run(
     loc = ST.GetUniformLocation(kernel->program_id, "output_min");
     ST.Uniform2iv(loc, 1, output_min);
     CHECK_GLERROR(1);
+
+    printf("output_extent: %d,%d\n",output_extent[0],output_extent[1]);
+    printf("output_min: %d,%d\n",output_min[0],output_min[1]);
     
     // TODO(abstephensg) This per run setup may move to program load time in halide_init_kernels
 
@@ -1428,16 +1447,16 @@ WEAK int halide_opengl_dev_run(
     std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
     std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
     
-#if DEBUG_MESH
-    printf("Sorted x coords: ");
+#if DEBUG_RUNTIME
+    debug(user_context) << "Sorted x coords: ";
     for (int i=0;i!=num_coords_dim0;++i)
-        printf("%f ",coords_per_dim[0][sorted_order0[i]]);
-    printf("\n");
+        debug(user_context) << coords_per_dim[0][sorted_order0[i]] << " ";
+    debug(user_context) << "\n";
     
-    printf("Sorted y coords: ");
+    debug(user_context) << "Sorted y coords: ";
     for (int i=0;i!=num_coords_dim1;++i)
-        printf("%f ",coords_per_dim[1][sorted_order1[i]]);
-    printf("\n");
+        debug(user_context) << coords_per_dim[1][sorted_order1[i]] << " ";
+    debug(user_context) << "\n";
 #endif
     
     // Construct the vertex and element buffers
@@ -1482,29 +1501,37 @@ WEAK int halide_opengl_dev_run(
     }
     
 
-#if DEBUG_MESH
+#if DEBUG_RUNTIME
+    debug(user_context) << "Vertex buffer:";
     for (int i=0;i!=vertex_buffer_size;++i) {
         if (!(i%num_attributes)) {
-            halide_printf(user_context,"\n");
+	  debug(user_context) << "\n";
         }
-        halide_printf(user_context,"%f ",vertex_buffer[i]);
+        debug(user_context) << vertex_buffer[i] << " ";
     }
-    halide_printf(user_context,"\n");
-    halide_printf(user_context,"\n");
+    debug(user_context) << "\n";
+    debug(user_context) << "\n";
     
+    debug(user_context) << "Element buffer:";
     for (int i=0;i!=element_buffer_size;++i) {
         if (!(i%3)) {
-            halide_printf(user_context,"\n");
+            debug(user_context) << "\n";
         }        
-        halide_printf(user_context,"%d ",element_buffer[i]);
+        debug(user_context) << element_buffer[i] << " ";
     }
-    halide_printf(user_context,"\n");
+    debug(user_context) << "\n";
 #endif 
     
     // Setup viewport
     ST.Viewport(0, 0, output_extent[0], output_extent[1]);
 
     // Setup the vertex and element buffers
+    GLuint vertex_array_object = 0;
+    if (ST.have_vertex_array_objects) {
+        ST.GenVertexArrays(1,&vertex_array_object);
+        ST.BindVertexArray(vertex_array_object);
+    }
+
     GLuint vertex_buffer_id;
     ST.GenBuffers(1,&vertex_buffer_id);
     ST.BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
@@ -1521,16 +1548,25 @@ WEAK int halide_opengl_dev_run(
     GLint attrib_ids[num_attributes];
     
     for (int i=0;i!=num_attributes;++i) {
+
+        // TODO(abstephensg): Switch to glBindAttribLocation
         GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_names[i]);
-        CHECK_GLERROR(1);
+	attrib_ids[i] = attrib_id;
+
+        // Check to see if the varying attribute was simplified out of the
+        // program by the GLSL compiler. This may occur because the .varying attribute
+        // let expression might be unused, but it is never run through a simplification
+        // pass--with Let simplification turned on--since the pass would remove the
+        // .varying variable in several cases.
+        if (attrib_id == -1) {
+          continue;
+        }
         
         ST.VertexAttribPointer(attrib_id, 1, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat)*num_attributes, (void*)(i*sizeof(GLfloat)));
         CHECK_GLERROR(1);
         
         ST.EnableVertexAttribArray(attrib_id);
         CHECK_GLERROR(1);
-        
-        attrib_ids[i] = attrib_id;
     }
 
     // Draw the scene
@@ -1538,7 +1574,8 @@ WEAK int halide_opengl_dev_run(
     CHECK_GLERROR(1);
     
     for (int i=0;i!=num_attributes;++i) {
-        ST.DisableVertexAttribArray(attrib_ids[i]);
+        if (attrib_ids[i] != -1)
+            ST.DisableVertexAttribArray(attrib_ids[i]);
     }
 
     // Cleanup
@@ -1553,10 +1590,15 @@ WEAK int halide_opengl_dev_run(
 
     ST.BindBuffer(GL_ARRAY_BUFFER, 0);
     ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    if (ST.have_vertex_array_objects) {
+        ST.BindVertexArray(0);
+        ST.DeleteVertexArrays(1,&vertex_array_object);
+    }
     
     ST.DeleteBuffers(1,&vertex_buffer_id);
     ST.DeleteBuffers(1,&element_buffer_id);
-    
+
     return 0;
 }
 

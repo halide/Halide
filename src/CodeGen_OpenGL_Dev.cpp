@@ -614,8 +614,10 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
                    << type_name << " " << print_name(args[i].name) << "\n";
         } else if (ends_with(args[i].name, ".varying")) {
             header << "/// VARYING "
-                   << CodeGen_C::print_type(args[i].type) << " "
-                   << print_name(args[i].name) << "\n";
+                   // GLSL requires that varying attributes are float. Integer
+                   // expressions for vertex attributes are cast to float during
+                   // host codegen
+                   << "float " << print_name(args[i].name) << "\n";
         } else {
             header << "/// UNIFORM "
                    << CodeGen_C::print_type(args[i].type) << " "
@@ -644,9 +646,8 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         if (args[i].is_buffer && args[i].read) {
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
         } else if (ends_with(args[i].name, ".varying")) {
-            stream << "varying "
-            << print_type(args[i].type) << " "
-            << print_name(args[i].name) << ";\n";
+            // GLSL requires that varying attributes are float
+            stream << "varying float " << print_name(args[i].name) << ";\n";
         } else if (!args[i].is_buffer) {
             stream << "uniform "
                    << print_type(args[i].type) << " "
