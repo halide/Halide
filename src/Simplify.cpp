@@ -684,6 +684,12 @@ private:
             }
         }
 
+        ModulusRemainder mod_rem(0, 1);
+        if (ramp_a && ramp_a->base.type() == Int(32)) {
+            // Do modulus remainder analysis on the base.
+            mod_rem = modulus_remainder(ramp_a->base, alignment_info);
+        }
+
         if (is_zero(a) && !is_zero(b)) {
             expr = a;
         } else if (is_one(b)) {
@@ -702,19 +708,17 @@ private:
             }
         } else if (broadcast_a && broadcast_b) {
             expr = mutate(Broadcast::make(Div::make(broadcast_a->value, broadcast_b->value), broadcast_a->width));
-        } else if (ramp_a && broadcast_b &&
-                   const_int(broadcast_b->value, &ib) && ib &&
-                   const_int(ramp_a->stride, &ia) && ((ia % ib) == 0)) {
-            // ramp(x, ia, w) / broadcast(ib, w) -> ramp(x/ib, ia/ib, w) when ib divides ia
-            expr = mutate(Ramp::make(ramp_a->base/ib, ia/ib, ramp_a->width));
-        } else if (ramp_a && broadcast_b &&
-                   mul_a_a && const_int(mul_a_a->b, &ia) && ia &&
-                   const_int(broadcast_b->value, &ib) && ib &&
-                   const_int(ramp_a->stride, &ic) &&
-                   (ib % ia) == 0 &&
-                   std::abs(ic * (broadcast_b->width - 1)) < std::abs(ia)) {
-            // ramp(x*a, c, w) / broadcast(b, w) -> broadcast(x / (b/a), w) when c*(w-1) < a and a divides b
-            expr = mutate(Broadcast::make(mul_a_a->a / div_imp(ib, ia), broadcast_b->width));
+        } else if (ramp_a && const_int(ramp_a->stride, &ia) &&
+                   broadcast_b && const_int(broadcast_b->value, &ib) && ib &&
+                   ia % ib == 0) {
+            // ramp(x, 4, w) / broadcast(2, w) -> ramp(x / 2, 2, w)
+            expr = mutate(Ramp::make(ramp_a->base / ib, div_imp(ia, ib), ramp_a->width));
+        } else if (ramp_a && ramp_a->base.type() == Int(32) && const_int(ramp_a->stride, &ia) &&
+                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+                   mod_rem.modulus % ib == 0 &&
+                   div_imp(mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
+            // ramp(k*z + x, y, w) / z = broadcast(k, w) if x/z == (x + (w-1)*y)/z
+            expr = mutate(Broadcast::make(ramp_a->base / ib, ramp_a->width));
         } else if (div_a &&
                    const_int(div_a->b, &ia) && ia >= 0 &&
                    const_int(b, &ib) && ib >= 0) {
@@ -768,7 +772,7 @@ private:
         Expr a = mutate(op->a);
         Expr b = mutate(op->b);
 
-        int ia = 0, ia2 = 0, ib = 0;
+        int ia = 0, ib = 0;
         float fa = 0.0f, fb = 0.0f;
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
@@ -790,6 +794,14 @@ private:
             }
 
             mod_rem = modulus_remainder(a, alignment_info);
+        }
+
+        // If the RHS is a constant and the LHS is a ramp, do modulus
+        // remainder analysis on the base.
+        if (broadcast_b &&
+            const_int(broadcast_b->value, &ib) && ib &&
+            ramp_a && ramp_a->base.type() == Int(32)) {
+            mod_rem = modulus_remainder(ramp_a->base, alignment_info);
         }
 
         if (is_zero(a) && !is_zero(b)) {
@@ -823,12 +835,18 @@ private:
                    ia % ib == 0) {
             // ramp(x, 4, w) % broadcast(2, w)
             expr = mutate(Broadcast::make(ramp_a->base % ib, ramp_a->width));
-        } else if (ramp_a && const_int(ramp_a->base, &ia) &&
-                   const_int(ramp_a->stride, &ia2) &&
+        } else if (ramp_a && ramp_a->base.type() == Int(32) && const_int(ramp_a->stride, &ia) &&
                    broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
-                   div_imp(ia, ib) == div_imp(ia + ramp_a->width*ia2, ib)) {
-            // ramp(x, y, w) % broadcast(z, w) = ramp(x % z, y, w) if x/z == (x + w*y)/z
-            expr = mutate(Ramp::make(mod_imp(ia, ib), ramp_a->stride, ramp_a->width));
+                   mod_rem.modulus % ib == 0 &&
+                   div_imp(mod_rem.remainder, ib) == div_imp(mod_rem.remainder + (ramp_a->width-1)*ia, ib)) {
+            // ramp(k*z + x, y, w) % z = ramp(x, y, w) if x/z == (x + (w-1)*y)/z
+            expr = mutate(Ramp::make(mod_imp(mod_rem.remainder, ib), ramp_a->stride, ramp_a->width));
+        } else if (ramp_a && ramp_a->base.type() == Int(32) &&
+                   const_int(ramp_a->stride, &ia) && !is_const(ramp_a->base) &&
+                   broadcast_b && const_int(broadcast_b->value, &ib) && ib != 0 &&
+                   mod_rem.modulus % ib == 0) {
+            // ramp(k*z + x, y, w) % z = ramp(x, y, w) % z
+            expr = mutate(Ramp::make(mod_imp(mod_rem.remainder, ib), ramp_a->stride, ramp_a->width) % ib);
         } else if (a.same_as(op->a) && b.same_as(op->b)) {
             expr = op;
         } else {
@@ -2426,15 +2444,22 @@ void simplify_test() {
     check(Expr(Broadcast::make(y, 4)) / Expr(Broadcast::make(x, 4)),
           Expr(Broadcast::make(y/x, 4)));
     check(Expr(Ramp::make(x, 4, 4)) / 2, Ramp::make(x/2, 2, 4));
+    check(Expr(Ramp::make(x, -4, 7)) / 2, Ramp::make(x/2, -2, 7));
+    check(Expr(Ramp::make(x, 4, 5)) / -2, Ramp::make(x/-2, -2, 5));
+    check(Expr(Ramp::make(x, -8, 5)) / -2, Ramp::make(x/-2, 4, 5));
 
     check(Expr(Ramp::make(4*x, 1, 4)) / 4, Broadcast::make(x, 4));
     check(Expr(Ramp::make(x*4, 1, 3)) / 4, Broadcast::make(x, 3));
     check(Expr(Ramp::make(x*8, 2, 4)) / 8, Broadcast::make(x, 4));
     check(Expr(Ramp::make(x*8, 3, 3)) / 8, Broadcast::make(x, 3));
     check(Expr(Ramp::make(0, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
-    check(Expr(Ramp::make(8, 1, 8)) % 16, Expr(Ramp::make(8, 1, 8) % 16));
+    check(Expr(Ramp::make(8, 1, 8)) % 16, Expr(Ramp::make(8, 1, 8)));
+    check(Expr(Ramp::make(9, 1, 8)) % 16, Expr(Ramp::make(9, 1, 8)) % 16);
     check(Expr(Ramp::make(16, 1, 8)) % 16, Expr(Ramp::make(0, 1, 8)));
-    check(Expr(Ramp::make(0, 1, 8)) % 8, Expr(Ramp::make(0, 1, 8) % 8));
+    check(Expr(Ramp::make(0, 1, 8)) % 8, Expr(Ramp::make(0, 1, 8)));
+    check(Expr(Ramp::make(x*8+17, 1, 4)) % 8, Expr(Ramp::make(1, 1, 4)));
+    check(Expr(Ramp::make(x*8+17, 1, 8)) % 8, Expr(Ramp::make(1, 1, 8) % 8));
+
 
     check(Expr(7) % 2, 1);
     check(Expr(7.25f) % 2.0f, 1.25f);
