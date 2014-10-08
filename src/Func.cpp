@@ -217,6 +217,8 @@ int Func::dimensions() const {
     return func.dimensions();
 }
 
+#if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
+
 FuncRefVar Func::operator()() const {
     // Bulk up the vars using implicit vars
     vector<Var> args;
@@ -261,10 +263,14 @@ FuncRefVar Func::operator()(Var x, Var y, Var z, Var w, Var u, Var v) const {
     return FuncRefVar(func, args, placeholder_pos);
 }
 
+#endif // Can't have C++11 arbitrary number of args support
+
 FuncRefVar Func::operator()(vector<Var> args) const {
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefVar(func, args, placeholder_pos);
 }
+
+#if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
 
 FuncRefExpr Func::operator()(Expr x) const {
     vector<Expr> args = vec(x);
@@ -301,6 +307,8 @@ FuncRefExpr Func::operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) con
     int placeholder_pos = add_implicit_vars(args);
     return FuncRefExpr(func, args, placeholder_pos);
 }
+
+#endif // Can't have C++11 arbitrary number of args support
 
 FuncRefExpr Func::operator()(vector<Expr> args) const {
     int placeholder_pos = add_implicit_vars(args);
@@ -781,6 +789,8 @@ Stage &Stage::reorder(const std::vector<VarOrRVar>& vars) {
     return *this;
 }
 
+#if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
+
 Stage &Stage::reorder(VarOrRVar x, VarOrRVar y) {
     VarOrRVar vars[] = {x, y};
     reorder_vars(schedule.dims(), vars, 2, *this);
@@ -834,6 +844,8 @@ Stage &Stage::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w, VarOrR
     reorder_vars(schedule.dims(), vars, 10, *this);
     return *this;
 }
+
+#endif // Can't have C++11 arbitrary number of args support
 
 Stage &Stage::gpu_threads(VarOrRVar tx, GPUAPI /* gpu_api */) {
     parallel(tx);
@@ -1076,6 +1088,8 @@ Func &Func::reorder(const std::vector<VarOrRVar> &vars) {
     return *this;
 }
 
+#if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
+
 Func &Func::reorder(VarOrRVar x, VarOrRVar y) {
     invalidate_cache();
     Stage(func.schedule(), name()).reorder(x, y);
@@ -1137,6 +1151,8 @@ Func &Func::reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z, VarOrRVar w,
     Stage(func.schedule(), name()).reorder(x, y, z, w, t1, t2, t3, t4, t5, t6);
     return *this;
 }
+
+#endif // Can't have C++11 arbitrary number of args support
 
 Func &Func::gpu_threads(VarOrRVar tx, GPUAPI gpu_api) {
     invalidate_cache();
