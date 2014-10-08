@@ -405,9 +405,11 @@ WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
     Argument *arg = kernel->arguments;
     while (arg) {
         Argument *next = arg->next;
+        free(arg->name);
         free(arg);
         arg = next;
     }
+    free(kernel->source);
     free(kernel);
 }
 
