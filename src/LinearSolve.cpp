@@ -420,10 +420,11 @@ private:
                     rhs = simplify(Cast::make(var_term.var->type, rhs));
                     lhs = make_zero(var_term.var->type);
                 } else {
-                    if (var_term.var->type.is_int() &&
+                    if (var_term.coeff.type().is_int() &&
+                        rhs.type().is_int() &&
                         ((is_less != swapped && is_open) ||
                          (is_less == swapped && !is_open))) {
-                        // If we are wrting an integer < or a >=
+                        // If we are solving an integer < or a >=
                         // comparison than we must use the ceiling of the
                         // division as the respective bound.
                         rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
