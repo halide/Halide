@@ -301,7 +301,6 @@ void check_sse_all() {
     //check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
 
     check("shufps", 4, in_f32(2*x));
-    if (!use_avx) check("pshufd", 4, in_f32(100-x));
 
     // SSE 2
 

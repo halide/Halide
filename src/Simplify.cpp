@@ -1678,8 +1678,8 @@ private:
             return;
         }
 
-        Stmt then_case = op->then_case;
-        Stmt else_case = op->else_case;
+        Stmt then_case = mutate(op->then_case);
+        Stmt else_case = mutate(op->else_case);
 
         // Mine the condition for useful constraints to apply (eg var == value && bool_param).
         std::vector<Expr> stack;
@@ -1712,6 +1712,7 @@ private:
             }
 
             const EQ *eq = next.as<EQ>();
+            const NE *ne = next.as<NE>();
             const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
 
             if (eq && var) {
@@ -1728,14 +1729,12 @@ private:
                 if (!and_chain) {
                     else_case = substitute(var->name, const_false(), else_case);
                 }
-            } else if (eq && is_const(eq->b)) {
+            } else if (eq && is_const(eq->b) && !or_chain) {
                 // some_expr = const
-                if (!or_chain) {
-                    then_case = substitute(eq->a, eq->b, then_case);
-                }
-                if (!and_chain) {
-                    else_case = substitute(eq->a, eq->b, else_case);
-                }
+                then_case = substitute(eq->a, eq->b, then_case);
+            } else if (ne && is_const(ne->b) && !and_chain) {
+                // some_expr != const
+                else_case = substitute(ne->a, ne->b, else_case);
             }
         }
 
@@ -2710,7 +2709,22 @@ void simplify_test() {
                            Block::make(Evaluate::make(1), Evaluate::make(3)),
                            Block::make(Evaluate::make(2), Evaluate::make(4))));
 
+    // Check conditions involving entire exprs
+    Expr foo = x + 3*y;
+    Expr foo_simple = x + y*3;
+    check(IfThenElse::make(foo == 17,
+                           Evaluate::make(foo+1),
+                           Evaluate::make(foo+2)),
+          IfThenElse::make(foo_simple == 17,
+                           Evaluate::make(18),
+                           Evaluate::make(foo_simple+2)));
 
+    check(IfThenElse::make(foo != 17,
+                           Evaluate::make(foo+1),
+                           Evaluate::make(foo+2)),
+          IfThenElse::make(foo_simple != 17,
+                           Evaluate::make(foo_simple+1),
+                           Evaluate::make(19)));
 
     check(b1 || !b1, t);
     check(!b1 || b1, t);
