@@ -45,22 +45,6 @@ namespace BoundaryConditions {
 
 namespace Internal {
 
-#if __cplusplus > 199711L // C++11 arbitrary number of args support
-
-inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
-                                     Expr min, Expr extent) {
-    collected_bounds.push_back(std::make_pair(min, extent));
-}
-
-template <typename ...Bounds>
-inline NO_INLINE void collect_bounds(std::vector<std::pair<Expr, Expr> > &collected_bounds,
-                                     Expr min, Expr extent, Bounds... bounds) {
-    collected_bounds.push_back(std::make_pair(min, extent));
-    collect_bounds(collected_bounds, bounds...);
-}
-
-#endif // C++11 support.
-
 inline const Func &func_like_to_func(const Func &func) {
     return func;
 }
@@ -109,7 +93,7 @@ template <typename T, typename ...Bounds>
 inline NO_INLINE Func constant_exterior(T func_like, Expr value,
                                         Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_bounds(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return constant_exterior(Internal::func_like_to_func(func_like), value, collected_bounds);
 }
 #else
@@ -221,7 +205,7 @@ inline NO_INLINE Func repeat_edge(T func_like) {
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func repeat_edge(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_bounds(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return repeat_edge(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
@@ -332,7 +316,7 @@ inline NO_INLINE Func repeat_image(T func_like) {
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func repeat_image(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_bounds(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return repeat_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
@@ -443,7 +427,7 @@ inline NO_INLINE Func mirror_image(T func_like) {
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func mirror_image(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_bounds(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return mirror_image(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else
@@ -557,7 +541,7 @@ inline NO_INLINE Func mirror_interior(T func_like) {
 template <typename T, typename ...Bounds>
 inline NO_INLINE Func mirror_interior(T func_like, Bounds... bounds) {
     std::vector<std::pair<Expr, Expr> > collected_bounds;
-    Internal::collect_bounds(collected_bounds, bounds...);
+    ::Halide::Internal::collect_paired_args(collected_bounds, bounds...);
     return mirror_interior(Internal::func_like_to_func(func_like), collected_bounds);
 }
 #else

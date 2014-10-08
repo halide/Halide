@@ -82,6 +82,17 @@ public:
                                 VarOrRVar xi, VarOrRVar yi,
                                 Expr xfactor, Expr yfactor);
     EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
+// Add C++11 varargs template
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+    template <typename... Args>
+    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, Args... args) {
+        std::vector<VarOrRVar> collected_args;
+        collected_args.push_back(x);
+        collected_args.push_back(y);
+        Internal::collect_args(collected_args, args...);
+        return reorder(collected_args);
+    }
+#else
     EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y);
     EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z);
     EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, VarOrRVar z,
@@ -103,6 +114,8 @@ public:
                                    VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                                    VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                                    VarOrRVar t6);
+#endif
+
     EXPORT Stage &rename(VarOrRVar old_name, VarOrRVar new_name);
     EXPORT Stage specialize(Expr condition);
 
@@ -662,6 +675,7 @@ public:
     //@{
     EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args,
                                 const Target &target = get_target_from_environment());
+// TODO: Add C++11 varargs template, which is trickier due to final optional argument.
     EXPORT void compile_to_file(const std::string &filename_prefix,
                                 const Target &target = get_target_from_environment());
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a,
@@ -674,6 +688,7 @@ public:
                                 const Target &target = get_target_from_environment());
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
                                 const Target &target = get_target_from_environment());
+
     // @}
 
     /** Eagerly jit compile the function to machine code. This
@@ -900,6 +915,17 @@ public:
      * enough implicit vars are added to the end of the argument list
      * to make up the difference (see \ref Var::implicit) */
     // @{
+// Add C++11 varargs template
+    EXPORT FuncRefVar operator()(std::vector<Var>) const;
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+    template <typename... Args>
+    EXPORT typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, FuncRefVar>::type
+    operator()(Args... args) const {
+        std::vector<Var> collected_args;
+        Internal::collect_args(collected_args, args...);
+        return this->operator()(collected_args);
+    }
+#else
     EXPORT FuncRefVar operator()() const;
     EXPORT FuncRefVar operator()(Var x) const;
     EXPORT FuncRefVar operator()(Var x, Var y) const;
@@ -907,7 +933,7 @@ public:
     EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w) const;
     EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u) const;
     EXPORT FuncRefVar operator()(Var x, Var y, Var z, Var w, Var u, Var v) const;
-    EXPORT FuncRefVar operator()(std::vector<Var>) const;
+#endif // C++11
     // @}
 
     /** Either calls to the function, or the left-hand-side of a
@@ -917,13 +943,23 @@ public:
      * the end of the argument list to make up the difference. (see
      * \ref Var::implicit)*/
     // @{
+    EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+    template <typename... Args>
+    EXPORT FuncRefExpr operator()(Expr x, Args... args) const {
+        std::vector<Expr> collected_args;
+        collected_args.push_back(x);
+        Internal::collect_args(collected_args, args...);
+        return (*this)(collected_args);
+    }
+#else
     EXPORT FuncRefExpr operator()(Expr x) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u) const;
     EXPORT FuncRefExpr operator()(Expr x, Expr y, Expr z, Expr w, Expr u, Expr v) const;
-    EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
+#endif // C++11
     // @}
 
     /** Split a dimension into inner and outer subdimensions with the
@@ -1007,6 +1043,16 @@ public:
      * innermost out */
     EXPORT Func &reorder(const std::vector<VarOrRVar> &vars);
 
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+    template <typename... Args>
+    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, Args... args) {
+        std::vector<VarOrRVar> collected_args;
+        collected_args.push_back(x);
+        collected_args.push_back(y);
+        Internal::collect_args(collected_args, args...);
+        return reorder(collected_args);
+    }
+#else
     /** Reorder two dimensions so that x is traversed inside y. Does
      * not affect the nesting order of other dimensions. E.g, if you
      * say foo(x, y, z, w) = bar; foo.reorder(w, x); then foo will be
@@ -1057,6 +1103,7 @@ public:
                          VarOrRVar w, VarOrRVar t1, VarOrRVar t2,
                          VarOrRVar t3, VarOrRVar t4, VarOrRVar t5,
                          VarOrRVar t6);
+#endif // C++11
 
     /** Rename a dimension. Equivalent to split with a inner size of one. */
     EXPORT Func &rename(VarOrRVar old_name, VarOrRVar new_name);

@@ -197,6 +197,49 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
 
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+
+template <typename T>
+inline NO_INLINE void collect_args(std::vector<T> &collected_args) {
+}
+
+ template <typename T, typename T2>
+inline NO_INLINE void collect_args(std::vector<T> &collected_args,
+                                   T2 arg) {
+    collected_args.push_back(arg);
+}
+
+template <typename T, typename T2, typename ...Args>
+inline NO_INLINE void collect_args(std::vector<T> &collected_args,
+                                   T2 arg, Args... args) {
+    collected_args.push_back(arg);
+    collect_args(collected_args, args...);
+}
+
+template <typename T1, typename T2, typename T3, typename T4 >
+inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
+                                     T3 a1, T4 a2) {
+    collected_args.push_back(std::make_pair<T1, T2>(a1, a2));
+}
+
+ template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
+inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
+                                   T3 a1, T4 a2, Args... args) {
+    collected_args.push_back(std::make_pair<T1, T2>(a1, a2));
+    collect_paired_args(collected_args, args...);
+}
+
+template<typename... T>
+struct meta_and : std::true_type {};
+
+template<typename T1, typename... Args>
+struct meta_and<T1, Args...> : std::integral_constant<bool, T1::value && meta_and<Args...>::value> {};
+
+template<typename To, typename... Args>
+struct all_are_convertible : meta_and<std::is_convertible<Args, To>...> {};
+
+#endif // C++11 arbitrary number of args support
+
 }
 }
 
