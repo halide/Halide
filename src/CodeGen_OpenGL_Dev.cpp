@@ -66,18 +66,18 @@ Type map_type(const Type &type) {
 
 // Most GLSL builtins are only defined for float arguments, so we may have to
 // introduce type casts around the arguments and the entire function call.
-// TODO: handle vector types
 Expr call_builtin(const Type &result_type, const std::string &func,
                   const std::vector<Expr> &args) {
+    Type float_type = Float(32, result_type.width);
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].type().is_float()) {
-            new_args[i] = Cast::make(Float(32), args[i]);
+        if (!args[i].type().element_of().is_float()) {
+            new_args[i] = Cast::make(float_type, args[i]);
         } else {
             new_args[i] = args[i];
         }
     }
-    Expr val = Call::make(Float(32), func, new_args, Call::Extern);
+    Expr val = Call::make(float_type, func, new_args, Call::Extern);
     return simplify(Cast::make(result_type, val));
 }
 
@@ -410,7 +410,8 @@ void CodeGen_GLSL::visit(const Div *op) {
         // Halide's integer division is defined to round down. Since the
         // rounding behavior of GLSL's integer division is undefined, emulate
         // the correct behavior using floating point arithmetic.
-        Expr val = Div::make(Cast::make(Float(32), op->a), Cast::make(Float(32), op->b));
+        Type float_type = Float(32, op->type.width);
+        Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
         print_expr(call_builtin(op->type, "floor_f32", vec(val)));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
@@ -445,11 +446,11 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     return "";
 }
 
-void CodeGen_GLSL::visit(const Load *op) {
+void CodeGen_GLSL::visit(const Load *) {
     internal_error << "GLSL: unexpected Load node encountered.\n";
 }
 
-void CodeGen_GLSL::visit(const Store *op) {
+void CodeGen_GLSL::visit(const Store *) {
     internal_error << "GLSL: unexpected Store node encountered.\n";
 }
 
