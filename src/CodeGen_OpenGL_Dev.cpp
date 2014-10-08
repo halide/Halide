@@ -527,15 +527,26 @@ void CodeGen_GLSL::visit(const Call *op) {
             Expr one_val = op->args[1];
             Expr weight = op->args[2];
 
-            // If weight is an integer, convert it to float and normalize to
-            // the [0.0f, 1.0f] range.
+            internal_assert(weight.type().is_uint() || weight.type().is_float());
             if (weight.type().is_uint()) {
+                // Normalize integer weights to [0.0f, 1.0f] range.
                 weight = Div::make(Cast::make(Float(32), weight),
                                    Cast::make(Float(32), weight.type().imax()));
+            } else if (op->type.is_uint()) {
+                // Round float weights down to next multiple of (1/op->type.imax())
+                // to give same results as lerp based on integer arithmetic.
+                weight = floor(weight * op->type.imax()) / op->type.imax();
             }
 
-            // If zero_val and one_val are integers, add appropriate type casts.
-            print_expr(call_builtin(op->type, "mix", vec(zero_val, one_val, weight)));
+            Type result_type = Float(32, op->type.width);
+            Expr e = call_builtin(result_type, "mix", vec(zero_val, one_val, weight));
+
+            if (!op->type.is_float()) {
+                // Mirror rounding implementation of Halide's integer lerp.
+                e = Cast::make(op->type, floor(e + 0.5f));
+            }
+            print_expr(e);
+
             return;
         } else if (op->name == Call::abs) {
             print_expr(call_builtin(op->type, op->name, op->args));
