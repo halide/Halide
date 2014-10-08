@@ -1,5 +1,6 @@
 #include "StmtToHtml.h"
 #include "IROperator.h"
+#include "IRMutator.h"
 #include "Scope.h"
 
 #include <iterator>
@@ -19,6 +20,76 @@ std::string to_string(T value) {
     std::ostringstream os ;
     os << value ;
     return os.str() ;
+}
+
+// Prepares a Stmt for printing in HTML:
+// - Gather contiguous AssertStmts into a collapsible node.
+// - Transform Lets into LetStmts. This is unsafe if variable names
+// are not unique.
+class PrepareStmtForHtml : public IRMutator {
+
+private:
+    using IRMutator::visit;
+
+    std::vector<std::pair<string, Expr> > lets;
+
+    void visit(const Let *op) {
+        lets.push_back(std::make_pair(op->name, op->value));
+        expr = mutate(op->body);
+    }
+
+    void visit(const Block *op) {
+        std::vector<Stmt> asserts;
+        while (op && op->first.as<AssertStmt>()) {
+            asserts.push_back(op->first);
+            stmt = op->rest;
+            op = stmt.as<Block>();
+        }
+
+        if (asserts.empty()) {
+            Stmt first = mutate(op->first);
+            Stmt rest = mutate(op->rest);
+
+            if (first.defined() && rest.defined()) {
+                stmt = Block::make(first, rest);
+            } else if (first.defined()) {
+                stmt = first;
+            } else {
+                stmt = rest;
+            }
+        } else {
+            stmt = mutate(stmt);
+
+            Stmt asserts_block = asserts.front();
+            for (size_t i = 1; i < asserts.size(); i++) {
+                asserts_block = Block::make(asserts_block, asserts[i]);
+            }
+
+            // This is a special block with an evaluated string immediate
+            // to identify it as an asserts block.
+            asserts_block = Block::make(Evaluate::make(StringImm::make("asserts")), asserts_block);
+            stmt = Block::make(asserts_block, stmt);
+        }
+    }
+
+public:
+    using IRMutator::mutate;
+
+    Stmt mutate(Stmt s) {
+        s = IRMutator::mutate(s);
+        while (!lets.empty()) {
+            s = LetStmt::make(lets.back().first, lets.back().second, s);
+            lets.pop_back();
+        }
+
+        return s;
+    }
+};
+
+Stmt prepare_stmt_for_html(Stmt s) {
+    PrepareStmtForHtml preparer;
+    s = preparer.mutate(s);
+    return s;
 }
 
 class StmtToHtml : public IRVisitor {
@@ -122,13 +193,18 @@ private:
         stream << matched(r);
     }
 
-    string open_expand_button(int id) {
+    string open_expand_button(int id, bool expanded = true) {
         std::stringstream button;
         button << "<a class=ExpandButton onclick='return toggle(" << id << ");' href=_blank>"
-               << "<div style='position:relative; width:0; height:0;'>"
-               << "<div class=ShowHide style='display:none;' id=" << id << "-show" << "><i class='fa fa-plus-square-o'></i></div>"
-               << "<div class=ShowHide id=" << id << "-hide" << "><i class='fa fa-minus-square-o'></i></div>"
-               << "</div>";
+               << "<div style='position:relative; width:0; height:0;'>";
+        if (expanded) {
+            button << "<div class=ShowHide style='display:none;' id=" << id << "-show" << "><i class='fa fa-plus-square-o'></i></div>"
+                   << "<div class=ShowHide id=" << id << "-hide" << "><i class='fa fa-minus-square-o'></i></div>";
+        } else {
+            button << "<div class=ShowHide id=" << id << "-show" << "><i class='fa fa-plus-square-o'></i></div>"
+                   << "<div class=ShowHide style='display:none;' id=" << id << "-hide" << "><i class='fa fa-minus-square-o'></i></div>";
+        }
+        button << "</div>";
         return button.str();
     }
 
@@ -350,7 +426,7 @@ public:
         stream << keyword("produce") << " ";
         stream << var(op->name);
         stream << close_expand_button() << " {";
-        stream << close_span();;
+        stream << close_span();
         stream << open_div("ProduceBody Indent", produce_id);
         print(op->produce);
         stream << close_div();
@@ -493,8 +569,28 @@ public:
     }
     void visit(const Block *op) {
         stream << open_div("Block");
-        print(op->first);
-        if (op->rest.defined()) print(op->rest);
+        // Find out of this is a special named block.
+        const Evaluate *eval = op->first.as<Evaluate>();
+        const StringImm *name = eval ? eval->value.as<StringImm>() : NULL;
+        if (name) {
+            int block_id = unique_id();
+            stream << open_span("Matched");
+            stream << open_expand_button(block_id);
+            stream << open_span("Comment");
+            stream << "/* " << name->value << " */";
+            stream << close_span();
+            stream << close_expand_button() << " {";
+            stream << close_span();
+            stream << open_div("Block Indent", block_id);
+            print(op->rest);
+            stream << close_div();
+            stream << matched("}");
+        } else {
+            print(op->first);
+            if (op->rest.defined()) {
+                print(op->rest);
+            }
+        }
         stream << close_div();
     }
     void visit(const IfThenElse *op) {
@@ -584,6 +680,7 @@ p.WrapLine { margin: 0px; margin-left: 30px; text-indent:-30px; } \n \
 div.WrapLine { margin-left: 30px; text-indent:-30px; } \n \
 div.Indent { padding-left: 15px; }\n \
 div.ShowHide { position:absolute; left:-12px; width:12px; height:12px; } \n \
+div.DisplayNone { display: none; }\n \
 span.Comment { color: #998; font-style: italic; }\n \
 span.Keyword { color: #333; font-weight: bold; }\n \
 span.Assign { color: #d14; font-weight: bold; }\n \
@@ -615,6 +712,7 @@ function toggle(id) { \n \
 }
 
 void print_to_html(string filename, Stmt s) {
+    s = prepare_stmt_for_html(s);
     StmtToHtml sth(filename);
     sth.generate(s);
 }
