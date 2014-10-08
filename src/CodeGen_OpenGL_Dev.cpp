@@ -706,15 +706,54 @@ void CodeGen_GLSL::test() {
           "float $ = max(1.0000000, 5.0000000);\n"
           "int $ = int($);\n");
 
-    // Lerp with integer weight
+    check(Max::make(Broadcast::make(1, 4), Broadcast::make(5, 4)),
+          "vec4 $ = vec4(1.0000000);\n"
+          "vec4 $ = vec4(5.0000000);\n"
+          "vec4 $ = max($, $);\n"
+          "ivec4 $ = ivec4($);\n");
+
+    check(Variable::make(Int(32), "x") / Expr(3),
+          "float $ = float($x);\n"
+          "float $ = $ * 0.33333334;\n"
+          "float $ = floor($);\n"
+          "int $ = int($);\n");
+    check(Variable::make(Int(32, 4), "x") / Variable::make(Int(32, 4), "y"),
+          "vec4 $ = vec4($x);\n"
+          "vec4 $ = vec4($y);\n"
+          "vec4 $ = $ / $;\n"
+          "vec4 $ = floor($);\n"
+          "ivec4 $ = ivec4($);\n");
+    check(Variable::make(Float(32, 4), "x") / Variable::make(Float(32, 4), "y"),
+          "vec4 $ = $x / $y;\n");
+
+    // Integer lerp with integer weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)),
-          "float $ = mix(0.0000000, 255.00000, 0.49803922);\n");
+          "float $ = mix(0.0000000, 255.00000, 0.49803922);\n"
+          "float $ = $ + 0.50000000;\n"
+          "float $ = floor($);\n");
 
-    // Lerp with float weight
+    // Integer lerp with float weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f),
-          "float $ = mix(0.0000000, 255.00000, 0.30000001);\n");
+          "float $ = mix(0.0000000, 255.00000, 0.30000001);\n"
+          "float $ = $ + 0.50000000;\n"
+          "float $ = floor($);\n");
 
+    // Floating point lerp
+    check(lerp(0.0f, 1.0f, 0.3f),
+          "float $ = mix(0.0000000, 1.0000000, 0.30000001);\n");
+
+    // Vectorized lerp
+    check(lerp(Variable::make(Float(32, 4), "x"), Variable::make(Float(32, 4), "y"), Broadcast::make(0.25f, 4)),
+          "vec4 $ = vec4(0.25000000);\n"
+          "vec4 $ = mix($x, $y, $);\n");
+
+    // Sin with scalar arg
     check(sin(3.0f), "float $ = sin(3.0000000);\n");
+
+    // Sin with vector arg
+    check(Call::make(Float(32, 4), "sin_f32", vec(Broadcast::make(1.f, 4)), Internal::Call::Extern),
+          "vec4 $ = vec4(1.0000000);\n"
+          "vec4 $ = sin($);\n");
 
     // use float version of abs in GLSL
     check(abs(-2),
