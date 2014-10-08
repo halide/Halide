@@ -13,33 +13,32 @@ namespace Halide {
 
 /** A typed version of FuncRefVar. */
 template <typename T>
-class FuncRefVarT {
+class FuncRefVarT : public T {
     FuncRefVar untyped;
 
 public:
-    FuncRefVarT(FuncRefVar untyped) : untyped(untyped) {}
+    FuncRefVarT(const FuncRefVar& untyped)
+        : T(untyped.function().has_pure_definition() ? T(Tuple(untyped)) : T())
+        , untyped(untyped) {}
 
     /* See FuncRefExpr::operator =. Note that unlike basic Funcs,
      * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
     Stage operator+=(T x) { return untyped = untyped + x; }
-    Stage operator-=(T x) { return untyped = untyped - x;}
+    Stage operator-=(T x) { return untyped = untyped - x; }
     Stage operator*=(T x) { return untyped = untyped * x; }
     Stage operator/=(T x) { return untyped = untyped / x; }
     // @}
-
-    // Convert this FuncT<T>::operator() call to T.
-    operator T() const { return T(static_cast<Tuple>(untyped)); }
 };
 
 /** A typed version of FuncRefExpr. */
 template <typename T>
-class FuncRefExprT {
+class FuncRefExprT : public T {
     FuncRefExpr untyped;
 
 public:
-    FuncRefExprT(FuncRefExpr untyped) : untyped(untyped) {}
+    FuncRefExprT(const FuncRefExpr& untyped) : T(Tuple(untyped)), untyped(untyped) {}
 
     /* See FuncRefExpr::operator =. Note that unlike basic Funcs,
      * the update definitions do not implicitly define a base case. */
@@ -50,9 +49,6 @@ public:
     Stage operator*=(T x) { return untyped = untyped * x; }
     Stage operator/=(T x) { return untyped = untyped / x; }
     // @}
-
-    // Convert this FuncT<T>::operator() call to T.
-    operator T() const { return T(static_cast<Tuple>(untyped)); }
 };
 
 /** A Func that returns a type T. T should be implicitly convertible
