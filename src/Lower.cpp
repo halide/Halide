@@ -215,20 +215,8 @@ Stmt build_provide_loop_nest(Function f,
 
             string base_name = prefix + split.inner + ".base";
             Expr base_var = Variable::make(Int(32), base_name);
-            //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-
-            if (split.exact) {
-                // The bounds of the old reduction variable need to be
-                // explicitly defined for the benefit of producers
-                // that feed into this stage. They run from base to
-                // base + split factor.
-                stmt = LetStmt::make(prefix + split.old_var + ".min",
-                                     base_var, stmt);
-                stmt = LetStmt::make(prefix + split.old_var + ".max",
-                                     base_var + split.factor - 1, stmt);
-            }
-
+            stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
@@ -241,10 +229,10 @@ Stmt build_provide_loop_nest(Function f,
             Expr inner = fused % inner_extent + inner_min;
             Expr outer = fused / inner_extent + outer_min;
 
-            //stmt = LetStmt::make(prefix + split.inner, inner, stmt);
-            //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
+            stmt = LetStmt::make(prefix + split.inner, inner, stmt);
+            stmt = LetStmt::make(prefix + split.outer, outer, stmt);
 
             // Maintain the known size of the fused dim if
             // possible. This is important for possible later splits.
@@ -256,8 +244,8 @@ Stmt build_provide_loop_nest(Function f,
             }
 
         } else {
-            // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
+            stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
     }
 
