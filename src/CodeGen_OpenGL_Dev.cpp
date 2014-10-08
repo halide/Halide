@@ -734,7 +734,7 @@ void CodeGen_GLSL::test() {
 
     // Integer lerp with float weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f),
-          "float $ = mix(0.0000000, 255.00000, 0.30000001);\n"
+          "float $ = mix(0.0000000, 255.00000, 0.29803923);\n"
           "float $ = $ + 0.50000000;\n"
           "float $ = floor($);\n");
 
