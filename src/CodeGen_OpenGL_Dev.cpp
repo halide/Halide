@@ -191,16 +191,28 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {
-    Type target_type = map_type(op->type);
     Type value_type = op->value.type();
-    Expr value = op->value;
-    if (target_type == map_type(value_type)) {
-        // Skip unneeded casts
-        op->value.accept(this);
+    // If both types are represented by the same GLSL type, no explicit cast
+    // is necessary.
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code == Type::Float) {
+            // float->int conversions may need explicit truncation if the
+            // integer types is embedded into floats.  (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        value.accept(this);
         return;
+    } else {
+        Type target_type = map_type(op->type);
+        print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
-
-    print_assignment(target_type, print_type(target_type) + "(" + print_expr(value) + ")");
 }
 
 void CodeGen_GLSL::visit(const For *loop) {
@@ -667,6 +679,13 @@ void check(Expr e, const string &result) {
 
 void CodeGen_GLSL::test() {
     vector<Expr> e;
+
+    // Uint8 is embedded in GLSL floats, so no cast necessary
+    check(cast<float>(Variable::make(UInt(8), "x") * 1.0f),
+          "float $ = $x * 1.0000000;\n");
+    // But truncation is necessary for the reverse direction
+    check(cast<uint8_t>(Variable::make(Float(32), "x")),
+          "float $ = floor($x);\n");
 
     check(Min::make(Expr(1), Expr(5)),
           "float $ = min(1.0000000, 5.0000000);\n"
