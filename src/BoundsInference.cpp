@@ -624,6 +624,10 @@ public:
             lets.push_back(make_pair(let->name, let->value));
         }
 
+        // If there are no pipelines at this loop level, we can skip most of the work.
+        bool boring = body.as<For>() != NULL;
+
+
         // Figure out which stage of which function we're producing
         int producing = -1;
         Function f;
@@ -641,7 +645,7 @@ public:
 
         // Figure out how much of it we're producing
         Box box;
-        if (producing >= 0) {
+        if (!boring && producing >= 0) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());
@@ -650,83 +654,85 @@ public:
         // Recurse.
         body = mutate(body);
 
-        // We only care about the bounds of a func if:
-        // A) We're not already in a pipeline over that func AND
-        // B.1) There's a production of this func somewhere inside this loop OR
-        // B.2) We're downstream (a consumer) of a func for which we care about the bounds.
-        vector<bool> bounds_needed(stages.size(), false);
-        for (size_t i = 0; i < stages.size(); i++) {
-            if (inner_productions.count(stages[i].name)) {
-                bounds_needed[i] = true;
-            }
+        if (!boring) {
 
-            if (in_pipeline.count(stages[i].name)) {
-                bounds_needed[i] = false;
-            }
-
-            if (bounds_needed[i]) {
-                for (size_t j = 0; j < stages[i].consumers.size(); j++) {
-                    bounds_needed[stages[i].consumers[j]] = true;
-                }
-                body = stages[i].define_bounds(body, stage_name, in_stages, in_pipeline, inner_productions);
-            }
-        }
-
-        // Finally, define the production bounds for the thing
-        // we're producing.
-        if (producing >= 0 && !inner_productions.empty()) {
-            for (size_t i = 0; i < box.size(); i++) {
-                internal_assert(box[i].min.defined() && box[i].max.defined());
-                string var = stage_name + "." + f.args()[i];
-
-                if (box[i].max.same_as(box[i].min)) {
-                    body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                } else {
-                    body = LetStmt::make(var + ".max", box[i].max, body);
+            // We only care about the bounds of a func if:
+            // A) We're not already in a pipeline over that func AND
+            // B.1) There's a production of this func somewhere inside this loop OR
+            // B.2) We're downstream (a consumer) of a func for which we care about the bounds.
+            vector<bool> bounds_needed(stages.size(), false);
+            for (size_t i = 0; i < stages.size(); i++) {
+                if (inner_productions.count(stages[i].name)) {
+                    bounds_needed[i] = true;
                 }
 
-                body = LetStmt::make(var + ".min", box[i].min, body);
-
-                // The following is also valid, but seems to not simplify as well
-                /*
-                string var = stage_name + "." + f.args()[i];
-                Interval in = bounds_of_inner_var(var, body);
-                if (!in.min.defined() || !in.max.defined()) continue;
-
-                if (in.max.same_as(in.min)) {
-                    body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
-                } else {
-                    body = LetStmt::make(var + ".max", in.max, body);
+                if (in_pipeline.count(stages[i].name)) {
+                    bounds_needed[i] = false;
                 }
 
-                body = LetStmt::make(var + ".min", in.min, body);
-                */
+                if (bounds_needed[i]) {
+                    for (size_t j = 0; j < stages[i].consumers.size(); j++) {
+                        bounds_needed[stages[i].consumers[j]] = true;
+                    }
+                    body = stages[i].define_bounds(body, stage_name, in_stages, in_pipeline, inner_productions);
+                }
             }
-        }
 
-        // And the current bounds on its reduction variables.
-        if (producing >= 0 && stages[producing].stage > 0) {
-            const Stage &s = stages[producing];
-            const UpdateDefinition &r = s.func.updates()[s.stage-1];
-            if (r.domain.defined()) {
-                const vector<ReductionVariable> &d = r.domain.domain();
-                for (size_t i = 0; i < d.size(); i++) {
-                    string var = s.name + ".s" + int_to_string(s.stage) + "." + d[i].var;
-                    Interval in = bounds_of_inner_var(var, body);
-                    if (in.min.defined() && in.max.defined()) {
-                        body = LetStmt::make(var + ".min", in.min, body);
-                        body = LetStmt::make(var + ".max", in.max, body);
+            // Finally, define the production bounds for the thing
+            // we're producing.
+            if (producing >= 0 && !inner_productions.empty()) {
+                for (size_t i = 0; i < box.size(); i++) {
+                    internal_assert(box[i].min.defined() && box[i].max.defined());
+                    string var = stage_name + "." + f.args()[i];
+
+                    if (box[i].max.same_as(box[i].min)) {
+                        body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
                     } else {
-                        // If it's not found, we're already in the
-                        // scope of the injected let. The let was
-                        // probably lifted to an outer level.
-                        Expr val = Variable::make(Int(32), var);
-                        body = LetStmt::make(var + ".min", val, body);
-                        body = LetStmt::make(var + ".max", val, body);
+                        body = LetStmt::make(var + ".max", box[i].max, body);
+                    }
+
+                    body = LetStmt::make(var + ".min", box[i].min, body);
+
+                    // The following is also valid, but seems to not simplify as well
+                    /*
+                      string var = stage_name + "." + f.args()[i];
+                      Interval in = bounds_of_inner_var(var, body);
+                      if (!in.min.defined() || !in.max.defined()) continue;
+
+                      if (in.max.same_as(in.min)) {
+                          body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                      } else {
+                          body = LetStmt::make(var + ".max", in.max, body);
+                      }
+
+                      body = LetStmt::make(var + ".min", in.min, body);
+                    */
+                }
+            }
+
+            // And the current bounds on its reduction variables.
+            if (producing >= 0 && stages[producing].stage > 0) {
+                const Stage &s = stages[producing];
+                const UpdateDefinition &r = s.func.updates()[s.stage-1];
+                if (r.domain.defined()) {
+                    const vector<ReductionVariable> &d = r.domain.domain();
+                    for (size_t i = 0; i < d.size(); i++) {
+                        string var = s.name + ".s" + int_to_string(s.stage) + "." + d[i].var;
+                        Interval in = bounds_of_inner_var(var, body);
+                        if (in.min.defined() && in.max.defined()) {
+                            body = LetStmt::make(var + ".min", in.min, body);
+                            body = LetStmt::make(var + ".max", in.max, body);
+                        } else {
+                            // If it's not found, we're already in the
+                            // scope of the injected let. The let was
+                            // probably lifted to an outer level.
+                            Expr val = Variable::make(Int(32), var);
+                            body = LetStmt::make(var + ".min", val, body);
+                            body = LetStmt::make(var + ".max", val, body);
+                        }
                     }
                 }
             }
-        }
 
         }
 
