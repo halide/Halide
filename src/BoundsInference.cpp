@@ -38,14 +38,15 @@ bool depends_on_bounds_inference(Expr e) {
 
 
 /** Compute the bounds of the value of some variable defined by an
- * inner let stmt or for loop. E.g. for:
-
-for x from 0 to 10:
-  let y = x + 2;
-
-bounds_of_inner_var(y) would return 2 to 12.
-
-*/
+ * inner let stmt or for loop. E.g. for the stmt:
+ *
+ *
+ * for x from 0 to 10:
+ *  let y = x + 2;
+ *
+ * bounds_of_inner_var(y) would return 2 to 12, and
+ * bounds_of_inner_var(x) would return 0 to 10.
+ */
 class BoundsOfInnerVar : public IRVisitor {
 public:
     Interval result;
@@ -69,6 +70,8 @@ private:
     }
 
     void visit(const For *op) {
+        // At this stage of lowering, loop_min and loop_max
+        // conveniently exist in scope.
         Interval in(Variable::make(Int(32), op->name + ".loop_min"),
                     Variable::make(Int(32), op->name + ".loop_max"));
 
@@ -625,8 +628,7 @@ public:
         }
 
         // If there are no pipelines at this loop level, we can skip most of the work.
-        bool boring = body.as<For>() != NULL;
-
+        bool no_pipelines = body.as<For>() != NULL;
 
         // Figure out which stage of which function we're producing
         int producing = -1;
@@ -645,7 +647,7 @@ public:
 
         // Figure out how much of it we're producing
         Box box;
-        if (!boring && producing >= 0) {
+        if (!no_pipelines && producing >= 0) {
             Scope<Interval> empty_scope;
             box = box_provided(body, stages[producing].name, empty_scope, func_bounds);
             internal_assert((int)box.size() == f.dimensions());
@@ -654,7 +656,7 @@ public:
         // Recurse.
         body = mutate(body);
 
-        if (!boring) {
+        if (!no_pipelines) {
 
             // We only care about the bounds of a func if:
             // A) We're not already in a pipeline over that func AND

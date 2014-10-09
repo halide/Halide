@@ -215,7 +215,9 @@ Stmt build_provide_loop_nest(Function f,
 
             string base_name = prefix + split.inner + ".base";
             Expr base_var = Variable::make(Int(32), base_name);
+            // Substitute in the new expression for the split variable ...
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
+            // ... but also define it as a let for the benefit of bounds inference.
             stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
