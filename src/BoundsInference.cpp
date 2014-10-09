@@ -64,6 +64,19 @@ public:
             }
         }
 
+        size_t find_var_in_dims(const string& var) {
+            size_t pos = func.schedule().dims().size() + 1;
+
+            for (size_t i = 0; i < func.schedule().dims().size(); i++) {
+                if(func.schedule().dims()[i].var == var) {
+                    pos = i;
+                    break;
+                }
+            }
+
+            return pos;
+        }
+
         // Wrap a statement in let stmts defining the box
         Stmt define_bounds(Stmt s,
                            string producing_stage,
@@ -182,14 +195,26 @@ public:
             if (in_pipeline.count(name) == 0) {
                 // Inject any explicit bounds
                 string prefix = name + ".s" + int_to_string(stage) + ".";
+
+                size_t compute_level_var_pos = find_var_in_dims(func.schedule().compute_level().var);
+
                 for (size_t i = 0; i < func.schedule().bounds().size(); i++) {
                     const Bound &bound = func.schedule().bounds()[i];
                     string min_var = prefix + bound.var + ".min";
                     string max_var = prefix + bound.var + ".max";
                     Expr min_bound = bound.min;
                     Expr max_bound = (bound.min + bound.extent) - 1;
-                    s = LetStmt::make(min_var, min_bound, s);
-                    s = LetStmt::make(max_var, max_bound, s);
+
+                    size_t bound_var_pos = find_var_in_dims(bound.var);
+
+                    if(bound_var_pos < compute_level_var_pos) {
+                        debug(3) << "Making min/max vars for the " << bound.var << " at the bound inference stage\n";
+
+                        s = LetStmt::make(min_var, min_bound, s);
+                        s = LetStmt::make(max_var, max_bound, s);
+                    } else {
+                        debug(3) << "Ignoring " << bound.var << " at the bound inference stage\n";
+                    }
 
                     // Save the unbounded values to use in bounds-checking assertions
                     Expr min_required = Variable::make(Int(32), min_var);
