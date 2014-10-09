@@ -403,7 +403,15 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 target_link_libraries(Halide InitialModules ${LIBS})
 
 if (NOT WIN32)
-  target_link_libraries(Halide dl pthread z)
+  if (${LLVM_VERSION} GREATER 34)
+    execute_process(COMMAND "${LLVM_CONFIG}" --system-libs OUTPUT_VARIABLE EXTRA_LIBS)
+  else()
+    execute_process(COMMAND "${LLVM_CONFIG}" --ldflags OUTPUT_VARIABLE EXTRA_LIBS)
+  endif()
+  string(REGEX MATCHALL "-l[^ ]*" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE "-l" "" EXTRA_LIBS "${EXTRA_LIBS}")
+  string(REPLACE " " "" EXTRA_LIBS "${EXTRA_LIBS}")
+  target_link_libraries(Halide "${EXTRA_LIBS}")
 endif()
 
 if (NOT HALIDE_SHARED_LIBRARY)
