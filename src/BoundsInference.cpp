@@ -36,6 +36,58 @@ bool depends_on_bounds_inference(Expr e) {
     return d.result;
 }
 
+
+/** Compute the bounds of the value of some variable defined by an
+ * inner let stmt or for loop. E.g. for:
+
+for x from 0 to 10:
+  let y = x + 2;
+
+bounds_of_inner_var(y) would return 2 to 12.
+
+*/
+class BoundsOfInnerVar : public IRVisitor {
+public:
+    Interval result;
+    BoundsOfInnerVar(const string &v) : var(v) {}
+
+private:
+    string var;
+    Scope<Interval> scope;
+
+    using IRVisitor::visit;
+
+    void visit(const LetStmt *op) {
+        Interval in = bounds_of_expr_in_scope(op->value, scope);
+        if (op->name == var) {
+            result = in;
+        } else {
+            scope.push(op->name, in);
+            op->body.accept(this);
+            scope.pop(op->name);
+        }
+    }
+
+    void visit(const For *op) {
+        Interval in(Variable::make(Int(32), op->name + ".loop_min"),
+                    Variable::make(Int(32), op->name + ".loop_max"));
+
+        if (op->name == var) {
+            result = in;
+        } else {
+            scope.push(op->name, in);
+            op->body.accept(this);
+            scope.pop(op->name);
+        }
+    }
+};
+
+Interval bounds_of_inner_var(string var, Stmt s) {
+    BoundsOfInnerVar b(var);
+    s.accept(&b);
+    return b.result;
+}
+
 }
 
 class BoundsInference : public IRMutator {
@@ -634,6 +686,21 @@ public:
                 }
 
                 body = LetStmt::make(var + ".min", box[i].min, body);
+
+                // The following is also valid, but seems to not simplify as well
+                /*
+                string var = stage_name + "." + f.args()[i];
+                Interval in = bounds_of_inner_var(var, body);
+                if (!in.min.defined() || !in.max.defined()) continue;
+
+                if (in.max.same_as(in.min)) {
+                    body = LetStmt::make(var + ".max", Variable::make(Int(32), var + ".min"), body);
+                } else {
+                    body = LetStmt::make(var + ".max", in.max, body);
+                }
+
+                body = LetStmt::make(var + ".min", in.min, body);
+                */
             }
         }
 
@@ -644,14 +711,23 @@ public:
             if (r.domain.defined()) {
                 const vector<ReductionVariable> &d = r.domain.domain();
                 for (size_t i = 0; i < d.size(); i++) {
-                    if (op->name == s.name + ".s" + int_to_string(s.stage) + "." + d[i].var) {
-                        // We just entered the loop over this var
-                        Expr loop_var = Variable::make(Int(32), op->name);
-                        body = LetStmt::make(op->name + ".min", loop_var, body);
-                        body = LetStmt::make(op->name + ".max", loop_var, body);
+                    string var = s.name + ".s" + int_to_string(s.stage) + "." + d[i].var;
+                    Interval in = bounds_of_inner_var(var, body);
+                    if (in.min.defined() && in.max.defined()) {
+                        body = LetStmt::make(var + ".min", in.min, body);
+                        body = LetStmt::make(var + ".max", in.max, body);
+                    } else {
+                        // If it's not found, we're already in the
+                        // scope of the injected let. The let was
+                        // probably lifted to an outer level.
+                        Expr val = Variable::make(Int(32), var);
+                        body = LetStmt::make(var + ".min", val, body);
+                        body = LetStmt::make(var + ".max", val, body);
                     }
                 }
             }
+        }
+
         }
 
         inner_productions.insert(old_inner_productions.begin(),
