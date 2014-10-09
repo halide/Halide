@@ -32,6 +32,31 @@ public:
     /** Construct a scalar parameter of type T with the given name */
     Param(const std::string &n) : param(type_of<T>(), false, n) {}
 
+    /** Construct a scalar parameter of type T an initial value of 'val'. */
+    Param(T val) : param(type_of<T>(), false) {
+        set(val);
+    }
+
+    /** Construct a scalar parameter of type T with the given name
+     * and an initial value of 'val'. */
+    Param(T val, const std::string &n) : param(type_of<T>(), false, n) {
+        set(val);
+    }
+
+    /** Construct a scalar parameter of type T with an initial value of 'val'
+    * and a given min and max. */
+    Param(T val, Expr min, Expr max) : param(type_of<T>(), false) {
+        set_range(min, max);
+        set(val);
+    }
+
+    /** Construct a scalar parameter of type T with the given name
+     * and an initial value of 'val' and a given min and max. */
+    Param(T val, Expr min, Expr max, const std::string &n) : param(type_of<T>(), false, n) {
+        set_range(min, max);
+        set(val);
+    }
+
     /** Get the name of this parameter */
     const std::string &name() const {
         return param.name();
