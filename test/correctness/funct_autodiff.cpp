@@ -8,37 +8,39 @@ using namespace Halide;
 #endif
 
 // Class which tracks the value of a function of 2 variables and its partial derivatives.
-class AutoDiff {
+class DiffExpr {
 public:
     Expr f;
     Expr dx, dy;
 
-    AutoDiff() {}
-    AutoDiff(Expr f, Expr dx, Expr dy) : f(f), dx(dx), dy(dy) {}
-    AutoDiff(float f) : f(f), dx(0.0f), dy(0.0f) {}
+    DiffExpr() {}
+    DiffExpr(Expr f, Expr dx, Expr dy) : f(f), dx(dx), dy(dy) {}
+    DiffExpr(float f) : f(f), dx(0.0f), dy(0.0f) {}
 
     // To work with Halide, we need a conversion to/from Tuple.
-    explicit AutoDiff(Tuple t) : f(t[0]), dx(t[1]), dy(t[2]) {}
+    explicit DiffExpr(Tuple t) : f(t[0]), dx(t[1]), dy(t[2]) {}
     operator Tuple() const { return Tuple(f, dx, dy); }
 };
 
-AutoDiff operator + (AutoDiff l, AutoDiff r) { return AutoDiff(l.f + r.f, l.dx + r.dx, l.dy + r.dy); }
-AutoDiff operator - (AutoDiff l, AutoDiff r) { return AutoDiff(l.f - r.f, l.dx - r.dx, l.dy - r.dy); }
-AutoDiff operator * (AutoDiff l, AutoDiff r) { return AutoDiff(l.f*r.f,
+DiffExpr operator + (DiffExpr l, DiffExpr r) { return DiffExpr(l.f + r.f, l.dx + r.dx, l.dy + r.dy); }
+DiffExpr operator - (DiffExpr l, DiffExpr r) { return DiffExpr(l.f - r.f, l.dx - r.dx, l.dy - r.dy); }
+// Define operator * using the product rule for the derivatives.
+DiffExpr operator * (DiffExpr l, DiffExpr r) { return DiffExpr(l.f*r.f,
                                                                l.f*r.dx + r.f*l.dx,
                                                                l.f*r.dy + r.f*l.dy); }
-AutoDiff operator / (AutoDiff l, AutoDiff r) { return AutoDiff(l.f/r.f,
+// Quotient rule for the derivatives.
+DiffExpr operator / (DiffExpr l, DiffExpr r) { return DiffExpr(l.f/r.f,
                                                                (r.f*l.dx - l.f*r.dx)/(r.f*r.f),
                                                                (r.f*l.dy - l.f*r.dy)/(r.f*r.f)); }
 
-AutoDiff sin(AutoDiff x) { return AutoDiff(sin(x.f), cos(x.f)*x.dx, cos(x.f)*x.dy); }
-AutoDiff cos(AutoDiff x) { return AutoDiff(cos(x.f), -sin(x.f)*x.dx, -sin(x.f)*x.dy); }
-AutoDiff sqrt(AutoDiff x) { return AutoDiff(sqrt(x.f), 0.5f*x.dx/sqrt(x.f), 0.5f*x.dy/sqrt(x.f)); }
+DiffExpr sin(DiffExpr x) { return DiffExpr(sin(x.f), cos(x.f)*x.dx, cos(x.f)*x.dy); }
+DiffExpr cos(DiffExpr x) { return DiffExpr(cos(x.f), -sin(x.f)*x.dx, -sin(x.f)*x.dy); }
+DiffExpr sqrt(DiffExpr x) { return DiffExpr(sqrt(x.f), 0.5f*x.dx/sqrt(x.f), 0.5f*x.dy/sqrt(x.f)); }
 
-typedef FuncT<AutoDiff> DifferentiableFunc;
+typedef FuncT<DiffExpr> DiffFunc;
 
 // Declare the test func here as a template. This allows for computing
-// the derivative numerically or via auto differentiation.
+// the derivative numerically (T = Expr) or via auto differentiation (T = DiffExpr).
 template <typename T>
 T test_func(T x, T y) {
     const float pi = 3.141592f;
@@ -49,11 +51,12 @@ int main(int argc, char **argv) {
 
     Var x("x"), y("y");
 
-    AutoDiff xdx(x, 1.0f, 0.0f);
-    AutoDiff ydy(y, 0.0f, 1.0f);
+    // Define DiffExprs for our variables (x -> dx = 1, y -> dy = 1).
+    DiffExpr xdx(x, 1.0f, 0.0f);
+    DiffExpr ydy(y, 0.0f, 1.0f);
 
     // Define some interesting function.
-    DifferentiableFunc f("f");
+    DiffFunc f("f");
     f(x, y) = test_func(xdx, ydy);
 
     // Compute the magnitude of the derivative of f.
