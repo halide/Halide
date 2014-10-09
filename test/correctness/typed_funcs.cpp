@@ -3,6 +3,10 @@
 
 using namespace Halide;
 
+#if __cplusplus > 199711L
+#define CPP11
+#endif
+
 // Define a matrix class where the elements are Halide expressions.
 template <int M, int N>
 class Matrix {
@@ -25,7 +29,15 @@ public:
 
     // Assume vectors are column vectors.
     Expr & operator() (int i) {
-        return operator () (i, 0);
+#ifdef CPP11
+        // If we have C++11, using this operator on a matrix that
+        // isn't a row or column vector will be a compile time error.
+        static_assert(M == 1 || N == 1, "Matrix is not a vector.");
+#else
+        assert(M == 1 || N == 1);
+#endif
+        assert(0 <= i && i < m.size());
+        return m[i];
     }
 };
 
