@@ -348,7 +348,7 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
 }
 
 // Compute the N0 x N1 2D real DFT of x using radixes R0, R1.
-// The transform domain has dimensions N0 x N1/2+1 due to the
+// The transform domain has dimensions N0 x N1/2 + 1 due to the
 // conjugate symmetry of real DFTs.
 Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
@@ -411,7 +411,7 @@ Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
 // The DFT domain should have dimensions N0 x N1/2 + 1 due to the
 // conjugate symmetry of real FFTs.
-Func fft2d_c2r(Func c,  const std::vector<int> &R0, const std::vector<int> &R1) {
+Func fft2d_c2r(Func c, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
     // vectorization width.
     const int group = 8;
@@ -535,6 +535,17 @@ double log2(double x) {
     return log(x)/log(2.0);
 }
 
+double bench_realization(Func f, Realization R, int samples, Target target) {
+    double t = 1e6f;
+    for (int i = 0; i < samples; i++) {
+        double t1 = current_time();
+        f.realize(R, target);
+        double dt = current_time() - t1;
+        if (dt < t) t = dt;
+    }
+    return t;
+}
+
 int main(int argc, char **argv) {
     const int W = 32, H = 32;
 
@@ -627,7 +638,6 @@ int main(int argc, char **argv) {
     // noise.
     const int samples = 10;
     const int reps = 1000;
-    double t = 1e6f;
 
     Var rep("rep");
 
@@ -645,17 +655,12 @@ int main(int argc, char **argv) {
     // Write all reps to the same place in memory. This means the
     // output appears to be cached on all but the first
     // iteration. This seems to match the behavior of FFTW's benchmark
-    // code, and it is again a reasonable assumption for a well
-    // optimized real world program.
+    // code, and like the input, it is a reasonable assumption for a well
+    // optimized real world system.
     R_c2c[0].raw_buffer()->stride[2] = 0;
     R_c2c[1].raw_buffer()->stride[2] = 0;
 
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        bench_c2c.realize(R_c2c, target);
-        double dt = (current_time() - t1)*1e3/reps;
-        if (dt < t) t = dt;
-    }
+    double t = bench_realization(bench_c2c, R_c2c, samples, target)*1e3/reps;
     printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
     Func r2c_in;
@@ -667,13 +672,7 @@ int main(int argc, char **argv) {
     R_r2c[0].raw_buffer()->stride[2] = 0;
     R_r2c[1].raw_buffer()->stride[2] = 0;
 
-    t = 1e6f;
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        bench_r2c.realize(R_r2c, target);
-        double dt = (current_time() - t1)*1e3/reps;
-        if (dt < t) t = dt;
-    }
+    t = bench_realization(bench_r2c, R_r2c, samples, target)*1e3/reps;
     printf("r2c time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     Func c2r_in;
@@ -684,13 +683,7 @@ int main(int argc, char **argv) {
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_c2r[0].raw_buffer()->stride[2] = 0;
 
-    t = 1e6f;
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        bench_c2r.realize(R_c2r, target);
-        double dt = (current_time() - t1)*1e3/reps;
-        if (dt < t) t = dt;
-    }
+    t = bench_realization(bench_c2r, R_c2r, samples, target)*1e3/reps;
     printf("c2r time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     twiddles.clear();
