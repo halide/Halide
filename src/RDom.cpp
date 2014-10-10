@@ -71,22 +71,22 @@ RDom::RDom(ReductionDomain d) : dom(d) {
 }
 
 RDom::RDom(const std::vector<std::pair<Expr, Expr> > &ranges, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
     std::vector<ReductionVariable> vars;
     for (size_t i = 0; i < ranges.size(); i++) {
-        std::string rvar_uniqueifier;
+        std::string rvar_uniquifier;
         switch (i) {
-            case 0: rvar_uniqueifier = "x"; break;
-            case 1: rvar_uniqueifier = "y"; break;
-            case 2: rvar_uniqueifier = "z"; break;
-            case 3: rvar_uniqueifier = "w"; break;
-            default: rvar_uniqueifier = int_to_string(i); break;
+            case 0: rvar_uniquifier = "x"; break;
+            case 1: rvar_uniquifier = "y"; break;
+            case 2: rvar_uniquifier = "z"; break;
+            case 3: rvar_uniquifier = "w"; break;
+            default: rvar_uniquifier = int_to_string(i); break;
         }
         ReductionVariable rv;
-        rv.var = name + "." + rvar_uniqueifier + "$r";
+        rv.var = name + "." + rvar_uniquifier + "$r";
         rv.min = ranges[i].first;
         rv.extent = ranges[i].second;
         vars.push_back(rv);
@@ -98,7 +98,7 @@ RDom::RDom(const std::vector<std::pair<Expr, Expr> > &ranges, string name) {
 #if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
 // We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.
 RDom::RDom(Expr min, Expr extent, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -110,7 +110,7 @@ RDom::RDom(Expr min, Expr extent, string name) {
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -123,7 +123,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, string name) {
 }
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -138,7 +138,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
            string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -154,7 +154,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
            Expr min4, Expr extent4, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -171,7 +171,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
            Expr min4, Expr extent4, Expr min5, Expr extent5, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -189,7 +189,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
            Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
@@ -209,7 +209,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
 RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr extent2, Expr min3, Expr extent3,
            Expr min4, Expr extent4, Expr min5, Expr extent5, Expr min6, Expr extent6, Expr min7, Expr extent7,
            string name) {
-    if (name == "") {
+    if (name.empty()) {
         name = make_entity_name(this, "Halide::RDom", 'r');
     }
 
