@@ -82,7 +82,6 @@ public:
                                 VarOrRVar xi, VarOrRVar yi,
                                 Expr xfactor, Expr yfactor);
     EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
-// Add C++11 varargs template
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
     EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, Args... args) {
@@ -444,6 +443,9 @@ class Func {
 
     // Some infrastructure that helps Funcs catch and handle runtime errors in JIT-compiled code.
     bool prepare_to_catch_runtime_errors(void *buf);
+
+    // Helper function for recursive reordering support
+    EXPORT Func &reorder_storage(const std::vector<Var> &dims, size_t start);
 
 public:
 
@@ -915,7 +917,6 @@ public:
      * enough implicit vars are added to the end of the argument list
      * to make up the difference (see \ref Var::implicit) */
     // @{
-// Add C++11 varargs template
     EXPORT FuncRefVar operator()(std::vector<Var>) const;
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
@@ -1411,10 +1412,23 @@ public:
      * positions in the nesting order while the specified variables
      * are reordered around them. */
     // @{
+    EXPORT Func &reorder_storage(const std::vector<Var> &dims);
+#if __cplusplus > 199711L // C++11 arbitrary number of args support
+    EXPORT Func &reorder_storage(Var x, Var y);
+    template <typename... Args>
+    EXPORT Func &reorder_storage(Var x, Var y, Args... args) {
+        std::vector<Var> collected_args;
+        collected_args.push_back(x);
+        collected_args.push_back(y);
+        Internal::collect_args(collected_args, args...);
+        return reorder_storage(collected_args);
+    }
+#else
     EXPORT Func &reorder_storage(Var x, Var y);
     EXPORT Func &reorder_storage(Var x, Var y, Var z);
     EXPORT Func &reorder_storage(Var x, Var y, Var z, Var w);
     EXPORT Func &reorder_storage(Var x, Var y, Var z, Var w, Var t);
+#endif
     // @}
 
     /** Compute this function as needed for each unique value of the

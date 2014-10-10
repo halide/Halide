@@ -218,7 +218,6 @@ int Func::dimensions() const {
 }
 
 #if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
-
 FuncRefVar Func::operator()() const {
     // Bulk up the vars using implicit vars
     vector<Var> args;
@@ -1278,6 +1277,26 @@ Func &Func::reorder_storage(Var x, Var y) {
     return *this;
 }
 
+Func &Func::reorder_storage(const std::vector<Var> &dims, size_t start) {
+    // Reorder the first dimension with respect to all others, then
+    // recursively reorder all remaining dimensions.
+    for (size_t i = start + 1; i < dims.size(); i++) {
+        reorder_storage(dims[start], dims[i]);
+    }
+    if ((dims.size() - start) > 2) {
+        reorder_storage(dims, start + 1);
+    }
+    return *this;
+}
+
+Func &Func::reorder_storage(const std::vector<Var> &dims) {
+    user_assert(dims.size() > 1) <<
+        "reorder_Storage must have at least two dimensions in reorder list.\n";
+
+    return reorder_storage(dims, 0);
+}
+
+#if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
 Func &Func::reorder_storage(Var x, Var y, Var z) {
     reorder_storage(x, y);
     reorder_storage(x, z);
@@ -1301,6 +1320,7 @@ Func &Func::reorder_storage(Var x, Var y, Var z, Var w, Var t) {
     reorder_storage(y, z, w, t);
     return *this;
 }
+#endif // Can't have C++11 arbitrary number of args support
 
 Func &Func::compute_at(Func f, RVar var) {
     return compute_at(f, Var(var.name()));
