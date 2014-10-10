@@ -641,7 +641,8 @@ struct Call : public ExprNode<Call> {
         make_struct,
         stringify,
         memoize_expr,
-        copy_memory;
+        copy_memory,
+        isnan;
 
     // If it's a call to another halide function, this call node
     // holds onto a pointer to that function.
