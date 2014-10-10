@@ -1291,7 +1291,7 @@ Func &Func::reorder_storage(const std::vector<Var> &dims, size_t start) {
 
 Func &Func::reorder_storage(const std::vector<Var> &dims) {
     user_assert(dims.size() > 1) <<
-        "reorder_Storage must have at least two dimensions in reorder list.\n";
+        "reorder_storage must have at least two dimensions in reorder list.\n";
 
     return reorder_storage(dims, 0);
 }
