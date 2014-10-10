@@ -205,7 +205,7 @@ EXPORT std::vector<std::string> split_string(const std::string& source,
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() + compile_to_files();
  * it can be trivially wrapped by a "real" main() to produce a command-line utility
  * for ahead-of-time filter compilation. */
-int generate_filter_main(int argc, char **argv, std::ostream& cerr);
+EXPORT int generate_filter_main(int argc, char **argv, std::ostream& cerr);
 #endif  // __cplusplus > 199711L
 
 }
