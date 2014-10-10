@@ -27,7 +27,15 @@ public:
         FilterParam,
     };
 
+    /** Add an instance to the registry. The size may be 0 for Param Kinds,
+     * but not for Generator. subject_ptr is the value actually associated
+     * with this instance; it is usually (but not necessarily) the same
+     * as this_ptr. Assert if this_ptr is already registered.
+     */
     static void register_instance(void *this_ptr, size_t size, Kind kind, void *subject_ptr);
+
+    /** Remove an instance from the registry. Assert if not found.
+     */
     static void unregister_instance(void *this_ptr);
 
     /** Returns the list of subject pointers for objects that have

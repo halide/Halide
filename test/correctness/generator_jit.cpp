@@ -30,7 +30,7 @@ public:
     // GeneratorParams can be float or ints: {default} or {default, min, max}
     // (Note that if you want to specify min and max, you must specify both.)
     GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
-    GeneratorParam<int> bound{"bound", 3};
+    GeneratorParam<int> channels{"channels", 3};
     // ...or enums: {default, name->value map}
     GeneratorParam<SomeEnum> enummy{"enummy", kFoo, {{"foo", kFoo}, {"bar", kBar}}};
     // ...or bools: {default}
@@ -50,7 +50,7 @@ public:
         f(x, y) = max(x, y);
         g(x, y, c) = cast<int32_t>(f(x, y) * c * compiletime_factor * runtime_factor);
 
-        g.bound(c, 0, bound).reorder(c, x, y).unroll(c);
+        g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
 
         return g;
     }
@@ -62,10 +62,10 @@ public:
 // (As with Params, the name is constrained to C-like patterns.)
 RegisterGenerator<ExampleGen> register_jit_example("jit_example");
 
-void verify(const Image<int>& img, float compiletime_factor, float runtime_factor, int bound) {
+void verify(const Image<int>& img, float compiletime_factor, float runtime_factor, int channels) {
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
-            for (int c = 0; c < bound; c++) {
+            for (int c = 0; c < channels; c++) {
                 if (img(i, j, c) != (int32_t)(compiletime_factor*runtime_factor*c*(i > j ? i : j))) {
                     printf("img[%d, %d, %d] = %d\n", i, j, c, img(i, j, c));
                     exit(-1);
@@ -85,7 +85,7 @@ int main(int argc, char **argv) {
         ExampleGen gen;
         gen.set_generator_param_values(
             {{"compiletime_factor", "2.3"},
-             {"bound", "3"},
+             {"channels", "3"},
              {"target", "host"},
              {"enummy", "foo"},
              {"flag", "false"}});
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 
         // You can change the GeneratorParams between each call to build().
         gen.compiletime_factor.set(0.1);
-        gen.bound.set(4);
+        gen.channels.set(4);
         Image<int> img2 = gen.build().realize(32, 32, 4);
         verify(img2, 0.1, 1, 4);
 
@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
         // Setting GeneratorParams to values that can't be properly parsed
         // into the correct type will fail with a user_assert.
         // gen->set_generator_param_values({{"compiletime_factor", "this is not a number"}});
-        // gen->set_generator_param_values({{"bound", "neither is this"}});
+        // gen->set_generator_param_values({{"channels", "neither is this"}});
         // gen->set_generator_param_values({{"enummy", "not_in_the_enum_map"}});
         // gen->set_generator_param_values({{"flag", "maybe"}});
         // gen->set_generator_param_values({{"target", "6502-8"}});

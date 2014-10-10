@@ -1,10 +1,27 @@
 #!/bin/bash
+#
+# gengen.sh is a simple utility script that will take .cpp file(s) containing
+# one (or more) Generators, compile them, link them with libHalide, and run
+# the resulting executable to produce a .o/.h expressing the Generator's
+# function.
+#
+# Flags:
+# -c : C++ compiler to use [default: $CXX]
+# -l : path to libHalide [default: bin/libHalide.a]
+# -o : directory path for output files [REQUIRED]
+# -s : path to .cpp file(s) containing Generaors [REQUIRED]
+# -g : name of the Generator to produce. [Can be omitted if there's only one in the .cpp]
+# -f : C function name for the result. [Defaults to the Generator name if omitted]
+#
+# Flags are followed by GeneratorParam values, in the form name=value name=value etc.
+# You must always set the 'target' params common to all Generators;
+# all others are optional.
 
 set -e
 
 usage()
 {
-  echo `basename $0` -c CXX -l LIBHALIDE -o OUTPUT_DIR -s GENERATOR_SRC [-g GENERATOR_NAME] [-f FUNCTION_NAME] target=TARGET [generatotr_arg=value ...]
+  echo `basename $0` -c CXX -l LIBHALIDE -o OUTPUT_DIR -s GENERATOR_SRC [-g GENERATOR_NAME] [-f FUNCTION_NAME] target=TARGET [generator_param=value ...]
   exit 85
 }
 
