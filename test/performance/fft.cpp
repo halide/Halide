@@ -276,8 +276,10 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
         s_ = rs.y;
         exchange(n0, (s_/S)*R*S + s_%S + r_*S, _) = V(r_, s_, n0, _);
 
-        v.compute_at(exchange, s_).unroll(r);
-        v.reorder_storage(n0, r, s);
+        if (S > 1) {
+            v.compute_at(exchange, s_).unroll(r);
+            v.reorder_storage(n0, r, s);
+        }
 
         V.compute_at(exchange, s_);
         V.reorder_storage(V.args()[2], V.args()[0], V.args()[1]);
@@ -323,17 +325,20 @@ Func transpose(Func f) {
 // sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
 // DFT.
 Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, float sign) {
+    // Vectorization width.
+    const int group = 8;
+
     // Transpose the input to the FFT.
     Func xT = transpose(x);
 
     // Compute the DFT of dimension 1 (originally dimension 0).
-    Func dft1T = fft_dim1(xT, R0, sign);
+    Func dft1T = fft_dim1(xT, R0, sign, group);
 
     // Transpose back.
     Func dft1 = transpose(dft1T);
 
     // Compute the DFT of dimension 1.
-    Func dft = fft_dim1(dft1, R1, sign);
+    Func dft = fft_dim1(dft1, R1, sign, group);
     dft.bound(dft.args()[0], 0, product(R0));
     dft.bound(dft.args()[1], 0, product(R1));
 
@@ -343,9 +348,9 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
 }
 
 // Compute the N0 x N1 2D real DFT of x using radixes R0, R1.
-// Note that the transform domain is transposed and has dimensions
-// N1/2+1 x N0 due to the conjugate symmetry of real DFTs.
-Func fft2d_r2cT(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
+// The transform domain has dimensions N0 x N1/2 + 1 due to the
+// conjugate symmetry of real DFTs.
+Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
     // vectorization width.
     const int group = 8;
@@ -389,21 +394,24 @@ Func fft2d_r2cT(Func r, const std::vector<int> &R0, const std::vector<int> &R1) 
     Func unzippedT = transpose(unzipped);
 
     // DFT down the columns again (the rows of the original).
-    Func dft = fft_dim1(unzippedT, R0, -1.0f, group);
-    dft.bound(dft.args()[0], 0, (N1 + 1)/2 + 1);
-    dft.bound(dft.args()[1], 0, N0);
+    Func dftT = fft_dim1(unzippedT, R0, -1.0f, group);
+    // Transpose back.
+    Func dft = transpose(dftT);
+    dft.bound(dft.args()[0], 0, N0);
+    dft.bound(dft.args()[1], 0, N1/2 + 1);
 
-    unzipped.compute_at(dft, Var("g")).vectorize(n0, 8).unroll(n0);
-    dft1.compute_at(dft, outermost(dft));
+    unzipped.compute_at(dftT, Var("g")).vectorize(n0, group).unroll(n0);
+    dft1.compute_at(dftT, outermost(dft));
+    dftT.compute_at(dft, outermost(dft));
     dft.compute_root();
 
     return dft;
 }
 
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
-// Note that the input domain is transposed and should have dimensions
-// N1/2+1 x N0 due to the conjugate symmetry of real FFTs.
-Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1) {
+// The DFT domain should have dimensions N0 x N1/2 + 1 due to the
+// conjugate symmetry of real FFTs.
+Func fft2d_c2r(Func c, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
     // vectorization width.
     const int group = 8;
@@ -413,6 +421,8 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
 
     Var n0("n0"), n1("n1");
 
+    // Transpose the input.
+    Func cT = transpose(c);
     // Take the inverse DFT of the columns (rows in the final result).
     Func dft0T = fft_dim1(cT, R0, 1.0f, group);
 
@@ -456,11 +466,11 @@ Func fft2d_cT2r(Func cT,  const std::vector<int> &R0, const std::vector<int> &R1
     unzipped.bound(n0, 0, N0);
     unzipped.bound(n1, 0, N1);
 
-    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], 8).unroll(dft0.args()[0]);
+    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], group).unroll(dft0.args()[0]);
     dft0T.compute_at(dft, outermost(dft));
     dft.compute_at(unzipped, outermost(unzipped));
 
-    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
+    unzipped.compute_root().vectorize(n0, group).unroll(n0);
     return unzipped;
 }
 
@@ -488,17 +498,17 @@ Func fft2d_c2c(Func c, int N0, int N1, float sign) {
     return fft2d_c2c(c, radix_factor(N0), radix_factor(N1), sign);
 }
 
-// Compute N0 x N1 real DFTs. The DFT is transposed.
-Func fft2d_r2cT(Func r, int N0, int N1) {
-    return fft2d_r2cT(r, radix_factor(N0), radix_factor(N1));
+// Compute N0 x N1 real DFTs.
+Func fft2d_r2c(Func r, int N0, int N1) {
+    return fft2d_r2c(r, radix_factor(N0), radix_factor(N1));
 }
-Func fft2d_cT2r(Func cT, int N0, int N1) {
-    return fft2d_cT2r(cT, radix_factor(N0), radix_factor(N1));
+Func fft2d_c2r(Func c, int N0, int N1) {
+    return fft2d_c2r(c, radix_factor(N0), radix_factor(N1));
 }
 
 
 template <typename T>
-Func make_real(Image<T> &re) {
+Func make_real(const Image<T> &re) {
     Var x, y;
     Func ret;
     ret(x, y) = re(x, y);
@@ -506,7 +516,7 @@ Func make_real(Image<T> &re) {
 }
 
 template <typename T>
-Func make_complex(Image<T> &re) {
+Func make_complex(const Image<T> &re) {
     Var x, y;
     Func ret;
     ret(x, y) = Tuple(re(x, y), 0.0f);
@@ -515,6 +525,17 @@ Func make_complex(Image<T> &re) {
 
 double log2(double x) {
     return log(x)/log(2.0);
+}
+
+double bench_realization(Func f, Realization R, int samples, Target target) {
+    double t = 1e6f;
+    for (int i = 0; i < samples; i++) {
+        double t1 = current_time();
+        f.realize(R, target);
+        double dt = current_time() - t1;
+        if (dt < t) t = dt;
+    }
+    return t;
 }
 
 int main(int argc, char **argv) {
@@ -563,8 +584,8 @@ int main(int argc, char **argv) {
     Func filtered_r2c;
     {
         // Compute the DFT of the input and the kernel.
-        Func dft_in = fft2d_r2cT(make_real(in), W, H);
-        Func dft_kernel = fft2d_r2cT(make_real(kernel), W, H);
+        Func dft_in = fft2d_r2c(make_real(in), W, H);
+        Func dft_kernel = fft2d_r2c(make_real(kernel), W, H);
 
         // Compute the convolution.
         Func dft_filtered("dft_filtered");
@@ -572,7 +593,7 @@ int main(int argc, char **argv) {
         //dft_filtered.compute_root().trace_realizations();
 
         // Compute the inverse DFT to get the result.
-        filtered_r2c = fft2d_cT2r(dft_filtered, W, H);
+        filtered_r2c = fft2d_c2r(dft_filtered, W, H);
 
         // Normalize the result.
         RDom xy(0, W, 0, H);
@@ -609,60 +630,53 @@ int main(int argc, char **argv) {
     // noise.
     const int samples = 10;
     const int reps = 1000;
-    double t = 1e6f;
 
     Var rep("rep");
 
+    Image<float> re_in = lambda(x, y, 0.0f).realize(W, H);
+    Image<float> im_in = lambda(x, y, 0.0f).realize(W, H);
+
     Func c2c_in;
-    c2c_in(x, y, rep) = Tuple(in(x, y), 0.0f);
+    // Read all reps from the same place in memory. This effectively
+    // benchmarks taking the FFT of cached inputs, which is a
+    // reasonable assumption for a well optimized program with good
+    // locality.
+    c2c_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
+    // Write all reps to the same place in memory. This means the
+    // output appears to be cached on all but the first
+    // iteration. This seems to match the behavior of FFTW's benchmark
+    // code, and like the input, it is a reasonable assumption for a well
+    // optimized real world system.
+    R_c2c[0].raw_buffer()->stride[2] = 0;
+    R_c2c[1].raw_buffer()->stride[2] = 0;
 
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        bench_c2c.realize(R_c2c, target);
-        double dt = (current_time() - t1)*1e3/reps;
-        if (dt < t) t = dt;
-    }
+    double t = bench_realization(bench_c2c, R_c2c, samples, target)*1e3/reps;
     printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
-    Func r2cT_in;
-    r2cT_in(x, y, rep) = in(x, y);
-    Func bench_r2cT = fft2d_r2cT(r2cT_in, W, H);
-    // Due to padding for vectorization, this has asserts that fail,
-    // but are harmless (padding is overwritten, but no more).
-    if (!target.has_feature(Target::NoAsserts)) {
-        Func clamp_r2cT;
-        clamp_r2cT(x, y, rep) = bench_r2cT(clamp(x, 0, H/2), y, rep);
-        clamp_r2cT.compute_root().vectorize(x, 8);
-        bench_r2cT = clamp_r2cT;
-    }
-    Realization R_r2cT = bench_r2cT.realize(H/2 + 1, W, reps, target);
+    Func r2c_in;
+    // All reps read from the same input. See notes on c2c_in.
+    r2c_in(x, y, rep) = re_in(x, y);
+    Func bench_r2c = fft2d_r2c(r2c_in, W, H);
+    Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
+    // Write all reps to the same place in memory. See notes on R_c2c.
+    R_r2c[0].raw_buffer()->stride[2] = 0;
+    R_r2c[1].raw_buffer()->stride[2] = 0;
 
-    t = 1e6f;
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        bench_r2cT.realize(R_r2cT, target);
-        double dt = (current_time() - t1)*1e3/reps;
-        if (dt < t) t = dt;
-    }
-    printf("r2cT time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
+    t = bench_realization(bench_r2c, R_r2c, samples, target)*1e3/reps;
+    printf("r2c time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
-    Image<float> cT(H/2 + 1, W);
-    memset(cT.data(), 0, cT.width()*cT.height()*sizeof(float));
-    Func cT2r_in;
-    cT2r_in(x, y, rep) = Tuple(cT(x, y), cT(x, y));
-    Func bench_cT2r = fft2d_cT2r(cT2r_in, W, H);
-    Realization R_cT2r = bench_cT2r.realize(W, H, reps, target);
+    Func c2r_in;
+    // All reps read from the same input. See notes on c2c_in.
+    c2r_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
+    Func bench_c2r = fft2d_c2r(c2r_in, W, H);
+    Realization R_c2r = bench_c2r.realize(W, H, reps, target);
+    // Write all reps to the same place in memory. See notes on R_c2c.
+    R_c2r[0].raw_buffer()->stride[2] = 0;
 
-    t = 1e6f;
-    for (int i = 0; i < samples; i++) {
-        double t1 = current_time();
-        bench_cT2r.realize(R_cT2r, target);
-        double dt = (current_time() - t1)*1e3/reps;
-        if (dt < t) t = dt;
-    }
-    printf("cT2r time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
+    t = bench_realization(bench_c2r, R_c2r, samples, target)*1e3/reps;
+    printf("c2r time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     twiddles.clear();
 
