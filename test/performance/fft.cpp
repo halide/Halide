@@ -407,7 +407,7 @@ ComplexFunc fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int>
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
 // The DFT domain should have dimensions N0 x N1/2 + 1 due to the
 // conjugate symmetry of real FFTs.
-Func fft2d_c2r(ComplexFunc c,  const std::vector<int> &R0, const std::vector<int> &R1) {
+Func fft2d_c2r(ComplexFunc c, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
     // vectorization width.
     const int group = 8;
