@@ -103,8 +103,6 @@ then to point Halide to it:
 On Ubuntu llvm 3.2 also works, but you should omit --disable-terminfo
 or -DLLVM_ENABLE_TERMINFO=OFF when configuring it.
 
-
-
 With LLVM_CONFIG and CLANG set (or the appropriate llvm-config and
 clang in your path), you should be able to just run 'make' in this
 directory. 'make run_tests' will run the JIT test suite, and 'make
@@ -114,6 +112,13 @@ check their output).
 There is no 'make install' yet. If you want to make an install
 package, run 'make distrib'.
 
+If you wish to use cmake to build Halide, the build procedure is:
+
+    % mkdir build
+    % cd build
+    % LLVM_ROOT=/path/to/llvm3.3
+    % cmake -DLLVM_BIN=${LLVM_ROOT}/build/bin -DLLVM_INCLUDE="${LLVM_ROOT}/include;${LLVM_ROOT}/build/include" -DLLVM_LIB=${LLVM_ROOT}/build/lib -DLLVM_VERSION=33 ..
+    % make -j8
 
 Building Halide and llvm as 32-bit on 64-bit linux
 --------------------------------------------------
