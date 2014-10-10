@@ -128,7 +128,7 @@ void GeneratorBase::emit_filter(const std::string& output_dir,
     func.compile_to_header(base_path + ".h", filter_arguments, function_name);
   }
   if (options.emit_cpp) {
-    func.compile_to_c(base_path + ".cpp", filter_arguments, function_name);
+    func.compile_to_c(base_path + ".cpp", filter_arguments, function_name, target);
   }
   if (options.emit_assembly) {
     func.compile_to_assembly(base_path + ".s", filter_arguments, function_name, target);
@@ -137,10 +137,10 @@ void GeneratorBase::emit_filter(const std::string& output_dir,
     func.compile_to_bitcode(base_path + ".bc", filter_arguments, function_name, target);
   }
   if (options.emit_stmt) {
-    func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text);
+    func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text, target);
   }
   if (options.emit_stmt_html) {
-    func.compile_to_lowered_stmt(base_path + ".html", Halide::HTML);
+    func.compile_to_lowered_stmt(base_path + ".html", Halide::HTML, target);
   }
 }
 

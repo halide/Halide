@@ -57,13 +57,13 @@
  *  class XorImage : public Generator<XorImage> {
  *  public:
  *      GeneratorParam<int> channels{"channels", 3};
- *      ImageParam input{UInt(8), 2, "input"};
+ *      ImageParam input{UInt(8), 3, "input"};
  *      Param<uint8_t> mask{"mask"};
  *
  *      Func build() override {
  *          Var x, y, c;
  *          Func f;
- *          f(x, y) = input(x, y, c) ^ mask;
+ *          f(x, y, c) = input(x, y, c) ^ mask;
  *          f.bound(c, 0, bound).reorder(c, x, y).unroll(c);
  *          return f;
  *      }
