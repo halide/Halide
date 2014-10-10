@@ -1615,6 +1615,12 @@ void CodeGen::visit(const Call *op) {
         } else if (op->name == Call::bitwise_not) {
             internal_assert(op->args.size() == 1);
             value = builder->CreateNot(codegen(op->args[0]));
+        } else if (op->name == Call::isnan) {
+            internal_assert(op->args.size() == 1);
+            Value *a = codegen(op->args[0]);
+            Type t = op->args[0].type();
+            internal_assert(t.is_float());  // assert or not ?
+            value = builder->CreateFCmpUNO(a, a);
         } else if (op->name == Call::reinterpret) {
             internal_assert(op->args.size() == 1);
             Type dst = op->type;

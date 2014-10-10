@@ -1868,6 +1868,15 @@ private:
                 expr = abs(a);
             }
         } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::isnan) {
+            Expr a = mutate(op->args[0]);
+            Type ta = a.type();
+            if (!ta.is_float()) {
+                expr = false;
+            } else {
+                expr = op;
+            }
+        } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
             // Eagerly concat constant arguments to a stringify.
             bool changed = false;
