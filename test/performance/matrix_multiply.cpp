@@ -26,31 +26,19 @@ void print_results(const int N, const int num_iters, const std::string &result, 
     std::cout << std::setw(20) << column.str();
 }
 
-Func multiply_small_matrices(const int N, Func A, Func B) {
+void multiply_small_matrices(const int N, const Func& A, const Func& B, Func& C) {
     Var i("i"), j("j");
 
     RDom k(0, N, "k");
-    Func C("C");
-    C(i, j)  = Halide::undef(Float(32));
     C(i, j) += A(i, k) * B(k, j);
 
-    // A.compute_root().bound(i, 0, N).bound(j, 0, N);
-    // B.compute_root().bound(i, 0, N).bound(j, 0, N);
-
-    // At.compute_root()
-    //         .bound(i, 0, N)
-    //         .bound(j, 0, N)
-    //         .vectorize(i).unroll(j);
-
     C.bound(i, 0, N).bound(j, 0, N);
-    C.update().reorder(i,j,k).vectorize(i).unroll(j);
+    C.update().vectorize(i).unroll(j).unroll(k);
 
     C.output_buffer()
             .set_min(0,0).set_min(1,0)
             .set_stride(0,1).set_extent(1,N)
             .set_extent(0,N).set_extent(1,N);
-
-    return C;
 }
 
 void test_small_matrix(const int num_iters) {
@@ -66,10 +54,11 @@ void test_small_matrix(const int num_iters) {
             .set_extent(0,N).set_extent(1,N);
 
     Var i("i"), j("j");
-    Func A("A"), B("B");
+    Func A("A"), B("B"), C("C");
     A(i, j) = A_in(i, j);
     B(i, j) = B_in(i, j);
-    Func C = multiply_small_matrices(4, A, B);
+    C(i, j) = 0.0f;
+    multiply_small_matrices(4, A, B, C);
 
     Image<float> a(N,N), b(N,N), c(N,N);
 
@@ -92,7 +81,7 @@ void test_small_matrix(const int num_iters) {
     C.compile_to_lowered_stmt("small_mul.stmt", Text, t);
 
     // Uncomment to see the generated asm
-    // C.compile_to_assembly("/dev/stdout", Internal::vec<Argument>(A, B), "");
+    C.compile_to_assembly("small_mul.s", Internal::vec<Argument>(A_in, B_in), t);
 
     A_in.set(a);
     B_in.set(b);
@@ -116,7 +105,7 @@ void test_small_matrix(const int num_iters) {
 
     // Call the routine many times
     t1 = current_time();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < num_iters; i++) {
         r = p*q;
     }
     t2 = current_time();
@@ -128,6 +117,12 @@ void test_small_matrix(const int num_iters) {
 
 void test_matrix_multiply(const int N, const int num_iters) {
     ImageParam A_in(Float(32), 2), B_in(Float(32), 2);
+
+    A_in.set_min(0,0).set_min(1,0)
+        .set_extent(0,N).set_extent(1,N);
+
+    B_in.set_min(0,0).set_min(1,0)
+        .set_extent(0,N).set_extent(1,N);
 
     Expr size = A_in.width();
 
@@ -152,7 +147,7 @@ void test_matrix_multiply(const int N, const int num_iters) {
     t.set_feature(Target::NoAsserts);
     t.set_feature(Target::NoBoundsQuery);
 
-    Func prod = C.function();
+    Func prod = static_cast<Func>(C);
     prod.compile_jit(t);
     prod.compile_to_lowered_stmt("mat_mul.stmt", Text, t);
 
@@ -261,7 +256,7 @@ void test_eigen_multiply(const int N, const int num_iters) {
 
     // Call the routine many times
     float t1 = current_time();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < num_iters; i++) {
         c = a*b;
     }
     float t2 = current_time();
@@ -276,7 +271,7 @@ enum {
     test_class = 2,
     test_eigen = 4,
     test_small = 8,
-    test_all = 255
+    test_all = 7
 };
 
 std::vector<std::string> split_string(const std::string &str, const std::string &delim) {

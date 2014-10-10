@@ -7,6 +7,8 @@
 
 #include "IR.h"
 #include "Func.h"
+#include "Function.h"
+#include "Tuple.h"
 
 namespace Halide {
 
@@ -19,10 +21,12 @@ class Matrix;
  */
 class MatrixRef {
     Matrix& mat;
-    Expr row;
-    Expr col;
+    std::vector<Expr> rowcol;
   public:
     MatrixRef(Matrix& M, Expr i, Expr j);
+
+    EXPORT Expr row() const;
+    EXPORT Expr col() const;
 
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
@@ -75,11 +79,15 @@ class Matrix {
     /* For small matrices we store the coefficient Expr's directly. */
     std::vector<Expr> coeffs;
 
-    /* For large matrices (m > 4 || n > 4) we simply wrap a Func. */
-    Func func;
+    /* For large matrices (m > 4 || n > 4) we simply wrap a Function. */
+    Internal::Function func;
+
+    /* We store a schedule here, which we can apply to the Function as
+     * soon as we receive a compute_* call. */
+    Internal::Schedule schedule;
 
     /* Variables for accessing the function as a matrix. */
-    Var x, y;
+    std::vector<Var> ij;
 
     /* A flag indicating if we should use the function representation or
      * the coefficient representation. */
@@ -94,29 +102,47 @@ class Matrix {
     /* Returns the offset into the expression vector for small matrices. */
     int small_offset(Expr row, Expr col) const;
 
+    /* Help function to return array of variable names. */
+    std::vector<std::string> args() const;
+
+    void init(Expr num_row, Expr num_col);
+    bool const_num_rows(int &m);
+    bool const_num_cols(int &n);
+    bool const_size(int &m, int &n);
+
     friend class MatrixRef;
 
-    friend Matrix operator+(Matrix, Matrix);
-    friend Matrix operator-(Matrix, Matrix);
-    friend Matrix operator*(Matrix, Matrix);
-    friend Matrix operator*(Expr, Matrix);
-    friend Matrix operator*(Matrix, Expr);
-    friend Matrix operator/(Matrix, Expr);
-  public:
-    EXPORT Matrix();
-    EXPORT Matrix(Expr m, Expr n, Type t);
-    EXPORT Matrix(Expr m, Expr n, Func f);
-    EXPORT Matrix(Expr m, Expr n, const std::vector<Expr>& c);
-    EXPORT Matrix(ImageParam img);
+    // friend Matrix operator+(Matrix, Matrix);
+    // friend Matrix operator-(Matrix, Matrix);
+    // friend Matrix operator*(Matrix, Matrix);
+    // friend Matrix operator*(Expr, Matrix);
+    // friend Matrix operator*(Matrix, Expr);
+    // friend Matrix operator/(Matrix, Expr);
+public:
+    EXPORT Matrix(std::string name = "");
+    EXPORT Matrix(Expr m, Expr n, Type t, std::string name = "");
+    EXPORT Matrix(Expr m, Expr n, Func f, std::string name = "");
+    EXPORT Matrix(Expr m, Expr n, Tuple c, std::string name = "");
+    EXPORT Matrix(Expr m, Expr n, std::vector<Expr> c, std::string name = "");
+    EXPORT Matrix(ImageParam img, std::string name = "");
 
 #ifdef WITH_EIGEN
     template<class M>
     EXPORT Matrix(const Eigen::MatrixBase<M>& mat);
 #endif
 
+    EXPORT Matrix &compute_at_rows(Matrix &other);
+    EXPORT Matrix &compute_at_columns(Matrix &other);
+    // EXPORT Matrix &compute_at_blocks(Matrix &other, Expr block_rows, Expr block_cols);
+
+    EXPORT bool is_large_matrix() const {return is_large;}
+    EXPORT std::string name() const {return func.name();}
+
+    EXPORT Var row_var() const {return ij[0];}
+    EXPORT Var col_var() const {return ij[1];}
+
     EXPORT Type type() const;
-    EXPORT Func function();
-    EXPORT Buffer realize();
+    // EXPORT Buffer realize();
 
     EXPORT Expr num_rows() const;
     EXPORT Expr num_cols() const;
@@ -136,6 +162,9 @@ class Matrix {
     EXPORT Expr determinant();
     EXPORT Matrix inverse();
     // @}
+
+    operator Tuple();
+    operator Func();
 
     EXPORT MatrixRef operator[] (Expr i);
     EXPORT MatrixRef operator() (Expr i, Expr j);
@@ -158,7 +187,9 @@ EXPORT Matrix operator/(Matrix, Expr);
 #ifdef WITH_EIGEN
 namespace Internal {
 template<class M>
-Expr buildMatrixDef(const Eigen::MatrixBase<M>& mat, const Var x, const Var y, const int i=0, const int j=0) {
+Expr buildMatrixDef(const Eigen::MatrixBase<M>& mat,
+                    const Var x, const Var y,
+                    const int i=0, const int j=0) {
     if (i == mat.rows()-1 && j == mat.cols()-1) {
         return mat(i,j);
     } else {
@@ -177,11 +208,13 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
     const int m = mat.rows();
     const int n = mat.cols();
 
-    nrows = Expr(m);
-    ncols = Expr(n);
+    init(m, n);
 
-    if (m <= 4 && n <= 4) {
-        is_large = false;
+    if (is_large) {
+        func.define(args(), Internal::buildMatrixDef(mat, ij[0], ij[1]));
+        // func.bound(x, 0, nrows)
+        //     .bound(y, 0, ncols);
+    } else {
         coeffs.resize(m * n);
         for (int j = 0; j < n; ++j) {
             for (int i = 0; i < m; ++i) {
@@ -189,15 +222,6 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
                 coeffs[idx] = mat(i, j);
             }
         }
-    } else {
-        is_large = true;
-
-        x = Var("x");
-        y = Var("y");
-
-        func(x, y) = Internal::buildMatrixDef(mat, x, y);
-        // func.bound(x, 0, nrows)
-        //     .bound(y, 0, ncols);
     }
 }
 #endif
