@@ -505,7 +505,7 @@ Func fft2d_c2r(Func c, int N0, int N1) {
 
 
 template <typename T>
-Func make_real(Image<T> &re) {
+Func make_real(const Image<T> &re) {
     Var x, y;
     Func ret;
     ret(x, y) = re(x, y);
@@ -513,10 +513,18 @@ Func make_real(Image<T> &re) {
 }
 
 template <typename T>
-Func make_complex(Image<T> &re) {
+Func make_complex(const Image<T> &re) {
     Var x, y;
     Func ret;
     ret(x, y) = Tuple(re(x, y), 0.0f);
+    return ret;
+}
+
+template <typename T>
+Func make_complex(const Image<T> &re, const Image<T> &im) {
+    Var x, y;
+    Func ret;
+    ret(x, y) = Tuple(re(x, y), im(x, y));
     return ret;
 }
 
@@ -620,8 +628,11 @@ int main(int argc, char **argv) {
 
     Var rep("rep");
 
+    Image<float> re_in = lambda(x, y, 0.0f).realize(W, H);
+    Image<float> im_in = lambda(x, y, 0.0f).realize(W, H);
+
     Func c2c_in;
-    c2c_in(x, y, rep) = Tuple(in(x, y), 0.0f);
+    c2c_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
 
@@ -634,7 +645,7 @@ int main(int argc, char **argv) {
     printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
     Func r2c_in;
-    r2c_in(x, y, rep) = in(x, y);
+    r2c_in(x, y, rep) = re_in(x, y);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H);
     Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
 
@@ -647,10 +658,8 @@ int main(int argc, char **argv) {
     }
     printf("r2c time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
-    Image<float> c(W, H/2 + 1);
-    memset(c.data(), 0, c.width()*c.height()*sizeof(float));
     Func c2r_in;
-    c2r_in(x, y, rep) = Tuple(c(x, y), c(x, y));
+    c2r_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
     Func bench_c2r = fft2d_c2r(c2r_in, W, H);
     Realization R_c2r = bench_c2r.realize(W, H, reps, target);
 
