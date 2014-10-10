@@ -104,7 +104,12 @@ print-%:
 
 LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
 
+LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
+ifneq ($(LLVM_34_OR_OLDER), )
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
+else
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+endif
 
 UNAME = $(shell uname)
 
