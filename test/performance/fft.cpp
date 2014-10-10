@@ -325,17 +325,20 @@ Func transpose(Func f) {
 // sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
 // DFT.
 Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, float sign) {
+    // Vectorization width.
+    const int group = 8;
+
     // Transpose the input to the FFT.
     Func xT = transpose(x);
 
     // Compute the DFT of dimension 1 (originally dimension 0).
-    Func dft1T = fft_dim1(xT, R0, sign);
+    Func dft1T = fft_dim1(xT, R0, sign, group);
 
     // Transpose back.
     Func dft1 = transpose(dft1T);
 
     // Compute the DFT of dimension 1.
-    Func dft = fft_dim1(dft1, R1, sign);
+    Func dft = fft_dim1(dft1, R1, sign, group);
     dft.bound(dft.args()[0], 0, product(R0));
     dft.bound(dft.args()[1], 0, product(R1));
 
@@ -463,11 +466,11 @@ Func fft2d_c2r(Func c,  const std::vector<int> &R0, const std::vector<int> &R1) 
     unzipped.bound(n0, 0, N0);
     unzipped.bound(n1, 0, N1);
 
-    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], 8).unroll(dft0.args()[0]);
+    dft0.compute_at(dft, outermost(dft)).vectorize(dft0.args()[0], group).unroll(dft0.args()[0]);
     dft0T.compute_at(dft, outermost(dft));
     dft.compute_at(unzipped, outermost(unzipped));
 
-    unzipped.compute_root().vectorize(n0, 8).unroll(n0);
+    unzipped.compute_root().vectorize(n0, group).unroll(n0);
     return unzipped;
 }
 
@@ -632,9 +635,20 @@ int main(int argc, char **argv) {
     Image<float> im_in = lambda(x, y, 0.0f).realize(W, H);
 
     Func c2c_in;
+    // Read all reps from the same place in memory. This effectively
+    // benchmarks taking the FFT of cached inputs, which is a
+    // reasonable assumption for a well optimized program with good
+    // locality.
     c2c_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
     Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
+    // Write all reps to the same place in memory. This means the
+    // output appears to be cached on all but the first
+    // iteration. This seems to match the behavior of FFTW's benchmark
+    // code, and it is again a reasonable assumption for a well
+    // optimized real world program.
+    R_c2c[0].raw_buffer()->stride[2] = 0;
+    R_c2c[1].raw_buffer()->stride[2] = 0;
 
     for (int i = 0; i < samples; i++) {
         double t1 = current_time();
@@ -645,9 +659,13 @@ int main(int argc, char **argv) {
     printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
     Func r2c_in;
+    // All reps read from the same input. See notes on c2c_in.
     r2c_in(x, y, rep) = re_in(x, y);
     Func bench_r2c = fft2d_r2c(r2c_in, W, H);
     Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
+    // Write all reps to the same place in memory. See notes on R_c2c.
+    R_r2c[0].raw_buffer()->stride[2] = 0;
+    R_r2c[1].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
@@ -659,9 +677,12 @@ int main(int argc, char **argv) {
     printf("r2c time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
     Func c2r_in;
+    // All reps read from the same input. See notes on c2c_in.
     c2r_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
     Func bench_c2r = fft2d_c2r(c2r_in, W, H);
     Realization R_c2r = bench_c2r.realize(W, H, reps, target);
+    // Write all reps to the same place in memory. See notes on R_c2c.
+    R_c2r[0].raw_buffer()->stride[2] = 0;
 
     t = 1e6f;
     for (int i = 0; i < samples; i++) {
