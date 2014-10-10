@@ -70,6 +70,32 @@ RDom::RDom(ReductionDomain d) : dom(d) {
     init_vars("");
 }
 
+RDom::RDom(const std::vector<std::pair<Expr, Expr> > &ranges, string name) {
+    if (name == "") {
+        name = make_entity_name(this, "Halide::RDom", 'r');
+    }
+
+    std::vector<ReductionVariable> vars;
+    for (size_t i = 0; i < ranges.size(); i++) {
+        std::string rvar_uniqueifier;
+        switch (i) {
+            case 0: rvar_uniqueifier = "x"; break;
+            case 1: rvar_uniqueifier = "y"; break;
+            case 2: rvar_uniqueifier = "z"; break;
+            case 3: rvar_uniqueifier = "w"; break;
+            default: rvar_uniqueifier = int_to_string(i); break;
+        }
+        ReductionVariable rv;
+        rv.var = name + "." + rvar_uniqueifier + "$r";
+        rv.min = ranges[i].first;
+        rv.extent = ranges[i].second;
+        vars.push_back(rv);
+    }
+    dom = ReductionDomain(vars);
+    init_vars(name);
+}
+
+#if __cplusplus <= 199711L // Can't have C++11 arbitrary number of args support
 // We suffix all RVars with $r to prevent unintentional name matches with pure vars called x, y, z, w.
 RDom::RDom(Expr min, Expr extent, string name) {
     if (name == "") {
@@ -200,6 +226,7 @@ RDom::RDom(Expr min0, Expr extent0, Expr min1, Expr extent1, Expr min2, Expr ext
     dom = build_domain(vars);
     init_vars(name);
 }
+#endif // Can't have C++11 arbitrary number of args support
 
 RDom::RDom(Buffer b) {
     static string var_names[] = {"x$r", "y$r", "z$r", "w$r"};
