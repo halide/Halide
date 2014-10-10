@@ -523,14 +523,6 @@ Func make_complex(const Image<T> &re) {
     return ret;
 }
 
-template <typename T>
-Func make_complex(const Image<T> &re, const Image<T> &im) {
-    Var x, y;
-    Func ret;
-    ret(x, y) = Tuple(re(x, y), im(x, y));
-    return ret;
-}
-
 double log2(double x) {
     return log(x)/log(2.0);
 }
