@@ -6,7 +6,7 @@ namespace {
 
 class AcquireRelease : public Generator<AcquireRelease> {
 public:
-    ImageParam input{Float(32), 2, "input"};
+    ImageParam input{ Float(32), 2, "input" };
 
     Func build() override {
         Var x("x"), y("y");
@@ -26,4 +26,3 @@ public:
 RegisterGenerator<AcquireRelease> register_my_gen("acquire_release");
 
 }  // namespace
-

@@ -6,26 +6,25 @@ namespace {
 
 class Complex {
     Tuple t;
+
 public:
     Complex(Expr real, Expr imag) : t(real, imag) {}
     Complex(Tuple tup) : t(tup) {}
     Complex(FuncRefExpr f) : t(Tuple(f)) {}
     Complex(FuncRefVar f) : t(Tuple(f)) {}
-    Expr real() const {return t[0];}
-    Expr imag() const {return t[1];}
+    Expr real() const { return t[0]; }
+    Expr imag() const { return t[1]; }
 
-    operator Tuple() const {return t;}
+    operator Tuple() const { return t; }
 };
 
 // Define the usual complex arithmetic
 Complex operator+(const Complex &a, const Complex &b) {
-    return Complex(a.real() + b.real(),
-                   a.imag() + b.imag());
+    return Complex(a.real() + b.real(), a.imag() + b.imag());
 }
 
 Complex operator-(const Complex &a, const Complex &b) {
-    return Complex(a.real() - b.real(),
-                   a.imag() - b.imag());
+    return Complex(a.real() - b.real(), a.imag() - b.imag());
 }
 
 Complex operator*(const Complex &a, const Complex &b) {
@@ -33,13 +32,9 @@ Complex operator*(const Complex &a, const Complex &b) {
                    a.real() * b.imag() + a.imag() * b.real());
 }
 
-Complex conjugate(const Complex &a) {
-    return Complex(a.real(), -a.imag());
-}
+Complex conjugate(const Complex &a) { return Complex(a.real(), -a.imag()); }
 
-Expr magnitude(Complex a) {
-    return (a * conjugate(a)).real();
-}
+Expr magnitude(Complex a) { return (a * conjugate(a)).real(); }
 
 class Mandelbrot : public Generator<Mandelbrot> {
 public:
@@ -50,14 +45,14 @@ public:
         Func mandelbrot;
         Var x, y, z;
 
-        Complex initial(lerp(x_min, x_max, cast<float>(x)/w),
-                        lerp(y_min, y_max, cast<float>(y)/h));
+        Complex initial(lerp(x_min, x_max, cast<float>(x) / w),
+                        lerp(y_min, y_max, cast<float>(y) / h));
         Complex c(c_real, c_imag);
 
         mandelbrot(x, y, z) = initial;
         RDom t(1, iters);
-        Complex current = mandelbrot(x, y, t-1);
-        mandelbrot(x, y, t) = current*current + c;
+        Complex current = mandelbrot(x, y, t - 1);
+        mandelbrot(x, y, t) = current * current + c;
 
         // How many iterations until something escapes a circle of radius 2?
         Func count;
@@ -67,15 +62,10 @@ public:
         count(x, y) = select(escape[1], 0, escape[0]);
 
         Var xi, yi, xo, yo;
-        mandelbrot
-            .compute_at(count, xo);
+        mandelbrot.compute_at(count, xo);
 
-        count
-            .tile(x, y, xo, yo, xi, yi, 8, 8)
-            .parallel(yo)
-            .vectorize(xi, 4)
-            .unroll(xi)
-            .unroll(yi, 2);
+        count.tile(x, y, xo, yo, xi, yi, 8, 8).parallel(yo).vectorize(xi, 4).unroll(xi).unroll(yi,
+                                                                                               2);
 
         return count;
     }
@@ -84,4 +74,3 @@ public:
 RegisterGenerator<Mandelbrot> register_my_gen("mandelbrot");
 
 }  // namespace
-

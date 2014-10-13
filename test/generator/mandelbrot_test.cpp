@@ -12,8 +12,9 @@ int main(int argc, char **argv) {
 
     // Compute 100 different julia sets
     for (float t = 0; t < 100; t++) {
-        float fx = cos(t/10.0f), fy = sin(t/10.0f);
-        mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters, output.width(), output.height(), output);
+        float fx = cos(t / 10.0f), fy = sin(t / 10.0f);
+        mandelbrot(-2.0f, 2.0f, -1.4f, 1.4f, fx, fy, iters, output.width(), output.height(),
+                   output);
     }
 
     char buf[4096];

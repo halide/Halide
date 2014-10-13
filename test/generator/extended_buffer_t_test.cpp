@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Image<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
-            input(x, y) = sinf(x*y+1);
+            input(x, y) = sinf(x * y + 1);
         }
     }
     Image<float> output(10, 10, 3);
@@ -24,8 +24,7 @@ int main(int argc, char **argv) {
         for (int x = 0; x < 10; x++) {
             float correct = input(x, y) + 17;
             if (fabs(output(x, y) - correct) > 0.0001f) {
-                printf("output(%d, %d) was %f instead of %f\n",
-                       x, y, output(x, y), correct);
+                printf("output(%d, %d) was %f instead of %f\n", x, y, output(x, y), correct);
                 return -1;
             }
         }

@@ -6,14 +6,15 @@ namespace Halide {
 namespace Internal {
 
 /* static */
-ObjectInstanceRegistry& ObjectInstanceRegistry::get_registry() {
-  static ObjectInstanceRegistry* registry = new ObjectInstanceRegistry;
-  return *registry;
+ObjectInstanceRegistry &ObjectInstanceRegistry::get_registry() {
+    static ObjectInstanceRegistry *registry = new ObjectInstanceRegistry;
+    return *registry;
 }
 
 /* static */
-void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind kind, void *subject_ptr) {
-    ObjectInstanceRegistry& registry = get_registry();
+void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind kind,
+                                               void *subject_ptr) {
+    ObjectInstanceRegistry &registry = get_registry();
 #if __cplusplus > 199711L
     std::lock_guard<std::mutex> lock(registry.mutex);
 #endif
@@ -25,7 +26,7 @@ void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind
 
 /* static */
 void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
-    ObjectInstanceRegistry& registry = get_registry();
+    ObjectInstanceRegistry &registry = get_registry();
 #if __cplusplus > 199711L
     std::lock_guard<std::mutex> lock(registry.mutex);
 #endif
@@ -36,28 +37,30 @@ void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
 }
 
 /* static */
-std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size_t size, Kind kind) {
-    ObjectInstanceRegistry& registry = get_registry();
+std::vector<void *> ObjectInstanceRegistry::instances_in_range(void *start, size_t size,
+                                                               Kind kind) {
+    ObjectInstanceRegistry &registry = get_registry();
 #if __cplusplus > 199711L
     std::lock_guard<std::mutex> lock(registry.mutex);
 #endif
 
     std::vector<void *> results;
 
-    std::map<uintptr_t, InstanceInfo>::const_iterator it = registry.instances.lower_bound((uintptr_t)start);
+    std::map<uintptr_t, InstanceInfo>::const_iterator it =
+        registry.instances.lower_bound((uintptr_t)start);
 
     uintptr_t limit_ptr = ((uintptr_t)start) + size;
     while (it != registry.instances.end() && it->first < limit_ptr) {
-      if (it->second.kind == kind) {
-        results.push_back(it->second.subject_ptr);
-      }
+        if (it->second.kind == kind) {
+            results.push_back(it->second.subject_ptr);
+        }
 
-      if (it->first > (uintptr_t)start && it->second.size != 0) {
-        // Skip over containers that we enclose
-        it = registry.instances.lower_bound(it->first + it->second.size);
-      } else {
-        it++;
-      }
+        if (it->first > (uintptr_t)start && it->second.size != 0) {
+            // Skip over containers that we enclose
+            it = registry.instances.lower_bound(it->first + it->second.size);
+        } else {
+            it++;
+        }
     }
 
     return results;

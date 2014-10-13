@@ -24,10 +24,10 @@ int main(int argc, char **argv) {
     Image<int> output(W, H);
 
     // Create buffer_ts without host pointers.
-    buffer_t input_no_host = *((buffer_t*)input);
+    buffer_t input_no_host = *((buffer_t *)input);
     input_no_host.host = NULL;
 
-    buffer_t output_no_host = *((buffer_t*)output);
+    buffer_t output_no_host = *((buffer_t *)output);
     // We need a fake pointer here to trick Halide into creating the
     // device buffer (and not do bounds inference instead of running
     // the pipeline). Halide will not dereference this pointer.

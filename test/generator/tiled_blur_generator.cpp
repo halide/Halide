@@ -6,8 +6,8 @@ namespace {
 
 class TiledBlur : public Generator<TiledBlur> {
 public:
-    GeneratorParam<bool> is_interleaved{"is_interleaved", false};
-    ImageParam input{Int(32), 3, "input"};
+    GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
+    ImageParam input{ Int(32), 3, "input" };
 
     Func build() override {
         // This is the outermost pipeline, so input width and height
@@ -28,9 +28,8 @@ public:
         // the global min is at 0, 0.
         args[1] = input.width();
         args[2] = input.height();
-        tiled_blur.define_extern(
-            is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
-            args, Float(32), 3);
+        tiled_blur.define_extern(is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
+                                 args, Float(32), 3);
 
         Func brighter2("brighter2");
         brighter2(x, y, c) = tiled_blur(x, y, c) * 1.2f;
@@ -48,7 +47,8 @@ public:
 
         if (is_interleaved) {
             brighter1.reorder_storage(c, x, y);
-            tiled_blur.reorder_storage(tiled_blur.args()[2], tiled_blur.args()[0], tiled_blur.args()[1]);
+            tiled_blur.reorder_storage(tiled_blur.args()[2], tiled_blur.args()[0],
+                                       tiled_blur.args()[1]);
             input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
             brighter2.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
         }

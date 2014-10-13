@@ -6,7 +6,7 @@ namespace {
 
 class GpuOnly : public Generator<GpuOnly> {
 public:
-    ImageParam input{Int(32), 2, "input"};
+    ImageParam input{ Int(32), 2, "input" };
 
     Func build() override {
         Var x("x"), y("y");

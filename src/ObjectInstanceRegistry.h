@@ -46,17 +46,16 @@ public:
     static std::vector<void *> instances_in_range(void *start, size_t size, Kind kind);
 
 private:
-    static ObjectInstanceRegistry& get_registry();
+    static ObjectInstanceRegistry &get_registry();
 
     struct InstanceInfo {
-        void *subject_ptr; // May be different from the this_ptr in the key
-        size_t size; // May be 0 for params
+        void *subject_ptr;  // May be different from the this_ptr in the key
+        size_t size;  // May be 0 for params
         Kind kind;
 
-        InstanceInfo() : subject_ptr(NULL), size(0), kind(Invalid) { }
+        InstanceInfo() : subject_ptr(NULL), size(0), kind(Invalid) {}
         InstanceInfo(size_t size, Kind kind, void *subject_ptr)
-            : subject_ptr(subject_ptr), size(size), kind(kind) {
-        }
+            : subject_ptr(subject_ptr), size(size), kind(kind) {}
     };
 
 #if __cplusplus > 199711L
@@ -64,11 +63,11 @@ private:
 #endif
     std::map<uintptr_t, InstanceInfo> instances;
 
-    ObjectInstanceRegistry() { }
+    ObjectInstanceRegistry() {}
     ObjectInstanceRegistry(ObjectInstanceRegistry &rhs);  // unimplemented
 };
 
 }  // namespace Internal
 }  // namespace Halide
 
-#endif // HALIDE_OBJECT_INSTANCE_REGISTRY_H
+#endif  // HALIDE_OBJECT_INSTANCE_REGISTRY_H
