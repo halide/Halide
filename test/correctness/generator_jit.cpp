@@ -5,10 +5,7 @@
 using std::unique_ptr;
 using namespace Halide;
 
-enum SomeEnum {
-    kFoo,
-    kBar
-};
+enum class SomeEnum { Foo, Bar };
 
 class ExampleGen : public Generator<ExampleGen> {
 public:
@@ -31,19 +28,21 @@ public:
 
     // GeneratorParams can be float or ints: {default} or {default, min, max}
     // (Note that if you want to specify min and max, you must specify both.)
-    GeneratorParam<float> compiletime_factor{"compiletime_factor", 1, 0, 100};
-    GeneratorParam<int> channels{"channels", 3};
+    GeneratorParam<float> compiletime_factor{ "compiletime_factor", 1, 0, 100 };
+    GeneratorParam<int> channels{ "channels", 3 };
     // ...or enums: {default, name->value map}
-    GeneratorParam<SomeEnum> enummy{"enummy", kFoo, {{"foo", kFoo}, {"bar", kBar}}};
+    GeneratorParam<SomeEnum> enummy{ "enummy",
+                                     SomeEnum::Foo,
+                                     { { "foo", SomeEnum::Foo }, { "bar", SomeEnum::Bar } } };
     // ...or bools: {default}
-    GeneratorParam<bool> flag{"flag", true};
+    GeneratorParam<bool> flag{ "flag", true };
 
     // Param (and ImageParam) are arguments passed to the filter when
     // it is executed (as opposed to the generator during compilation).
     // When jitting, there is effectively little difference between the
     // two (at least for scalar values). Note that we set a default value of
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
-    Param<float> runtime_factor{1.0, "runtime_factor"};
+    Param<float> runtime_factor{ 1.0, "runtime_factor" };
 
     Func build() override {
         Var x, y, c;
@@ -64,11 +63,12 @@ public:
 // (As with Params, the name is constrained to C-like patterns.)
 RegisterGenerator<ExampleGen> register_jit_example("jit_example");
 
-void verify(const Image<int>& img, float compiletime_factor, float runtime_factor, int channels) {
+void verify(const Image<int> &img, float compiletime_factor, float runtime_factor, int channels) {
     for (int i = 0; i < 32; i++) {
         for (int j = 0; j < 32; j++) {
             for (int c = 0; c < channels; c++) {
-                if (img(i, j, c) != (int32_t)(compiletime_factor*runtime_factor*c*(i > j ? i : j))) {
+                if (img(i, j, c) !=
+                    (int32_t)(compiletime_factor * runtime_factor * c * (i > j ? i : j))) {
                     printf("img[%d, %d, %d] = %d\n", i, j, c, img(i, j, c));
                     exit(-1);
                 }
@@ -85,12 +85,11 @@ int main(int argc, char **argv) {
         // all Generators have a "target" GeneratorParam, which is just
         // a Halide::Target set using the normal syntax.)
         ExampleGen gen;
-        gen.set_generator_param_values(
-            {{"compiletime_factor", "2.3"},
-             {"channels", "3"},
-             {"target", "host"},
-             {"enummy", "foo"},
-             {"flag", "false"}});
+        gen.set_generator_param_values({ { "compiletime_factor", "2.3" },
+                                         { "channels", "3" },
+                                         { "target", "host" },
+                                         { "enummy", "foo" },
+                                         { "flag", "false" } });
         Image<int> img = gen.build().realize(32, 32, 3, gen.get_target());
         verify(img, 2.3, 1, 3);
     }

@@ -7,7 +7,7 @@
 #
 # Flags:
 # -c : C++ compiler to use [default: $CXX]
-# -l : path to libHalide [default: bin/libHalide.a]
+# -l : path to libHalide [default: bin/libHalide.so]
 # -o : directory path for output files [REQUIRED]
 # -s : path to .cpp file(s) containing Generaors [REQUIRED]
 # -g : name of the Generator to produce. [Can be omitted if there's only one in the .cpp]
@@ -28,7 +28,7 @@ usage()
 TOOLS_DIR=$(cd $(dirname $0) && pwd)
 HALIDE_DIR=$(cd ${TOOLS_DIR}/.. && pwd)
 
-LIBHALIDE=${HALIDE_DIR}/bin/libHalide.a
+LIBHALIDE=${HALIDE_DIR}/bin/libHalide.so
 
 while getopts "c:f:g:l:o:s:" opt; do
   case $opt in
@@ -76,3 +76,4 @@ mkdir -p ${OUTPUT_DIR}
 GENGEN=`mktemp ${OUTPUT_DIR}/gengen.XXXX`
 ${CXX} -g -std=c++11 -fno-rtti -I${HALIDE_DIR}/include ${GENERATOR_SRCS} ${TOOLS_DIR}/GenGen.cpp ${LIBHALIDE} -lz -lpthread -ldl -o ${GENGEN}
 ${GENGEN} ${GENERATOR_FLAG} ${FUNCTION_FLAG} -o ${OUTPUT_DIR} $@
+rm ${GENGEN}
