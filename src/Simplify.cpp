@@ -1938,6 +1938,28 @@ private:
             } else {
                 expr = op;
             }
+        } else if (op->call_type == Call::Extern &&
+                   (op->name == "floor_f32" || op->name == "ceil_f32" ||
+                    op->name == "round_f32" || op->name == "trunc_f32")) {
+            internal_assert(op->args.size() == 1);
+            Expr arg = mutate(op->args[0]);
+            const Call *call = arg.as<Call>();
+            if (const float *f = as_const_float(arg)) {
+                if (op->name == "floor_f32") expr = floorf(*f);
+                else if (op->name == "ceil_f32") expr = ceilf(*f);
+                else if (op->name == "round_f32") expr = nearbyintf(*f);
+                else if (op->name == "trunc_f32") expr = truncf(*f);
+            } else if (call && call->call_type == Call::Extern &&
+                       (call->name == "floor_f32" || call->name == "ceil_f32" ||
+                        call->name == "round_f32" || call->name == "trunc_f32")) {
+                // For any combination of these integer-valued functions, we can
+                // discard the outer function. For example, floor(ceil(x)) == ceil(x).
+                expr = call;
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+            } else {
+                expr = op;
+            }
         } else {
             IRMutator::visit(op);
         }
@@ -2627,6 +2649,14 @@ void simplify_test() {
 
     check(log(0.5f + 0.5f), 0.0f);
     check(exp(log(2.0f)), 2.0f);
+
+    check(floor(0.98f), 0.0f);
+    check(ceil(0.98f), 1.0f);
+    check(round(0.6f), 1.0f);
+    check(round(-0.5f), 0.0f);
+    check(trunc(-1.6f), -1.0f);
+    check(floor(round(x)), round(x));
+    check(ceil(ceil(x)), ceil(x));
 
     //check(max(x, 16) - 16, max(x + -16, 0));
     //check(min(x, -4) + 7, min(x + 7, 3));
