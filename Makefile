@@ -26,7 +26,7 @@ OPTIMIZE ?= -O3
 BUILD_BIT_SIZE ?=
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
 GENGEN ?= ./tools/gengen.sh
-GENGEN_DEPS ?=$(BIN_DIR)/libHalide.a include/Halide.h tools/GenGen.cpp
+GENGEN_DEPS ?=$(BIN_DIR)/libHalide.so include/Halide.h tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
 LLVM_CXX_FLAGS += -DLLVM_VERSION=$(LLVM_VERSION_TIMES_10)
@@ -373,7 +373,7 @@ $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tm
 
 # By default, $(FILTERS_DIR)/%.o/.h are produced by running GENGEN on %_generator.cpp
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: test/generator/%_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.a -o $(FILTERS_DIR) -s $< target=host
+	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< target=host
 
 # By default, %_test.cpp depends on $(FILTERS_DIR)/%.o/.h
 $(BIN_DIR)/generator_%: test/generator/%_test.cpp include/HalideRuntime.h $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h
@@ -388,11 +388,11 @@ $(BIN_DIR)/generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_interleav
 
 # "tiled_blur_interleaved" is produced by using tiled_blur with different generator args.
 $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: test/generator/tiled_blur_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.a -o $(FILTERS_DIR) -s $< -f tiled_blur_interleaved target=host is_interleaved=true
+	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f tiled_blur_interleaved target=host is_interleaved=true
 
 # "tiled_blur_blur_interleaved" is produced by using tiled_blur_blur with different generator args.
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: test/generator/tiled_blur_blur_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.a -o $(FILTERS_DIR) -s $< -f tiled_blur_blur_interleaved target=host is_interleaved=true
+	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f tiled_blur_blur_interleaved target=host is_interleaved=true
 
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h

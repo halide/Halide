@@ -100,6 +100,12 @@ namespace Halide {
 
 namespace Internal {
 
+/** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
+ * compile_to_files();
+ * it can be trivially wrapped by a "real" main() to produce a command-line utility
+ * for ahead-of-time filter compilation. */
+EXPORT int generate_filter_main(int argc, char **argv, std::ostream &cerr);
+
 class GeneratorParamBase {
 public:
     explicit GeneratorParamBase(const std::string &name);
