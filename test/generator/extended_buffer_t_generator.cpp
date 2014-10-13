@@ -10,8 +10,7 @@ HalideExtern_1(int, fancy_buffer_t_get_extra_field, fancy_buffer_t *);
 
 class FancyImageParam : public ImageParam {
 public:
-    FancyImageParam(Type t, int dims, const std::string &n) :
-        ImageParam(t, dims, n) {}
+    FancyImageParam(Type t, int dims, const std::string &n) : ImageParam(t, dims, n) {}
 
     Expr extra_field() const {
         // It's possible to get a buffer_t pointer from an ImageParam
@@ -26,7 +25,7 @@ public:
 
 class ExtendedBufferT : public Generator<ExtendedBufferT> {
 public:
-    FancyImageParam input{Float(32), 2, "input"};
+    FancyImageParam input{ Float(32), 2, "input" };
 
     Func build() override {
         Var x, y;

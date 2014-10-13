@@ -30,7 +30,7 @@ int init_context() {
     cl_platform_id platforms[maxPlatforms];
     cl_uint platformCount = 0;
 
-    err = clGetPlatformIDs( maxPlatforms, platforms, &platformCount );
+    err = clGetPlatformIDs(maxPlatforms, platforms, &platformCount);
     if (err != CL_SUCCESS) {
         printf("clGetPlatformIDs failed (%d)\n", err);
         return err;
@@ -41,7 +41,7 @@ int init_context() {
     if (platformCount > 0) {
         platform = platforms[0];
     }
-    if (platform == NULL){
+    if (platform == NULL) {
         printf("Failed to get platform\n");
         return CL_INVALID_PLATFORM;
     }
@@ -52,7 +52,7 @@ int init_context() {
     const cl_uint maxDevices = 4;
     cl_device_id devices[maxDevices];
     cl_uint deviceCount = 0;
-    err = clGetDeviceIDs( platform, device_type, maxDevices, devices, &deviceCount );
+    err = clGetDeviceIDs(platform, device_type, maxDevices, devices, &deviceCount);
     if (err != CL_SUCCESS) {
         printf("clGetDeviceIDs failed (%d)\n", err);
         return err;
@@ -62,10 +62,11 @@ int init_context() {
         return CL_DEVICE_NOT_FOUND;
     }
 
-    cl_device_id dev = devices[deviceCount-1];
+    cl_device_id dev = devices[deviceCount - 1];
 
     // Create context and command queue.
-    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0 };
+    cl_context_properties properties[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)platform,
+                                           0 };
     cl_ctx = clCreateContext(properties, 1, &dev, NULL, NULL, &err);
     if (err != CL_SUCCESS) {
         printf("clCreateContext failed (%d)\n", err);
@@ -134,8 +135,7 @@ int init_context() {
     CUresult status;
     // Try to get a device >0 first, since 0 should be our display device
     // For now, don't try devices > 2 to maintain compatibility with previous behavior.
-    if (deviceCount > 2)
-        deviceCount = 2;
+    if (deviceCount > 2) deviceCount = 2;
     for (int id = deviceCount - 1; id >= 0; id--) {
         status = cuDeviceGet(&dev, id);
         if (status == CUDA_SUCCESS) break;
@@ -182,8 +182,7 @@ int init_context() {
     printf("Using default implementation of acquire/release\n");
     return 0;
 }
-void destroy_context() {
-}
+void destroy_context() {}
 #endif
 
 int main(int argc, char **argv) {
@@ -214,7 +213,8 @@ int main(int argc, char **argv) {
     for (int y = 0; y < output.height(); y++) {
         for (int x = 0; x < output.width(); x++) {
             if (input(x, y) * 2.0f + 1.0f != output(x, y)) {
-                printf("Error at (%d, %d): %f != %f\n", x, y, input(x, y) * 2.0f + 1.0f, output(x, y));
+                printf("Error at (%d, %d): %f != %f\n", x, y, input(x, y) * 2.0f + 1.0f,
+                       output(x, y));
                 return -1;
             }
         }

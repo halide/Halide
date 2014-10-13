@@ -6,8 +6,8 @@ namespace {
 
 class UserContextInsanity : public Generator<UserContextInsanity> {
 public:
-    ImageParam input{Float(32), 2, "input"};
-    Param<void *> user_context{"__user_context"};
+    ImageParam input{ Float(32), 2, "input" };
+    Param<void *> user_context{ "__user_context" };
 
     Func build() override {
         Var x, y;

@@ -6,10 +6,10 @@ namespace {
 
 class TiledBlurBlur : public Generator<TiledBlurBlur> {
 public:
-    GeneratorParam<bool> is_interleaved{"is_interleaved", false};
-    ImageParam input{Int(32), 3, "input"};
-    Param<int> width{"width"};
-    Param<int> height{"height"};
+    GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
+    ImageParam input{ Int(32), 3, "input" };
+    Param<int> width{ "width" };
+    Param<int> height{ "height" };
 
     Func build() override {
         // We pass in parameters to tell us where the boundary
@@ -24,10 +24,10 @@ public:
         Var x("x"), y("y"), c("c");
 
         Func blur("blur");
-        blur(x, y, c) = (input(clamp(x-1, 0, width-1), y, c) +
-                        input(clamp(x+1, 0, width-1), y, c) +
-                        input(x, clamp(y-1, 0, height-1), c) +
-                        input(x, clamp(y+1, 0, height-1), c))/4.0f;
+        blur(x, y, c) =
+            (input(clamp(x - 1, 0, width - 1), y, c) + input(clamp(x + 1, 0, width - 1), y, c) +
+             input(x, clamp(y - 1, 0, height - 1), c) + input(x, clamp(y + 1, 0, height - 1), c)) /
+            4.0f;
 
         if (is_interleaved) {
             input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);

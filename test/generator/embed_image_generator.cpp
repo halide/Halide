@@ -6,7 +6,7 @@ namespace {
 
 class EmbedImage : public Generator<EmbedImage> {
 public:
-    ImageParam input{Float(32), 3, "input"};
+    ImageParam input{ Float(32), 3, "input" };
 
     Func build() override {
         Image<float> matrix(3, 3);

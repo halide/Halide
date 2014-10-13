@@ -18,7 +18,6 @@ extern "C" void halide_error(void *context, const char *msg) {
     assert(context == context_pointer);
 }
 
-
 extern "C" int32_t halide_trace(void *context, const halide_trace_event *e) {
     called_trace = true;
     assert(context == context_pointer);
@@ -41,7 +40,7 @@ int main(int argc, char **argv) {
     Image<float> input(10, 10);
     for (int y = 0; y < 10; y++) {
         for (int x = 0; x < 10; x++) {
-          input(x, y) = 1;
+            input(x, y) = 1;
         }
     }
     Image<float> output(10, 10);
