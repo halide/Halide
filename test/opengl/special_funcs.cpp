@@ -82,6 +82,7 @@ bool test_approx(Expr r, Expr g, Expr b, double rms_error) {
     if (err > rms_error) {
         std::cerr << "RMS error too large for " << e << ": "
                   << err << " > " << rms_error << "\n";
+        return false;
     } else {
         return true;
     }
