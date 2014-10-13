@@ -15,6 +15,16 @@
 
 namespace Halide {
 
+/** A struct used to detect if a type is a pointer. If it's not a
+ * pointer, then not_a_pointer<T>::type is T.  If it is a pointer,
+ * then not_a_pointer<T>::type is some internal hidden type that no
+ * overload should trigger on. TODO: with C++11 this can be written
+ * more cleanly. */
+namespace Internal {
+template<typename T> struct not_a_pointer {typedef T type;};
+template<typename T> struct not_a_pointer<T *> { struct type {}; };
+}
+
 /** A scalar parameter to a halide pipeline. If you're jitting, this
  * should be bound to an actual value of type T using the set method
  * before you realize the function uses this. If you're statically
@@ -29,8 +39,34 @@ public:
      * auto-generated name */
     Param() : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {}
 
-    /** Construct a scalar parameter of type T with the given name */
-    Param(const std::string &n) : param(type_of<T>(), false, n) {}
+    /** Construct a scalar parameter of type T with the given name. */
+    explicit Param(const std::string &n) : param(type_of<T>(), false, n) {}
+
+    /** Construct a scalar parameter of type T an initial value of
+     * 'val'. Only triggers for scalar types. */
+    explicit Param(typename Internal::not_a_pointer<T>::type val) : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        set(val);
+    }
+
+    /** Construct a scalar parameter of type T with the given name
+     * and an initial value of 'val'. */
+    Param(const std::string &n, T val) : param(type_of<T>(), false, n) {
+        set(val);
+    }
+
+    /** Construct a scalar parameter of type T with an initial value of 'val'
+    * and a given min and max. */
+    Param(T val, Expr min, Expr max) : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {
+        set_range(min, max);
+        set(val);
+    }
+
+    /** Construct a scalar parameter of type T with the given name
+     * and an initial value of 'val' and a given min and max. */
+    Param(const std::string &n, T val, Expr min, Expr max) : param(type_of<T>(), false, n) {
+        set_range(min, max);
+        set(val);
+    }
 
     /** Get the name of this parameter */
     const std::string &name() const {

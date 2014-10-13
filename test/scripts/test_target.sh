@@ -47,6 +47,8 @@ chmod a+r distrib/*
 
 if [ "$HL_TARGET" == ptx -a "$HOST" == Darwin ]; then
     echo "Halide builds but tests not run"
+elif [ "$HL_TARGET" == opencl -a "$HOST" == Darwin ]; then
+    echo "Halide builds but tests not run"
 elif [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
 
@@ -63,6 +65,7 @@ else
     make test_tutorials -j8 &&
     make test_performance &&
     make test_apps &&
+    make test_generators &&
     echo "All tests pass"
 fi
 

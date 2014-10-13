@@ -1,4 +1,5 @@
 #include "IR.h"
+#include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
 
 namespace Halide {
@@ -47,11 +48,27 @@ void Parameter::check_dim_ok(int dim) const {
     user_assert(dim >= 0 && dim < 4) << "Dimension " << dim << " is not in the range [0, 3]\n";
 }
 
+Parameter::Parameter() : contents(NULL) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
 Parameter::Parameter(Type t, bool is_buffer) :
-    contents(new ParameterContents(t, is_buffer, unique_name('p'))) {}
+    contents(new ParameterContents(t, is_buffer, unique_name('p'))) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
 
 Parameter::Parameter(Type t, bool is_buffer, const std::string &name) :
-    contents(new ParameterContents(t, is_buffer, name)) {}
+    contents(new ParameterContents(t, is_buffer, name)) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::Parameter(const Parameter& that) : contents(that.contents) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::~Parameter() {
+    ObjectInstanceRegistry::unregister_instance(this);
+}
 
 Type Parameter::type() const {
     check_defined();

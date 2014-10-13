@@ -7,6 +7,7 @@
 #include "IRPrinter.h"
 #include "Simplify.h"
 #include "Debug.h"
+#include "CSE.h"
 
 namespace Halide {
 
@@ -51,6 +52,7 @@ namespace Internal {
 bool is_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<FloatImm>()) return true;
+    if (e.as<StringImm>()) return true;
     if (const Cast *c = e.as<Cast>()) {
         return is_const(c->value);
     }
@@ -389,7 +391,12 @@ Expr halide_log(Expr x_full) {
 
     result += cast(type, exponent) * logf(2.0);
 
-    return select(exceptional, select(use_nan, nan, neg_inf), result);
+    result = select(exceptional, select(use_nan, nan, neg_inf), result);
+
+    // This introduces lots of common subexpressions
+    result = common_subexpression_elimination(result);
+
+    return result;
 }
 
 Expr halide_exp(Expr x_full) {
@@ -433,6 +440,9 @@ Expr halide_exp(Expr x_full) {
     result = select(biased < 255, result, inf);
     result = select(biased > 0, result, make_zero(type));
 
+    // This introduces lots of common subexpressions
+    result = common_subexpression_elimination(result);
+
     return result;
 }
 
@@ -470,7 +480,10 @@ Expr halide_erf(Expr x_full) {
 
     // Switch between the two approximations based on the magnitude.
     Expr y = select(x > 1.0f, approx1, approx2);
-    return sign * y;
+
+    Expr result = common_subexpression_elimination(sign * y);
+
+    return result;
 }
 
 Expr raise_to_integer_power(Expr e, int p) {
@@ -509,9 +522,11 @@ Expr fast_log(Expr x) {
         -0.49997513376789826101f,
         1.0f,
         0.0f};
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
-    return result + cast<float>(exponent) * logf(2);
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    result = result + cast<float>(exponent) * logf(2);
+    result = common_subexpression_elimination(result);
+    return result;
 }
 
 Expr fast_exp(Expr x_full) {
@@ -539,7 +554,7 @@ Expr fast_exp(Expr x_full) {
     // thing as float.
     Expr two_to_the_n = reinterpret<float>(biased << 23);
     result *= two_to_the_n;
-
+    result = common_subexpression_elimination(result);
     return result;
 }
 

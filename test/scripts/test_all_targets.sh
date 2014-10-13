@@ -18,9 +18,9 @@ mkdir -p testing/deps
 if [[ ! -f testing/deps/libpng32.a ]]; then
     cd testing/deps
     echo Acquiring and building libpng
-    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.6/lpng166.zip/download -o lpng166.zip || exit 1
-    unzip -n lpng166.zip
-    cd lpng166
+    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.13/lpng1613.zip/download -o lpng1613.zip || exit 1
+    unzip -n lpng1613.zip
+    cd lpng1613
     if [[ `uname` == Darwin ]]; then
         make -f scripts/makefile.darwin clean
         make -f scripts/makefile.darwin ARCH="-arch i386 -arch x86_64" || exit 1
