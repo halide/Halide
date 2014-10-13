@@ -71,7 +71,7 @@ Expr call_builtin(const Type &result_type, const std::string &func,
     Type float_type = Float(32, result_type.width);
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
-        if (!args[i].type().element_of().is_float()) {
+        if (!args[i].type().is_float()) {
             new_args[i] = Cast::make(float_type, args[i]);
         } else {
             new_args[i] = args[i];
@@ -530,11 +530,13 @@ void CodeGen_GLSL::visit(const Call *op) {
             internal_assert(weight.type().is_uint() || weight.type().is_float());
             if (weight.type().is_uint()) {
                 // Normalize integer weights to [0.0f, 1.0f] range.
+                internal_assert(weight.type().bits < 32);
                 weight = Div::make(Cast::make(Float(32), weight),
                                    Cast::make(Float(32), weight.type().imax()));
             } else if (op->type.is_uint()) {
                 // Round float weights down to next multiple of (1/op->type.imax())
                 // to give same results as lerp based on integer arithmetic.
+                internal_assert(op->type().bits < 32);
                 weight = floor(weight * op->type.imax()) / op->type.imax();
             }
 
