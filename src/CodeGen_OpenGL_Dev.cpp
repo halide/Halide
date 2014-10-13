@@ -536,7 +536,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             } else if (op->type.is_uint()) {
                 // Round float weights down to next multiple of (1/op->type.imax())
                 // to give same results as lerp based on integer arithmetic.
-                internal_assert(op->type().bits < 32);
+                internal_assert(op->type.bits < 32);
                 weight = floor(weight * op->type.imax()) / op->type.imax();
             }
 
