@@ -1917,6 +1917,7 @@ private:
         } else if (op->call_type == Call::Extern &&
                    (op->name == "floor_f32" || op->name == "ceil_f32" ||
                     op->name == "round_f32" || op->name == "trunc_f32")) {
+            internal_assert(op->args.size() == 1);
             Expr arg = mutate(op->args[0]);
             const Call *call = arg.as<Call>();
             if (const float *f = as_const_float(arg)) {
