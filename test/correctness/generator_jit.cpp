@@ -42,7 +42,7 @@ public:
     // When jitting, there is effectively little difference between the
     // two (at least for scalar values). Note that we set a default value of
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
-    Param<float> runtime_factor{ 1.0, "runtime_factor" };
+    Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
     Func build() override {
         Var x, y, c;
