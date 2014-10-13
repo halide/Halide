@@ -164,6 +164,7 @@ public:
               typename std::enable_if<std::is_arithmetic<T2>::value>::type * = nullptr>
     void set(const T &new_value) {
         user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
+        value = new_value;
     }
 
     template <typename T2 = T,
