@@ -1,9 +1,36 @@
-#include <stdio.h>
 #include <Halide.h>
+#include <stdio.h>
 #include <math.h>
 
-using namespace Halide;
 using std::vector;
+using namespace Halide;
+using namespace Halide::Internal;
+
+class ContainsInterleave : public IRVisitor {
+public:
+    bool result;
+    ContainsInterleave() : result(false) {}
+
+    using IRVisitor::visit;
+
+    void visit(const Call *op) {
+        if (op->name == Call::interleave_vectors &&
+            op->call_type == Call::Intrinsic) {
+            result = true;
+        }
+        IRVisitor::visit(op);
+    }
+};
+
+bool does_interleave(Func f) {
+    Target t = get_jit_target_from_environment();
+    t.set_feature(Target::NoBoundsQuery);
+    t.set_feature(Target::NoAsserts);
+    Stmt s = Internal::lower(f.function(), t);
+    ContainsInterleave i;
+    s.accept(&i);
+    return i.result;
+}
 
 // Make sure the interleave pattern generates good vector code
 
@@ -39,21 +66,21 @@ int main(int argc, char **argv) {
 
     Var xy("xy");
     planar
-        .compute_at(interleaved, xy)
-        .vectorize(x, 4);
+            .compute_at(interleaved, xy)
+            .vectorize(x, 4);
 
     interleaved
-        .reorder(y, x)
-        .bound(y, 0, 3)
-        .fuse(y, x, xy)
-        .vectorize(xy, 12);
+            .reorder(y, x)
+            .bound(y, 0, 3)
+            .fuse(y, x, xy)
+            .vectorize(xy, 12);
 
     interleaved
-        .output_buffer()
-        .set_min(1, 0)
-        .set_stride(0, 3)
-        .set_stride(1, 1)
-        .set_extent(1, 3);
+            .output_buffer()
+            .set_min(1, 0)
+            .set_stride(0, 3)
+            .set_stride(1, 1)
+            .set_extent(1, 3);
 
     interleaved.compile_to_lowered_stmt("interleave_3.stmt");
     interleaved.compile_to_bitcode("interleave_3.bc", vector<Argument>());
@@ -222,6 +249,52 @@ int main(int argc, char **argv) {
                 }
             }
         }
+    }
+
+    // Test that transposition works when vectorizing either dimension:
+    Func square("square");
+    square(x, y) = 5*x + y;
+
+    Func trans1("trans1");
+    trans1(x, y) = square(y, x);
+
+    Func trans2("trans2");
+    trans2(x, y) = square(y, x);
+
+    square.compute_root()
+            .bound(x, 0, 8)
+            .bound(y, 0, 8);
+
+    trans1.compute_root()
+            .bound(x, 0, 8)
+            .bound(y, 0, 8)
+            .vectorize(x)
+            .unroll(y);
+
+    trans2.compute_root()
+            .bound(x, 0, 8)
+            .bound(y, 0, 8)
+            .unroll(x)
+            .vectorize(y);
+
+    trans1.output_buffer()
+            .set_min(0,0).set_min(1,0)
+            .set_stride(0,1).set_stride(1,8)
+            .set_extent(0,8).set_extent(1,8);
+
+    trans2.output_buffer()
+            .set_min(0,0).set_min(1,0)
+            .set_stride(0,1).set_stride(1,8)
+            .set_extent(0,8).set_extent(1,8);
+
+    if (!does_interleave(trans1)) {
+        printf("transposing with vectorize(x) does not interleave.\n");
+        return -1;
+    }
+
+    if (!does_interleave(trans2)) {
+        printf("transposing with vectorize(y) does not interleave.\n");
+        return -1;
     }
 
     printf("Success!\n");
