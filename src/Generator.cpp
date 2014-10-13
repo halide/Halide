@@ -12,23 +12,6 @@ bool is_valid_name(const std::string& n) {
     return std::regex_match(n, valid_name_pattern);
 }
 
-std::vector<std::string> split_string(const std::string &source, const std::string &delim) {
-    std::vector<std::string> elements;
-    size_t start = 0;
-    size_t found = 0;
-    while ((found = source.find(delim, start)) != std::string::npos) {
-        elements.push_back(source.substr(start, found - start));
-        start = found + delim.size();
-    }
-
-    // If start is exactly source.size(), the last thing in source is a
-    // delimiter, in which case we want to add an empty string to elements.
-    if (start <= source.size()) {
-        elements.push_back(source.substr(start, std::string::npos));
-    }
-    return elements;
-}
-
 }  // namespace
 
 namespace Halide {
