@@ -693,9 +693,13 @@ void CodeGen_GLSL::test() {
     check(Halide::print(3.0f), "float $ = 3.0000000;\n");
 
     // Test rounding behavior of integer division.
-    check(-2/Expr(3),
-          "float $ = floor(-0.66666669);\n"
+    check(Variable::make(Int(32), "x") / Variable::make(Int(32), "y"),
+          "float $ = float($x);\n"
+          "float $ = float($y);\n"
+          "float $ = $ / $;\n"
+          "float $ = floor($);\n"
           "int $ = int($);\n");
+
 
     check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
                        Broadcast::make(1.f, 4),
