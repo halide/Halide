@@ -37,6 +37,14 @@ public:
     // ...or bools: {default}
     GeneratorParam<bool> flag{ "flag", true };
 
+    // These are bad names that will produce compile errors:
+    // GeneratorParam<bool> badname{ " flag", true };
+    // GeneratorParam<bool> badname{ "flag ", true };
+    // GeneratorParam<bool> badname{ "0flag ", true };
+    // GeneratorParam<bool> badname{ "", true };
+    // GeneratorParam<bool> badname{ "\001", true };
+    // GeneratorParam<bool> badname{ "a name? with! stuff*", true };
+
     // Param (and ImageParam) are arguments passed to the filter when
     // it is executed (as opposed to the generator during compilation).
     // When jitting, there is effectively little difference between the
