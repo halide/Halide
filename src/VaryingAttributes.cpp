@@ -15,7 +15,7 @@
 namespace Halide {
 namespace Internal {
     
-// For debugging
+// This mutator substitutes out variables and corresponding let expressions.
 class Unletify : public IRMutator {
 public:
     using IRMutator::visit;
@@ -60,6 +60,10 @@ protected:
     
     Expr makeLinearLet(Expr e, const std::string& name = unique_name('a')) {
         
+        if (total_found >= max_expressions) {
+            return e;
+        }
+        
         // Perform some simplification: if the expression is a variable and its
         // name is in scope, then the visitor has already determined that it is
         // linear and will add a let for it higher in the IR tree. In this case,
@@ -73,8 +77,8 @@ protected:
         // out of the fragment shader during a subsequent pass
         std::string var = name + ".varying";
         Expr let = Let::make(var, e, Variable::make(e.type(),var));
-
-        linear_lets.push_back(let);
+        ++total_found;
+        
         return let;
     }
     
@@ -122,13 +126,12 @@ protected:
         
         Expr mutated_body = mutate(op->body);
         
-        if (value_order == 1) {
+        if ((value_order == 1) && (total_found < max_expressions)) {
             // Insert a let with a name tagged .varying, and point the existing
             // let name at this variable.
             std::string var = unique_name(op->name + ".varying");
             expr = Let::make(var, mutated_value, Let::make(op->name, Variable::make(mutated_value.type(), var), mutated_body));
-
-            linear_lets.push_back(expr);
+            ++total_found;
         }
         else {
             expr = Let::make(op->name,mutated_value,mutated_body);
@@ -145,24 +148,9 @@ protected:
         
         Stmt mutated_body = mutate(op->body);
         
-        // Check if this is the inner loop in the GPU for loop pair
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && loop_vars.size()==2) {
-            
-            // Examine the linearly varying attributes found and determine which
-            // to move out of the fragment shader
-            for (auto a : linear_lets) {
-                
-	        // TODO(abstephensg): Prioritize varying attributes in case we run out of slots
-	        debug(1) << "VARYING ATTRIBUTE: " << a.as<Let>()->value.type() << " " << a.as<Let>()->name << " = " << a.as<Let>()->value << "\n\n";
-                
-                // ...
-                
-            }
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            loop_vars.pop_back();
         }
-        
-	if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
-	    loop_vars.pop_back();
-	}
         
         stmt = For::make(op->name, op->min, op->extent, op->for_type, mutated_body);
     }
@@ -395,13 +383,15 @@ protected:
     
 public:
     std::vector<std::string> loop_vars;
-    std::vector<Expr> linear_lets;
     
     Scope<int> scope;
     
     std::string name;
     unsigned int order;
     bool found;
+  
+    unsigned int total_found = 0;
+    const unsigned int max_expressions = 14;
 };
 
 Stmt find_linear_expressions(Stmt s) {
@@ -603,17 +593,37 @@ class RemoveVaryingAttributeLets : public IRMutator {
 public:
     using IRMutator::visit;
     
+    virtual void visit(const Variable *op) {
+        if (ends_with(op->name,".varying")) {
+            Type value_type = scope.get(op->name).type();
+            if (op->type != value_type) {
+              
+              expr = Cast::make(op->type,Variable::make(value_type, op->name));
+              return;
+            }
+        }
+        expr = op;
+    }
+  
     virtual void visit(const Let *op) {
         if (ends_with(op->name,".varying")) {
             
+            // Add the varying attribute expression to the scope so that we can
+            // subsequently query its type
+            scope.push(op->name, op->value);
+          
             // Skip the let statement, the variable name will become an argument
             // picked up by the host closure
             expr = mutate(op->body);
+          
+            scope.pop(op->name);
         }
         else {
             IRMutator::visit(op);
         }
     }
+  
+    Scope<Expr> scope;
 };
 
 Stmt remove_varying_attributes(Stmt s)

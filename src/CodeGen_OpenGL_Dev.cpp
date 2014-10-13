@@ -378,7 +378,11 @@ std::vector<Expr> evaluate_vector_select(const Select *op) {
 
 void CodeGen_GLSL::visit(const Select *op) {
     string id_value;
-    if (op->type.is_scalar()) {
+  
+    // The evaluate_vector_select optimization doesn't apply in the case that the
+    // select condition is not an expression in terms of the vectorized dimension,
+    // turned off for now.
+    if (true || op->type.is_scalar()) {
         id_value = unique_name('_');
         do_indent();
         stream << print_type(op->type) << " " << id_value << ";\n";

@@ -110,14 +110,14 @@ enum PrinterType {BasicPrinter = 0,
 // Then remember the print only happens when the debug object leaves
 // scope, which may print at a confusing time.
 
-template<int type>
+template<int type, uint64_t length = 1024>
 class Printer {
 public:
-    char buf[1024];
+    char buf[length];
     char *dst, *end;
     void *user_context;
 
-    Printer(void *ctx) : dst(buf), end(buf + 1023), user_context(ctx) {
+    Printer(void *ctx) : dst(buf), end(buf + (length-1)), user_context(ctx) {
         *end = 0;
     }
 
