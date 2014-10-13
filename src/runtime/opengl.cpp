@@ -2,8 +2,7 @@
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
 
-#include <sstream>
-#include <algorithm>
+using namespace Halide::Runtime::Internal;
 
 #include "mini_opengl.h"
 
@@ -22,8 +21,6 @@ extern "C" void *halide_opengl_get_proc_address(void *user_context, const char *
 extern "C" int halide_opengl_create_context(void *user_context);
 
 extern "C" int isdigit(int c);
-
-#include <stdio.h>
 
 // List of all OpenGL functions used by the runtime. The list is used to
 // declare and initialize the dispatch table in OpenGLState below.
@@ -159,7 +156,7 @@ struct GlobalState {
 };
 
 
-WEAK GlobalState global_state;
+static GlobalState global_state;
 
 // A list of module-specific state. Each module corresponds to a single Halide filter
 WEAK ModuleState *state_list;
@@ -428,7 +425,7 @@ WEAK GLfloat quad_vertices[] = {
 };
 WEAK GLuint quad_indices[] = { 0, 1, 2, 3 };
 
-WEAK GlobalState::GlobalState() {
+GlobalState::GlobalState() {
     initialized = false;
     profile = OpenGL;
     major_version = 2;
@@ -880,7 +877,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
     if (kernel->program_id == 0) {
 
         // Create the vertex shader        
-        std::ostringstream vertex_src;
+        Printer<StringStreamPrinter,1024*256> vertex_src(user_context);
         vertex_src << "attribute float XXvertex_x_attrib;\n"
                    << "attribute float XXvertex_y_attrib;\n"
                    << "varying vec2 pixcoord;\n";
@@ -911,7 +908,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,
-                                              GL_VERTEX_SHADER, vertex_src.str().c_str(), NULL);
+                                              GL_VERTEX_SHADER, vertex_src.buf, NULL);
         if (vertex_shader_id == 0) {
             halide_error(user_context, "Failed to create vertex shader");
             return 1;
@@ -1430,9 +1427,11 @@ WEAK int halide_opengl_dev_run(
     ST.Uniform2iv(loc, 1, output_min);
     CHECK_GLERROR(1);
 
-    printf("output_extent: %d,%d\n",output_extent[0],output_extent[1]);
-    printf("output_min: %d,%d\n",output_min[0],output_min[1]);
-    
+#if 0 // DEBUG_RUNTIME
+    debug(user_context) << "output_extent: " << output_extent[0] << "," << output_extent[1] << "\n";
+    debug(user_context) << "output_min: " << output_min[0] << "," << output_min[1] << "\n";
+#endif
+  
     // TODO(abstephensg) This per run setup may move to program load time in halide_init_kernels
 
     // Sort the coordinates
@@ -1443,11 +1442,12 @@ WEAK int halide_opengl_dev_run(
     int sorted_order1[num_coords_dim1];
     for (int i=0;i!=num_coords_dim1;++i)
         sorted_order1[i] = i;
+
+    // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
+    // std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
+    // std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
     
-    std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
-    std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
-    
-#if DEBUG_RUNTIME
+#if 0 // DEBUG_RUNTIME
     debug(user_context) << "Sorted x coords: ";
     for (int i=0;i!=num_coords_dim0;++i)
         debug(user_context) << coords_per_dim[0][sorted_order0[i]] << " ";
@@ -1501,7 +1501,7 @@ WEAK int halide_opengl_dev_run(
     }
     
 
-#if DEBUG_RUNTIME
+#if 0 // DEBUG_RUNTIME
     debug(user_context) << "Vertex buffer:";
     for (int i=0;i!=vertex_buffer_size;++i) {
         if (!(i%num_attributes)) {
@@ -1551,7 +1551,7 @@ WEAK int halide_opengl_dev_run(
 
         // TODO(abstephensg): Switch to glBindAttribLocation
         GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_names[i]);
-	attrib_ids[i] = attrib_id;
+        attrib_ids[i] = attrib_id;
 
         // Check to see if the varying attribute was simplified out of the
         // program by the GLSL compiler. This may occur because the .varying attribute
