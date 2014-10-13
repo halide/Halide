@@ -18,7 +18,7 @@ namespace Halide {
 /** A struct used to detect if a type is a pointer. If it's not a
  * pointer, then not_a_pointer<T>::type is T.  If it is a pointer,
  * then not_a_pointer<T>::type is some internal hidden type that no
- * overload should trigger on. TODO: with C++11 this can be written 
+ * overload should trigger on. TODO: with C++11 this can be written
  * more cleanly. */
 namespace Internal {
 template<typename T> struct not_a_pointer {typedef T type;};
@@ -33,12 +33,12 @@ template<typename T>
 class Param {
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
-    
+
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
     Param() : param(type_of<T>(), false, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {}
-    
+
     /** Construct a scalar parameter of type T with the given name. */
     explicit Param(const std::string &n) : param(type_of<T>(), false, n) {}
 
@@ -50,7 +50,7 @@ public:
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val'. */
-    Param(T val, const std::string &n) : param(type_of<T>(), false, n) {
+    Param(const std::string &n, T val) : param(type_of<T>(), false, n) {
         set(val);
     }
 
@@ -63,7 +63,7 @@ public:
 
     /** Construct a scalar parameter of type T with the given name
      * and an initial value of 'val' and a given min and max. */
-    Param(T val, Expr min, Expr max, const std::string &n) : param(type_of<T>(), false, n) {
+    Param(const std::string &n, T val, Expr min, Expr max) : param(type_of<T>(), false, n) {
         set_range(min, max);
         set(val);
     }
