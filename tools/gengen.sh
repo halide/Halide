@@ -74,5 +74,5 @@ fi
 
 mkdir -p ${OUTPUT_DIR}
 GENGEN=`mktemp ${OUTPUT_DIR}/gengen.XXXX`
-${CXX} -std=c++11 -fno-rtti -I${HALIDE_DIR}/include ${GENERATOR_SRCS} ${TOOLS_DIR}/GenGen.cpp ${LIBHALIDE} -lz -o ${GENGEN}
+${CXX} -g -std=c++11 -fno-rtti -I${HALIDE_DIR}/include ${GENERATOR_SRCS} ${TOOLS_DIR}/GenGen.cpp ${LIBHALIDE} -lz -lpthread -ldl -o ${GENGEN}
 ${GENGEN} ${GENERATOR_FLAG} ${FUNCTION_FLAG} -o ${OUTPUT_DIR} $@

@@ -7,8 +7,8 @@
 namespace {
 
 // Return true iff the name is valid for Generators or Params.
-bool IsValidName(const std::string &n) {
-    static std::regex valid_name_pattern("^[A-Za-z_][A-Za-z_0-9]*$");
+bool IsValidName(const std::string& n) {
+    static std::regex valid_name_pattern("^[A-Za-z_][A-Za-z0-9_]*$");
     return std::regex_match(n, valid_name_pattern);
 }
 
@@ -81,7 +81,7 @@ void GeneratorBase::build_params() {
     if (!params_built) {
         std::vector<void *> vf = ObjectInstanceRegistry::instances_in_range(
             this, size, ObjectInstanceRegistry::FilterParam);
-        for (int i = 0; i < vf.size(); ++i) {
+        for (size_t i = 0; i < vf.size(); ++i) {
             Parameter *param = static_cast<Parameter *>(vf[i]);
             internal_assert(param != nullptr);
             user_assert(IsValidName(param->name())) << "Invalid Param name: " << param->name();
@@ -93,7 +93,7 @@ void GeneratorBase::build_params() {
 
         std::vector<void *> vg = ObjectInstanceRegistry::instances_in_range(
             this, size, ObjectInstanceRegistry::GeneratorParam);
-        for (int i = 0; i < vg.size(); ++i) {
+        for (size_t i = 0; i < vg.size(); ++i) {
             GeneratorParamBase *param = static_cast<GeneratorParamBase *>(vg[i]);
             internal_assert(param != nullptr);
             user_assert(IsValidName(param->name)) << "Invalid GeneratorParam name: " << param->name;
