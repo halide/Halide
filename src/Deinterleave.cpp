@@ -522,8 +522,8 @@ class Interleaver : public IRMutator {
 
             const int *stride_ptr = as_const_int(r0->stride);
 
-            // The stride isn't a constant > 1
-            if (!stride_ptr || *stride_ptr <= 1) goto fail;
+            // The stride isn't a constant or is <= 0
+            if (!stride_ptr || *stride_ptr < 1) goto fail;
 
             const int stride = *stride_ptr;
             const int width = r0->width;
@@ -534,62 +534,144 @@ class Interleaver : public IRMutator {
             Stmt rest = collect_strided_stores(op->rest, store->name,
                                                stride, let_stmts, stores);
 
-            // Wrong number of stores collected.
-            if (stores.size() != (size_t)stride) goto fail;
+            if (stride > 1) {
+                // Wrong number of stores collected.
+                if (stores.size() != (size_t)stride) goto fail;
 
-            // Figure out the offset of each store relative to the first one.
-            int min_offset = 0;
-            std::vector<int> offsets(stride);
-            for (int i = 0; i < stride; ++i) {
-                const Ramp *ri = stores[i].index.as<Ramp>();
-                internal_assert(ri);
+                // Figure out the offset of each store relative to the first one.
+                int min_offset = 0;
+                std::vector<int> offsets(stride);
+                for (int i = 0; i < stride; ++i) {
+                    const Ramp *ri = stores[i].index.as<Ramp>();
+                    internal_assert(ri);
 
-                // Mismatched store vector widths.
-                if (ri->width != width) goto fail;
+                    // Mismatched store vector widths.
+                    if (ri->width != width) goto fail;
 
-                Expr diff = simplify(ri->base - r0->base);
-                const int *offs = as_const_int(diff);
+                    Expr diff = simplify(ri->base - r0->base);
+                    const int *offs = as_const_int(diff);
 
-                // Difference between bases is not a constant.
-                if (!offs) goto fail;
+                    // Difference between bases is not a constant.
+                    if (!offs) goto fail;
 
-                offsets[i] = *offs;
-                if (*offs < min_offset) {
-                    min_offset = *offs;
-                }
-            }
-
-            // Bucket the stores by offset.
-            Expr base;
-            std::vector<Expr> args(stride);
-            for (int i = 0; i < stride; ++i) {
-                int j = offsets[i] - min_offset;
-                if (j == 0) {
-                    base = stores[i].index.as<Ramp>()->base;
+                    offsets[i] = *offs;
+                    if (*offs < min_offset) {
+                        min_offset = *offs;
+                    }
                 }
 
-                // The offset is not between zero and the stride.
-                if (j < 0 || j >= stride) goto fail;
+                // Bucket the stores by offset.
+                Expr base;
+                std::vector<Expr> args(stride);
+                for (int i = 0; i < stride; ++i) {
+                    int j = offsets[i] - min_offset;
+                    if (j == 0) {
+                        base = stores[i].index.as<Ramp>()->base;
+                    }
 
-                // We already have a store for this offset.
-                if (args[j].defined()) goto fail;
+                    // The offset is not between zero and the stride.
+                    if (j < 0 || j >= stride) goto fail;
 
-                args[j] = stores[i].value;
+                    // We already have a store for this offset.
+                    if (args[j].defined()) goto fail;
+
+                    args[j] = stores[i].value;
+                }
+
+                // One of the stores should have had the minimum offset.
+                internal_assert(base.defined());
+
+                // Generate a single interleaving store.
+                Type t = store->value.type();
+                t.width = width*stride;
+                Expr index = Ramp::make(base, make_one(Int(32)), t.width);
+                Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
+                Stmt new_store = Store::make(store->name, value, index);
+
+                // Continue recursively into the stuff that
+                // collect_strided_stores didn't collect.
+                stmt = Block::make(new_store, mutate(rest));
+            } else {
+                // Wrong number of stores collected.
+                if (stores.size() != (size_t)width) goto fail;
+
+                // This case only triggers if we are doing a sequence of
+                // unit stride vector stores of strided vector loads. In
+                // this case we can easily transpose the operations and
+                // store an interleaved vector of unit stride loads.
+                int min_offset = 0;
+                std::vector<int> offsets(width);
+                std::string load_name;
+                Buffer load_image;
+                Parameter load_param;
+                for (int i = 0; i < width; ++i) {
+                    const Ramp *ri = stores[i].index.as<Ramp>();
+                    internal_assert(ri);
+
+                    // Mismatched store vector widths.
+                    if (ri->width != width) goto fail;
+
+                    Expr diff = simplify(ri->base - r0->base);
+                    const int *offs = as_const_int(diff);
+
+                    // Difference between bases is not constant.
+                    if (!offs) goto fail;
+
+                    // Difference between bases is not a multiple of the width.
+                    if (*offs % width != 0) goto fail;
+
+                    offsets[i] = *offs;
+                    if (*offs < min_offset) {
+                        min_offset = *offs;
+                    }
+
+                    const Load *load = stores[i].value.as<Load>();
+                    if (!load) goto fail;
+
+                    const Ramp *ramp = load->index.as<Ramp>();
+                    if (!ramp) goto fail;
+
+                    // Load stride or width is not eqaul to the store width.
+                    if (!is_const(ramp->stride, width) || ramp->width != width) goto fail;
+
+                    if (i == 0) {
+                        load_name  = load->name;
+                        load_image = load->image;
+                        load_param = load->param;
+                    } else {
+                        if (load->name != load_name) goto fail;
+                    }
+                }
+
+                // Gather the args for interleaving.
+                Expr base;
+                Type t = store->value.type();
+                std::vector<Expr> args(width);
+                for (int i = 0; i < width; ++i) {
+                    int j = (offsets[i] - min_offset) / width;
+                    if (j == 0) {
+                        base = stores[i].index.as<Ramp>()->base;
+                    }
+
+                    // The offset is not between zero and the stride.
+                    if (j < 0 || j >= width) goto fail;
+
+                    // We already have a store for this offset.
+                    if (args[j].defined()) goto fail;
+
+                    args[j] = Load::make(t, load_name, stores[i].index, load_image, load_param);
+                }
+
+                // Generate a single interleaving store.
+                t.width = width*width;
+                Expr index = Ramp::make(base, make_one(Int(32)), t.width);
+                Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
+                Stmt new_store = Store::make(store->name, value, index);
+
+                // Continue recursively into the stuff that
+                // collect_strided_stores didn't collect.
+                stmt = Block::make(new_store, mutate(rest));
             }
-
-            // One of the stores should have had the minimum offset.
-            internal_assert(base.defined());
-
-            // Generate a single interleaving store.
-            Type t = store->value.type();
-            t.width = width*stride;
-            Expr index = Ramp::make(base, make_one(Int(32)), t.width);
-            Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
-            Stmt new_store = Store::make(store->name, value, index);
-
-            // Continue recursively into the stuff that
-            // collect_strided_stores didn't collect.
-            stmt = Block::make(new_store, mutate(rest));
 
             // Rewrap the let statements we pulled off.
             while (!let_stmts.empty()) {
@@ -607,7 +689,7 @@ class Interleaver : public IRMutator {
         // opportunities within. Continue recursively.
         stmt = Block::make(mutate(op->first), mutate(op->rest));
     }
-public:
+  public:
     Interleaver() : should_deinterleave(false) {}
 };
 
