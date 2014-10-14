@@ -276,7 +276,10 @@ public:
 
     void set_generator_param_values(const GeneratorParamValues &params);
 
-    std::vector<Argument> get_filter_arguments() const;
+    std::vector<Argument> get_filter_arguments() {
+        build_params();
+        return filter_arguments;
+    }
 
     // Call build() and produce compiled output of the given func.
     // All files will be in the given directory, with the given file_base_name
