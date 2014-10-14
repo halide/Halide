@@ -52,7 +52,9 @@ WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 endif
 
 # turn on c++11 for llvm 3.5
-ifeq ($(LLVM_VERSION_TIMES_10), 35)
+LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
+ifneq ($(LLVM_34_OR_OLDER), )
+else
 LLVM_CXX_FLAGS += -std=c++11
 TEST_CXX_FLAGS += -std=c++11
 endif
@@ -114,7 +116,6 @@ print-%:
 
 LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
 
-LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
 ifneq ($(LLVM_34_OR_OLDER), )
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
 else
@@ -385,7 +386,7 @@ $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: test/generator/%_generator.cpp $(GENGEN_D
 
 # By default, %_test.cpp depends on $(FILTERS_DIR)/%.o/.h
 $(BIN_DIR)/generator_%: test/generator/%_test.cpp include/HalideRuntime.h $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
 
 # A few tests have additional dependencies, which we'll specify here manually:
 # tiled_blur_test also depends on tiled_blur_blur
@@ -401,6 +402,17 @@ $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h:
 # "tiled_blur_blur_interleaved" is produced by using tiled_blur_blur with different generator args.
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: test/generator/tiled_blur_blur_generator.cpp $(GENGEN_DEPS)
 	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f tiled_blur_blur_interleaved target=host is_interleaved=true
+
+# matrix_multiply test using the internal matrix class.
+$(BIN_DIR)/generator_matrix_multiply: $(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_class.o
+
+# "matrix_multiply_func" is produced by using matrix_multiply with different generator args.
+$(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_func.h: test/generator/matrix_multiply_generator.cpp $(GENGEN_DEPS)
+	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f matrix_multiply_func target=host-no_asserts-no_bounds_query use_matrix_class=false
+
+# "matrix_multiply_class" is produced by using matrix_multiply with different generator args.
+$(FILTERS_DIR)/matrix_multiply_class.o $(FILTERS_DIR)/matrix_multiply_class.h: test/generator/matrix_multiply_generator.cpp $(GENGEN_DEPS)
+	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f matrix_multiply_class target=host-no_asserts-no_bounds_query use_matrix_class=true
 
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h

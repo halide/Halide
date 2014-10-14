@@ -21,12 +21,11 @@ class Matrix;
  */
 class MatrixRef {
     Matrix& mat;
-    std::vector<Expr> rowcol;
+    Expr row;
+    Expr col;
+
   public:
     MatrixRef(Matrix& M, Expr i, Expr j);
-
-    EXPORT Expr row() const;
-    EXPORT Expr col() const;
 
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
@@ -79,12 +78,12 @@ class Matrix {
     /* For small matrices we store the coefficient Expr's directly. */
     std::vector<Expr> coeffs;
 
-    /* For large matrices (m > 4 || n > 4) we simply wrap a Function. */
-    Internal::Function func;
+    /* For large matrices (m > 4 || n > 4) we simply wrap a Func. */
+    Func func;
 
     /* We store a schedule here, which we can apply to the Function as
      * soon as we receive a compute_* call. */
-    Internal::Schedule schedule;
+    // Internal::Schedule schedule;
 
     /* Variables for accessing the function as a matrix. */
     std::vector<Var> ij;
@@ -112,12 +111,12 @@ class Matrix {
 
     friend class MatrixRef;
 
-    // friend Matrix operator+(Matrix, Matrix);
-    // friend Matrix operator-(Matrix, Matrix);
-    // friend Matrix operator*(Matrix, Matrix);
-    // friend Matrix operator*(Expr, Matrix);
-    // friend Matrix operator*(Matrix, Expr);
-    // friend Matrix operator/(Matrix, Expr);
+    friend Matrix operator+(Matrix, Matrix);
+    friend Matrix operator-(Matrix, Matrix);
+    friend Matrix operator*(Matrix, Matrix);
+    friend Matrix operator*(Expr, Matrix);
+    friend Matrix operator*(Matrix, Expr);
+    friend Matrix operator/(Matrix, Expr);
 public:
     EXPORT Matrix(std::string name = "");
     EXPORT Matrix(Expr m, Expr n, Type t, std::string name = "");
@@ -211,9 +210,9 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
     init(m, n);
 
     if (is_large) {
-        func.define(args(), Internal::buildMatrixDef(mat, ij[0], ij[1]));
-        // func.bound(x, 0, nrows)
-        //     .bound(y, 0, ncols);
+        Var i = row_var();
+        Var j = col_var();
+        func(i, j) = Internal::buildMatrixDef(mat, i, j);
     } else {
         coeffs.resize(m * n);
         for (int j = 0; j < n; ++j) {

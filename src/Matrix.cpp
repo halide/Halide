@@ -24,62 +24,52 @@ bool is_size_const(Expr i) {
     return valid;
 }
 
-MatrixRef::MatrixRef(Matrix& M, Expr i, Expr j) : mat(M), rowcol(2) {
-    internal_assert(i.defined() && is_int(i));
-    internal_assert(j.defined() && is_int(j));
-    rowcol[0] = i;
-    rowcol[1] = j;
-}
-
-Expr MatrixRef::row() const {
-    return rowcol[0];
-}
-
-Expr MatrixRef::col() const {
-    return rowcol[1];
+MatrixRef::MatrixRef(Matrix& M, Expr i, Expr j) : mat(M), row(i), col(j) {
+    internal_assert(row.defined() && is_int(row));
+    internal_assert(col.defined() && is_int(col));
 }
 
 void MatrixRef::operator=(Expr x) {
     if (mat.is_large) {
-        FuncRefExpr(mat.func, rowcol) = x;
+        mat.func(row, col) = x;
     } else {
-        const int i = mat.small_offset(row(), col());
+        const int i = mat.small_offset(row, col);
         mat.coeffs[i] = x;
     }
 }
 
 void MatrixRef::operator+=(Expr x) {
     if (mat.is_large) {
-        FuncRefExpr(mat.func, rowcol) += x;
+        mat.func(row, col) += x;
     } else {
-        const int i = mat.small_offset(row(), col());
+        const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] + x;
     }
 }
 
 void MatrixRef::operator-=(Expr x) {
     if (mat.is_large) {
-        FuncRefExpr(mat.func, rowcol) -= x;
+        mat.func(row, col) -= x;
     } else {
-        const int i = mat.small_offset(row(), col());
+        const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] - x;
     }
 }
 
 void MatrixRef::operator*=(Expr x) {
     if (mat.is_large) {
-        FuncRefExpr(mat.func, rowcol) *= x;
+        mat.func(row, col) *= x;
     } else {
-        const int i = mat.small_offset(row(), col());
+        const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] * x;
     }
 }
 
 void MatrixRef::operator/=(Expr x) {
     if (mat.is_large) {
-        FuncRefExpr(mat.func, rowcol) /= x;
+        mat.func(row, col) /= x;
     } else {
-        const int i = mat.small_offset(row(), col());
+        const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] - x;
     }
 }
@@ -100,9 +90,9 @@ void MatrixRef::operator=(const FuncRefExpr &e) {
 
 MatrixRef::operator Expr() const {
     if (mat.is_large) {
-        return FuncRefExpr(mat.func, rowcol);
+        return mat.func(row, col);
     } else {
-        const int i = mat.small_offset(row(), col());
+        const int i = mat.small_offset(row, col);
         return mat.coeffs[i];
     }
 }
@@ -179,10 +169,10 @@ void Matrix::init(Expr num_row = 0, Expr num_col = 0) {
         }
     }
 
-    Internal::Bound row_bound = {ij[0].name(), 0, nrows};
-    Internal::Bound col_bound = {ij[1].name(), 0, ncols};
-    schedule.bounds().push_back(row_bound);
-    schedule.bounds().push_back(col_bound);
+    // Internal::Bound row_bound = {ij[0].name(), 0, nrows};
+    // Internal::Bound col_bound = {ij[1].name(), 0, ncols};
+    // schedule.bounds().push_back(row_bound);
+    // schedule.bounds().push_back(col_bound);
 }
 
 bool Matrix::const_num_rows(int &m) {
@@ -242,7 +232,6 @@ Matrix::Matrix(Expr num_row, Expr num_col, Tuple c, std::string name)
     }
 }
 
-
 Matrix::Matrix(Expr num_row, Expr num_col, std::vector<Expr> c, std::string name)
         : func(matrix_name(this, name)) {
     init(num_row, num_col);
@@ -266,7 +255,9 @@ Matrix::Matrix(ImageParam img, std::string name)
         init(img.width(), 1);
 
         if (is_large) {
-            func.define(args(), vector_of(img(ij[0])));
+            Var i = ij[0];
+            Var j = ij[1];
+            func(i, j) = img(i);
         } else {
             int m, n;
             const_size(m, n);
@@ -281,7 +272,9 @@ Matrix::Matrix(ImageParam img, std::string name)
         init(img.width(), img.height());
 
         if (is_large) {
-            func.define(args(), vector_of(img(ij[0], ij[1])));
+            Var i = ij[0];
+            Var j = ij[1];
+            func(i, j) = img(i, j);
         } else {
             int m, n;
             const_size(m, n);
@@ -314,15 +307,21 @@ Matrix::Matrix(Expr num_row, Expr num_col, Func f, std::string name)
                 coeffs[i] = f(i);
             }
         } else if (is_one(ncols)) {
-            func.define(args(), vector_of(f(row_var())));
+            Var i = ij[0];
+            Var j = ij[1];
+            func(i, j) = f(i);
         } else {// is_one(nrows)
-            func.define(args(), vector_of(f(col_var())));
+            Var i = ij[0];
+            Var j = ij[1];
+            func(i, j) = f(j);
         }
     } else {
         internal_assert(f.dimensions() == 2);
 
         if (is_large) {
-            func.define(args(), vector_of(f(row_var(), col_var())));
+            Var i = ij[0];
+            Var j = ij[1];
+            func(i, j) = f(i, j);
         } else {
             int m, n;
             const_size(m, n);
@@ -351,11 +350,11 @@ Matrix::operator Tuple() {
 }
 
 Matrix::operator Func() {
-    if (!is_large && !func.has_pure_definition()) {
+    if (!is_large && !func.defined()) {
         int m, n;
         const_size(m, n);
 
-        Expr mat = Halide::undef(type());
+        Expr mat = undef(type());
         for (int j = 0; j < n; ++j ) {
             for (int i = 0; i < n; ++i ) {
                 const int idx = small_offset(i, j);
@@ -364,36 +363,23 @@ Matrix::operator Func() {
             }
         }
 
-        func.define(args(), vector_of(mat));
+        func(row_var(), col_var()) = mat;
     }
 
-    func.schedule() = schedule;
-    return Func(func);
+    return func;
 }
 
 Matrix &Matrix::compute_at_rows(Matrix &other) {
-    Internal::LoopLevel loop_level(other.name(), row_var().name());
-    schedule.compute_level() = loop_level;
-    if (schedule.store_level().is_inline()) {
-        schedule.store_level() = loop_level;
-    }
-
     if (is_large) {
-        func.schedule() = schedule;
+        func.compute_at(static_cast<Func>(other), other.row_var());
     }
 
     return *this;
 }
 
 Matrix &Matrix::compute_at_columns(Matrix &other) {
-    Internal::LoopLevel loop_level(other.name(), col_var().name());
-    schedule.compute_level() = loop_level;
-    if (schedule.store_level().is_inline()) {
-        schedule.store_level() = loop_level;
-    }
-
     if (is_large) {
-        func.schedule() = schedule;
+        func.compute_at(static_cast<Func>(other), other.col_var());
     }
 
     return *this;
@@ -432,54 +418,13 @@ Expr Matrix::num_cols() const {
     return ncols;
 }
 
-Matrix Matrix::row(Expr i) {
-    std::string result_name = strip(this->name()) + "_row";
-
-    int n;
-    if (const_num_cols(n)) {
-        if (n <= 4) {
-            Matrix &A = *this;
-            std::vector<Expr> row_coeffs(n);
-            for (int j = 0; j < n; ++j) {
-                row_coeffs[j] = static_cast<Expr>(A(i, j));
-            }
-
-            return Matrix(1, ncols, row_coeffs, result_name);
-        }
-    }
-
-    Func row_func;
-    row_func(col_var()) = FuncRefVar(func, ij);
-    return Matrix(1, ncols, row_func, result_name);
-}
-
-Matrix Matrix::col(Expr j) {
-    std::string result_name = strip(this->name()) + "_col";
-
-    int m;
-    if (const_num_rows(m)) {
-        if (m <= 4) {
-            Matrix &A = *this;
-            std::vector<Expr> col_coeffs(m);
-            for (int i = 0; i < m; ++i) {
-                col_coeffs[i] = static_cast<Expr>(A(i, j));
-            }
-
-            return Matrix(nrows, 1, col_coeffs, result_name);
-        }
-    }
-
-    Func col_func;
-    col_func(row_var()) = FuncRefVar(func, ij);
-    return Matrix(nrows, 1, col_func, result_name);
-}
-
 Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
+    Matrix &A = *this;
+
     std::string result_name = strip(this->name()) + "_block";
 
     Expr block_nrows = simplify(max_i - min_i + 1);
     Expr block_ncols = simplify(max_j - min_j + 1);
-    Matrix &A = *this;
 
     if (!is_large) {
         int m, n;
@@ -496,21 +441,66 @@ Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
         }
     }
 
-    Func block_func;
-    block_func(row_var(), col_var()) =
+    Matrix block(block_nrows, block_ncols, A.type(), result_name);
+    block(row_var(), col_var()) =
             Halide::select(row_var() <= block_nrows && col_var() <= block_ncols,
                            A(row_var() - min_i, col_var() - min_j),
                            Halide::undef(type()));
-    return Matrix(block_nrows, block_ncols, block_func, result_name);
+    return block;
+}
+
+Matrix Matrix::row(Expr i) {
+    Matrix &A = *this;
+
+    std::string result_name = strip(this->name()) + "_block";
+
+    if (!is_large) {
+        int m, n;
+        const_size(m, n);
+
+        std::vector<Expr> row_coeffs(m * n);
+        for (int j = 0; j < n; ++j) {
+            row_coeffs[j] = static_cast<Expr>(A(i, j));
+        }
+
+        return Matrix(m, n, row_coeffs, result_name);
+    }
+
+    Matrix row(1, ncols, A.type(), result_name);
+    row(row_var(), col_var()) = A(0, col_var());
+    return row;
+}
+
+Matrix Matrix::col(Expr j) {
+    Matrix &A = *this;
+
+    std::string result_name = strip(this->name()) + "_col";
+
+    int m;
+    if (const_num_rows(m)) {
+        if (m <= 4) {
+            std::vector<Expr> col_coeffs(m);
+            for (int i = 0; i < m; ++i) {
+                col_coeffs[i] = static_cast<Expr>(A(i, j));
+            }
+
+            return Matrix(nrows, 1, col_coeffs, result_name);
+        }
+    }
+
+    Matrix col(nrows, 1, A.type(), result_name);
+    col(row_var(), col_var()) = A(row_var(), 0);
+    return col;
 }
 
 Matrix Matrix::transpose() {
     std::string result_name = strip(this->name()) + "_t";
 
     if (is_large) {
-        Func mat_trans;
-        mat_trans(col_var(), row_var()) = FuncRefVar(func, ij);
-        return Matrix(ncols, nrows, mat_trans, result_name);
+        Matrix &A = *this;
+        Matrix A_t(ncols, nrows, A.type(), result_name);
+        A_t(row_var(), col_var()) = A(col_var(), row_var());
+        return A_t;
     } else {
         const int m = *as_const_int(nrows);
         const int n = *as_const_int(ncols);
@@ -633,8 +623,7 @@ Matrix identity_matrix(Type t, Expr size) {
             for (int j = 0; j < n; ++j) {
                 for (int i =0; i < n; ++i) {
                     const int idx = i + j * n;
-                    ident[idx] = i == j? Halide::cast(t, 1):
-                            Halide::cast(t, 0);
+                    ident[idx] = i == j? cast(t, 1): cast(t, 0);
                 }
             }
 
@@ -642,11 +631,11 @@ Matrix identity_matrix(Type t, Expr size) {
         }
     }
 
-    Func ident;
-    Var i("i"), j("j");
-    ident(i, j) = Halide::select(i == j, Halide::cast(t, 1),
-                                         Halide::cast(t, 0));
-    return Matrix(size, size, ident, "I");
+    Matrix I(size, size, t, "I");
+    Var i = I.row_var();
+    Var j = I.col_var();
+    I(i, j) = select(i == j, cast(t, 1), cast(t, 0));
+    return I;
 }
 
 Matrix operator+(Matrix A, Matrix B) {
@@ -657,12 +646,11 @@ Matrix operator+(Matrix A, Matrix B) {
     std::string result_name = strip(A.name()) + "_plus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
-        Var i = A.row_var();
-        Var j = A.col_var();
-
-        Func sum;
+        Matrix sum(A.num_rows(), A.num_cols(), A.type(), result_name);
+        Var i = sum.row_var();
+        Var j = sum.col_var();
         sum(i, j) = A(i, j) + B(i, j);
-        return Matrix(A.num_rows(), B.num_cols(), sum, result_name);
+        return sum;
     } else {
         Tuple sum = A;
         Tuple B_coeffs = B;
@@ -682,12 +670,11 @@ Matrix operator-(Matrix A, Matrix B) {
     std::string result_name = strip(A.name()) + "_minus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
-        Var i = A.row_var();
-        Var j = A.col_var();
-
-        Func diff;
+        Matrix diff(A.num_rows(), A.num_cols(), A.type(), result_name);
+        Var i = diff.row_var();
+        Var j = diff.col_var();
         diff(i, j) = A(i, j) - B(i, j);
-        return Matrix(A.num_rows(), B.num_cols(), diff, result_name);
+        return diff;
     } else {
         Tuple diff = A;
         Tuple B_coeffs = B;
@@ -703,12 +690,11 @@ Matrix operator*(Expr a, Matrix B) {
     std::string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
-        Var i = B.row_var();
-        Var j = B.col_var();
-
-        Func scale;
+        Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
+        Var i = scale.row_var();
+        Var j = scale.col_var();
         scale(i, j) = a * B(i, j);
-        return Matrix(B.num_rows(), B.num_cols(), scale, result_name);
+        return scale;
     } else {
         Tuple scale = B;
         for (size_t k = 0; k < scale.size(); ++k) {
@@ -723,12 +709,11 @@ Matrix operator*(Matrix B, Expr a) {
     std::string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
-        Var i = B.row_var();
-        Var j = B.col_var();
-
-        Func scale;
+        Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
+        Var i = scale.row_var();
+        Var j = scale.col_var();
         scale(i, j) = B(i, j) * a;
-        return Matrix(B.num_rows(), B.num_cols(), scale, result_name);
+        return scale;
     } else {
         Tuple scale = B;
         for (size_t k = 0; k < scale.size(); ++k) {
@@ -743,12 +728,11 @@ Matrix operator/(Matrix B, Expr a) {
     std::string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
-        Var i = B.row_var();
-        Var j = B.col_var();
-
-        Func scale;
+        Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
+        Var i = scale.row_var();
+        Var j = scale.col_var();
         scale(i, j) = B(i, j) / a;
-        return Matrix(B.num_rows(), B.num_cols(), scale, result_name);
+        return scale;
     } else {
         Tuple scale = B;
         for (size_t k = 0; k < scale.size(); ++k) {
@@ -798,17 +782,17 @@ Matrix operator*(Matrix A, Matrix B) {
         }
     }
 
-    Var i = A.row_var();
-    Var j = A.col_var();
+    Matrix prod(A.num_rows(), B.num_cols(), A.type(), result_name);
+    Var i = prod.row_var();
+    Var j = prod.col_var();
 
     RDom k(0, A.num_cols(), "k");
-    Func prod;
-    prod(i, j) = sum(A(i, k) * B(k, j));
+    prod(i, j) += A(i, k) * B(i, k);
 
     // const int  vec_size  = 8;
     // const int  tile_size = 16;
 
-    return Matrix(prod_nrows, prod_ncols, prod, result_name);
+    return prod;
 
 #if 0
     Var x("x"), y("y");
