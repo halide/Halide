@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <math.h>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -1874,8 +1875,10 @@ private:
             float f = 0.0f;
             if (!ta.is_float()) {
                 expr = false;
+#if 0       //  Less trouble with C++11
             } else if (const_float(arg, &f)) {
-                expr = isnan(f);
+                expr = std::isnan(f);
+#endif
             } else if (!arg.same_as(op->args[0])) {
                 expr = Call::make(op->type, op->name, vec(arg), op->call_type);
             } else {
