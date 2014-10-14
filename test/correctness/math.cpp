@@ -103,6 +103,7 @@ fun_1_all_types(exp)
 fun_1_all_types(log)
 fun_1_all_types(floor)
 fun_1_all_types(ceil)
+fun_1_all_types(trunc)
 fun_1_all_types(asin)
 fun_1_all_types(acos)
 fun_1_all_types(tan)
@@ -200,6 +201,7 @@ int main(int argc, char **argv) {
     call_1(log, 256, 1, 1000000)
     call_1(floor, 256, -25, 25)
     call_1(ceil, 256, -25, 25)
+    call_1(trunc, 256, -25, 25)
     call_2(pow, 256, .1, 20, .1, 2)
 
     printf("Success!\n");

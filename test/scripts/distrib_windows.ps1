@@ -1,5 +1,6 @@
 # Set the root dir of the Halide checkout
 $ROOT = "C:\Code\Halide"
+cd $ROOT
 
 $ErrorActionPreference = "Continue"
 
@@ -56,7 +57,7 @@ cmake -D LLVM_ENABLE_TERMINFO=OFF -D LLVM_TARGETS_TO_BUILD='X86;ARM;NVPTX;AArch6
 MSBuild.exe /m /t:Build /p:Configuration="Release" .\ALL_BUILD.vcxproj
 
 cd $ROOT\llvm
-if (! (Test-Path build-32)) {
+if (! (Test-Path build-32)) { 
   mkdir build-32
 }
 cd build-32

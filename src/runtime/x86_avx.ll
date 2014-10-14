@@ -44,6 +44,16 @@ define weak_odr <4 x double> @floor_f64x4(<4 x double> %arg) nounwind alwaysinli
    ret <4 x double> %1
 }
 
+define weak_odr <8 x float> @trunc_f32x8(<8 x float> %arg) nounwind alwaysinline {
+   %1 = tail call <8 x float> @llvm.x86.avx.round.ps.256(<8 x float> %arg, i32 3) nounwind
+   ret <8 x float> %1
+}
+
+define weak_odr <4 x double> @trunc_f64x4(<4 x double> %arg) nounwind alwaysinline {
+   %1 = tail call <4 x double> @llvm.x86.avx.round.pd.256(<4 x double> %arg, i32 3) nounwind
+   ret <4 x double> %1
+}
+
 define weak_odr <8 x float> @abs_f32x8(<8 x float> %x) nounwind uwtable readnone alwaysinline {
   %arg = bitcast <8 x float> %x to <8 x i32>
   %mask = lshr <8 x i32> <i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1, i32 -1>, <i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>

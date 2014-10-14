@@ -79,7 +79,7 @@ struct Target {
 
     void set_features(std::vector<Feature> features_to_set, bool value = true) {
         for (size_t i = 0; i < features_to_set.size(); i++) {
-            set_feature(features_to_set[i]);
+            set_feature(features_to_set[i], value);
         }
     }
 

@@ -81,18 +81,18 @@ Type map_type(const Type &type) {
 
 // Most GLSL builtins are only defined for float arguments, so we may have to
 // introduce type casts around the arguments and the entire function call.
-// TODO: handle vector types
 Expr call_builtin(const Type &result_type, const std::string &func,
                   const std::vector<Expr> &args) {
+    Type float_type = Float(32, result_type.width);
     std::vector<Expr> new_args(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (!args[i].type().is_float()) {
-            new_args[i] = Cast::make(Float(32), args[i]);
+            new_args[i] = Cast::make(float_type, args[i]);
         } else {
             new_args[i] = args[i];
         }
     }
-    Expr val = Call::make(Float(32), func, new_args, Call::Extern);
+    Expr val = Call::make(float_type, func, new_args, Call::Extern);
     return simplify(Cast::make(result_type, val));
 }
 
@@ -206,16 +206,28 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
 }
 
 void CodeGen_GLSL::visit(const Cast *op) {
-    Type target_type = map_type(op->type);
     Type value_type = op->value.type();
-    Expr value = op->value;
-    if (target_type == map_type(value_type)) {
-        // Skip unneeded casts
-        op->value.accept(this);
+    // If both types are represented by the same GLSL type, no explicit cast
+    // is necessary.
+    if (map_type(op->type) == map_type(value_type)) {
+        Expr value = op->value;
+        if (value_type.code == Type::Float) {
+            // float->int conversions may need explicit truncation if the
+            // integer types is embedded into floats.  (Note: overflows are
+            // considered undefined behavior, so we do nothing about values
+            // that are out of range of the target type.)
+            if (op->type.code == Type::UInt) {
+                value = simplify(floor(value));
+            } else if (op->type.code == Type::Int) {
+                value = simplify(trunc(value));
+            }
+        }
+        value.accept(this);
         return;
+    } else {
+        Type target_type = map_type(op->type);
+        print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
-
-    print_assignment(target_type, print_type(target_type) + "(" + print_expr(value) + ")");
 }
     
 void CodeGen_GLSL::visit(const Let *op) {
@@ -442,7 +454,8 @@ void CodeGen_GLSL::visit(const Div *op) {
         // Halide's integer division is defined to round down. Since the
         // rounding behavior of GLSL's integer division is undefined, emulate
         // the correct behavior using floating point arithmetic.
-        Expr val = Div::make(Cast::make(Float(32), op->a), Cast::make(Float(32), op->b));
+        Type float_type = Float(32, op->type.width);
+        Expr val = Div::make(Cast::make(float_type, op->a), Cast::make(float_type, op->b));
         print_expr(call_builtin(op->type, "floor_f32", vec(val)));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
@@ -471,11 +484,11 @@ std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     }
 }
 
-void CodeGen_GLSL::visit(const Load *op) {
+void CodeGen_GLSL::visit(const Load *) {
     internal_error << "GLSL: unexpected Load node encountered.\n";
 }
 
-void CodeGen_GLSL::visit(const Store *op) {
+void CodeGen_GLSL::visit(const Store *) {
     internal_error << "GLSL: unexpected Store node encountered.\n";
 }
 
@@ -540,15 +553,28 @@ void CodeGen_GLSL::visit(const Call *op) {
             Expr one_val = op->args[1];
             Expr weight = op->args[2];
 
-            // If weight is an integer, convert it to float and normalize to
-            // the [0.0f, 1.0f] range.
+            internal_assert(weight.type().is_uint() || weight.type().is_float());
             if (weight.type().is_uint()) {
+                // Normalize integer weights to [0.0f, 1.0f] range.
+                internal_assert(weight.type().bits < 32);
                 weight = Div::make(Cast::make(Float(32), weight),
                                    Cast::make(Float(32), weight.type().imax()));
+            } else if (op->type.is_uint()) {
+                // Round float weights down to next multiple of (1/op->type.imax())
+                // to give same results as lerp based on integer arithmetic.
+                internal_assert(op->type.bits < 32);
+                weight = floor(weight * op->type.imax()) / op->type.imax();
             }
 
-            // If zero_val and one_val are integers, add appropriate type casts.
-            print_expr(call_builtin(op->type, "mix", vec(zero_val, one_val, weight)));
+            Type result_type = Float(32, op->type.width);
+            Expr e = call_builtin(result_type, "mix", vec(zero_val, one_val, weight));
+
+            if (!op->type.is_float()) {
+                // Mirror rounding implementation of Halide's integer lerp.
+                e = Cast::make(op->type, floor(e + 0.5f));
+            }
+            print_expr(e);
+
             return;
         } else if (op->name == Call::abs) {
             print_expr(call_builtin(op->type, op->name, op->args));
@@ -703,6 +729,13 @@ void check(Expr e, const string &result) {
 void CodeGen_GLSL::test() {
     vector<Expr> e;
 
+    // Uint8 is embedded in GLSL floats, so no cast necessary
+    check(cast<float>(Variable::make(UInt(8), "x") * 1.0f),
+          "float $ = $x * 1.0000000;\n");
+    // But truncation is necessary for the reverse direction
+    check(cast<uint8_t>(Variable::make(Float(32), "x")),
+          "float $ = floor($x);\n");
+
     check(Min::make(Expr(1), Expr(5)),
           "float $ = min(1.0000000, 5.0000000);\n"
           "int $ = int($);\n");
@@ -711,15 +744,54 @@ void CodeGen_GLSL::test() {
           "float $ = max(1.0000000, 5.0000000);\n"
           "int $ = int($);\n");
 
-    // Lerp with integer weight
+    check(Max::make(Broadcast::make(1, 4), Broadcast::make(5, 4)),
+          "vec4 $ = vec4(1.0000000);\n"
+          "vec4 $ = vec4(5.0000000);\n"
+          "vec4 $ = max($, $);\n"
+          "ivec4 $ = ivec4($);\n");
+
+    check(Variable::make(Int(32), "x") / Expr(3),
+          "float $ = float($x);\n"
+          "float $ = $ * 0.33333334;\n"
+          "float $ = floor($);\n"
+          "int $ = int($);\n");
+    check(Variable::make(Int(32, 4), "x") / Variable::make(Int(32, 4), "y"),
+          "vec4 $ = vec4($x);\n"
+          "vec4 $ = vec4($y);\n"
+          "vec4 $ = $ / $;\n"
+          "vec4 $ = floor($);\n"
+          "ivec4 $ = ivec4($);\n");
+    check(Variable::make(Float(32, 4), "x") / Variable::make(Float(32, 4), "y"),
+          "vec4 $ = $x / $y;\n");
+
+    // Integer lerp with integer weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)),
-          "float $ = mix(0.0000000, 255.00000, 0.49803922);\n");
+          "float $ = mix(0.0000000, 255.00000, 0.49803922);\n"
+          "float $ = $ + 0.50000000;\n"
+          "float $ = floor($);\n");
 
-    // Lerp with float weight
+    // Integer lerp with float weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f),
-          "float $ = mix(0.0000000, 255.00000, 0.30000001);\n");
+          "float $ = mix(0.0000000, 255.00000, 0.29803923);\n"
+          "float $ = $ + 0.50000000;\n"
+          "float $ = floor($);\n");
 
+    // Floating point lerp
+    check(lerp(0.0f, 1.0f, 0.3f),
+          "float $ = mix(0.0000000, 1.0000000, 0.30000001);\n");
+
+    // Vectorized lerp
+    check(lerp(Variable::make(Float(32, 4), "x"), Variable::make(Float(32, 4), "y"), Broadcast::make(0.25f, 4)),
+          "vec4 $ = vec4(0.25000000);\n"
+          "vec4 $ = mix($x, $y, $);\n");
+
+    // Sin with scalar arg
     check(sin(3.0f), "float $ = sin(3.0000000);\n");
+
+    // Sin with vector arg
+    check(Call::make(Float(32, 4), "sin_f32", vec(Broadcast::make(1.f, 4)), Internal::Call::Extern),
+          "vec4 $ = vec4(1.0000000);\n"
+          "vec4 $ = sin($);\n");
 
     // use float version of abs in GLSL
     check(abs(-2),
@@ -729,9 +801,13 @@ void CodeGen_GLSL::test() {
     check(Halide::print(3.0f), "float $ = 3.0000000;\n");
 
     // Test rounding behavior of integer division.
-    check(-2/Expr(3),
-          "float $ = floor(-0.66666669);\n"
+    check(Variable::make(Int(32), "x") / Variable::make(Int(32), "y"),
+          "float $ = float($x);\n"
+          "float $ = float($y);\n"
+          "float $ = $ / $;\n"
+          "float $ = floor($);\n"
           "int $ = int($);\n");
+
 
     check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
                        Broadcast::make(1.f, 4),
