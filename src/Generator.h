@@ -281,6 +281,23 @@ public:
         return filter_arguments;
     }
 
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for the current target. */
+    template <typename data_t>
+    int natural_vector_size() const {
+        const bool is_avx2 = get_target().has_feature(Halide::Target::AVX2);
+        const bool is_avx = get_target().has_feature(Halide::Target::AVX) && !is_avx2;
+        const bool is_integer = std::numeric_limits<data_t>::is_integer;
+
+        // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
+        // However, AVX has a very limited complement of integer instructions;
+        // restricting us to SSE4.1 size for integer operations produces much
+        // better performance. (AVX2 does have good integer operations for 256-bit
+        // registers.)
+        int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
+        return vector_byte_size / static_cast<int>(sizeof(data_t));
+    }
+
     // Call build() and produce compiled output of the given func.
     // All files will be in the given directory, with the given file_base_name
     // plus an appropriate extension. If file_base_name is empty, function_name

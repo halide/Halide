@@ -60,6 +60,7 @@ public:
         g(x, y, c) = cast<int32_t>(f(x, y) * c * compiletime_factor * runtime_factor);
 
         g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
+        g.vectorize(x, natural_vector_size<float>());
 
         return g;
     }
