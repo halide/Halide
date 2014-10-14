@@ -1869,10 +1869,15 @@ private:
             }
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::isnan) {
-            Expr a = mutate(op->args[0]);
-            Type ta = a.type();
+            Expr arg = mutate(op->args[0]);
+            Type ta = arg.type();
+            float f = 0.0f;
             if (!ta.is_float()) {
                 expr = false;
+            } else if (const_float(arg, &f)) {
+                expr = isnan(f);
+            } else if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
             } else {
                 expr = op;
             }

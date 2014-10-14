@@ -1619,7 +1619,7 @@ void CodeGen::visit(const Call *op) {
             internal_assert(op->args.size() == 1);
             Value *a = codegen(op->args[0]);
             Type t = op->args[0].type();
-            internal_assert(t.is_float());  // assert or not ?
+            internal_assert(t.is_float());
             value = builder->CreateFCmpUNO(a, a);
         } else if (op->name == Call::reinterpret) {
             internal_assert(op->args.size() == 1);
