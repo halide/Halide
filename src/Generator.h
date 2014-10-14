@@ -259,6 +259,8 @@ protected:
 
 class GeneratorBase : public NamesInterface {
 public:
+    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
+
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
         EmitOptions()
@@ -293,8 +295,6 @@ private:
     std::map<std::string, Internal::Parameter *> filter_params;
     std::map<std::string, Internal::GeneratorParamBase *> generator_params;
     bool params_built;
-
-    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
 
     void build_params();
 
