@@ -17,7 +17,7 @@ bool is_alnum(char c) { return is_alpha(c) || (c >= '0' && c <= '9'); }
 bool is_valid_name(const std::string& n) {
     if (n.empty()) return false;
     if (!is_alpha(n[0])) return false;
-    for (int i = 1; i < n.size(); ++i) {
+    for (size_t i = 1; i < n.size(); ++i) {
         if (!is_alnum(n[i])) return false;
     }
     return true;
