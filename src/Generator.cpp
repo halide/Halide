@@ -2,14 +2,25 @@
 #if __cplusplus > 199711L
 
 #include "Generator.h"
-#include <regex>
 
 namespace {
 
 // Return true iff the name is valid for Generators or Params.
+// (NOTE: gcc didn't add proper std::regex support until v4.9;
+// we don't yet require this, hence the hand-rolled replacement.)
+
+// Note that this includes '_'
+bool is_alpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c == '_'); }
+
+bool is_alnum(char c) { return is_alpha(c) || (c >= '0' && c <= '9'); }
+
 bool is_valid_name(const std::string& n) {
-    static std::regex valid_name_pattern("^[A-Za-z_][A-Za-z0-9_]*$");
-    return std::regex_match(n, valid_name_pattern);
+    if (n.empty()) return false;
+    if (!is_alpha(n[0])) return false;
+    for (int i = 1; i < n.size(); ++i) {
+        if (!is_alnum(n[i])) return false;
+    }
+    return true;
 }
 
 }  // namespace
@@ -50,6 +61,11 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
 
     std::vector<std::string> generator_names = Internal::GeneratorRegistry::enumerate();
+    if (generator_names.size() == 0) {
+        cerr << "No generators have been registered\n";
+        cerr << kUsage;
+        return 1;
+    }
 
     std::string generator_name = flags_info["-g"];
     if (generator_name.empty()) {
@@ -196,12 +212,14 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
 }
 
 void GeneratorBase::emit_filter(const std::string &output_dir, const std::string &function_name,
-                                const EmitOptions &options) {
+                                const std::string &file_base_name, const EmitOptions &options) {
     Func func = build();
 
     build_params();
 
-    std::string base_path = output_dir + "/" + function_name;
+    std::string base_path = file_base_name.empty() ?
+        output_dir + "/" + function_name :
+        output_dir + "/" + file_base_name;
     if (options.emit_o) {
         func.compile_to_object(base_path + ".o", filter_arguments, function_name, target);
     }

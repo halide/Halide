@@ -259,6 +259,8 @@ protected:
 
 class GeneratorBase : public NamesInterface {
 public:
+    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
+
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
         EmitOptions()
@@ -274,10 +276,17 @@ public:
 
     void set_generator_param_values(const GeneratorParamValues &params);
 
-    std::vector<Argument> get_filter_arguments() const;
+    std::vector<Argument> get_filter_arguments() {
+        build_params();
+        return filter_arguments;
+    }
 
+    // Call build() and produce compiled output of the given func.
+    // All files will be in the given directory, with the given file_base_name
+    // plus an appropriate extension. If file_base_name is empty, function_name
+    // will be used as file_base_name.
     void emit_filter(const std::string &output_dir, const std::string &function_name,
-                     const EmitOptions &options = EmitOptions());
+                     const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
 protected:
     GeneratorBase(size_t size);
@@ -289,8 +298,6 @@ private:
     std::map<std::string, Internal::Parameter *> filter_params;
     std::map<std::string, Internal::GeneratorParamBase *> generator_params;
     bool params_built;
-
-    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
 
     void build_params();
 
