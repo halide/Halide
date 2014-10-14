@@ -113,9 +113,8 @@ public:
         Func wrapper;
         Var x, y, c;
         wrapper(x, y, c) = extern_stage_combine(x, y, c);
-        wrapper.bound(c, 0, 3);
 
-        //wrapper.reorder(c, x, y);
+        wrapper.reorder(c, x, y);
         extern_stage_1.compute_at(wrapper, y);
         extern_stage_2.compute_at(wrapper, y);
         extern_stage_combine.compute_at(wrapper, y);
