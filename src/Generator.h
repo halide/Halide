@@ -178,12 +178,21 @@ public:
     void set(const T &new_value) {
         value = new_value;
     }
+
     void set_from_string(const std::string &new_value_string) override {
         // delegate to a function that we can specialize based on the template argument
         set(parse(new_value_string));
     }
-    operator const T &() const { return value; }
+
+    operator T() const { return value; }
+
     operator Expr() const { return value; }
+
+    // Add an explicit overload to operator! to resolve ambiguity between
+    // the overloads on T and Expr
+    inline bool operator!() const {
+        return !value;
+    }
 
 private:
     T value;
@@ -272,7 +281,7 @@ public:
 
     virtual Func build() = 0;
 
-    const Target &get_target() const { return target; }
+    Target get_target() const { return target; }
 
     void set_generator_param_values(const GeneratorParamValues &params);
 
