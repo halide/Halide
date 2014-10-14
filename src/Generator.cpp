@@ -212,12 +212,14 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
 }
 
 void GeneratorBase::emit_filter(const std::string &output_dir, const std::string &function_name,
-                                const EmitOptions &options) {
+                                const std::string &file_base_name, const EmitOptions &options) {
     Func func = build();
 
     build_params();
 
-    std::string base_path = output_dir + "/" + function_name;
+    std::string base_path = file_base_name.empty() ?
+        output_dir + "/" + function_name :
+        output_dir + "/" + file_base_name;
     if (options.emit_o) {
         func.compile_to_object(base_path + ".o", filter_arguments, function_name, target);
     }
