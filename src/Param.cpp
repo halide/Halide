@@ -75,6 +75,16 @@ OutputImageParam &OutputImageParam::set_bounds(int dim, Expr min, Expr extent) {
     return set_min(dim, min).set_extent(dim, extent);
 }
 
+OutputImageParam &OutputImageParam::set_type(Type t) {
+    param.set_type(t);
+    return *this;
+}
+
+OutputImageParam &OutputImageParam::set_dimensions(int d) {
+    dims = d;
+    return *this;
+}
+
 int OutputImageParam::dimensions() const {
     return dims;
 }

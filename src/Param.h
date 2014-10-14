@@ -234,6 +234,12 @@ public:
     /** Set the min and extent in one call. */
     EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
 
+    /** Set the type. */
+    EXPORT OutputImageParam &set_type(Type t);
+
+    /** Set the dimensionality. */
+    EXPORT OutputImageParam &set_dimensions(int d);
+
     /** Get the dimensionality of this image parameter */
     EXPORT int dimensions() const;
 

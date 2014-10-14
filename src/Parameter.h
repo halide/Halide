@@ -105,6 +105,9 @@ public:
     EXPORT void set_max_value(Expr e);
     EXPORT Expr get_max_value();
     // @}
+
+    /** Replace the Parameter's type. */
+    EXPORT void set_type(Type t);
 };
 
 /** Validate arguments to a call to a func, image or imageparam. */

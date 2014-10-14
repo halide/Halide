@@ -167,6 +167,11 @@ Expr Parameter::get_max_value() {
     return contents.ptr->max_value;
 }
 
+void Parameter::set_type(Type t) {
+    check_defined();
+    contents.ptr->type = t;
+}
+
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
         << args->size() << "-argument call to \""
