@@ -730,6 +730,10 @@ void CodeGen_C::visit(const Call *op) {
             string a0 = print_expr(op->args[0]);
             string a1 = print_expr(op->args[1]);
             rhs << a0 << " >> " << a1;
+        } else if (op->name == Call::isnan) {
+            internal_assert(op->args.size() == 1);
+            string a0 = print_expr(op->args[0]);
+            rhs << "isnan( " <<  a0 << ")";
         } else if (op->name == Call::rewrite_buffer) {
             int dims = ((int)(op->args.size())-2)/3;
             (void)dims; // In case internal_assert is ifdef'd to do nothing

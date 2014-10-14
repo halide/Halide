@@ -145,6 +145,7 @@ CodeGen_GLSL::CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {
     builtin["mix"] = "mix";
     builtin["mod"] = "mod";
     builtin["abs"] = "abs";
+    builtin["isnan"] = "isnan";
 }
 
 string CodeGen_GLSL::print_type(Type type) {

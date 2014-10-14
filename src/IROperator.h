@@ -868,12 +868,12 @@ inline Expr trunc(Expr x) {
     }
 }
 
-/** Return the integer part of a floating-point expression. If the argument is
- *  not floating-point, it is cast to Float(32). The return value is still in
- *  floating point, despite being a whole number. Vectorizes cleanly. */
-inline Expr isNaN(Expr x) {
-    user_assert(x.defined()) << "isNaN of undefined Expr\n";
-    return Internal::Call::make(x.type(), Internal::Call::isnan, vec(x), Internal::Call::Intrinsic);
+/** Returns true if the argument is a Not a Number (NaN). Requires a floating point argument.
+  * Vectorizes cleanly. */
+inline Expr isnan(Expr x) {
+    user_assert(x.defined()) << "isnan of undefined Expr\n";
+    user_assert(x.type().is_float()) << "isnan only works for float";
+    return Internal::Call::make(Bool(), Internal::Call::isnan, vec(x), Internal::Call::Intrinsic);
 }
 
 /** Return the fractional part of a floating-point expression. If the argument
