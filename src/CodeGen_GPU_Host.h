@@ -97,7 +97,6 @@ private:
     CodeGen_GPU_Dev *cgdev;
 };
 
-
 }}
 
 #endif

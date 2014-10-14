@@ -200,10 +200,15 @@ extern int halide_get_trace_file(void *user_context);
  * (flushing the trace). Returns zero on success. */
 extern int halide_shutdown_trace();
 
+/** All Halide GPU or device backend implementations much provide an interface
+ * to be used with halide_device_malloc, etc.
+ */
+struct halide_device_interface;
+
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-extern void halide_release(void *user_context);
+extern void halide_device_release(void *user_context, const halide_device_interface *interface);
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
@@ -211,33 +216,17 @@ extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
 
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
-extern int halide_copy_to_dev(void *user_context, struct buffer_t *buf);
+extern int halide_copy_to_device(void *user_context, struct buffer_t *buf);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-extern int halide_dev_sync(void *user_context);
+extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 
 /** Allocate device memory to back a buffer_t. */
-extern int halide_dev_malloc(void *user_context, struct buffer_t *buf);
+extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
 
 /** Free any device memory associated with a buffer_t. */
-extern int halide_dev_free(void *user_context, struct buffer_t *buf);
-
-/** These are forward declared here to ensure they have the same
- * signature across different Halide gpu backends. Do not call
- * them. */
-// @{
-extern int halide_init_kernels(void *user_context, void **state_ptr,
-                               const char *src, int size);
-extern int halide_dev_run(void *user_context,
-                          void *state_ptr,
-                          const char *entry_name,
-                          int blocksX, int blocksY, int blocksZ,
-                          int threadsX, int threadsY, int threadsZ,
-                          int shared_mem_bytes,
-                          size_t arg_sizes[],
-                          void *args[]);
-// @}
+extern int halide_device_free(void *user_context, struct buffer_t *buf);
 
 /** Set the platform name for OpenCL to use (e.g. "Intel" or
  * "NVIDIA"). The argument is copied internally. The opencl runtime

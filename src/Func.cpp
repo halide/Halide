@@ -1225,7 +1225,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, GPU_GLSL);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();

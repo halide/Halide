@@ -1,13 +1,16 @@
 #include "runtime_internal.h"
 #include "scoped_spin_lock.h"
+#include "device_interface.h"
 #include "../buffer_t.h"
-#include "HalideRuntime.h"
+#include "HalideRuntimeOpenCL.h"
 
 #include "mini_cl.h"
 
 #include "cuda_opencl_shared.h"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
+
+WEAK halide_device_interface opencl_device_interface;
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -24,7 +27,9 @@ cl_context WEAK *cl_ctx_ptr = NULL;
 cl_command_queue WEAK *cl_q_ptr = NULL;
 volatile int WEAK *cl_lock_ptr = NULL;
 
-}}} // namespace Halide::Runtime::Internal
+}}}} // namespace Halide::Runtime::Internal::OpenCL
+
+using namespace Halide::Runtime::Internal::OpenCL;
 
 // Allow OpenCL 1.1 features to be used.
 #define ENABLE_OPENCL_11
@@ -126,21 +131,23 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 
-WEAK bool validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
+WEAK bool validate_device_pointer(void *user_context, buffer_t* buf, size_t size=0) {
     if (buf->dev == 0) {
         return true;
     }
 
+    cl_mem dev_ptr = (cl_mem)get_device_handle(buf->dev);
+
     size_t real_size;
-    cl_int result = clGetMemObjectInfo((cl_mem)buf->dev, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
+    cl_int result = clGetMemObjectInfo(dev_ptr, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
     if (result != CL_SUCCESS) {
-        error(user_context) << "CL: Bad device pointer " << (void *)buf->dev
+        error(user_context) << "CL: Bad device pointer " << (void *)dev_ptr
                             << ": clGetMemObjectInfo returned "
                             << get_opencl_error_name(result);
         return false;
     }
 
-    debug(user_context) << "CL: validate " << (void *)buf->dev
+    debug(user_context) << "CL: validate " << (void *)dev_ptr
                         << ": asked for " << size
                         << ", actual allocated " << real_size << "\n";
 
@@ -349,17 +356,19 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
 extern "C" {
 
-WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
 
-    // halide_dev_free, at present, can be exposed to clients and they
-    // should be allowed to call halide_dev_free on any buffer_t
+    // halide_opencl_device_free, at present, can be exposed to clients and they
+    // should be allowed to call halide_opencl_device_free on any buffer_t
     // including ones that have never been used with a GPU.
     if (buf->dev == 0) {
       return 0;
     }
 
+    cl_mem dev_ptr = (cl_mem)get_device_handle(buf->dev);
+
     debug(user_context)
-        << "CL: halide_dev_free (user_context: " << user_context
+        << "CL: halide_opencl_device_free (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
@@ -371,11 +380,12 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
-    halide_assert(user_context, validate_dev_pointer(user_context, buf));
-    debug(user_context) << "    clReleaseMemObject " << (void *)buf->dev << "\n";
-    cl_int result = clReleaseMemObject((cl_mem)buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
+    debug(user_context) << "    clReleaseMemObject " << (void *)dev_ptr << "\n";
+    cl_int result = clReleaseMemObject((cl_mem)dev_ptr);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
+    delete_device_wrapper(buf->dev);
     buf->dev = 0;
     if (result != CL_SUCCESS) {
         error(user_context) << "CL: clReleaseMemObject failed: "
@@ -505,8 +515,8 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
 }
 
 // Used to generate correct timings when tracing
-WEAK int halide_dev_sync(void *user_context) {
-    debug(user_context) << "CL: halide_dev_sync (user_context: " << user_context << ")\n";
+  WEAK int halide_opencl_device_sync(void *user_context, struct buffer_t *) {
+    debug(user_context) << "CL: halide_opencl_device_sync (user_context: " << user_context << ")\n";
 
     ClContext ctx(user_context);
     halide_assert(user_context, ctx.error == CL_SUCCESS);
@@ -530,9 +540,9 @@ WEAK int halide_dev_sync(void *user_context) {
     return CL_SUCCESS;
 }
 
-WEAK void halide_release(void *user_context) {
+WEAK int halide_opencl_device_release(void *user_context) {
     debug(user_context)
-        << "CL: halide_release (user_context: " << user_context << ")\n";
+        << "CL: halide_opencl_device_release (user_context: " << user_context << ")\n";
 
     // The ClContext object does not allow the context storage to be modified,
     // so we use halide_acquire_context directly.
@@ -541,7 +551,7 @@ WEAK void halide_release(void *user_context) {
     cl_command_queue q;
     err = halide_acquire_cl_context(user_context, &ctx, &q);
     if (err != 0 || !ctx) {
-        return;
+        return -1;
     }
 
     err = clFinish(q);
@@ -577,11 +587,13 @@ WEAK void halide_release(void *user_context) {
     }
 
     halide_release_cl_context(user_context);
+
+    return 0;
 }
 
-WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     debug(user_context)
-        << "CL: halide_dev_malloc (user_context: " << user_context
+        << "CL: halide_opencl_device_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     ClContext ctx(user_context);
@@ -591,7 +603,7 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
 
     size_t size = buf_size(user_context, buf);
     if (buf->dev) {
-        halide_assert(user_context, validate_dev_pointer(user_context, buf, size));
+        halide_assert(user_context, validate_device_pointer(user_context, buf, size));
         return 0;
     }
 
@@ -610,14 +622,20 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
 
     cl_int err;
     debug(user_context) << "    clCreateBuffer -> " << size << " ";
-    buf->dev = (uint64_t)clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
-    if (err != CL_SUCCESS || buf->dev == 0) {
+    cl_mem dev_ptr = clCreateBuffer(ctx.context, CL_MEM_READ_WRITE, size, NULL, &err);
+    if (err != CL_SUCCESS || dev_ptr == 0) {
         debug(user_context) << get_opencl_error_name(err) << "\n";
         error(user_context) << "CL: clCreateBuffer failed: "
                             << get_opencl_error_name(err);
         return err;
     } else {
         debug(user_context) << (void *)buf->dev << "\n";
+    }
+    buf->dev = new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
+    if (buf->dev == 0) {
+        error(user_context) << "CL: out of memory allocating device wrapper.\n";
+        clReleaseMemObject(dev_ptr);
+        return -1;
     }
 
     debug(user_context)
@@ -632,14 +650,14 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     return CL_SUCCESS;
 }
 
-WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
-    int err = halide_dev_malloc(user_context, buf);
+WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
+    int err = halide_opencl_device_malloc(user_context, buf);
     if (err) {
         return err;
     }
 
     debug(user_context)
-        << "CL: halide_copy_to_dev (user_context: " << user_context
+        << "CL: halide_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple
@@ -656,9 +674,9 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
         #endif
 
         halide_assert(user_context, buf->host && buf->dev);
-        halide_assert(user_context, validate_dev_pointer(user_context, buf));
+        halide_assert(user_context, validate_device_pointer(user_context, buf));
 
-        dev_copy c = make_host_to_dev_copy(buf);
+        device_copy c = make_host_to_device_copy(buf);
 
         for (int w = 0; w < c.extent[3]; w++) {
             for (int z = 0; z < c.extent[2]; z++) {
@@ -729,7 +747,7 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
+WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
     if (!buf->dev_dirty) {
         return 0;
     }
@@ -754,9 +772,9 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
         #endif
 
         halide_assert(user_context, buf->host && buf->dev);
-        halide_assert(user_context, validate_dev_pointer(user_context, buf));
+        halide_assert(user_context, validate_device_pointer(user_context, buf));
 
-        dev_copy c = make_dev_to_host_copy(buf);
+        device_copy c = make_device_to_host_copy(buf);
 
         for (int w = 0; w < c.extent[3]; w++) {
             for (int z = 0; z < c.extent[2]; z++) {
@@ -827,16 +845,16 @@ WEAK int halide_copy_to_host(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_dev_run(void *user_context,
-                        void *state_ptr,
-                        const char* entry_name,
-                        int blocksX, int blocksY, int blocksZ,
-                        int threadsX, int threadsY, int threadsZ,
-                        int shared_mem_bytes,
-                        size_t arg_sizes[],
-                        void* args[]) {
+WEAK int halide_opencl_run(void *user_context,
+                           void *state_ptr,
+                           const char* entry_name,
+                           int blocksX, int blocksY, int blocksZ,
+                           int threadsX, int threadsY, int threadsZ,
+                           int shared_mem_bytes,
+                           size_t arg_sizes[],
+                           void* args[]) {
     debug(user_context)
-        << "CL: halide_dev_run (user_context: " << user_context << ", "
+        << "CL: halide_opencl_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
@@ -932,6 +950,10 @@ WEAK int halide_dev_run(void *user_context,
     return 0;
 }
 
+WEAK const halide_device_interface *halide_opencl_device_interface() {
+    return &opencl_device_interface;
+}
+
 } // extern "C" linkage
 
 namespace Halide { namespace Runtime { namespace Internal {
@@ -987,5 +1009,14 @@ WEAK const char *get_opencl_error_name(cl_int err) {
     default: return "<Unknown error>";
     }
 }
+
+WEAK halide_device_interface opencl_device_interface = {
+    halide_opencl_device_malloc,
+    halide_opencl_device_free,
+    halide_opencl_device_sync,
+    halide_opencl_device_release,
+    halide_opencl_copy_to_host,
+    halide_opencl_copy_to_device,
+};
 
 }}} // namespace Halide::Runtime::Internal

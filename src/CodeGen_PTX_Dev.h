@@ -41,6 +41,8 @@ public:
 
     void dump();
 
+    std::string api_unique_name() { return "cuda"; }
+
 protected:
     using CodeGen::visit;
 
