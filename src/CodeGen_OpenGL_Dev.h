@@ -26,10 +26,16 @@ public:
     // CodeGen_GPU_Dev interface
     void add_kernel(Stmt stmt, const std::string &name,
                     const std::vector<GPU_Argument> &args);
+
     void init_module();
+
     std::vector<char> compile_to_src();
+
     std::string get_current_kernel_name();
+
     void dump();
+
+    std::string api_unique_name() { return "opengl"; }
 
 private:
     CodeGen_GLSL *glc;

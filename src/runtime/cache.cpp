@@ -157,7 +157,7 @@ struct CacheEntry {
     ~CacheEntry() {
         halide_free(user_context, key);
         for (int32_t i = 0; i < tuple_count; i++) {
-          halide_dev_free(user_context, &buffer(i));
+          halide_device_free(user_context, &buffer(i));
           halide_free(user_context, buffer(i).host);
         }
     }

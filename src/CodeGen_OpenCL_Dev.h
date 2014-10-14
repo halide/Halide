@@ -36,6 +36,8 @@ public:
 
     void dump();
 
+    std::string api_unique_name() { return "opencl"; }
+
 protected:
 
     class CodeGen_OpenCL_C : public CodeGen_C {

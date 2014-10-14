@@ -45,6 +45,12 @@ struct CodeGen_GPU_Dev {
 
     virtual void dump() = 0;
 
+    /** This routine returns the GPU API name that is combined into
+     *  runtime routine names to ensure each GPU API has a unique
+     *  name.
+     */
+    std::string api_unique_name() = 0;
+
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);
     static bool is_gpu_thread_var(const std::string &name);

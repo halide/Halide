@@ -584,11 +584,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
         };
-        llvm::Function *dev_run_fn = module->getFunction("halide_dev_run");
-        internal_assert(dev_run_fn) << "Could not find halide_dev_run in module\n";
+	std::string run_fn_name = "halide_" + cgdev->api_unique_name() + "_run";
+        llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
+        internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-        CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_dev_run");
+        CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + run_fn_name);
     } else {
         CodeGen_CPU::visit(loop);
     }
