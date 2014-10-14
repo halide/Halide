@@ -12,7 +12,13 @@ void my_error_handler(void *user_context, const char *msg) {
 int main(int argc, char **argv) {
     Func f, g;
     Var x, y;
-    ImageParam param(Int(32), 2);
+
+    // Note that we deliberately initialize to incorrect type and dimensions here,
+    // to verify that set_type and set_dimensions are working.
+    ImageParam param(Float(32), 3);
+    param.set_type(Int(32));
+    param.set_dimensions(2);
+
     Image<int> image1(128, 73);
     Image<int> image2(144, 23);
 
