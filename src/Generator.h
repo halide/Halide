@@ -276,8 +276,12 @@ public:
 
     std::vector<Argument> get_filter_arguments() const;
 
+    // Call build() and produce compiled output of the given func.
+    // All files will be in the given directory, with the given file_base_name
+    // plus an appropriate extension. If file_base_name is empty, function_name
+    // will be used as file_base_name.
     void emit_filter(const std::string &output_dir, const std::string &function_name,
-                     const EmitOptions &options = EmitOptions());
+                     const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
 protected:
     GeneratorBase(size_t size);
