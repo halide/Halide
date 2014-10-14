@@ -33,19 +33,20 @@ void test_transpose(int mode) {
         case scalar_trans:
             block_transpose.compute_at(output, x).unroll(x).unroll(y);
             algorithm = "Scalar transpose";
+            output.compile_to_assembly("scalar_transpose.s", std::vector<Argument>());
             break;
         case vec_y_trans:
             block_transpose.compute_at(output, x).vectorize(y).unroll(x);
             algorithm = "Transpose vectorized in y";
+            output.compile_to_assembly("fast_transpose_y.s", std::vector<Argument>());
             break;
         case vec_x_trans:
             block_transpose.compute_at(output, x).vectorize(x).unroll(y);
             algorithm = "Transpose vectorized in x";
+            output.compile_to_assembly("fast_transpose_x.s", std::vector<Argument>());
             break;
     }
 
-    output.compile_to_lowered_stmt("fast_transpose.stmt");
-    output.compile_to_assembly("fast_transpose.s", std::vector<Argument>());
 
     Image<uint16_t> result(1024, 1024);
     output.compile_jit();
