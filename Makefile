@@ -313,7 +313,7 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
-GENERATOR_TESTS := $(shell ls test/generator/*_test.cpp)
+GENERATOR_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
 
 STATIC_TEST_CXX ?= $(CXX)
@@ -330,7 +330,7 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
-test_generators: $(GENERATOR_TESTS:test/generator/%_test.cpp=generator_%)
+test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
 
 run_tests: test_internal test_correctness test_errors test_tutorials test_static test_warnings test_generators
 	make test_performance
@@ -340,7 +340,8 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
 	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
-	$(GENERATOR_TESTS:test/generator/%_test.cpp=$(BIN_DIR)/generator_%) \
+	$(GENERATOR_TESTS:test/generator/%_aottest.cpp=$(BIN_DIR)/generator_aot_%) \
+	$(GENERATOR_TESTS:test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%)
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
@@ -375,16 +376,20 @@ $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tm
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: test/generator/%_generator.cpp $(GENGEN_DEPS)
 	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< target=host
 
-# By default, %_test.cpp depends on $(FILTERS_DIR)/%.o/.h
-$(BIN_DIR)/generator_%: test/generator/%_test.cpp include/HalideRuntime.h $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h
+# By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h
+$(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp include/HalideRuntime.h $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+
+# By default, %_jittest.cpp don't.
+$(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
 
 # A few tests have additional dependencies, which we'll specify here manually:
-# tiled_blur_test also depends on tiled_blur_blur
-$(BIN_DIR)/generator_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
+# tiled_blur_aottest also depends on tiled_blur_blur
+$(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
 
-# tiled_blur_interleaved_test depends on tiled_blur_interleaved and tiled_blur_blur_interleaved
-$(BIN_DIR)/generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
+# tiled_blur_interleaved_aottest depends on tiled_blur_interleaved and tiled_blur_blur_interleaved
+$(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
 
 # "tiled_blur_interleaved" is produced by using tiled_blur with different generator args.
 $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: test/generator/tiled_blur_generator.cpp $(GENGEN_DEPS)
