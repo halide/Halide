@@ -75,6 +75,7 @@ protected:
 
     void visit(const Call *);
     void visit(const AssertStmt *);
+    void visit(const Ramp *op);
     void visit(const Broadcast *);
 
     void visit(const Evaluate *);
