@@ -9,10 +9,10 @@ namespace {
 // (NOTE: gcc didn't add proper std::regex support until v4.9;
 // we don't yet require this, hence the hand-rolled replacement.)
 
-// Note that this includes '_'
-bool is_alpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c == '_'); }
+bool is_alpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
 
-bool is_alnum(char c) { return is_alpha(c) || (c >= '0' && c <= '9'); }
+// Note that this includes '_'
+bool is_alnum(char c) { return is_alpha(c) || (c == '_') || (c >= '0' && c <= '9'); }
 
 bool is_valid_name(const std::string& n) {
     if (n.empty()) return false;

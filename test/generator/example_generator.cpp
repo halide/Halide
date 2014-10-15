@@ -48,6 +48,10 @@ public:
     // GeneratorParam<bool> badname{ "\001", true };
     // GeneratorParam<bool> badname{ "a name? with! stuff*", true };
 
+    // Note that a leading underscore is legal-but-reserved in C,
+    // but it's outright forbidden here. (underscore after first char is ok.)
+    // GeneratorParam<bool> badname{ "_flag", true };
+
     // Param (and ImageParam) are arguments passed to the filter when
     // it is executed (as opposed to the Generator, during compilation).
     // When jitting, there is effectively little difference between the
