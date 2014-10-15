@@ -918,9 +918,9 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
                        Expr x_size, Expr y_size,
                        GPUAPI /* gpu_api */) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", x.is_rvar),
+        by("__block_id_y", y.is_rvar),
         tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", x.is_rvar);
+        ty("__thread_id_y", y.is_rvar);
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
     parallel(by);
@@ -933,11 +933,11 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        Expr x_size, Expr y_size, Expr z_size,
                        GPUAPI /* gpu_api */) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", x.is_rvar),
-        bz("__block_id_z", x.is_rvar),
+        by("__block_id_y", y.is_rvar),
+        bz("__block_id_z", z.is_rvar),
         tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", x.is_rvar),
-        tz("__thread_id_z", x.is_rvar);
+        ty("__thread_id_y", y.is_rvar),
+        tz("__thread_id_z", z.is_rvar);
     split(x, bx, tx, x_size);
     split(y, by, ty, y_size);
     split(z, bz, tz, z_size);
