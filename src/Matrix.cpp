@@ -108,6 +108,12 @@ std::string strip(std::string name) {
     return name.substr(0, pos);
 }
 
+std::string block_var_name(std::string base_name, int level) {
+    std::ostringstream sout;
+    sout << "b" << level << "_" << base_name;
+    return sout.str();
+}
+
 std::string matrix_name(Matrix *M, std::string name, std::string alt_name = "") {
     static std::string default_name = Internal::make_entity_name(M, "Halide::Matrix", 'M');
 
@@ -122,13 +128,6 @@ std::string matrix_name(Matrix *M, std::string name, std::string alt_name = "") 
     }
 }
 
-}
-
-std::vector<std::string> Matrix::args() const {
-    std::vector<std::string> a(2);
-    a[0] = ij[0].name();
-    a[1] = ij[1].name();
-    return a;
 }
 
 int Matrix::small_offset(Expr row, Expr col) const {
@@ -169,6 +168,8 @@ void Matrix::init(Expr num_row = 0, Expr num_col = 0) {
         }
     }
 
+    // vec_size = 0;
+    // tile_size = 0;
     // Internal::Bound row_bound = {ij[0].name(), 0, nrows};
     // Internal::Bound col_bound = {ij[1].name(), 0, ncols};
     // schedule.bounds().push_back(row_bound);
@@ -197,6 +198,21 @@ bool Matrix::const_size(int &m, int &n) {
     bool is_const = const_num_rows(m);
     is_const = is_const && const_num_cols(n);
     return is_const;
+}
+
+Stage Matrix::base_schedule() {
+    return static_cast<Stage>(func);
+}
+
+Stage Matrix::vector_schedule(Stage &parent) {
+    return parent.specialize(nrows >= vec_size);
+}
+
+Stage Matrix::block_schedule(int level, Stage &parent) {
+    internal_assert(0 <= level && level < blocks.size());
+
+    Block &b = blocks[level];
+    return parent.specialize(nrows >= b.nrows && ncols >= b.ncols);
 }
 
 Matrix::Matrix(std::string name)
@@ -344,6 +360,14 @@ Type Matrix::type() const {
     }
 }
 
+Expr Matrix::num_rows() const {
+    return nrows;
+}
+
+Expr Matrix::num_cols() const {
+    return ncols;
+}
+
 Matrix::operator Tuple() {
     internal_assert(!is_large);
     return Tuple(coeffs);
@@ -410,12 +434,72 @@ Matrix &Matrix::compute_at_columns(Matrix &other) {
 //   return f.realize(nr, nc);
 // }
 
-Expr Matrix::num_rows() const {
-    return nrows;
+Matrix &Matrix::partition(Expr row_size, Expr col_size) {
+    int level = block_sizes.size();
+
+    Var bi = block_var_name("i", level);
+    Var bj = block_var_name("j", level);
+
+    Block b = {row_size, col_size, bi, bj};
+    blocks.push_back(b);
+
+    Stage schedule = block_schedule(level);
+    schedule.tile(row_var(), col_var(), bi, bj, row_size, col_size);
+
+    if (level == vec_level) {
+        const int *vec_size = as_const_int(row_size);
+        user_assert(vec_size) <<
+                "Attemtping to vectorize matrix computations on a partition that doesn't "
+                "have a constant number of rows. Partition at level " << level << " on "
+                "matrix " << name() << " does not have constant height.\n";
+
+        vector_schedule().vectorize(b.bi);
+    }
+
+    return *this;
 }
 
-Expr Matrix::num_cols() const {
-    return ncols;
+Matrix &Matrix::vectorize(int level) {
+    internal_assert(level >= 0);
+
+    user_assert(vec_level == -1) <<
+            "The vectorize schedule on matrices may only be applied at one level "
+            "you have already called vectorize on matrix " << name() << " at "
+            "level " << vec_level << ".\n";
+
+    vec_level = level;
+
+    if (vec_level < blocks.size()) {
+        Block &b = blocks[vec_level];
+
+        const int *vec_size = as_const_int(b.nrows);
+        user_assert(vec_size) <<
+                "Attemtping to vectorize matrix computations on a partition that doesn't "
+                "have a constant number of rows. Partition at level " << level << " on "
+                "matrix " << name() << " does not have constant height.\n";
+
+        vector_schedule().vectorize(b.bi);
+    }
+
+    return *this;
+}
+
+Matrix &Matrix::parallelize(int level) {
+    internal_assert(level >= 0);
+
+    user_assert(par_level == -1) <<
+            "The parallel schedule on matrices may only be applied at one level "
+            "you have already called parallelize on matrix " << name() << " at "
+            "level " << par_level << ".\n";
+
+    par_level = level;
+
+    if (par_level < blocks.size()) {
+        Block &b = blocks[vec_level];
+        parallel_schedule().parallel(b.bj);
+    }
+
+    return *this;
 }
 
 Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
@@ -789,8 +873,18 @@ Matrix operator*(Matrix A, Matrix B) {
     RDom k(0, A.num_cols(), "k");
     prod(i, j) += A(i, k) * B(i, k);
 
-    // const int  vec_size  = 8;
-    // const int  tile_size = 16;
+    const int vec_size  = 16 / A.type().bytes();
+    const int tile_size = 4;
+    prod.partition(vec_size, vec_size);
+    prod.partition(4, 4);
+    prod.partition(2, 2);
+    prod.vectorize(0);
+    prod.parallelize(2);
+
+    if (blocks.size() > 0) {
+        A.compute_at_blocks(prod, 0);
+        B.compute_at_blocks(prod, 0);
+    }
 
     return prod;
 

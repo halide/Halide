@@ -81,9 +81,9 @@ class Matrix {
     /* For large matrices (m > 4 || n > 4) we simply wrap a Func. */
     Func func;
 
-    /* We store a schedule here, which we can apply to the Function as
+    /* We store a schedule here, which we can apply to the Func as
      * soon as we receive a compute_* call. */
-    // Internal::Schedule schedule;
+    Internal::Schedule schedule;
 
     /* Variables for accessing the function as a matrix. */
     std::vector<Var> ij;
@@ -98,16 +98,34 @@ class Matrix {
     /* Number of columns in the matrix. */
     Expr ncols;
 
+    struct Block {
+        Expr nrows;
+        Expr ncols;
+        Var  bi;
+        Var  bj;
+    };
+
+    /* Vector of tuples storing the matrix block partitioning at each level. */
+    std::vector<Block> blocks;
+
+    /* Level of partitioning at which to vectorize operations. */
+    int vec_level;
+
+    /* Level of partitioning at which to parallelize operations. */
+    int par_level;
+
     /* Returns the offset into the expression vector for small matrices. */
     int small_offset(Expr row, Expr col) const;
-
-    /* Help function to return array of variable names. */
-    std::vector<std::string> args() const;
 
     void init(Expr num_row, Expr num_col);
     bool const_num_rows(int &m);
     bool const_num_cols(int &n);
     bool const_size(int &m, int &n);
+
+    Stage base_schedule();
+    Stage vector_schedule();
+    Stage parallel_schedule();
+    Stage block_schedule(int level);
 
     friend class MatrixRef;
 
@@ -130,10 +148,6 @@ public:
     EXPORT Matrix(const Eigen::MatrixBase<M>& mat);
 #endif
 
-    EXPORT Matrix &compute_at_rows(Matrix &other);
-    EXPORT Matrix &compute_at_columns(Matrix &other);
-    // EXPORT Matrix &compute_at_blocks(Matrix &other, Expr block_rows, Expr block_cols);
-
     EXPORT bool is_large_matrix() const {return is_large;}
     EXPORT std::string name() const {return func.name();}
 
@@ -145,6 +159,15 @@ public:
 
     EXPORT Expr num_rows() const;
     EXPORT Expr num_cols() const;
+
+    EXPORT Matrix &compute_at_rows(Matrix &other);
+    EXPORT Matrix &compute_at_columns(Matrix &other);
+    EXPORT Matrix &compute_at_blocks(Matrix &other, int level);
+    EXPORT Matrix &compute_at_column_of_blocks(Matrix &other, int level);
+
+    EXPORT Matrix &partition(Expr row_size, Expr col_size);
+    EXPORT Matrix &vectorize(int level);
+    EXPORT Matrix &parallelize(int level);
 
     EXPORT Matrix row(Expr i);
     EXPORT Matrix col(Expr j);
