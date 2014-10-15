@@ -178,12 +178,21 @@ public:
     void set(const T &new_value) {
         value = new_value;
     }
+
     void set_from_string(const std::string &new_value_string) override {
         // delegate to a function that we can specialize based on the template argument
         set(parse(new_value_string));
     }
-    operator const T &() const { return value; }
+
+    operator T() const { return value; }
+
     operator Expr() const { return value; }
+
+    // Add an explicit overload to operator! to resolve ambiguity between
+    // the overloads on T and Expr
+    inline bool operator!() const {
+        return !value;
+    }
 
 private:
     T value;
@@ -259,6 +268,8 @@ protected:
 
 class GeneratorBase : public NamesInterface {
 public:
+    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
+
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
         EmitOptions()
@@ -270,14 +281,38 @@ public:
 
     virtual Func build() = 0;
 
-    const Target &get_target() const { return target; }
+    Target get_target() const { return target; }
 
     void set_generator_param_values(const GeneratorParamValues &params);
 
-    std::vector<Argument> get_filter_arguments() const;
+    std::vector<Argument> get_filter_arguments() {
+        build_params();
+        return filter_arguments;
+    }
 
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for the current target. */
+    template <typename data_t>
+    int natural_vector_size() const {
+        const bool is_avx2 = get_target().has_feature(Halide::Target::AVX2);
+        const bool is_avx = get_target().has_feature(Halide::Target::AVX) && !is_avx2;
+        const bool is_integer = std::numeric_limits<data_t>::is_integer;
+
+        // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
+        // However, AVX has a very limited complement of integer instructions;
+        // restricting us to SSE4.1 size for integer operations produces much
+        // better performance. (AVX2 does have good integer operations for 256-bit
+        // registers.)
+        int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
+        return vector_byte_size / static_cast<int>(sizeof(data_t));
+    }
+
+    // Call build() and produce compiled output of the given func.
+    // All files will be in the given directory, with the given file_base_name
+    // plus an appropriate extension. If file_base_name is empty, function_name
+    // will be used as file_base_name.
     void emit_filter(const std::string &output_dir, const std::string &function_name,
-                     const EmitOptions &options = EmitOptions());
+                     const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
 protected:
     GeneratorBase(size_t size);
@@ -289,8 +324,6 @@ private:
     std::map<std::string, Internal::Parameter *> filter_params;
     std::map<std::string, Internal::GeneratorParamBase *> generator_params;
     bool params_built;
-
-    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
 
     void build_params();
 

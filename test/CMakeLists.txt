@@ -141,24 +141,32 @@ if (WITH_TEST_GENERATORS)
 
   # For foo_generator.cpp, assume it contains a single generator named 'foo'
   # and make an executable target for it named 'generator_foo'
+  file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_jittest.cpp")
+  foreach(test ${TESTS})
+    string(REPLACE "_jittest.cpp" "" name "generator_jit_${test}")
+    halide_project(${name} "generator" "generator/${test}")
+  endforeach()
+
+  # For foo_generator.cpp, assume it contains a single generator named 'foo'
+  # and make an executable target for it named 'generator_foo'
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_generator.cpp")
   foreach(gen_src ${TESTS})
     string(REPLACE "_generator.cpp" "" gen_name "generator_${gen_src}")
     halide_project(${gen_name} "generator" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/GenGen.cpp" "generator/${gen_src}")
   endforeach()
 
-  file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_test.cpp")
+  file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_aottest.cpp")
   foreach(TEST_SRC ${TESTS})
 
-    string(REPLACE "_test.cpp" "" GEN_NAME "${TEST_SRC}")
-    string(REPLACE "_test.cpp" "" FUNC_NAME "${TEST_SRC}")
+    string(REPLACE "_aottest.cpp" "" GEN_NAME "${TEST_SRC}")
+    string(REPLACE "_aottest.cpp" "" FUNC_NAME "${TEST_SRC}")
 
     string(REPLACE ".cpp" "" TEST_RUNNER "exec_test_${TEST_SRC}")
     set(SCRATCH_DIR "${NATIVE_INT_DIR}scratch_${GEN_NAME}")
     file(MAKE_DIRECTORY "${SCRATCH_DIR}")
 
     add_executable("${TEST_RUNNER}" "generator/${TEST_SRC}")
-    if (TEST_SRC STREQUAL "tiled_blur_interleaved_test.cpp")
+    if (TEST_SRC STREQUAL "tiled_blur_interleaved_aottest.cpp")
       # Some special dependencies here:
       # "tiled_blur_interleaved" is produced by using tiled_blur with different generator args.
       add_generator_dependency("${TEST_RUNNER}" 
@@ -179,8 +187,8 @@ if (WITH_TEST_GENERATORS)
                                "${GEN_NAME}" 
                                "${FUNC_NAME}" 
                                "target=host")
-      # tiled_blur_test.cpp depends on tiled_blur AND ALSO tiled_blur_blur
-      if (TEST_SRC STREQUAL "tiled_blur_test.cpp")
+      # tiled_blur_aottest.cpp depends on tiled_blur AND ALSO tiled_blur_blur
+      if (TEST_SRC STREQUAL "tiled_blur_aottest.cpp")
         add_generator_dependency("${TEST_RUNNER}" 
                                  "${SCRATCH_DIR}" 
                                  "tiled_blur_blur"
