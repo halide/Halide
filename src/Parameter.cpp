@@ -8,6 +8,7 @@ struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
     bool is_buffer;
+    bool is_explicit_name;
     std::string name;
     Buffer buffer;
     uint64_t data;
@@ -15,7 +16,8 @@ struct ParameterContents {
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, const std::string &n, bool is_explicit_name = false)
+        : type(t), is_buffer(b), is_explicit_name(is_explicit_name), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -50,8 +52,8 @@ void Parameter::check_dim_ok(int dim) const {
 Parameter::Parameter(Type t, bool is_buffer) :
     contents(new ParameterContents(t, is_buffer, unique_name('p'))) {}
 
-Parameter::Parameter(Type t, bool is_buffer, const std::string &name) :
-    contents(new ParameterContents(t, is_buffer, name)) {}
+Parameter::Parameter(Type t, bool is_buffer, const std::string &name, bool is_explicit_name) :
+    contents(new ParameterContents(t, is_buffer, name, is_explicit_name)) {}
 
 Type Parameter::type() const {
     check_defined();
@@ -61,6 +63,11 @@ Type Parameter::type() const {
 const std::string &Parameter::name() const {
     check_defined();
     return contents.ptr->name;
+}
+
+bool Parameter::is_explicit_name() const {
+    check_defined();
+    return contents.ptr->is_explicit_name;
 }
 
 bool Parameter::is_buffer() const {
