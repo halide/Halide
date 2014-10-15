@@ -391,10 +391,10 @@ std::vector<Expr> evaluate_vector_select(const Select *op) {
 void CodeGen_GLSL::visit(const Select *op) {
     string id_value;
   
-    // The evaluate_vector_select optimization doesn't apply in the case that the
-    // select condition is not an expression in terms of the vectorized dimension,
-    // turned off for now.
-    if (true || op->type.is_scalar()) {
+    // TODO: The evaluate_vector_select optimization doesn't apply in the case
+    // that the select condition is not an expression in terms of the
+    // vectorized dimension
+    if (op->type.is_scalar()) {
         id_value = unique_name('_');
         do_indent();
         stream << print_type(op->type) << " " << id_value << ";\n";
@@ -606,10 +606,27 @@ void CodeGen_GLSL::visit(const Call *op) {
 void CodeGen_GLSL::visit(const AssertStmt *) {
     internal_error << "GLSL: unexpected Assertion node encountered.\n";
 }
+    
+void CodeGen_GLSL::visit(const Ramp *op) {
+    ostringstream rhs;
+    rhs << print_type(op->type) << "(";
+
+    if (op->width > 4)
+        internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
+
+    rhs << print_expr(op->base);
+    
+    for (int i = 1; i < op->width; ++i) {
+        rhs << ", " << print_expr(Add::make(op->base,Mul::make(i,op->stride)));
+    }
+    
+    rhs << ")";
+    print_assignment(op->type, rhs.str());
+}
 
 void CodeGen_GLSL::visit(const Broadcast *op) {
     ostringstream rhs;
-    rhs << "vec" << op->width << "(" << print_expr(op->value) << ")";
+    rhs << print_type(op->type) << "(" << print_expr(op->value) << ")";
     print_assignment(op->type, rhs.str());
 }
 

@@ -305,6 +305,12 @@ protected:
     
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
+    
+    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+    
+    // Once this is done, Min and Max should call visitBinaryLinear and the code
+    // in setup_mesh will handle piecewise linear behavior introduced by these
+    // expressions
     virtual void visit(const Min *op) { visitBinary(op); }
     virtual void visit(const Max *op) { visitBinary(op); }
     
@@ -521,6 +527,8 @@ std::vector<Expr> enumerate_branches(Expr root) {
     return e.result;
 }
 
+// This visitor sets it's found flag to true if the IR tree contains a variable
+// with the specified name, it also returns a pointer to the variable.
 class ContainsVariable : public IRVisitor
 {
 public:
@@ -557,11 +565,13 @@ Type type_of_variable(Expr e, const std::string& name)
     
     return c.result->type;
 }
-        
-class ExpressionMeshBuilder : public IRVisitor
+
+// This visitor produces a map containing name and expression pairs from Let
+// expressions tagged with .varying
+class FindVaryingAttributeLets : public IRVisitor
 {
 public:
-    ExpressionMeshBuilder(std::map<std::string,Expr>& varyings_) : varyings(varyings_) { }
+    FindVaryingAttributeLets(std::map<std::string,Expr>& varyings_) : varyings(varyings_) { }
     
     using IRVisitor::visit;
     
@@ -589,6 +599,10 @@ public:
     std::map<std::string,Expr>& varyings;
 };
 
+// This visitor removes inlined let statements with names tagged .varying from
+// the expression tree. After this visitor is called, the varying attribute
+// expressions will no longer appear in the tree, only variables with the
+// .varying tag will remain.
 class RemoveVaryingAttributeLets : public IRMutator {
 public:
     using IRMutator::visit;
@@ -631,6 +645,7 @@ Stmt remove_varying_attributes(Stmt s)
     return RemoveVaryingAttributeLets().mutate(s);
 }
 
+// This visitor produces a set of variable names that are tagged with ".varying"
 class FindVaryingAttributes : public IRVisitor {
 public:
     using IRVisitor::visit;
@@ -644,6 +659,8 @@ public:
     std::set<std::string> variables;
 };
 
+// Remove varying attributes from the varying's map if they do not appear in the
+// loop_stmt because they were simplified away.
 void prune_varying_attributes(Stmt loop_stmt, std::map<std::string,Expr>& varying)
 {
     FindVaryingAttributes find;
@@ -662,12 +679,107 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string,Expr>& varyin
         varying.erase(name);
     }
 }
+    
+// This visitor changes the type of variables tagged with .varying to float, and
+// then propagates the float expression up through the expression, casting where
+// necessary.
+class CastVaryingVariablesToFloat : public IRMutator {
+public:
+    virtual void visit(const Variable *op) {
+        if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
+            expr = Cast::make(Float(32),op);
+        }
+        else {
+            expr = op;
+        }
+    }
+    
+    Type float_type(Expr e) {
+        return Float(e.type().bits,e.type().width);
+    }
+    
+    template<typename T>
+    void visitBinaryOp(const T* op) {
+        Expr mutated_a = mutate(op->a);
+        Expr mutated_b = mutate(op->b);
+        
+        bool a_float = mutated_a.type().is_float();
+        bool b_float = mutated_b.type().is_float();
+        
+        if ((a_float || b_float) && (a_float != b_float)) {
+            if (a_float) {
+                mutated_b = Cast::make(float_type(op->a), mutated_b);
+            }
+            else {
+                mutated_a = Cast::make(float_type(op->b), mutated_a);
+            }
+        }
+        expr = T::make(mutated_a,mutated_b);
+    }
+    
+    virtual void visit(const Add *op) { visitBinaryOp(op); }
+    virtual void visit(const Sub *op) { visitBinaryOp(op); }
+    virtual void visit(const Mul *op) { visitBinaryOp(op); }
+    virtual void visit(const Div *op) { visitBinaryOp(op); }
+    virtual void visit(const Mod *op) { visitBinaryOp(op); }
+    virtual void visit(const Min *op) { visitBinaryOp(op); }
+    virtual void visit(const Max *op) { visitBinaryOp(op); }
+    virtual void visit(const EQ *op) { visitBinaryOp(op); }
+    virtual void visit(const NE *op) { visitBinaryOp(op); }
+    virtual void visit(const LT *op) { visitBinaryOp(op); }
+    virtual void visit(const LE *op) { visitBinaryOp(op); }
+    virtual void visit(const GT *op) { visitBinaryOp(op); }
+    virtual void visit(const GE *op) { visitBinaryOp(op); }
+    virtual void visit(const And *op) { visitBinaryOp(op); }
+    virtual void visit(const Or *op) { visitBinaryOp(op); }
+    
+    virtual void visit(const Select *op)  {
+        Expr mutated_true_value = mutate(op->true_value);
+        Expr mutated_false_value = mutate(op->false_value);
+        
+        bool t_float = mutated_true_value.type().is_float();
+        bool f_float = mutated_false_value.type().is_float();
+        
+        if ((t_float || f_float) && !(t_float && f_float)) {
+            if (!t_float)
+                mutated_true_value = Cast::make(float_type(op->true_value), mutated_true_value);
+            if (!f_float)
+                mutated_false_value = Cast::make(float_type(op->false_value), mutated_false_value);
+        }
+        
+        expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
+    }
+};
+
+// This visitor casts the named variables to float, and then propagates the
+// float type through the expression. The variable is offset by 0.5f
+class CastVariablesToFloatAndOffset : public CastVaryingVariablesToFloat {
+public:
+    virtual void visit(const Variable *op) {
+        
+        if (std::find(names.begin(), names.end(), op->name) != names.end()) {
+            expr = Sub::make(Cast::make(float_type(op),op),0.5f);
+        }
+        else {
+            expr = op;
+        }
+    }
+    
+    CastVariablesToFloatAndOffset(const std::vector<std::string>& names_) : names(names_) { }
+    
+    const std::vector<std::string>& names;
+};
 
 Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr>& varyings)
 {
+    const For* loop1 = op;
+    const For* loop0 = loop1->body.as<For>();
+    
+    internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
+
     // Construct a mesh of expressions to instantiate during runtime
-    ExpressionMeshBuilder mesh_builder(varyings);
-    op->accept(&mesh_builder);
+    FindVaryingAttributeLets let_finder(varyings);
+    op->accept(&let_finder);
     
     // Remove the varying attribute let expressions from the statement
     Stmt loop_stmt = remove_varying_attributes(op);
@@ -681,7 +793,21 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     // subsequent tagged linear expressions. Run a pass to check for
     // these and remove them from the varying attribute list
     prune_varying_attributes(loop_stmt,varyings);
-
+    
+    // At this point the varying attribute expressions have been removed from
+    // loop_stmt- it only contains variables tagged with .varying
+    
+    // The GPU will only interpolate floating point values so the varying
+    // attribute expression must be converted to floating point.
+    loop_stmt = CastVaryingVariablesToFloat().mutate(loop_stmt);
+    
+    // The GPU will take texture coordinates at pixel centers during
+    // interpolation, we offset the Halide integer grid by 0.5 so that these
+    // coordinates line up on integer coordinate values.
+    for (auto v : varyings) {
+        varyings[v.first] = CastVariablesToFloatAndOffset({loop0->name,loop1->name}).mutate(v.second);
+    }
+    
     // Establish and order for the attributes in each vertex
     std::map<std::string,int> attribute_order;
     
@@ -703,10 +829,6 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     
     // Construct a list of expressions giving to coordinate locations along
     // each dimension, starting with the minimum and maximum coordinates
-    const For* loop1 = op;
-    const For* loop0 = loop1->body.as<For>();
-    
-    internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
     
     attribute_order[loop0->name] = 0;
     attribute_order[loop1->name] = 1;
@@ -796,8 +918,6 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
         
         std::string varying_name = v.first;
         
-        debug(1) << "\nVarying: " << varying_name << "\n";
-        
         // Iterate over all of the coordinates for the variable in this
         // varying attribute expression
         
@@ -846,7 +966,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
         }
     }
     
-    debug(1) << "MESH:\n";
+    debug(1) << "MESH COORD EXPRESSIONS:\n";
     
     for (int a=0;a!=result.coords.size();++a) {
         std::string attrib_name = result.attributes[a];
