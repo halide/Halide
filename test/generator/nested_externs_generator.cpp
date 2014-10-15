@@ -33,7 +33,7 @@ public:
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
-    Param<float> value {1.0f, "value"};
+    Param<float> value {"value", 1.0f};
 
     Func build() override {
         Func extern_stage_1("inner_extern_1"),
@@ -69,7 +69,7 @@ public:
 class NestedExternsLeaf : public Generator<NestedExternsLeaf> {
 public:
 
-    Param<float> value {1.0f, "value"};
+    Param<float> value {"value", 1.0f};
 
     Func build() override {
         Func f("leaf");
@@ -85,7 +85,7 @@ public:
 // Call two extern stages then pass the two results to another extern stage.
 class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
-    Param<float> value {1.0f, "value"};
+    Param<float> value {"value", 1.0f};
 
     Func build() override {
         Func extern_stage_1("root_extern_1"),
@@ -124,9 +124,9 @@ public:
     }
 };
 
-RegisterGenerator<NestedExternsCombine> gen1("nested_externs_combine");
-RegisterGenerator<NestedExternsInner> gen2("nested_externs_inner");
-RegisterGenerator<NestedExternsLeaf> gen3("nested_externs_leaf");
-RegisterGenerator<NestedExternsRoot> gen4("nested_externs_root");
+RegisterGenerator<NestedExternsCombine> register_combine_gen("nested_externs_combine");
+RegisterGenerator<NestedExternsInner> register_inner_gen("nested_externs_inner");
+RegisterGenerator<NestedExternsLeaf> register_leaf_gen("nested_externs_leaf");
+RegisterGenerator<NestedExternsRoot> register_root_gen("nested_externs_root");
 
 }  // namespace
