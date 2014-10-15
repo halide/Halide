@@ -626,5 +626,9 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
+    
+std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
+    return name;
+}
 
 }}

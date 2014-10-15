@@ -33,6 +33,8 @@ public:
 
     CodeGen_GLSL *glc;
 
+    virtual std::string print_gpu_name(const std::string &name);
+    
 private:
     std::ostringstream src_stream;
     std::string cur_kernel_name;

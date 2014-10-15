@@ -418,7 +418,7 @@ public:
     using IRMutator::visit;
 
     bool which() {
-        if (depth == branch.size()) {
+        if (depth == (int)branch.size()) {
             branch.push_back(0);
         }
         return branch[depth];
@@ -872,9 +872,9 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
         
         debug(2) << "Solutions:\n";
         
-        for (int j=0;j!=exprs.size();++j) {
+        for (int j=0;j!=(int)exprs.size();++j) {
             Expr a = exprs[j];
-            for (int i=j+1;i!=exprs.size();++i) {
+            for (int i=j+1;i!=(int)exprs.size();++i) {
                 Expr b = exprs[i];
                 
                 Expr eq = EQ::make(a, b);
@@ -968,7 +968,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     
     debug(1) << "MESH COORD EXPRESSIONS:\n";
     
-    for (int a=0;a!=result.coords.size();++a) {
+    for (int a=0;a!=(int)result.coords.size();++a) {
         std::string attrib_name = result.attributes[a];
         debug(1) << attrib_name << " (total: " << result.coords[a].size() << ")\n";
 
