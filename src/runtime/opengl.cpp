@@ -153,7 +153,7 @@ struct GlobalState {
 };
 
 
-WEAK GlobalState global_state;
+GlobalState global_state;
 
 // A list of module-specific state. Each module corresponds to a single Halide filter
 WEAK ModuleState *state_list;
@@ -421,7 +421,7 @@ WEAK GLfloat quad_vertices[] = {
 };
 WEAK GLuint quad_indices[] = { 0, 1, 2, 3 };
 
-WEAK GlobalState::GlobalState() {
+GlobalState::GlobalState() {
     initialized = false;
     profile = OpenGL;
     major_version = 2;
