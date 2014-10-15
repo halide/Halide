@@ -133,9 +133,9 @@ endif
 
 LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
 ifneq ($(LLVM_34_OR_OLDER), )
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --libs --ldflags)
 else
-LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --libs --ldflags --system-libs)
 endif
 
 UNAME = $(shell uname)
