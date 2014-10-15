@@ -1,6 +1,6 @@
 #include <iostream>
 #include <algorithm>
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -1873,14 +1873,12 @@ private:
             Expr arg = mutate(op->args[0]);
             Type ta = arg.type();
             float f = 0.0f;
-            if (!ta.is_float()) {
-                expr = false;
-#if 0       //  Less trouble with C++11
+            if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+#if 0       // TODO: enable this once we use C++11
             } else if (const_float(arg, &f)) {
                 expr = std::isnan(f);
 #endif
-            } else if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
             } else {
                 expr = op;
             }

@@ -873,7 +873,8 @@ inline Expr trunc(Expr x) {
 inline Expr isnan(Expr x) {
     user_assert(x.defined()) << "isnan of undefined Expr\n";
     user_assert(x.type().is_float()) << "isnan only works for float";
-    return Internal::Call::make(Bool(), Internal::Call::isnan, vec(x), Internal::Call::Intrinsic);
+    Type t = Bool(x.type().width);
+    return Internal::Call::make(t, Internal::Call::isnan, vec(x), Internal::Call::Intrinsic);
 }
 
 /** Return the fractional part of a floating-point expression. If the argument
