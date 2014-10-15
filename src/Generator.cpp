@@ -15,10 +15,17 @@ bool is_alpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 bool is_alnum(char c) { return is_alpha(c) || (c == '_') || (c >= '0' && c <= '9'); }
 
 bool is_valid_name(const std::string& n) {
-    if (n.empty()) return false;
-    if (!is_alpha(n[0])) return false;
+    if (n.empty()) {
+        return false;
+    }
+    if (!is_alpha(n[0])) {
+        // __user_context is allowed to start with non-alpha, but nothing else is
+        return (n == "__user_context");
+    }
     for (size_t i = 1; i < n.size(); ++i) {
-        if (!is_alnum(n[i])) return false;
+        if (!is_alnum(n[i])) {
+            return false;
+        }
     }
     return true;
 }
