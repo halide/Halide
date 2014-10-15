@@ -45,6 +45,11 @@ struct CodeGen_GPU_Dev {
 
     virtual void dump() = 0;
 
+    /** Returns the specified name transformed by the variable naming rules
+     * for the GPU language backend. Used to determine the name of a parameter
+     * during host codegen. */
+    virtual std::string print_gpu_name(const std::string &name) = 0;
+    
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);
     static bool is_gpu_thread_var(const std::string &name);

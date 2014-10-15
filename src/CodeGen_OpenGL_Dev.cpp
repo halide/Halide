@@ -135,6 +135,10 @@ string CodeGen_OpenGL_Dev::get_current_kernel_name() {
 void CodeGen_OpenGL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
+    
+std::string CodeGen_OpenGL_Dev::print_gpu_name(const std::string &name) {
+    return glc->print_name(name);
+}
 
 //
 // CodeGen_GLSL

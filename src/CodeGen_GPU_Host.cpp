@@ -540,7 +540,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             ExpressionMesh mesh;
             loop_stmt = setup_mesh(loop,mesh,varying);
             
-#if 1
             // Create an array of null terminated strings containing the attribute
             // names in the order they appear per vertex channel
             int num_attributes = mesh.attributes.size();
@@ -551,8 +550,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             
             for (int i=0;i!=num_attributes;++i) {
                 
-                CodeGen_GLSL* glsl = dynamic_cast<CodeGen_OpenGL_Dev*>(cgdev)->glc;
-                std::string name = glsl->print_name(mesh.attributes[i] + "_attrib");
+                std::string name = cgdev->print_gpu_name(mesh.attributes[i] + "_attrib");
                 std::string mangled = replace_all(name, "__", "XX");
                 
                 Value* gpu_attribute = CodeGen::create_string_constant(mangled);
@@ -602,7 +600,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 builder->CreateStore(gpu_coords,
                                      builder->CreateConstGEP2_64(gpu_coords_per_dim, 0, i));
             }
-#endif
         }
 
         // compute a closure over the state passed into the kernel
