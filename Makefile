@@ -19,7 +19,7 @@ LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
-CXX11 ?= 
+CXX11 ?=
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
 #  but that is difficult in some testing situations because it requires having
@@ -53,11 +53,13 @@ endif
 
 # turn on c++11 for llvm 3.5
 ifeq ($(LLVM_VERSION_TIMES_10), 35)
-CXX11 = -std=c++11
+CXX11 = true
 endif
 
-LLVM_CXX_FLAGS += $(CXX11)
-TEST_CXX_FLAGS += $(CXX11)
+ifeq ($(CXX11),true)
+LLVM_CXX_FLAGS += -std=c++11
+TEST_CXX_FLAGS += -std=c++11
+endif
 
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
@@ -327,7 +329,7 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
-ifeq ($(CXX11), -std=c++11)
+ifeq ($(CXX11),true)
 test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
 else
 test_generators: ;
@@ -335,7 +337,7 @@ endif
 
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_static test_warnings 
 
-ifeq ($(CXX11), -std=c++11)
+ifeq ($(CXX11),true)
 ALL_TESTS += test_generators
 endif
 
@@ -435,7 +437,7 @@ $(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FI
 
 # By default, %_jittest.cpp depends on libHalide.
 $(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	@ if [[ $@ == *_run ]]; then \
