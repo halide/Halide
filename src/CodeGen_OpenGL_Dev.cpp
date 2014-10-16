@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Debug.h"
+#include "Deinterleave.h"
 #include "Simplify.h"
 #include <iomanip>
 #include <map>
@@ -235,129 +236,21 @@ void CodeGen_GLSL::visit(const For *loop) {
     }
 }
 
-class EvaluateSelect : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Ramp *op) {
-        result.resize(op->width);
-        for (int i = 0; i < op->width; i++) {
-            result[i] = simplify(Add::make(op->base, Mul::make(op->stride, Expr(i))));
-        }
-    }
-
-    void visit(const Broadcast *op) {
-        result.resize(op->width);
-        for (int i = 0; i < op->width; i++) {
-            result[i] = op->value;
-        }
-    }
-
-    template <class T>
-    void visit_binary_op(const T *op) {
-        op->a.accept(this);
-        std::vector<Expr> result_a = result;
-        op->b.accept(this);
-        std::vector<Expr> result_b = result;
-        for (size_t i = 0; i < result_a.size(); i++) {
-            result[i] = simplify(T::make(result_a[i], result_b[i]));
-        }
-    }
-
-    void visit(const EQ *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const NE *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const LT *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const LE *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const GT *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const GE *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Add *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Sub *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Mul *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Div *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Min *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Max *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const And *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Or *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Not *op) {
-        op->a.accept(this);
-        for (size_t i = 0; i < result.size(); i++) {
-            result[i] = simplify(Not::make(result[i]));
-        }
-    }
-
-    void visit(const Select *op) {
-        const int width = op->type.width;
-
-        result.resize(width);
-        op->condition.accept(this);
-        std::vector<Expr> cond = result;
-
-        op->true_value.accept(this);
-        std::vector<Expr> true_value = result;
-
-        op->false_value.accept(this);
-        std::vector<Expr> false_value = result;
-
-        for (int i = 0; i < width; i++) {
-            if (is_const(cond[i])) {
-                result[i] = is_one(cond[i]) ? true_value[i] : false_value[i];
-            } else {
-                result[i] = Select::make(cond[i], true_value[i], false_value[i]);
-            }
-        }
-    }
-
-public:
-    std::vector<Expr> result;
-    EvaluateSelect() {
-    }
-};
-
 std::vector<Expr> evaluate_vector_select(const Select *op) {
-    EvaluateSelect eval;
-    op->accept(&eval);
-    return eval.result;
+    const int width = op->type.width;
+    std::vector<Expr> result(width);
+    for (int i = 0; i < width; i++) {
+        Expr cond = extract_lane(op->condition, i);
+        Expr true_value = extract_lane(op->true_value, i);
+        Expr false_value = extract_lane(op->false_value, i);
+
+        if (is_const(cond)) {
+            result[i] = is_one(cond) ? true_value : false_value;
+        } else {
+            result[i] = Select::make(cond, true_value, false_value);
+        }
+    }
+    return result;
 }
 
 void CodeGen_GLSL::visit(const Select *op) {
