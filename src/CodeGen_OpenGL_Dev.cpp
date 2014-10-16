@@ -362,7 +362,7 @@ std::vector<Expr> evaluate_vector_select(const Select *op) {
 
 void CodeGen_GLSL::visit(const Select *op) {
     string id_value;
-    if (op->type.is_scalar()) {
+    if (op->condition.type().is_scalar()) {
         id_value = unique_name('_');
         do_indent();
         stream << print_type(op->type) << " " << id_value << ";\n";
@@ -387,10 +387,11 @@ void CodeGen_GLSL::visit(const Select *op) {
         }
         close_scope("");
     } else {
-        // Selects in user code are primarily used for constructing vector
-        // types. If the select condition can be evaluated at compile-time
-        // (which is often the case), we can do so without lowering the select
-        // to "if" statements.
+        // Selects with vector conditions are typically used for constructing
+        // vector types. If the select condition can be evaluated at
+        // compile-time (which is often the case), we can built the vector
+        // directly without lowering to a sequence of "if" statements.
+        internal_assert(op->condition.type().width == op->type.width);
         int width = op->type.width;
         std::vector<Expr> result = evaluate_vector_select(op);
         std::vector<std::string> ids(width);
