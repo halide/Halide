@@ -537,7 +537,6 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
                << "bool is_nan_f32(float x) {return x != x; }\n"
-               << "bool is_nan_f64(double x) {return x != x; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << smod_def("char") << "\n"
@@ -579,8 +578,9 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#define __address_space___shared __local\n";
 
     if (target.has_feature(Target::CLDoubles)) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
-        src_stream << "#define sqrt_f64 sqrt\n"
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
+                   << "bool is_nan_f64(double x) {return x != x; }\n"
+                   << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"
                    << "#define cos_f64 cos\n"
                    << "#define exp_f64 exp\n"
