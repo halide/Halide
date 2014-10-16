@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     Var y;
 
     Expr e = sqrt(x - y);
-    f(x, y) = select( isnan(e) , 0.0f, 1.0f );   
+    f(x, y) = select(is_nan(e), 0.0f, 1.0f);
     f.vectorize(x, 8);
 
     int w = 16;
@@ -19,21 +19,19 @@ int main(int argc, char **argv) {
         for (int y = 0; y < h; y++) {
             if ((x - y) < 0) {
                 if (im(x, y) != 0.0f) {
-                    printf ("undetected Nan for sqrt( %d - %d )\n", x, y);
+                    printf ("undetected Nan for sqrt(%d - %d)\n", x, y);
                     return -1;
                 }
-            }
-            else
-            {
+            } else {
                 if (im(x, y) != 1.0f) {
-                    printf ("unexpected Nan for sqrt( %d - %d )\n", x, y);
+                    printf ("unexpected Nan for sqrt(%d - %d)\n", x, y);
                     return -1;
                 }
             }
         }
     }
 
-   
+
     printf ("Success\n");
     return 0;
 }
