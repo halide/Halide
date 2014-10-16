@@ -22,7 +22,7 @@ int bits_diff(float fa, float fb) {
 void check(Image<float> a, Image<float> b) {
     for (int i = 0; i < a.width(); i++) {
         int err = bits_diff(a(i), b(i));
-        if (err > 8) {
+        if (err > 13) {
             printf("Mismatch in mantissa at %d: %10.10f %10.10f. Differs by %d bits.\n", i, a(i), b(i), err);
             //exit(-1);
         }
@@ -47,25 +47,25 @@ int main(int argc, char **argv) {
 
     // Now test various vectorization widths with an explicit 1.0. On
     // arm 2 and 4 trigger optimizations. On x86 4 and 8 do.
-    f2(x) = 1.0f / v;
+    f2(x) = fast_inverse(v);
     f2.vectorize(x, 2);
 
-    f3(x) = 1.0f / v;
+    f3(x) = fast_inverse(v);
     f3.vectorize(x, 4);
 
-    f4(x) = 1.0f / v;
+    f4(x) = fast_inverse(v);
     f4.vectorize(x, 8);
 
     // Same thing for reciprocal square root.
     g1(x) = p / sqrt(v);
 
-    g2(x) = 1.0f / sqrt(v);
+    g2(x) = fast_inverse_sqrt(v);
     g2.vectorize(x, 2);
 
-    g3(x) = 1.0f / sqrt(v);
+    g3(x) = fast_inverse_sqrt(v);
     g3.vectorize(x, 4);
 
-    g4(x) = 1.0f / sqrt(v);
+    g4(x) = fast_inverse_sqrt(v);
     g4.vectorize(x, 8);
 
     Image<float> imf1 = f1.realize(10000);
