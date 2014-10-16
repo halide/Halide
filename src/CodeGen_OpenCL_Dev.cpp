@@ -568,6 +568,8 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define acosh_f32 acosh \n"
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
+               << "#define fast_inverse_f32 native_recip \n"
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
                << "int halide_gpu_thread_barrier() {\n"
                << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
                << "  return 0;\n"
