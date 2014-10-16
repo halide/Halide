@@ -1691,6 +1691,14 @@ void CodeGen::visit(const Call *op) {
                 }
                 value = builder->CreateSelect(cmp, arg, neg);
             }
+        } else if (op->name == Call::copy_buffer_t) {
+            // Make some memory for this buffer_t
+            Value *dst = create_alloca_at_entry(buffer_t_type, 1);
+            Value *src = codegen(op->args[0]);
+            src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
+            src = builder->CreateLoad(src);
+            builder->CreateStore(src, dst);
+            value = dst;
         } else if (op->name == Call::create_buffer_t) {
             // Make some memory for this buffer_t
             Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
