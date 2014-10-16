@@ -130,7 +130,7 @@ ImageParam::ImageParam(Type t, int d) :
     OutputImageParam(Internal::Parameter(t, true, d, Internal::make_entity_name(this, "Halide::ImageParam", 'p'))) {}
 
 ImageParam::ImageParam(Type t, int d, const std::string &n) :
-    OutputImageParam(Internal::Parameter(t, true, d, n)) {
+    OutputImageParam(Internal::Parameter(t, true, d, n, /* is_explicit_name */ true)) {
     // Discourage future Funcs from having the same name
     Internal::unique_name(n);
 }
