@@ -393,6 +393,16 @@ $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h:
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: test/generator/tiled_blur_blur_generator.cpp $(GENGEN_DEPS)
 	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f tiled_blur_blur_interleaved target=host is_interleaved=true
 
+# The nested externs object file and header is a concatenation of three separate generator outputs
+$(FILTERS_DIR)/nested_externs.o: $(BIN_DIR)/generator_nested_externs_leaf $(BIN_DIR)/generator_nested_externs_inner $(BIN_DIR)/generator_nested_externs_combine  $(BIN_DIR)/generator_nested_externs_root
+	ld -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
+
+$(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
+	cat $(FILTERS_DIR)/nested_externs_*.h > $(FILTERS_DIR)/nested_externs.h
+
+# The nested externs generator needs to be run once for each generator it contains
+$(BIN_DIR)/generator_nested_externs_% $(FILTERS_DIR)/generator_nested_externs_%.o $(FILTERS_DIR)/generator_nested_externs_%.h : test/generator/nested_externs_generator.cpp $(GENGEN_DEPS)
+	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -g nested_externs_$* -f nested_externs_$* target=host
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	@ if [[ $@ == *_run ]]; then \
@@ -447,6 +457,7 @@ opengl_%: $(BIN_DIR)/opengl_%
 	@-mkdir -p tmp
 	cd tmp ; HL_JIT_TARGET=$(HL_JIT_TARGET) $(LD_PATH_SETUP) ../$< 2>&1
 	@-echo
+
 
 generator_%: $(BIN_DIR)/generator_%
 	@-mkdir -p tmp
