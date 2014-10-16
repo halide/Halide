@@ -31,8 +31,8 @@ void check(Image<float> a, Image<float> b) {
 
 int main(int argc, char **argv) {
 
-    Func f1, f2, f3, f4;
-    Func g1, g2, g3, g4;
+    Func f1, f2, f3, f4, f5;
+    Func g1, g2, g3, g4, g5;
 
     Var x;
     Expr v = x*1.34f + 1.0142f;
@@ -68,25 +68,39 @@ int main(int argc, char **argv) {
     g4(x) = fast_inverse_sqrt(v);
     g4.vectorize(x, 8);
 
+    // Also test both on the GPU.
+    f5(x) = fast_inverse(v);
+    g5(x) = fast_inverse_sqrt(v);
+
+    Target t = get_jit_target_from_environment();
+    if (t.has_gpu_feature()) {
+        f5.gpu_tile(x, 16);
+        g5.gpu_tile(x, 16);
+    }
+
     Image<float> imf1 = f1.realize(10000);
     Image<float> imf2 = f2.realize(10000);
     Image<float> imf3 = f3.realize(10000);
     Image<float> imf4 = f4.realize(10000);
+    Image<float> imf5 = f5.realize(10000);
 
     Image<float> img1 = g1.realize(10000);
     Image<float> img2 = g2.realize(10000);
     Image<float> img3 = g3.realize(10000);
     Image<float> img4 = g4.realize(10000);
+    Image<float> img5 = g5.realize(10000);
 
     printf("Testing accuracy of inverse\n");
     check(imf1, imf2);
     check(imf1, imf3);
     check(imf1, imf4);
+    check(imf1, imf5);
     printf("Pass.\n");
     printf("Testing accuracy of inverse sqrt\n");
     check(img1, img2);
     check(img1, img3);
     check(img1, img4);
+    check(img1, img5);
     printf("Pass.\n");
 
     printf("Success!\n");
