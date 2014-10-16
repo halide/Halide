@@ -1201,8 +1201,8 @@ void check_neon_all() {
     */
 
     // VRECPE   I, F    -       Reciprocal Estimate
-    check("vrecpe.f32", 4, 1.0f/f32_1);
-    check("vrecpe.f32", 2, 1.0f/f32_1);
+    check("vrecpe.f32", 4, fast_inverse(f32_1));
+    check("vrecpe.f32", 2, fast_inverse(f32_1));
 
     // VRECPS   F       -       Reciprocal Step
     // This does one newton-rhapson iteration for finding the reciprocal. Skip it.
