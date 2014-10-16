@@ -622,6 +622,7 @@ struct Call : public ExprNode<Call> {
         random,
         lerp,
         create_buffer_t,
+        copy_buffer_t,
         extract_buffer_min,
         extract_buffer_max,
         set_host_dirty,
