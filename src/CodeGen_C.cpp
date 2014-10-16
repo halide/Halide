@@ -804,6 +804,12 @@ void CodeGen_C::visit(const Call *op) {
             close_scope("if " + cond_id + " else");
 
             rhs << result_id;
+        } else if (op->name == Call::copy_buffer_t) {
+            internal_assert(op->args.size() == 1);
+            string arg = print_expr(op->args[0]);
+            string buf_id = unique_name('B');
+            stream << "buffer_t " << buf_id << " = *((buffer_t *)(" << arg << "))\n";
+            rhs << "(&" << buf_id << ")";
         } else if (op->name == Call::create_buffer_t) {
             internal_assert(op->args.size() >= 2);
             vector<string> args;
