@@ -812,6 +812,22 @@ inline Expr fast_pow(Expr x, Expr y) {
     return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * y));
 }
 
+/** Fast approximate inverse for Float(32). Corresponds to the rcpps
+ * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
+ * cleanly. */
+inline Expr fast_inverse(Expr x) {
+    user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
+    return Internal::Call::make(x.type(), "fast_inverse_f32", vec(x), Internal::Call::Extern);
+}
+
+/** Fast approximate inverse square root for Float(32). Corresponds to
+ * the rsqrtps instruction on x86, and the vrsqrte instruction on
+ * ARM. Vectorizes cleanly. */
+inline Expr fast_inverse_sqrt(Expr x) {
+    user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
+    return Internal::Call::make(x.type(), "fast_inverse_sqrt_f32", vec(x), Internal::Call::Extern);
+}
+
 /** Return the greatest whole number less than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
