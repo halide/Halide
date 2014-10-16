@@ -536,6 +536,8 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float minval_f32() {return -FLT_MAX;}\n"
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
+               << "bool is_nan_f32(float x) {return x != x; }\n"
+               << "bool is_nan_f64(double x) {return x != x; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << smod_def("char") << "\n"

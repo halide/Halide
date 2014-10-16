@@ -1865,23 +1865,22 @@ private:
                 expr = a;
             } else if (a.same_as(op->args[0])) {
                 expr = op;
-                } else {
+            } else {
                 expr = abs(a);
             }
-        } else if (op->call_type == Call::Intrinsic &&
-                   op->name == Call::isnan) {
+#if __cplusplus > 199711L // C++11 comes with a portable isnan
+        } else if (op->call_type == Call::Extern &&
+                   op->name == "is_nan_f32") {
             Expr arg = mutate(op->args[0]);
-            Type ta = arg.type();
             float f = 0.0f;
-            if (!arg.same_as(op->args[0])) {
-                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
-#if 0       // TODO: enable this once we use C++11
-            } else if (const_float(arg, &f)) {
+            if (const_float(arg, &f)) {
                 expr = std::isnan(f);
-#endif
-            } else {
+            } else if (arg.same_as(op->args[0])) {
                 expr = op;
+            } else {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
             }
+#endif
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
             // Eagerly concat constant arguments to a stringify.

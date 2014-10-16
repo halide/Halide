@@ -242,7 +242,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(condition.defined()) << "Select of undefined\n";
     internal_assert(true_value.defined()) << "Select of undefined\n";
     internal_assert(false_value.defined()) << "Select of undefined\n";
-    internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool\n";
+    internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool: " << condition.type() << "\n";
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
     internal_assert(condition.type().is_scalar() ||
                     condition.type().width == true_value.type().width)
@@ -590,7 +590,6 @@ const string Call::make_struct = "make_struct";
 const string Call::stringify = "stringify";
 const string Call::memoize_expr = "memoize_expr";
 const string Call::copy_memory = "copy_memory";
-const string Call::isnan = "isnan";
 
 }
 }
