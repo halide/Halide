@@ -773,7 +773,22 @@ void CodeGen_GLSL::test() {
           "float $ = floor($);\n"
           "int $ = int($);\n");
 
+    // Select with scalar condition
+    check(Select::make(EQ::make(Variable::make(Float(32), "x"), 1.0f),
+                       Broadcast::make(1.f, 4),
+                       Broadcast::make(2.f, 4)),
+          "vec4 $;\n"
+          "bool $ = $x == 1.0000000;\n"
+          "if ($) {\n"
+          " vec4 $ = vec4(1.0000000);\n"
+          " $ = $;\n"
+          "}\n"
+          "else {\n"
+          " vec4 $ = vec4(2.0000000);\n"
+          " $ = $;\n"
+          "}\n");
 
+    // Select with vector condition
     check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
                        Broadcast::make(1.f, 4),
                        Broadcast::make(2.f, 4)),
