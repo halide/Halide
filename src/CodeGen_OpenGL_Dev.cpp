@@ -687,6 +687,27 @@ void CodeGen_GLSL::test() {
                        Broadcast::make(2.f, 4)),
           "vec4 $ = vec4(2.0000000, 1.0000000, 2.0000000, 2.0000000);\n");
 
+    // Test codegen for texture loads
+    Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
+                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 4)),
+                            Call::Intrinsic);
+    Expr load2 = Call::make(Float(32, 2), Call::glsl_texture_load,
+                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 2)),
+                            Call::Intrinsic);
+    check(load2, "vec2 $ = texture2D($buf, vec2(0, 0)).rg;\n");
+    check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
+
+    // Test combination of select and texture operations.
+    // TODO: The code below is correct but probably slower than necessary.
+    // Ideally, we could perform just one single texture operation.
+    check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
+                       Broadcast::make(1.f, 4),
+                       load4),
+          "float $ = texture2D($buf, vec2(0, 0)).r;\n"
+          "float $ = texture2D($buf, vec2(0, 0)).b;\n"
+          "float $ = texture2D($buf, vec2(0, 0)).a;\n"
+          "vec4 $ = vec4($, 1.0000000, $, $);\n");
+
     check(log(1.0f), "float $ = log(1.0000000);\n");
     check(exp(1.0f), "float $ = exp(1.0000000);\n");
 
