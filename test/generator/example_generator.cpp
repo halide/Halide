@@ -3,6 +3,12 @@
 // By convention, Generators always go in a .cpp file, usually with no
 // corresponding .h file. They can be enclosed in any C++ namespaces
 // you like, but the anonymous namespace is often the best choice.
+//
+// It's normally considered Best Practice to have exactly one Generator
+// per .cpp file, and to have the .cpp file name match the generator name
+// with a "_generator" suffix (e.g., Generator with name "foo" should
+// live in "foo_generator.cpp"), as it tends to simplify build rules,
+// but neither of these are required.
 
 namespace {
 
@@ -52,12 +58,19 @@ public:
     // but it's outright forbidden here. (underscore after first char is ok.)
     // GeneratorParam<bool> badname{ "_flag", true };
 
+    // We also forbid two underscores in a row.
+    // GeneratorParam<bool> badname{ "f__lag", true };
+
     // Param (and ImageParam) are arguments passed to the filter when
     // it is executed (as opposed to the Generator, during compilation).
     // When jitting, there is effectively little difference between the
     // two (at least for scalar values). Note that we set a default value of
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
+
+    static std::string name() {
+        return "example";
+    }
 
     Func build() override {
         Var x, y, c;
@@ -81,6 +94,6 @@ public:
 // however, registering it is needed for working seamlessly with the ahead-of-time
 // compilation tools, so it's generally recommended to always register it.
 // (As with Params, the name is constrained to C-like patterns.)
-Halide::RegisterGenerator<Example> register_example("example");
+Halide::RegisterGenerator<Example> register_example;
 
 }  // namespace

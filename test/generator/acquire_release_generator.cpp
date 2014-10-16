@@ -1,12 +1,14 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class AcquireRelease : public Generator<AcquireRelease> {
+class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
     ImageParam input{ Float(32), 2, "input" };
+
+    static std::string name() {
+        return "acquire_release";
+    }
 
     Func build() override {
         Var x("x"), y("y");
@@ -23,6 +25,6 @@ public:
     }
 };
 
-RegisterGenerator<AcquireRelease> register_my_gen("acquire_release");
+Halide::RegisterGenerator<AcquireRelease> register_my_gen;
 
 }  // namespace

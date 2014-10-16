@@ -1,12 +1,14 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class GpuOnly : public Generator<GpuOnly> {
+class GpuOnly : public Halide::Generator<GpuOnly> {
 public:
     ImageParam input{ Int(32), 2, "input" };
+
+    static std::string name() {
+        return "gpu_only";
+    }
 
     Func build() override {
         Var x("x"), y("y");
@@ -23,6 +25,6 @@ public:
     }
 };
 
-RegisterGenerator<GpuOnly> register_my_gen("gpu_only");
+Halide::RegisterGenerator<GpuOnly> register_my_gen;
 
 }  // namespace

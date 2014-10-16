@@ -1,11 +1,13 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class GpuObjectLifetime : public Generator<GpuObjectLifetime> {
+class GpuObjectLifetime : public Halide::Generator<GpuObjectLifetime> {
 public:
+    static std::string name() {
+        return "gpu_object_lifetime";
+    }
+
     Func build() override {
         Var x;
 
@@ -22,6 +24,6 @@ public:
     }
 };
 
-RegisterGenerator<GpuObjectLifetime> register_my_gen("gpu_object_lifetime");
+Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen;
 
 }  // namespace
