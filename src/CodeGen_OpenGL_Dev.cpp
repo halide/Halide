@@ -3,6 +3,7 @@
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Debug.h"
+#include "Deinterleave.h"
 #include "Simplify.h"
 #include <iomanip>
 #include <map>
@@ -235,134 +236,26 @@ void CodeGen_GLSL::visit(const For *loop) {
     }
 }
 
-class EvaluateSelect : public IRVisitor {
-    using IRVisitor::visit;
-
-    void visit(const Ramp *op) {
-        result.resize(op->width);
-        for (int i = 0; i < op->width; i++) {
-            result[i] = simplify(Add::make(op->base, Mul::make(op->stride, Expr(i))));
-        }
-    }
-
-    void visit(const Broadcast *op) {
-        result.resize(op->width);
-        for (int i = 0; i < op->width; i++) {
-            result[i] = op->value;
-        }
-    }
-
-    template <class T>
-    void visit_binary_op(const T *op) {
-        op->a.accept(this);
-        std::vector<Expr> result_a = result;
-        op->b.accept(this);
-        std::vector<Expr> result_b = result;
-        for (size_t i = 0; i < result_a.size(); i++) {
-            result[i] = simplify(T::make(result_a[i], result_b[i]));
-        }
-    }
-
-    void visit(const EQ *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const NE *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const LT *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const LE *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const GT *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const GE *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Add *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Sub *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Mul *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Div *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Min *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Max *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const And *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Or *op) {
-        visit_binary_op(op);
-    }
-
-    void visit(const Not *op) {
-        op->a.accept(this);
-        for (size_t i = 0; i < result.size(); i++) {
-            result[i] = simplify(Not::make(result[i]));
-        }
-    }
-
-    void visit(const Select *op) {
-        const int width = op->type.width;
-
-        result.resize(width);
-        op->condition.accept(this);
-        std::vector<Expr> cond = result;
-
-        op->true_value.accept(this);
-        std::vector<Expr> true_value = result;
-
-        op->false_value.accept(this);
-        std::vector<Expr> false_value = result;
-
-        for (int i = 0; i < width; i++) {
-            if (is_const(cond[i])) {
-                result[i] = is_one(cond[i]) ? true_value[i] : false_value[i];
-            } else {
-                result[i] = Select::make(cond[i], true_value[i], false_value[i]);
-            }
-        }
-    }
-
-public:
-    std::vector<Expr> result;
-    EvaluateSelect() {
-    }
-};
-
 std::vector<Expr> evaluate_vector_select(const Select *op) {
-    EvaluateSelect eval;
-    op->accept(&eval);
-    return eval.result;
+    const int width = op->type.width;
+    std::vector<Expr> result(width);
+    for (int i = 0; i < width; i++) {
+        Expr cond = extract_lane(op->condition, i);
+        Expr true_value = extract_lane(op->true_value, i);
+        Expr false_value = extract_lane(op->false_value, i);
+
+        if (is_const(cond)) {
+            result[i] = is_one(cond) ? true_value : false_value;
+        } else {
+            result[i] = Select::make(cond, true_value, false_value);
+        }
+    }
+    return result;
 }
 
 void CodeGen_GLSL::visit(const Select *op) {
     string id_value;
-    if (op->type.is_scalar()) {
+    if (op->condition.type().is_scalar()) {
         id_value = unique_name('_');
         do_indent();
         stream << print_type(op->type) << " " << id_value << ";\n";
@@ -387,10 +280,11 @@ void CodeGen_GLSL::visit(const Select *op) {
         }
         close_scope("");
     } else {
-        // Selects in user code are primarily used for constructing vector
-        // types. If the select condition can be evaluated at compile-time
-        // (which is often the case), we can do so without lowering the select
-        // to "if" statements.
+        // Selects with vector conditions are typically used for constructing
+        // vector types. If the select condition can be evaluated at
+        // compile-time (which is often the case), we can built the vector
+        // directly without lowering to a sequence of "if" statements.
+        internal_assert(op->condition.type().width == op->type.width);
         int width = op->type.width;
         std::vector<Expr> result = evaluate_vector_select(op);
         std::vector<std::string> ids(width);
@@ -772,11 +666,47 @@ void CodeGen_GLSL::test() {
           "float $ = floor($);\n"
           "int $ = int($);\n");
 
+    // Select with scalar condition
+    check(Select::make(EQ::make(Variable::make(Float(32), "x"), 1.0f),
+                       Broadcast::make(1.f, 4),
+                       Broadcast::make(2.f, 4)),
+          "vec4 $;\n"
+          "bool $ = $x == 1.0000000;\n"
+          "if ($) {\n"
+          " vec4 $ = vec4(1.0000000);\n"
+          " $ = $;\n"
+          "}\n"
+          "else {\n"
+          " vec4 $ = vec4(2.0000000);\n"
+          " $ = $;\n"
+          "}\n");
 
+    // Select with vector condition
     check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
                        Broadcast::make(1.f, 4),
                        Broadcast::make(2.f, 4)),
           "vec4 $ = vec4(2.0000000, 1.0000000, 2.0000000, 2.0000000);\n");
+
+    // Test codegen for texture loads
+    Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
+                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 4)),
+                            Call::Intrinsic);
+    Expr load2 = Call::make(Float(32, 2), Call::glsl_texture_load,
+                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 2)),
+                            Call::Intrinsic);
+    check(load2, "vec2 $ = texture2D($buf, vec2(0, 0)).rg;\n");
+    check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
+
+    // Test combination of select and texture operations.
+    // TODO: The code below is correct but probably slower than necessary.
+    // Ideally, we could perform just one single texture operation.
+    check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
+                       Broadcast::make(1.f, 4),
+                       load4),
+          "float $ = texture2D($buf, vec2(0, 0)).r;\n"
+          "float $ = texture2D($buf, vec2(0, 0)).b;\n"
+          "float $ = texture2D($buf, vec2(0, 0)).a;\n"
+          "vec4 $ = vec4($, 1.0000000, $, $);\n");
 
     check(log(1.0f), "float $ = log(1.0000000);\n");
     check(exp(1.0f), "float $ = exp(1.0000000);\n");
