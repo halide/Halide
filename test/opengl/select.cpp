@@ -2,11 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <functional>
-
 using namespace Halide;
-
-
 
 int test_per_channel_select() {
 
