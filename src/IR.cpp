@@ -569,6 +569,7 @@ const string Call::random = "random";
 const string Call::rewrite_buffer = "rewrite_buffer";
 const string Call::profiling_timer = "profiling_timer";
 const string Call::create_buffer_t = "create_buffer_t";
+const string Call::copy_buffer_t = "copy_buffer_t";
 const string Call::extract_buffer_min = "extract_buffer_min";
 const string Call::extract_buffer_max = "extract_buffer_max";
 const string Call::set_host_dirty = "set_host_dirty";
