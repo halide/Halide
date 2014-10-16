@@ -9,6 +9,9 @@
  * if you are compiling with C++11 enabled.
  */
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
 #if __cplusplus > 199711L
 #include <mutex>
