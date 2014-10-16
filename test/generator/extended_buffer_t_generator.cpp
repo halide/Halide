@@ -27,6 +27,10 @@ class ExtendedBufferT : public Generator<ExtendedBufferT> {
 public:
     FancyImageParam input{ Float(32), 2, "input" };
 
+    static std::string name() {
+        return "extended_buffer_t";
+    }
+
     Func build() override {
         Var x, y;
         Func output;
@@ -35,6 +39,6 @@ public:
     }
 };
 
-RegisterGenerator<ExtendedBufferT> register_my_gen("extended_buffer_t");
+RegisterGenerator<ExtendedBufferT> register_my_gen;
 
 }  // namespace

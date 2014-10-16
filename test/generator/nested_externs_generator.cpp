@@ -15,6 +15,10 @@ public:
     ImageParam input_a{ Float(32), 3, "a" };
     ImageParam input_b{ Float(32), 3, "b" };
 
+    static std::string name() {
+        return "nested_externs_combine";
+    }
+
     Func build() override {
         Func result("combine");
         Var x, y, c;
@@ -35,28 +39,25 @@ class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
     Param<float> value {"value", 1.0f};
 
-    Func build() override {
-        Func extern_stage_1("inner_extern_1"),
-            extern_stage_2("inner_extern_2"),
-            extern_stage_combine("inner_combine");
+    static std::string name() {
+        return "nested_externs_inner";
+    }
 
-        extern_stage_1.define_extern("nested_externs_leaf",
-                                     {value}, Float(32), 3);
+    Func build() override {
+        Func extern_stage_1 = extern_generator("nested_externs_leaf", {value});
+
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
                                         extern_stage_1.args()[1]);
         extern_stage_1.compute_root();
 
-        extern_stage_2.define_extern("nested_externs_leaf",
-                                     {value+1}, Float(32), 3);
+        Func extern_stage_2 = extern_generator("nested_externs_leaf", {value+1});
         extern_stage_2.reorder_storage(extern_stage_2.args()[2],
                                         extern_stage_2.args()[0],
                                         extern_stage_2.args()[1]);
         extern_stage_2.compute_root();
 
-        extern_stage_combine.define_extern("nested_externs_combine",
-                                           {extern_stage_1, extern_stage_2},
-                                           Float(32), 3);
+        Func extern_stage_combine = extern_generator("nested_externs_combine", {extern_stage_1, extern_stage_2});
         extern_stage_combine.compute_root();
 
         set_interleaved(extern_stage_combine.output_buffer());
@@ -70,6 +71,10 @@ class NestedExternsLeaf : public Generator<NestedExternsLeaf> {
 public:
 
     Param<float> value {"value", 1.0f};
+
+    static std::string name() {
+        return "nested_externs_leaf";
+    }
 
     Func build() override {
         Func f("leaf");
@@ -87,24 +92,22 @@ class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
     Param<float> value {"value", 1.0f};
 
-    Func build() override {
-        Func extern_stage_1("root_extern_1"),
-            extern_stage_2("root_extern_2"),
-            extern_stage_combine("root_combine");
+    static std::string name() {
+        return "nested_externs_root";
+    }
 
-        extern_stage_1.define_extern("nested_externs_inner",
-                                     {value}, Float(32), 3);
+    Func build() override {
+        Func extern_stage_1 = extern_generator("nested_externs_inner", {value});
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
                                         extern_stage_1.args()[1]);
-        extern_stage_2.define_extern("nested_externs_inner",
-                                     {value+1}, Float(32), 3);
+
+        Func extern_stage_2 = extern_generator("nested_externs_inner", {value+1});
         extern_stage_2.reorder_storage(extern_stage_2.args()[2],
                                         extern_stage_2.args()[0],
                                         extern_stage_2.args()[1]);
-        extern_stage_combine.define_extern("nested_externs_combine",
-                                           {extern_stage_1, extern_stage_2},
-                                           Float(32), 3);
+
+        Func extern_stage_combine = extern_generator("nested_externs_combine", {extern_stage_1, extern_stage_2});
         extern_stage_combine.reorder_storage(extern_stage_combine.args()[2],
                                              extern_stage_combine.args()[0],
                                              extern_stage_combine.args()[1]);
@@ -124,9 +127,9 @@ public:
     }
 };
 
-RegisterGenerator<NestedExternsCombine> register_combine_gen("nested_externs_combine");
-RegisterGenerator<NestedExternsInner> register_inner_gen("nested_externs_inner");
-RegisterGenerator<NestedExternsLeaf> register_leaf_gen("nested_externs_leaf");
-RegisterGenerator<NestedExternsRoot> register_root_gen("nested_externs_root");
+RegisterGenerator<NestedExternsCombine> register_combine_gen;
+RegisterGenerator<NestedExternsInner> register_inner_gen;
+RegisterGenerator<NestedExternsLeaf> register_leaf_gen;
+RegisterGenerator<NestedExternsRoot> register_root_gen;
 
 }  // namespace

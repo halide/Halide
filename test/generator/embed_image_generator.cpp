@@ -1,12 +1,14 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class EmbedImage : public Generator<EmbedImage> {
+class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
     ImageParam input{ Float(32), 3, "input" };
+
+    static std::string name() {
+        return "embed_image";
+    }
 
     Func build() override {
         Image<float> matrix(3, 3);
@@ -27,6 +29,6 @@ public:
     }
 };
 
-RegisterGenerator<EmbedImage> register_my_gen("embed_image");
+Halide::RegisterGenerator<EmbedImage> register_my_gen;
 
 }  // namespace

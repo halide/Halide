@@ -25,7 +25,6 @@ OPTIMIZE ?= -O3
 #  such a compiler handy. One still needs to have 32-bit llvm libraries, etc.)
 BUILD_BIT_SIZE ?=
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer -fno-rtti
-GENGEN ?= ./tools/gengen.sh
 GENGEN_DEPS ?=$(BIN_DIR)/libHalide.so include/Halide.h tools/GenGen.cpp
 
 LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
@@ -296,6 +295,7 @@ $(BUILD_DIR)/%.o: src/%.cpp src/%.h $(BUILD_DIR)/llvm_ok
 clean:
 	rm -rf $(BIN_DIR)/*
 	rm -rf $(BUILD_DIR)/*
+	rm -rf $(FILTERS_DIR)/*
 	rm -rf include/*
 	rm -rf doc
 
@@ -366,43 +366,63 @@ tmp/static/%/%.o: $(BIN_DIR)/static_%_generate
 $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%/%.o include/HalideRuntime.h
 	$(STATIC_TEST_CXX) $(STATIC_TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static/$* -I apps/support -I src/runtime tmp/static/$*/*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
-# By default, $(FILTERS_DIR)/%.o/.h are produced by running GENGEN on %_generator.cpp
-$(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: test/generator/%_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< target=host
+# TODO(srj): this doesn't auto-delete, why not?
+.INTERMEDIATE: $(FILTERS_DIR)/%.generator
 
-# By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h
-$(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp include/HalideRuntime.h $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+# By default, %.generator is produced by building %_generator.cpp
+# Note that the rule includes all _generator.cpp files, so that generators with define_extern
+# usage can just add deps later.
+$(FILTERS_DIR)/%.generator: test/generator/%_generator.cpp $(GENGEN_DEPS)
+	@mkdir -p $(FILTERS_DIR)
+	$(CXX) -std=c++11 -fno-rtti -Iinclude $(filter %_generator.cpp,$^) tools/GenGen.cpp $(BIN_DIR)/libHalide.so -lz -lpthread -ldl -o $@
 
-# By default, %_jittest.cpp don't.
-$(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+# By default, %.o/.h are produced by executing %.generator
+$(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
+	@mkdir -p $(FILTERS_DIR)
+	$< -g $(notdir $*) -o $(FILTERS_DIR) target=host
 
-# A few tests have additional dependencies, which we'll specify here manually:
-# tiled_blur_aottest also depends on tiled_blur_blur
+# If we want to use a Generator with custom GeneratorParams, we need to write
+# custom rules: to pass the GeneratorParams, and to give a unique function and file name.
+$(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur.generator
+	$< -g tiled_blur -f tiled_blur_interleaved -o $(FILTERS_DIR) target=host is_interleaved=true
+$(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur_blur.generator
+	$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o $(FILTERS_DIR) target=host is_interleaved=true
+
+# Some .generators have additional dependencies (usually due to define_extern usage).
+# These typically require two extra dependencies:
+# (1) Ensuring the extra _generator.cpp is built into the .generator.
+# (2) Ensuring the extra .o is linked into the final output.
+
+# tiled_blur also needs tiled_blur_blur, due to an extern_generator dependency.
+$(FILTERS_DIR)/tiled_blur.generator: test/generator/tiled_blur_blur_generator.cpp
+# TODO(srj): we really want to say "anything that depends on tiled_blur.o also depends on tiled_blur_blur.o";
+# is there a way to specify that in Make?
 $(BIN_DIR)/generator_aot_tiled_blur: $(FILTERS_DIR)/tiled_blur_blur.o
+$(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
 
-# tiled_blur_interleaved_aottest depends on tiled_blur_interleaved and tiled_blur_blur_interleaved
-$(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.o
+# Usually, it's considered best practice to have one Generator per .cpp file,
+# with the generator-name and filename matching; nested_externs_generators.cpp
+# is a counterexample, and thus requires some special casing to get right.
+# First, make a special rule to build each of the Generators in nested_externs_generator.cpp
+# (which all have the form nested_externs_*)
+$(FILTERS_DIR)/nested_externs_%.o $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
+	$< -g nested_externs_$* -o $(FILTERS_DIR) target=host
 
-# "tiled_blur_interleaved" is produced by using tiled_blur with different generator args.
-$(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: test/generator/tiled_blur_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f tiled_blur_interleaved target=host is_interleaved=true
-
-# "tiled_blur_blur_interleaved" is produced by using tiled_blur_blur with different generator args.
-$(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: test/generator/tiled_blur_blur_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f tiled_blur_blur_interleaved target=host is_interleaved=true
-
-# The nested externs object file and header is a concatenation of three separate generator outputs
-$(FILTERS_DIR)/nested_externs.o: $(BIN_DIR)/generator_nested_externs_leaf $(BIN_DIR)/generator_nested_externs_inner $(BIN_DIR)/generator_nested_externs_combine  $(BIN_DIR)/generator_nested_externs_root
+# Synthesize 'nested_externs.o' based on the four generator products we need:
+$(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o
 	ld -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
 
+# Synthesize 'nested_externs.h' based on the four generator products we need:
 $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 	cat $(FILTERS_DIR)/nested_externs_*.h > $(FILTERS_DIR)/nested_externs.h
 
-# The nested externs generator needs to be run once for each generator it contains
-$(BIN_DIR)/generator_nested_externs_% $(FILTERS_DIR)/generator_nested_externs_%.o $(FILTERS_DIR)/generator_nested_externs_%.h : test/generator/nested_externs_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -g nested_externs_$* -f nested_externs_$* target=host
+# By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
+$(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h include/HalideRuntime.h 
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+
+# By default, %_jittest.cpp depends on libHalide.
+$(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	@ if [[ $@ == *_run ]]; then \

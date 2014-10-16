@@ -48,6 +48,10 @@ public:
     Param<int> w{"w"};
     Param<int> h{"h"};
 
+    static std::string name() {
+        return "mandelbrot";
+    }
+
     Func build() override {
         Func mandelbrot;
         Var x, y, z;
@@ -78,6 +82,6 @@ public:
     }
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen("mandelbrot");
+RegisterGenerator<Mandelbrot> register_my_gen;
 
 }  // namespace

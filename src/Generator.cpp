@@ -14,18 +14,19 @@ bool is_alpha(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 // Note that this includes '_'
 bool is_alnum(char c) { return is_alpha(c) || (c == '_') || (c >= '0' && c <= '9'); }
 
+// Basically, a valid C identifier, except:
+//
+// -- initial _ is forbidden (rather than merely "reserved")
+// -- two underscores in a row is also forbidden
+//
+// ("__user_context" is exempt from both of the above exemptions, but calling
+// code should special-case it and never pass it here)
 bool is_valid_name(const std::string& n) {
-    if (n.empty()) {
-        return false;
-    }
-    if (!is_alpha(n[0])) {
-        // __user_context is allowed to start with non-alpha, but nothing else is
-        return (n == "__user_context");
-    }
+    if (n.empty()) return false;
+    if (!is_alpha(n[0])) return false;
     for (size_t i = 1; i < n.size(); ++i) {
-        if (!is_alnum(n[i])) {
-            return false;
-        }
+        if (!is_alnum(n[i])) return false;
+        if (n[i] == '_' && n[i-1] == '_') return false;
     }
     return true;
 }
@@ -67,7 +68,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
-    std::vector<std::string> generator_names = Internal::GeneratorRegistry::enumerate();
+    std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
     if (generator_names.size() == 0) {
         cerr << "No generators have been registered\n";
         cerr << kUsage;
@@ -78,7 +79,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     if (generator_name.empty()) {
         // If -g isn't specified, but there's only one generator registered, just use that one.
         if (generator_names.size() != 1) {
-            cerr << "-g must be specified if multiple generators are registered\n";
+            cerr << "-g must be specified if multiple generators are registered:\n";
+            for (auto name : generator_names) {
+                cerr << "    " << name << "\n";
+            }
             cerr << kUsage;
             return 1;
         }
@@ -86,14 +90,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
     std::string function_name = flags_info["-f"];
     if (function_name.empty()) {
-        // If -f isn't specified, but there's only one generator registered,
-        // just assume function name = generator name.
-        if (generator_names.size() != 1) {
-            cerr << "-f must be specified if multiple generators are registered\n";
-            cerr << kUsage;
-            return 1;
-        }
-        function_name = generator_names[0];
+        // If -f isn't specified, assume function name = generator name.
+        function_name = generator_name;
     }
     std::string output_dir = flags_info["-o"];
     if (output_dir.empty()) {
@@ -107,8 +105,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
-    std::unique_ptr<GeneratorBase> gen =
-        Internal::GeneratorRegistry::create(generator_name, generator_args);
+    std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
     if (gen == nullptr) {
         cerr << "Unknown generator: " << generator_name << "\n";
         cerr << kUsage;
@@ -185,8 +182,13 @@ void GeneratorBase::build_params() {
         for (size_t i = 0; i < vf.size(); ++i) {
             Parameter *param = static_cast<Parameter *>(vf[i]);
             internal_assert(param != nullptr);
-            user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
-            user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
+            // both user_context and __user_context are allowed iff the Param is void*
+            if (param->name() == "user_context" || param->name() == "__user_context") {
+                user_assert(param->type().is_handle()) << param->name() << " is a reserved name";
+            } else {
+                user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
+                user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
+            }
             user_assert(filter_params.find(param->name()) == filter_params.end())
                 << "Duplicate Param name: " << param->name();
             filter_params[param->name()] = param;
@@ -207,6 +209,16 @@ void GeneratorBase::build_params() {
     }
 }
 
+GeneratorParamValues GeneratorBase::get_generator_param_values() {
+    build_params();
+    GeneratorParamValues results;
+    for (auto key_value : generator_params) {
+        GeneratorParamBase *param = key_value.second;
+        results[param->name] = param->to_string();
+    }
+    return results;
+}
+
 void GeneratorBase::set_generator_param_values(const GeneratorParamValues &params) {
     build_params();
     for (auto key_value : params) {
@@ -215,19 +227,19 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
         auto param = generator_params.find(key);
         user_assert(param != generator_params.end())
             << "Generator has no GeneratorParam named: " << key;
-        param->second->set_from_string(value);
+        param->second->from_string(value);
     }
 }
 
-void GeneratorBase::emit_filter(const std::string &output_dir, const std::string &function_name,
-                                const std::string &file_base_name, const EmitOptions &options) {
-    Func func = build();
-
+void GeneratorBase::emit_filter(const std::string &output_dir,
+                                const std::string &function_name,
+                                const std::string &file_base_name,
+                                const EmitOptions &options) {
     build_params();
 
-    std::string base_path = file_base_name.empty() ?
-        output_dir + "/" + function_name :
-        output_dir + "/" + file_base_name;
+    Func func = build();
+
+    std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
     if (options.emit_o) {
         func.compile_to_object(base_path + ".o", filter_arguments, function_name, target);
     }
@@ -249,6 +261,29 @@ void GeneratorBase::emit_filter(const std::string &output_dir, const std::string
     if (options.emit_stmt_html) {
         func.compile_to_lowered_stmt(base_path + ".html", Halide::HTML, target);
     }
+}
+
+Func GeneratorBase::build_extern(std::initializer_list<ExternFuncArgument> function_arguments,
+                                 std::string function_name){
+    Func f = build();
+    Func f_extern;
+    if (function_name.empty()) {
+        function_name = generator_name();
+    }
+    f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
+    return f_extern;
+}
+
+Func GeneratorBase::extern_generator(const std::string &generator_name,
+                                     std::initializer_list<ExternFuncArgument> function_arguments,
+                                     const GeneratorParamValues &generator_params,
+                                     const std::string &function_name) {
+    std::unique_ptr<GeneratorBase> extern_gen = GeneratorRegistry::create(generator_name, generator_params);
+    user_assert(extern_gen != nullptr) << "Unknown generator: " << generator_name << "\n";
+    // Explicitly set the new Generator's target to match ours, regardless
+    // of what may have been passed in params.
+    extern_gen->target.set(target);
+    return extern_gen->build_extern(function_arguments, function_name);
 }
 
 }  // namespace Internal

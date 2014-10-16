@@ -1,13 +1,15 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class UserContextInsanity : public Generator<UserContextInsanity> {
+class UserContextInsanity : public Halide::Generator<UserContextInsanity> {
 public:
     ImageParam input{ Float(32), 2, "input" };
     Param<void *> user_context{ "__user_context" };
+
+    static std::string name() {
+        return "user_context_insanity";
+    }
 
     Func build() override {
         Var x, y;
@@ -25,6 +27,6 @@ public:
     }
 };
 
-RegisterGenerator<UserContextInsanity> register_my_gen("user_context_insanity");
+Halide::RegisterGenerator<UserContextInsanity> register_my_gen;
 
 }  // namespace
