@@ -126,7 +126,7 @@ struct ModuleState {
 
 // All persistent state maintained by the runtime.
 struct GlobalState {
-    GlobalState();
+    void init();
 
     bool initialized;
 
@@ -427,7 +427,7 @@ WEAK GLfloat quad_vertices[] = {
 };
 WEAK GLuint quad_indices[] = { 0, 1, 2, 3 };
 
-GlobalState::GlobalState() {
+WEAK void GlobalState::init() {
     initialized = false;
     profile = OpenGL;
     major_version = 2;
@@ -526,7 +526,7 @@ WEAK int halide_opengl_init(void *user_context) {
         return 0;
     }
 
-    global_state = GlobalState();
+    global_state.init();
 
     // Make a context if there isn't one
     if (halide_opengl_create_context(user_context)) {
@@ -1624,7 +1624,7 @@ WEAK void halide_opengl_context_lost(void *user_context) {
         tex = next;
     }
 
-    ST = GlobalState();
+    global_state.init();
     return;
 }
 
