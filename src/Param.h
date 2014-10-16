@@ -41,8 +41,12 @@ public:
         param(type_of<T>(), false, 0, Internal::make_entity_name(this, "Halide::Param<?", 'p')) {}
 
     /** Construct a scalar parameter of type T with the given name. */
+    // @{
     explicit Param(const std::string &n) :
         param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {}
+    explicit Param(const char *n) :
+        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {}
+    // @}
 
     /** Construct a scalar parameter of type T an initial value of
      * 'val'. Only triggers for scalar types. */
