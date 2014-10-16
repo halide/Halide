@@ -14,9 +14,9 @@ namespace Halide {
 
 class Matrix;
 
-/** A fragment of front-end syntax of the form f(x, y, z), where x, y,
- * z are Exprs. If could be the left hand side of a reduction
- * definition, or it could be a call to a function. We don't know
+/** A fragment of front-end syntax of the form A(i, j), where i, and j
+ * are Exprs. It could be the left hand side of a reduction
+ * definition, or it could be a call to a matrix. We don't know
  * until we see how this object gets used.
  */
 class MatrixRef {
@@ -74,6 +74,32 @@ class MatrixRef {
     EXPORT operator Expr() const;
 };
 
+class Partition {
+    Matrix &matrix;
+
+    Expr nrows, ncols;
+    Var  bi, bj;
+
+    int  update;
+    int  level;
+    bool specialized;
+    Expr condition;
+public:
+    Partition(Matrix &mat);
+    Partition(Matrix &mat, int up, int lvl, Expr m, Expr n);
+
+    Partition &parent();
+
+    Stage schedule();
+    Expr num_rows() const {return nrows;}
+    Expr num_cols() const {return ncols;}
+
+    Var row_var() const {return bi;}
+    Var col_var() const {return bj;}
+
+    bool is_specialization() const {return specialized;}
+};
+ 
 class Matrix {
     /* For small matrices we store the coefficient Expr's directly. */
     std::vector<Expr> coeffs;
@@ -83,10 +109,10 @@ class Matrix {
 
     /* We store a schedule here, which we can apply to the Func as
      * soon as we receive a compute_* call. */
-    Internal::Schedule schedule;
+    /* Internal::Schedule schedule; */
 
     /* Variables for accessing the function as a matrix. */
-    std::vector<Var> ij;
+    Var ij[2];
 
     /* A flag indicating if we should use the function representation or
      * the coefficient representation. */
@@ -98,15 +124,8 @@ class Matrix {
     /* Number of columns in the matrix. */
     Expr ncols;
 
-    struct Block {
-        Expr nrows;
-        Expr ncols;
-        Var  bi;
-        Var  bj;
-    };
-
-    /* Vector of tuples storing the matrix block partitioning at each level. */
-    std::vector<Block> blocks;
+    /* Vector of partitions that have been applied to this matrix. */
+    std::vector<Partition> partitions;
 
     /* Level of partitioning at which to vectorize operations. */
     int vec_level;
@@ -118,16 +137,11 @@ class Matrix {
     int small_offset(Expr row, Expr col) const;
 
     void init(Expr num_row, Expr num_col);
-    bool const_num_rows(int &m);
-    bool const_num_cols(int &n);
-    bool const_size(int &m, int &n);
 
-    Stage base_schedule();
-    Stage vector_schedule();
-    Stage parallel_schedule();
-    Stage block_schedule(int level);
+    Stage root_schedule(int update=-1);
 
     friend class MatrixRef;
+    friend class Partition;
 
     friend Matrix operator+(Matrix, Matrix);
     friend Matrix operator-(Matrix, Matrix);
@@ -151,8 +165,8 @@ public:
     EXPORT bool is_large_matrix() const {return is_large;}
     EXPORT std::string name() const {return func.name();}
 
-    EXPORT Var row_var() const {return ij[0];}
-    EXPORT Var col_var() const {return ij[1];}
+    EXPORT Var row_var() const;
+    EXPORT Var col_var() const;
 
     EXPORT Type type() const;
     // EXPORT Buffer realize();
@@ -160,14 +174,24 @@ public:
     EXPORT Expr num_rows() const;
     EXPORT Expr num_cols() const;
 
-    EXPORT Matrix &compute_at_rows(Matrix &other);
-    EXPORT Matrix &compute_at_columns(Matrix &other);
-    EXPORT Matrix &compute_at_blocks(Matrix &other, int level);
-    EXPORT Matrix &compute_at_column_of_blocks(Matrix &other, int level);
+    EXPORT bool const_num_rows(int &m);
+    EXPORT bool const_num_cols(int &n);
+    EXPORT bool const_size(int &m, int &n);
 
+    EXPORT Matrix &compute_at_rows(Matrix &other, int level = 0);
+    EXPORT Matrix &compute_at_columns(Matrix &other, int level = 0);
+
+    EXPORT Matrix &partition(Expr size);
     EXPORT Matrix &partition(Expr row_size, Expr col_size);
-    EXPORT Matrix &vectorize(int level);
-    EXPORT Matrix &parallelize(int level);
+    EXPORT Matrix &vectorize(int level = -1);
+    EXPORT Matrix &parallelize(int level = -1);
+
+    EXPORT int num_partitions();
+    EXPORT Partition &root_partition();
+    EXPORT Partition &get_partition(int level);
+
+    EXPORT const Partition &root_partition() const;
+    EXPORT const Partition &get_partition(int level) const;
 
     EXPORT Matrix row(Expr i);
     EXPORT Matrix col(Expr j);
