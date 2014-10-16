@@ -25,6 +25,16 @@ class DependsOnBoundsInference : public IRVisitor {
         }
     }
 
+    void visit(const Call *op) {
+        if (op->call_type == Call::Intrinsic &&
+            (op->name == Call::extract_buffer_min ||
+             op->name == Call::extract_buffer_max)) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
 public:
     bool result;
     DependsOnBoundsInference() : result(false) {}
@@ -309,15 +319,18 @@ public:
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
                     }
-                } else if (args[j].is_buffer()) {
-                    Buffer b = args[j].buffer;
-                    Parameter p(b.type(), true, b.name());
-                    p.set_buffer(b);
-                    Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
-                    bounds_inference_args.push_back(buf);
-                } else if (args[j].is_image_param()) {
+                } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
-                    Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                    Buffer b = args[j].buffer;
+                    string name = args[j].is_image_param() ? p.name() : b.name();
+
+                    Expr in_buf = Variable::make(Handle(), name + ".buffer");
+
+                    // Copy the input buffer into a query buffer to mutate.
+                    string query_name = name + ".bounds_query." + func.name();
+                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, vec<Expr>(in_buf), Call::Intrinsic);
+                    lets.push_back(make_pair(query_name, query_buf));
+                    Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                 } else {
                     internal_error << "Bad ExternFuncArgument type";

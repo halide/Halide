@@ -24,22 +24,29 @@ class Parameter {
 
 public:
     /** Construct a new undefined handle */
-    Parameter() : contents(NULL) {}
+    EXPORT Parameter();
 
     /** Construct a new parameter of the given type. If the second
-     * argument is true, this is a buffer parameter, otherwise, it is
-     * a scalar parameter. The parameter will be given a unique
-     * auto-generated name. */
-    EXPORT Parameter(Type t, bool is_buffer);
+     * argument is true, this is a buffer parameter of the given
+     * dimensionality, otherwise, it is a scalar parameter (and the
+     * dimensionality should be zero). The parameter will be given a
+     * unique auto-generated name. */
+    EXPORT Parameter(Type t, bool is_buffer, int dimensions);
 
     /** Construct a new parameter of the given type with name given by
-     * the third argument. If the second argument is true, this is a
-     * buffer parameter, otherwise, it is a scalar parameter. The
-     * parameter will be given a unique auto-generated name. */
-    EXPORT Parameter(Type t, bool is_buffer, const std::string &name);
+     * the last argument. If the second argument is true, this is a
+     * buffer parameter, otherwise, it is a scalar parameter. */
+    EXPORT Parameter(Type t, bool is_buffer, int dimensions, const std::string &name);
+
+    /** Copy ctor and dtor, needed for ObjectRegistry accounting. */
+    EXPORT Parameter(const Parameter&);
+    EXPORT ~Parameter();
 
     /** Get the type of this parameter */
     EXPORT Type type() const;
+
+    /** Get the dimensionality of this parameter. Zero for scalars. */
+    EXPORT int dimensions() const;
 
     /** Get the name of this parameter */
     EXPORT const std::string &name() const;
