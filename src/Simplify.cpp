@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -1866,6 +1867,20 @@ private:
                 expr = op;
                 } else {
                 expr = abs(a);
+            }
+        } else if (op->call_type == Call::Intrinsic &&
+                   op->name == Call::isnan) {
+            Expr arg = mutate(op->args[0]);
+            Type ta = arg.type();
+            float f = 0.0f;
+            if (!arg.same_as(op->args[0])) {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+#if 0       // TODO: enable this once we use C++11
+            } else if (const_float(arg, &f)) {
+                expr = std::isnan(f);
+#endif
+            } else {
+                expr = op;
             }
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
