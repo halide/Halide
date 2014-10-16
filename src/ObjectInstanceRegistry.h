@@ -24,7 +24,7 @@ public:
         Invalid,
         Generator,
         GeneratorParam,
-        FilterParam,
+        FilterParam
     };
 
     /** Add an instance to the registry. The size may be 0 for Param Kinds,
