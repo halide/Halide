@@ -22,20 +22,15 @@ public:
         Func brighter1("brighter1");
         brighter1(x, y, c) = input(x, y, c) * 1.2f;
 
-        // Note that extern_generator() requires that the Generator with
-        // the given name ("tiled_blur_blur" in this case) be available
-        //at *runtime*, not compile-time; we need not include it here,
-        // we just must ensure that it is linked & registered when this method
-        // is called.
-        Func tiled_blur = extern_generator(
+        Func tiled_blur = call_extern_by_name(
             /* generator_name */
             "tiled_blur_blur",
             /* ExternFuncArguments */
             { brighter1, input.width(), input.height() },
-            /* generator_args */
-            { { "is_interleaved", is_interleaved ? "true" : "false" } },
-            /* function name */
-            is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur");
+            /* optional: function name */
+            is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
+            /* optional: generator_args */
+            { { "is_interleaved", is_interleaved ? "true" : "false" } });
 
         Func brighter2("brighter2");
         brighter2(x, y, c) = tiled_blur(x, y, c) * 1.2f;

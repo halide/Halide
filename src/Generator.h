@@ -337,12 +337,26 @@ public:
 
     virtual ~GeneratorBase();
 
+    /** Build and return a Halide::Func. All Generators must override this. */
     virtual Func build() = 0;
 
-    Func extern_generator(const std::string &generator_name,
-                          std::initializer_list<ExternFuncArgument> function_arguments,
-                          const GeneratorParamValues &params = GeneratorParamValues(),
-                          const std::string &function_name = "");
+    /** Return a Func that calls a previously-generated instance of this Generator.
+     * This is (essentially) a smart wrapper around define_extern(), but uses the
+     * output types and dimensionality of the Func returned by build. It is
+     * expected that the previously-generated instance will be available (at link time)
+     * as extern "C" function_name (if function_name is empty, it is assumed to
+     * match generator_name()). */
+    Func call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
+                     std::string function_name = "");
+
+    /** Similar to call_extern(), but first creates a new Generator
+     * (from the current Registry) with the given name and params;
+     * this is more convenient to use if you don't have access to the C++
+     * Generator class definition at compile-time. */
+    static Func call_extern_by_name(const std::string &generator_name,
+                                    std::initializer_list<ExternFuncArgument> function_arguments,
+                                    const std::string &function_name = "",
+                                    const GeneratorParamValues &generator_params = GeneratorParamValues());
 
     Target get_target() const { return target; }
 
@@ -396,9 +410,6 @@ private:
     virtual std::string generator_name() = 0;
 
     void build_params();
-
-    Func build_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                      std::string function_name = "");
 
     // Provide private, unimplemented, wrong-result-type methods here
     // so that Generators don't attempt to call the global methods
