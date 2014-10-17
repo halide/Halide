@@ -586,9 +586,6 @@ int main(int argc, char **argv) {
         // Extract the real component and normalize.
         filtered_c2c(x, y) = re(dft_out(x, y))/cast<float>(W*H);
     }
-    filtered_c2c.compile_to_lowered_stmt("fft_c2c.stmt");
-
-    return 0;
 
     Func filtered_r2c;
     {
@@ -608,8 +605,6 @@ int main(int argc, char **argv) {
         RDom xy(0, W, 0, H);
         filtered_r2c(xy.x, xy.y) /= cast<float>(W*H);
     }
-    filtered_r2c.compile_to_lowered_stmt("fft_r2c.stmt");
-
 
     Image<float> result_c2c = filtered_c2c.realize(W, H, target);
     Image<float> result_r2c = filtered_r2c.realize(W, H, target);
