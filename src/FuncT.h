@@ -25,10 +25,10 @@ public:
      * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
-    Stage operator+=(T x) { return untyped = untyped + x; }
-    Stage operator-=(T x) { return untyped = untyped - x; }
-    Stage operator*=(T x) { return untyped = untyped * x; }
-    Stage operator/=(T x) { return untyped = untyped / x; }
+    Stage operator+=(T x) { return untyped = T(Tuple(untyped)) + x; }
+    Stage operator-=(T x) { return untyped = T(Tuple(untyped)) - x; }
+    Stage operator*=(T x) { return untyped = T(Tuple(untyped)) * x; }
+    Stage operator/=(T x) { return untyped = T(Tuple(untyped)) / x; }
     // @}
 };
 
@@ -44,10 +44,10 @@ public:
      * the update definitions do not implicitly define a base case. */
     // @{
     Stage operator=(T x) { return untyped = x; }
-    Stage operator+=(T x) { return untyped = untyped + x; }
-    Stage operator-=(T x) { return untyped = untyped - x;}
-    Stage operator*=(T x) { return untyped = untyped * x; }
-    Stage operator/=(T x) { return untyped = untyped / x; }
+    Stage operator+=(T x) { return untyped = T(Tuple(untyped)) + x; }
+    Stage operator-=(T x) { return untyped = T(Tuple(untyped)) - x;}
+    Stage operator*=(T x) { return untyped = T(Tuple(untyped)) * x; }
+    Stage operator/=(T x) { return untyped = T(Tuple(untyped)) / x; }
     // @}
 };
 
