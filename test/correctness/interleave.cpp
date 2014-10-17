@@ -35,9 +35,9 @@ bool does_interleave(Func f) {
 // Make sure the interleave pattern generates good vector code
 
 int main(int argc, char **argv) {
-    Func f, g, h;
     Var x, y;
 
+    Func f, g, h;
     f(x) = sin(x);
     g(x) = cos(x);
     h(x) = select(x % 2 == 0, 1.0f/f(x/2), g(x/2)*17.0f);
@@ -185,7 +185,7 @@ int main(int argc, char **argv) {
     buff5 = Buffer(Float(32), 16, 5, 0, 0, (uint8_t *)0);
     buff5.raw_buffer()->stride[0] = 5;
     buff5.raw_buffer()->stride[1] = 1;
-
+ 
     Realization r5(Internal::vec(buff5));
     output5.realize(r5);
 
@@ -253,7 +253,7 @@ int main(int argc, char **argv) {
 
     // Test that transposition works when vectorizing either dimension:
     Func square("square");
-    square(x, y) = 5*x + y;
+    square(x, y) = cast(UInt(16), 5*x + y);
 
     Func trans1("trans1");
     trans1(x, y) = square(y, x);
@@ -286,6 +286,30 @@ int main(int argc, char **argv) {
             .set_min(0,0).set_min(1,0)
             .set_stride(0,1).set_stride(1,8)
             .set_extent(0,8).set_extent(1,8);
+
+    trans1.compile_to_lowered_stmt("trans1.stmt");
+    trans2.compile_to_lowered_stmt("trans2.stmt");
+
+    Image<uint16_t> result6(8,8);
+    Image<uint16_t> result7(8,8);
+    trans1.realize(result6);
+    trans2.realize(result7);
+
+    for (int x = 0; x < 8; x++) {
+        for (int y = 0; y < 8; y++) {
+            int correct = 5*y + x;
+            if (result6(x,y) != correct) {
+                printf("result(%d) = %d instead of %d\n", x, result6(x,y), correct);
+                return -1;
+            }
+            
+            if (result7(x,y) != correct) {
+                printf("result(%d) = %d instead of %d\n", x, result7(x,y), correct);
+                return -1;
+            }
+        }
+    }
+
 
     if (!does_interleave(trans1)) {
         printf("transposing with vectorize(x) does not interleave.\n");
