@@ -126,12 +126,6 @@ endif
 # Remove some non-llvm libs that llvm-config has helpfully included
 LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_LIBS))
 
-# On linux, statically link libgcc and libstdc++ to avoid version woes
-SHARED_LD_FLAGS ?=
-ifeq ($(UNAME), Linux)
-SHARED_LD_FLAGS += -static-libstdc++ -static-libgcc
-endif
-
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
 TEST_PTX = 1
@@ -229,7 +223,7 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) $(SHARED_LD_FLAGS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) src/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p include

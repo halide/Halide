@@ -35,6 +35,11 @@ int main(int argc, char **argv) {
     // a Func. They have no meaning by themselves.
     Halide::Var x, y;
 
+    // We typically use Vars named 'x' and 'y' to correspond to the x
+    // and y axes of an image, and we write them in that order. If
+    // you're used to thinking of images as having rows and columns,
+    // then x is the column index, and y is the row index.
+
     // Funcs are defined at any integer coordinate of its variables as
     // an Expr in terms of those variables and other functions.
     // Here, we'll define an Expr which has the value x + y. Vars have
