@@ -104,10 +104,11 @@ print-%:
 
 LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
 
+LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
+ifneq ($(LLVM_34_OR_OLDER), )
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
-LLVM_35_OR_NEWER = $(findstring $(LLVM_VERSION_TIMES_10), 35 36)
-ifneq ($(LLVM_35_OR_NEWER), )
-LLVM_LDFLAGS += $(shell $(LLVM_CONFIG) --system-libs)
+else
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
 endif
 
 UNAME = $(shell uname)
@@ -170,6 +171,11 @@ endif
 ifneq ($(TEST_PTX), )
 TEST_CXX_FLAGS += -DTEST_PTX
 endif
+
+# Note that we don't include -g in the static test flags. OS X's
+# dsymutil can't seem to generate a dSYM folder from the binaries that
+# trunk llvm produces.
+STATIC_TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -fno-omit-frame-pointer
 
 # Compiling the tutorials requires libpng
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
@@ -314,7 +320,7 @@ test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
 
-run_tests: test_correctness test_errors test_tutorials test_static test_warnings
+run_tests: test_internal test_correctness test_errors test_tutorials test_static test_warnings
 	make test_performance
 
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
@@ -350,7 +356,7 @@ tmp/static/%/%.o: $(BIN_DIR)/static_%_generate
 	@-echo
 
 $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%/%.o include/HalideRuntime.h
-	$(STATIC_TEST_CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static/$* -I apps/support -I src/runtime tmp/static/$*/*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
+	$(STATIC_TEST_CXX) $(STATIC_TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static/$* -I apps/support -I src/runtime tmp/static/$*/*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	@ if [[ $@ == *_run ]]; then \
