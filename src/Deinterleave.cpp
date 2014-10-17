@@ -549,7 +549,7 @@ class Interleaver : public IRMutator {
             std::string load_name;
             Buffer load_image;
             Parameter load_param;
-            for (int i = 0; i < stores.size(); ++i) {
+            for (size_t i = 0; i < stores.size(); ++i) {
                 const Ramp *ri = stores[i].index.as<Ramp>();
                 internal_assert(ri);
 
@@ -566,7 +566,7 @@ class Interleaver : public IRMutator {
                 if (*offs < min_offset) {
                     min_offset = *offs;
                 }
-                    
+
                 if (stride == 1) {
                     // Difference between bases is not a multiple of the width.
                     if (*offs % width != 0) goto fail;
@@ -593,7 +593,7 @@ class Interleaver : public IRMutator {
             }
 
             // Gather the args for interleaving.
-            for (int i = 0; i < stores.size(); ++i) {
+            for (size_t i = 0; i < stores.size(); ++i) {
                 int j = offsets[i] - min_offset;
                 if (stride == 1)
                     j /= stores.size();
@@ -603,7 +603,7 @@ class Interleaver : public IRMutator {
                 }
 
                 // The offset is not between zero and the stride.
-                if (j < 0 || j >= stores.size()) goto fail;
+                if (j < 0 || (size_t)j >= stores.size()) goto fail;
 
                 // We already have a store for this offset.
                 if (args[j].defined()) goto fail;

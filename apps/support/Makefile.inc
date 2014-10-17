@@ -7,7 +7,9 @@ else
 LIB_HALIDE = bin/libHalide.a
 endif
 
-LDFLAGS += $(shell llvm-config --ldflags)
+LLVM_CONFIG ?= llvm-config
+LDFLAGS += $(shell $(LLVM_CONFIG) --ldflags)
+LDFLAGS += $(shell $(LLVM_CONFIG) --system-libs)
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
