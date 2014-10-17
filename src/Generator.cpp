@@ -263,7 +263,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     }
 }
 
-Func GeneratorBase::build_extern(std::initializer_list<ExternFuncArgument> function_arguments,
+Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
                                  std::string function_name){
     Func f = build();
     Func f_extern;
@@ -274,16 +274,15 @@ Func GeneratorBase::build_extern(std::initializer_list<ExternFuncArgument> funct
     return f_extern;
 }
 
-Func GeneratorBase::extern_generator(const std::string &generator_name,
-                                     std::initializer_list<ExternFuncArgument> function_arguments,
-                                     const GeneratorParamValues &generator_params,
-                                     const std::string &function_name) {
+Func GeneratorBase::call_extern_by_name(const std::string &generator_name,
+                                        std::initializer_list<ExternFuncArgument> function_arguments,
+                                        const std::string &function_name,
+                                        const GeneratorParamValues &generator_params) {
     std::unique_ptr<GeneratorBase> extern_gen = GeneratorRegistry::create(generator_name, generator_params);
     user_assert(extern_gen != nullptr) << "Unknown generator: " << generator_name << "\n";
-    // Explicitly set the new Generator's target to match ours, regardless
-    // of what may have been passed in params.
-    extern_gen->target.set(target);
-    return extern_gen->build_extern(function_arguments, function_name);
+    // Note that the Generator's target is not set; at present, this shouldn't matter for
+    // define_extern() functions, since none of the linkage should vary by Target.
+    return extern_gen->call_extern(function_arguments, function_name);
 }
 
 }  // namespace Internal

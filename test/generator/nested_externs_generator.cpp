@@ -44,20 +44,31 @@ public:
     }
 
     Func build() override {
-        Func extern_stage_1 = extern_generator("nested_externs_leaf", {value});
+        // We can make an extern call to any (registered) Generator
+        // by using call_extern_by_name() with the generator_name we're calling,
+        // and a vector of ExternFuncArguments. We can (optionally) also
+        // specify GeneratorParams for the Generator, and the function name we
+        // expect that Generator to be linked under.
+        Func extern_stage_1 = call_extern_by_name("nested_externs_leaf", {value});
 
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
                                         extern_stage_1.args()[1]);
         extern_stage_1.compute_root();
 
-        Func extern_stage_2 = extern_generator("nested_externs_leaf", {value+1});
+        Func extern_stage_2 = call_extern_by_name("nested_externs_leaf", {value+1});
         extern_stage_2.reorder_storage(extern_stage_2.args()[2],
                                         extern_stage_2.args()[0],
                                         extern_stage_2.args()[1]);
         extern_stage_2.compute_root();
 
-        Func extern_stage_combine = extern_generator("nested_externs_combine", {extern_stage_1, extern_stage_2});
+        // If the Generator is available at C++ compile time
+        // (either via .h or inlined in the same file, as is the case here),
+        // you can simply instantiate the Generator and make the call.
+        // (Here we assume that it will be available at link time with
+        // a function name that matches the generator name; we can
+        // specify an optional function name otherwise.)
+        Func extern_stage_combine = NestedExternsCombine().call_extern({extern_stage_1, extern_stage_2});
         extern_stage_combine.compute_root();
 
         set_interleaved(extern_stage_combine.output_buffer());
@@ -97,17 +108,17 @@ public:
     }
 
     Func build() override {
-        Func extern_stage_1 = extern_generator("nested_externs_inner", {value});
+        Func extern_stage_1 = NestedExternsInner().call_extern({value});
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
                                         extern_stage_1.args()[1]);
 
-        Func extern_stage_2 = extern_generator("nested_externs_inner", {value+1});
+        Func extern_stage_2 = NestedExternsInner().call_extern({value+1});
         extern_stage_2.reorder_storage(extern_stage_2.args()[2],
                                         extern_stage_2.args()[0],
                                         extern_stage_2.args()[1]);
 
-        Func extern_stage_combine = extern_generator("nested_externs_combine", {extern_stage_1, extern_stage_2});
+        Func extern_stage_combine = NestedExternsCombine().call_extern({extern_stage_1, extern_stage_2});
         extern_stage_combine.reorder_storage(extern_stage_combine.args()[2],
                                              extern_stage_combine.args()[0],
                                              extern_stage_combine.args()[1]);
