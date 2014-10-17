@@ -29,7 +29,7 @@ struct Target {
     /** The architecture used by the target. Determines the
      * instruction set to use. For the PNaCl target, the "instruction
      * set" is actually llvm bitcode. */
-    enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS} arch;
+  enum Arch {ArchUnknown = 0, X86, ARM, PNaCl, MIPS, Hexagon} arch;
 
     /** The bit-width of the target machine. Must be 0 for unknown, or 32 or 64. */
     int bits;
@@ -62,7 +62,7 @@ struct Target {
         OpenGL,  ///< Enable the OpenGL runtime.
 
         UserContext,  ///< Generated code takes a user_context pointer as first argument
-
+        HVX, /// Enable HVX (hexagon) intrinsics
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!

@@ -5,6 +5,7 @@
 #include "CodeGen_ARM.h"
 #include "CodeGen_MIPS.h"
 #include "CodeGen_PNaCl.h"
+#include "CodeGen_Hexagon.h"
 
 namespace Halide {
 namespace Internal {
@@ -13,8 +14,9 @@ using std::string;
 using std::vector;
 
 StmtCompiler::StmtCompiler(Target target) {
-    if (target.os == Target::OSUnknown) {
-        target = get_host_target();
+    if (target.os == Target::OSUnknown &&
+        target.arch != Target::Hexagon) {
+      target = get_host_target();
     }
 
     // The awkward mapping from targets to code generators
@@ -53,6 +55,10 @@ StmtCompiler::StmtCompiler(Target target) {
         contents = new CodeGen_MIPS(target);
     } else if (target.arch == Target::PNaCl) {
         contents = new CodeGen_PNaCl(target);
+    } else if (target.arch == Target::Hexagon) {
+      if (target.os != Target::OSUnknown)
+        user_error << "Hexagon not setup yet";
+      contents = new CodeGen_Hexagon(target);
     }
 }
 
