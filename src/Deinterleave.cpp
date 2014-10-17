@@ -1,12 +1,13 @@
 #include "Deinterleave.h"
+#include "BlockFlattening.h"
+#include "Debug.h"
 #include "IRMutator.h"
-#include "Simplify.h"
 #include "IROperator.h"
 #include "IREquality.h"
 #include "IRPrinter.h"
 #include "ModulusRemainder.h"
-#include "Debug.h"
 #include "Scope.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -694,6 +695,7 @@ class Interleaver : public IRMutator {
 };
 
 Stmt rewrite_interleavings(Stmt s) {
+    s = flatten_blocks(s);
     return Interleaver().mutate(s);
 }
 
