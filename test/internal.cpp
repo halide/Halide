@@ -11,6 +11,8 @@
 #include "ModulusRemainder.h"
 #include "OneToOne.h"
 #include "SpecializeBranchedLoops.h"
+#include "CSE.h"
+#include "IREquality.h"
 
 using namespace Halide;
 using namespace Halide::Internal;
@@ -23,7 +25,7 @@ int main(int argc, const char **argv) {
     #endif
 
     CodeGen_C::test();
-    simplify_test();
+    ir_equality_test();
     bounds_test();
     lower_test();
     Func::test();
@@ -32,5 +34,8 @@ int main(int argc, const char **argv) {
     modulus_remainder_test();
     is_one_to_one_test();
     specialize_branched_loops_test();
+    cse_test();
+    simplify_test();
+
     return 0;
 }

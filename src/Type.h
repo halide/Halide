@@ -19,10 +19,11 @@ struct Expr;
  * types. Instead vectorize a function. */
 struct Type {
     /** The basic type code: signed integer, unsigned integer, or floating point */
-    enum {Int,  //!< signed integers
-          UInt, //!< unsigned integers
-          Float, //!< floating point numbers
-          Handle //!< opaque pointer type (void *)
+    enum TypeCode {
+        Int,  //!< signed integers
+        UInt, //!< unsigned integers
+        Float, //!< floating point numbers
+        Handle //!< opaque pointer type (void *)
     } code;
 
     /** The number of bits of precision of a single scalar value of this type. */
