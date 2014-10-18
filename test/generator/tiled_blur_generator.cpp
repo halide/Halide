@@ -7,9 +7,7 @@ public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
 
-    static std::string name() {
-        return "tiled_blur";
-    }
+    static constexpr const char* NAME = "tiled_blur";
 
     Func build() override {
         // This is the outermost pipeline, so input width and height

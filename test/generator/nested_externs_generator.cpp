@@ -15,9 +15,7 @@ public:
     ImageParam input_a{ Float(32), 3, "a" };
     ImageParam input_b{ Float(32), 3, "b" };
 
-    static std::string name() {
-        return "nested_externs_combine";
-    }
+    static constexpr const char* NAME = "nested_externs_combine";
 
     Func build() override {
         Func result("combine");
@@ -39,9 +37,7 @@ class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
     Param<float> value {"value", 1.0f};
 
-    static std::string name() {
-        return "nested_externs_inner";
-    }
+    static constexpr const char* NAME = "nested_externs_inner";
 
     Func build() override {
         // We can make an extern call to any (registered) Generator
@@ -83,9 +79,7 @@ public:
 
     Param<float> value {"value", 1.0f};
 
-    static std::string name() {
-        return "nested_externs_leaf";
-    }
+    static constexpr const char* NAME = "nested_externs_leaf";
 
     Func build() override {
         Func f("leaf");
@@ -103,9 +97,7 @@ class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
     Param<float> value {"value", 1.0f};
 
-    static std::string name() {
-        return "nested_externs_root";
-    }
+    static constexpr const char* NAME = "nested_externs_root";
 
     Func build() override {
         Func extern_stage_1 = NestedExternsInner().call_extern({value});

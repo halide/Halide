@@ -9,9 +9,7 @@ public:
     Param<int> width{ "width" };
     Param<int> height{ "height" };
 
-    static std::string name() {
-        return "tiled_blur_blur";
-    }
+    static constexpr const char* NAME = "tiled_blur_blur";
 
     Func build() override {
         // We pass in parameters to tell us where the boundary

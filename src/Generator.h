@@ -43,13 +43,13 @@
  *    RegisterGenerator<ExampleGen> register_jit_example;
  * \endcode
  *
- * The registered name of the Generator is provided by the name() method
+ * The registered name of the Generator is provided by the static NAME member
  * (which must match the same rules as Param names, above).
  *
  * (If you are jitting, you may not need to bother registering your Generator,
  * but it's considered best practice to always do so anyway.)
  *
- * Most Generator classes will only need to provide the name() method,
+ * Most Generator classes will only need to provide the a static NAME member,
  * override the build() method, and perhaps declare a Param and/or GeneratorParam:
  *
  * \code
@@ -59,9 +59,7 @@
  *      ImageParam input{UInt(8), 3, "input"};
  *      Param<uint8_t> mask{"mask"};
  *
- *      static std::string name() {
- *        return "xor_image";
- *      }
+ *      static constexpr const char* NAME = "xor_image";
  *
  *      Func build() override {
  *          Var x, y, c;
@@ -457,7 +455,7 @@ public:
     Generator() : Internal::GeneratorBase(sizeof(T)) {}
 private:
     std::string generator_name() override final {
-        return T::name();
+        return T::NAME;
     }
 };
 
@@ -476,7 +474,7 @@ private:
 public:
     RegisterGenerator() {
         std::unique_ptr<Internal::GeneratorFactory> f(new TFactory());
-        Internal::GeneratorRegistry::register_factory(T::name(), std::move(f));
+        Internal::GeneratorRegistry::register_factory(T::NAME, std::move(f));
     }
 };
 

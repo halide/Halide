@@ -6,9 +6,7 @@ class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
     ImageParam input{ Float(32), 2, "input" };
 
-    static std::string name() {
-        return "acquire_release";
-    }
+    static constexpr const char* NAME = "acquire_release";
 
     Func build() override {
         Var x("x"), y("y");

@@ -48,9 +48,7 @@ public:
     Param<int> w{"w"};
     Param<int> h{"h"};
 
-    static std::string name() {
-        return "mandelbrot";
-    }
+    static constexpr const char* NAME = "mandelbrot";
 
     Func build() override {
         Func mandelbrot;
