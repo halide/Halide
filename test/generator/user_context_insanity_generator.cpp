@@ -7,9 +7,7 @@ public:
     ImageParam input{ Float(32), 2, "input" };
     Param<void *> user_context{ "__user_context" };
 
-    static std::string name() {
-        return "user_context_insanity";
-    }
+    static constexpr const char* NAME = "user_context_insanity";
 
     Func build() override {
         Var x, y;

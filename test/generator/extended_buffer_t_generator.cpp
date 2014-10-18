@@ -27,9 +27,7 @@ class ExtendedBufferT : public Generator<ExtendedBufferT> {
 public:
     FancyImageParam input{ Float(32), 2, "input" };
 
-    static std::string name() {
-        return "extended_buffer_t";
-    }
+    static constexpr const char* NAME = "extended_buffer_t";
 
     Func build() override {
         Var x, y;

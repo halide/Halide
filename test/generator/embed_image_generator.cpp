@@ -6,9 +6,7 @@ class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
     ImageParam input{ Float(32), 3, "input" };
 
-    static std::string name() {
-        return "embed_image";
-    }
+    static constexpr const char* NAME = "embed_image";
 
     Func build() override {
         Image<float> matrix(3, 3);

@@ -68,9 +68,7 @@ public:
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
-    static std::string name() {
-        return "example";
-    }
+    static constexpr const char* NAME = "example";
 
     Func build() override {
         Var x, y, c;
