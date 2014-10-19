@@ -454,6 +454,7 @@ DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(device_interface)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -520,8 +521,8 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // must remain weak.
     string retain[] = {"halide_copy_to_host",
                        "halide_copy_to_dev",
-                       "halide_dev_malloc",
-                       "halide_dev_free",
+                       "halide_device_malloc",
+                       "halide_device_free",
                        "halide_set_error_handler",
                        "halide_set_custom_allocator",
                        "halide_set_custom_trace",
@@ -742,6 +743,7 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
     modules.push_back(get_initmod_posix_print(c, bits_64, debug));
     modules.push_back(get_initmod_cache(c, bits_64, debug));
     modules.push_back(get_initmod_to_string(c, bits_64, debug));
+    modules.push_back(get_initmod_device_interface(c, bits_64, debug));
 
     // These modules are optional
     if (t.arch == Target::X86) {
