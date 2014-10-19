@@ -19,7 +19,8 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
+                                     jitEventListener(NULL) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
@@ -394,18 +395,7 @@ void CodeGen_X86::visit(const Div *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;
-    if (is_one(op->a) &&
-        (op->type == Float(32, 4) ||
-         (target.has_feature(Target::AVX) &&
-          op->type == Float(32, 8)))) {
-        // Reciprocal and reciprocal square root
-        Expr w = Variable::make(op->type, "*");
-        if (expr_match(Call::make(op->type, "sqrt_f32", vec(w), Call::Extern), op->b, matches)) {
-            value = codegen(Call::make(op->type, "inverse_sqrt_f32", matches, Call::Extern));
-        } else {
-            value = codegen(Call::make(op->type, "inverse_f32", vec(op->b), Call::Extern));
-        }
-    } else if (power_of_two && op->type.is_int()) {
+    if (power_of_two && op->type.is_int()) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateAShr(numerator, shift);
@@ -742,6 +732,23 @@ string CodeGen_X86::mattrs() const {
 
 bool CodeGen_X86::use_soft_float_abi() const {
     return false;
+}
+
+void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
+{
+    jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
+    if (jitEventListener) {
+        ee->RegisterJITEventListener(jitEventListener);
+    }
+}
+
+void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *)
+{
+    if (jitEventListener) {
+        ee->UnregisterJITEventListener(jitEventListener);
+        delete jitEventListener;
+        jitEventListener = NULL;
+    }
 }
 
 }}
