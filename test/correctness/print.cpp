@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
 
     // Check that Halide's stringification of floats and doubles
     // matches %f and %e respectively.
-    
+
     #ifndef _MSC_VER
     // msvc's library has different ideas about how %f and %e should come out.
     {
@@ -132,12 +132,12 @@ int main(int argc, char **argv) {
                    x == 4, std::numeric_limits<float>::quiet_NaN(),
                    x == 5, -std::numeric_limits<float>::quiet_NaN(),
                    e);
-        e = select(x == 6, std::numeric_limits<float>::denorm_min(),
-                   x == 7, -std::numeric_limits<float>::denorm_min(),
-                   x == 8, std::numeric_limits<float>::min(),
-                   x == 9, -std::numeric_limits<float>::min(),
-                   x == 10, std::numeric_limits<float>::max(),
-                   x == 11, -std::numeric_limits<float>::max(),
+        e = select(x == 5, std::numeric_limits<float>::denorm_min(),
+                   x == 6, -std::numeric_limits<float>::denorm_min(),
+                   x == 7, std::numeric_limits<float>::min(),
+                   x == 8, -std::numeric_limits<float>::min(),
+                   x == 9, std::numeric_limits<float>::max(),
+                   x == 10, -std::numeric_limits<float>::max(),
                    e);
 
         f(x) = print(e);
@@ -150,9 +150,13 @@ int main(int argc, char **argv) {
         char correct[1024];
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%f\n", imf(i));
+            // OS X prints -nan as nan
+            #ifdef __APPLE__
+            if (messages[i] == "-nan\n") messages[i] = "nan\n";
+            #endif
             if (messages[i] != correct) {
                 printf("float %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, imf(i));
-                //return -1;
+                return -1;
             }
         }
 
@@ -166,9 +170,12 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < N; i++) {
             snprintf(correct, sizeof(correct), "%e\n", img(i));
+            #ifdef __APPLE__
+            if (messages[i] == "-nan\n") messages[i] = "nan\n";
+            #endif
             if (messages[i] != correct) {
                 printf("double %d: %s vs %s for %10.20e\n", i, messages[i].c_str(), correct, img(i));
-                //return -1;
+                return -1;
             }
         }
 

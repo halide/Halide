@@ -138,6 +138,8 @@ const string preamble =
     "inline float nan_f32() {return NAN;}\n"
     "inline float neg_inf_f32() {return -INFINITY;}\n"
     "inline float inf_f32() {return INFINITY;}\n"
+    "inline bool is_nan_f32(float x) {return x != x;}\n"
+    "inline bool is_nan_f64(double x) {return x != x;}\n"
     "inline float float_from_bits(uint32_t bits) {\n"
     " union {\n"
     "  uint32_t as_uint;\n"
@@ -804,6 +806,12 @@ void CodeGen_C::visit(const Call *op) {
             close_scope("if " + cond_id + " else");
 
             rhs << result_id;
+        } else if (op->name == Call::copy_buffer_t) {
+            internal_assert(op->args.size() == 1);
+            string arg = print_expr(op->args[0]);
+            string buf_id = unique_name('B');
+            stream << "buffer_t " << buf_id << " = *((buffer_t *)(" << arg << "))\n";
+            rhs << "(&" << buf_id << ")";
         } else if (op->name == Call::create_buffer_t) {
             internal_assert(op->args.size() >= 2);
             vector<string> args;

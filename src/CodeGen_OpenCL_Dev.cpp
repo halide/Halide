@@ -536,6 +536,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "float minval_f32() {return -FLT_MAX;}\n"
                << "float nan_f32() { return NAN; }\n"
                << "float neg_inf_f32() { return -INFINITY; }\n"
+               << "bool is_nan_f32(float x) {return x != x; }\n"
                << "float inf_f32() { return INFINITY; }\n"
                << "float float_from_bits(unsigned int x) {return as_float(x);}\n"
                << smod_def("char") << "\n"
@@ -555,6 +556,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define floor_f32 floor \n"
                << "#define ceil_f32 ceil \n"
                << "#define round_f32 round \n"
+               << "#define trunc_f32 trunc \n"
                << "#define pow_f32 pow\n"
                << "#define asin_f32 asin \n"
                << "#define acos_f32 acos \n"
@@ -567,6 +569,8 @@ void CodeGen_OpenCL_Dev::init_module() {
                << "#define acosh_f32 acosh \n"
                << "#define tanh_f32 tanh \n"
                << "#define atanh_f32 atanh \n"
+               << "#define fast_inverse_f32 native_recip \n"
+               << "#define fast_inverse_sqrt_f32 native_rsqrt \n"
                << "int halide_gpu_thread_barrier() {\n"
                << "  barrier(CLK_LOCAL_MEM_FENCE);\n" // Halide only ever needs local memory fences.
                << "  return 0;\n"
@@ -576,8 +580,9 @@ void CodeGen_OpenCL_Dev::init_module() {
     src_stream << "#define __address_space___shared __local\n";
 
     if (target.has_feature(Target::CLDoubles)) {
-        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n";
-        src_stream << "#define sqrt_f64 sqrt\n"
+        src_stream << "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n"
+                   << "bool is_nan_f64(double x) {return x != x; }\n"
+                   << "#define sqrt_f64 sqrt\n"
                    << "#define sin_f64 sin\n"
                    << "#define cos_f64 cos\n"
                    << "#define exp_f64 exp\n"
@@ -586,6 +591,7 @@ void CodeGen_OpenCL_Dev::init_module() {
                    << "#define floor_f64 floor\n"
                    << "#define ceil_f64 ceil\n"
                    << "#define round_f64 round\n"
+                   << "#define trunc_f64 trunc\n"
                    << "#define pow_f64 pow\n"
                    << "#define asin_f64 asin\n"
                    << "#define acos_f64 acos\n"

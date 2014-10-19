@@ -146,186 +146,186 @@ CodeGen_ARM::CodeGen_ARM(Target t) : CodeGen_Posix(t) {
     // the signed case.
     #if LLVM_VERSION < 34
     if (target.bits == 32) {
-      casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
-      casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
-      casts.push_back(Pattern("vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256)));
-      casts.push_back(Pattern("vaddhn.v4i16", _u16((wild_u32x4 + wild_u32x4)/65536)));
-      casts.push_back(Pattern("vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256)));
-      casts.push_back(Pattern("vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)));
-      casts.push_back(Pattern("vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)));
-      casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
+        casts.push_back(Pattern("vaddhn.v8i8", _i8((wild_i16x8 + wild_i16x8)/256)));
+        casts.push_back(Pattern("vaddhn.v4i16", _i16((wild_i32x4 + wild_i32x4)/65536)));
+        casts.push_back(Pattern("vaddhn.v8i8", _u8((wild_u16x8 + wild_u16x8)/256)));
+        casts.push_back(Pattern("vaddhn.v4i16", _u16((wild_u32x4 + wild_u32x4)/65536)));
+        casts.push_back(Pattern("vsubhn.v8i8", _i8((wild_i16x8 - wild_i16x8)/256)));
+        casts.push_back(Pattern("vsubhn.v4i16", _i16((wild_i32x4 - wild_i32x4)/65536)));
+        casts.push_back(Pattern("vsubhn.v8i8", _u8((wild_u16x8 - wild_u16x8)/256)));
+        casts.push_back(Pattern("vsubhn.v4i16", _u16((wild_u32x4 - wild_u32x4)/65536)));
     }
     #endif
 
     if (target.bits == 32) {
-      // Generate the cast patterns that can take vector types.  We need
-      // to iterate over all 64 and 128 bit integer types relevant for
-      // neon.
-      Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
-                      Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
-                      Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
-      for (int i = 0; i < 12; i++) {
-          Type t = types[i];
-          std::ostringstream oss;
-          oss << (t.is_int() ? 's' : 'u') << ".v" << t.width << "i" << t.bits;
-          string t_str = oss.str();
+        // Generate the cast patterns that can take vector types.  We need
+        // to iterate over all 64 and 128 bit integer types relevant for
+        // neon.
+        Type types[] = {Int(8, 8), Int(8, 16), UInt(8, 8), UInt(8, 16),
+                        Int(16, 4), Int(16, 8), UInt(16, 4), UInt(16, 8),
+                        Int(32, 2), Int(32, 4), UInt(32, 2), UInt(32, 4)};
+        for (int i = 0; i < 12; i++) {
+            Type t = types[i];
+            std::ostringstream oss;
+            oss << (t.is_int() ? 's' : 'u') << ".v" << t.width << "i" << t.bits;
+            string t_str = oss.str();
 
-          // Wider versions of the type
-          Type w = t;
-          w.bits *= 2;
-          Type ws = Int(t.bits*2, t.width);
+            // Wider versions of the type
+            Type w = t;
+            w.bits *= 2;
+            Type ws = Int(t.bits*2, t.width);
 
-          // Vector wildcard for this type
-          Expr vector = Variable::make(t, "*");
-          Expr w_vector = Variable::make(w, "*");
-          Expr ws_vector = Variable::make(ws, "*");
+            // Vector wildcard for this type
+            Expr vector = Variable::make(t, "*");
+            Expr w_vector = Variable::make(w, "*");
+            Expr ws_vector = Variable::make(ws, "*");
 
-          // Bounds of the type stored in the wider vector type
-          Expr tmin = simplify(cast(w, t.imin()));
-          Expr tmax = simplify(cast(w, t.imax()));
-          Expr tsmin = simplify(cast(ws, t.imin()));
-          Expr tsmax = simplify(cast(ws, t.imax()));
+            // Bounds of the type stored in the wider vector type
+            Expr tmin = simplify(cast(w, t.imin()));
+            Expr tmax = simplify(cast(w, t.imax()));
+            Expr tsmin = simplify(cast(ws, t.imin()));
+            Expr tsmax = simplify(cast(ws, t.imax()));
 
-          // Can't fit uint32 max into an intimm
-          if (t.element_of() == UInt(32)) {
-              tmax = simplify(cast(w, t.max()));
-              tsmax = simplify(cast(ws, t.max()));
-          }
+            // Can't fit uint32 max into an intimm
+            if (t.element_of() == UInt(32)) {
+                tmax = simplify(cast(w, t.max()));
+                tsmax = simplify(cast(ws, t.max()));
+            }
 
-          // Rounding-up averaging
-          casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2), Pattern::NarrowArgs));
-          casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_vector + 1))/2), Pattern::NarrowArgs));
-          casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + 1) + w_vector)/2), Pattern::NarrowArgs));
+            // Rounding-up averaging
+            casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + w_vector + 1)/2), Pattern::NarrowArgs));
+            casts.push_back(Pattern("vrhadd" + t_str, cast(t, (w_vector + (w_vector + 1))/2), Pattern::NarrowArgs));
+            casts.push_back(Pattern("vrhadd" + t_str, cast(t, ((w_vector + 1) + w_vector)/2), Pattern::NarrowArgs));
 
-          // Rounding down averaging
-          casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2), Pattern::NarrowArgs));
+            // Rounding down averaging
+            casts.push_back(Pattern("vhadd" + t_str, cast(t, (w_vector + w_vector)/2), Pattern::NarrowArgs));
 
-          // Halving subtract
-          casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2), Pattern::NarrowArgs));
+            // Halving subtract
+            casts.push_back(Pattern("vhsub" + t_str, cast(t, (w_vector - w_vector)/2), Pattern::NarrowArgs));
 
-          // Saturating add
-          casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax)), Pattern::NarrowArgs));
+            // Saturating add
+            casts.push_back(Pattern("vqadd" + t_str, cast(t, clamp(w_vector + w_vector, tmin, tmax)), Pattern::NarrowArgs));
 
-          // In the unsigned case, the saturation below in unnecessary
-          if (t.is_uint()) {
-              casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax)), Pattern::NarrowArgs));
-          }
+            // In the unsigned case, the saturation below in unnecessary
+            if (t.is_uint()) {
+                casts.push_back(Pattern("vqadd" + t_str, cast(t, min(w_vector + w_vector, tmax)), Pattern::NarrowArgs));
+            }
 
-          // Saturating subtract
-          // N.B. Saturating subtracts always widen to a signed type
-          casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax)), Pattern::NarrowArgs));
+            // Saturating subtract
+            // N.B. Saturating subtracts always widen to a signed type
+            casts.push_back(Pattern("vqsub" + t_str, cast(t, clamp(ws_vector - ws_vector, tsmin, tsmax)), Pattern::NarrowArgs));
 
-          // In the unsigned case, we may detect that the top of the clamp is unnecessary
-          if (t.is_uint()) {
-              casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0)), Pattern::NarrowArgs));
-          }
-      }
+            // In the unsigned case, we may detect that the top of the clamp is unnecessary
+            if (t.is_uint()) {
+                casts.push_back(Pattern("vqsub" + t_str, cast(t, max(ws_vector - ws_vector, 0)), Pattern::NarrowArgs));
+            }
+        }
 
-      // At some point llvm started recognising narrowing shifts
-      // directly and these intrinsics went away.
-      #if LLVM_VERSION < 35
-      casts.push_back(Pattern("vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), Pattern::RightShift));
-      casts.push_back(Pattern("vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), Pattern::RightShift));
-      casts.push_back(Pattern("vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), Pattern::RightShift));
-      casts.push_back(Pattern("vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), Pattern::RightShift));
-      casts.push_back(Pattern("vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), Pattern::RightShift));
-      casts.push_back(Pattern("vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), Pattern::RightShift));
+        // At some point llvm started recognising narrowing shifts
+        // directly and these intrinsics went away.
+#if LLVM_VERSION < 35
+        casts.push_back(Pattern("vshiftn.v8i8", _i8(wild_i16x8/wild_i16x8), Pattern::RightShift));
+        casts.push_back(Pattern("vshiftn.v4i16", _i16(wild_i32x4/wild_i32x4), Pattern::RightShift));
+        casts.push_back(Pattern("vshiftn.v2i32", _i32(wild_i64x2/wild_i64x2), Pattern::RightShift));
+        casts.push_back(Pattern("vshiftn.v8i8", _u8(wild_u16x8/wild_u16x8), Pattern::RightShift));
+        casts.push_back(Pattern("vshiftn.v4i16", _u16(wild_u32x4/wild_u32x4), Pattern::RightShift));
+        casts.push_back(Pattern("vshiftn.v2i32", _u32(wild_u64x2/wild_u64x2), Pattern::RightShift));
 
-      // Widening left shifts
-      left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
-      #endif
+        // Widening left shifts
+        left_shifts.push_back(Pattern("vshiftls.v8i16", _i16(wild_i8x8)*wild_i16x8, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftls.v4i32", _i32(wild_i16x4)*wild_i32x4, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftls.v2i64", _i64(wild_i32x2)*wild_i64x2, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftlu.v8i16", _u16(wild_u8x8)*wild_u16x8, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftlu.v4i32", _u32(wild_u16x4)*wild_u32x4, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftlu.v2i64", _u64(wild_u32x2)*wild_u64x2, Pattern::LeftShift));
+#endif
 
-      casts.push_back(Pattern("vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftns.v2i32", _i32q(wild_i64x2/wild_i64x2), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftnu.v8i8", _u8q(wild_u16x8/wild_u16x8), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftnu.v4i16", _u16q(wild_u32x4/wild_u32x4), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftnu.v2i32", _u32q(wild_u64x2/wild_u64x2), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftnsu.v8i8", _u8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftnsu.v4i16", _u16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
-      casts.push_back(Pattern("vqshiftnsu.v2i32", _u32q(wild_i64x2/wild_i64x2), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftns.v8i8", _i8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftns.v4i16", _i16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftns.v2i32", _i32q(wild_i64x2/wild_i64x2), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftnu.v8i8", _u8q(wild_u16x8/wild_u16x8), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftnu.v4i16", _u16q(wild_u32x4/wild_u32x4), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftnu.v2i32", _u32q(wild_u64x2/wild_u64x2), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftnsu.v8i8", _u8q(wild_i16x8/wild_i16x8), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftnsu.v4i16", _u16q(wild_i32x4/wild_i32x4), Pattern::RightShift));
+        casts.push_back(Pattern("vqshiftnsu.v2i32", _u32q(wild_i64x2/wild_i64x2), Pattern::RightShift));
 
-      casts.push_back(Pattern("vqshifts.v8i8", _i8q(_i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshifts.v4i16", _i16q(_i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshifts.v2i32", _i32q(_i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftu.v8i8", _u8q(_u16(wild_u8x8)*wild_u16x8), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftu.v4i16", _u16q(_u32(wild_u16x4)*wild_u32x4), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftu.v2i32", _u32q(_u64(wild_u32x2)*wild_u64x2), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftsu.v8i8", _u8q(_i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftsu.v4i16", _u16q(_i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftsu.v2i32", _u32q(_i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshifts.v16i8", _i8q(_i16(wild_i8x16)*wild_i16x16), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshifts.v8i16", _i16q(_i32(wild_i16x8)*wild_i32x8), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshifts.v4i32", _i32q(_i64(wild_i32x4)*wild_i64x4), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftu.v16i8", _u8q(_u16(wild_u8x16)*wild_u16x16), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftu.v8i16", _u16q(_u32(wild_u16x8)*wild_u32x8), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftu.v4i32", _u32q(_u64(wild_u32x4)*wild_u64x4), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftsu.v16i8", _u8q(_i16(wild_i8x16)*wild_i16x16), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftsu.v8i16", _u16q(_i32(wild_i16x8)*wild_i32x8), Pattern::LeftShift));
-      casts.push_back(Pattern("vqshiftsu.v4i32", _u32q(_i64(wild_i32x4)*wild_i64x4), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshifts.v8i8", _i8q(_i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshifts.v4i16", _i16q(_i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshifts.v2i32", _i32q(_i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftu.v8i8", _u8q(_u16(wild_u8x8)*wild_u16x8), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftu.v4i16", _u16q(_u32(wild_u16x4)*wild_u32x4), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftu.v2i32", _u32q(_u64(wild_u32x2)*wild_u64x2), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftsu.v8i8", _u8q(_i16(wild_i8x8)*wild_i16x8), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftsu.v4i16", _u16q(_i32(wild_i16x4)*wild_i32x4), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftsu.v2i32", _u32q(_i64(wild_i32x2)*wild_i64x2), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshifts.v16i8", _i8q(_i16(wild_i8x16)*wild_i16x16), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshifts.v8i16", _i16q(_i32(wild_i16x8)*wild_i32x8), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshifts.v4i32", _i32q(_i64(wild_i32x4)*wild_i64x4), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftu.v16i8", _u8q(_u16(wild_u8x16)*wild_u16x16), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftu.v8i16", _u16q(_u32(wild_u16x8)*wild_u32x8), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftu.v4i32", _u32q(_u64(wild_u32x4)*wild_u64x4), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftsu.v16i8", _u8q(_i16(wild_i8x16)*wild_i16x16), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftsu.v8i16", _u16q(_i32(wild_i16x8)*wild_i32x8), Pattern::LeftShift));
+        casts.push_back(Pattern("vqshiftsu.v4i32", _u32q(_i64(wild_i32x4)*wild_i64x4), Pattern::LeftShift));
 
-      casts.push_back(Pattern("vqmovns.v8i8", _i8q(wild_i16x8)));
-      casts.push_back(Pattern("vqmovns.v4i16", _i16q(wild_i32x4)));
-      casts.push_back(Pattern("vqmovns.v2i32", _i32q(wild_i64x2)));
-      casts.push_back(Pattern("vqmovnu.v8i8", _u8q(wild_u16x8)));
-      casts.push_back(Pattern("vqmovnu.v4i16", _u16q(wild_u32x4)));
-      casts.push_back(Pattern("vqmovnu.v2i32", _u32q(wild_u64x2)));
-      casts.push_back(Pattern("vqmovnsu.v8i8", _u8q(wild_i16x8)));
-      casts.push_back(Pattern("vqmovnsu.v4i16", _u16q(wild_i32x4)));
-      casts.push_back(Pattern("vqmovnsu.v2i32", _u32q(wild_i64x2)));
+        casts.push_back(Pattern("vqmovns.v8i8", _i8q(wild_i16x8)));
+        casts.push_back(Pattern("vqmovns.v4i16", _i16q(wild_i32x4)));
+        casts.push_back(Pattern("vqmovns.v2i32", _i32q(wild_i64x2)));
+        casts.push_back(Pattern("vqmovnu.v8i8", _u8q(wild_u16x8)));
+        casts.push_back(Pattern("vqmovnu.v4i16", _u16q(wild_u32x4)));
+        casts.push_back(Pattern("vqmovnu.v2i32", _u32q(wild_u64x2)));
+        casts.push_back(Pattern("vqmovnsu.v8i8", _u8q(wild_i16x8)));
+        casts.push_back(Pattern("vqmovnsu.v4i16", _u16q(wild_i32x4)));
+        casts.push_back(Pattern("vqmovnsu.v2i32", _u32q(wild_i64x2)));
 
-      // Non-widening left shifts
-      left_shifts.push_back(Pattern("vshifts.v16i8", wild_i8x16*wild_i8x16, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshifts.v8i16", wild_i16x8*wild_i16x8, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshifts.v4i32", wild_i32x4*wild_i32x4, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshifts.v2i64", wild_i64x2*wild_i64x2, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v16i8", wild_u8x16*wild_u8x16, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v8i16", wild_u16x8*wild_u16x8, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v4i32", wild_u32x4*wild_u32x4, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v2i64", wild_u64x2*wild_u64x2, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshifts.v8i8",  wild_i8x8*wild_i8x8, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshifts.v4i16", wild_i16x4*wild_i16x4, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshifts.v2i32", wild_i32x2*wild_i32x2, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v8i8",  wild_u8x8*wild_u8x8, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v4i16", wild_u16x4*wild_u16x4, Pattern::LeftShift));
-      left_shifts.push_back(Pattern("vshiftu.v2i32", wild_u32x2*wild_u32x2, Pattern::LeftShift));
+        // Non-widening left shifts
+        left_shifts.push_back(Pattern("vshifts.v16i8", wild_i8x16*wild_i8x16, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshifts.v8i16", wild_i16x8*wild_i16x8, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshifts.v4i32", wild_i32x4*wild_i32x4, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshifts.v2i64", wild_i64x2*wild_i64x2, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v16i8", wild_u8x16*wild_u8x16, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v8i16", wild_u16x8*wild_u16x8, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v4i32", wild_u32x4*wild_u32x4, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v2i64", wild_u64x2*wild_u64x2, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshifts.v8i8",  wild_i8x8*wild_i8x8, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshifts.v4i16", wild_i16x4*wild_i16x4, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshifts.v2i32", wild_i32x2*wild_i32x2, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v8i8",  wild_u8x8*wild_u8x8, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v4i16", wild_u16x4*wild_u16x4, Pattern::LeftShift));
+        left_shifts.push_back(Pattern("vshiftu.v2i32", wild_u32x2*wild_u32x2, Pattern::LeftShift));
 
-      averagings.push_back(Pattern("vhadds.v8i8", (wild_i8x8 + wild_i8x8)));
-      averagings.push_back(Pattern("vhaddu.v8i8", (wild_u8x8 + wild_u8x8)));
-      averagings.push_back(Pattern("vhadds.v4i16", (wild_i16x4 + wild_i16x4)));
-      averagings.push_back(Pattern("vhaddu.v4i16", (wild_u16x4 + wild_u16x4)));
-      averagings.push_back(Pattern("vhadds.v2i32", (wild_i32x2 + wild_i32x2)));
-      averagings.push_back(Pattern("vhaddu.v2i32", (wild_u32x2 + wild_u32x2)));
-      averagings.push_back(Pattern("vhadds.v16i8", (wild_i8x16 + wild_i8x16)));
-      averagings.push_back(Pattern("vhaddu.v16i8", (wild_u8x16 + wild_u8x16)));
-      averagings.push_back(Pattern("vhadds.v8i16", (wild_i16x8 + wild_i16x8)));
-      averagings.push_back(Pattern("vhaddu.v8i16", (wild_u16x8 + wild_u16x8)));
-      averagings.push_back(Pattern("vhadds.v4i32", (wild_i32x4 + wild_i32x4)));
-      averagings.push_back(Pattern("vhaddu.v4i32", (wild_u32x4 + wild_u32x4)));
-      averagings.push_back(Pattern("vhsubs.v8i8", (wild_i8x8 - wild_i8x8)));
-      averagings.push_back(Pattern("vhsubu.v8i8", (wild_u8x8 - wild_u8x8)));
-      averagings.push_back(Pattern("vhsubs.v4i16", (wild_i16x4 - wild_i16x4)));
-      averagings.push_back(Pattern("vhsubu.v4i16", (wild_u16x4 - wild_u16x4)));
-      averagings.push_back(Pattern("vhsubs.v2i32", (wild_i32x2 - wild_i32x2)));
-      averagings.push_back(Pattern("vhsubu.v2i32", (wild_u32x2 - wild_u32x2)));
-      averagings.push_back(Pattern("vhsubs.v16i8", (wild_i8x16 - wild_i8x16)));
-      averagings.push_back(Pattern("vhsubu.v16i8", (wild_u8x16 - wild_u8x16)));
-      averagings.push_back(Pattern("vhsubs.v8i16", (wild_i16x8 - wild_i16x8)));
-      averagings.push_back(Pattern("vhsubu.v8i16", (wild_u16x8 - wild_u16x8)));
-      averagings.push_back(Pattern("vhsubs.v4i32", (wild_i32x4 - wild_i32x4)));
-      averagings.push_back(Pattern("vhsubu.v4i32", (wild_u32x4 - wild_u32x4)));
+        averagings.push_back(Pattern("vhadds.v8i8", (wild_i8x8 + wild_i8x8)));
+        averagings.push_back(Pattern("vhaddu.v8i8", (wild_u8x8 + wild_u8x8)));
+        averagings.push_back(Pattern("vhadds.v4i16", (wild_i16x4 + wild_i16x4)));
+        averagings.push_back(Pattern("vhaddu.v4i16", (wild_u16x4 + wild_u16x4)));
+        averagings.push_back(Pattern("vhadds.v2i32", (wild_i32x2 + wild_i32x2)));
+        averagings.push_back(Pattern("vhaddu.v2i32", (wild_u32x2 + wild_u32x2)));
+        averagings.push_back(Pattern("vhadds.v16i8", (wild_i8x16 + wild_i8x16)));
+        averagings.push_back(Pattern("vhaddu.v16i8", (wild_u8x16 + wild_u8x16)));
+        averagings.push_back(Pattern("vhadds.v8i16", (wild_i16x8 + wild_i16x8)));
+        averagings.push_back(Pattern("vhaddu.v8i16", (wild_u16x8 + wild_u16x8)));
+        averagings.push_back(Pattern("vhadds.v4i32", (wild_i32x4 + wild_i32x4)));
+        averagings.push_back(Pattern("vhaddu.v4i32", (wild_u32x4 + wild_u32x4)));
+        averagings.push_back(Pattern("vhsubs.v8i8", (wild_i8x8 - wild_i8x8)));
+        averagings.push_back(Pattern("vhsubu.v8i8", (wild_u8x8 - wild_u8x8)));
+        averagings.push_back(Pattern("vhsubs.v4i16", (wild_i16x4 - wild_i16x4)));
+        averagings.push_back(Pattern("vhsubu.v4i16", (wild_u16x4 - wild_u16x4)));
+        averagings.push_back(Pattern("vhsubs.v2i32", (wild_i32x2 - wild_i32x2)));
+        averagings.push_back(Pattern("vhsubu.v2i32", (wild_u32x2 - wild_u32x2)));
+        averagings.push_back(Pattern("vhsubs.v16i8", (wild_i8x16 - wild_i8x16)));
+        averagings.push_back(Pattern("vhsubu.v16i8", (wild_u8x16 - wild_u8x16)));
+        averagings.push_back(Pattern("vhsubs.v8i16", (wild_i16x8 - wild_i16x8)));
+        averagings.push_back(Pattern("vhsubu.v8i16", (wild_u16x8 - wild_u16x8)));
+        averagings.push_back(Pattern("vhsubs.v4i32", (wild_i32x4 - wild_i32x4)));
+        averagings.push_back(Pattern("vhsubu.v4i32", (wild_u32x4 - wild_u32x4)));
 
-      negations.push_back(Pattern("vqneg.v8i8", -max(wild_i8x8, -127)));
-      negations.push_back(Pattern("vqneg.v16i8", -max(wild_i8x16, -127)));
-      negations.push_back(Pattern("vqneg.v4i16", -max(wild_i16x4, -32767)));
-      negations.push_back(Pattern("vqneg.v8i16", -max(wild_i16x8, -32767)));
-      negations.push_back(Pattern("vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))));
-      negations.push_back(Pattern("vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))));
+        negations.push_back(Pattern("vqneg.v8i8", -max(wild_i8x8, -127)));
+        negations.push_back(Pattern("vqneg.v16i8", -max(wild_i8x16, -127)));
+        negations.push_back(Pattern("vqneg.v4i16", -max(wild_i16x4, -32767)));
+        negations.push_back(Pattern("vqneg.v8i16", -max(wild_i16x8, -32767)));
+        negations.push_back(Pattern("vqneg.v2i32", -max(wild_i32x2, -(0x7fffffff))));
+        negations.push_back(Pattern("vqneg.v4i32", -max(wild_i32x4, -(0x7fffffff))));
     }
 }
 
@@ -695,15 +695,7 @@ void CodeGen_ARM::visit(const Div *op) {
     bool power_of_two = is_const_power_of_two(op->b, &shift_amount);
 
     vector<Expr> matches;
-    if ((op->type == Float(32, 2) || op->type == Float(32, 4)) && is_one(op->a)) {
-        // Reciprocal and reciprocal square root
-        Expr w = Variable::make(op->type, "*");
-        if (expr_match(Call::make(op->type, "sqrt_f32", vec(w), Call::Extern), op->b, matches)) {
-            value = codegen(Call::make(op->type, "inverse_sqrt_f32", matches, Call::Extern));
-        } else {
-            value = codegen(Call::make(op->type, "inverse_f32", vec(op->b), Call::Extern));
-        }
-    } else if (power_of_two && op->type.is_int()) {
+    if (power_of_two && op->type.is_int()) {
         Value *numerator = codegen(op->a);
         Constant *shift = ConstantInt::get(llvm_type_of(op->type), shift_amount);
         value = builder->CreateAShr(numerator, shift);

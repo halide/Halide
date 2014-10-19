@@ -49,7 +49,7 @@ struct CodeGen_GPU_Dev {
      *  runtime routine names to ensure each GPU API has a unique
      *  name.
      */
-    std::string api_unique_name() = 0;
+    virtual std::string api_unique_name() = 0;
 
     static bool is_gpu_var(const std::string &name);
     static bool is_gpu_block_var(const std::string &name);
