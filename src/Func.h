@@ -616,6 +616,8 @@ public:
      * disassemble anything, or if you need to feed the assembly into
      * some custom toolchain to produce an object file (e.g. iOS) */
     //@{
+    EXPORT void compile_to_assembly(const std::string &filename,
+                                    const Target &target = get_target_from_environment());
     EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>, const std::string &fn_name,
                                     const Target &target = get_target_from_environment());
     EXPORT void compile_to_assembly(const std::string &filename, std::vector<Argument>,
