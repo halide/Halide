@@ -10,14 +10,20 @@ private:
     using IRMutator::visit;
 
     void visit(const Block *op) {
-        const Block *first_block = op->first.as<Block>();
+        Stmt first = op->first;
+        Stmt rest  = op->rest;
+        while(const Block *first_block = op->first.as<Block>()) {
+            first = mutate(first_block->first);
+            if (first_block->rest.defined()) {
+                rest = rest.defined()? Block::make(first_block->rest, rest): first_block->rest;
+            }
+        }
 
-        if (first_block) {
-            Stmt first = mutate(first_block->first);
-            Stmt rest  = Block::make(mutate(first_block->rest), op->rest);
-            stmt = Block::make(first, mutate(rest));
+        if (first.same_as(op->first)) {
+            rest = mutate(rest);
+            stmt = rest.same_as(op->rest)? op: Block::make(first, rest);
         } else {
-            IRMutator::visit(op);
+            stmt = Block::make(first, mutate(rest));
         }
     }
 };
