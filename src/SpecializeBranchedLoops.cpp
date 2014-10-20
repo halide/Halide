@@ -472,7 +472,7 @@ public:
         const LT *lt = cond.as<LT>();
         const GT *gt = cond.as<GT>();
 
-        // debug(0) << "\tBranching at depth " << branch_depth << " in the range [" << min << ", " << extent << ") "
+        // debug(0) << "\tBranching in the range [" << min << ", " << extent << ") "
         //          << "on condition: " << cond << "\n";
 
         Expr min1 = min, min2;
@@ -916,20 +916,20 @@ public:
                 extent = bounds_branches[i].extent;
 
                 // debug(0) << "\tBranching for(" << op->name << ") body on interval [" << min << ", " << extent << ")\n";
-                
+
                 old_num_branches = branches.size();
                 free_vars.push(op->name, 0);
                 std::vector<Stmt> body(1, op->body);
                 branch_children(loop, body);
                 free_vars.pop(op->name);
-                
+
                 if (branches.size() == old_num_branches) {
                     // If we branched the bound, but did not branch the body then we add the bounds
                     // branch to the branches list here.
                     branches.push_back(bounds_branches[i]);
                 }
             }
- 
+
             min = old_min;
             extent = old_extent;
         }
@@ -973,7 +973,6 @@ public:
     }
 
     void visit(const IfThenElse *op) {
-        bool has_else = op->else_case.defined();
         if (expr_uses_var(op->condition, name, scope)) {
             Stmt normalized = normalize_if_stmts(op, scope);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
@@ -986,8 +985,10 @@ public:
 
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
             if (!solve.same_as(if_stmt->condition)) {
+                Stmt then_stmt = if_stmt->then_case.defined()? if_stmt->then_case: Evaluate::make(0);
+                Stmt else_stmt = if_stmt->else_case.defined()? if_stmt->else_case: Evaluate::make(0);
                 Branch b1, b2;
-                if (build_branches(solve, if_stmt->then_case, if_stmt->else_case, b1, b2)) {
+                if (build_branches(solve, then_stmt, else_stmt, b1, b2)) {
                     size_t num_branches = branches.size();
                     Expr orig_min = min;
                     Expr orig_extent = extent;
@@ -1006,7 +1007,7 @@ public:
                         num_branches = branches.size();
                     }
 
-                    if (has_else && !is_zero(b2.extent)) {
+                    if (!is_zero(b2.extent)) {
                         if (branches.size() < branching_limit) {
                             min = b2.min;
                             extent = b2.extent;
