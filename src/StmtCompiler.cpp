@@ -14,10 +14,18 @@ using std::string;
 using std::vector;
 
 StmtCompiler::StmtCompiler(Target target) {
+user_warning << "Entering stmt compiler\n";
+user_warning << target.arch << " " << Target::Hexagon   << "\n";
+user_warning << target.os   << " " << Target::OSUnknown << "\n";
+target.arch = Target::Hexagon;
+target.os = Target::OSUnknown;
     if (target.os == Target::OSUnknown &&
         target.arch != Target::Hexagon) {
       target = get_host_target();
     }
+
+user_warning << target.arch << " " << Target::Hexagon   << "\n";
+user_warning << target.os   << " " << Target::OSUnknown << "\n";
 
     // The awkward mapping from targets to code generators
     if (target.features_any_of(vec(Target::CUDA,
@@ -48,6 +56,7 @@ StmtCompiler::StmtCompiler(Target target) {
                        << target.to_string() << "\n";
         }
     } else if (target.arch == Target::X86) {
+        user_warning << "Invoking codegen x86\n";
         contents = new CodeGen_X86(target);
     } else if (target.arch == Target::ARM) {
         contents = new CodeGen_ARM(target);
@@ -56,8 +65,9 @@ StmtCompiler::StmtCompiler(Target target) {
     } else if (target.arch == Target::PNaCl) {
         contents = new CodeGen_PNaCl(target);
     } else if (target.arch == Target::Hexagon) {
+      user_warning << "Invoking codegen hexagon\n";
       if (target.os != Target::OSUnknown)
-        user_error << "Hexagon not setup yet";
+        user_error << "Hexagon not setup yet" << target.os << "\n";
       contents = new CodeGen_Hexagon(target);
     }
 }

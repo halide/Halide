@@ -498,6 +498,11 @@ DECLARE_LL_INITMOD(mips)
 #else
 DECLARE_NO_INITMOD(mips)
 #endif
+#ifdef WITH_HEXAGON
+DECLARE_LL_INITMOD(hexagon)
+#else
+DECLARE_NO_INITMOD(hexagon)
+#endif
 
 namespace {
 

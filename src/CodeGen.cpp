@@ -85,6 +85,12 @@ using std::stack;
 #define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
 #endif
 
+#ifdef WITH_HEXAGON
+#define InitializeHexagonTarget()       InitializeTarget(Hexagon)
+#define InitializeHexagonAsmParser()    InitializeAsmParser(Hexagon)
+#define InitializeHexagonAsmPrinter()   InitializeAsmPrinter(Hexagon)
+#endif
+
 CodeGen::CodeGen(Target t) :
     module(NULL), owns_module(false),
     function(NULL), context(NULL),
@@ -179,6 +185,7 @@ CodeGen::~CodeGen() {
 bool CodeGen::llvm_initialized = false;
 bool CodeGen::llvm_X86_enabled = false;
 bool CodeGen::llvm_ARM_enabled = false;
+bool CodeGen::llvm_Hexagon_enabled = false;
 bool CodeGen::llvm_AArch64_enabled = false;
 bool CodeGen::llvm_NVPTX_enabled = false;
 bool CodeGen::llvm_Mips_enabled = false;

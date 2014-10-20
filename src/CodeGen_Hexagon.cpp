@@ -43,7 +43,7 @@ using namespace llvm;
 
 CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
 
-  user_warning << "Hexagon not fully setup yet";
+  user_warning << "Hexagon not fully setup yet\n";
 }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
