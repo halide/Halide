@@ -41,18 +41,14 @@ public:
         // and a vector of ExternFuncArguments. We can (optionally) also
         // specify GeneratorParams for the Generator, and the function name we
         // expect that Generator to be linked under.
-std::cerr<<"LINE "<<__LINE__<<"\n";
         Func extern_stage_1 = call_extern_by_name("nested_externs_leaf", {value});
-std::cerr<<"LINE "<<__LINE__<<"\n";
 
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
                                         extern_stage_1.args()[1]);
         extern_stage_1.compute_root();
 
-std::cerr<<"LINE "<<__LINE__<<"\n";
         Func extern_stage_2 = call_extern_by_name("nested_externs_leaf", {value+1});
-std::cerr<<"LINE "<<__LINE__<<"\n";
         extern_stage_2.reorder_storage(extern_stage_2.args()[2],
                                         extern_stage_2.args()[0],
                                         extern_stage_2.args()[1]);
@@ -64,9 +60,7 @@ std::cerr<<"LINE "<<__LINE__<<"\n";
         // (Here we assume that it will be available at link time with
         // a function name that matches the generator name; we can
         // specify an optional function name otherwise.)
-std::cerr<<"LINE "<<__LINE__<<"\n";
         Func extern_stage_combine = NestedExternsCombine().call_extern({extern_stage_1, extern_stage_2});
-std::cerr<<"LINE "<<__LINE__<<"\n";
         extern_stage_combine.compute_root();
 
         set_interleaved(extern_stage_combine.output_buffer());
