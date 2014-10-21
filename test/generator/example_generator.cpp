@@ -68,8 +68,6 @@ public:
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
-    static constexpr const char* NAME = "example";
-
     Func build() override {
         Var x, y, c;
         Func f, g, h;
@@ -92,6 +90,6 @@ public:
 // however, registering it is needed for working seamlessly with the ahead-of-time
 // compilation tools, so it's generally recommended to always register it.
 // (As with Params, the name is constrained to C-like patterns.)
-Halide::RegisterGenerator<Example> register_example;
+Halide::RegisterGenerator<Example> register_example{"example"};
 
 }  // namespace

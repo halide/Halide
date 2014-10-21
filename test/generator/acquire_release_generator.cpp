@@ -6,8 +6,6 @@ class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
     ImageParam input{ Float(32), 2, "input" };
 
-    static constexpr const char* NAME = "acquire_release";
-
     Func build() override {
         Var x("x"), y("y");
         Func f("f");
@@ -23,6 +21,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<AcquireRelease> register_my_gen;
+Halide::RegisterGenerator<AcquireRelease> register_my_gen{"acquire_release"};
 
 }  // namespace

@@ -48,8 +48,6 @@ public:
     Param<int> w{"w"};
     Param<int> h{"h"};
 
-    static constexpr const char* NAME = "mandelbrot";
-
     Func build() override {
         Func mandelbrot;
         Var x, y, z;
@@ -73,13 +71,12 @@ public:
         Var xi, yi, xo, yo;
         mandelbrot.compute_at(count, xo);
 
-        count.tile(x, y, xo, yo, xi, yi, 8, 8).parallel(yo).vectorize(xi, 4).unroll(xi).unroll(yi,
-                                                                                               2);
+        count.tile(x, y, xo, yo, xi, yi, 8, 8).parallel(yo).vectorize(xi, 4).unroll(xi).unroll(yi, 2);
 
         return count;
     }
 };
 
-RegisterGenerator<Mandelbrot> register_my_gen;
+RegisterGenerator<Mandelbrot> register_my_gen{"mandelbrot"};
 
 }  // namespace

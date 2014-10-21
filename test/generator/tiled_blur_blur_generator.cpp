@@ -9,8 +9,6 @@ public:
     Param<int> width{ "width" };
     Param<int> height{ "height" };
 
-    static constexpr const char* NAME = "tiled_blur_blur";
-
     Func build() override {
         // We pass in parameters to tell us where the boundary
         // condition kicks in. This is decoupled from the size of the
@@ -36,6 +34,6 @@ public:
         return blur;
     }
 };
-Halide::RegisterGenerator<TiledBlurBlur> register_my_gen;
+Halide::RegisterGenerator<TiledBlurBlur> register_my_gen{"tiled_blur_blur"};
 
 }  // namespace

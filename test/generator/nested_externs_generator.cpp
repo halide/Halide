@@ -15,8 +15,6 @@ public:
     ImageParam input_a{ Float(32), 3, "a" };
     ImageParam input_b{ Float(32), 3, "b" };
 
-    static constexpr const char* NAME = "nested_externs_combine";
-
     Func build() override {
         Func result("combine");
         Var x, y, c;
@@ -36,8 +34,6 @@ public:
 class NestedExternsInner : public Generator<NestedExternsInner> {
 public:
     Param<float> value {"value", 1.0f};
-
-    static constexpr const char* NAME = "nested_externs_inner";
 
     Func build() override {
         // We can make an extern call to any (registered) Generator
@@ -79,8 +75,6 @@ public:
 
     Param<float> value {"value", 1.0f};
 
-    static constexpr const char* NAME = "nested_externs_leaf";
-
     Func build() override {
         Func f("leaf");
         Var x, y, c;
@@ -96,8 +90,6 @@ public:
 class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
     Param<float> value {"value", 1.0f};
-
-    static constexpr const char* NAME = "nested_externs_root";
 
     Func build() override {
         Func extern_stage_1 = NestedExternsInner().call_extern({value});
@@ -130,9 +122,9 @@ public:
     }
 };
 
-RegisterGenerator<NestedExternsCombine> register_combine_gen;
-RegisterGenerator<NestedExternsInner> register_inner_gen;
-RegisterGenerator<NestedExternsLeaf> register_leaf_gen;
-RegisterGenerator<NestedExternsRoot> register_root_gen;
+RegisterGenerator<NestedExternsCombine> register_combine_gen{"nested_externs_combine"};
+RegisterGenerator<NestedExternsInner> register_inner_gen{"nested_externs_inner"};
+RegisterGenerator<NestedExternsLeaf> register_leaf_gen{"nested_externs_leaf"};
+RegisterGenerator<NestedExternsRoot> register_root_gen{"nested_externs_root"};
 
 }  // namespace

@@ -6,8 +6,6 @@ class GpuOnly : public Halide::Generator<GpuOnly> {
 public:
     ImageParam input{ Int(32), 2, "input" };
 
-    static constexpr const char* NAME = "gpu_only";
-
     Func build() override {
         Var x("x"), y("y");
 
@@ -23,6 +21,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<GpuOnly> register_my_gen;
+Halide::RegisterGenerator<GpuOnly> register_my_gen{"gpu_only"};
 
 }  // namespace
