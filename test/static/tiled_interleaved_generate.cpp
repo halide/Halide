@@ -32,9 +32,8 @@ int main(int argc, char **argv) {
                          input(x, clamp(y-1, 0, height-1), c) +
                          input(x, clamp(y+1, 0, height-1), c))/4.0f;
 
-        input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
-
-        blur.output_buffer().set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
+        input.set_layout(Interleaved, 3);
+        blur.output_buffer().set_layout(Interleaved, 3);
 
         blur.compile_to_file("tiled_interleaved_blur", input, width, height);
     }
@@ -44,7 +43,7 @@ int main(int argc, char **argv) {
         // The entire input image.
         ImageParam input(Float(32), 3);
 
-        input.set_stride(2, 1).set_stride(0, 3).set_bounds(2, 0, 3);
+        input.set_layout(Interleaved, 3);
 
         // This is the outermost pipeline, so input width and height
         // are meaningful. If you want to be able to call this outer
@@ -81,7 +80,7 @@ int main(int argc, char **argv) {
         // 33x33 near the boundaries
         brighter1.trace_realizations();
 
-        brighter2.output_buffer().set_stride(0, 3).set_stride(2, 1).set_bounds(2, 0, 3);
+        brighter2.output_buffer().set_layout(Interleaved, 3);
 
         brighter2.compile_to_file("tiled_interleaved", input);
     }
