@@ -335,7 +335,7 @@ else
 test_generators: ;
 endif
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_static test_warnings 
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_static test_warnings
 
 ifeq ($(CXX11),true)
 ALL_TESTS += test_generators
@@ -389,19 +389,23 @@ $(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tm
 # usage can just add deps later.
 $(FILTERS_DIR)/%.generator: test/generator/%_generator.cpp $(GENGEN_DEPS)
 	@mkdir -p $(FILTERS_DIR)
-	$(CXX) -std=c++11 -fno-rtti -Iinclude $(filter %_generator.cpp,$^) tools/GenGen.cpp $(BIN_DIR)/libHalide.so -lz -lpthread -ldl -o $@
+	$(CXX) -std=c++11 -fno-rtti -Iinclude $(filter %_generator.cpp,$^) tools/GenGen.cpp -L$(BIN_DIR) -lHalide -lz -lpthread -ldl -o $@
 
 # By default, %.o/.h are produced by executing %.generator
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
-	$< -g $(notdir $*) -o $(FILTERS_DIR) target=host
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -g $(notdir $*) -o ../$(FILTERS_DIR) target=host
 
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur.generator
-	$< -g tiled_blur -f tiled_blur_interleaved -o $(FILTERS_DIR) target=host is_interleaved=true
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur -f tiled_blur_interleaved -o ../$(FILTERS_DIR) target=host is_interleaved=true
+
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur_blur.generator
-	$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o $(FILTERS_DIR) target=host is_interleaved=true
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o ../$(FILTERS_DIR) target=host is_interleaved=true
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
@@ -421,7 +425,8 @@ $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_
 # First, make a special rule to build each of the Generators in nested_externs_generator.cpp
 # (which all have the form nested_externs_*)
 $(FILTERS_DIR)/nested_externs_%.o $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
-	$< -g nested_externs_$* -o $(FILTERS_DIR) target=host
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=host
 
 # Synthesize 'nested_externs.o' based on the four generator products we need:
 $(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o
@@ -432,12 +437,12 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 	cat $(FILTERS_DIR)/nested_externs_*.h > $(FILTERS_DIR)/nested_externs.h
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
-$(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h include/HalideRuntime.h 
+$(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h include/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
 
 # By default, %_jittest.cpp depends on libHalide.
 $(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.so,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	@ if [[ $@ == *_run ]]; then \
