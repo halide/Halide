@@ -92,23 +92,17 @@ public:
     Param<float> value {"value", 1.0f};
 
     Func build() override {
-std::cerr<<"LINE "<<__LINE__<<"\n";
         Func extern_stage_1 = NestedExternsInner().call_extern({value});
-std::cerr<<"LINE "<<__LINE__<<"\n";
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],
                                         extern_stage_1.args()[0],
                                         extern_stage_1.args()[1]);
 
-std::cerr<<"LINE "<<__LINE__<<"\n";
         Func extern_stage_2 = NestedExternsInner().call_extern({value+1});
-std::cerr<<"LINE "<<__LINE__<<"\n";
         extern_stage_2.reorder_storage(extern_stage_2.args()[2],
                                         extern_stage_2.args()[0],
                                         extern_stage_2.args()[1]);
 
-std::cerr<<"LINE "<<__LINE__<<"\n";
         Func extern_stage_combine = NestedExternsCombine().call_extern({extern_stage_1, extern_stage_2});
-std::cerr<<"LINE "<<__LINE__<<"\n";
         extern_stage_combine.reorder_storage(extern_stage_combine.args()[2],
                                              extern_stage_combine.args()[0],
                                              extern_stage_combine.args()[1]);
