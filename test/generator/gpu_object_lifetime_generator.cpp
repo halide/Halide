@@ -4,8 +4,6 @@ namespace {
 
 class GpuObjectLifetime : public Halide::Generator<GpuObjectLifetime> {
 public:
-    static constexpr const char* NAME = "gpu_object_lifetime";
-
     Func build() override {
         Var x;
 
@@ -22,6 +20,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen;
+Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen{"gpu_object_lifetime"};
 
 }  // namespace

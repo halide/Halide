@@ -40,17 +40,17 @@
  * this is done by simply defining an instance of RegisterGenerator at static
  * scope:
  * \code
- *    RegisterGenerator<ExampleGen> register_jit_example;
+ *    RegisterGenerator<ExampleGen> register_jit_example{"jit_example"};
  * \endcode
  *
- * The registered name of the Generator is provided by the static NAME member
+ * The registered name of the Generator is provided as an argument
  * (which must match the same rules as Param names, above).
  *
  * (If you are jitting, you may not need to bother registering your Generator,
  * but it's considered best practice to always do so anyway.)
  *
- * Most Generator classes will only need to provide the a static NAME member,
- * override the build() method, and perhaps declare a Param and/or GeneratorParam:
+ * Most Generator classes will only need to override the build() method,
+ * and perhaps declare a Param and/or GeneratorParam:
  *
  * \code
  *  class XorImage : public Generator<XorImage> {
@@ -58,8 +58,6 @@
  *      GeneratorParam<int> channels{"channels", 3};
  *      ImageParam input{UInt(8), 3, "input"};
  *      Param<uint8_t> mask{"mask"};
- *
- *      static constexpr const char* NAME = "xor_image";
  *
  *      Func build() override {
  *          Var x, y, c;
@@ -69,7 +67,7 @@
  *          return f;
  *      }
  *  };
- *  RegisterGenerator<XorImage> reg_xor;
+ *  RegisterGenerator<XorImage> reg_xor{"xor_image"};
  * \endcode
  *
  * By default, this code schedules itself for 3-channel (RGB) images;
@@ -395,7 +393,7 @@ private:
     std::map<std::string, Internal::GeneratorParamBase *> generator_params;
     bool params_built;
 
-    virtual std::string generator_name() = 0;
+    virtual const std::string &generator_name() = 0;
 
     void build_params();
 
@@ -440,14 +438,19 @@ private:
 
 }  // namespace Internal
 
+template <class T> class RegisterGenerator;
+
 template <class T> class Generator : public Internal::GeneratorBase {
 public:
     Generator() : Internal::GeneratorBase(sizeof(T)) {}
 private:
-    std::string generator_name() override final {
-        return T::NAME;
+    friend class RegisterGenerator<T>;
+    static std::string registered_generator_name;
+    const std::string &generator_name() override final {
+        return registered_generator_name;
     }
 };
+template <class T> std::string Generator<T>::registered_generator_name;
 
 template <class T> class RegisterGenerator {
 private:
@@ -462,9 +465,11 @@ private:
     };
 
 public:
-    RegisterGenerator() {
+    RegisterGenerator(const char* name) {
+        user_assert(Generator<T>::registered_generator_name.empty());
+        Generator<T>::registered_generator_name = name;
         std::unique_ptr<Internal::GeneratorFactory> f(new TFactory());
-        Internal::GeneratorRegistry::register_factory(T::NAME, std::move(f));
+        Internal::GeneratorRegistry::register_factory(name, std::move(f));
     }
 };
 

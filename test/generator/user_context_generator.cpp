@@ -7,8 +7,6 @@ public:
     ImageParam input{ Int(32), 2, "input" };
     Param<void *> user_context{ "__user_context" };
 
-    static constexpr const char* NAME = "user_context";
-
     Func build() override {
         Var x, y;
 
@@ -25,6 +23,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<UserContext> register_my_gen;
+Halide::RegisterGenerator<UserContext> register_my_gen{"user_context"};
 
 }  // namespace

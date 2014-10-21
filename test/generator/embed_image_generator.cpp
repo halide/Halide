@@ -6,8 +6,6 @@ class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
     ImageParam input{ Float(32), 3, "input" };
 
-    static constexpr const char* NAME = "embed_image";
-
     Func build() override {
         Image<float> matrix(3, 3);
 
@@ -27,6 +25,6 @@ public:
     }
 };
 
-Halide::RegisterGenerator<EmbedImage> register_my_gen;
+Halide::RegisterGenerator<EmbedImage> register_my_gen{"embed_image"};
 
 }  // namespace

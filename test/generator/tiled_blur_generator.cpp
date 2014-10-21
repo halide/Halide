@@ -7,8 +7,6 @@ public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
 
-    static constexpr const char* NAME = "tiled_blur";
-
     Func build() override {
         // This is the outermost pipeline, so input width and height
         // are meaningful. If you want to be able to call this outer
@@ -55,6 +53,6 @@ public:
         return brighter2;
     }
 };
-Halide::RegisterGenerator<TiledBlur> register_my_gen;
+Halide::RegisterGenerator<TiledBlur> register_my_gen{"tiled_blur"};
 
 }  // namespace
