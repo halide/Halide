@@ -393,7 +393,7 @@ private:
     std::map<std::string, Internal::GeneratorParamBase *> generator_params;
     bool params_built;
 
-    virtual const std::string &generator_name() = 0;
+    virtual const std::string &generator_name() const = 0;
 
     void build_params();
 
@@ -445,12 +445,16 @@ public:
     Generator() : Internal::GeneratorBase(sizeof(T)) {}
 private:
     friend class RegisterGenerator<T>;
-    static std::string registered_generator_name;
-    const std::string &generator_name() override final {
-        return registered_generator_name;
+    // Must wrap the static member in a static method to avoid static-member
+    // initialization order fiasco
+    static std::string* generator_name_storage() {
+        static std::string name;
+        return &name;
+    }
+    const std::string &generator_name() const override final {
+        return *generator_name_storage();
     }
 };
-template <class T> std::string Generator<T>::registered_generator_name;
 
 template <class T> class RegisterGenerator {
 private:
@@ -466,8 +470,8 @@ private:
 
 public:
     RegisterGenerator(const char* name) {
-        user_assert(Generator<T>::registered_generator_name.empty());
-        Generator<T>::registered_generator_name = name;
+        user_assert(Generator<T>::generator_name_storage()->empty());
+        *Generator<T>::generator_name_storage() = name;
         std::unique_ptr<Internal::GeneratorFactory> f(new TFactory());
         Internal::GeneratorRegistry::register_factory(name, std::move(f));
     }
