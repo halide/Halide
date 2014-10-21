@@ -269,6 +269,7 @@ Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> functi
     Func f_extern;
     if (function_name.empty()) {
         function_name = generator_name();
+        user_assert(!function_name.empty()) << "call_extern: generator_name is empty";
     }
     f_extern.define_extern(function_name, function_arguments, f.output_types(), f.dimensions());
     return f_extern;
