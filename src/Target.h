@@ -6,6 +6,7 @@
  */
 
 #include <bitset>
+#include <limits>
 #include <stdint.h>
 #include <string>
 #include "Error.h"
