@@ -297,7 +297,7 @@ int main(int argc, char **argv) {
 
 bool have_opencl() {
 #ifdef _WIN32
-    return LoadLibrary("opengl.dll") != NULL;
+    return LoadLibrary("OpenCL.dll") != NULL;
 #elif __APPLE__
     return dlopen("/System/Library/Frameworks/OpenCL.framework/Versions/Current/OpenCL", RTLD_LAZY) != NULL;
 #else
