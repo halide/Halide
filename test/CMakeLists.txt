@@ -176,60 +176,61 @@ if (WITH_TEST_GENERATORS)
     if (TEST_SRC STREQUAL "tiled_blur_interleaved_aottest.cpp")
       # Some special dependencies here:
       # "tiled_blur_interleaved" is produced by using tiled_blur with different generator args.
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
-                               "generator_tiled_blur" 
-                               "tiled_blur" 
-                               "tiled_blur_interleaved" 
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_tiled_blur"
+                               "tiled_blur"
+                               "tiled_blur_interleaved"
                                "target=host" "is_interleaved=true")
       # "tiled_blur_blur_interleaved" is produced by using tiled_blur_blur with different generator args.
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
                                "generator_tiled_blur_blur"
                                "tiled_blur_blur"
-                               "tiled_blur_blur_interleaved" 
+                               "tiled_blur_blur_interleaved"
                                "target=host" "is_interleaved=true")
     elseif(TEST_SRC STREQUAL "nested_externs_aottest.cpp")
       # Dear CMake: I hate you, and I will hate you for all eternity.
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
-                               "generator_nested_externs"
-                               "nested_externs_combine"
-                               "nested_externs_combine" 
-                               "target=host")
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
-                               "generator_nested_externs"
-                               "nested_externs_inner"
-                               "nested_externs_inner" 
-                               "target=host")
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
-                               "generator_nested_externs"
-                               "nested_externs_leaf"
-                               "nested_externs_leaf" 
-                               "target=host")
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
                                "generator_nested_externs"
                                "nested_externs_root"
-                               "nested_externs_root" 
+                               "nested_externs_root"
                                "target=host")
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_nested_externs"
+                               "nested_externs_inner"
+                               "nested_externs_inner"
+                               "target=host")
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_nested_externs"
+                               "nested_externs_combine"
+                               "nested_externs_combine"
+                               "target=host")
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_nested_externs"
+                               "nested_externs_leaf"
+                               "nested_externs_leaf"
+                               "target=host")
+
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
-      add_generator_dependency("${TEST_RUNNER}" 
-                               "${SCRATCH_DIR}" 
-                               "generator_${GEN_NAME}" 
-                               "${GEN_NAME}" 
-                               "${FUNC_NAME}" 
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_${GEN_NAME}"
+                               "${GEN_NAME}"
+                               "${FUNC_NAME}"
                                "target=host")
       # tiled_blur_aottest.cpp depends on tiled_blur AND ALSO tiled_blur_blur
       if (TEST_SRC STREQUAL "tiled_blur_aottest.cpp")
-        add_generator_dependency("${TEST_RUNNER}" 
-                                 "${SCRATCH_DIR}" 
+        add_generator_dependency("${TEST_RUNNER}"
+                                 "${SCRATCH_DIR}"
                                  "generator_tiled_blur_blur"
                                  "tiled_blur_blur"
-                                 "tiled_blur_blur" 
+                                 "tiled_blur_blur"
                                  "target=host")
       endif()
     endif()
