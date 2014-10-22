@@ -36,6 +36,11 @@ bool is_valid_name(const std::string& n) {
 namespace Halide {
 namespace Internal {
 
+const std::map<std::string, ImageParamLayout> image_param_layout_enum_map{
+    {"planar", Planar},
+    {"interleaved", Interleaved}
+};
+
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
                           "target=target-string [generator_arg=value [...]]\n";

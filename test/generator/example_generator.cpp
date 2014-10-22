@@ -46,6 +46,10 @@ public:
     // ...or bools: {default}
     GeneratorParam<bool> flag{ "flag", true };
 
+    // The Halide::ImageParamLayout is just an ordinary enum, but with
+    // an appropriate string -> value map built-in so we don't have to provide it.
+    GeneratorParam<ImageParamLayout> output_layout{ "output_layout", Halide::Planar };
+
     // These are bad names that will produce errors at build time:
     // GeneratorParam<bool> badname{ " flag", true };
     // GeneratorParam<bool> badname{ "flag ", true };
@@ -74,6 +78,8 @@ public:
 
         f(x, y) = max(x, y);
         g(x, y, c) = cast<int32_t>(f(x, y) * c * compiletime_factor * runtime_factor);
+
+        g.output_buffer().set_layout(output_layout, channels);
 
         g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
 

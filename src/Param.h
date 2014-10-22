@@ -169,6 +169,19 @@ inline Param<void *> user_context_param() {
   return Param<void *>("__user_context");
 }
 
+/** ImageParamLayout is a convenient shorthand for representing
+ * common buffer layouts for input and output ImageParams. It is
+ * not meant to be exhaustive, merely to make common Generator patterns
+ * more convenient (in particular, specialization of a pipeline for
+ * a Planar vs Interleaved layout based on a GeneratorParam value).  */
+enum ImageParamLayout {
+  // Traditional Planar layout; rows and planes may or may not have padding.
+  Planar,
+  // Traditional Interleaved (e.g. RGBRGBRGB, RGBARGBARGBA, etc).
+  // There may or may not be padding at the end of each row.
+  Interleaved
+};
+
 /** A handle on the output buffer of a pipeline. Used to make static
  * promises about the output size and stride. */
 class OutputImageParam {
@@ -245,6 +258,15 @@ public:
 
     /** Set the min and extent in one call. */
     EXPORT OutputImageParam &set_bounds(int dim, Expr min, Expr extent);
+
+    /** Set the stride and bounds appropriately for an image
+     * with the given layout and channel count. Note that this
+     * call assumes the convention of dimensions 0,1,2 being
+     * x,y,c respectively. Note also that there is (deliberately)
+     * no equivalent get_layout() call; since ImageParamLayout is not
+     * intended to be comprehensive, there can easily be ImageParams
+     * that don't conform to any of the predefined ImageParamLayout values. */
+    EXPORT OutputImageParam &set_layout(ImageParamLayout layout, int channels);
 
     /** Get the dimensionality of this image parameter */
     EXPORT int dimensions() const;

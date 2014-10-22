@@ -75,6 +75,18 @@ OutputImageParam &OutputImageParam::set_bounds(int dim, Expr min, Expr extent) {
     return set_min(dim, min).set_extent(dim, extent);
 }
 
+OutputImageParam &OutputImageParam::set_layout(ImageParamLayout layout, int channels) {
+    switch (layout) {
+        case Planar:
+            set_stride(0, 1).set_stride(1, Expr()).set_stride(2, Expr());
+            break;
+        case Interleaved:
+            set_stride(0, channels).set_stride(1, Expr()).set_stride(2, 1);
+            break;
+    }
+    return set_bounds(2, 0, channels);
+}
+
 int OutputImageParam::dimensions() const {
     return param.dimensions();
 }
