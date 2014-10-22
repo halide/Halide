@@ -101,7 +101,7 @@ if (WITH_TEST_STATIC)
   endforeach()
 endif()
 
-function(add_generator_dependency target scratch_dir gen_name func_name)
+function(add_generator_dependency target scratch_dir gen_target gen_name func_name)
   # CMake 2.8 doesn't have string(CONCAT), so fake it like so:
   string(REPLACE ".lib" "${CMAKE_STATIC_LIBRARY_SUFFIX}" FILTER_LIB "${func_name}.lib" )
   string(REPLACE ".h" ".h" FILTER_HDR "${func_name}.h" )
@@ -109,15 +109,15 @@ function(add_generator_dependency target scratch_dir gen_name func_name)
   if (WIN32)
     # TODO(srj): this has not yet been tested on Windows.
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
-      DEPENDS "generator_${gen_name}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/Release/generator_${gen_name}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
+      DEPENDS "${gen_target}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/Release/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
       COMMAND "lib.exe" "/OUT:${STATIC_LIB}" "${scratch_dir}/*.o"
       WORKING_DIRECTORY "${scratch_dir}"
       )
   else()
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
-      DEPENDS "generator_${gen_name}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/generator_${gen_name}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
+      DEPENDS "${gen_target}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
       COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${scratch_dir}/*.o"
       WORKING_DIRECTORY "${scratch_dir}")
   endif()
@@ -149,10 +149,15 @@ if (WITH_TEST_GENERATORS)
 
   # For foo_generator.cpp, assume it contains a single generator named 'foo'
   # and make an executable target for it named 'generator_foo'
-  file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_generator.cpp")
-  foreach(gen_src ${TESTS})
+  file(GLOB GENS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_generator.cpp")
+  foreach(gen_src ${GENS})
     string(REPLACE "_generator.cpp" "" gen_name "generator_${gen_src}")
-    halide_project(${gen_name} "generator" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/GenGen.cpp" "generator/${gen_src}")
+    # tiled_blur also needs tiled_blur_blur
+    if(gen_name STREQUAL "generator_tiled_blur")
+      halide_project(${gen_name} "generator" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/GenGen.cpp" "generator/${gen_src}" "generator/tiled_blur_blur_generator.cpp")
+    else()
+      halide_project(${gen_name} "generator" "${CMAKE_CURRENT_SOURCE_DIR}/../tools/GenGen.cpp" "generator/${gen_src}")
+    endif()
   endforeach()
 
   file(GLOB TESTS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/generator" "${CMAKE_CURRENT_SOURCE_DIR}/generator/*_aottest.cpp")
@@ -171,19 +176,48 @@ if (WITH_TEST_GENERATORS)
       # "tiled_blur_interleaved" is produced by using tiled_blur with different generator args.
       add_generator_dependency("${TEST_RUNNER}" 
                                "${SCRATCH_DIR}" 
+                               "generator_tiled_blur" 
                                "tiled_blur" 
                                "tiled_blur_interleaved" 
                                "target=host" "is_interleaved=true")
       # "tiled_blur_blur_interleaved" is produced by using tiled_blur_blur with different generator args.
       add_generator_dependency("${TEST_RUNNER}" 
                                "${SCRATCH_DIR}" 
+                               "generator_tiled_blur_blur"
                                "tiled_blur_blur"
                                "tiled_blur_blur_interleaved" 
                                "target=host" "is_interleaved=true")
+    elseif(TEST_SRC STREQUAL "nested_externs_aottest.cpp")
+      # Dear CMake: I hate you, and I will hate you for all eternity.
+      add_generator_dependency("${TEST_RUNNER}" 
+                               "${SCRATCH_DIR}" 
+                               "generator_nested_externs"
+                               "nested_externs_combine"
+                               "nested_externs_combine" 
+                               "target=host")
+      add_generator_dependency("${TEST_RUNNER}" 
+                               "${SCRATCH_DIR}" 
+                               "generator_nested_externs"
+                               "nested_externs_inner"
+                               "nested_externs_inner" 
+                               "target=host")
+      add_generator_dependency("${TEST_RUNNER}" 
+                               "${SCRATCH_DIR}" 
+                               "generator_nested_externs"
+                               "nested_externs_leaf"
+                               "nested_externs_leaf" 
+                               "target=host")
+      add_generator_dependency("${TEST_RUNNER}" 
+                               "${SCRATCH_DIR}" 
+                               "generator_nested_externs"
+                               "nested_externs_root"
+                               "nested_externs_root" 
+                               "target=host")
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       add_generator_dependency("${TEST_RUNNER}" 
                                "${SCRATCH_DIR}" 
+                               "generator_${GEN_NAME}" 
                                "${GEN_NAME}" 
                                "${FUNC_NAME}" 
                                "target=host")
@@ -191,6 +225,7 @@ if (WITH_TEST_GENERATORS)
       if (TEST_SRC STREQUAL "tiled_blur_aottest.cpp")
         add_generator_dependency("${TEST_RUNNER}" 
                                  "${SCRATCH_DIR}" 
+                                 "generator_tiled_blur_blur"
                                  "tiled_blur_blur"
                                  "tiled_blur_blur" 
                                  "target=host")
