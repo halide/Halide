@@ -2068,16 +2068,24 @@ void CodeGen::visit(const Call *op) {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
     } else if (op->call_type == Call::Extern && op->name == "pow_f32") {
+        internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
         Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
         e.accept(this);
     } else if (op->call_type == Call::Extern && op->name == "log_f32") {
+        internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_log(op->args[0]);
         e.accept(this);
     } else if (op->call_type == Call::Extern && op->name == "exp_f32") {
+        internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_exp(op->args[0]);
         e.accept(this);
+    } else if (op->call_type == Call::Extern &&
+               (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
+        internal_assert(op->args.size() == 1);
+        Value *a = codegen(op->args[0]);
+        value = builder->CreateFCmpUNO(a, a);
     } else {
         // It's an extern call.
 

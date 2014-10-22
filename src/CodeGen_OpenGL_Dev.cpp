@@ -8,6 +8,7 @@
 #include "VaryingAttributes.h"
 #include <iomanip>
 #include <map>
+#include <limits>
 
 namespace Halide {
 namespace Internal {
@@ -165,6 +166,7 @@ CodeGen_GLSL::CodeGen_GLSL(std::ostream &s) : CodeGen_C(s) {
     builtin["mix"] = "mix";
     builtin["mod"] = "mod";
     builtin["abs"] = "abs";
+    builtin["isnan"] = "isnan";
 }
 
 string CodeGen_GLSL::print_type(Type type) {
@@ -203,10 +205,17 @@ std::string CodeGen_GLSL::print_name(const std::string &name) {
 }
 
 void CodeGen_GLSL::visit(const FloatImm *op) {
-    // TODO(dheck): use something like dtoa to avoid precision loss in
-    // float->decimal conversion
     ostringstream oss;
-    oss << std::showpoint << std::setprecision(8) << op->value;
+    // Print integral numbers with trailing ".0". For fractional numbers use a
+    // precision of 9 digits, which should be enough to recover the binary
+    // float unambiguously from the decimal representation (if iostreams
+    // implements correct rounding).
+    if (truncf(op->value) == op->value) {
+        oss << std::fixed << std::setprecision(1) << op->value;
+    } else {
+        oss.flags(std::ios_base::fixed | std::ios_base::scientific);
+        oss << std::setprecision(9) << op->value;
+    }
     id = oss.str();
 }
 
@@ -626,6 +635,11 @@ string normalize_temporaries(const string &s) {
 void check(Expr e, const string &result) {
     ostringstream source;
     CodeGen_GLSL cg(source);
+    if (e.as<FloatImm>() || e.as<IntImm>()) {
+        // Hack: CodeGen_C doesn't treat immediates like other expressions, so
+        // wrap them to obtain useful output.
+        e = Halide::print(e);
+    }
     Evaluate::make(e).accept(&cg);
     string src = normalize_temporaries(source.str());
     if (src != result) {
@@ -635,35 +649,44 @@ void check(Expr e, const string &result) {
             << "  Actual source code:\n" << src;
     }
 }
+
 }  // namespace
 
 void CodeGen_GLSL::test() {
     vector<Expr> e;
 
+    // Check that float constants are printed correctly.
+    check(1.0f, "float $ = 1.0;\n");
+    check(1.0f + std::numeric_limits<float>::epsilon(), "float $ = 1.00000012;\n");
+    check(1.19209290e-07f, "float $ = 1.1920929e-07;\n");
+    check(8388608.f, "float $ = 8388608.0;\n");
+    check(-2.1e19f, "float $ = -20999999189405401088.0;\n");
+    check(3.1415926536f, "float $ = 3.14159274;\n");
+
     // Uint8 is embedded in GLSL floats, so no cast necessary
     check(cast<float>(Variable::make(UInt(8), "x") * 1.0f),
-          "float $ = $x * 1.0000000;\n");
+          "float $ = $x * 1.0;\n");
     // But truncation is necessary for the reverse direction
     check(cast<uint8_t>(Variable::make(Float(32), "x")),
           "float $ = floor($x);\n");
 
     check(Min::make(Expr(1), Expr(5)),
-          "float $ = min(1.0000000, 5.0000000);\n"
+          "float $ = min(1.0, 5.0);\n"
           "int $ = int($);\n");
 
     check(Max::make(Expr(1), Expr(5)),
-          "float $ = max(1.0000000, 5.0000000);\n"
+          "float $ = max(1.0, 5.0);\n"
           "int $ = int($);\n");
 
     check(Max::make(Broadcast::make(1, 4), Broadcast::make(5, 4)),
-          "vec4 $ = vec4(1.0000000);\n"
-          "vec4 $ = vec4(5.0000000);\n"
+          "vec4 $ = vec4(1.0);\n"
+          "vec4 $ = vec4(5.0);\n"
           "vec4 $ = max($, $);\n"
           "ivec4 $ = ivec4($);\n");
 
     check(Variable::make(Int(32), "x") / Expr(3),
           "float $ = float($x);\n"
-          "float $ = $ * 0.33333334;\n"
+          "float $ = $ * 0.333333343;\n"
           "float $ = floor($);\n"
           "int $ = int($);\n");
     check(Variable::make(Int(32, 4), "x") / Variable::make(Int(32, 4), "y"),
@@ -677,39 +700,39 @@ void CodeGen_GLSL::test() {
 
     // Integer lerp with integer weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), cast<uint8_t>(127)),
-          "float $ = mix(0.0000000, 255.00000, 0.49803922);\n"
-          "float $ = $ + 0.50000000;\n"
+          "float $ = mix(0.0, 255.0, 0.498039216);\n"
+          "float $ = $ + 0.5;\n"
           "float $ = floor($);\n");
 
     // Integer lerp with float weight
     check(lerp(cast<uint8_t>(0), cast<uint8_t>(255), 0.3f),
-          "float $ = mix(0.0000000, 255.00000, 0.29803923);\n"
-          "float $ = $ + 0.50000000;\n"
+          "float $ = mix(0.0, 255.0, 0.298039228);\n"
+          "float $ = $ + 0.5;\n"
           "float $ = floor($);\n");
 
     // Floating point lerp
     check(lerp(0.0f, 1.0f, 0.3f),
-          "float $ = mix(0.0000000, 1.0000000, 0.30000001);\n");
+          "float $ = mix(0.0, 1.0, 0.300000012);\n");
 
     // Vectorized lerp
     check(lerp(Variable::make(Float(32, 4), "x"), Variable::make(Float(32, 4), "y"), Broadcast::make(0.25f, 4)),
-          "vec4 $ = vec4(0.25000000);\n"
+          "vec4 $ = vec4(0.25);\n"
           "vec4 $ = mix($x, $y, $);\n");
 
     // Sin with scalar arg
-    check(sin(3.0f), "float $ = sin(3.0000000);\n");
+    check(sin(3.0f), "float $ = sin(3.0);\n");
 
     // Sin with vector arg
     check(Call::make(Float(32, 4), "sin_f32", vec(Broadcast::make(1.f, 4)), Internal::Call::Extern),
-          "vec4 $ = vec4(1.0000000);\n"
+          "vec4 $ = vec4(1.0);\n"
           "vec4 $ = sin($);\n");
 
     // use float version of abs in GLSL
     check(abs(-2),
-          "float $ = abs(-2.0000000);\n"
+          "float $ = abs(-2.0);\n"
           "int $ = int($);\n");
 
-    check(Halide::print(3.0f), "float $ = 3.0000000;\n");
+    check(Halide::print(3.0f), "float $ = 3.0;\n");
 
     // Test rounding behavior of integer division.
     check(Variable::make(Int(32), "x") / Variable::make(Int(32), "y"),
@@ -724,13 +747,13 @@ void CodeGen_GLSL::test() {
                        Broadcast::make(1.f, 4),
                        Broadcast::make(2.f, 4)),
           "vec4 $;\n"
-          "bool $ = $x == 1.0000000;\n"
+          "bool $ = $x == 1.0;\n"
           "if ($) {\n"
-          " vec4 $ = vec4(1.0000000);\n"
+          " vec4 $ = vec4(1.0);\n"
           " $ = $;\n"
           "}\n"
           "else {\n"
-          " vec4 $ = vec4(2.0000000);\n"
+          " vec4 $ = vec4(2.0);\n"
           " $ = $;\n"
           "}\n");
 
@@ -738,7 +761,7 @@ void CodeGen_GLSL::test() {
     check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
                        Broadcast::make(1.f, 4),
                        Broadcast::make(2.f, 4)),
-          "vec4 $ = vec4(2.0000000, 1.0000000, 2.0000000, 2.0000000);\n");
+          "vec4 $ = vec4(2.0, 1.0, 2.0, 2.0);\n");
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
@@ -759,14 +782,14 @@ void CodeGen_GLSL::test() {
           "float $ = texture2D($buf, vec2(0, 0)).r;\n"
           "float $ = texture2D($buf, vec2(0, 0)).b;\n"
           "float $ = texture2D($buf, vec2(0, 0)).a;\n"
-          "vec4 $ = vec4($, 1.0000000, $, $);\n");
+          "vec4 $ = vec4($, 1.0, $, $);\n");
 
-    check(log(1.0f), "float $ = log(1.0000000);\n");
-    check(exp(1.0f), "float $ = exp(1.0000000);\n");
+    check(log(1.0f), "float $ = log(1.0);\n");
+    check(exp(1.0f), "float $ = exp(1.0);\n");
 
     // Integer powers are expanded
-    check(pow(1.4f, 2), "float $ = 1.4000000 * 1.4000000;\n");
-    check(pow(1.0f, 2.1f), "float $ = pow(1.0000000, 2.0999999);\n");
+    check(pow(1.4f, 2), "float $ = 1.39999998 * 1.39999998;\n");
+    check(pow(1.0f, 2.1f), "float $ = pow(1.0, 2.0999999);\n");
 
     std::cout << "CodeGen_GLSL test passed\n";
 }
