@@ -764,20 +764,28 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         modules.push_back(get_initmod_win32_math_ll(c));
     } else if (t.arch == Target::PNaCl) {
         modules.push_back(get_initmod_pnacl_math_ll(c));
-    } else {
+    } else if (t.arch != Target::Hexagon) {
+      //PDB: disabling posix math for hexagon. for now, at least.
         modules.push_back(get_initmod_posix_math_ll(c));
     }
 
     // These modules are always used
-    modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-    modules.push_back(get_initmod_posix_math(c, bits_64, debug));
-    modules.push_back(get_initmod_tracing(c, bits_64, debug));
-    modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-    modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-    modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-    modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-    modules.push_back(get_initmod_cache(c, bits_64, debug));
-    modules.push_back(get_initmod_to_string(c, bits_64, debug));
+    //PDB: No GPU stuff needed for Hexagon
+    if (t.arch != Target::Hexagon) {
+      modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
+    }
+    if (t.arch != Target::Hexagon) {
+      //PDB: Disabling all that is posix for the time being. We'll need to deal with
+      // write_debug_image soon, at the very least.
+      modules.push_back(get_initmod_posix_math(c, bits_64, debug));
+      modules.push_back(get_initmod_tracing(c, bits_64, debug));
+      modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+      modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+      modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+      modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+      modules.push_back(get_initmod_cache(c, bits_64, debug));
+      modules.push_back(get_initmod_to_string(c, bits_64, debug));
+    }
 
     // These modules are optional
     if (t.arch == Target::X86) {
