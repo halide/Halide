@@ -72,22 +72,14 @@ define weak_odr <4 x double> @abs_f64x4(<4 x double> %x) nounwind uwtable readno
 
 declare <8 x float> @llvm.x86.avx.rcp.ps.256(<8 x float>) nounwind readnone
 
-define weak_odr <8 x float> @inverse_f32x8(<8 x float> %x) nounwind uwtable readnone alwaysinline {
+define weak_odr <8 x float> @fast_inverse_f32x8(<8 x float> %x) nounwind uwtable readnone alwaysinline {
   %approx = tail call <8 x float> @llvm.x86.avx.rcp.ps.256(<8 x float> %x);
-  %prod = fmul <8 x float> %approx, %x
-  %diff = fsub <8 x float> <float 2.0, float 2.0, float 2.0, float 2.0, float 2.0, float 2.0, float 2.0, float 2.0>, %prod
-  %result = fmul <8 x float> %approx, %diff
-  ret <8 x float> %result
+  ret <8 x float> %approx
 }
 
 declare <8 x float> @llvm.x86.avx.rsqrt.ps.256(<8 x float>) nounwind readnone
 
-define weak_odr <8 x float> @inverse_sqrt_f32x8(<8 x float> %x) nounwind uwtable readnone alwaysinline {
+define weak_odr <8 x float> @fast_inverse_sqrt_f32x8(<8 x float> %x) nounwind uwtable readnone alwaysinline {
   %approx = tail call <8 x float> @llvm.x86.avx.rsqrt.ps.256(<8 x float> %x);
-  %prod = fmul <8 x float> %approx, %approx
-  %prod2 = fmul <8 x float> %prod, %x
-  %diff = fsub <8 x float> <float 3.0, float 3.0, float 3.0, float 3.0, float 3.0, float 3.0, float 3.0, float 3.0>, %prod2
-  %scale = fmul <8 x float> <float 0.5, float 0.5, float 0.5, float 0.5,float 0.5, float 0.5, float 0.5, float 0.5 >, %diff
-  %result = fmul <8 x float> %approx, %scale
-  ret <8 x float> %result
+  ret <8 x float> %approx
 }
