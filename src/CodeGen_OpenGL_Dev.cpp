@@ -188,8 +188,9 @@ std::string CodeGen_GLSL::print_name(const std::string &name) {
 void CodeGen_GLSL::visit(const FloatImm *op) {
     ostringstream oss;
     // Print integral numbers with trailing ".0". For fractional numbers use a
-    // precision of at 9 digits, which should be enough to recover the binary
-    // float unambiguously (if iostreams implements correct rounding).
+    // precision of 9 digits, which should be enough to recover the binary
+    // float unambiguously from the decimal representation (if iostreams
+    // implements correct rounding).
     if (truncf(op->value) == op->value) {
         oss << std::fixed << std::setprecision(1) << op->value;
     } else {
