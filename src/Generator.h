@@ -93,6 +93,7 @@
 
 #include "Func.h"
 #include "ObjectInstanceRegistry.h"
+#include "Param.h"
 #include "Target.h"
 
 namespace Halide {
@@ -114,6 +115,8 @@ public:
 
     const std::string name;
 };
+
+extern const std::map<std::string, ImageParamLayout> image_param_layout_enum_map;
 
 }  // namespace Internal
 
@@ -171,6 +174,13 @@ public:
     void set(const T &new_value) {
         user_assert(new_value >= min && new_value <= max) << "Value out of range: " << new_value;
         value = new_value;
+    }
+
+    // Special-case for ImageParamLayout, which has a built-in enum map.
+    template <typename T2 = T, typename std::enable_if<std::is_same<T2, ImageParamLayout>::value>::type * = nullptr>
+    GeneratorParam(const std::string &name, const T &value)
+        : GeneratorParamBase(name), value(value), min(std::numeric_limits<T>::lowest()),
+          max(std::numeric_limits<T>::max()), enum_map(Internal::image_param_layout_enum_map) {
     }
 
     template <typename T2 = T,
@@ -305,6 +315,7 @@ protected:
     using ExternFuncArgument = Halide::ExternFuncArgument;
     using Func = Halide::Func;
     using ImageParam = Halide::ImageParam;
+    using ImageParamLayout = Halide::ImageParamLayout;
     using RDom = Halide::RDom;
     using Target = Halide::Target;
     using Tuple = Halide::Tuple;
