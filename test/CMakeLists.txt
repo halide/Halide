@@ -83,6 +83,7 @@ if (WITH_TEST_STATIC)
     # Use a custom target to force it to run the generator before the
     # object file for the runner.
     add_custom_target("run_generator_${GENERATOR}" DEPENDS "${STATIC_LIB}")
+    set_target_properties("run_generator_${GENERATOR}" PROPERTIES FOLDER "generator")
 
     # Link them into the static tests
     add_executable("${RUNNER}" "static/${file}")
@@ -111,20 +112,21 @@ function(add_generator_dependency target scratch_dir gen_target gen_name func_na
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
       DEPENDS "${gen_target}"
       COMMAND "${CMAKE_BINARY_DIR}/bin/Release/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
-      COMMAND "lib.exe" "/OUT:${STATIC_LIB}" "${scratch_dir}/*.o"
+      COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${scratch_dir}\\${func_name}.o"
       WORKING_DIRECTORY "${scratch_dir}"
       )
   else()
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
       DEPENDS "${gen_target}"
       COMMAND "${CMAKE_BINARY_DIR}/bin/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
-      COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${scratch_dir}/*.o"
+      COMMAND "${CMAKE_AR}" q "${FILTER_LIB}" "${scratch_dir}/${func_name}.o"
       WORKING_DIRECTORY "${scratch_dir}")
   endif()
 
   # Use a custom target to force it to run the generator before the
   # object file for the runner.
   add_custom_target("exec_generator_${gen_name}_${func_name}" DEPENDS "${FILTER_LIB}" "${FILTER_HDR}")
+  set_target_properties("exec_generator_${gen_name}_${func_name}" PROPERTIES FOLDER "generator")
 
   # exec_generator_foo must build before $target
   add_dependencies("${target}" "exec_generator_${gen_name}_${func_name}")
