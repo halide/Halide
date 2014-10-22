@@ -46,6 +46,10 @@ public:
     // ...or bools: {default}
     GeneratorParam<bool> flag{ "flag", true };
 
+    // Halide::Type is supported as though it was an enum.
+    // It's most useful for customizing the type of input or output image params.
+    GeneratorParam<Halide::Type> output_type{ "output_type", Int(32) };
+
     // These are bad names that will produce errors at build time:
     // GeneratorParam<bool> badname{ " flag", true };
     // GeneratorParam<bool> badname{ "flag ", true };
@@ -70,17 +74,17 @@ public:
 
     Func build() override {
         Var x, y, c;
-        Func f, g, h;
+        Func f("f"), g("g");
 
         f(x, y) = max(x, y);
-        g(x, y, c) = cast<int32_t>(f(x, y) * c * compiletime_factor * runtime_factor);
+        g(x, y, c) = cast(output_type, f(x, y) * c * compiletime_factor * runtime_factor);
 
         g.bound(c, 0, channels).reorder(c, x, y).unroll(c);
 
         // Note that we can use the Generator method natural_vector_size()
         // here; this produces the width of the SIMD vector being targeted
         // divided by the width of the data type.
-        g.vectorize(x, natural_vector_size<float>());
+        g.vectorize(x, natural_vector_size(output_type));
 
         return g;
     }

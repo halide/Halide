@@ -99,6 +99,8 @@ namespace Halide {
 
 namespace Internal {
 
+extern const std::map<std::string, Halide::Type> halide_type_enum_map;
+
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files();
  * it can be trivially wrapped by a "real" main() to produce a command-line utility
@@ -126,9 +128,24 @@ public:
  *   - bool
  *   - enum
  *   - Halide::Target
+ *   - Halide::Type
  * All GeneratorParams have a default value. Arithmetic types can also
  * optionally specify min and max. Enum types must specify a string-to-value
  * map.
+ *
+ * Halide::Type is treated as though it were an enum, with the mappings:
+ *
+ *   "int8"     Halide::Int(8)
+ *   "int16"    Halide::Int(16)
+ *   "int32"    Halide::Int(32)
+ *   "uint8"    Halide::UInt(8)
+ *   "uint16"   Halide::UInt(16)
+ *   "uint32"   Halide::UInt(32)
+ *   "float32"  Halide::Float(32)
+ *   "float64"  Halide::Float(64)
+ *
+ * No vector Types are currently supported by this mapping.
+ *
  */
 template <typename T> class GeneratorParam : public Internal::GeneratorParamBase {
 public:
@@ -163,6 +180,13 @@ public:
         : GeneratorParamBase(name), value(value), min(std::numeric_limits<T>::lowest()),
           max(std::numeric_limits<T>::max()), enum_map(enum_map) {
         static_assert(std::is_enum<T>::value, "Only enum types may specify value maps");
+    }
+
+    // Special-case for Halide::Type, which has a built-in enum map (and no min or max).
+    template <typename T2 = T, typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
+    GeneratorParam(const std::string &name, const T &value)
+        : GeneratorParamBase(name), value(value), min(value),
+          max(value), enum_map(Internal::halide_type_enum_map) {
     }
 
     // Arithmetic values must fall within the range -- we don't silently clamp.
@@ -217,6 +241,25 @@ private:
               typename std::enable_if<std::is_same<T2, Target>::value>::type * = nullptr>
     std::string to_string_impl(const T& t) const {
         return t.to_string();
+    }
+
+    template <typename T2 = T,
+              typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
+    T from_string_impl(const std::string &s) const {
+        auto it = enum_map.find(s);
+        user_assert(it != enum_map.end()) << "Enumeration value not found: " << s;
+        return it->second;
+    }
+    template <typename T2 = T,
+              typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
+    std::string to_string_impl(const T& t) const {
+        for (auto key_value : enum_map) {
+            if (t == key_value.second) {
+                return key_value.first;
+            }
+        }
+        user_assert(0) << "Type value not found: " << name;
+        return "";
     }
 
     // string conversions: bool
@@ -311,6 +354,7 @@ protected:
     using Type = Halide::Type;
     using Var = Halide::Var;
     template <typename T> Expr cast(Expr e) const { return Halide::cast<T>(e); }
+    inline Expr cast(Halide::Type t, Expr e) const { return Halide::cast(t, e); }
     template <typename T> using GeneratorParam = Halide::GeneratorParam<T>;
     template <typename T> using Image = Halide::Image<T>;
     template <typename T> using Param = Halide::Param<T>;
@@ -362,6 +406,12 @@ public:
     std::vector<Argument> get_filter_arguments() {
         build_params();
         return filter_arguments;
+    }
+
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for the current target. */
+    int natural_vector_size(Halide::Type t) const {
+        return get_target().natural_vector_size(t);
     }
 
     /** Given a data type, return an estimate of the "natural" vector size
