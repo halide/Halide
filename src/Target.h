@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <string>
 #include "Error.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace llvm {
@@ -196,19 +197,26 @@ struct Target {
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for this Target. */
-    template <typename data_t>
-    int natural_vector_size() const {
+    int natural_vector_size(Halide::Type t) const {
         const bool is_avx2 = has_feature(Halide::Target::AVX2);
         const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
-        const bool is_integer = std::numeric_limits<data_t>::is_integer;
+        const bool is_integer = t.is_int() || t.is_uint();
 
         // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
         // However, AVX has a very limited complement of integer instructions;
         // restricting us to SSE4.1 size for integer operations produces much
         // better performance. (AVX2 does have good integer operations for 256-bit
         // registers.)
-        int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
-        return vector_byte_size / static_cast<int>(sizeof(data_t));
+        const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
+        const int data_size = t.bits / 8;
+        return vector_byte_size / data_size;
+    }
+
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for this Target. */
+    template <typename data_t>
+    int natural_vector_size() const {
+        return natural_vector_size(type_of<data_t>());
     }
 
 private:
