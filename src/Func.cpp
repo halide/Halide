@@ -1405,7 +1405,7 @@ vector<string> FuncRefVar::args_with_implicit_vars(const vector<Expr> &e) const 
 
     for (size_t i = 0; i < e.size(); i++) {
         user_assert(e[i].defined())
-            << "Argument " << i << " in call to \"" << func.name() << "\" is undefined.\n";
+            << "Argument " << (i+1) << " in call to \"" << func.name() << "\" is undefined.\n";
     }
 
     CountImplicitVars count(e);

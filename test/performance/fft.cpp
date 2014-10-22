@@ -12,50 +12,55 @@ const float pi = 3.14159265f;
 
 using namespace Halide;
 
-// Complex number arithmetic. Complex numbers are represented with
-// Halide Tuples.
-Expr re(Tuple z) {
-    return z[0];
-}
+// Halide complex number class.
+class ComplexExpr {
+public:
+    Expr x, y;
 
-Expr im(Tuple z) {
-    return z[1];
-}
+    ComplexExpr(Tuple z) : x(z[0]), y(z[1]) {}
+    ComplexExpr(Expr x = 0.0f, Expr y = 0.0f) : x(x), y(y) {}
+    ComplexExpr(float x, float y = 0.0f) : x(x), y(y) {}
 
-Tuple add(Tuple za, Tuple zb) {
-    return Tuple(re(za) + re(zb), im(za) + im(zb));
-}
+    Expr re() { return x; }
+    Expr im() { return y; }
 
-Tuple sub(Tuple za, Tuple zb) {
-    return Tuple(re(za) - re(zb), im(za) - im(zb));
-}
+    operator Tuple() const { return Tuple(x, y); }
+};
 
-Tuple mul(Tuple za, Tuple zb) {
-    return Tuple(re(za)*re(zb) - im(za)*im(zb), re(za)*im(zb) + re(zb)*im(za));
-}
+Expr re(ComplexExpr z) { return z.re(); }
+Expr im(ComplexExpr z) { return z.im(); }
+Expr re(Expr x) { return x; }
+Expr im(Expr x) { return 0.0f; }
 
-// Scalar multiplication.
-Tuple scale(Expr x, Tuple z) {
-    return Tuple(x*re(z), x*im(z));
-}
+ComplexExpr j(0.0f, 1.0f);
+ComplexExpr undef_z(undef<float>(), undef<float>());
 
-Tuple conj(Tuple z) {
-    return Tuple(re(z), -im(z));
-}
+// Unary negation.
+ComplexExpr operator -(ComplexExpr z) { return ComplexExpr(-re(z), -im(z)); }
+// ComplexExpr conjugate.
+ComplexExpr operator ~(ComplexExpr z) { return ComplexExpr(re(z), -im(z)); }
+// Complex arithmetic.
+ComplexExpr operator + (ComplexExpr a, ComplexExpr b) { return ComplexExpr(re(a) + re(b), im(a) + im(b)); }
+ComplexExpr operator - (ComplexExpr a, ComplexExpr b) { return ComplexExpr(re(a) - re(b), im(a) - im(b)); }
+ComplexExpr operator * (ComplexExpr a, ComplexExpr b) { return ComplexExpr(re(a)*re(b) - im(a)*im(b),
+                                                                           re(a)*im(b) + im(a)*re(b)); }
 
 // Compute exp(j*x)
-Tuple expj(Expr x) {
-    return Tuple(cos(x), sin(x));
+ComplexExpr expj(Expr x) {
+    return ComplexExpr(cos(x), sin(x));
 }
 
 // Some helpers for doing basic Halide operations with complex numbers.
-Tuple sumz(Tuple z, const std::string &s = "sum") {
-    return Tuple(sum(re(z), s + "_re"), sum(im(z), s + "_im"));
+ComplexExpr sum(ComplexExpr z, const std::string &s = "sum") {
+    return ComplexExpr(sum(re(z), s + "_re"), sum(im(z), s + "_im"));
 }
 
-Tuple selectz(Expr c, Tuple t, Tuple f) {
-    return Tuple(select(c, re(t), re(f)), select(c, im(t), im(f)));
+ComplexExpr select(Expr c, ComplexExpr t, ComplexExpr f) {
+    return ComplexExpr(select(c, re(t), re(f)), select(c, im(t), im(f)));
 }
+
+typedef FuncT<ComplexExpr> ComplexFunc;
+typedef FuncRefExprT<ComplexExpr> ComplexFuncRefExpr;
 
 // Compute the product of the integers in R.
 int product(const std::vector<int> &R) {
@@ -74,14 +79,14 @@ void add_implicit_args(std::vector<Var> &defined, Func implicit) {
     }
 }
 
-std::vector<Var> add_implicit_args(Var x0, Func implicit) {
+std::vector<Var> add_implicit_args(Var x0, const Func &implicit) {
     std::vector<Var> ret;
     ret.push_back(x0);
     add_implicit_args(ret, implicit);
     return ret;
 }
 
-std::vector<Var> add_implicit_args(Var x0, Var x1, Func implicit) {
+std::vector<Var> add_implicit_args(Var x0, Var x1, const Func &implicit) {
     std::vector<Var> ret;
     ret.push_back(x0);
     ret.push_back(x1);
@@ -100,128 +105,119 @@ Var outermost(Func f) {
     return Var::outermost();
 }
 
-// Compute the complex DFT of size N on dimension 0 of x.
-Func dft_dim0(Func x, int N, float sign) {
+// Compute the complex DFT of size N on dimension 0 of x. This is slow,
+// if this is being used, consider implementing a specialization for N.
+ComplexFunc dft_dim0(ComplexFunc x, int N, float sign) {
     Var n("n");
-    Func X("X");
-    if (N < 10) {
-        // If N is small, unroll the loop.
-        Tuple dft = x(0, _);
-        for (int k = 1; k < N; k++) {
-            dft = add(dft, mul(expj((sign*2*pi*k*n)/N), x(k, _)));
-        }
-        X(n, _) = dft;
-    } else {
-        // If N is larger, we really shouldn't be using this algorithm for the DFT anyways.
-        RDom k(0, N);
-        X(n, _) = sumz(mul(expj((sign*2*pi*k*n)/N), x(k, _)));
-    }
+    ComplexFunc X("X");
+    RDom k(0, N);
+    X(n, _) = sum(x(k, _)*expj((sign*2*pi*k*n)/N));
     X.unroll(n);
     return X;
 }
 
 // Specializations for some small DFTs.
-Func dft2_dim0(Func x, float sign) {
+ComplexFunc dft2_dim0(ComplexFunc x, float sign) {
     Var n("n");
-    Func X("X2_dim0");
-    X(add_implicit_args(n, x)) = Tuple(undef<float>(), undef<float>());
+    ComplexFunc X("X2_dim0");
+    X(add_implicit_args(n, x)) = undef_z;
 
-    Tuple x0 = x(0, _), x1 = x(1, _);
-    FuncRefExpr X0 = X(0, _), X1 = X(1, _);
+    ComplexExpr x0 = x(0, _), x1 = x(1, _);
+    ComplexFuncRefExpr X0 = X(0, _), X1 = X(1, _);
 
-    X0 = add(x0, x1);
-    X1 = sub(x0, x1);
+    X0 = x0 + x1;
+    X1 = x0 - x1;
 
     return X;
 }
 
-Func dft4_dim0(Func x, float sign) {
+ComplexFunc dft4_dim0(ComplexFunc x, float sign) {
     Var n("n");
-    Func X("X");
-    X(add_implicit_args(n, x)) = Tuple(undef<float>(), undef<float>());
+    ComplexFunc X("X");
+    X(add_implicit_args(n, x)) = undef_z;
 
-    Tuple x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
-    FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
+    ComplexExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
+    ComplexFuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
 
-    FuncRefExpr T0 = X(-1, _);
-    FuncRefExpr T2 = X(-2, _);
-    T0 = add(x0, x2);
-    T2 = add(x1, x3);
-    X0 = add(T0, T2);
-    X2 = sub(T0, T2);
+    ComplexFuncRefExpr T0 = X(-1, _);
+    ComplexFuncRefExpr T2 = X(-2, _);
+    T0 = x0 + x2;
+    T2 = x1 + x3;
+    X0 = T0 + T2;
+    X2 = T0 - T2;
 
-    FuncRefExpr T1 = T0;
-    FuncRefExpr T3 = T2;
-    T1 = sub(x0, x2);
-    T3 = mul(sub(x1, x3), Tuple(0.0f, sign)); // W = j*sign
-    X1 = add(T1, T3);
-    X3 = sub(T1, T3);
+    ComplexFuncRefExpr T1 = T0;
+    ComplexFuncRefExpr T3 = T2;
+    T1 = x0 - x2;
+    T3 = (x1 - x3)*j*sign;
+    X1 = T1 + T3;
+    X3 = T1 - T3;
 
     return X;
 }
 
-Func dft8_dim0(Func x, float sign) {
+ComplexFunc dft8_dim0(ComplexFunc x, float sign) {
     const float sqrt2_2 = 0.70710678f;
 
     Var n("n");
-    Func X("X");
-    X(add_implicit_args(n, x)) = Tuple(undef<float>(), undef<float>());
+    ComplexFunc X("X");
+    X(add_implicit_args(n, x)) = undef_z;
 
-    Tuple x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
-    Tuple x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);
-    FuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
-    FuncRefExpr X4 = X(4, _), X5 = X(5, _), X6 = X(6, _), X7 = X(7, _);
+    ComplexExpr x0 = x(0, _), x1 = x(1, _), x2 = x(2, _), x3 = x(3, _);
+    ComplexExpr x4 = x(4, _), x5 = x(5, _), x6 = x(6, _), x7 = x(7, _);
+    ComplexFuncRefExpr X0 = X(0, _), X1 = X(1, _), X2 = X(2, _), X3 = X(3, _);
+    ComplexFuncRefExpr X4 = X(4, _), X5 = X(5, _), X6 = X(6, _), X7 = X(7, _);
 
-    FuncRefExpr T0 = X(-1, _), T1 = X(-2, _), T2 = X(-3, _), T3 = X(-4, _);
-    FuncRefExpr T4 = X(-5, _), T5 = X(-6, _), T6 = X(-7, _), T7 = X(-8, _);
+    ComplexFuncRefExpr T0 = X(-1, _), T1 = X(-2, _), T2 = X(-3, _), T3 = X(-4, _);
+    ComplexFuncRefExpr T4 = X(-5, _), T5 = X(-6, _), T6 = X(-7, _), T7 = X(-8, _);
 
-    X0 = add(x0, x4);
-    X2 = add(x2, x6);
-    T0 = add(X0, X2);
-    T2 = sub(X0, X2);
+    X0 = x0 + x4;
+    X2 = x2 + x6;
+    T0 = X0 + X2;
+    T2 = X0 - X2;
 
-    X1 = sub(x0, x4);
-    X3 = mul(sub(x2, x6), Tuple(0.0f, sign));
-    T1 = add(X1, X3);
-    T3 = sub(X1, X3);
+    X1 = x0 - x4;
+    X3 = (x2 - x6)*j*sign;
+    T1 = X1 + X3;
+    T3 = X1 - X3;
 
-    X4 = add(x1, x5);
-    X6 = add(x3, x7);
-    T4 = add(X4, X6);
-    T6 = mul(sub(X4, X6), Tuple(0.0f, sign));
+    X4 = x1 + x5;
+    X6 = x3 + x7;
+    T4 = X4 + X6;
+    T6 = (X4 - X6)*j*sign;
 
-    X5 = sub(x1, x5);
-    X7 = mul(sub(x3, x7), Tuple(0.0f, sign));
-    T5 = mul(add(X5, X7), Tuple(sqrt2_2, sign*sqrt2_2));
-    T7 = mul(sub(X5, X7), Tuple(-sqrt2_2, sign*sqrt2_2));
+    X5 = x1 - x5;
+    X7 = (x3 - x7)*j*sign;
+    T5 = (X5 + X7)*ComplexExpr(sqrt2_2, sign*sqrt2_2);
+    T7 = (X5 - X7)*ComplexExpr(-sqrt2_2, sign*sqrt2_2);
 
-    X0 = add(T0, T4);
-    X1 = add(T1, T5);
-    X2 = add(T2, T6);
-    X3 = add(T3, T7);
-    X4 = sub(T0, T4);
-    X5 = sub(T1, T5);
-    X6 = sub(T2, T6);
-    X7 = sub(T3, T7);
+    X0 = T0 + T4;
+    X1 = T1 + T5;
+    X2 = T2 + T6;
+    X3 = T3 + T7;
+    X4 = T0 - T4;
+    X5 = T1 - T5;
+    X6 = T2 - T6;
+    X7 = T3 - T7;
 
     return X;
 }
 
-std::map<int, Func> twiddles;
+std::map<int, ComplexFunc> twiddles;
 
 // Return a function computing the twiddle factors.
-Func W(int N, float sign) {
+ComplexFunc W(int N, float sign) {
     // Check to see if this set of twiddle factors is already computed.
-    Func &w = twiddles[N*(int)sign];
+    ComplexFunc &w = twiddles[N*(int)sign];
 
     Var n("n");
     if (!w.defined()) {
-        Func W("W");
+        ComplexFunc W("W");
         W(n) = expj((sign*2*pi*n)/N);
         Realization compute_static = W.realize(N);
         Image<float> reW = compute_static[0];
         Image<float> imW = compute_static[1];
-        w(n) = Tuple(reW(n), imW(n));
+        w(n) = ComplexExpr(reW(n), imW(n));
     }
 
     return w;
@@ -229,11 +225,11 @@ Func W(int N, float sign) {
 
 // Compute the N point DFT of dimension 1 (columns) of x using
 // radix R.
-Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8) {
+ComplexFunc fft_dim1(ComplexFunc x, const std::vector<int> &NR, float sign, int group_size = 8) {
     int N = product(NR);
     Var n0("n0"), n1("n1");
 
-    std::vector<Func> stages;
+    std::vector<ComplexFunc> stages;
 
     RVar r_, s_;
     int S = 1;
@@ -243,22 +239,22 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
         std::stringstream stage_id;
         stage_id << "S" << S << "_R" << R;
 
-        Func exchange("x_" + stage_id.str());
+        ComplexFunc exchange("x_" + stage_id.str());
         Var r("r"), s("s");
 
         // Load the points from each subtransform and apply the
         // twiddle factors. Twiddle factors for S = 1 are all expj(0) = 1.
-        Func v("v_" + stage_id.str());
-        Tuple x_rs = x(n0, s + r*(N/R), _);
+        ComplexFunc v("v_" + stage_id.str());
+        ComplexExpr x_rs = x(n0, s + r*(N/R), _);
         if (S > 1) {
-            Func W_RS = W(R*S, sign);
-            v(r, s, n0, _) = mul(selectz(r > 0, W_RS(r*(s%S)), Tuple(1.0f, 0.0f)), x_rs);
+            ComplexFunc W_RS = W(R*S, sign);
+            v(r, s, n0, _) = x_rs*select(r > 0, W_RS(r*(s%S)), 1.0f);
         } else {
             v(r, s, n0, _) = x_rs;
         }
 
         // Compute the R point DFT of the subtransform.
-        Func V;
+        ComplexFunc V;
         switch (R) {
         case 2: V = dft2_dim0(v, sign); break;
         case 4: V = dft4_dim0(v, sign); break;
@@ -268,7 +264,7 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
 
         // Write the subtransform and use it as input to the next
         // pass.
-        exchange(add_implicit_args(n0, n1, x)) = Tuple(undef<float>(), undef<float>());
+        exchange(add_implicit_args(n0, n1, x)) = undef_z;
         exchange.bound(n1, 0, N);
 
         RDom rs(0, R, 0, N/R);
@@ -312,11 +308,12 @@ Func fft_dim1(Func x, const std::vector<int> &NR, float sign, int group_size = 8
     return x;
 }
 
-// Transpose the first two dimensions of x.
-Func transpose(Func f) {
+// Transpose the first two dimensions of f.
+template <typename T>
+T transpose(T f) {
     std::vector<Var> argsT(f.args());
     std::swap(argsT[0], argsT[1]);
-    Func fT;
+    T fT;
     fT(argsT) = f(f.args());
     return fT;
 }
@@ -324,21 +321,21 @@ Func transpose(Func f) {
 // Compute the N0 x N1 2D complex DFT of x using radixes R0, R1.
 // sign = -1 indicates a forward DFT, sign = 1 indicates an inverse
 // DFT.
-Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, float sign) {
+ComplexFunc fft2d_c2c(ComplexFunc x, const std::vector<int> &R0, const std::vector<int> &R1, float sign) {
     // Vectorization width.
     const int group = 8;
 
     // Transpose the input to the FFT.
-    Func xT = transpose(x);
+    ComplexFunc xT = transpose(x);
 
     // Compute the DFT of dimension 1 (originally dimension 0).
-    Func dft1T = fft_dim1(xT, R0, sign, group);
+    ComplexFunc dft1T = fft_dim1(xT, R0, sign, group);
 
     // Transpose back.
-    Func dft1 = transpose(dft1T);
+    ComplexFunc dft1 = transpose(dft1T);
 
     // Compute the DFT of dimension 1.
-    Func dft = fft_dim1(dft1, R1, sign, group);
+    ComplexFunc dft = fft_dim1(dft1, R1, sign, group);
     dft.bound(dft.args()[0], 0, product(R0));
     dft.bound(dft.args()[1], 0, product(R1));
 
@@ -350,7 +347,7 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
 // Compute the N0 x N1 2D real DFT of x using radixes R0, R1.
 // The transform domain has dimensions N0 x N1/2 + 1 due to the
 // conjugate symmetry of real DFTs.
-Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
+ComplexFunc fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
     // vectorization width.
     const int group = 8;
@@ -369,34 +366,33 @@ Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
     // vectorization.
     // The zip location is aligned to the nearest group.
     int zip_n = ((N0/2 - 1) | (group - 1)) + 1;
-    Func zipped("zipped");
-    zipped(n0, n1, _) = Tuple(r(n0, n1, _),
-                              r(clamp(n0 + zip_n, 0, N0 - 1), n1, _));
+    ComplexFunc zipped("zipped");
+    zipped(n0, n1, _) = ComplexExpr(r(n0, n1, _),
+                                    r(clamp(n0 + zip_n, 0, N0 - 1), n1, _));
 
     // DFT down the columns first.
-    Func dft1 = fft_dim1(zipped, R1, -1.0f, group);
+    ComplexFunc dft1 = fft_dim1(zipped, R1, -1.0f, group);
 
     // Unzip the DFTs of the columns.
-    Func unzipped("unzipped");
+    ComplexFunc unzipped("unzipped");
     // By linearity of the DFT, Z = X + j*Y, where X, Y, and Z are the
     // DFTs of x, y and z.
 
     // By the conjugate symmetry of real DFTs, computing Z_n +
     // conj(Z_(N-n)) and Z_n - conj(Z_(N-n)) gives 2*X_n and 2*j*Y_n,
     // respectively.
-    Tuple Z = dft1(n0%zip_n, n1, _);
-    Tuple symZ = dft1(n0%zip_n, (N1 - n1)%N1, _);
-    Tuple X = add(Z, conj(symZ));
-    Tuple Y = mul(Tuple(0.0f, -1.0f), sub(Z, conj(symZ)));
-    unzipped(n0, n1, _) = scale(0.5f, selectz(n0 < zip_n, X, Y));
+    ComplexExpr Z = dft1(n0%zip_n, n1, _);
+    ComplexExpr symZ = dft1(n0%zip_n, (N1 - n1)%N1, _);
+    ComplexExpr X = Z + ~symZ;
+    ComplexExpr Y = -j*(Z - ~symZ);
+    unzipped(n0, n1, _) = 0.5f*select(n0 < zip_n, X, Y);
 
     // Transpose so we can FFT dimension 0 (by making it dimension 1).
-    Func unzippedT = transpose(unzipped);
+    ComplexFunc unzippedT = transpose(unzipped);
 
     // DFT down the columns again (the rows of the original).
-    Func dftT = fft_dim1(unzippedT, R0, -1.0f, group);
-    // Transpose back.
-    Func dft = transpose(dftT);
+    ComplexFunc dftT = fft_dim1(unzippedT, R0, -1.0f, group);
+    ComplexFunc dft = transpose(dftT);
     dft.bound(dft.args()[0], 0, N0);
     dft.bound(dft.args()[1], 0, N1/2 + 1);
 
@@ -411,7 +407,7 @@ Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
 // Compute the N0 x N1 2D inverse DFT of x using radixes R0, R1.
 // The DFT domain should have dimensions N0 x N1/2 + 1 due to the
 // conjugate symmetry of real FFTs.
-Func fft2d_c2r(Func c, const std::vector<int> &R0, const std::vector<int> &R1) {
+Func fft2d_c2r(ComplexFunc c, const std::vector<int> &R0, const std::vector<int> &R1) {
     // How many columns to group together in one FFT. This is the
     // vectorization width.
     const int group = 8;
@@ -422,23 +418,23 @@ Func fft2d_c2r(Func c, const std::vector<int> &R0, const std::vector<int> &R1) {
     Var n0("n0"), n1("n1");
 
     // Transpose the input.
-    Func cT = transpose(c);
+    ComplexFunc cT = transpose(c);
     // Take the inverse DFT of the columns (rows in the final result).
-    Func dft0T = fft_dim1(cT, R0, 1.0f, group);
+    ComplexFunc dft0T = fft_dim1(cT, R0, 1.0f, group);
 
     // Transpose so we can take the DFT of the columns again.
-    Func dft0 = transpose(dft0T);
+    ComplexFunc dft0 = transpose(dft0T);
 
     // Zip two real DFTs X and Y into one complex DFT Z = X + j*Y
-    Func zipped("zipped");
+    ComplexFunc zipped("zipped");
     // Construct the whole DFT domain of X and Y via conjugate
     // symmetry. At n1 = N1/2, both branches are equal (the dft is
     // real, so the conjugate is a no-op), so the slightly less
     // intuitive form of this expression still works, but vectorizes
     // more cleanly than n1 <= N1/2.
-    Tuple X = selectz(n1 < N1/2,
-                      dft0(n0, clamp(n1, 0, N1/2), _),
-                      conj(dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _)));
+    ComplexExpr X = select(n1 < N1/2,
+                           dft0(n0, clamp(n1, 0, N1/2), _),
+                           ~dft0(n0, clamp((N1 - n1)%N1, 0, N1/2), _));
 
     // The zip point is roughly half of the domain, aligned up to the
     // nearest group.
@@ -450,13 +446,13 @@ Func fft2d_c2r(Func c, const std::vector<int> &R0, const std::vector<int> &R1) {
         // the domain, we need to clamp excess accesses.
         n0_Y = clamp(n0_Y, 0, N0 - 1);
     }
-    Tuple Y = selectz(n1 < N1/2,
-                      dft0(n0_Y, clamp(n1, 0, N1/2), _),
-                      conj(dft0(n0_Y, clamp((N1 - n1)%N1, 0, N1/2), _)));
-    zipped(n0, n1, _) = add(X, mul(Tuple(0.0f, 1.0f), Y));
+    ComplexExpr Y = select(n1 < N1/2,
+                           dft0(n0_Y, clamp(n1, 0, N1/2), _),
+                           ~dft0(n0_Y, clamp((N1 - n1)%N1, 0, N1/2), _));
+    zipped(n0, n1, _) = X + j*Y;
 
     // Take the inverse DFT of the columns again.
-    Func dft = fft_dim1(zipped, R1, 1.0f, group);
+    ComplexFunc dft = fft_dim1(zipped, R1, 1.0f, group);
 
     // Extract the real inverse DFTs.
     Func unzipped("unzipped");
@@ -494,15 +490,15 @@ std::vector<int> radix_factor(int N) {
 
 // Compute the N0 x N1 2D complex DFT of x. sign = -1 indicates a
 // forward DFT, sign = 1 indicates an inverse DFT.
-Func fft2d_c2c(Func c, int N0, int N1, float sign) {
+ComplexFunc fft2d_c2c(ComplexFunc c, int N0, int N1, float sign) {
     return fft2d_c2c(c, radix_factor(N0), radix_factor(N1), sign);
 }
 
 // Compute N0 x N1 real DFTs.
-Func fft2d_r2c(Func r, int N0, int N1) {
+ComplexFunc fft2d_r2c(Func r, int N0, int N1) {
     return fft2d_r2c(r, radix_factor(N0), radix_factor(N1));
 }
-Func fft2d_c2r(Func c, int N0, int N1) {
+Func fft2d_c2r(ComplexFunc c, int N0, int N1) {
     return fft2d_c2r(c, radix_factor(N0), radix_factor(N1));
 }
 
@@ -516,10 +512,10 @@ Func make_real(const Image<T> &re) {
 }
 
 template <typename T>
-Func make_complex(const Image<T> &re) {
+ComplexFunc make_complex(const Image<T> &re) {
     Var x, y;
-    Func ret;
-    ret(x, y) = Tuple(re(x, y), 0.0f);
+    ComplexFunc ret;
+    ret(x, y) = re(x, y);
     return ret;
 }
 
@@ -567,15 +563,15 @@ int main(int argc, char **argv) {
     Func filtered_c2c;
     {
         // Compute the DFT of the input and the kernel.
-        Func dft_in = fft2d_c2c(make_complex(in), W, H, -1);
-        Func dft_kernel = fft2d_c2c(make_complex(kernel), W, H, -1);
+        ComplexFunc dft_in = fft2d_c2c(make_complex(in), W, H, -1);
+        ComplexFunc dft_kernel = fft2d_c2c(make_complex(kernel), W, H, -1);
 
         // Compute the convolution.
-        Func dft_filtered("dft_filtered");
-        dft_filtered(x, y) = mul(dft_in(x, y), dft_kernel(x, y));
+        ComplexFunc dft_filtered("dft_filtered");
+        dft_filtered(x, y) = dft_in(x, y)*dft_kernel(x, y);
 
         // Compute the inverse DFT to get the result.
-        Func dft_out = fft2d_c2c(dft_filtered, W, H, 1);
+        ComplexFunc dft_out = fft2d_c2c(dft_filtered, W, H, 1);
 
         // Extract the real component and normalize.
         filtered_c2c(x, y) = re(dft_out(x, y))/cast<float>(W*H);
@@ -584,13 +580,12 @@ int main(int argc, char **argv) {
     Func filtered_r2c;
     {
         // Compute the DFT of the input and the kernel.
-        Func dft_in = fft2d_r2c(make_real(in), W, H);
-        Func dft_kernel = fft2d_r2c(make_real(kernel), W, H);
+        ComplexFunc dft_in = fft2d_r2c(make_real(in), W, H);
+        ComplexFunc dft_kernel = fft2d_r2c(make_real(kernel), W, H);
 
         // Compute the convolution.
-        Func dft_filtered("dft_filtered");
-        dft_filtered(x, y) = mul(dft_in(x, y), dft_kernel(x, y));
-        //dft_filtered.compute_root().trace_realizations();
+        ComplexFunc dft_filtered("dft_filtered");
+        dft_filtered(x, y) = dft_in(x, y)*dft_kernel(x, y);
 
         // Compute the inverse DFT to get the result.
         filtered_r2c = fft2d_c2r(dft_filtered, W, H);
@@ -636,13 +631,13 @@ int main(int argc, char **argv) {
     Image<float> re_in = lambda(x, y, 0.0f).realize(W, H);
     Image<float> im_in = lambda(x, y, 0.0f).realize(W, H);
 
-    Func c2c_in;
+    ComplexFunc c2c_in;
     // Read all reps from the same place in memory. This effectively
     // benchmarks taking the FFT of cached inputs, which is a
     // reasonable assumption for a well optimized program with good
     // locality.
-    c2c_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
-    Func bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
+    c2c_in(x, y, rep) = ComplexExpr(re_in(x, y), im_in(x, y));
+    ComplexFunc bench_c2c = fft2d_c2c(c2c_in, W, H, -1);
     Realization R_c2c = bench_c2c.realize(W, H, reps, target);
     // Write all reps to the same place in memory. This means the
     // output appears to be cached on all but the first
@@ -653,12 +648,12 @@ int main(int argc, char **argv) {
     R_c2c[1].raw_buffer()->stride[2] = 0;
 
     double t = bench_realization(bench_c2c, R_c2c, samples, target)*1e3/reps;
-    printf("c2c  time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
+    printf("c2c time: %f us, %f MFLOP/s\n", t, 5*W*H*(log2(W) + log2(H))/t);
 
     Func r2c_in;
     // All reps read from the same input. See notes on c2c_in.
     r2c_in(x, y, rep) = re_in(x, y);
-    Func bench_r2c = fft2d_r2c(r2c_in, W, H);
+    ComplexFunc bench_r2c = fft2d_r2c(r2c_in, W, H);
     Realization R_r2c = bench_r2c.realize(W, H/2 + 1, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
     R_r2c[0].raw_buffer()->stride[2] = 0;
@@ -667,9 +662,9 @@ int main(int argc, char **argv) {
     t = bench_realization(bench_r2c, R_r2c, samples, target)*1e3/reps;
     printf("r2c time: %f us, %f MFLOP/s\n", t, 2.5*W*H*(log2(W) + log2(H))/t);
 
-    Func c2r_in;
+    ComplexFunc c2r_in;
     // All reps read from the same input. See notes on c2c_in.
-    c2r_in(x, y, rep) = Tuple(re_in(x, y), im_in(x, y));
+    c2r_in(x, y, rep) = ComplexExpr(re_in(x, y), im_in(x, y));
     Func bench_c2r = fft2d_c2r(c2r_in, W, H);
     Realization R_c2r = bench_c2r.realize(W, H, reps, target);
     // Write all reps to the same place in memory. See notes on R_c2c.
