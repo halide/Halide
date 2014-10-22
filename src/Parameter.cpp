@@ -1,4 +1,5 @@
 #include "IR.h"
+#include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
 
 namespace Halide {
@@ -52,16 +53,27 @@ void Parameter::check_dim_ok(int dim) const {
 }
 
 Parameter::Parameter() : contents(NULL) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'))) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name) :
     contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::Parameter(const Parameter& that) : contents(that.contents) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::~Parameter() {
+    ObjectInstanceRegistry::unregister_instance(this);
 }
 
 Type Parameter::type() const {
