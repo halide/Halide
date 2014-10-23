@@ -46,6 +46,10 @@ WITH_OPENGL ?= not-empty
 WITH_INTROSPECTION ?= not-empty
 WITH_EXCEPTIONS ?=
 
+# If HL_TARGET or HL_JIT_TARGET aren't set, use host
+HL_TARGET ?= host
+HL_JIT_TARGET ?= host
+
 # turn off PTX for llvm 3.2
 ifneq ($(LLVM_VERSION), 3.2)
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
@@ -399,17 +403,17 @@ $(FILTERS_DIR)/%.generator: test/generator/%_generator.cpp $(GENGEN_DEPS)
 $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h: $(FILTERS_DIR)/%.generator
 	@mkdir -p $(FILTERS_DIR)
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -g $(notdir $*) -o ../$(FILTERS_DIR) target=host
+	cd tmp; $(LD_PATH_SETUP) ../$< -g $(notdir $*) -o ../$(FILTERS_DIR) target=$(HL_TARGET)
 
 # If we want to use a Generator with custom GeneratorParams, we need to write
 # custom rules: to pass the GeneratorParams, and to give a unique function and file name.
 $(FILTERS_DIR)/tiled_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur -f tiled_blur_interleaved -o ../$(FILTERS_DIR) target=host is_interleaved=true
+	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur -f tiled_blur_interleaved -o ../$(FILTERS_DIR) target=$(HL_TARGET) is_interleaved=true
 
 $(FILTERS_DIR)/tiled_blur_blur_interleaved.o $(FILTERS_DIR)/tiled_blur_blur_interleaved.h: $(FILTERS_DIR)/tiled_blur_blur.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o ../$(FILTERS_DIR) target=host is_interleaved=true
+	cd tmp; $(LD_PATH_SETUP) ../$< -g tiled_blur_blur -f tiled_blur_blur_interleaved -o ../$(FILTERS_DIR) target=$(HL_TARGET) is_interleaved=true
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:
@@ -430,11 +434,11 @@ $(BIN_DIR)/generator_aot_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur_blur_
 # (which all have the form nested_externs_*)
 $(FILTERS_DIR)/nested_externs_%.o $(FILTERS_DIR)/nested_externs_%.h: $(FILTERS_DIR)/nested_externs.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=host
+	cd tmp; $(LD_PATH_SETUP) ../$< -g nested_externs_$* -o ../$(FILTERS_DIR) target=$(HL_TARGET)
 
 # Synthesize 'nested_externs.o' based on the four generator products we need:
 $(FILTERS_DIR)/nested_externs.o: $(FILTERS_DIR)/nested_externs_leaf.o $(FILTERS_DIR)/nested_externs_inner.o $(FILTERS_DIR)/nested_externs_combine.o $(FILTERS_DIR)/nested_externs_root.o
-	ld -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
+	$(LD) -r $(FILTERS_DIR)/nested_externs_*.o -o $(FILTERS_DIR)/nested_externs.o
 
 # Synthesize 'nested_externs.h' based on the four generator products we need:
 $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
