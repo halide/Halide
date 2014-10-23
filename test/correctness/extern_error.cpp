@@ -28,16 +28,13 @@ void my_halide_error(void *user_context, const char *msg) {
 }
 
 int main(int argc, char **argv) {
-    Param<void*> my_user_context = user_context_param();
-    my_user_context.set(context_pointer);
-
     std::vector<ExternFuncArgument> args;
-    args.push_back(my_user_context);
+    args.push_back(user_context_value());
 
     Func f;
     f.define_extern("extern_error", args, Float(32), 1);
-
     f.set_error_handler(&my_halide_error);
+    f.set_custom_user_context(context_pointer);
     f.realize(100);
 
     if (!error_occurred || !extern_error_called) {

@@ -36,10 +36,6 @@
  * (i.e., essentially a C/C++ variable name, with some extra restrictions
  * on underscore use). By convention, the name should match the member-variable name.
  *
- * Note that the "__user_context" Param is not allowed to be declared as
- * part of a Generator; user_context is controlled by the "user_context"
- * GeneratorParam, present in all Generators.
- *
  * Generators are usually added to a global registry to simplify AOT build mechanics;
  * this is done by simply defining an instance of RegisterGenerator at static
  * scope:
@@ -371,7 +367,6 @@ protected:
 class GeneratorBase : public NamesInterface {
 public:
     GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
-    GeneratorParam<bool> user_context{ "user_context", false };
 
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;

@@ -37,6 +37,24 @@ using std::ofstream;
 
 using namespace Internal;
 
+namespace {
+
+Internal::Parameter make_user_context() {
+    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
+}
+
+vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
+    for (int i = 0; i < args.size(); ++i) {
+        internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
+    }
+    if (target.has_feature(Target::UserContext)) {
+        args.insert(args.begin(), Argument("__user_context", false, Halide::Handle()));
+    }
+    return args;
+}
+
+}  // namespace
+
 Func::Func(const string &name) : func(unique_name(name)),
                                  error_handler(NULL),
                                  custom_malloc(NULL),
@@ -47,7 +65,8 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_print(NULL),
                                  cache_size(0),
                                  random_seed(0),
-                                 user_context(user_context_param()) {
+                                 custom_user_context(make_user_context()),
+                                 custom_user_context_set(false) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -60,7 +79,8 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_print(NULL),
                cache_size(0),
                random_seed(0),
-               user_context(user_context_param()) {
+               custom_user_context(make_user_context()),
+               custom_user_context_set(false) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -73,7 +93,8 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_print(NULL),
                      cache_size(0),
                      random_seed(0),
-                     user_context(user_context_param()) {
+                     custom_user_context(make_user_context()),
+                     custom_user_context_set(false) {
     (*this)(_) = e;
 }
 
@@ -87,7 +108,8 @@ Func::Func(Function f) : func(f),
                          custom_print(NULL),
                          cache_size(0),
                          random_seed(0),
-                         user_context(user_context_param()) {
+                         custom_user_context(make_user_context()),
+                         custom_user_context_set(false) {
 }
 
 const string &Func::name() const {
@@ -1989,6 +2011,8 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
                               const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2011,6 +2035,8 @@ void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2029,7 +2055,9 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
     compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {
+void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
+    args = add_user_context_arg(args, target);
+
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
     }
@@ -2041,6 +2069,8 @@ void Func::compile_to_header(const string &filename, vector<Argument> args, cons
 
 void Func::compile_to_c(const string &filename, vector<Argument> args,
                         const string &fn_name, const Target &target) {
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2178,7 +2208,7 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
 
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
                            const Target &target) {
-    compile_to_header(filename_prefix + ".h", args, filename_prefix);
+    compile_to_header(filename_prefix + ".h", args, filename_prefix, target);
     compile_to_object(filename_prefix + ".o", args, filename_prefix, target);
 }
 
@@ -2215,6 +2245,8 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
                                const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2231,6 +2263,11 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
     compile_to_assembly(filename, args, "", target);
+}
+
+void Func::set_custom_user_context(void *context) {
+    custom_user_context.set_scalar(context);
+    custom_user_context_set = true;
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
@@ -2333,19 +2370,13 @@ bool Func::prepare_to_catch_runtime_errors(void *b) {
     error_buffer *buf = (error_buffer *)b;
     buf->end = 0;
     // If the user isn't using a custom error handler or custom user
-    // context, we can trap errors and convert them to exceptions.
-    bool my_user_context_active = false;
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        if (arg_values[i] == user_context.get_address()) {
-            my_user_context_active = true;
-        }
-    }
+    // context, we can trap errors and save the messages into an error buffer.
     if ((error_handler == &buffered_error_handler ||
          error_handler == NULL) &&
-        my_user_context_active) {
+        !custom_user_context_set) {
         compiled_module.set_error_handler(buffered_error_handler);
         memset(buf->buf, 0, max_error_buffer_size);
-        user_context.set(buf);
+        set_custom_user_context(buf);
         return true;
     }
     return false;
@@ -2607,10 +2638,13 @@ void *Func::compile_jit(const Target &target) {
     InferArguments infer_args(name());
     lowered.accept(&infer_args);
 
-    // Add the user context arg if it isn't there already
-    Expr(user_context).accept(&infer_args);
+    // For jitting, we always point at the custom_user_context,
+    // regardless of whether Target::UserContext is set.
+    Expr uc_expr = Internal::Variable::make(type_of<void*>(), custom_user_context.name(), custom_user_context);
+    uc_expr.accept(&infer_args);
 
     arg_values = infer_args.arg_values;
+
 
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
