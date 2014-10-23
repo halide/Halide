@@ -99,7 +99,7 @@ namespace Halide {
 
 namespace Internal {
 
-extern const std::map<std::string, Halide::Type> halide_type_enum_map;
+EXPORT extern const std::map<std::string, Halide::Type> halide_type_enum_map;
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files();
