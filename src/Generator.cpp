@@ -190,8 +190,6 @@ void GeneratorBase::build_params() {
         for (size_t i = 0; i < vf.size(); ++i) {
             Parameter *param = static_cast<Parameter *>(vf[i]);
             internal_assert(param != nullptr);
-            // Param<void*> is not allowed, regardless of name.
-            user_assert(!param->type().is_handle()) << "Param<void*> is not allowed in a Generator.";
             user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
             user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
             user_assert(filter_params.find(param->name()) == filter_params.end())
