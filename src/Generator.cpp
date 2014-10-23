@@ -245,16 +245,12 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
     Func func = build();
 
     std::vector<Halide::Argument> inputs = get_filter_arguments();
-    if (user_context) {
-      inputs.insert(inputs.begin(), Halide::user_context_param());
-    }
-
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
     if (options.emit_o) {
         func.compile_to_object(base_path + ".o", inputs, function_name, target);
     }
     if (options.emit_h) {
-        func.compile_to_header(base_path + ".h", inputs, function_name);
+        func.compile_to_header(base_path + ".h", inputs, function_name, target);
     }
     if (options.emit_cpp) {
         func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
