@@ -340,6 +340,10 @@ enum StmtOutputFormat {
      HTML
 };
 
+namespace Internal {
+    struct ErrorBuffer;
+}
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -426,16 +430,15 @@ class Func {
      * still be valid though. */
     std::vector<std::pair<int, Internal::Parameter> > image_param_args;
 
-    /** The current user-context used for realizing this
-     * function. May be NULL. Only relevant when jitting.
+    /** The user context that's used when jitting. This is not settable
+     * by user code, but is reserved for internal use.
      * Note that this is an Internal::Parameter (rather than a Param<void*>)
      * because Param is forbidden from using the name "__user_context"
      * (to flush out deprecated usages), but Internal::Parameter is not. */
-    Internal::Parameter custom_user_context;
-    bool custom_user_context_set;
+    Internal::Parameter jit_user_context;
 
     // Some infrastructure that helps Funcs catch and handle runtime errors in JIT-compiled code.
-    bool prepare_to_catch_runtime_errors(void *buf);
+    bool prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf);
 
 public:
 
@@ -691,11 +694,6 @@ public:
      * returned from Halide::get_jit_target_from_environment()
      */
      EXPORT void *compile_jit(const Target &target = get_jit_target_from_environment());
-
-    /** Set the user_context value passed to various runtime routines
-     * during halide pipelines. Only relevant when jitting.
-     */
-    EXPORT void set_custom_user_context(void *context);
 
     /** Set the error handler function that be called in the case of
      * runtime errors during halide pipelines. If you are compiling
