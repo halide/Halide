@@ -784,8 +784,10 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
       modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
       modules.push_back(get_initmod_posix_print(c, bits_64, debug));
       modules.push_back(get_initmod_cache(c, bits_64, debug));
-      modules.push_back(get_initmod_to_string(c, bits_64, debug));
     }
+    // PDB: Need this for Hexagon. Realized this when trying to compile lesson_07
+    // from the tutorials.
+    modules.push_back(get_initmod_to_string(c, bits_64, debug));
 
     // These modules are optional
     if (t.arch == Target::X86) {

@@ -14,9 +14,9 @@ using std::string;
 using std::vector;
 
 StmtCompiler::StmtCompiler(Target target) {
-user_warning << "Entering stmt compiler\n";
-user_warning << target.arch << " " << Target::Hexagon   << "\n";
-user_warning << target.os   << " " << Target::OSUnknown << "\n";
+// user_warning << "Entering stmt compiler\n";
+// user_warning << target.arch << " " << Target::Hexagon   << "\n";
+// user_warning << target.os   << " " << Target::OSUnknown << "\n";
 target.arch = Target::Hexagon;
 target.os = Target::OSUnknown;
     if (target.os == Target::OSUnknown &&
