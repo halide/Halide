@@ -1,5 +1,4 @@
 #include "ObjectInstanceRegistry.h"
-
 #include "Error.h"
 
 namespace Halide {
