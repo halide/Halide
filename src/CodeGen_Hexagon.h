@@ -41,12 +41,12 @@ protected:
     /* llvm::Instruction *call_void_intrin(const std::string &name, std::vector<llvm::Value *>); */
     /* // @} */
 
-    /* using CodeGen_Posix::visit; */
+    using CodeGen_Posix::visit;
 
     /* /\** Nodes for which we want to emit specific neon intrinsics *\/ */
     /* // @{ */
     /* void visit(const Cast *); */
-    /* void visit(const Add *); */
+    void visit(const Add *);
     /* void visit(const Sub *); */
     /* void visit(const Div *); */
     /* void visit(const Mul *); */
@@ -55,8 +55,8 @@ protected:
     /* void visit(const LT *); */
     /* void visit(const LE *); */
     /* void visit(const Select *); */
-    /* void visit(const Store *); */
-    /* void visit(const Load *); */
+    void visit(const Store *);
+    void visit(const Load *);
     /* void visit(const Call *); */
     /* // @} */
 

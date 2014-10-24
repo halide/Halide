@@ -88,5 +88,60 @@ string CodeGen_Hexagon::mattrs() const {
 bool CodeGen_Hexagon::use_soft_float_abi() const {
   return false;
 }
+void CodeGen_Hexagon::visit(const Load *op) {
+  const Ramp *ramp = op->index.as<Ramp>();
+
+    // We only deal with ramps here
+  if (!ramp) {
+    debug(1) << "Dealing with a ramp\n";
+    CodeGen::visit(op);
+  }
+
+  CodeGen::visit(op);
+  return;
+}
+
+void CodeGen_Hexagon::visit(const Store *op) {
+      const Ramp *ramp = op->index.as<Ramp>();
+
+    // We only deal with ramps here
+    if (ramp) {
+      debug(1) << "Dealing with a ramp " << op << "\n";
+    }
+    CodeGen::visit(op);
+    return;
+}
+static bool canUseVadd(const Add *op) {
+  const Ramp *RampA = op->a.as<Ramp>();
+  const Ramp *RampB = op->b.as<Ramp>();
+  if (RampA && RampB)
+    return true;
+  if (!RampA && RampB) {
+    const Broadcast *BroadcastA = op->a.as<Broadcast>();
+    return BroadcastA != NULL;
+  } else  if (RampA && !RampB) {
+    const Broadcast *BroadcastB = op->b.as<Broadcast>();
+    return BroadcastB != NULL;
+  } else {
+    const Broadcast *BroadcastA = op->a.as<Broadcast>();
+    const Broadcast *BroadcastB = op->b.as<Broadcast>();
+    if (BroadcastA && BroadcastB)
+      return true;
+  }
+  return false;
+}
+void CodeGen_Hexagon::visit(const Add *op) {
+  if (canUseVadd(op)) {
+    Intrinsic::ID ID = Intrinsic::hexagon_V6_vaddw;
+    llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+    Value *Op1 = codegen(op->a);
+    Value *Op2 = codegen(op->b);
+    value = builder->CreateCall2(F, Op1, Op2);
+  }
+  else
+    CodeGen::visit(op);
+  return;
+}
 
 }}
+
