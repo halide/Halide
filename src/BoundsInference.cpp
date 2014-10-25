@@ -117,6 +117,7 @@ public:
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<Expr> exprs;
+        string full_name;
 
         // Computed expressions on the left and right-hand sides
         void compute_exprs() {
@@ -451,11 +452,12 @@ public:
             s.stage = 0;
             s.name = s.func.name();
             s.compute_exprs();
+            s.full_name = s.name + ".s0";
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
-                s.name = s.func.name();
+                s.full_name = s.name + ".s" + int_to_string(s.stage);
                 s.compute_exprs();
                 stages.push_back(s);
             }
@@ -648,11 +650,13 @@ public:
         Function f;
         string stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            string next_stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
-            if (starts_with(op->name, next_stage_name + ".")) {
+            if (starts_with(op->name, stages[i].full_name) &&
+                op->name[stages[i].full_name.size()] == '.') {
+                assert(producing == -1);
                 producing = i;
                 f = stages[i].func;
-                stage_name = next_stage_name;
+                stage_name = stages[i].full_name;
+                break;
             }
         }
 
@@ -732,7 +736,7 @@ public:
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &d = r.domain.domain();
                     for (size_t i = 0; i < d.size(); i++) {
-                        string var = s.name + ".s" + int_to_string(s.stage) + "." + d[i].var;
+                        string var = s.full_name + "." + d[i].var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {
                             body = LetStmt::make(var + ".min", in.min, body);
