@@ -61,8 +61,6 @@ struct Target {
 
         OpenGL,  ///< Enable the OpenGL runtime.
 
-        UserContext,  ///< Generated code takes a user_context pointer as first argument
-
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!

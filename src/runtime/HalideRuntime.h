@@ -27,7 +27,7 @@ extern "C" {
  *
  * All of these functions take a "void *user_context" parameter as their
  * first argument; if the Halide kernel that calls back to any of these
- * functions has been compiled with the UserContext feature set on its Target,
+ * funcions has been defined with a "__user_context" parameter XXXXXXXX,
  * then the value of that pointer passed from the code that calls the
  * Halide kernel is piped through to the function.
  *

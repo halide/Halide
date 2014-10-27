@@ -34,13 +34,6 @@ class Param {
     /** A reference-counted handle on the internal parameter object */
     Internal::Parameter param;
 
-    void check_name() const {
-        user_assert(param.name() != "__user_context") << "Param<void*>(\"__user_context\") "
-            << "is no longer used to control whether Halide functions take explicit "
-            << "user_context arguments. Use set_custom_user_context() when jitting, "
-            << "or add Target::UserContext to the Target feature set when compiling ahead of time.";
-    }
-
 public:
     /** Construct a scalar parameter of type T with a unique
      * auto-generated name */
@@ -50,13 +43,9 @@ public:
     /** Construct a scalar parameter of type T with the given name. */
     // @{
     explicit Param(const std::string &n) :
-        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
-        check_name();
-    }
+        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {}
     explicit Param(const char *n) :
-        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
-        check_name();
-    }
+        param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {}
     // @}
 
     /** Construct a scalar parameter of type T an initial value of
@@ -70,7 +59,6 @@ public:
      * and an initial value of 'val'. */
     Param(const std::string &n, T val) :
         param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
-        check_name();
         set(val);
     }
 
@@ -86,7 +74,6 @@ public:
      * and an initial value of 'val' and a given min and max. */
     Param(const std::string &n, T val, Expr min, Expr max) :
         param(type_of<T>(), false, 0, n, /*is_explicit_name*/ true) {
-        check_name();
         set_range(min, max);
         set(val);
     }
@@ -173,11 +160,13 @@ public:
     }
 };
 
-/** Returns an Expr corresponding to the user context passed to
- * the function (if any). It is rare that this function is necessary
- * (e.g. to pass the user context to an extern function written in C). */
-inline Expr user_context_value() {
-    return Internal::Variable::make(Handle(), "__user_context");
+/** Returns a Param corresponding to a pointer to a user context
+ * structure; when the Halide function that takes such a parameter
+ * calls a function from the Halide runtime (e.g. halide_printf()), it
+ * passes the value of this pointer as the first argument to the
+ * runtime function.  */
+inline Param<void *> user_context_param() {
+  return Param<void *>("__user_context");
 }
 
 /** A handle on the output buffer of a pipeline. Used to make static
