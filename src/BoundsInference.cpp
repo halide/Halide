@@ -652,7 +652,6 @@ public:
         for (size_t i = 0; i < stages.size(); i++) {
             if (starts_with(op->name, stages[i].full_name) &&
                 op->name[stages[i].full_name.size()] == '.') {
-                assert(producing == -1);
                 producing = i;
                 f = stages[i].func;
                 stage_name = stages[i].full_name;
