@@ -282,6 +282,8 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
             set_feature(Target::OpenGL);
+        } else if (tok == "user_context") {
+            set_feature(Target::UserContext);
         } else if (tok == "no_asserts") {
             set_feature(Target::NoAsserts);
         } else if (tok == "no_bounds_query") {
@@ -341,7 +343,8 @@ std::string Target::to_string() const {
       "armv7s",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
-      "opengl"
+      "opengl",
+      "user_context"
   };
   internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])
