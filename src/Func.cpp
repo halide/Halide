@@ -44,7 +44,7 @@ Internal::Parameter make_user_context() {
 }
 
 vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
-    for (int i = 0; i < args.size(); ++i) {
+    for (size_t i = 0; i < args.size(); ++i) {
         internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
     }
     if (target.has_feature(Target::UserContext)) {
