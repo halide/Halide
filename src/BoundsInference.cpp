@@ -117,7 +117,7 @@ public:
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<Expr> exprs;
-        string name_with_stage;
+        string stage_prefix;
 
         // Computed expressions on the left and right-hand sides
         void compute_exprs() {
@@ -452,12 +452,12 @@ public:
             s.stage = 0;
             s.name = s.func.name();
             s.compute_exprs();
-            s.name_with_stage = s.name + ".s0";
+            s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
-                s.name_with_stage = s.name + ".s" + int_to_string(s.stage);
+                s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
@@ -650,11 +650,10 @@ public:
         Function f;
         string stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            if (starts_with(op->name, stages[i].name_with_stage) &&
-                op->name[stages[i].name_with_stage.size()] == '.') {
+            if (starts_with(op->name, stages[i].stage_prefix)) {
                 producing = i;
                 f = stages[i].func;
-                stage_name = stages[i].name_with_stage;
+                stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
                 break;
             }
         }
@@ -735,7 +734,7 @@ public:
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &d = r.domain.domain();
                     for (size_t i = 0; i < d.size(); i++) {
-                        string var = s.name_with_stage + "." + d[i].var;
+                        string var = s.stage_prefix + d[i].var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {
                             body = LetStmt::make(var + ".min", in.min, body);
