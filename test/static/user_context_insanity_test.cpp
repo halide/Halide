@@ -10,7 +10,7 @@ const int num_launcher_tasks = 1000;
 static bool got_context[num_launcher_tasks];
 
 extern "C" int32_t halide_trace(void *context, const halide_trace_event *e) {
-    if (context < &got_context[0] || 
+    if (context < &got_context[0] ||
         context >= &got_context[num_launcher_tasks]) {
         printf("Bad user context in child task: %p\n", context);
         abort();
@@ -30,7 +30,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     Image<float> output(10, 10);
 
     void *ctx = &got_context[index];
-    user_context_insanity(input, &got_context[index], output);
+    user_context_insanity(&got_context[index], input, output);
 
     return 0;
 }

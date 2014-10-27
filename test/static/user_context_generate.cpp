@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
 
     f.parallel(y);
     f.trace_stores();
-    f.compile_to_file("user_context", input, user_context_param());
+    f.compile_to_file("user_context", input,
+        get_target_from_environment().with_feature(Target::UserContext));
     return 0;
 }
