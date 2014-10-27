@@ -496,7 +496,7 @@ namespace {
 void link_modules(std::vector<llvm::Module *> &modules) {
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        #if LLVM_VERSION >= 35
+        #if LLVM_VERSION == 35
         modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
         #endif
         // This is a workaround to silence some linkage warnings during
@@ -505,8 +505,12 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         // as a workaround for -m64 requiring an explicit 64-bit target.
         modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
+        #if LLVM_VERSION >= 36
+        bool failed = llvm::Linker::LinkModules(modules[0], modules[i], llvm::Linker::DestroySource);
+        #else
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
+        #endif
         if (failed) {
             internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }
