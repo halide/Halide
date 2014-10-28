@@ -37,6 +37,24 @@ using std::ofstream;
 
 using namespace Internal;
 
+namespace {
+
+Internal::Parameter make_user_context() {
+    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
+}
+
+vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
+    for (size_t i = 0; i < args.size(); ++i) {
+        internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
+    }
+    if (target.has_feature(Target::UserContext)) {
+        args.insert(args.begin(), Argument("__user_context", false, Halide::Handle()));
+    }
+    return args;
+}
+
+}  // namespace
+
 Func::Func(const string &name) : func(unique_name(name)),
                                  error_handler(NULL),
                                  custom_malloc(NULL),
@@ -47,7 +65,7 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_print(NULL),
                                  cache_size(0),
                                  random_seed(0),
-                                 user_context(user_context_param()) {
+                                 jit_user_context(make_user_context()) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -60,7 +78,7 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_print(NULL),
                cache_size(0),
                random_seed(0),
-               user_context(user_context_param()) {
+               jit_user_context(make_user_context()) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -73,7 +91,7 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_print(NULL),
                      cache_size(0),
                      random_seed(0),
-                     user_context(user_context_param()) {
+                     jit_user_context(make_user_context()) {
     (*this)(_) = e;
 }
 
@@ -87,7 +105,7 @@ Func::Func(Function f) : func(f),
                          custom_print(NULL),
                          cache_size(0),
                          random_seed(0),
-                         user_context(user_context_param()) {
+                         jit_user_context(make_user_context()) {
 }
 
 const string &Func::name() const {
@@ -918,9 +936,9 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y,
                        Expr x_size, Expr y_size,
                        GPUAPI /* gpu_api */) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", x.is_rvar),
+        by("__block_id_y", y.is_rvar),
         tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", x.is_rvar);
+        ty("__thread_id_y", y.is_rvar);
     tile(x, y, bx, by, tx, ty, x_size, y_size);
     parallel(bx);
     parallel(by);
@@ -933,11 +951,11 @@ Stage &Stage::gpu_tile(VarOrRVar x, VarOrRVar y, VarOrRVar z,
                        Expr x_size, Expr y_size, Expr z_size,
                        GPUAPI /* gpu_api */) {
     VarOrRVar bx("__block_id_x", x.is_rvar),
-        by("__block_id_y", x.is_rvar),
-        bz("__block_id_z", x.is_rvar),
+        by("__block_id_y", y.is_rvar),
+        bz("__block_id_z", z.is_rvar),
         tx("__thread_id_x", x.is_rvar),
-        ty("__thread_id_y", x.is_rvar),
-        tz("__thread_id_z", x.is_rvar);
+        ty("__thread_id_y", y.is_rvar),
+        tz("__thread_id_z", z.is_rvar);
     split(x, bx, tx, x_size);
     split(y, by, ty, y_size);
     split(z, bz, tz, z_size);
@@ -1748,7 +1766,7 @@ OutputImageParam Func::output_buffer() const {
     user_assert(func.output_buffers().size() == 1)
         << "Can't call Func::output_buffer on Func \"" << name()
         << "\" because it returns a Tuple.\n";
-    return OutputImageParam(func.output_buffers()[0], dimensions());
+    return OutputImageParam(func.output_buffers()[0]);
 }
 
 vector<OutputImageParam> Func::output_buffers() const {
@@ -1757,7 +1775,7 @@ vector<OutputImageParam> Func::output_buffers() const {
 
     vector<OutputImageParam> bufs(func.output_buffers().size());
     for (size_t i = 0; i < bufs.size(); i++) {
-        bufs[i] = OutputImageParam(func.output_buffers()[i], dimensions());
+        bufs[i] = OutputImageParam(func.output_buffers()[i]);
     }
     return bufs;
 }
@@ -1803,6 +1821,7 @@ public:
                 visit_expr(extern_arg->expr);
             } else if (extern_arg->is_buffer()) {
                 include_parameter(Parameter(extern_arg->buffer.type(), true,
+                                            extern_arg->buffer.dimensions(),
                                             extern_arg->buffer.name()));
             } else if (extern_arg->is_image_param()) {
                 include_parameter(extern_arg->image_param);
@@ -1988,6 +2007,8 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
                               const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2010,6 +2031,8 @@ void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2028,7 +2051,9 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
     compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name) {
+void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
+    args = add_user_context_arg(args, target);
+
     for (int i = 0; i < outputs(); i++) {
         args.push_back(output_buffers()[i]);
     }
@@ -2040,6 +2065,8 @@ void Func::compile_to_header(const string &filename, vector<Argument> args, cons
 
 void Func::compile_to_c(const string &filename, vector<Argument> args,
                         const string &fn_name, const Target &target) {
+    args = add_user_context_arg(args, target);
+
     lower(target);
 
     vector<Buffer> images_to_embed;
@@ -2177,7 +2204,7 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
 
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
                            const Target &target) {
-    compile_to_header(filename_prefix + ".h", args, filename_prefix);
+    compile_to_header(filename_prefix + ".h", args, filename_prefix, target);
     compile_to_object(filename_prefix + ".o", args, filename_prefix, target);
 }
 
@@ -2213,6 +2240,8 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
+
+    args = add_user_context_arg(args, target);
 
     lower(target);
 
@@ -2287,17 +2316,15 @@ void Func::realize(Buffer b, const Target &target) {
     realize(Realization(vec<Buffer>(b)), target);
 }
 
-namespace {
+namespace Internal {
 
-const int max_error_buffer_size = 4096;
-struct error_buffer {
-    char buf[max_error_buffer_size];
+struct ErrorBuffer {
+    enum { MaxBufSize = 4096 };
+    char buf[MaxBufSize];
     int end;
-};
+    void (*next_error_handler)(void *user_context, const char *);
 
-extern "C" void buffered_error_handler(void *ctx, const char *message) {
-    if (ctx) {
-        error_buffer *buf = (error_buffer *)ctx;
+    void concat(const char *message) {
         size_t len = strlen(message);
 
         if (len && message[len-1] != '\n') {
@@ -2307,47 +2334,49 @@ extern "C" void buffered_error_handler(void *ctx, const char *message) {
 
         // Atomically claim some space in the buffer
 #ifdef WIN32
-        int old_end = _InterlockedExchangeAdd((volatile long *)(&buf->end), len);
+        int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
 #else
-        int old_end = __sync_fetch_and_add(&buf->end, len);
+        int old_end = __sync_fetch_and_add(&end, len);
 #endif
 
-        if (old_end + len >= max_error_buffer_size - 1) {
+        if (old_end + len >= MaxBufSize - 1) {
             // Out of space
             return;
         }
 
         for (size_t i = 0; i < len - 1; i++) {
-            buf->buf[old_end + i] = message[i];
+            buf[old_end + i] = message[i];
         }
-        if (buf->buf[old_end + len - 2] != '\n') {
-            buf->buf[old_end + len - 1] = '\n';
+        if (buf[old_end + len - 2] != '\n') {
+            buf[old_end + len - 1] = '\n';
         }
     }
-}
 
-}
+    const char *str() const {
+        return buf;
+    }
 
-bool Func::prepare_to_catch_runtime_errors(void *b) {
-    error_buffer *buf = (error_buffer *)b;
+    static void handler(void *ctx, const char *message) {
+        if (ctx) {
+            ErrorBuffer *buf = (ErrorBuffer *)ctx;
+            buf->concat(message);
+            if (buf->next_error_handler) {
+                buf->next_error_handler(ctx, message);
+            }
+        }
+    }
+};
+
+}  // namespace Internal
+
+bool Func::prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf) {
+    bool has_custom_error_handler = (error_handler != &Internal::ErrorBuffer::handler && error_handler != NULL);
+    memset(buf->buf, 0, Internal::ErrorBuffer::MaxBufSize);
     buf->end = 0;
-    // If the user isn't using a custom error handler or custom user
-    // context, we can trap errors and convert them to exceptions.
-    bool my_user_context_active = false;
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        if (arg_values[i] == user_context.get_address()) {
-            my_user_context_active = true;
-        }
-    }
-    if ((error_handler == &buffered_error_handler ||
-         error_handler == NULL) &&
-        my_user_context_active) {
-        compiled_module.set_error_handler(buffered_error_handler);
-        memset(buf->buf, 0, max_error_buffer_size);
-        user_context.set(buf);
-        return true;
-    }
-    return false;
+    buf->next_error_handler = has_custom_error_handler ? error_handler : NULL;
+    compiled_module.set_error_handler(Internal::ErrorBuffer::handler);
+    jit_user_context.set_scalar(buf);
+    return has_custom_error_handler;
 }
 
 void Func::realize(Realization dst, const Target &target) {
@@ -2411,8 +2440,10 @@ void Func::realize(Realization dst, const Target &target) {
             << "An argument to a jitted function is null\n";
     }
 
-    error_buffer buf;
-    bool buffer_runtime_errors = prepare_to_catch_runtime_errors(&buf);
+    // Always add a custom error handler to capture any error messages.
+    // (If there is a user-set error handler, it will be called as well.)
+    ErrorBuffer buf;
+    bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
 
     Internal::debug(2) << "Calling jitted function\n";
     int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
@@ -2422,8 +2453,9 @@ void Func::realize(Realization dst, const Target &target) {
         dst[i].set_source_module(compiled_module);
     }
 
-    if (buffer_runtime_errors && exit_status) {
-        halide_runtime_error << buf.buf;
+    if (exit_status && !has_custom_error_handler) {
+        // Only report the errors if no custom error handler was installed
+        halide_runtime_error << buf.str();
     }
 }
 
@@ -2511,8 +2543,10 @@ void Func::infer_input_bounds(Realization dst) {
     const int max_iters = 16;
     int iter = 0;
 
-    error_buffer buf;
-    bool buffer_runtime_errors = prepare_to_catch_runtime_errors(&buf);
+    // Always add a custom error handler to capture any error messages.
+    // (If there is a user-set error handler, it will be called as well.)
+    ErrorBuffer buf;
+    bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
 
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers we expect to be mutated
@@ -2522,8 +2556,9 @@ void Func::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Calling jitted function\n";
         int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
 
-        if (buffer_runtime_errors && exit_status) {
-            halide_runtime_error << buf.buf;
+        if (exit_status && !has_custom_error_handler) {
+            // Only report the errors if no custom error handler was installed
+            halide_runtime_error << buf.str();
         }
 
         Internal::debug(2) << "Back from jitted function\n";
@@ -2606,10 +2641,13 @@ void *Func::compile_jit(const Target &target) {
     InferArguments infer_args(name());
     lowered.accept(&infer_args);
 
-    // Add the user context arg if it isn't there already
-    Expr(user_context).accept(&infer_args);
+    // For jitting, we always add jit_user_context,
+    // regardless of whether Target::UserContext is set.
+    Expr uc_expr = Internal::Variable::make(type_of<void*>(), jit_user_context.name(), jit_user_context);
+    uc_expr.accept(&infer_args);
 
     arg_values = infer_args.arg_values;
+
 
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
