@@ -19,7 +19,7 @@ LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
-CXX11 ?=
+CXX11 ?= true
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
 #  but that is difficult in some testing situations because it requires having
@@ -57,6 +57,11 @@ endif
 
 # turn on c++11 for llvm 3.5
 ifeq ($(LLVM_VERSION_TIMES_10), 35)
+CXX11 = true
+endif
+
+# turn on c++11 for llvm 3.6
+ifeq ($(LLVM_VERSION_TIMES_10), 36)
 CXX11 = true
 endif
 
