@@ -130,6 +130,7 @@ static bool canUseVadd(const Add *op) {
   }
   return false;
 }
+
 void CodeGen_Hexagon::visit(const Add *op) {
   if (canUseVadd(op)) {
     Intrinsic::ID ID = Intrinsic::hexagon_V6_vaddw;
@@ -143,5 +144,15 @@ void CodeGen_Hexagon::visit(const Add *op) {
   return;
 }
 
+  void CodeGen_Hexagon::visit(const Broadcast *op) {
+    int Width = op->width;
+    if (Width == 16) {
+      Intrinsic::ID ID = Intrinsic::hexagon_V6_lvsplatw;
+      llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+      Value *Op1 = codegen(op->value);
+      value = builder->CreateCall(F, Op1);
+
+    }
+  }
 }}
 

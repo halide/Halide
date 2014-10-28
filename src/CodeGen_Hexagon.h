@@ -47,6 +47,8 @@ protected:
     /* // @{ */
     /* void visit(const Cast *); */
     void visit(const Add *);
+    void visit(const Broadcast *);
+
     /* void visit(const Sub *); */
     /* void visit(const Div *); */
     /* void visit(const Mul *); */
