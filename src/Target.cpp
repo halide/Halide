@@ -509,7 +509,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
         #if LLVM_VERSION >= 36
-        bool failed = llvm::Linker::LinkModules(modules[0], modules[i], llvm::Linker::DestroySource);
+        bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
         #else
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
