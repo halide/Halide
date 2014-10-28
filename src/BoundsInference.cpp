@@ -25,6 +25,16 @@ class DependsOnBoundsInference : public IRVisitor {
         }
     }
 
+    void visit(const Call *op) {
+        if (op->call_type == Call::Intrinsic &&
+            (op->name == Call::extract_buffer_min ||
+             op->name == Call::extract_buffer_max)) {
+            result = true;
+        } else {
+            IRVisitor::visit(op);
+        }
+    }
+
 public:
     bool result;
     DependsOnBoundsInference() : result(false) {}
@@ -107,6 +117,7 @@ public:
         vector<int> consumers;
         map<pair<string, int>, Box> bounds;
         vector<Expr> exprs;
+        string stage_prefix;
 
         // Computed expressions on the left and right-hand sides
         void compute_exprs() {
@@ -309,15 +320,18 @@ public:
                         lets.push_back(make_pair(name, buf));
                         bounds_inference_args.push_back(Variable::make(Handle(), name));
                     }
-                } else if (args[j].is_buffer()) {
-                    Buffer b = args[j].buffer;
-                    Parameter p(b.type(), true, b.name());
-                    p.set_buffer(b);
-                    Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
-                    bounds_inference_args.push_back(buf);
-                } else if (args[j].is_image_param()) {
+                } else if (args[j].is_image_param() || args[j].is_buffer()) {
                     Parameter p = args[j].image_param;
-                    Expr buf = Variable::make(Handle(), p.name() + ".buffer", p);
+                    Buffer b = args[j].buffer;
+                    string name = args[j].is_image_param() ? p.name() : b.name();
+
+                    Expr in_buf = Variable::make(Handle(), name + ".buffer");
+
+                    // Copy the input buffer into a query buffer to mutate.
+                    string query_name = name + ".bounds_query." + func.name();
+                    Expr query_buf = Call::make(Handle(), Call::copy_buffer_t, vec<Expr>(in_buf), Call::Intrinsic);
+                    lets.push_back(make_pair(query_name, query_buf));
+                    Expr buf = Variable::make(Handle(), query_name, b, p, ReductionDomain());
                     bounds_inference_args.push_back(buf);
                 } else {
                     internal_error << "Bad ExternFuncArgument type";
@@ -438,11 +452,12 @@ public:
             s.stage = 0;
             s.name = s.func.name();
             s.compute_exprs();
+            s.stage_prefix = s.name + ".s0.";
             stages.push_back(s);
 
             for (size_t j = 0; j < f[i].updates().size(); j++) {
                 s.stage = (int)(j+1);
-                s.name = s.func.name();
+                s.stage_prefix = s.name + ".s" + int_to_string(s.stage) + ".";
                 s.compute_exprs();
                 stages.push_back(s);
             }
@@ -635,11 +650,11 @@ public:
         Function f;
         string stage_name;
         for (size_t i = 0; i < stages.size(); i++) {
-            string next_stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
-            if (starts_with(op->name, next_stage_name + ".")) {
+            if (starts_with(op->name, stages[i].stage_prefix)) {
                 producing = i;
                 f = stages[i].func;
-                stage_name = next_stage_name;
+                stage_name = stages[i].name + ".s" + int_to_string(stages[i].stage);
+                break;
             }
         }
 
@@ -719,7 +734,7 @@ public:
                 if (r.domain.defined()) {
                     const vector<ReductionVariable> &d = r.domain.domain();
                     for (size_t i = 0; i < d.size(); i++) {
-                        string var = s.name + ".s" + int_to_string(s.stage) + "." + d[i].var;
+                        string var = s.stage_prefix + d[i].var;
                         Interval in = bounds_of_inner_var(var, body);
                         if (in.min.defined() && in.max.defined()) {
                             body = LetStmt::make(var + ".min", in.min, body);

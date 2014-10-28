@@ -1,4 +1,5 @@
 #include "IR.h"
+#include "ObjectInstanceRegistry.h"
 #include "Parameter.h"
 
 namespace Halide {
@@ -8,6 +9,8 @@ struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
     bool is_buffer;
+    int dimensions;
+    bool is_explicit_name;
     std::string name;
     Buffer buffer;
     uint64_t data;
@@ -15,7 +18,8 @@ struct ParameterContents {
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, const std::string &n) : type(t), is_buffer(b), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e = false)
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -44,23 +48,52 @@ void Parameter::check_is_scalar() const {
 }
 
 void Parameter::check_dim_ok(int dim) const {
-    user_assert(dim >= 0 && dim < 4) << "Dimension " << dim << " is not in the range [0, 3]\n";
+    user_assert(dim >= 0 && dim < dimensions())
+        << "Dimension " << dim << " is not in the range [0, " << dimensions() - 1 << "]\n";
 }
 
-Parameter::Parameter(Type t, bool is_buffer) :
-    contents(new ParameterContents(t, is_buffer, unique_name('p'))) {}
+Parameter::Parameter() : contents(NULL) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
 
-Parameter::Parameter(Type t, bool is_buffer, const std::string &name) :
-    contents(new ParameterContents(t, is_buffer, name)) {}
+Parameter::Parameter(Type t, bool is_buffer, int d) :
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false)) {
+    internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name)) {
+    internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::Parameter(const Parameter& that) : contents(that.contents) {
+    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+}
+
+Parameter::~Parameter() {
+    ObjectInstanceRegistry::unregister_instance(this);
+}
 
 Type Parameter::type() const {
     check_defined();
     return contents.ptr->type;
 }
 
+int Parameter::dimensions() const {
+    check_defined();
+    return contents.ptr->dimensions;
+}
+
 const std::string &Parameter::name() const {
     check_defined();
     return contents.ptr->name;
+}
+
+bool Parameter::is_explicit_name() const {
+    check_defined();
+    return contents.ptr->is_explicit_name;
 }
 
 bool Parameter::is_buffer() const {

@@ -812,6 +812,22 @@ inline Expr fast_pow(Expr x, Expr y) {
     return select(x == 0.0f, 0.0f, fast_exp(fast_log(x) * y));
 }
 
+/** Fast approximate inverse for Float(32). Corresponds to the rcpps
+ * instruction on x86, and the vrecpe instruction on ARM. Vectorizes
+ * cleanly. */
+inline Expr fast_inverse(Expr x) {
+    user_assert(x.type() == Float(32)) << "fast_inverse only takes float arguments\n";
+    return Internal::Call::make(x.type(), "fast_inverse_f32", vec(x), Internal::Call::Extern);
+}
+
+/** Fast approximate inverse square root for Float(32). Corresponds to
+ * the rsqrtps instruction on x86, and the vrsqrte instruction on
+ * ARM. Vectorizes cleanly. */
+inline Expr fast_inverse_sqrt(Expr x) {
+    user_assert(x.type() == Float(32)) << "fast_inverse_sqrt only takes float arguments\n";
+    return Internal::Call::make(x.type(), "fast_inverse_sqrt_f32", vec(x), Internal::Call::Extern);
+}
+
 /** Return the greatest whole number less than or equal to a
  * floating-point expression. If the argument is not floating-point,
  * it is cast to Float(32). The return value is still in floating
@@ -865,6 +881,20 @@ inline Expr trunc(Expr x) {
     } else {
         Type t = Float(32, x.type().width);
         return Internal::Call::make(t, "trunc_f32", vec(cast(t, x)), Internal::Call::Extern);
+    }
+}
+
+/** Returns true if the argument is a Not a Number (NaN). Requires a
+  * floating point argument.  Vectorizes cleanly. */
+inline Expr is_nan(Expr x) {
+    user_assert(x.defined()) << "is_nan of undefined Expr\n";
+    user_assert(x.type().is_float()) << "is_nan only works for float";
+    Type t = Bool(x.type().width);
+    if (x.type().element_of() == Float(64)) {
+        return Internal::Call::make(t, "is_nan_f64", vec(x), Internal::Call::Extern);
+    } else {
+        Type ft = Float(32, x.type().width);
+        return Internal::Call::make(t, "is_nan_f32", vec(cast(ft, x)), Internal::Call::Extern);
     }
 }
 
