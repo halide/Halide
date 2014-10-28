@@ -10,14 +10,27 @@ private:
     using IRMutator::visit;
 
     void visit(const Block *op) {
-        const Block *first_block = op->first.as<Block>();
+        /* First we dig into the block traversing down the 'first'
+         * stmt until we find one that is not a block. We push all of
+         * the rest stmt's into the 'rest' stmt of the top-level
+         * block, and then fix up the 'rest' stmt recursively at the
+         * end. The result of this mutation is an equivalent Block
+         * node that does not contain any Block nodes in a 'first' stmt.
+         */
+        Stmt first = op->first;
+        Stmt rest  = op->rest;
+        while(const Block *first_block = op->first.as<Block>()) {
+            first = mutate(first_block->first);
+            if (first_block->rest.defined()) {
+                rest = rest.defined()? Block::make(first_block->rest, rest): first_block->rest;
+            }
+        }
 
-        if (first_block) {
-            Stmt first = mutate(first_block->first);
-            Stmt rest  = Block::make(mutate(first_block->rest), op->rest);
-            stmt = Block::make(first, mutate(rest));
+        if (first.same_as(op->first)) {
+            rest = mutate(rest);
+            stmt = rest.same_as(op->rest)? op: Block::make(first, rest);
         } else {
-            IRMutator::visit(op);
+            stmt = Block::make(first, mutate(rest));
         }
     }
 };
