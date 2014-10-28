@@ -213,7 +213,7 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     if (truncf(op->value) == op->value) {
         oss << std::fixed << std::setprecision(1) << op->value;
     } else {
-        oss << std::showpoint << std::setprecision(9) << op->value;
+        oss << std::setprecision(9) << op->value;
     }
     id = oss.str();
 }
@@ -778,9 +778,9 @@ void CodeGen_GLSL::test() {
     check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
                        Broadcast::make(1.f, 4),
                        load4),
-          "float $ = texture2D($buf, vec2(0, 0)).r;\n"
-          "float $ = texture2D($buf, vec2(0, 0)).b;\n"
-          "float $ = texture2D($buf, vec2(0, 0)).a;\n"
+          "float $ = texture2D($buf, vec2(0, 0))[0];\n"
+          "float $ = texture2D($buf, vec2(0, 0))[2];\n"
+          "float $ = texture2D($buf, vec2(0, 0))[3];\n"
           "vec4 $ = vec4($, 1.0, $, $);\n");
 
     check(log(1.0f), "float $ = log(1.0);\n");
