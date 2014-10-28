@@ -67,6 +67,22 @@ int main(int argc, char **argv) {
        return -1;
     }
 
+    // Full specification round-trip, PNacl
+    t1 = Target(Target::NaCl, Target::PNaCl, 32);
+    ts = t1.to_string();
+    if (ts != "pnacl-32-nacl") {
+       printf("to_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+    if (!t2.from_string(ts)) {
+       printf("from_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+    if (t2 != t1) {
+       printf("compare failure: %s %s\n", t1.to_string().c_str(), t2.to_string().c_str());
+       return -1;
+    }
+
     // Partial specification merging: os,arch,bits get replaced; features get combined
     t2 = Target(Target::Linux, Target::X86, 64, vec(Target::OpenCL));
     if (!t2.merge_string("x86-32-sse41")) {
