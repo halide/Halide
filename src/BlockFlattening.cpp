@@ -19,8 +19,8 @@ private:
          */
         Stmt first = op->first;
         Stmt rest  = op->rest;
-        while(const Block *first_block = op->first.as<Block>()) {
-            first = mutate(first_block->first);
+        while(const Block *first_block = first.as<Block>()) {
+            first = first_block->first;
             if (first_block->rest.defined()) {
                 rest = rest.defined()? Block::make(first_block->rest, rest): first_block->rest;
             }
