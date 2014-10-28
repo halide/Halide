@@ -1374,6 +1374,9 @@ void Func::debug_to_file(const string &filename) {
 }
 
 Stage Func::update(int idx) {
+    user_assert(idx < num_update_definitions()) <<
+      "Call to update with index larger than last defined update stage for Func \"" <<
+      name() << "\".\n";
     invalidate_cache();
     return Stage(func.update_schedule(idx),
                  name() + ".update(" + int_to_string(idx) + ")");
