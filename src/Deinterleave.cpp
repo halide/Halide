@@ -544,7 +544,7 @@ class Interleaver : public IRMutator {
             std::vector<Expr> args(stores.size());
 
             int min_offset = 0;
-            std::vector<int> offsets(width);
+            std::vector<int> offsets(stores.size());
 
             std::string load_name;
             Buffer load_image;
