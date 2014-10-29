@@ -8,8 +8,13 @@ LIB_HALIDE = bin/libHalide.a
 endif
 
 LLVM_CONFIG ?= llvm-config
-LDFLAGS += $(shell $(LLVM_CONFIG) --ldflags)
-LDFLAGS += $(shell $(LLVM_CONFIG) --system-libs)
+LLVM_VERSION_TIMES_10 = $(shell $(LLVM_CONFIG) --version | cut -b 1,3)
+LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
+ifneq ($(LLVM_34_OR_OLDER), )
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags)
+else
+LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+endif
 
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
