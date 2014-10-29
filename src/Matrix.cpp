@@ -131,68 +131,79 @@ MatrixRef::operator Expr() const {
     }
 }
 
-Partition::Partition(Matrix &mat) :
-    matrix(mat), nrows(1), ncols(1), level(0)
+Partition::Partition(Stage s, Expr m, Expr n) :
+        schedule(s), prev(0), next(0),
+        par_rows(1), par_cols(1),
+        min_rows(0), min_cols(0),
+        mat_rows(m), mat_rows(n)
 {
     bi = Var("i");
     bj = Var("j");
-
-    specialized = false;
 }
 
-Partition::Partition(Matrix &mat, int up, int lvl, Expr num_rows, Expr num_cols) :
-    matrix(mat), nrows(num_rows), ncols(num_cols), update(up), level(lvl)
+Partition::Partition(Partition *p, Expr m, Expr n) :
+        prev(p), next(0)
+        par_rows(m), par_cols(n),
+        min_rows(m * p->min_rows), min_cols(n * p->min_cols),
+        mat_rows(p->mat_rows), mat_cols(p->mat_cols)
 {
-    internal_assert(level > 0);
+    int lvl = level();
+    prev->next = this;
 
     bi = Var(block_var_name("i", level));
     bj = Var(block_var_name("j", level));
 
-    std::cout << "Partitioning matrix " << matrix.name() << " at level " << level
+    std::cout << "Partitioning matrix " << parent.schedule.name() << " at level " << level
               << " into " << nrows << " x " << ncols << " blocks. "
-              << "Partion vars: (" << bi.name() << ", " << bj.name() << ")\n";
+              << "Partition vars: (" << bi.name() << ", " << bj.name() << ")\n"
+              << "\tPartion blocks total size = " << min_rows << " x " << min_cols << "\n";
 
-    int m, n;
-    bool const_size_matrix = matrix.const_size(m, n);
-
-    for (int i = level-1; i >= 0; --i) {
-        Partition &p = matrix.get_partition(i);
-
-        num_rows = simplify(num_rows * p.nrows);
-        num_cols = simplify(num_cols * p.ncols);
-    }
-
-    std::cout << "\tPartion blocks total size = " << num_rows << " x " << num_cols << "\n";
-
-    if (const_size_matrix && is_size_const(num_rows) && is_size_const(num_cols)) {
-        specialized = false;
+    int im, in;
+    bool const_size_blocks = as_const_int(m, im) && as_const_int(n, in);
+    if (const_size_blocks && is_size_const(min_rows) && is_size_const(min_cols)) {
+        sched = parent()->schedule();
     } else {
-        condition = matrix.num_rows() >= num_rows && matrix.num_cols() >= num_cols;
-        specialized = true;
-        std::cout << "\tPartion schedule is specialized on the condition " << condition << "\n";
+        sched = parent()->schedule().specialize(mat_rows >= min_rows && mat_cols >= min_cols);
+        std::cout << "\tPartition schedule is specialized on the condition "
+                  << (mat_rows >= min_rows && mat_cols >= min_cols) << "\n";
     }
-    
+
     Var pi = parent().row_var();
     Var pj = parent().col_var();
 
-    std::cout << "\tPartion tiled as: " << matrix.name() << "("
+    std::cout << "\tPartition tiled as: " << name() << "("
               << pi.name() << ", " << pj.name() << ", "
               << bi.name() << ", " << bj.name() << ", "
               << pi.name() << ", " << pj.name() << ")\n";
-    schedule().tile(pi, pj, bi, bj, pi, pj, nrows, ncols);
+    sched.tile(pi, pj, bi, bj, pi, pj, nrows, ncols);
 }
 
-Stage Partition::schedule() {
-    if (specialized) {
-        return parent().schedule().specialize(condition);
+const std::string &Partition::name() const {
+    return sched.name();
+}
+
+int Partition::level() const {
+    if (par) {
+        return par->level() + 1;
     } else {
-        return matrix.root_schedule(update;);
+        return 0;
     }
 }
 
+Stage Partition::schedule() {
+    return sched;
+}
+
 Partition &Partition::parent() {
-    internal_assert(level > 0);
-    return matrix.get_partition(level-1);
+    return *prev;
+}
+
+Partition &Partition::child() {
+    return *next;
+}
+
+Partition Partition::split(Expr m, Expr n) {
+    return Partition(this, m, n);
 }
 
 int Matrix::small_offset(Expr row, Expr col) const {
@@ -473,7 +484,7 @@ Matrix &Matrix::compute_at_rows(Matrix &other, int level) {
                 finish = !pi.is_specialization();
             }
         }
-        
+
         func.compute_at(static_cast<Func>(other), p.row_var());
     }
 
@@ -564,7 +575,7 @@ Matrix &Matrix::vectorize(int level) {
         vec_level = level;
     }
 
-    if (vec_level < partitions.size()) {
+    if (vec_level < (int)partitions.size()) {
         Partition &p = partitions[vec_level];
 
         const int *vec_size = as_const_int(p.num_rows());
@@ -592,7 +603,7 @@ Matrix &Matrix::parallelize(int level) {
         par_level = level;
     }
 
-    if (par_level < partitions.size()) {
+    if (par_level < (int)partitions.size()) {
         Partition &p = partitions[par_level];
         p.schedule().parallel(p.col_var());
     }
@@ -609,7 +620,7 @@ Partition &Matrix::root_partition() {
 }
 
 Partition &Matrix::get_partition(int level) {
-    internal_assert(0 <= level && level < partitions.size());
+  internal_assert(0 <= level && level < (int)partitions.size());
     return partitions[level];
 }
 
@@ -618,7 +629,7 @@ const Partition &Matrix::root_partition() const {
 }
 
 const Partition &Matrix::get_partition(int level) const {
-    internal_assert(0 <= level && level < partitions.size());
+  internal_assert(0 <= level && level < (int)partitions.size());
     return partitions[level];
 }
 

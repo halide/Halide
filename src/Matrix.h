@@ -74,32 +74,55 @@ class MatrixRef {
     EXPORT operator Expr() const;
 };
 
+/**
+ * A Partition defines a decomposition of a Matrix into a hierarchy of
+ * blocks that is used for scheduling matrix computations. A Matrix
+ * can be defined in several update steps and each one can have it's
+ * own partitioning.
+ *
+ * The Partition class automatically manages the creation of
+ * specializations in the Matrix schedule. If an (m x n) partition is
+ * requested on a matrix whose size is smaller than (m x n) the matrix
+ * computations will not be tiled.
+ */
 class Partition {
-    Matrix &matrix;
+    Stage sched;
+    Partition *prev;
+    Partition *next;
 
-    Expr nrows, ncols;
+    // Block variables, indexing the blocks at this level of the partition.
     Var  bi, bj;
 
-    int  update;
-    int  level;
-    bool specialized;
-    Expr condition;
-public:
-    Partition(Matrix &mat);
-    Partition(Matrix &mat, int up, int lvl, Expr m, Expr n);
+    // The number of rows and columns per block in this partition.
+    Expr par_rows, par_cols;
 
-    Partition &parent();
+    // The minimum number of rows and columns we must have in the
+    // matrix in order to use this partition.
+    Expr min_rows, min_cols;
+
+    // The number of rows and columns in the matrix that we are partitioning.
+    Expr mat_rows, mat_cols;
+
+    Partition(Partition *p, Expr m, Expr n);
+public:
+    Partition(Stage s, Expr m, Expr n);
+
+    const std::string &name() const;
 
     Stage schedule();
+    Partition &parent();
+    Partition &child();
+    int level() const;
+
+    Partition split(Expr m, Expr n);
+
     Expr num_rows() const {return nrows;}
     Expr num_cols() const {return ncols;}
 
     Var row_var() const {return bi;}
     Var col_var() const {return bj;}
-
-    bool is_specialization() const {return specialized;}
 };
- 
+
 class Matrix {
     /* For small matrices we store the coefficient Expr's directly. */
     std::vector<Expr> coeffs;
@@ -124,7 +147,8 @@ class Matrix {
     /* Number of columns in the matrix. */
     Expr ncols;
 
-    /* Vector of partitions that have been applied to this matrix. */
+    /* Vector of partitions that have been applied to this matrix. We
+     * store a partition per update step of the matrix definition. */
     std::vector<Partition> partitions;
 
     /* Level of partitioning at which to vectorize operations. */
