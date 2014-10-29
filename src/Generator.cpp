@@ -18,9 +18,6 @@ bool is_alnum(char c) { return is_alpha(c) || (c == '_') || (c >= '0' && c <= '9
 //
 // -- initial _ is forbidden (rather than merely "reserved")
 // -- two underscores in a row is also forbidden
-//
-// ("__user_context" is exempt from both of the above exemptions, but calling
-// code should special-case it and never pass it here)
 bool is_valid_name(const std::string& n) {
     if (n.empty()) return false;
     if (!is_alpha(n[0])) return false;
@@ -193,13 +190,8 @@ void GeneratorBase::build_params() {
         for (size_t i = 0; i < vf.size(); ++i) {
             Parameter *param = static_cast<Parameter *>(vf[i]);
             internal_assert(param != nullptr);
-            // both user_context and __user_context are allowed iff the Param is void*
-            if (param->name() == "user_context" || param->name() == "__user_context") {
-                user_assert(param->type().is_handle()) << param->name() << " is a reserved name";
-            } else {
-                user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
-                user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
-            }
+            user_assert(param->is_explicit_name()) << "Params in Generators must have explicit names: " << param->name();
+            user_assert(is_valid_name(param->name())) << "Invalid Param name: " << param->name();
             user_assert(filter_params.find(param->name()) == filter_params.end())
                 << "Duplicate Param name: " << param->name();
             filter_params[param->name()] = param;
@@ -250,21 +242,22 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 
     Func func = build();
 
+    std::vector<Halide::Argument> inputs = get_filter_arguments();
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
     if (options.emit_o) {
-        func.compile_to_object(base_path + ".o", filter_arguments, function_name, target);
+        func.compile_to_object(base_path + ".o", inputs, function_name, target);
     }
     if (options.emit_h) {
-        func.compile_to_header(base_path + ".h", filter_arguments, function_name);
+        func.compile_to_header(base_path + ".h", inputs, function_name, target);
     }
     if (options.emit_cpp) {
-        func.compile_to_c(base_path + ".cpp", filter_arguments, function_name, target);
+        func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
     }
     if (options.emit_assembly) {
-        func.compile_to_assembly(base_path + ".s", filter_arguments, function_name, target);
+        func.compile_to_assembly(base_path + ".s", inputs, function_name, target);
     }
     if (options.emit_bitcode) {
-        func.compile_to_bitcode(base_path + ".bc", filter_arguments, function_name, target);
+        func.compile_to_bitcode(base_path + ".bc", inputs, function_name, target);
     }
     if (options.emit_stmt) {
         func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text, target);
