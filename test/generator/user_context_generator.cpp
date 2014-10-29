@@ -5,7 +5,6 @@ namespace {
 class UserContext : public Halide::Generator<UserContext> {
 public:
     ImageParam input{ Int(32), 2, "input" };
-    Param<void *> user_context{ "__user_context" };
 
     Func build() override {
         Var x, y;
