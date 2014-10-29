@@ -215,11 +215,7 @@ bool Target::merge_string(const std::string &target) {
             is_arch = true;
         } else if (tok == "pnacl") {
             arch = Target::PNaCl;
-            os = Target::NaCl;
-            bits = 32;
-            is_os = true;
             is_arch = true;
-            is_bits = true;
         } else if (tok == "mips") {
             arch = Target::MIPS;
             is_arch = true;
@@ -324,6 +320,16 @@ bool Target::merge_string(const std::string &target) {
 
     if (arch_specified && !bits_specified) {
         return false;
+    }
+
+    // If arch is PNaCl, require explicit setting of os and bits as well.
+    if (arch_specified && arch == Target::PNaCl) {
+        if (!os_specified || os != Target::NaCl) {
+            return false;
+        }
+        if (!bits_specified || bits != 32) {
+            return false;
+        }
     }
 
     return true;
@@ -509,7 +515,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
         #if LLVM_VERSION >= 36
-        bool failed = llvm::Linker::LinkModules(modules[0], modules[i], llvm::Linker::DestroySource);
+        bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
         #else
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);

@@ -194,7 +194,6 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     if (truncf(op->value) == op->value) {
         oss << std::fixed << std::setprecision(1) << op->value;
     } else {
-        oss.flags(std::ios_base::fixed | std::ios_base::scientific);
         oss << std::setprecision(9) << op->value;
     }
     id = oss.str();
