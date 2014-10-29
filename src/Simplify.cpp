@@ -1,5 +1,6 @@
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -1877,9 +1878,22 @@ private:
                 expr = a;
             } else if (a.same_as(op->args[0])) {
                 expr = op;
-                } else {
+            } else {
                 expr = abs(a);
             }
+#if __cplusplus > 199711L // C++11 comes with a portable isnan
+        } else if (op->call_type == Call::Extern &&
+                   op->name == "is_nan_f32") {
+            Expr arg = mutate(op->args[0]);
+            float f = 0.0f;
+            if (const_float(arg, &f)) {
+                expr = std::isnan(f);
+            } else if (arg.same_as(op->args[0])) {
+                expr = op;
+            } else {
+                expr = Call::make(op->type, op->name, vec(arg), op->call_type);
+            }
+#endif
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::stringify) {
             // Eagerly concat constant arguments to a stringify.

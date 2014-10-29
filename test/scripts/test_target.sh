@@ -65,6 +65,7 @@ else
     make test_tutorials -j8 &&
     make test_performance &&
     make test_apps &&
+    make test_generators &&
     echo "All tests pass"
 fi
 
