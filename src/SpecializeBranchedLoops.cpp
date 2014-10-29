@@ -59,6 +59,174 @@ bool expr_uses_var(Expr expr, const std::string &var, const Scope<Expr> &scope) 
     return uses_var.result;
 }
 
+/* This mutator is used as a second pass after NormalizeIfStmts as a
+ * means to reduce the number of intermediate steps thet the
+ * BranchCollector needs to perform. The goal here is to detect
+ * tautological conditions inside internal if stmts. When we find an
+ * IfThenElse node we try to prove that the condition is true or
+ * false, if we can do that succesfully, then we can replace the
+ * entire node by either the then or else case respectively.
+ */
+class PruneIfStmtTree : public IRMutator {
+public:
+    std::string name;
+    Scope<Expr> scope;
+    Scope<Interval> bounds_info;
+    const Scope<int>& free_vars;
+
+    PruneIfStmtTree(const std::string &var, const Scope<Expr> *s,
+                    const Scope<Interval> *bounds, const Scope<int> &vars)
+            : name(var), free_vars(vars) {
+        scope.set_containing_scope(s);
+        bounds_info.set_containing_scope(bounds);
+    }
+
+  private:
+    using IRMutator::visit;
+
+    void visit(const IfThenElse *op) {
+        Expr condition = simplify(op->condition, true, bounds_info);
+        Stmt then_case = op->then_case;
+        Stmt else_case = op->else_case;
+
+        // debug(0) << "Pruning:\n" << Stmt(op);
+
+        Expr solve = solve_for_linear_variable(condition, name, free_vars);
+        if (!solve.same_as(condition)) {
+            Interval var_bounds;
+            Expr min_then, max_then;
+            Expr min_else, max_else;
+
+            if (bounds_info.contains(name)) {
+                var_bounds = bounds_info.get(name);
+            } else {
+                var_bounds = Interval(Int(32).min(), Int(32).max());
+            }
+
+            const LT *lt = solve.as<LT>();
+            const LE *le = solve.as<LE>();
+            const GT *gt = solve.as<GT>();
+            const GE *ge = solve.as<GE>();
+            if (lt) {
+                min_then = var_bounds.min;
+                max_then = min(lt->b - 1, var_bounds.max);
+
+                min_else = max(var_bounds.min, lt->b);
+                max_else = var_bounds.max;
+            } else if (le) {
+                min_then = var_bounds.min;
+                max_then = min(le->b, var_bounds.max);
+
+                min_else = max(var_bounds.min, le->b + 1);
+                max_else = var_bounds.max;
+            } else if (gt) {
+                min_then = max(var_bounds.min, gt->b + 1);
+                max_then = var_bounds.max;
+
+                min_else = var_bounds.min;
+                max_else = min(gt->b, var_bounds.max);
+            } else if (ge) {
+                min_then = max(var_bounds.min, ge->b);
+                max_then = var_bounds.max;
+
+                min_else = var_bounds.min;
+                max_else = min(ge->b - 1, var_bounds.max);
+            }
+
+            bounds_info.push(name, Interval(min_then, max_then));
+            // debug(0) << "Mutating then case:\n" << then_case << "\n";
+            then_case = mutate(then_case);
+            then_case = simplify(then_case, true, bounds_info);
+            bounds_info.pop(name);
+
+            bounds_info.push(name, Interval(min_else, max_else));
+            // debug(0) << "Mutating else case:\n" << else_case << "\n";
+            else_case = mutate(else_case);
+            else_case = simplify(else_case, true, bounds_info);
+            bounds_info.pop(name);
+        }
+
+        if (!condition.same_as(op->condition) ||
+            !then_case.same_as(op->then_case) ||
+            !else_case.same_as(op->else_case)) {
+            condition = solve;
+            stmt = IfThenElse::make(condition, then_case, else_case);
+        } else {
+            // We didn't mutate the stmt as is, but we can still try to prune stmts of the form:
+            //
+            //   if (x < a) {
+            //       if (x < b) {
+            //         ...
+            //       } else {
+            //         ...
+            //       }
+            //   }
+            //
+            // by transforming them into:
+            //
+            //   if (x < b) {
+            //       if (x < a) {
+            //        ...
+            //       }
+            //   } else {
+            //       if (x < a) {
+            //         ...
+            //       }
+            //   }
+            //
+            // and mutating the transformed stmt.
+            const IfThenElse *inner_if = then_case.as<IfThenElse>();
+            if (inner_if && !else_case.defined()) {
+                const IfThenElse *inner_if = then_case.as<IfThenElse>();
+                Stmt new_then = IfThenElse::make(condition, inner_if->then_case);
+                Stmt new_else = inner_if->else_case.defined()?
+                    IfThenElse::make(condition, inner_if->then_case) : else_case;
+                Stmt new_if = IfThenElse::make(inner_if->condition, new_then, new_else);
+                Stmt new_stmt = mutate(new_if);
+
+                if (!new_stmt.same_as(new_if)) {
+                    stmt = new_stmt;
+                    return;
+                }
+            } else {
+                then_case = mutate(then_case);
+                else_case = mutate(else_case);
+
+                if (!then_case.same_as(op->then_case) || !else_case.same_as(op->else_case)) {
+                    stmt = IfThenElse::make(condition, then_case, else_case);
+                } else {
+                    stmt = op;
+                }
+            }
+        }
+
+        // debug(0) << "Prunded stmt:\n" << stmt << "\n\n";
+    }
+
+    void visit(const LetStmt *op) {
+        scope.push(op->name, op->value);
+        Stmt new_body = mutate(op->body);
+        scope.pop(op->name);
+
+        if (!new_body.same_as(op->body)) {
+            stmt = LetStmt::make(op->name, op->value, new_body);
+        } else {
+            stmt = op;
+        }
+    }
+};
+
+Stmt prune_if_stmt_tree(Stmt s, const std::string &var, const Scope<Expr> &scope,
+                        const Scope<Interval> &bounds, const Scope<int> &vars) {
+    PruneIfStmtTree pruner(var, &scope, &bounds, vars);
+    Stmt pruned = simplify(pruner.mutate(s), true, bounds);
+    // while (!pruned.same_as(s)) {
+    //     s = pruned;
+    //     pruned = simplify(pruner.mutate(s), true, bounds);
+    // }
+    return pruned;
+}
+
 /* This mutator transforms a Stmt so that the condition of all the
  * IfThenElse nodes are "simple". i.e. we remove all of the logical
  * connectives that may appear in a conditional. Additionally, we
@@ -461,6 +629,59 @@ public:
         scope.set_containing_scope(s);
         free_vars.set_containing_scope(lv);
         bounds_info.set_containing_scope(bi);
+    }
+
+    Stmt construct_stmt() {
+        Stmt stmt;
+        bool first = true;
+        std::stack<std::string> bounds_vars;
+        for (int i = branches.size()-1; i >= 0; --i) {
+            Branch &b = branches[i];
+            Expr b_min = b.min;
+            Expr b_extent = b.extent;
+
+            bounds_info.push(name, Interval(b_min, b_min + b_extent - 1));
+
+            // First, we replace the min/extent exprs in the branch by
+            // unique variables, pushing the corresponding exprs onto the
+            // branch_scope. Before actually adding the branch to the list
+            // of branches.
+            std::ostringstream branch_name;
+            branch_name << name << ".b" << i;
+            if (!min.as<Variable>()) {
+                std::string min_name = branch_name.str() + ".min";
+                bounds_vars.push(min_name);
+                scope.push(min_name, b_min);
+                b_min = Variable::make(b_min.type(), min_name);
+            }
+
+            if (!extent.as<Variable>()) {
+                std::string extent_name = branch_name.str() + ".extent";
+                bounds_vars.push(extent_name);
+                scope.push(extent_name, b_extent);
+                b_extent = Variable::make(b_extent.type(), extent_name);
+            }
+
+            Stmt branch_stmt = simplify(b.stmt, true, bounds_info);
+            branch_stmt = For::make(name, b_min, b_extent, For::Serial, branch_stmt);
+            if (first) {
+                stmt = branch_stmt;
+                first = false;
+            } else {
+                stmt = Block::make(branch_stmt, stmt);
+            }
+
+            bounds_info.pop(name);
+        }
+
+        while (!bounds_vars.empty()) {
+            const std::string &var = bounds_vars.top();
+            stmt = LetStmt::make(var, scope.get(var), stmt);
+            scope.pop(var);
+            bounds_vars.pop();
+        }
+
+        return stmt;
     }
 
   private:
@@ -1003,6 +1224,7 @@ public:
     void visit(const IfThenElse *op) {
         if (expr_uses_var(op->condition, name, scope)) {
             Stmt normalized = normalize_if_stmts(op, scope);
+            normalized = prune_if_stmt_tree(normalized, name, scope, bounds_info, free_vars);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
             // debug(0) << "Branching normalized if:\n" << Stmt(if_stmt) << "\n";
@@ -1073,21 +1295,6 @@ public:
     }
 };
 
-void collect_branches(Expr expr, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars, const Scope<Interval> &bounds_info) {
-    BranchCollector collector(name, min, extent, &scope, &free_vars, &bounds_info);
-    expr.accept(&collector);
-    branches.swap(collector.branches);
-}
-
-void collect_branches(Stmt stmt, const std::string& name, Expr min, Expr extent,
-                      std::vector<Branch> &branches, const Scope<Expr> &scope,
-                      const Scope<int> &free_vars, const Scope<Interval> &bounds_info) {
-    BranchCollector collector(name, min, extent, &scope, &free_vars, &bounds_info);
-    stmt.accept(&collector);
-    branches.swap(collector.branches);
-}
 
 class SpecializeBranchedLoops : public IRMutator {
 private:
@@ -1107,31 +1314,26 @@ private:
 
         Stmt body = mutate(op->body);
 
+        bool branched = false;
         if (op->for_type == For::Serial && stmt_branches_in_var(op->name, body, scope)) {
-            // debug(0) << "Branching loop " << op->name << ". Original body:\n"
-            //          << op->body << "Mutated body:\n" << body;
+            // debug(0) << "Collecting branches in loop " << op->name << ":\n" << body << "\n\n";
+            BranchCollector collector(op->name, op->min, op->extent, &scope, &loop_vars, &bounds_info);
+            body.accept(&collector);
 
-            std::vector<Branch> branches;
-            collect_branches(body, op->name, op->min, op->extent, branches, scope, loop_vars, bounds_info);
+            if (!collector.branches.empty()) {
+                stmt = collector.construct_stmt();
+                branched = true;
+            }
+        }
 
-            if (branches.empty()) {
+        if (!branched) {
+            if (!body.same_as(op->body)) {
                 stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
             } else {
-                stmt = Evaluate::make(0);
-                for (int i = branches.size()-1; i >= 0; --i) {
-                    Branch &branch = branches[i];
-                    bounds_info.push(op->name, Interval(branch.min, branch.min + branch.extent - 1));
-                    Expr extent = simplify(branch.extent, true, bounds_info);
-                    if (is_zero(extent)) continue;
-                    Stmt branch_stmt = simplify(branch.stmt, true, bounds_info);
-                    branch_stmt = For::make(op->name, branch.min, extent, op->for_type, branch_stmt);
-                    stmt = Block::make(branch_stmt, stmt);
-                    bounds_info.pop(op->name);
-                }
+                stmt = op;
             }
-        } else {
-            stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
         }
+
         loop_vars.pop(op->name);
     }
 
