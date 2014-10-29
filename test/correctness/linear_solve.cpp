@@ -87,6 +87,11 @@ bool test_collect_linear_terms() {
     Expr y_var = Variable::make(Float(32), "y");
     Expr z_var = Variable::make(Float(32), "z");
 
+    Scope<int> free_vars;
+    free_vars.push("x", 0);
+    free_vars.push("y", 0);
+    free_vars.push("z", 0);
+
     /* Simplify an expression by collecting linear terms:
      *
      *    3(x - y + (z - 1)/15) + (x/2) - (y + 3*z)/6
@@ -108,7 +113,7 @@ bool test_collect_linear_terms() {
     e1_terms[3] = t1_z;
 
     std::vector<Term> terms;
-    collect_linear_terms(e1, terms);
+    collect_linear_terms(e1, terms, free_vars);
     if (!check_terms(e1_terms, terms)) {
         return false;
     }
@@ -134,7 +139,7 @@ bool test_collect_linear_terms() {
     e2_terms[3] = t2_z;
 
     terms.clear();
-    collect_linear_terms(e2, terms);
+    collect_linear_terms(e2, terms, free_vars);
     if (!check_terms(e2_terms, terms)) {
         return false;
     }
@@ -144,6 +149,11 @@ bool test_collect_linear_terms() {
 
 bool test_linear_solve() {
     Var x("x"), y("y"), z("z");
+
+    Scope<int> free_vars;
+    free_vars.push("x", 0);
+    free_vars.push("y", 0);
+    free_vars.push("z", 0);
 
     /* Solve an equation for a specific variable:
      *
@@ -158,13 +168,13 @@ bool test_linear_solve() {
     Expr e2 = 10.f*z - (2.f*x + y)/3.f + 10.f*y;
     Expr eq = (e1 == e2);
     Expr expected = ((13.f - 1.f/6.f)*y + 10.3f*z - 0.2f) / (3.5f + 2.f/3.f);
-    Expr ans = solve_for_linear_variable(eq, x);
+    Expr ans = solve_for_linear_variable(eq, x, free_vars);
     Expr actual = ans.as<EQ>()->b;
 
     std::vector<Term> expected_terms;
     std::vector<Term> actual_terms;
-    collect_linear_terms(expected, expected_terms);
-    collect_linear_terms(actual, actual_terms);
+    collect_linear_terms(expected, expected_terms, free_vars);
+    collect_linear_terms(actual, actual_terms, free_vars);
 
     if (!check_terms(expected_terms, actual_terms)) {
         std::cout << "Solving linear expression failed!\n"

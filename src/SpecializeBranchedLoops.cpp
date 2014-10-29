@@ -52,13 +52,20 @@ class ExprUsesVar : public IRVisitor {
     bool result;
 };
 
-/** Test if an expression references the given variable. */
+/* Test if an expression references the given variable. */
 bool expr_uses_var(Expr expr, const std::string &var, const Scope<Expr> &scope) {
     ExprUsesVar uses_var(var, &scope);
     expr.accept(&uses_var);
     return uses_var.result;
 }
 
+/* This mutator transforms a Stmt so that the condition of all the
+ * IfThenElse nodes are "simple". i.e. we remove all of the logical
+ * connectives that may appear in a conditional. Additionally, we
+ * transform EQ and NE nodes into compound expressions involve LE & GE
+ * and LT & GT respectively. This allows the BranchCollector to only
+ * solve conditions involving single inequalities.
+ */
 class NormalizeIfStmts : public IRMutator {
 public:
     NormalizeIfStmts(const Scope<Expr> *s) : in_if_stmt(false), branch_count(0) {
@@ -66,7 +73,7 @@ public:
     }
 
 private:
-    using IRVisitor::visit;
+    using IRMutator::visit;
 
     Scope<Expr> scope;
     bool in_if_stmt;
@@ -172,9 +179,13 @@ private:
 };
 
 Stmt normalize_if_stmts(Stmt stmt, const Scope<Expr> &scope) {
-    return NormalizeIfStmts(&scope).mutate(stmt);
+    return simplify(NormalizeIfStmts(&scope).mutate(stmt));
 }
 
+/* This mutator pefroms the same transformation as NormalizeIfStmts,
+ * except this transforms select exprs. See the description in
+ * NormalizeIfStmts for more details.
+ */
 class NormalizeSelect : public IRMutator {
   public:
     NormalizeSelect(const Scope<Expr> *s) : in_select_cond(false), branch_count(0) {
@@ -308,6 +319,12 @@ std::ostream &operator<<(std::ostream &out, const Branch &b) {
     return out;
 }
 
+/* A simple visitor that checks if a given Stmt or Expr has any
+ * branches in a particular variable. The flag branch_on_minmax
+ * specifies whether or not we should consider min/max nodes as
+ * branches. This is useful for not introducing branches when the only
+ * source is min/max exprs.
+ */
 class BranchesInVar : public IRVisitor {
   public:
     std::string name;
@@ -387,6 +404,9 @@ bool expr_branches_in_var(const std::string &name, Expr value, const Scope<Expr>
     return check.has_branches;
 }
 
+/* Simple visitor that checks how many variables in a stmt or expr
+ * appear in a fixed list of "free" variables.
+ */
 class FindFreeVariables : public IRGraphVisitor {
   public:
     const Scope<Expr> &scope;
@@ -416,6 +436,14 @@ bool has_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_v
     return num_free_vars(expr, scope, free_vars) > 0;
 }
 
+/* This visitor performs the main work for the
+ * specialize_branched_loops optimization pass. We are given a
+ * variable that we are checking for branches in, a current scope, a
+ * list of any other free variables, and some bounds infor on those
+ * variables. This visitor then applies to a Stmt in the branch
+ * variable and attempts to build up a list of Branch structs, which
+ * define the bounds and contents of each branch of the loop.
+ */
 class BranchCollector : public IRVisitor {
 public:
     std::string name;
@@ -446,19 +474,21 @@ public:
         std::cout << "\n";
     }
 
-    Branch make_branch(Expr min, Expr ext, Expr expr) {
-        // debug(0) << "\t\tMaking branch [" << min << ", " << ext << ") w/ "
-        //          << "expr = " << expr << "\n";
+    void get_branch_content(const Branch &b, Expr &expr) {expr = b.expr;}
+    void get_branch_content(const Branch &b, Stmt &stmt) {stmt = b.stmt;}
 
-        Branch b = {min, ext, expr, Stmt()};
-        return b;
-    }
+    void set_branch_content(const Expr &expr, Branch &b) {b.expr = expr;}
+    void set_branch_content(const Stmt &stmt, Branch &b) {b.stmt = stmt;}
 
-    Branch make_branch(Expr min, Expr ext, Stmt stmt) {
-        // debug(0) << "\t\tMaking branch [" << min << ", " << ext << ") w/ "
-        //          << "stmt: " << stmt << "\n";
+    template<class StmtOrExpr>
+    Branch make_branch(Expr min, Expr extent, StmtOrExpr content) {
+        Branch b;
+        b.min = min;
+        b.extent = extent;
+        set_branch_content(content, b);
 
-        Branch b = {min, ext, Expr(), stmt};
+        // debug(0) << "Making branch: " << b << "\n";
+
         return b;
     }
 
@@ -472,7 +502,7 @@ public:
         const LT *lt = cond.as<LT>();
         const GT *gt = cond.as<GT>();
 
-        // debug(0) << "\tBranching in the range [" << min << ", " << extent << ") "
+        // debug(0) << "Branching in the range [" << min << ", " << simplify(min+extent) << ") "
         //          << "on condition: " << cond << "\n";
 
         Expr min1 = min, min2;
@@ -532,9 +562,6 @@ public:
         return true;
     }
 
-    void copy_branch_content(const Branch &b, Expr &expr) {expr = b.expr;}
-    void copy_branch_content(const Branch &b, Stmt &stmt) {stmt = b.stmt;}
-
     // This function generalizes how we must visit all expr or stmt nodes with child nodes.
     template<class Op, class StmtOrExpr>
     void branch_children(const Op *op, const std::vector<StmtOrExpr>& children) {
@@ -574,7 +601,7 @@ public:
                 if (has_branches) {
                     while (index.back() < child_branches.back().size()) {
                         for (size_t i = 0; i < index.size(); ++i) {
-                            copy_branch_content(child_branches[i][index[i]], new_children[i]);
+                            get_branch_content(child_branches[i][index[i]], new_children[i]);
                         }
 
                         Branch &curr_branch = child_branches.back()[index.back()++];
@@ -605,7 +632,7 @@ public:
         // Bail out if this condition depends on more than just the current loop variable.
         if (num_free_vars(cond, scope, free_vars) > 1) return;
 
-        Expr solve = solve_for_linear_variable(cond, name, scope);
+        Expr solve = solve_for_linear_variable(cond, name, free_vars, scope);
         if (!solve.same_as(cond)) {
             Branch b1, b2;
             if (build_branches(solve, a, b, b1, b2)) {
@@ -833,7 +860,8 @@ public:
                 // debug(0) << "\tBranching body on interval [" << min << ", " << extent << ") with "
                 //          << op->name << " = " << let_branches[i].expr << "\n";
 
-                // Now we branch the body, first pushing the value expr from the current value branch into the scope.
+                // Now we branch the body, first pushing the value
+                // expr from the current value branch into the scope.
                 old_num_branches = branches.size();
                 scope.push(op->name, let_branches[i].expr);
                 std::vector<StmtOrExpr> body(1, op->body);
@@ -983,7 +1011,7 @@ public:
             // the current loop variable.
             if (num_free_vars(if_stmt->condition, scope, free_vars) > 1) return;
 
-            Expr solve = solve_for_linear_variable(if_stmt->condition, name, scope);
+            Expr solve = solve_for_linear_variable(if_stmt->condition, name, free_vars, scope);
             if (!solve.same_as(if_stmt->condition)) {
                 Stmt then_stmt = if_stmt->then_case.defined()? if_stmt->then_case: Evaluate::make(0);
                 Stmt else_stmt = if_stmt->else_case.defined()? if_stmt->else_case: Evaluate::make(0);
@@ -1071,7 +1099,7 @@ private:
 
     void visit(const For *op) {
         loop_vars.push(op->name, 0);
-        
+
         const Variable *loop_ext = op->extent.as<Variable>();
         if (loop_ext) {
             bounds_info.push(loop_ext->name, Interval(0, loop_ext->type.max()));

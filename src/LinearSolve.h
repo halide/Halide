@@ -27,8 +27,9 @@ struct Term {
  * linear, and so this can be used to detect linear expressions as
  * well.
  */
-bool collect_linear_terms(Expr e, std::vector<Term>& terms);
-bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<Expr>& scope);
+bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<int> &free_vars);
+bool collect_linear_terms(Expr e, std::vector<Term>& terms,
+                          const Scope<int> &free_vars, const Scope<Expr>& scope);
 
 /* This function solves a conditional expression made up of linear
  * expressions for a particular variable. If the expression contains
@@ -36,8 +37,8 @@ bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<Expr>& s
  * independently. It returns the solved expression if it succeeds,
  * otherwise it returns the inpute expression [e].
  */
-Expr solve_for_linear_variable(Expr e, Var x);
-Expr solve_for_linear_variable(Expr e, Var x, const Scope<Expr>& scope);
+Expr solve_for_linear_variable(Expr e, Var x, const Scope<int> &free_vars);
+Expr solve_for_linear_variable(Expr e, Var x, const Scope<int> &free_vars, const Scope<Expr>& scope);
 
 }
 }
