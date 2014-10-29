@@ -11,16 +11,18 @@ namespace Internal {
 namespace {
 
 class HasVariable : public IRVisitor {
-  public:
+public:
+    const Scope<int> &free_vars;
     bool has_var;
 
-    HasVariable() : has_var(false) {}
+    HasVariable(const Scope<int> &vars) : free_vars(vars), has_var(false) {}
 
-  private:
+private:
     using IRVisitor::visit;
 
-    void visit(const Variable* op) {
-        has_var = true;
+    void visit(const Variable *op) {
+        if (free_vars.contains(op->name))
+            has_var = true;
     }
 };
 
@@ -28,11 +30,13 @@ class HasVariable : public IRVisitor {
 
 class CollectLinearTerms : public IRVisitor {
 public:
+    const Scope<int> &free_vars;
     Scope<Expr> scope;
     std::vector<Term> terms;
     bool success;
 
-    CollectLinearTerms(const Scope<Expr> *s = NULL) : success(true) {
+    CollectLinearTerms(const Scope<int> &vars, const Scope<Expr> *s = NULL) :
+            free_vars(vars), success(true) {
         terms.resize(1);
         terms[0].var = NULL;
         coeff.push(1);
@@ -42,7 +46,7 @@ private:
     SmallStack<Expr> coeff;
 
     bool has_var(Expr e) {
-        HasVariable check;
+        HasVariable check(free_vars);
         e.accept(&check);
         return check.has_var;
     }
@@ -181,7 +185,7 @@ private:
     }
 };
 
-void collect_terms(std::vector<Term>& old_terms, std::vector<Term>& new_terms) {
+void collect_terms(std::vector<Term> &old_terms, std::vector<Term> &new_terms) {
     std::map<std::string, int> term_map;
 
     Term t0 = {make_zero(Int(32)), NULL};
@@ -205,7 +209,7 @@ void collect_terms(std::vector<Term>& old_terms, std::vector<Term>& new_terms) {
     }
 }
 
-Expr linear_expr(const std::vector<Term>& terms) {
+Expr linear_expr(const std::vector<Term> &terms) {
     Expr expr;
 
     if (terms[0].var) {
@@ -225,8 +229,8 @@ Expr linear_expr(const std::vector<Term>& terms) {
     return simplify(expr);
 }
 
-bool collect_linear_terms(Expr e, std::vector<Term>& terms) {
-    CollectLinearTerms linear_terms;
+bool collect_linear_terms(Expr e, std::vector<Term> &terms, const Scope<int> &free_vars) {
+    CollectLinearTerms linear_terms(free_vars);
     e.accept(&linear_terms);
     if (linear_terms.success) {
         collect_terms(linear_terms.terms, terms);
@@ -236,8 +240,10 @@ bool collect_linear_terms(Expr e, std::vector<Term>& terms) {
     }
 }
 
-bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<Expr> &scope) {
-    CollectLinearTerms linear_terms(&scope);
+bool collect_linear_terms(Expr e, std::vector<Term> &terms,
+                          const Scope<int> &free_vars,
+                          const Scope<Expr> &scope) {
+    CollectLinearTerms linear_terms(free_vars, &scope);
     e.accept(&linear_terms);
     if (linear_terms.success) {
         collect_terms(linear_terms.terms, terms);
@@ -250,12 +256,13 @@ bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<Expr> &s
 
 class SolveForLinearVariable : public IRMutator {
 public:
-    std::string  var_name;
-    Scope<Expr>  scope;
+    const Scope<int> &free_vars;
+    std::string var_name;
+    Scope<Expr> scope;
     bool solved;
 
-    SolveForLinearVariable(const std::string& var, const Scope<Expr> *s = NULL) :
-            var_name(var), solved(false) {
+    SolveForLinearVariable(const std::string& var, const Scope<int> &vars, const Scope<Expr> *s = NULL) :
+            free_vars(vars), var_name(var), solved(false) {
         scope.set_containing_scope(s);
     }
 private:
@@ -302,8 +309,8 @@ private:
         std::vector<Term> lhs_terms;
         std::vector<Term> rhs_terms;
 
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, scope);
+        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, free_vars, scope);
+        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, free_vars, scope);
 
         if (lhs_is_linear && rhs_is_linear) {
             int lhs_var = find_var(lhs_terms);
@@ -368,8 +375,8 @@ private:
         std::vector<Term> lhs_terms;
         std::vector<Term> rhs_terms;
 
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, scope);
+        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, free_vars, scope);
+        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, free_vars, scope);
 
         if (lhs_is_linear && rhs_is_linear) {
             int lhs_var = find_var(lhs_terms);
@@ -462,8 +469,8 @@ private:
     }
 };
 
-Expr solve_for_linear_variable(Expr e, Var x) {
-    SolveForLinearVariable solver(x.name());
+Expr solve_for_linear_variable(Expr e, Var x, const Scope<int> &free_vars) {
+    SolveForLinearVariable solver(x.name(), free_vars);
     Expr s = solver.mutate(e);
     if (solver.solved) {
         return s;
@@ -472,8 +479,8 @@ Expr solve_for_linear_variable(Expr e, Var x) {
     }
 }
 
-Expr solve_for_linear_variable(Expr e, Var x, const Scope<Expr> &scope) {
-    SolveForLinearVariable solver(x.name(), &scope);
+Expr solve_for_linear_variable(Expr e, Var x, const Scope<int> &free_vars, const Scope<Expr> &scope) {
+    SolveForLinearVariable solver(x.name(), free_vars, &scope);
     Expr s = solver.mutate(e);
     if (solver.solved) {
         return s;
