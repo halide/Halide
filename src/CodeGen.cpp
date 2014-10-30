@@ -345,7 +345,7 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
-    // optimize_module();
+    optimize_module();
 }
 
 llvm::Type *CodeGen::llvm_type_of(Type t) {
