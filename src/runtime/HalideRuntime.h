@@ -239,7 +239,7 @@ extern int halide_dev_run(void *user_context,
                           void *args[],
                           char** attribute_names,
                           int num_attributes,
-                          float** coords_per_dim,
+                          float* vertex_buffer,
                           int num_coords_dim0,
                           int num_coords_dim1);
 // @}

@@ -520,8 +520,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         
         Value* null_ptr_value = ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
         Value* gpu_attribute_names = null_ptr_value;
-        Value* gpu_num_attributes  = null_ptr_value;
-        Value* gpu_coords_per_dim  = null_ptr_value;
+        Value* gpu_num_padded_attributes  = null_ptr_value;
+        Value* gpu_vertex_buffer     = null_ptr_value;
         Value* gpu_num_coords_dim0 = null_ptr_value;
         Value* gpu_num_coords_dim1 = null_ptr_value;
         
@@ -543,69 +543,138 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // Create an array of null terminated strings containing the attribute
             // names in the order they appear per vertex channel
             int num_attributes = mesh.attributes.size();
-            
-            gpu_attribute_names = create_alloca_at_entry(ArrayType::get(llvm::Type::getInt8PtrTy(*context), num_attributes),
-                                                         num_attributes,
+
+            // Pad the number of attributes up to a multiple of four
+            int padded_num_attributes = (num_attributes/4 + (num_attributes%4!=0))*4;
+            int num_packed_attributes = padded_num_attributes / 4;
+
+            gpu_attribute_names = create_alloca_at_entry(CodeGen::i8->getPointerTo(),
+                                                         num_packed_attributes,
                                                          kernel_name + "_attribute_names");
             
-            for (int i=0;i!=num_attributes;++i) {
+            for (int i=0;i!=num_packed_attributes;++i) {
+
+                std::ostringstream oss;
+                oss << "_varyingf" << i << "_attrib";
+                std::string name = oss.str();
                 
-                std::string name = cgdev->print_gpu_name(mesh.attributes[i] + "_attrib");
-                std::string mangled = replace_all(name, "__", "XX");
-                
-                Value* gpu_attribute = CodeGen::create_string_constant(mangled);
-                builder->CreateStore(gpu_attribute, builder->CreateConstGEP2_64(gpu_attribute_names, 0, i));
+                Value* gpu_attribute = CodeGen::create_string_constant(name);
+
+                builder->CreateStore(gpu_attribute, builder->CreateConstGEP1_32(gpu_attribute_names, i));
             }
             
             // Record the number of attributes
-            gpu_num_attributes = codegen(IntImm::make(num_attributes));
+            gpu_num_padded_attributes = codegen(IntImm::make(padded_num_attributes));
             
             // Record the expressions for each dimension
             int num_coords_dim0 = mesh.coords[0].size();
             int num_coords_dim1 = mesh.coords[1].size();
-            
+
             gpu_num_coords_dim0 = codegen(IntImm::make(num_coords_dim0));
             gpu_num_coords_dim1 = codegen(IntImm::make(num_coords_dim1));
-            
-            gpu_coords_per_dim = create_alloca_at_entry(ArrayType::get(llvm::Type::getFloatPtrTy(*context), num_attributes),
-                                                        num_attributes,
-                                                        kernel_name + "_coords_per_dim");
-            
-            for (int i=0;i!=num_attributes;++i) {
-                
-                // Create an array of coordinates for this dimension
-                int num_coords = mesh.coords[i].size();
-                Value* gpu_coords = create_alloca_at_entry(ArrayType::get(CodeGen::f32, num_coords),
-                                                           num_coords,
-                                                           kernel_name + "_coords_" + mesh.attributes[i]);
-                for (int c=0;c!=num_coords;++c) {
-                    Expr value = mesh.coords[i][c];
-                    
+
+            int num_vertices = num_coords_dim0 * num_coords_dim1;
+            int num_vertex_elements = num_vertices * padded_num_attributes;
+
+            gpu_vertex_buffer = create_alloca_at_entry(CodeGen::f32,
+                                                       num_vertex_elements,
+                                                       kernel_name + "_vertex_buffer");
+
+            int element_idx = 0;
+            for (int j=0; j!=num_coords_dim1; ++j) {
+                for (int i=0; i!=num_coords_dim0; ++i) {
+
+                    // Obtain the expressions for each channel in this vertex
+                    int vertex_idx = j*num_coords_dim1+i;
+
                     // Convert the coordinates in the X and Y dimensions to device
-                    // coordinates
-                    if (i<2) {
-                        value = deviceCoordinates(value,mesh.coords[i][1]);
+                    // coordinates using the largest coordinate in the dimension
+                    {
+                        Expr value = mesh.coords[0][i];
+
+                        // The expression for the greatest coordinate value is
+                        // placed in index 1 of the first and second coordinate
+                        // dimensions. If additional coordinates are generated
+                        // due to piecewise linear expressions, they are
+                        // appended following this index and sorted at runtime
+                        // when the expressions may be evaluated.
+                        value = deviceCoordinates(value,mesh.coords[0][1]);
+
+                        Value* gpu_coord = codegen(value);
+                        builder->CreateStore(gpu_coord,
+                                             builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
                     }
 
-                    // Cast other attributes to floating point
-                    else if (value.type() != Float(32)) {
-                        value = Cast::make(Float(32), value);
+                    {
+                        Expr value = mesh.coords[1][j];
+
+                        // Use the coordinate value in index 1 for the extent
+                        value = deviceCoordinates(value,mesh.coords[1][1]);
+
+                        Value* gpu_coord = codegen(value);
+                        builder->CreateStore(gpu_coord,
+                                             builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
                     }
 
-                    Value* gpu_coord = codegen(value);
-                    builder->CreateStore(gpu_coord,
-                                         builder->CreateConstGEP2_32(gpu_coords, 0, c));
+                    // Codegen the expressions for the other coordinates in this
+                    // vertex starting at channel 2
+                    int a = 2;
+                    for (; a!=num_attributes; ++a) {
+
+                        Expr value = mesh.coords[a][vertex_idx];
+
+                        // Make sure the value is floating point
+                        if (value.type() != Float(32)) {
+                            value = Cast::make(Float(32), value);
+                        }
+
+                        Value* gpu_coord = codegen(value);
+                        builder->CreateStore(gpu_coord,
+                                             builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
+
+                    }
+
+                    // Pad out the vertex with zeros
+                    for (; a!=padded_num_attributes; ++a) {
+                        Value* gpu_coord = codegen(Expr(0.0f));
+                        builder->CreateStore(gpu_coord,
+                                             builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
+                    }
                 }
-                
-                builder->CreateStore(gpu_coords,
-                                     builder->CreateConstGEP2_64(gpu_coords_per_dim, 0, i));
             }
         }
 
         // compute a closure over the state passed into the kernel
         GPU_Host_Closure c(loop_stmt, loop->name);
         
+        // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
+
+        // Halide allows passing of scalar float and integer arguments. For
+        // OpenGL, pack these into vec4 uniforms and varying attributes
+        if (target.has_feature(Target::OpenGL)) {
+
+            int num_uniform_floats = 0;
+
+            // The spatial x and y coordinates are passed in the first two
+            // scalar float varying slots
+            int num_varying_floats = 2;
+            int num_uniform_ints   = 0;
+
+            // Pack scalar parameters into vec4
+            for (size_t i = 0; i < closure_args.size(); i++) {
+                if (closure_args[i].is_buffer) {
+                    continue;
+                } else if (ends_with(closure_args[i].name, ".varying")) {
+                    closure_args[i].packed_index = num_varying_floats++;
+                } else if (closure_args[i].type.is_float()) {
+                    closure_args[i].packed_index = num_uniform_floats++;
+                } else if (closure_args[i].type.is_int()) {
+                    closure_args[i].packed_index = num_uniform_ints++;
+                }
+            }
+        }
+
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
                 closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
@@ -691,9 +760,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref"),
+
+            // TODO(abstephensg): the function takes i8** and our Value has type [1 x i8*]*, which breaks in assert builds
             gpu_attribute_names,
-            gpu_num_attributes,
-            gpu_coords_per_dim,
+
+            gpu_num_padded_attributes,
+            gpu_vertex_buffer,
             gpu_num_coords_dim0,
             gpu_num_coords_dim1,
         };
