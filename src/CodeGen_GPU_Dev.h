@@ -15,12 +15,16 @@ struct GPU_Argument : public Argument {
     /** The static size of the argument if known, or zero otherwise. */
     size_t size;
 
-    GPU_Argument() : size(0) {}
+    /** The index of the first element of the argument when packed into a wider
+     * type, such as packing scalar floats into vec4 for GLSL. */
+    size_t packed_index;
+
+    GPU_Argument() : size(0), packed_index(0) {}
     GPU_Argument(const std::string &_name, bool _is_buffer, Type _type) :
-        Argument(_name, _is_buffer, _type), size(0) {}
+        Argument(_name, _is_buffer, _type), size(0), packed_index(0) {}
     GPU_Argument(const std::string &_name, bool _is_buffer, Type _type,
-                 size_t _size) :
-        Argument(_name, _is_buffer, _type), size(_size) {}
+                 size_t _size) : 
+        Argument(_name, _is_buffer, _type), size(_size), packed_index(0) {}
 };
 
 /** A code generator that emits GPU code from a given Halide stmt. */

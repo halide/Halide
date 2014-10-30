@@ -880,31 +880,42 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
 
         // Create the vertex shader        
         Printer<StringStreamPrinter,1024*256> vertex_src(user_context);
-        vertex_src << "attribute float XXvertex_x_attrib;\n"
-                   << "attribute float XXvertex_y_attrib;\n"
-                   << "varying vec2 pixcoord;\n";
-        
+
+        // Count the number of varying attributes, this is 2 for the spatial
+        // x and y coordinates, plus the number of scalar varying attribute
+        // expressions pulled out of the fragment shader.
+        int num_varying_float = 2;
+
         for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
-	    if (arg->kind == Argument::Varying) {
-                vertex_src << "attribute float " << arg->name << "_attrib;\n";
-                vertex_src << "varying   float " << arg->name << ";\n";
-            }
+            if (arg->kind == Argument::Varying)
+                ++num_varying_float;
+        }
+
+        int num_packed_varying_float = (num_varying_float/4) + (num_varying_float%4 != 0);
+
+        for (int i = 0; i != num_packed_varying_float; ++i) {
+            vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
+            vertex_src << "varying   vec4 _varyingf" << i << ";\n";
         }
         
         vertex_src << "uniform ivec2 output_min;\n"
                    << "uniform ivec2 output_extent;\n"
                    << "void main() {\n"
-                   << "    vec2 position = vec2(XXvertex_x_attrib, XXvertex_y_attrib);\n"
+
+                   // Host codegen always passes the spatial vertex coordinates
+                   // in the first two elements of the _varyingf0_attrib
+                   << "    vec2 position = vec2(_varyingf0_attrib[0], _varyingf0_attrib[1]);\n"
                    << "    gl_Position = vec4(position, 0.0, 1.0);\n"
                    << "    vec2 texcoord = 0.5 * position + 0.5;\n"
-                   << "    pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
-        
-        for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
-        if (arg->kind == Argument::Varying) {
-                vertex_src << "   " << arg->name << " = " << arg->name << "_attrib;\n";
-            }
+                   << "    vec2 pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
+
+        // Copy through all of the varying attributes
+        for (int i = 0; i != num_packed_varying_float; ++i) {
+            vertex_src << "    _varyingf" << i << " = _varyingf" << i << "_attrib;\n";
         }
-        
+
+        vertex_src << "    _varyingf0.xy = pixcoord;\n";
+
         vertex_src << "}\n";
 
         
@@ -917,30 +928,8 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         }
         
         // Create the fragment shader
-#if 1
         GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
                                                 kernel->source, NULL);
-#else
-	const char* debug_src = 
-	  "varying float _a0_varying;\n"
-	  "varying float _a1_varying;\n"
-	  "uniform int _cpu_extent_0;\n"
-	  "uniform int _cpu_extent_1;\n"
-	  "varying float _t0_varying;\n"
-	  "varying vec2 pixcoord;\n"
-	  "void main() {\n"
-	  "  int _gpu_s0_v1XX_block_id_y = int(pixcoord.y);\n"
-	  "  int _gpu_s0_v0XX_block_id_x = int(pixcoord.x);\n"
-	  "  ivec3 _0 = ivec3(_a1_varying, _a0_varying, 12);\n"
-	  "  vec3 _1 = vec3(_0);\n"
-	  "  gl_FragColor.rgb = vec3(int(_a1_varying), int(_a0_varying), 12) / 255.0;\n"
-	  // "  gl_FragColor.rgb = vec3(10*int(pixcoord.x), int(pixcoord.y), 12) / 255.0;\n"
-	  "}\n";
-
-        GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                                debug_src, NULL);
-#endif
-
         // Link GLSL program
         GLuint program = ST.CreateProgram();
         ST.AttachShader(program, vertex_shader_id);
@@ -1216,8 +1205,8 @@ WEAK int halide_opengl_dev_run(
     size_t arg_sizes[],
     void *args[],
     char** attribute_names,
-    int num_attributes,
-    float** coords_per_dim,
+    int num_padded_attributes,
+    float* vertex_buffer,
     int num_coords_dim0,
     int num_coords_dim1) {
     CHECK_INITIALIZED(1);
@@ -1433,10 +1422,11 @@ WEAK int halide_opengl_dev_run(
     debug(user_context) << "output_extent: " << output_extent[0] << "," << output_extent[1] << "\n";
     debug(user_context) << "output_min: " << output_min[0] << "," << output_min[1] << "\n";
 #endif
-  
-    // TODO(abstephensg) This per run setup may move to program load time in halide_init_kernels
 
+
+    // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
     // Sort the coordinates
+    /*
     int sorted_order0[num_coords_dim0];
     for (int i=0;i!=num_coords_dim0;++i)
         sorted_order0[i] = i;
@@ -1445,10 +1435,10 @@ WEAK int halide_opengl_dev_run(
     for (int i=0;i!=num_coords_dim1;++i)
         sorted_order1[i] = i;
 
-    // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
-    // std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
-    // std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
-    
+    std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
+    std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
+    */
+
 #if 0 // DEBUG_RUNTIME
     debug(user_context) << "Sorted x coords: ";
     for (int i=0;i!=num_coords_dim0;++i)
@@ -1461,36 +1451,20 @@ WEAK int halide_opengl_dev_run(
     debug(user_context) << "\n";
 #endif
     
-    // Construct the vertex and element buffers
+    // Construct an element buffer using the sorted vertex order
     int width = num_coords_dim0;
     int height = num_coords_dim1;
 
-    int vertex_buffer_size = width*height*num_attributes;
-    float vertex_buffer[vertex_buffer_size];
+    int vertex_buffer_size = width*height*num_padded_attributes;
 
-    int idx = 0;
-    for (int h=0;h!=height;++h) {
-        int j = sorted_order1[h];
-        float y = coords_per_dim[1][j];
-        for (int w=0;w!=width;++w) {
-            int i = sorted_order0[w];
-            float x = coords_per_dim[0][i];
-            
-            vertex_buffer[idx++] = x;
-            vertex_buffer[idx++] = y;
-            
-            for (int a=2;a!=num_attributes;++a) {
-                vertex_buffer[idx++] = coords_per_dim[a][j*width+i];
-            }
-        }
-    }
-    
     int element_buffer_size = (width-1)*(height-1)*6;
     int element_buffer[element_buffer_size];
     
-    idx = 0;
+    int idx = 0;
     for (int h=0;h!=(height-1);++h) {
         for (int w=0;w!=(width-1);++w) {
+
+            // TODO(abestephensg): Use sorted coordinates when integrated
             int v = w+h*width;
             element_buffer[idx++] = v;
             element_buffer[idx++] = v+1;
@@ -1506,7 +1480,7 @@ WEAK int halide_opengl_dev_run(
 #if 0 // DEBUG_RUNTIME
     debug(user_context) << "Vertex buffer:";
     for (int i=0;i!=vertex_buffer_size;++i) {
-        if (!(i%num_attributes)) {
+        if (!(i%num_padded_attributes)) {
 	  debug(user_context) << "\n";
         }
         debug(user_context) << vertex_buffer[i] << " ";
@@ -1545,11 +1519,16 @@ WEAK int halide_opengl_dev_run(
     ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
     ST.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float)*element_buffer_size, element_buffer, GL_STATIC_DRAW);
     CHECK_GLERROR(1);
-    
+
+    // The num_padded_attributes argument is the number of vertex attributes,
+    // including the spatial x and y coordinates, padded up to a multiple of
+    // four so that the attributes may be packed into vec4 slots.
+    int num_packed_attributes = num_padded_attributes/4;
+
     // Set up the per vertex attributes
-    GLint attrib_ids[num_attributes];
-    
-    for (int i=0;i!=num_attributes;++i) {
+    GLint attrib_ids[num_packed_attributes];
+
+    for (int i=0;i!=num_packed_attributes;i++) {
 
         // TODO(abstephensg): Switch to glBindAttribLocation
         GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_names[i]);
@@ -1563,19 +1542,20 @@ WEAK int halide_opengl_dev_run(
         if (attrib_id == -1) {
           continue;
         }
-        
-        ST.VertexAttribPointer(attrib_id, 1, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat)*num_attributes, (void*)(i*sizeof(GLfloat)));
+
+        ST.VertexAttribPointer(attrib_id, 4, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat)*num_padded_attributes, (void*)(i*sizeof(GLfloat)*4));
         CHECK_GLERROR(1);
         
         ST.EnableVertexAttribArray(attrib_id);
         CHECK_GLERROR(1);
     }
 
+
     // Draw the scene
     ST.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, NULL);
     CHECK_GLERROR(1);
     
-    for (int i=0;i!=num_attributes;++i) {
+    for (int i=0;i!=num_packed_attributes;++i) {
         if (attrib_ids[i] != -1)
             ST.DisableVertexAttribArray(attrib_ids[i]);
     }
@@ -1662,8 +1642,8 @@ WEAK int halide_dev_run(void *user_context,
                           int shared_mem_bytes,
                           size_t arg_sizes[], void *args[],
                           char** attribute_names,
-                          int num_attributes,
-                          float** coords_per_dim,
+                          int num_padded_attributes,
+                          float* vertex_buffer,
                           int num_coords_dim0,
                           int num_coords_dim1) {
     return halide_opengl_dev_run(user_context, state_ptr,
@@ -1673,8 +1653,8 @@ WEAK int halide_dev_run(void *user_context,
                                  shared_mem_bytes,
                                  arg_sizes, args,
                                  attribute_names,
-                                 num_attributes,
-                                 coords_per_dim,
+                                 num_padded_attributes,
+                                 vertex_buffer,
                                  num_coords_dim0,
                                  num_coords_dim1);
 }
