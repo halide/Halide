@@ -55,7 +55,9 @@ extern "C" int isdigit(int c);
     GLFUNC(PFNGLGETUNIFORMLOCATIONPROC, GetUniformLocation);            \
     GLFUNC(PFNGLUNIFORM1IVPROC, Uniform1iv);                            \
     GLFUNC(PFNGLUNIFORM2IVPROC, Uniform2iv);                            \
+    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform4iv);                            \
     GLFUNC(PFNGLUNIFORM1FVPROC, Uniform1fv);                            \
+    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform4fv);                            \
     GLFUNC(PFNGLGENFRAMEBUFFERSPROC, GenFramebuffers);                  \
     GLFUNC(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers);            \
     GLFUNC(PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus);    \
@@ -878,7 +880,13 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
 
     if (kernel->program_id == 0) {
 
-        // Create the vertex shader        
+        // Create the vertex shader the runtime will output boilerplate for the
+        // vertex shader based on a fixed program plus arguments obtained from
+        // the comment header passed in the fragment shader. Since there is a
+        // relatively small number of vertices (i.e. usually only four) per
+        // vertex expressions interpolated by varying attributes are evaluated
+        // by host code on the CPU and passed to the GPU as values in the
+        // vertex buffer.
         Printer<StringStreamPrinter,1024*256> vertex_src(user_context);
 
         // Count the number of varying attributes, this is 2 for the spatial
@@ -891,7 +899,7 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
                 ++num_varying_float;
         }
 
-        int num_packed_varying_float = (num_varying_float/4) + (num_varying_float%4 != 0);
+        int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
 
         for (int i = 0; i != num_packed_varying_float; ++i) {
             vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
@@ -1226,20 +1234,70 @@ WEAK int halide_opengl_dev_run(
     ST.UseProgram(kernel->program_id);
     CHECK_GLERROR(1);
 
-    Argument *kernel_arg;
+    // TODO(abstephensg) it would be great to codegen these vec4 uniform buffers
+    // directly, instead of passing an array of arguments and then copying them
+    // out at runtime.
+
+    // Determine the number of float and int uniform parameters. This code
+    // follows the argument packing convention in CodeGen_GPU_Host and
+    // CodeGen_OpenGL_Dev
+    int num_uniform_floats = 0;
+    int num_uniform_ints = 0;
+
+    Argument *kernel_arg = kernel->arguments;
+    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+
+        // Check for a mismatch between the number of arguments declared in the
+        // fragment shader source header and the number passed to this function
+        if (!kernel_arg) {
+            error(user_context)
+            << "Too many arguments passed to halide_opengl_dev_run\n"
+            << "Argument " << i << ": size=" << i << " value=" << args[i];
+            return 1;
+        }
+
+        // Count the number of float and int uniform parameters.
+        if (kernel_arg->kind == Argument::Uniform) {
+            switch (kernel_arg->type) {
+                case Argument::Float:
+                // Integer parameters less than 32 bits wide are passed as
+                // normalized float values
+                case Argument::Int8:
+                case Argument::UInt8:
+                case Argument::Int16:
+                case Argument::UInt16:
+                    ++num_uniform_floats;
+                    break;
+                case Argument::Bool:
+                case Argument::Int32:
+                case Argument::UInt32:
+                    ++num_uniform_ints;
+                    break;
+                default:
+                    error(user_context) << "GLSL: Encountered invalid kernel argument type";
+                    return 1;
+            }
+        }
+    }
+
+    // Pad up to a multiple of four
+    int num_padded_uniform_floats = (num_uniform_floats + 0x3) & ~0x3;
+    int num_padded_uniform_ints   = (num_uniform_ints + 0x3) & ~0x3;
+
+    // Allocate storage for the packed arguments
+    float uniform_float[num_padded_uniform_floats];
+    int   uniform_int[num_padded_uniform_ints];
+
     bool bind_render_targets = true;
 
     // Copy input arguments to corresponding GLSL uniforms.
     GLint num_active_textures = 0;
+    int uniform_float_idx = 0;
+    int uniform_int_idx = 0;
+
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (!kernel_arg) {
-            error(user_context)
-                << "Too many arguments passed to halide_opengl_dev_run\n"
-                << "Argument " << i << ": size=" << i << " value=" << args[i];
-            return 1;
-        }
-        
+
         if (kernel_arg->kind == Argument::Outbuf) {
 
             // Check if the output buffer will be bound by the client instead of
@@ -1265,59 +1323,44 @@ WEAK int halide_opengl_dev_run(
             num_active_textures++;
             // TODO: check maximum number of active textures
         } else if (kernel_arg->kind == Argument::Uniform) {
-            GLint loc =
-                ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
-            CHECK_GLERROR(1);
-            if (loc == -1) {
-                // Argument was probably optimized away by GLSL compiler.
-                continue;
-            }
+
+            // Copy the uniform parameter into the packed scalar list
+            // corresponding to its type.
 
             // Note: small integers are represented as floats in GLSL.
             switch (kernel_arg->type) {
             case Argument::Float:
-                set_float_param(user_context, kernel_arg->name, loc, *(float*)args[i]);
+                uniform_float[uniform_float_idx++] = *(float*)args[i];
                 break;
-            case Argument::Bool: {
-                GLint value = *((bool*)args[i]) ? 1 : 0;
-                set_int_param(user_context, kernel_arg->name, loc, value);
+            case Argument::Bool:
+                uniform_int[uniform_int_idx++] = *((bool*)args[i]) ? 1 : 0;
                 break;
-            }
-            case Argument::Int8: {
-                GLfloat value = *((int8_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+            case Argument::Int8:
+                uniform_float[uniform_float_idx++] = *((int8_t*)args[i]);
                 break;
-            }
-            case Argument::UInt8: {
-                GLfloat value = *((uint8_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+            case Argument::UInt8:
+                uniform_float[uniform_float_idx++] = *((uint8_t*)args[i]);
                 break;
-            }
             case Argument::Int16: {
-                GLfloat value = *((int16_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+                uniform_float[uniform_float_idx++] = *((int16_t*)args[i]);
                 break;
             }
             case Argument::UInt16: {
-                GLfloat value = *((uint16_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+                uniform_float[uniform_float_idx++] = *((uint16_t*)args[i]);
                 break;
             }
             case Argument::Int32: {
-                GLint value = *((int32_t*)args[i]);
-                set_int_param(user_context, kernel_arg->name, loc, value);
+                uniform_int[uniform_int_idx++] = *((int32_t*)args[i]);
                 break;
             }
             case Argument::UInt32: {
                 uint32_t value = *((uint32_t*)args[i]);
-                GLint signed_value;
                 if (value > 0x7fffffff) {
                     error(user_context)
                         << "GLSL: argument '" << kernel_arg->name << "' is too large for GLint";
                     return -1;
                 }
-                signed_value = static_cast<GLint>(value);
-                set_int_param(user_context, kernel_arg->name, loc, signed_value);
+                uniform_int[uniform_int_idx++] = static_cast<GLint>(value);
                 break;
             }
             case Argument::Void:
@@ -1330,6 +1373,40 @@ WEAK int halide_opengl_dev_run(
     if (kernel_arg) {
         halide_error(user_context, "Too few arguments passed to halide_opengl_dev_run");
         return 1;
+    }
+
+    // Set the packed uniform int parameters
+    for (int idx = 0; idx != num_padded_uniform_ints; idx += 4) {
+
+        // Produce the uniform parameter name without using the std library.
+        Printer<StringStreamPrinter,16> name(user_context);
+        name << "_uniformi" << (idx/4);
+
+        GLint loc = ST.GetUniformLocation(kernel->program_id, name.str());
+        CHECK_GLERROR(1);
+        if (loc == -1) {
+            // Argument was probably optimized away by GLSL compiler.
+            continue;
+        }
+
+        ST.Uniform4iv(loc,1,&uniform_int[idx]);
+    }
+
+    // Set the packed uniform float parameters
+    for (int idx = 0; idx != num_padded_uniform_floats; idx += 4) {
+
+        // Produce the uniform parameter name without using the std library.
+        Printer<StringStreamPrinter,16> name(user_context);
+        name << "_uniformf" << (idx/4);
+
+        GLint loc = ST.GetUniformLocation(kernel->program_id, name.str());
+        CHECK_GLERROR(1);
+        if (loc == -1) {
+            // Argument was probably optimized away by GLSL compiler.
+            continue;
+        }
+
+        ST.Uniform4fv(loc,1,&uniform_float[idx]);
     }
 
     // Prepare framebuffer for rendering to output textures.

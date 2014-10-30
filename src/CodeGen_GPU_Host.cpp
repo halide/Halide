@@ -545,7 +545,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             int num_attributes = mesh.attributes.size();
 
             // Pad the number of attributes up to a multiple of four
-            int padded_num_attributes = (num_attributes/4 + (num_attributes%4!=0))*4;
+            int padded_num_attributes = (num_attributes + 0x3) & ~0x3;
             int num_packed_attributes = padded_num_attributes / 4;
 
             gpu_attribute_names = create_alloca_at_entry(CodeGen::i8->getPointerTo(),
@@ -681,6 +681,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
+
+        // Call CodeGen_OpenGL_Dev via a pointer to CodeGen_GPU_Dev. The stmt,
+        // function name, and arguments are passed to GLSL codegen.
+        // The arguments are used in CodeGen_GLSL::compile to output a comment
+        // header that is interpreted at runtime to determine argument types and
+        // names. CodeGen_GLSL::compile also outputs  boiler plate code for
+        // uniform and varying declarations.
         cgdev->add_kernel(loop_stmt, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop
@@ -760,10 +767,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
             builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref"),
-
-            // TODO(abstephensg): the function takes i8** and our Value has type [1 x i8*]*, which breaks in assert builds
             gpu_attribute_names,
-
             gpu_num_padded_attributes,
             gpu_vertex_buffer,
             gpu_num_coords_dim0,
