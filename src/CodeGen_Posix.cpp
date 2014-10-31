@@ -69,6 +69,7 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
     wild_u32x8(Variable::make(UInt(32, 8), "*")),
     wild_u64x4(Variable::make(UInt(64, 4), "*")),
 
+    wild_i32x16(Variable::make(Int(32, 16), "*")),
     wild_f32x2(Variable::make(Float(32, 2), "*")),
 
     wild_f32x4(Variable::make(Float(32, 4), "*")),
@@ -114,6 +115,7 @@ void CodeGen_Posix::init_module() {
     i32x2 = VectorType::get(i32, 2);
     i32x4 = VectorType::get(i32, 4);
     i32x8 = VectorType::get(i32, 8);
+    i32x16 = VectorType::get(i32, 16);
     i64x2 = VectorType::get(i64, 2);
     i64x4 = VectorType::get(i64, 4);
     f32x2 = VectorType::get(f32, 2);

@@ -41,9 +41,21 @@ using std::make_pair;
 
 using namespace llvm;
 
-CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
+  /** Various patterns to peephole match against */
+  struct Pattern {
 
-  user_warning << "Hexagon not fully setup yet\n";
+    Expr pattern;
+    //        enum PatternType {Simple = 0, LeftShift, RightShift, NarrowArgs};
+    enum PatternType {Simple = 0, LeftShift, RightShift, NarrowArgs};
+    Intrinsic::ID ID;
+    PatternType type;
+    Pattern() {}
+    Pattern(Expr p, llvm::Intrinsic::ID id, PatternType t = Simple) : pattern(p), ID(id), type(t) {}
+  };
+  std::vector<Pattern> casts, varith;
+
+CodeGen_Hexagon::CodeGen_Hexagon(Target t) : CodeGen_Posix(t) {
+  varith.push_back(Pattern(wild_i32x16 + wild_i32x16, Intrinsic::hexagon_V6_vaddw));
 }
 
 void CodeGen_Hexagon::compile(Stmt stmt, string name,
@@ -88,29 +100,8 @@ string CodeGen_Hexagon::mattrs() const {
 bool CodeGen_Hexagon::use_soft_float_abi() const {
   return false;
 }
-void CodeGen_Hexagon::visit(const Load *op) {
-  const Ramp *ramp = op->index.as<Ramp>();
 
-    // We only deal with ramps here
-  if (!ramp) {
-    debug(1) << "Dealing with a ramp\n";
-    CodeGen::visit(op);
-  }
 
-  CodeGen::visit(op);
-  return;
-}
-
-void CodeGen_Hexagon::visit(const Store *op) {
-      const Ramp *ramp = op->index.as<Ramp>();
-
-    // We only deal with ramps here
-    if (ramp) {
-      debug(1) << "Dealing with a ramp " << op << "\n";
-    }
-    CodeGen::visit(op);
-    return;
-}
 static bool canUseVadd(const Add *op) {
   const Ramp *RampA = op->a.as<Ramp>();
   const Ramp *RampB = op->b.as<Ramp>();
@@ -132,27 +123,44 @@ static bool canUseVadd(const Add *op) {
 }
 
 void CodeGen_Hexagon::visit(const Add *op) {
-  if (canUseVadd(op)) {
-    Intrinsic::ID ID = Intrinsic::hexagon_V6_vaddw;
-    llvm::Function *F = Intrinsic::getDeclaration(module, ID);
-    Value *Op1 = codegen(op->a);
-    Value *Op2 = codegen(op->b);
-    value = builder->CreateCall2(F, Op1, Op2);
+  // if (canUseVadd(op)) {
+  //   Intrinsic::ID ID = Intrinsic::hexagon_V6_vaddw;
+  //   llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+  //   Value *Op1 = codegen(op->a);
+  //   Value *Op2 = codegen(op->b);
+  //   value = builder->CreateCall2(F, Op1, Op2);
+  // }
+  // else
+  vector<Expr> matches;
+  for (size_t I = 0; I < varith.size(); ++I) {
+    const Pattern &P = varith[I];
+    if (expr_match(P.pattern, op, matches)) {
+        Intrinsic::ID ID = P.ID;
+        llvm::Function *F = Intrinsic::getDeclaration(module, ID);
+        Value *Op1 = codegen(matches[0]);
+        Value *Op2 = codegen(matches[1]);
+        value = builder->CreateCall2(F, Op1, Op2);
+        return;
+      }
   }
-  else
-    CodeGen::visit(op);
+  CodeGen::visit(op);
   return;
 }
 
   void CodeGen_Hexagon::visit(const Broadcast *op) {
-    int Width = op->width;
-    if (Width == 16) {
+    //    int Width = op->width;
+    Expr WildI32 = Variable::make(Int(32), "*");
+    Expr PatternMatch = Broadcast::make(WildI32, 16);
+    vector<Expr> Matches;
+    if (expr_match(PatternMatch, op, Matches)) {
+        //    if (Width == 16) {
       Intrinsic::ID ID = Intrinsic::hexagon_V6_lvsplatw;
       llvm::Function *F = Intrinsic::getDeclaration(module, ID);
       Value *Op1 = codegen(op->value);
       value = builder->CreateCall(F, Op1);
-
+      return;
     }
+    CodeGen::visit(op);
   }
 }}
 
