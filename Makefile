@@ -60,6 +60,11 @@ ifeq ($(LLVM_VERSION_TIMES_10), 35)
 CXX11 = true
 endif
 
+# turn on c++11 for llvm 3.6
+ifeq ($(LLVM_VERSION_TIMES_10), 36)
+CXX11 = true
+endif
+
 ifeq ($(CXX11),true)
 LLVM_CXX_FLAGS += -std=c++11
 TEST_CXX_FLAGS += -std=c++11
