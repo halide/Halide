@@ -113,7 +113,7 @@ build_arm/halide_game_of_life.o: halide_game_of_life
 build_pnacl/halide_game_of_life.bc: halide_game_of_life
 	mkdir -p build_pnacl
 	cd build_pnacl; \
-	HL_TARGET=pnacl-64 \
+	HL_TARGET=pnacl-32-nacl \
 	DYLD_LIBRARY_PATH=../../../bin \
 	LD_LIBRARY_PATH=../../../bin \
 	../halide_game_of_life
