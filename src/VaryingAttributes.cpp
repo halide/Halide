@@ -395,9 +395,15 @@ public:
     std::string name;
     unsigned int order;
     bool found;
-  
+
     unsigned int total_found = 0;
-    const unsigned int max_expressions = 14;
+
+    // This parameter controls the maximum number of linearly varying
+    // expressions halide will pull out of the fragment shader and evaluate per
+    // vertex, and allow the GPU to linearly interpolate across the domain. For
+    // OpenGL ES 2.0 we can pass 16 vec4 varying attributes, or 64 scalars. Two
+    // scalar slots are used by boilerplate code to pass pixel coordinates.
+    const unsigned int max_expressions = 62;
 };
 
 Stmt find_linear_expressions(Stmt s) {
@@ -885,8 +891,8 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                     
                     if (contains_variable(eq, var_name)) {
 
-// TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-/*
+                        // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+                        /*
                         Expr solution = solve_for_linear_variable_or_fail(eq, Var(var_name));
                         
                         if (solution.defined()) {
@@ -898,11 +904,11 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                             result.coords[dim].push_back(rhs);
                         }
                         else {
-*/
-                            internal_error << "DID NOT SOLVE: " << varying_name << " FOR: " << var_name << " EXPR: " << eq << "\n";
-/*
+                        */
+                        internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << var_name << " expr: " << eq << "\n";
+                        /*
                         }
-*/
+                        */
                     }
                 }
             }
