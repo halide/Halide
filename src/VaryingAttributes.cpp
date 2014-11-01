@@ -45,15 +45,14 @@ public:
     Scope<Expr> scope;
 };
     
-/** Find expressions that we can evaluate with interpolation hardware in the GPU
- *
- * This visitor keeps track of the "order" of the expression in terms of the
- * specified variables. The order value 0 means that the expression is contant;
- * order value 1 means that it is linear in terms of only one variable, check
- * the member found to determine which; order value 2 means non-linear, it
- * could be disqualified due to being quadratic, bilinear or the result of an
- * unknown function.
- */
+// Find expressions that we can evaluate with interpolation hardware in the GPU
+//
+// This visitor keeps track of the "order" of the expression in terms of the
+// specified variables. The order value 0 means that the expression is contant;
+// order value 1 means that it is linear in terms of only one variable, check
+// the member found to determine which; order value 2 means non-linear, it
+// could be disqualified due to being quadratic, bilinear or the result of an
+// unknown function.
 class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
@@ -413,11 +412,10 @@ Stmt find_linear_expressions(Stmt s) {
 
 
 
-/** Produce an expression containing a traversal through the branches in an IR 
- * tree based on a boolean vector of branch choices. For each binary branch
- * encountered, the boolean value indicates which expression is included in the
- * result.
- */
+// Produce an expression containing a traversal through the branches in an IR
+// tree based on a boolean vector of branch choices. For each binary branch
+// encountered, the boolean value indicates which expression is included in the
+// result.
 class TraverseBranches : public IRMutator
 {
 public:
@@ -456,9 +454,8 @@ public:
     int depth;
 };
     
-/** This visitor traverses the IR tree to find vectors of branch choices to 
- supply to TraverseBranches.
- */
+// This visitor traverses the IR tree to find vectors of branch choices to
+//  supply to TraverseBranches.
 class EnumerateBranches : public IRVisitor
 {
 public:
@@ -521,10 +518,9 @@ public:
     int count = 0;
 };
 
-/** This function returns a vector containing an expression for each possible
- branch within the specified expression. If the expression does not contain
- any branches, an empty vector is returned.
- */
+// This function returns a vector containing an expression for each possible
+// branch within the specified expression. If the expression does not contain
+// any branches, an empty vector is returned.
 std::vector<Expr> enumerate_branches(Expr root) {
     EnumerateBranches e;
     e.root = root;
@@ -567,7 +563,8 @@ Type type_of_variable(Expr e, const std::string& name)
     ContainsVariable c(name);
     e.accept(&c);
     
-    internal_assert(c.found) << "Expression " << e << " does not contain variable " << name << "\n";
+    internal_assert(c.found) << "Expression " << e
+                             << " does not contain variable " << name << "\n";
     
     return c.result->type;
 }
@@ -810,8 +807,8 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     // The GPU will take texture coordinates at pixel centers during
     // interpolation, we offset the Halide integer grid by 0.5 so that these
     // coordinates line up on integer coordinate values.
-    for (auto v : varyings) {
-        varyings[v.first] = CastVariablesToFloatAndOffset({loop0->name,loop1->name}).mutate(v.second);
+    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+        varyings[v->first] = CastVariablesToFloatAndOffset({loop0->name,loop1->name}).mutate(v->second);
     }
     
     // Establish and order for the attributes in each vertex
@@ -847,7 +844,11 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     
     result.coords[1].push_back(loop1->min);
     result.coords[1].push_back(loop1_max);
-    
+
+
+    /*
+    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+
     // Varying attribute expressions often contain piecewise linear
     // components, especially at the image border. These expressions often
     // depend on unknown parameters and cannot be evaluated during
@@ -891,8 +892,6 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                     
                     if (contains_variable(eq, var_name)) {
 
-                        // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-                        /*
                         Expr solution = solve_for_linear_variable_or_fail(eq, Var(var_name));
                         
                         if (solution.defined()) {
@@ -904,25 +903,23 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                             result.coords[dim].push_back(rhs);
                         }
                         else {
-                        */
-                        internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << var_name << " expr: " << eq << "\n";
-                        /*
+                            internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << var_name << " expr: " << eq << "\n";
                         }
-                        */
                     }
                 }
             }
         }
         debug(2) << "\n";
     }
-    
+    */
+
     // Create a list of expressions for each varying attribute that evaluates
     // it at each coordinate in the unsorted order of the coordinates found
     // above
     
-    for (auto v : varyings) {
+    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
         
-        std::string varying_name = v.first;
+        std::string varying_name = v->first;
         
         // Iterate over all of the coordinates for the variable in this
         // varying attribute expression
@@ -935,33 +932,33 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
         // loop variables. Produce pairs of let expressions to evaluate each
         // varying attribute expression at each pair of coordinates
         
-        for (auto y : result.coords[1]) {
+        for (unsigned y = 0; y != result.coords[1].size(); ++y) {
             
             // Check if the varying expression contains the y dimension
             // variable and has the same type
-            Expr cast_y = y;
+            Expr cast_y = result.coords[1][y];
             
             ContainsVariable c(loop1->name);
-            v.second.accept(&c);
+            v->second.accept(&c);
             
-            if (c.found && (c.result->type != y.type())) {
-                cast_y = Cast::make(c.result->type,y);
+            if (c.found && (c.result->type != cast_y.type())) {
+                cast_y = Cast::make(c.result->type,cast_y);
             }
 
-            for (auto x : result.coords[0]) {
+            for (unsigned x = 0; x != result.coords[0].size(); ++x) {
                 
                 // Check if the varying expression contains the y dimension
                 // variable and has the same type
-                Expr cast_x = x;
+                Expr cast_x = result.coords[0][x];
                 
                 ContainsVariable c(loop0->name);
-                v.second.accept(&c);
+                v->second.accept(&c);
                 
-                if (c.found && (c.result->type != x.type())) {
-                    cast_x = Cast::make(c.result->type,x);
+                if (c.found && (c.result->type != cast_x.type())) {
+                    cast_x = Cast::make(c.result->type,cast_x);
                 }
 
-                Expr value = Let::make(loop1->name, cast_y, Let::make(loop0->name, cast_x, v.second));
+                Expr value = Let::make(loop1->name, cast_y, Let::make(loop0->name, cast_x, v->second));
                 
                 // Clean up the lets and other redundant terms
                 value = simplify(value);
@@ -971,15 +968,16 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
             }
         }
     }
-    
+
+    // Output coordinates for debugging
     debug(1) << "MESH COORD EXPRESSIONS:\n";
     
-    for (int a=0;a!=(int)result.coords.size();++a) {
+    for (unsigned a=0;a!=result.coords.size();++a) {
         std::string attrib_name = result.attributes[a];
         debug(1) << attrib_name << " (total: " << result.coords[a].size() << ")\n";
 
-        for (auto c : result.coords[a]) {
-            debug(1) << "    " << c << "\n";
+        for (std::vector<Expr>::const_iterator c = result.coords[a].begin(); c != result.coords[a].end(); ++c) {
+            debug(1) << "    " << *c << "\n";
         }
     }
     
