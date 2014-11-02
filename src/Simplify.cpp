@@ -1961,8 +1961,10 @@ private:
             if (const float *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") expr = floorf(*f);
                 else if (op->name == "ceil_f32") expr = ceilf(*f);
+#if _MSC_VER == 0 || _MSC_VER >= 1800
                 else if (op->name == "round_f32") expr = nearbyintf(*f);
                 else if (op->name == "trunc_f32") expr = truncf(*f);
+#endif
             } else if (call && call->call_type == Call::Extern &&
                        (call->name == "floor_f32" || call->name == "ceil_f32" ||
                         call->name == "round_f32" || call->name == "trunc_f32")) {
