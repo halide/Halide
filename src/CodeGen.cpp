@@ -345,7 +345,7 @@ void CodeGen::compile(Stmt stmt, string name,
     debug(2) << "Done generating llvm bitcode\n";
 
     // Optimize it
-    optimize_module();
+    // optimize_module();
 }
 
 llvm::Type *CodeGen::llvm_type_of(Type t) {
@@ -382,8 +382,8 @@ void CodeGen::optimize_module() {
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
-    // TODO: Commented out for workaround for crash in PassManagerImpl due to NULL DL
-    // module_pass_manager.run(*module);
+    // TODO: Comment out for workaround for crash in PassManagerImpl due to NULL DL
+    module_pass_manager.run(*module);
     if (!function_name.empty()) {
         llvm::Function *fn = module->getFunction(function_name);
         internal_assert(fn) << "Could not find function " << function_name << " inside llvm module\n";
