@@ -19,7 +19,7 @@ void simple_version(float* A, float *B, float *C, int width, int stride) {
 
 
 int main(int argc, char **argv) {
-    const int width = 992, block_size = 32;
+    const int matrix_size = 992, block_size = 32;
 
     ImageParam A(type_of<float>(), 2);
     ImageParam B(type_of<float>(), 2);
@@ -27,7 +27,7 @@ int main(int argc, char **argv) {
     Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yo");
     Func matrix_mul("matrix_mul");
 
-    RDom k(0, width);
+    RDom k(0, matrix_size);
     RVar ki;
 
     matrix_mul(x, y) = 0.0f;
@@ -37,21 +37,21 @@ int main(int argc, char **argv) {
 
     matrix_mul.update(0).split(x, x, xi, block_size).split(y, y, yi, block_size).split(k, k, ki, block_size).reorder(xi, ki, yi, k, x, y).parallel(y).vectorize(xi, 4).unroll(xi, 4);
 
-    matrix_mul.bound(x, 0, width);
-    matrix_mul.bound(y, 0, width);
+    matrix_mul.bound(x, 0, matrix_size);
+    matrix_mul.bound(y, 0, matrix_size);
 
     matrix_mul.compile_jit();
 
 
     const int iterations = 50;
 
-    Image<float> mat_A(width, width);
-    Image<float> mat_B(width, width);
-    Image<float> output(width, width);
+    Image<float> mat_A(matrix_size, matrix_size);
+    Image<float> mat_B(matrix_size, matrix_size);
+    Image<float> output(matrix_size, matrix_size);
 
     // init randomly
-    for(int iy = 0; iy < width; iy++) {
-        for(int ix = 0; ix < width; ix++) {
+    for(int iy = 0; iy < matrix_size; iy++) {
+        for(int ix = 0; ix < matrix_size; ix++) {
             mat_A(ix, iy) = (rand() % 256) / 256.0f;
             mat_B(ix, iy) = (rand() % 256) / 256.0f;
         }
@@ -72,15 +72,15 @@ int main(int argc, char **argv) {
 
 
     // check results
-    Image<float> output_ref(width, width);
-    Image<float> output_halide(width, width);
+    Image<float> output_ref(matrix_size, matrix_size);
+    Image<float> output_halide(matrix_size, matrix_size);
 
     simple_version(mat_A.data(), mat_B.data(), output_ref.data(), mat_A.width(), mat_A.stride(1));
     matrix_mul.realize(output_halide);
 
     bool halide_correct = true;
-    for(int iy = 0; iy < width && halide_correct; iy++) {
-        for(int ix = 0; ix < width; ix++) {
+    for(int iy = 0; iy < matrix_size && halide_correct; iy++) {
+        for(int ix = 0; ix < matrix_size; ix++) {
             halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.000001f);
         }
     }
@@ -90,7 +90,7 @@ int main(int argc, char **argv) {
     else
         printf("Halide results - FAIL\n");
 
-    float flops = 2.0f * width * width * width;
+    float flops = 2.0f * matrix_size * matrix_size * matrix_size;
 
     printf("halide: %fms, %f MFLOP/s\n\n", t, (flops / t) * iterations / 1000);
 
