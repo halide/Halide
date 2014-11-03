@@ -366,7 +366,7 @@ protected:
 
 class GeneratorBase : public NamesInterface {
 public:
-    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
+    GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
