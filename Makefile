@@ -358,12 +358,6 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
 	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
 
-ifeq ($(CXX11),true)
-build_tests: \
-	$(GENERATOR_TESTS:test/generator/%_aottest.cpp=$(BIN_DIR)/generator_aot_%) \
-	$(GENERATOR_TESTS:test/generator/%_jittest.cpp=$(BIN_DIR)/generator_jit_%)
-endif
-
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
@@ -460,7 +454,7 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 
 # By default, %_aottest.cpp depends on $(FILTERS_DIR)/%.o/.h (but not libHalide).
 $(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h include/HalideRuntime.h
-	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread -o $@
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread $(STATIC_TEST_LIBS) -o $@
 
 # By default, %_jittest.cpp depends on libHalide.
 $(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
