@@ -4,17 +4,13 @@
 
 using namespace Halide;
 
-void simple_version(float* A, float *B, float *C, int width, int stride)
-{
-    for(int iy = 0; iy < width; iy++)
-    {
-        for(int ix = 0; ix < width; ix++)
-        {
+void simple_version(float* A, float *B, float *C, int width, int stride) {
+    for(int iy = 0; iy < width; iy++) {
+        for(int ix = 0; ix < width; ix++) {
             float *cc = C + iy * stride + ix;
             *cc = 0.0f;
 
-            for(int ik = 0; ik < width; ik++)
-            {
+            for(int ik = 0; ik < width; ik++) {
                 *cc = *cc + A[iy * stride + ik] * B[ik * stride + ix];
             }
         }
@@ -39,12 +35,7 @@ int main(int argc, char **argv) {
 
     matrix_mul.vectorize(x, 4);
 
-    matrix_mul.update(0).split(x, x, xi, block_size);
-    matrix_mul.update(0).split(y, y, yi, block_size);
-    matrix_mul.update(0).split(k, k, ki, block_size);
-
-    matrix_mul.update(0).reorder(xi, ki, yi, k, x, y);
-    matrix_mul.update(0).parallel(y).vectorize(xi, 8).unroll(xi, 4);
+    matrix_mul.update(0).split(x, x, xi, block_size).split(y, y, yi, block_size).split(k, k, ki, block_size).reorder(xi, ki, yi, k, x, y).parallel(y).vectorize(xi, 4).unroll(xi, 4);
 
     matrix_mul.bound(x, 0, width);
     matrix_mul.bound(y, 0, width);
@@ -59,10 +50,8 @@ int main(int argc, char **argv) {
     Image<float> output(width, width);
 
     // init randomly
-    for(int iy = 0; iy < width; iy++)
-    {
-        for(int ix = 0; ix < width; ix++)
-        {
+    for(int iy = 0; iy < width; iy++) {
+        for(int ix = 0; ix < width; ix++) {
             mat_A(ix, iy) = (rand() % 256) / 256.0f;
             mat_B(ix, iy) = (rand() % 256) / 256.0f;
         }
@@ -90,17 +79,9 @@ int main(int argc, char **argv) {
     matrix_mul.realize(output_halide);
 
     bool halide_correct = true;
-    for(int iy = 0; iy < width && halide_correct; iy++)
-    {
-        for(int ix = 0; ix < width; ix++)
-        {
+    for(int iy = 0; iy < width && halide_correct; iy++) {
+        for(int ix = 0; ix < width; ix++) {
             halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.000001f);
-
-            // if(std::abs(output_ref(ix, iy) - output_halide(ix, iy)) > 0.000001f)
-            // {
-            //     printf("%d %d %f %f\n", ix, iy, output_ref(ix, iy), output_halide(ix, iy));
-            //     break;
-            // }
         }
     }
 
@@ -111,7 +92,7 @@ int main(int argc, char **argv) {
 
     float flops = 2.0f * width * width * width;
 
-    printf("halide: %f MFLOP/s\n\n", (flops / t) * iterations / 1000);
+    printf("halide: %fms, %f MFLOP/s\n\n", t, (flops / t) * iterations / 1000);
 
     printf("Success!\n");
     return 0;
