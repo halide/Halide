@@ -33,16 +33,19 @@ bool is_valid_name(const std::string& n) {
 namespace Halide {
 namespace Internal {
 
-const std::map<std::string, Halide::Type> halide_type_enum_map{
-    {"int8", Halide::Int(8)},
-    {"int16", Halide::Int(16)},
-    {"int32", Halide::Int(32)},
-    {"uint8", Halide::UInt(8)},
-    {"uint16", Halide::UInt(16)},
-    {"uint32", Halide::UInt(32)},
-    {"float32", Halide::Float(32)},
-    {"float64", Halide::Float(64)}
-};
+const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
+    static const std::map<std::string, Halide::Type> halide_type_enum_map{
+        {"int8", Halide::Int(8)},
+        {"int16", Halide::Int(16)},
+        {"int32", Halide::Int(32)},
+        {"uint8", Halide::UInt(8)},
+        {"uint16", Halide::UInt(16)},
+        {"uint32", Halide::UInt(32)},
+        {"float32", Halide::Float(32)},
+        {"float64", Halide::Float(64)}
+    };
+    return halide_type_enum_map;
+}
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
