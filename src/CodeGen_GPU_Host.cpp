@@ -336,7 +336,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     builder->CreateBr(entry);
 
     // Optimize the module
-    CodeGen::optimize_module();
+    // CodeGen::optimize_module();
 }
 
 template<typename CodeGen_CPU>
