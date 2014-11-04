@@ -363,15 +363,29 @@ private:
         }
     }
 
-    template<class LetOp>
-    void visit_let(const LetOp *op) {
+    void visit(const Let *op) {
         scope.push(op->name, op->value);
-        op->body.accept(this);
+        expr = mutate(op->body);
         scope.pop(op->name);
+
+        if (expr.same_as(op->body)) {
+            expr = op;
+        } else {
+            expr = Let::make(op->name, op->value, expr);
+        }
     }
 
-    void visit(const Let *op) {visit_let(op);}
-    void visit(const LetStmt *op) {visit_let(op);}
+    void visit(const LetStmt *op) {
+        scope.push(op->name, op->value);
+        stmt = mutate(op->body);
+        scope.pop(op->name);
+
+        if (stmt.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, op->value, stmt);
+        }
+    }
 };
 
 Stmt normalize_if_stmts(Stmt stmt, const Scope<Expr> &scope) {
@@ -480,15 +494,17 @@ class NormalizeSelect : public IRMutator {
         }
     }
 
-    template<class LetOp>
-    void visit_let(const LetOp *op) {
+    void visit(const LetStmt *op) {
         scope.push(op->name, op->value);
-        op->body.accept(this);
+        stmt = mutate(op->body);
         scope.pop(op->name);
-    }
 
-    void visit(const Let *op) {visit_let(op);}
-    void visit(const LetStmt *op) {visit_let(op);}
+        if (stmt.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = LetStmt::make(op->name, op->value, stmt);
+        }
+    }
 };
 
 Expr normalize_select(Expr expr, const Scope<Expr> &scope) {
@@ -918,7 +934,6 @@ public:
         b2 = make_branch(min2, ext2, b);
 
         bounds_info.pop(name);
-
         return true;
     }
 
@@ -1180,22 +1195,22 @@ public:
         b.expr = Op::make(ab[0], ab[1]);
     }
 
-    void update_branch(Branch &b, const Add *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Sub *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Mul *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Div *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Mod *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Min *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Max *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Add *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Sub *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Mul *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Div *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Mod *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Min *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Max *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
 
-    void update_branch(Branch &b, const EQ *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const NE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const LT *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const LE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const GT *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const GE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const And *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Or *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const EQ *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const NE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const LT *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const LE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const GT *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const GE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const And *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
+    void update_branch(Branch &b, const Or *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
 
     template<class Op>
     void visit_binary_op(const Op *op) {
@@ -1320,7 +1335,6 @@ public:
 
     void update_branch(Branch &b, const LetStmt *op, std::vector<StmtOrExpr> &args) {
         b.stmt = LetStmt::make(op->name, args[0], args[1]);
-        // debug(0) << "Updated let branch:\n" << b.stmt << "\n";
     }
 
     template<class LetOp>
@@ -1672,7 +1686,7 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-#if 1
+#if 0
     debug(0) << "Specializing branched loops in stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
     debug(0) << "Specialized stmt:\n" << s << "\n";
