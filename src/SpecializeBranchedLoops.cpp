@@ -505,7 +505,7 @@ struct Branch {
 };
 
 bool operator< (const Branch &b1, const Branch &b2) {
-    static const IRDeepCompare compare;
+    static IRDeepCompare compare;
     if (equal(b1.min, b2.min)) {
         return compare(b1.extent, b2.extent);
     } else {
@@ -1439,7 +1439,9 @@ public:
         children[0] = op->min;
         children[1] = op->extent;
         children[2] = op->body;
+        free_vars.push(op->name, 0);
         branch_children(op, children);
+        free_vars.pop(op->name);
     }
 #else
     void update_branch(Branch &b, const For *op, const std::vector<StmtOrExpr> &args) {
@@ -1670,7 +1672,7 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-#if 0
+#if 1
     debug(0) << "Specializing branched loops in stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
     debug(0) << "Specialized stmt:\n" << s << "\n";
