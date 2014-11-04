@@ -1,5 +1,5 @@
-#include <set>
-#include <stack>
+#include <queue>
+#include <vector>
 
 #include "SpecializeBranchedLoops.h"
 #include "IREquality.h"
@@ -19,6 +19,34 @@ namespace {
 // combinatorial explosion of code generation.
 static const int branching_limit = 10;
 
+// A variant type that encapsulates a Stmt or Expr handle.
+class StmtOrExpr {
+public:
+    StmtOrExpr() {}
+    StmtOrExpr(Stmt s) : stmt(s) {}
+    StmtOrExpr(Expr e) : expr(e) {}
+
+    bool is_stmt() const {return stmt.defined();}
+    bool is_expr() const {return expr.defined();}
+    bool defined() const {return is_stmt() || is_expr();}
+
+    void accept(IRVisitor *visit) {
+        if (is_stmt()) {
+            stmt.accept(visit);
+        } else {
+            expr.accept(visit);
+        }
+    }
+
+    StmtOrExpr operator= (Stmt s) {stmt = s; expr = Expr(); return *this;}
+    StmtOrExpr operator= (Expr e) {stmt = Stmt(); expr = e; return *this;}
+
+    operator Stmt() const {return stmt;}
+    operator Expr() const {return expr;}
+private:
+    Stmt stmt;
+    Expr expr;
+};
 
 // The generic version of this class doesn't work for our
 // purposes. We need to dive into the current scope to decide if a
@@ -100,7 +128,7 @@ public:
             if (bounds_info.contains(name)) {
                 var_bounds = bounds_info.get(name);
             } else {
-                var_bounds = Interval(Int(32).min(), Int(32).max());
+                var_bounds = Interval(Expr(), Expr());
             }
 
             const LT *lt = solve.as<LT>();
@@ -109,28 +137,28 @@ public:
             const GE *ge = solve.as<GE>();
             if (lt) {
                 min_then = var_bounds.min;
-                max_then = min(lt->b - 1, var_bounds.max);
+                max_then = var_bounds.max.defined()? min(lt->b - 1, var_bounds.max): lt->b - 1;
 
-                min_else = max(var_bounds.min, lt->b);
+                min_else = var_bounds.min.defined()? max(var_bounds.min, lt->b): lt->b;
                 max_else = var_bounds.max;
             } else if (le) {
                 min_then = var_bounds.min;
-                max_then = min(le->b, var_bounds.max);
+                max_then = var_bounds.max.defined()? min(le->b, var_bounds.max): le->b;
 
-                min_else = max(var_bounds.min, le->b + 1);
+                min_else = var_bounds.min.defined()? max(var_bounds.min, le->b + 1): le->b + 1;
                 max_else = var_bounds.max;
             } else if (gt) {
-                min_then = max(var_bounds.min, gt->b + 1);
+                min_then = var_bounds.min.defined()? max(var_bounds.min, gt->b + 1): gt->b + 1;
                 max_then = var_bounds.max;
 
                 min_else = var_bounds.min;
-                max_else = min(gt->b, var_bounds.max);
+                max_else = var_bounds.max.defined()? min(gt->b, var_bounds.max): gt->b;
             } else if (ge) {
-                min_then = max(var_bounds.min, ge->b);
+                min_then = var_bounds.min.defined()? max(var_bounds.min, ge->b): ge->b;
                 max_then = var_bounds.max;
 
                 min_else = var_bounds.min;
-                max_else = min(ge->b - 1, var_bounds.max);
+                max_else = var_bounds.max.defined()? min(ge->b - 1, var_bounds.max): ge->b - 1;
             }
 
             bounds_info.push(name, Interval(min_then, max_then));
@@ -476,14 +504,24 @@ struct Branch {
     Stmt stmt;
 };
 
+bool operator< (const Branch &b1, const Branch &b2) {
+    static const IRDeepCompare compare;
+    if (equal(b1.min, b2.min)) {
+        return compare(b1.extent, b2.extent);
+    } else {
+        return compare(b1.min, b2.min);
+    }
+}
+
 std::ostream &operator<<(std::ostream &out, const Branch &b) {
-    out << "branch(" << b.min << ", " << b.extent << "): ";
+    out << "branch(" << b.min << ", " << b.extent << "): {";
     if (b.expr.defined()) {
-        out << b.expr << "\n";
+        out << b.expr;
     }
     if (b.stmt.defined()) {
         out << "\n" << b.stmt;
     }
+    out << "}";
     return out;
 }
 
@@ -634,7 +672,7 @@ public:
     Stmt construct_stmt() {
         Stmt stmt;
         bool first = true;
-        std::stack<std::string> bounds_vars;
+        std::queue<std::string> bounds_vars;
         for (int i = branches.size()-1; i >= 0; --i) {
             Branch &b = branches[i];
             Expr b_min = b.min;
@@ -648,18 +686,18 @@ public:
             // of branches.
             std::ostringstream branch_name;
             branch_name << name << ".b" << i;
-            if (!min.as<Variable>()) {
-                std::string min_name = branch_name.str() + ".min";
-                bounds_vars.push(min_name);
-                scope.push(min_name, b_min);
-                b_min = Variable::make(b_min.type(), min_name);
-            }
-
-            if (!extent.as<Variable>()) {
+            if (should_extract(extent)) {
                 std::string extent_name = branch_name.str() + ".extent";
                 bounds_vars.push(extent_name);
                 scope.push(extent_name, b_extent);
                 b_extent = Variable::make(b_extent.type(), extent_name);
+            }
+
+            if (should_extract(min)) {
+                std::string min_name = branch_name.str() + ".min";
+                bounds_vars.push(min_name);
+                scope.push(min_name, b_min);
+                b_min = Variable::make(b_min.type(), min_name);
             }
 
             Stmt branch_stmt = simplify(b.stmt, true, bounds_info);
@@ -675,7 +713,7 @@ public:
         }
 
         while (!bounds_vars.empty()) {
-            const std::string &var = bounds_vars.top();
+            const std::string &var = bounds_vars.front();
             stmt = LetStmt::make(var, scope.get(var), stmt);
             scope.pop(var);
             bounds_vars.pop();
@@ -695,155 +733,382 @@ public:
         std::cout << "\n";
     }
 
-    void get_branch_content(const Branch &b, Expr &expr) {expr = b.expr;}
-    void get_branch_content(const Branch &b, Stmt &stmt) {stmt = b.stmt;}
+    void get_branch_content(const Branch &b, StmtOrExpr &stmt_or_expr) {
+        if (b.expr.defined()) {
+            stmt_or_expr = b.expr;
+        } else {
+            stmt_or_expr = b.stmt;
+        }
+    }
 
-    void set_branch_content(const Expr &expr, Branch &b) {b.expr = expr;}
-    void set_branch_content(const Stmt &stmt, Branch &b) {b.stmt = stmt;}
+    // A method used to test if we should pull out a min/extent expr
+    // into a let stmt, modified from CSE.cpp
+    bool should_extract(Expr e) {
+        if (is_const(e)) {
+            return false;
+        }
 
-    template<class StmtOrExpr>
+        if (e.as<Variable>()) {
+            return false;
+        }
+
+        if (const Cast *a = e.as<Cast>()) {
+            return should_extract(a->value);
+        }
+
+        if (const Add *a = e.as<Add>()) {
+            return !(is_const(a->a) || is_const(a->b));
+        }
+
+        if (const Sub *a = e.as<Sub>()) {
+            return !(is_const(a->a) || is_const(a->b));
+        }
+
+        if (const Mul *a = e.as<Mul>()) {
+            return !(is_const(a->a) || is_const(a->b));
+        }
+
+        if (const Div *a = e.as<Div>()) {
+            return !(is_const(a->a) || is_const(a->b));
+        }
+
+        return true;
+    }
+
+    // template<class StmtOrExpr>
     Branch make_branch(Expr min, Expr extent, StmtOrExpr content) {
         Branch b;
         b.min = min;
         b.extent = extent;
-        set_branch_content(content, b);
+        if (content.is_stmt()) {
+            b.stmt = content;
+        } else {
+            b.expr = content;
+        }
 
         // debug(0) << "Making branch: " << b << "\n";
 
         return b;
     }
 
-    // Build a pair of branches for 2 exprs, based on a simple inequality conditional.
-    // It is assumed that the inequality has been solved and so the variable of interest
-    // is on the left hand side.
-    template<class StmtOrExpr>
-    bool build_branches(Expr cond, StmtOrExpr a, StmtOrExpr b, Branch &b1, Branch &b2) {
+    // Try to prove an expr can be reduced to a constant true or false value.
+    bool can_prove_expr(Expr expr, bool &is_true) {
+        expr = simplify(expr, true, bounds_info);
+        if (is_zero(expr)) {
+            is_true = false;
+            return true;
+        } else if (is_one(expr)) {
+            is_true = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    // Try to prove if the point is in the given range. Return true if
+    // we can proved this, and set in_range to the proved
+    // value. Otherwise, we return false if this can't be proved.
+    bool can_prove_in_range(Expr point, Expr min, Expr extent, bool &in_range) {
+        Expr test = point >= min && point < min + extent;
+        return can_prove_expr(test, in_range);
+    }
+
+    Expr branch_point(Expr cond, bool &swap) {
         const LE *le = cond.as<LE>();
         const GE *ge = cond.as<GE>();
         const LT *lt = cond.as<LT>();
         const GT *gt = cond.as<GT>();
 
-        // debug(0) << "Branching in the range [" << min << ", " << simplify(min+extent) << ") "
-        //          << "on condition: " << cond << "\n";
-
-        Expr min1 = min, min2;
-        Expr ext1, ext2;
+        swap = false;
         if (le) {
             if (is_zero(le->a)) {
                 if (is_zero(le->b) || is_positive_const(le->b)) {
-                    ext1 = extent;
+                    return simplify(min + extent - 1);
                 } else {
-                    ext1 = 0;
+                    return min;
                 }
             } else {
-                ext1 = simplify(Min::make(max(le->b - min1 + 1, 0), extent), true, bounds_info);
+                return simplify(le->b + 1);
             }
         } else if (lt) {
             if (is_zero(lt->a)) {
                 if (is_positive_const(lt->b)) {
-                    ext1 = extent;
+                    return simplify(min + extent - 1);
                 } else {
-                    ext1 = 0;
+                    return min;
                 }
             } else {
-                ext1 = simplify(Min::make(max(lt->b - min1, 0), extent), true, bounds_info);
+                return simplify(lt->b);
             }
         } else if (ge) {
             if (is_zero(ge->a)) {
                 if (is_zero(ge->b) || is_negative_const(ge->b)) {
-                    ext1 = extent;
+                    return simplify(min + extent - 1);
                 } else {
-                    ext1 = 0;
+                    return min;
                 }
             } else {
-                ext1 = simplify(Min::make(max(ge->b - min1, 0), extent), true, bounds_info);
-                std::swap(a, b);
+                swap = true;
+                return simplify(ge->b);
             }
         } else if (gt) {
             if (is_zero(gt->a)) {
                 if (is_negative_const(gt->b)) {
-                    ext1 = extent;
+                    return simplify(min + extent);
                 } else {
-                    ext1 = 0;
+                    return min;
                 }
             } else {
-                ext1 = simplify(Min::make(max(gt->b - min1 + 1, 0), extent), true, bounds_info);
-                std::swap(a, b);
+                swap = true;
+                return simplify(gt->b + 1);
             }
-        } else {
-            return false;
         }
 
-        min2 = simplify(min1 + ext1, true, bounds_info);
-        ext2 = simplify(max(extent - ext1, 0), true, bounds_info);
+        return Expr();
+    }
+
+    // Build a pair of branches for 2 exprs, based on a simple inequality conditional.
+    // It is assumed that the inequality has been solved and so the variable of interest
+    // is on the left hand side.
+    // template<class StmtOrExpr>
+    bool build_branches(Expr cond, StmtOrExpr a, StmtOrExpr b, Branch &b1, Branch &b2) {
+        Expr max = simplify(min + extent - 1);
+        bounds_info.push(name, Interval(min, max));
+
+        // debug(0) << "Branching in range [" << min << ", " << max << "] on condition " << cond << ":\n";
+
+        Expr min1, min2;
+        Expr ext1, ext2;
+
+        bool swap;
+        bool in_range;
+        Expr point = branch_point(cond, swap);
+        // debug(0) << "\tBranch point @ " << point << "\n";
+        if (can_prove_in_range(point, min, extent, in_range)) {
+            if (in_range) {
+                min1 = min;
+                min2 = point;
+                ext1 = simplify(point - min);
+                ext2 = simplify(min + extent - point);
+            } else {
+                Expr below_range = simplify(point < min, true, bounds_info);
+                if (is_one(below_range)) {
+                    min1 = min2 = min;
+                    ext1 = 0;
+                    ext2 = extent;
+                } else {
+                    min1 = min;
+                    min2 = max;
+                    ext1 = extent;
+                    ext2 = 0;
+                }
+            }
+        } else {
+            min1 = min;
+            ext1 = simplify(clamp(point - min, 0, extent));
+            min2 = simplify(min + ext1);
+            ext2 = simplify(extent - ext1);
+        }
+
+        if (swap) {
+            std::swap(a, b);
+        }
 
         b1 = make_branch(min1, ext1, a);
         b2 = make_branch(min2, ext2, b);
+
+        bounds_info.pop(name);
 
         return true;
     }
 
     // This function generalizes how we must visit all expr or stmt nodes with child nodes.
-    template<class Op, class StmtOrExpr>
+    template<class Op> //, class StmtOrExpr>
     void branch_children(const Op *op, const std::vector<StmtOrExpr>& children) {
-        std::vector<size_t> index;
-        std::vector<std::vector<Branch> > child_branches;
-        std::vector<StmtOrExpr> new_children(children.size());
-        bool done = false;
-        bool has_branches = false;
-        while(!done) {
-            size_t n = index.size();
-            Expr old_min = min;
-            Expr old_extent = extent;
+        std::vector<Expr> branch_points;
+        std::vector<std::vector<StmtOrExpr> > args;
 
-            if (n > 0) {
-                Branch &curr_branch = child_branches.back()[index.back()];
-                min = curr_branch.min;
-                extent = curr_branch.extent;
-            }
+        Expr max = simplify(min + extent);
+        branch_points.push_back(min);
+        branch_points.push_back(max);
+        args.push_back(std::vector<StmtOrExpr>());
+
+        for (size_t i = 0; i < children.size(); ++i) {
+            StmtOrExpr child = children[i];
 
             size_t old_num_branches = branches.size();
-            if (children[n].defined()) {
-                children[n].accept(this);
+            if (child.defined()) {
+                child.accept(this);
             }
 
             if (branches.size() == old_num_branches) {
-                Branch b = make_branch(min, extent, children[n]);
-                child_branches.push_back(std::vector<Branch>(1, b));
+                // Child stmt or expr did not branch, thus we add the
+                // child to the args list for each branch directly.
+                for (size_t j = 0; j < args.size(); ++j) {
+                    args[j].push_back(child);
+                }
             } else {
-                has_branches = true;
-                child_branches.push_back(std::vector<Branch>(branches.begin() + old_num_branches,
-                                                             branches.end()));
+                // Pull the child branches created by the collector out of the branch list.
+                std::vector<Branch> child_branches(branches.begin() + old_num_branches, branches.end());
                 branches.erase(branches.begin() + old_num_branches, branches.end());
-            }
 
-            index.push_back(0);
-            if (n == children.size()-1) {
-                if (has_branches) {
-                    while (index.back() < child_branches.back().size()) {
-                        for (size_t i = 0; i < index.size(); ++i) {
-                            get_branch_content(child_branches[i][index[i]], new_children[i]);
-                        }
+                // debug(0) << "Branching child (" << child << "):\n"
+                //          << "  Current branch points " << branch_points.size() << " {";
+                // for (size_t j = 0; j < branch_points.size(); ++j) {
+                //   debug(0) << branch_points[j] << (j < branch_points.size()-1? ", ": "}\n");
+                // }
+                // debug(0) << "  Child branch points   " << child_branches.size() <<  " {";
+                // for (size_t j = 0; j < child_branches.size(); ++j) {
+                //   debug(0) << child_branches[j].min << ", ";
+                // }
+                // debug(0) << branch_points.back() << "}\n";
 
-                        Branch &curr_branch = child_branches.back()[index.back()++];
-                        update_branch(curr_branch, op, new_children);
-                        branches.push_back(curr_branch);
+                if (args.size() == 1) {
+                    // This is the first child with branches, we can simply insert all the
+                    // branch points from the child branches into the branch_points array.
+                    std::vector<StmtOrExpr> old_args = args[0];
+
+                    StmtOrExpr arg;
+                    get_branch_content(child_branches[0], arg);
+                    args[0].push_back(arg);
+                    Expr max = branch_points.back();
+                    branch_points.pop_back();
+                    for (size_t j = 1; j < child_branches.size(); ++j) {
+                        Branch &b = child_branches[j];
+                        get_branch_content(b, arg);
+                        branch_points.push_back(b.min);
+                        args.push_back(old_args);
+                        args.back().push_back(arg);
                     }
-
-                    while (!index.empty() && index.back() >= child_branches.back().size()) {
-                        child_branches.pop_back();
-                        index.pop_back();
-
-                        if (!index.empty()) {
-                            index.back()++;
-                        }
-                    }
-
-                    if (index.empty()) {
-                        done = true;
-                    }
+                    branch_points.push_back(max);
                 } else {
-                    done = true;
+                    size_t k = 0;
+                    bool can_subdivide = true;
+                    std::vector<int> is_equal(child_branches.size(), false);
+                    std::vector<int> intervals(child_branches.size(), -1);
+                    for (size_t j = 0; j < child_branches.size(); ++j) {
+                        Branch &b = child_branches[j];
+                        StmtOrExpr arg;
+                        get_branch_content(b, arg);
+
+                        Expr b_limit = simplify(b.min + b.extent);
+                        bool in_range;
+                        bool found_interval = false;
+                        while (!found_interval && can_subdivide && k < args.size()) {
+                            Expr min_k = branch_points[k];
+                            Expr ext_k = branch_points[k+1] - min_k;
+                            if (equal(b.min, min_k)) {
+                                // The branch point of the child branch matches exactly a branch
+                                // point we have already collected.
+                                is_equal[j] = true;
+                                intervals[j] = k;
+                                found_interval = true;
+                            } else if (can_prove_in_range(b.min, min_k, ext_k, in_range)) {
+                                if (in_range) {
+                                    // We've found an interval that we can prove the child branch
+                                    // point lives in.
+                                    intervals[j] = k;
+                                    found_interval = true;
+                                } else {
+                                    ++k;
+                                }
+                            } else {
+                                // We can't prove anything about where the child branch point lives, so we are going
+                                // to have to recursively divide all the branches. Simple interval subdivision
+                                // won't work.
+                                can_subdivide = false;
+                            }
+
+                        }
+                    }
+
+                    if (can_subdivide) {
+                        // We can prove where all the child branch points lies w.r.t. to the points already
+                        // collected.
+                        std::vector<Expr> new_branch_points;
+                        std::vector<std::vector<StmtOrExpr> > new_args;
+                        for (size_t j = 0; j < child_branches.size(); ++j) {
+                            Branch &b = child_branches[j];
+                            StmtOrExpr arg;
+                            get_branch_content(b, arg);
+
+                            size_t first = intervals[j];
+                            size_t last  = j < child_branches.size()-1? intervals[j+1]: args.size();
+
+                            // Case: First interval...
+                            Expr first_point = is_equal[first]? branch_points[first]: b.min;
+                            new_branch_points.push_back(first_point);
+                            new_args.push_back(args[first]);
+                            new_args.back().push_back(arg);
+
+                            // Case: Intermediate intervals...
+                            for (size_t k = first+1; k < last; ++k) {
+                                new_branch_points.push_back(branch_points[k]);
+                                new_args.push_back(args[k]);
+                                new_args.back().push_back(arg);
+                            }
+
+                            // Case: Last interval...
+                            if (last > first && j < child_branches.size()-1 && !is_equal[last]) {
+                                Expr last_point = branch_points[last];
+                                new_branch_points.push_back(last_point);
+                                new_args.push_back(args[last]);
+                                new_args.back().push_back(arg);
+                            }
+                        }
+                        new_branch_points.push_back(branch_points.back());
+                        branch_points.swap(new_branch_points);
+                        args.swap(new_args);
+                    } else {
+                        if (child_branches.size() * args.size() > branching_limit) {
+                            // Branching on this child node would introduce too many branches, so we fall back
+                            // to adding the child argument directly to the branches collected thus far.
+                            for (size_t j = 0; j < args.size(); ++j) {
+                                args[j].push_back(child);
+                            }
+                        } else {
+                            // We can't prove where all the child branch points lies w.r.t. to the points already
+                            // collected, so we must recursively branch everything we've collected so far.
+                            std::vector<Expr> new_branch_points;
+                            std::vector<std::vector<StmtOrExpr> > new_args;
+                            for (size_t j = 0; j < args.size(); ++j) {
+                                Expr min = branch_points[j];
+                                Expr max = branch_points[j+1] - 1;
+                                for (size_t k = 0; k < child_branches.size(); ++k) {
+                                    Branch &b = child_branches[k];
+                                    StmtOrExpr arg;
+                                    get_branch_content(b, arg);
+
+                                    new_branch_points.push_back(simplify(clamp(b.min, min, max)));
+                                    new_args.push_back(args[k]);
+                                    new_args.back().push_back(arg);
+                                }
+                            }
+                            new_branch_points.push_back(branch_points.back());
+                            branch_points.swap(new_branch_points);
+                            args.swap(new_args);
+                        }
+                    }
+                }
+
+                // debug(0) << "  New branch points {";
+                // for (size_t j = 0; j < branch_points.size(); ++j) {
+                //   debug(0) << branch_points[j] << (j < branch_points.size()-1? ", ": "}\n");
+                // }
+            }
+        }
+
+        // Only add branches in the non-trivial case of more than one branch.
+        if (args.size() > 1) {
+            // Now we have branched all the child stmt or expr's and we need to rebuild the
+            // branches using the collected branch_points and args.
+            for (size_t i = 0; i < args.size(); ++i) {
+                Expr min = branch_points[i];
+                Expr extent = simplify(branch_points[i+1] - min);
+                if (!is_zero(extent)) {
+                    Branch b = {min, extent, Expr(), Stmt()};
+                    update_branch(b, op, args[i]);
+                    branches.push_back(b);
                 }
             }
         }
@@ -869,7 +1134,7 @@ public:
                     }
 
                     // If we didn't branch any further, push these branches onto the stack.
-                    if (branches.size() == num_branches) {
+                    if (branches.size() == num_branches && !is_zero(b1.extent)) {
                         branches.push_back(b1);
                     }
                     num_branches = branches.size();
@@ -883,7 +1148,7 @@ public:
                     }
 
                     // If we didn't branch any further, push these branches onto the stack.
-                    if (branches.size() == num_branches) {
+                    if (branches.size() == num_branches && !is_zero(b2.extent)) {
                         branches.push_back(b2);
                     }
 
@@ -894,12 +1159,12 @@ public:
         }
     }
 
-    void update_branch(Branch &b, const Cast *op, const std::vector<Expr> &value) {
+    void update_branch(Branch &b, const Cast *op, const std::vector<StmtOrExpr> &value) {
         b.expr = Cast::make(op->type, value[0]);
     }
 
     void visit(const Cast *op) {
-        std::vector<Expr> children(1, op->value);
+        std::vector<StmtOrExpr> children(1, op->value);
         branch_children(op, children);
     }
 
@@ -911,30 +1176,30 @@ public:
     // }
 
     template<class Op>
-    void update_binary_op_branch(Branch &b, const Op *op, const std::vector<Expr> &ab) {
+    void update_binary_op_branch(Branch &b, const Op *op, const std::vector<StmtOrExpr> &ab) {
         b.expr = Op::make(ab[0], ab[1]);
     }
 
-    void update_branch(Branch &b, const Add *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Sub *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Mul *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Div *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Mod *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Min *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Max *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Add *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Sub *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Mul *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Div *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Mod *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Min *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Max *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
 
-    void update_branch(Branch &b, const EQ *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const NE *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const LT *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const LE *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const GT *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const GE *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const And *op, const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
-    void update_branch(Branch &b, const Or *op,  const std::vector<Expr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const EQ *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const NE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const LT *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const LE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const GT *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const GE *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const And *op, const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
+    void update_branch(Branch &b, const Or *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op ,ab);}
 
     template<class Op>
     void visit_binary_op(const Op *op) {
-        std::vector<Expr> ab(2, Expr());
+        std::vector<StmtOrExpr> ab(2, Expr());
         ab[0] = op->a;
         ab[1] = op->b;
 
@@ -972,16 +1237,16 @@ public:
     void visit(const And *op) {visit_binary_op(op);}
     void visit(const Or *op)  {visit_binary_op(op);}
 
-    void update_branch(Branch &b, const Not *op, const std::vector<Expr> &ab) {
+    void update_branch(Branch &b, const Not *op, const std::vector<StmtOrExpr> &ab) {
         b.expr = Not::make(ab[0]);
     }
 
     void visit(const Not *op) {
-        std::vector<Expr> a(1, op->a);
+        std::vector<StmtOrExpr> a(1, op->a);
         branch_children(op, a);
     }
 
-    void update_branch(Branch &b, const Select *op, const std::vector<Expr> &vals) {
+    void update_branch(Branch &b, const Select *op, const std::vector<StmtOrExpr> &vals) {
         b.expr = Select::make(op->condition, vals[0], vals[1]);
     }
 
@@ -993,58 +1258,89 @@ public:
             op = select.as<Select>();
             visit_simple_cond(op->condition, op->true_value, op->false_value);
         } else {
-            std::vector<Expr> vals(2);
+            std::vector<StmtOrExpr> vals(2);
             vals[0] = op->true_value;
             vals[1] = op->false_value;
             branch_children(op, vals);
         }
     }
 
-    void update_branch(Branch &b, const Load *op, const std::vector<Expr> &index) {
+    void update_branch(Branch &b, const Load *op, const std::vector<StmtOrExpr> &index) {
         b.expr = Load::make(op->type, op->name, index[0], op->image, op->param);
     }
 
     void visit(const Load *op) {
-        std::vector<Expr> index(1, op->index);
+        std::vector<StmtOrExpr> index(1, op->index);
         branch_children(op, index);
     }
 
-    void update_branch(Branch &b, const Ramp *op, const std::vector<Expr> &args) {
+    void update_branch(Branch &b, const Ramp *op, const std::vector<StmtOrExpr> &args) {
         b.expr = Ramp::make(args[0], args[1], op->width);
     }
 
     void visit(const Ramp *op) {
-        std::vector<Expr> children(2, Expr());
+        std::vector<StmtOrExpr> children(2, Expr());
         children[0] = op->base;
         children[1] = op->stride;
         branch_children(op, children);
     }
 
-    void update_branch(Branch &b, const Broadcast *op, const std::vector<Expr> &value) {
+    void update_branch(Branch &b, const Broadcast *op, const std::vector<StmtOrExpr> &value) {
         b.expr = Broadcast::make(value[0], op->width);
     }
 
     void visit(const Broadcast *op) {
-        std::vector<Expr> value(1, op->value);
+        std::vector<StmtOrExpr> value(1, op->value);
         branch_children(op, value);
     }
 
-    void update_branch(Branch &b, const Call *op, const std::vector<Expr> &args) {
+    void update_branch(Branch &b, const Call *op, const std::vector<StmtOrExpr> &branch_args) {
+        std::vector<Expr> args;
+        for (size_t i = 0; i < branch_args.size(); ++i) {
+            args.push_back(branch_args[i]);
+        }
         b.expr = Call::make(op->type, op->name, args, op->call_type,
                             op->func, op->value_index, op->image, op->param);
     }
 
     void visit(const Call *op) {
         if (op->args.size() > 0) {
-            branch_children(op, op->args);
+            std::vector<StmtOrExpr> args;
+            for (size_t i = 0; i < op->args.size(); ++i) {
+                args.push_back(op->args[i]);
+            }
+            branch_children(op, args);
         }
     }
 
-    void update_branch(Branch &b, const Let *op, std::vector<Expr> &body) {
+#if 1
+    void update_branch(Branch &b, const Let *op, std::vector<StmtOrExpr> &args) {
+        b.expr = Let::make(op->name, args[0], args[1]);
+    }
+
+    void update_branch(Branch &b, const LetStmt *op, std::vector<StmtOrExpr> &args) {
+        b.stmt = LetStmt::make(op->name, args[0], args[1]);
+        // debug(0) << "Updated let branch:\n" << b.stmt << "\n";
+    }
+
+    template<class LetOp>
+    void visit_let(const LetOp *op) {
+        std::vector<StmtOrExpr> children(2);
+        children[0] = op->value;
+        children[1] = op->body;
+        scope.push(op->name, op->value);
+        branch_children(op, children);
+        scope.pop(op->name);
+    }
+
+    void visit(const Let *op) {visit_let(op);}
+    void visit(const LetStmt *op) {visit_let(op);}
+#else
+    void update_branch(Branch &b, const Let *op, std::vector<StmtOrExpr> &body) {
         b.expr = Let::make(op->name, scope.get(op->name), body[0]);
     }
 
-    void update_branch(Branch &b, const LetStmt *op, std::vector<Stmt> &body) {
+    void update_branch(Branch &b, const LetStmt *op, std::vector<StmtOrExpr> &body) {
         b.stmt = LetStmt::make(op->name, scope.get(op->name), body[0]);
         // debug(0) << "Updated let branch:\n" << b.stmt << "\n";
     }
@@ -1074,6 +1370,7 @@ public:
             Expr old_min = min;
             Expr old_extent = extent;
 
+            std::vector<Branch> new_branches;
             for (size_t i = 0; i < let_branches.size(); ++i) {
                 min = let_branches[i].min;
                 extent = let_branches[i].extent;
@@ -1094,6 +1391,19 @@ public:
                     Branch b = make_branch(min, extent, LetOp::make(op->name, let_branches[i].expr, op->body));
                     branches.push_back(b);
                 }
+                new_branches.insert(new_branches.end(), branches.begin() + old_num_branches, branches.end());
+                branches.erase(branches.begin() + old_num_branches, branches.end());
+
+                debug(0) << "Branching LetStmt: let " << op->name << " = " << let_branches[i].expr << ". "
+                         << "Num branches = " << branches.size() << ".\n";
+            }
+
+            if (branches.size() + new_branches.size() <= branching_limit) {
+                branches.insert(branches.end(), new_branches.begin(), new_branches.end);
+            } else {
+                for (size_t i = 0; i < let_branches.size(); ++i) {
+
+                }
             }
 
             min = old_min;
@@ -1103,31 +1413,45 @@ public:
 
     void visit(const Let *op) {visit_let<Expr>(op);}
     void visit(const LetStmt *op) {visit_let<Stmt>(op);}
+#endif
 
     // AssertStmt
 
-    void update_branch(Branch &b, const Pipeline *op, const std::vector<Stmt> &args) {
+    void update_branch(Branch &b, const Pipeline *op, const std::vector<StmtOrExpr> &args) {
         b.stmt = Pipeline::make(op->name, args[0], args[1], args[2]);
     }
 
     void visit(const Pipeline *op) {
-        std::vector<Stmt> children(3, Stmt());
+        std::vector<StmtOrExpr> children(3);
         children[0] = op->produce;
         children[1] = op->update;
         children[2] = op->consume;
         branch_children(op, children);
     }
 
-    void update_branch(Branch &b, const For *op, const std::vector<Expr> &args) {
+#if 1
+    void update_branch(Branch &b, const For *op, const std::vector<StmtOrExpr> &args) {
+        b.stmt = For::make(op->name, args[0], args[1], op->for_type, args[2]);
+    }
+
+    void visit(const For *op) {
+        std::vector<StmtOrExpr> children(3);
+        children[0] = op->min;
+        children[1] = op->extent;
+        children[2] = op->body;
+        branch_children(op, children);
+    }
+#else
+    void update_branch(Branch &b, const For *op, const std::vector<StmtOrExpr> &args) {
         b.stmt = For::make(op->name, args[0], args[1], op->for_type, op->body);
     }
 
-    void update_branch(Branch &b, const For *op, const std::vector<Stmt> &args) {
+    void update_branch(Branch &b, const For *op, const std::vector<StmtOrExpr> &args) {
         b.stmt = For::make(op->name, op->min, op->extent, op->for_type, args[0]);
     }
 
     void visit(const For *op) {
-        const Variable *loop_ext = op->extent.as<Variable>();
+       const Variable *loop_ext = op->extent.as<Variable>();
         if (loop_ext) {
             bounds_info.push(loop_ext->name, Interval(0, loop_ext->type.max()));
         }
@@ -1183,13 +1507,14 @@ public:
             extent = old_extent;
         }
     }
+#endif
 
-    void update_branch(Branch &b, const Store *op, const std::vector<Expr> &args) {
+    void update_branch(Branch &b, const Store *op, const std::vector<StmtOrExpr> &args) {
         b.stmt = Store::make(op->name, args[0], args[1]);
     }
 
     void visit(const Store *op) {
-        std::vector<Expr> args(2);
+        std::vector<StmtOrExpr> args(2);
         args[0] = op->value;
         args[1] = op->index;
         branch_children(op, args);
@@ -1197,27 +1522,27 @@ public:
 
     // Provide
 
-    void update_branch(Branch &b, const Allocate *op, const std::vector<Stmt> &body) {
+    void update_branch(Branch &b, const Allocate *op, const std::vector<StmtOrExpr> &body) {
         b.stmt = Allocate::make(op->name, op->type, op->extents, op->condition, body[0]);
     }
 
     void visit(const Allocate *op) {
-        std::vector<Stmt> children(1, op->body);
+        std::vector<StmtOrExpr> children(1, op->body);
         branch_children(op, children);
     }
 
-    void update_branch(Branch &b, const Block *op, const std::vector<Stmt> &args) {
+    void update_branch(Branch &b, const Block *op, const std::vector<StmtOrExpr> &args) {
         b.stmt = Block::make(args[0], args[1]);
     }
 
     void visit(const Block *op) {
-        std::vector<Stmt> children(2, Stmt());
+        std::vector<StmtOrExpr> children(2, Stmt());
         children[0] = op->first;
         children[1] = op->rest;
         branch_children(op, children);
     }
 
-    void update_branch(Branch &b, const IfThenElse *op, const std::vector<Stmt> &cases) {
+    void update_branch(Branch &b, const IfThenElse *op, const std::vector<StmtOrExpr> &cases) {
         b.stmt = IfThenElse::make(op->condition, cases[0], cases[1]);
     }
 
@@ -1251,7 +1576,7 @@ public:
                         }
 
                         // If we didn't branch any further, push this branch onto the stack.
-                        if (branches.size() == num_branches) {
+                        if (branches.size() == num_branches && !is_zero(b1.extent)) {
                             branches.push_back(b1);
                         }
                         num_branches = branches.size();
@@ -1266,7 +1591,7 @@ public:
 
                         // If we didn't branch any further, push this
                         // branches onto the stack.
-                        if (branches.size() == num_branches) {
+                        if (branches.size() == num_branches && !is_zero(b2.extent)) {
                             branches.push_back(b2);
                         }
                     }
@@ -1279,18 +1604,18 @@ public:
             }
         }
 
-        std::vector<Stmt> cases(2);
+        std::vector<StmtOrExpr> cases(2);
         cases[0] = op->then_case;
         cases[1] = op->else_case;
         branch_children(op, cases);
     }
 
-    void update_branch(Branch &b, const Evaluate *op, const std::vector<Expr> &value) {
+    void update_branch(Branch &b, const Evaluate *op, const std::vector<StmtOrExpr> &value) {
         b.stmt = Evaluate::make(value[0]);
     }
 
     void visit(const Evaluate *op) {
-        std::vector<Expr> children(1, op->value);
+        std::vector<StmtOrExpr> children(1, op->value);
         branch_children(op, children);
     }
 };
@@ -1309,7 +1634,7 @@ private:
 
         const Variable *loop_ext = op->extent.as<Variable>();
         if (loop_ext) {
-            bounds_info.push(loop_ext->name, Interval(0, loop_ext->type.max()));
+            bounds_info.push(loop_ext->name, Interval(0, Expr()));
         }
 
         Stmt body = mutate(op->body);
@@ -1394,14 +1719,35 @@ void check_num_branches(Stmt stmt, const std::string &var, int expected_loops) {
 class CheckIntervals : public IRVisitor {
     using IRVisitor::visit;
 
+    Scope<Expr> scope;
+    std::vector<std::string> bound_vars;
+
+    Expr wrap_in_scope(Expr expr) const {
+        for (int i = (int)bound_vars.size() - 1; i >= 0; --i) {
+            const std::string &var = bound_vars[i];
+            expr = Let::make(var, scope.get(var), expr);
+        }
+
+        return simplify(expr);
+    }
+
     void visit(const For *op) {
         if (op->name == var) {
             const Interval &iv = ival[index++];
-            matches = matches && equal(op->min, iv.min)
-                    && equal(op->extent, iv.max);
+            matches = matches
+                    && equal(wrap_in_scope(op->min), iv.min)
+                    && equal(wrap_in_scope(op->extent), iv.max);
         }
 
         op->body.accept(this);
+    }
+
+    void visit(const LetStmt *op) {
+        scope.push(op->name, op->value);
+        bound_vars.push_back(op->name);
+        op->body.accept(this);
+        bound_vars.pop_back();
+        scope.pop(op->name);
     }
 
   public:

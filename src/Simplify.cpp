@@ -1382,6 +1382,10 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Min *min_a = a.as<Min>();
+        const Min *min_b = b.as<Min>();
+        const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
 
         int ia = 0, ib = 0;
 
@@ -1416,7 +1420,7 @@ private:
             // Comparing expression of type < minimum of type.  This can never be true.
             expr = const_false(op->type.width);
         } else if (is_zero(delta) || (no_overflow(delta.type()) && is_positive_const(delta))) {
-             expr = const_false(op->type.width);
+            expr = const_false(op->type.width);
         } else if (no_overflow(delta.type()) && is_negative_const(delta)) {
             expr = const_true(op->type.width);
         } else if (broadcast_a && broadcast_b) {
@@ -1462,6 +1466,54 @@ private:
                        equal(mul_a->b, mul_b->b)) {
                 // Divide both sides by a constant
                 expr = mutate(mul_a->a < mul_b->a);
+            } else if (min_a) {
+                Expr lt_a = mutate(min_a->a < b);
+                Expr lt_b = mutate(min_a->b < b);
+                if (is_one(lt_a) || is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) && is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (max_a) {
+                Expr lt_a = mutate(max_a->a < b);
+                Expr lt_b = mutate(max_a->b < b);
+                if (is_one(lt_a) && is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) || is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (min_b) {
+                Expr lt_a = mutate(a < min_b->a);
+                Expr lt_b = mutate(a < min_b->b);
+                if (is_one(lt_a) && is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) || is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (max_b) {
+                Expr lt_a = mutate(a < max_b->a);
+                Expr lt_b = mutate(a < max_b->b);
+                if (is_one(lt_a) || is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) && is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
             } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
                        is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
                 expr = const_true(delta_ramp->width);
