@@ -5,12 +5,12 @@
 using namespace Halide;
 
 void simple_version(float* A, float *B, float *C, int width, int stride) {
-    for(int iy = 0; iy < width; iy++) {
-        for(int ix = 0; ix < width; ix++) {
+    for (int iy = 0; iy < width; iy++) {
+        for (int ix = 0; ix < width; ix++) {
             float *cc = C + iy * stride + ix;
             *cc = 0.0f;
 
-            for(int ik = 0; ik < width; ik++) {
+            for (int ik = 0; ik < width; ik++) {
                 *cc = *cc + A[iy * stride + ik] * B[ik * stride + ix];
             }
         }
@@ -50,8 +50,8 @@ int main(int argc, char **argv) {
     Image<float> output(matrix_size, matrix_size);
 
     // init randomly
-    for(int iy = 0; iy < matrix_size; iy++) {
-        for(int ix = 0; ix < matrix_size; ix++) {
+    for (int iy = 0; iy < matrix_size; iy++) {
+        for (int ix = 0; ix < matrix_size; ix++) {
             mat_A(ix, iy) = (rand() % 256) / 256.0f;
             mat_B(ix, iy) = (rand() % 256) / 256.0f;
         }
@@ -79,16 +79,17 @@ int main(int argc, char **argv) {
     matrix_mul.realize(output_halide);
 
     bool halide_correct = true;
-    for(int iy = 0; iy < matrix_size && halide_correct; iy++) {
-        for(int ix = 0; ix < matrix_size; ix++) {
+    for (int iy = 0; iy < matrix_size && halide_correct; iy++) {
+        for (int ix = 0; ix < matrix_size; ix++) {
             halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.000001f);
         }
     }
 
-    if(halide_correct)
+    if (halide_correct) {
         printf("Halide results - OK\n");
-    else
+    } else {
         printf("Halide results - FAIL\n");
+    }
 
     float flops = 2.0f * matrix_size * matrix_size * matrix_size;
 
