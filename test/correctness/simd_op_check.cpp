@@ -28,6 +28,8 @@ vector<job> jobs;
 Target target;
 
 void check(const char *op, int vector_width, Expr e) {
+    printf("%s %d\n", op, vector_width);
+
     if (filter) {
         if (strncmp(op, filter, strlen(filter)) != 0) return;
     }
@@ -222,74 +224,81 @@ void check_sse_all() {
     const int max_u8 = 255;
     const int max_u16 = 65535;
 
-    // MMX (in 128-bits)
-    check("paddb", 16, u8_1 + u8_2);
-    check("psubb", 16, u8_1 - u8_2);
-    check("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
-    // Add a test with a constant as there was a bug on this.
-    check("paddsb", 16, i8(clamp(i16(i8_1) + i16(3), min_i8, max_i8)));
-    check("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
-    check("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-    check("psubusb", 16, u8(max(i16(u8_1) - i16(u8_2), 0)));
-    check("paddw", 8, u16_1 + u16_2);
-    check("psubw", 8, u16_1 - u16_2);
-    check("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
-    check("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
-    check("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-    check("psubusw", 8, u16(max(i32(u16_1) - i32(u16_2), 0)));
-    check("paddd", 4, i32_1 + i32_2);
-    check("psubd", 4, i32_1 - i32_2);
-    check("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
-    check("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) >> 16));
+    // MMX and SSE1 (in 64 and 128 bits)
+    for (int w = 1; w <= 4; w++) {
+        check("paddb",   8*w, u8_1 + u8_2);
+        check("psubb",   8*w, u8_1 - u8_2);
+        check("paddsb",  8*w, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
+        // Add a test with a constant as there was a bug on this.
+        check("paddsb",  8*w, i8(clamp(i16(i8_1) + i16(3), min_i8, max_i8)));
+        check("psubsb",  8*w, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
+        check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
+        check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
+        check("paddw",   4*w, u16_1 + u16_2);
+        check("psubw",   4*w, u16_1 - u16_2);
+        check("paddsw",  4*w, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
+        check("psubsw",  4*w, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
+        check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
+        check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
+        check("paddd",   2*w, i32_1 + i32_2);
+        check("psubd",   2*w, i32_1 - i32_2);
+        check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
+        check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
 
-    // Add a test with a constant as there was a bug on this.
-    check("pmulhw", 8, i16((3 * i32(i16_2)) / (256*256)));
+        // Add a test with a constant as there was a bug on this.
+        check("pmulhw",  4*w, i16((3 * i32(i16_2)) / (256*256)));
 
-    // There was a bug with this case too. CSE was lifting out the
-    // information that made it possible to do the narrowing.
-    check("pmulhw", 8, select(in_u8(0) == 0,
-                              i16((3 * i32(i16_2)) / (256*256)),
-                              i16((5 * i32(i16_2)) / (256*256))));
+        // There was a bug with this case too. CSE was lifting out the
+        // information that made it possible to do the narrowing.
+        check("pmulhw",  4*w, select(in_u8(0) == 0,
+                                  i16((3 * i32(i16_2)) / (256*256)),
+                                  i16((5 * i32(i16_2)) / (256*256))));
 
-    check("pmulhuw", 8, i16_1 / 15);
-    check("pmullw", 8, i16_1 * i16_2);
+        check("pmulhuw", 4*w, i16_1 / 15);
+        check("pmullw",  4*w, i16_1 * i16_2);
 
-    check("pcmpeqb", 16, select(u8_1 == u8_2, u8(1), u8(2)));
-    check("pcmpgtb", 16, select(u8_1 > u8_2, u8(1), u8(2)));
-    check("pcmpeqw", 8, select(u16_1 == u16_2, u16(1), u16(2)));
-    check("pcmpgtw", 8, select(u16_1 > u16_2, u16(1), u16(2)));
-    check("pcmpeqd", 4, select(u32_1 == u32_2, u32(1), u32(2)));
-    check("pcmpgtd", 4, select(u32_1 > u32_2, u32(1), u32(2)));
+        check("pcmpeqb", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
+        check("pcmpgtb", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
+        check("pcmpeqw", 4*w, select(u16_1 == u16_2, u16(1), u16(2)));
+        check("pcmpgtw", 4*w, select(u16_1 > u16_2, u16(1), u16(2)));
+        check("pcmpeqd", 2*w, select(u32_1 == u32_2, u32(1), u32(2)));
+        check("pcmpgtd", 2*w, select(u32_1 > u32_2, u32(1), u32(2)));
+
+        // SSE 1
+        check("addps", 2*w, f32_1 + f32_2);
+        check("subps", 2*w, f32_1 - f32_2);
+        check("mulps", 2*w, f32_1 * f32_2);
+
+        // Padding out the lanes of a div isn't necessarily a good
+        // idea, and so llvm doesn't do it.
+        if (w > 1) {
+            check("divps", 2*w, f32_1 / f32_2);
+        }
+
+        check("rcpps", 2*w, fast_inverse(f32_2));
+        check("sqrtps", 2*w, sqrt(f32_2));
+        check("rsqrtps", 2*w, fast_inverse_sqrt(f32_2));
+        check("maxps", 2*w, max(f32_1, f32_2));
+        check("minps", 2*w, min(f32_1, f32_2));
+        check("pavgb", 8*w, u8((u16(u8_1) + u16(u8_2) + 1)/2));
+        check("pavgb", 8*w, u8((u16(u8_1) + u16(u8_2) + 1)>>1));
+        check("pavgw", 4*w, u16((u32(u16_1) + u32(u16_2) + 1)/2));
+        check("pavgw", 4*w, u16((u32(u16_1) + u32(u16_2) + 1)>>1));
+        check("pmaxsw", 4*w, max(i16_1, i16_2));
+        check("pminsw", 4*w, min(i16_1, i16_2));
+        check("pmaxub", 8*w, max(u8_1, u8_2));
+        check("pminub", 8*w, min(u8_1, u8_2));
+        check("pmulhuw", 4*w, u16((u32(u16_1) * u32(u16_2))/(256*256)));
+        check("pmulhuw", 4*w, u16((u32(u16_1) * u32(u16_2))>>16));
+        check("pmulhuw", 4*w, u16_1 / 15);
+
+    }
 
 
-    // SSE 1
-    check("addps", 4, f32_1 + f32_2);
-    check("subps", 4, f32_1 - f32_2);
-    check("mulps", 4, f32_1 * f32_2);
-    check("divps", 4, f32_1 / f32_2);
-    check("rcpps", 4, fast_inverse(f32_2));
-    check("sqrtps", 4, sqrt(f32_2));
-    check("rsqrtps", 4, fast_inverse_sqrt(f32_2));
-    check("maxps", 4, max(f32_1, f32_2));
-    check("minps", 4, min(f32_1, f32_2));
-    check("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
-    check("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)>>1));
-    check("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
-    check("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)>>1));
-    check("pmaxsw", 8, max(i16_1, i16_2));
-    check("pminsw", 8, min(i16_1, i16_2));
-    check("pmaxub", 16, max(u8_1, u8_2));
-    check("pminub", 16, min(u8_1, u8_2));
-    check("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-    check("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))>>16));
-    check("pmulhuw", 8, u16_1 / 15);
-
-    /* Not implemented yet in the front-end
-    check("andnps", 4, bool1 & (~bool2));
-    check("andps", 4, bool1 & bool2);
-    check("orps", 4, bool1 | bool2);
-    check("xorps", 4, bool1 ^ bool2);
-    */
+    // check("andnps", 4, bool_1 & (~bool_2));
+    check("andps", 4, bool_1 & bool_2);
+    check("orps", 4, bool_1 | bool_2);
+    check("xorps", 4, bool_1 ^ bool_2);
 
     check("cmpeqps", 4, select(f32_1 == f32_2, 1.0f, 2.0f));
     //check("cmpneqps", 4, select(f32_1 != f32_2, 1.0f, 2.0f));
@@ -304,34 +313,39 @@ void check_sse_all() {
 
     // SSE 2
 
-    check("addpd", 2, f64_1 + f64_2);
-    check("subpd", 2, f64_1 - f64_2);
-    check("mulpd", 2, f64_1 * f64_2);
-    check("divpd", 2, f64_1 / f64_2);
-    check("sqrtpd", 2, sqrt(f64_2));
-    check("maxpd", 2, max(f64_1, f64_2));
-    check("minpd", 2, min(f64_1, f64_2));
+    for (int w = 2; w <= 4; w++) {
+        check("addpd", w, f64_1 + f64_2);
+        check("subpd", w, f64_1 - f64_2);
+        check("mulpd", w, f64_1 * f64_2);
+        check("divpd", w, f64_1 / f64_2);
+        check("sqrtpd", w, sqrt(f64_2));
+        check("maxpd", w, max(f64_1, f64_2));
+        check("minpd", w, min(f64_1, f64_2));
 
-    check("cmpeqpd", 2, select(f64_1 == f64_2, 1.0f, 2.0f));
-    //check("cmpneqpd", 2, select(f64_1 != f64_2, 1.0f, 2.0f));
-    //check("cmplepd", 2, select(f64_1 <= f64_2, 1.0f, 2.0f));
-    check("cmpltpd", 2, select(f64_1 < f64_2, 1.0f, 2.0f));
+        check("cmpeqpd", w, select(f64_1 == f64_2, 1.0f, 2.0f));
+        //check("cmpneqpd", w, select(f64_1 != f64_2, 1.0f, 2.0f));
+        //check("cmplepd", w, select(f64_1 <= f64_2, 1.0f, 2.0f));
+        check("cmpltpd", w, select(f64_1 < f64_2, 1.0f, 2.0f));
 
-    // llvm is pretty flaky about which ops get generated for casts. We don't intend to catch these for now, so skip them.
-    //check("cvttpd2dq", 4, i32(f64_1));
-    //check("cvtdq2pd", 4, f64(i32_1));
-    //check("cvttps2dq", 4, i32(f32_1));
-    //check("cvtdq2ps", 4, f32(i32_1));
-    //check("cvtps2pd", 4, f64(f32_1));
-    //check("cvtpd2ps", 4, f32(f64_1));
+        // llvm is pretty inconsistent about which ops get generated
+        // for casts. We don't intend to catch these for now, so skip
+        // them.
 
-    check("paddq", 4, i64_1 + i64_2);
-    check("psubq", 4, i64_1 - i64_2);
-    check("pmuludq", 4, u64_1 * u64_2);
+        //check("cvttpd2dq", 4, i32(f64_1));
+        //check("cvtdq2pd", 4, f64(i32_1));
+        //check("cvttps2dq", 4, i32(f32_1));
+        //check("cvtdq2ps", 4, f32(i32_1));
+        //check("cvtps2pd", 4, f64(f32_1));
+        //check("cvtpd2ps", 4, f32(f64_1));
 
-    check("packssdw", 8, i16(clamp(i32_1, min_i16, max_i16)));
-    check("packsswb", 16, i8(clamp(i16_1, min_i8, max_i8)));
-    check("packuswb", 16, u8(clamp(i16_1, 0, max_u8)));
+        check("paddq", 2*w, i64_1 + i64_2);
+        check("psubq", 2*w, i64_1 - i64_2);
+        check("pmuludq", 2*w, u64_1 * u64_2);
+
+        check("packssdw", 4*w, i16(clamp(i32_1, min_i16, max_i16)));
+        check("packsswb", 8*w, i8(clamp(i16_1, min_i8, max_i8)));
+        check("packuswb", 8*w, u8(clamp(i16_1, 0, max_u8)));
+    }
 
     // SSE 3
 
@@ -339,17 +353,20 @@ void check_sse_all() {
 
     // SSSE 3
     if (use_ssse3) {
-        check("pabsb", 16, abs(i8_1));
-        check("pabsw", 8, abs(i16_1));
-        check("pabsd", 4, abs(i32_1));
+        for (int w = 2; w <= 4; w++) {
+            check("pabsb", 8*w, abs(i8_1));
+            check("pabsw", 4*w, abs(i16_1));
+            check("pabsd", 2*w, abs(i32_1));
+        }
     }
 
     // SSE 4.1
 
     // skip dot product and argmin
-
-    check("pmaddwd", 4, i32(i16_1) * 3 + i32(i16_2) * 4);
-    check("pmaddwd", 4, i32(i16_1) * 3 - i32(i16_2) * 4);
+    for (int w = 2; w <= 4; w++) {
+        check("pmaddwd", 2*w, i32(i16_1) * 3 + i32(i16_2) * 4);
+        check("pmaddwd", 2*w, i32(i16_1) * 3 - i32(i16_2) * 4);
+    }
 
     if (use_avx2) {
         check("vpmaddwd", 8, i32(i16_1) * 3 + i32(i16_2) * 4);
@@ -360,31 +377,33 @@ void check_sse_all() {
     // llvm doesn't distinguish between signed and unsigned multiplies
     //check("pmuldq", 4, i64(i32_1) * i64(i32_2));
     if (use_sse41) {
-        check("pmuludq", 4, u64(u32_1) * u64(u32_2));
-        check("pmulld", 4, i32_1 * i32_2);
+        for (int w = 2; w <= 4; w++) {
+            check("pmuludq", 2*w, u64(u32_1) * u64(u32_2));
+            check("pmulld", 2*w, i32_1 * i32_2);
 
-        check("blendvps", 4, select(f32_1 > 0.7f, f32_1, f32_2));
-        check("blendvpd", 2, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
-        check("pblendvb", 16, select(u8_1 > 7, u8_1, u8_2));
+            check("blendvps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
+            check("blendvpd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
+            check("pblendvb", 8*w, select(u8_1 > 7, u8_1, u8_2));
 
-        check("pmaxsb", 16, max(i8_1, i8_2));
-        check("pminsb", 16, min(i8_1, i8_2));
-        check("pmaxuw", 8, max(u16_1, u16_2));
-        check("pminuw", 8, min(u16_1, u16_2));
-        check("pmaxud", 4, max(u32_1, u32_2));
-        check("pminud", 4, min(u32_1, u32_2));
-        check("pmaxsd", 4, max(i32_1, i32_2));
-        check("pminsd", 4, min(i32_1, i32_2));
+            check("pmaxsb", 8*w, max(i8_1, i8_2));
+            check("pminsb", 8*w, min(i8_1, i8_2));
+            check("pmaxuw", 4*w, max(u16_1, u16_2));
+            check("pminuw", 4*w, min(u16_1, u16_2));
+            check("pmaxud", 2*w, max(u32_1, u32_2));
+            check("pminud", 2*w, min(u32_1, u32_2));
+            check("pmaxsd", 2*w, max(i32_1, i32_2));
+            check("pminsd", 2*w, min(i32_1, i32_2));
 
-        check("roundps", 4, round(f32_1));
-        check("roundpd", 2, round(f64_1));
-        check("roundps", 4, floor(f32_1));
-        check("roundpd", 2, floor(f64_1));
-        check("roundps", 4, ceil(f32_1));
-        check("roundpd", 2, ceil(f64_1));
+            check("roundps", 2*w, round(f32_1));
+            check("roundpd", w, round(f64_1));
+            check("roundps", 2*w, floor(f32_1));
+            check("roundpd", w, floor(f64_1));
+            check("roundps", 2*w, ceil(f32_1));
+            check("roundpd", w, ceil(f64_1));
 
-        check("pcmpeqq", 2, select(i64_1 == i64_2, i64(1), i64(2)));
-        check("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
+            check("pcmpeqq", w, select(i64_1 == i64_2, i64(1), i64(2)));
+            check("packusdw", 4*w, u16(clamp(i32_1, 0, max_u16)));
+        }
     }
 
     // SSE 4.2
@@ -1480,6 +1499,8 @@ int main(int argc, char **argv) {
     else filter = NULL;
 
     target = get_target_from_environment();
+    target.set_feature(Target::NoAsserts);
+    target.set_feature(Target::NoBoundsQuery);
 
     use_avx2 = target.has_feature(Target::AVX2);
     use_avx = use_avx2 || target.has_feature(Target::AVX);

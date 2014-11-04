@@ -1413,4 +1413,8 @@ bool CodeGen_ARM::use_soft_float_abi() const {
          (target.os == Target::IOS && !target.has_feature(Target::ARMv7s)));
 }
 
+int CodeGen_ARM::native_vector_bits() const {
+    return 128;
+}
+
 }}

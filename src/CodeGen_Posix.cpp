@@ -77,6 +77,17 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
     wild_f32x8(Variable::make(Float(32, 8), "*")),
     wild_f64x4(Variable::make(Float(64, 4), "*")),
 
+    wild_i8x0(Variable::make(Int(8, 0), "*")),
+    wild_u8x0(Variable::make(UInt(8, 0), "*")),
+    wild_i16x0(Variable::make(Int(16, 0), "*")),
+    wild_u16x0(Variable::make(UInt(16, 0), "*")),
+    wild_i32x0(Variable::make(Int(32, 0), "*")),
+    wild_u32x0(Variable::make(UInt(32, 0), "*")),
+    wild_i64x0(Variable::make(Int(64, 0), "*")),
+    wild_u64x0(Variable::make(UInt(64, 0), "*")),
+    wild_f32x0(Variable::make(Float(32, 0), "*")),
+    wild_f64x0(Variable::make(Float(64, 0), "*")),
+
     // Bounds of types
     min_i8(Int(8).min()),
     max_i8(Int(8).max()),

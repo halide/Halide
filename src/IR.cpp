@@ -288,7 +288,7 @@ Expr Ramp::make(Expr base, Expr stride, int width) {
 Expr Broadcast::make(Expr value, int width) {
     internal_assert(value.defined()) << "Broadcast of undefined\n";
     internal_assert(value.type().is_scalar()) << "Broadcast of vector\n";
-    internal_assert(width > 1) << "Broadcast of width <= 1\n";
+    internal_assert(width != 1) << "Broadcast of width 1\n";
 
     Broadcast *node = new Broadcast;
     node->type = value.type().vector_of(width);

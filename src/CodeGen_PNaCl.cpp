@@ -58,4 +58,8 @@ bool CodeGen_PNaCl::use_soft_float_abi() const {
     return false;
 }
 
+int CodeGen_PNaCl::native_vector_bits() const {
+    return 128;
+}
+
 }}

@@ -406,6 +406,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 #endif
 }
 
+int CodeGen_PTX_Dev::native_vector_bits() const {
+    // PTX doesn't really do vectorization. The widest type is a double.
+    return 64;
+}
 
 string CodeGen_PTX_Dev::get_current_kernel_name() {
     return function->getName();
