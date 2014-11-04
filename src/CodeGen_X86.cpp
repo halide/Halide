@@ -10,6 +10,7 @@
 #include "Param.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
+#include "IRMutator.h"
 
 namespace Halide {
 namespace Internal {
@@ -86,6 +87,182 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     return triple;
 }
 
+namespace {
+
+// All sources of new types should get legalized. All sinks of types
+// should get reverted to the original.
+
+// Sources: Loads. Broadcast. Variables/Lets. Call results.
+// Sinks: Store indices and values. Load indices. Call arguments.
+
+/*
+class LegalizeTypes : public IRMutator {
+    Scope<Type> legalized_vars;
+
+    using IRMutator::visit;
+
+public:
+    using IRMutator::mutate;
+    Expr mutate(Expr e) {
+        debug(0) << "Mutating " << e << "\n";
+        Expr new_e = IRMutator::mutate(e);
+        debug(0) << e << " -> " << new_e << "\n";
+        return new_e;
+    }
+private:
+
+    Expr mutate_and_delegalize(Expr e) {
+        Expr new_e = mutate(e);
+        if (new_e.type() != e.type()) {
+            // Strip off the extra lanes
+            vector<Expr> args;
+            args.push_back(new_e);
+            for (int i = 0; i < e.type().width; i++) {
+                args.push_back(i);
+            }
+            return Call::make(e.type(), Call::shuffle_vector, args, Call::Intrinsic);
+        } else {
+            return new_e;
+        }
+    }
+
+    Expr legalize(Expr e) {
+        // bit-width of a vector type should be a multiple of 128
+        Type t = e.type();
+        if (t.is_vector()) {
+            internal_assert(128 % t.bits == 0);
+            int good_lanes = 128 / t.bits;
+            int extra_lanes = 0;
+            while ((t.width + extra_lanes) % good_lanes != 0) {
+                extra_lanes++;
+            }
+            if (extra_lanes) {
+                Type new_type = t;
+                new_type.width += extra_lanes;
+                vector<Expr> args;
+                args.push_back(e);
+                // The original elements
+                for (int i = 0; i < t.width; i++) {
+                    args.push_back(i);
+                }
+                // extra_lanes worth of undef values
+                for (int i = 0; i < extra_lanes; i++) {
+                    args.push_back(t.width);
+                }
+                return Call::make(new_type, Call::shuffle_vector, args, Call::Intrinsic);
+            }
+        }
+
+        // Other legalizations here...
+
+        return e;
+    }
+
+    void visit(const Broadcast *op) {
+        IRMutator::visit(op);
+        expr = legalize(expr);
+    }
+
+    void visit(const Cast *op) {
+        Expr value = mutate_and_delegalize(op->value);
+        if (!value.same_as(op->value)) {
+            expr = Cast::make(op->type, value);
+        } else {
+            expr = op;
+        }
+        expr = legalize(expr);
+    }
+
+    void visit(const Variable *op) {
+        if (legalized_vars.contains(op->name)) {
+            expr = Variable::make(legalized_vars.get(op->name), op->name);
+        } else {
+            expr = legalize(op);
+        }
+    }
+
+    template<typename Op, typename StmtOrExpr> StmtOrExpr visit_let(const Op *op) {
+
+        Expr value = mutate(op->value);
+
+        if (!value.same_as(op->value)) {
+            legalized_vars.push(op->name, value.type());
+        }
+
+        StmtOrExpr body = mutate(op->body);
+
+        if (!value.same_as(op->value)) {
+            legalized_vars.pop(op->name);
+        }
+
+        if (value.same_as(op->value) && body.same_as(op->body)) {
+            return op;
+        } else {
+            return Op::make(op->name, value, body);
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        stmt = visit_let<LetStmt, Stmt>(op);
+    }
+
+    void visit(const Let *op) {
+        expr = visit_let<Let, Expr>(op);
+    }
+
+    void visit(const Call *op) {
+        vector<Expr> new_args(op->args.size());
+        bool changed = false;
+        for (size_t i = 0; i < op->args.size(); i++) {
+            new_args[i] = mutate_and_delegalize(op->args[i]);
+            if (!new_args[i].same_as(op->args[i])) {
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            expr = Call::make(op->type, op->name, new_args, op->call_type,
+                              op->func, op->value_index, op->image, op->param);
+        } else {
+            expr = op;
+        }
+
+        expr = legalize(expr);
+    }
+
+    void visit(const Store *op) {
+        Expr value = mutate_and_delegalize(op->value);
+        Expr index = mutate_and_delegalize(op->index);
+
+        if (value.same_as(op->value) && index.same_as(op->index)) {
+            stmt = op;
+        } else {
+            stmt = Store::make(op->name, value, index);
+        }
+    }
+
+    void visit(const Load *op) {
+        Expr index = mutate_and_delegalize(op->index);
+
+        if (index.same_as(op->index)) {
+            expr = op;
+        } else {
+            expr = Load::make(op->type, op->name, index, op->image, op->param);
+        }
+
+        expr = legalize(expr);
+    }
+
+    void visit(const Select *op) {
+        Expr condition = mutate(op->condition);
+        Expr true_value = mutate(op->true_value);
+        Expr false_value = mutate(op->false_value);
+    }
+};
+*/
+
+}
+
 void CodeGen_X86::compile(Stmt stmt, string name,
                           const vector<Argument> &args,
                           const vector<Buffer> &images_to_embed) {
@@ -146,26 +323,47 @@ Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
 
-Value *CodeGen_X86::call_intrin(Type result_type, const string &name, vector<Expr> args) {
+Value *CodeGen_X86::call_intrin(Type result_type, int vector_width, const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         arg_values[i] = codegen(args[i]);
     }
 
-    return call_intrin(llvm_type_of(result_type), name, arg_values);
+    return call_intrin(llvm_type_of(result_type), vector_width, name, arg_values);
 }
 
-Value *CodeGen_X86::call_intrin(llvm::Type *result_type, const string &name, vector<Value *> arg_values) {
+Value *CodeGen_X86::call_intrin(llvm::Type *result_type, int vector_width, const string &name, vector<Value *> arg_values) {
+    int result_vector_width = (int)result_type->getVectorNumElements();
+    if (vector_width != result_vector_width) {
+        // Cut up each arg into appropriately-sized pieces, call the
+        // intrinsic on each, then splice together the results.
+        vector<Value *> results;
+        for (int start = 0; start < result_vector_width; start += vector_width) {
+            vector<Value *> args;
+            for (size_t i = 0; i < arg_values.size(); i++) {
+                args.push_back(slice_vector(arg_values[i], start, vector_width));
+            }
+
+            llvm::Type *result_slice_type =
+                llvm::VectorType::get(result_type->getScalarType(), vector_width);
+
+            results.push_back(call_intrin(result_slice_type, vector_width, name, args));
+        }
+        Value *result = concat_vectors(results);
+        return slice_vector(result, 0, result_vector_width);
+    }
+
     vector<llvm::Type *> arg_types(arg_values.size());
     for (size_t i = 0; i < arg_values.size(); i++) {
         arg_types[i] = arg_values[i]->getType();
     }
 
-    llvm::Function *fn = module->getFunction("llvm.x86." + name);
+    llvm::Function *fn = module->getFunction(name);
 
     if (!fn) {
-        FunctionType *func_t = FunctionType::get(result_type, arg_types, false);
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, "llvm.x86." + name, module);
+        llvm::Type *intrinsic_result_type = VectorType::get(result_type->getScalarType(), vector_width);
+        FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
+        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
         fn->setCallingConv(CallingConv::C);
     }
 
@@ -275,13 +473,98 @@ void CodeGen_X86::visit(const Sub *op) {
     }
 }
 
+void CodeGen_X86::visit(const GT *op) {
+    Type t = op->a.type();
+    int bits = t.width * t.bits;
+    if (t.width == 1 || bits % 128 == 0) {
+        // LLVM is fine for native vector widths or scalars
+        CodeGen::visit(op);
+    } else {
+        // Non-native vector widths get legalized poorly by llvm. We
+        // split it up ourselves.
+        Value *a = codegen(op->a), *b = codegen(op->b);
+
+        int slice_size = 128 / t.bits;
+
+        vector<Value *> result;
+        for (int i = 0; i < op->type.width; i += slice_size) {
+            Value *sa = slice_vector(a, i, slice_size);
+            Value *sb = slice_vector(b, i, slice_size);
+            Value *slice_value;
+            if (t.is_float()) {
+                slice_value = builder->CreateFCmpOGT(sa, sb);
+            } else if (t.is_int()) {
+                slice_value = builder->CreateICmpSGT(sa, sb);
+            } else {
+                slice_value = builder->CreateICmpUGT(sa, sb);
+            }
+            result.push_back(slice_value);
+        }
+
+        value = concat_vectors(result);
+        value = slice_vector(value, 0, t.width);
+    }
+}
+
+void CodeGen_X86::visit(const EQ *op) {
+    Type t = op->a.type();
+    int bits = t.width * t.bits;
+    if (t.width == 1 || bits % 128 == 0) {
+        // LLVM is fine for native vector widths or scalars
+        CodeGen::visit(op);
+    } else {
+        // Non-native vector widths get legalized poorly by llvm. We
+        // split it up ourselves.
+        Value *a = codegen(op->a), *b = codegen(op->b);
+
+        int slice_size = 128 / t.bits;
+
+        vector<Value *> result;
+        for (int i = 0; i < op->type.width; i += slice_size) {
+            Value *sa = slice_vector(a, i, slice_size);
+            Value *sb = slice_vector(b, i, slice_size);
+            Value *slice_value;
+            if (t.is_float()) {
+                slice_value = builder->CreateFCmpOEQ(sa, sb);
+            } else {
+                slice_value = builder->CreateICmpEQ(sa, sb);
+            }
+            result.push_back(slice_value);
+        }
+
+        value = concat_vectors(result);
+        value = slice_vector(value, 0, t.width);
+    }
+}
+
+void CodeGen_X86::visit(const LT *op) {
+    codegen(op->b > op->a);
+}
+
+void CodeGen_X86::visit(const LE *op) {
+    codegen(!(op->a > op->b));
+}
+
+void CodeGen_X86::visit(const GE *op) {
+    codegen(!(op->b > op->a));
+}
+
+void CodeGen_X86::visit(const NE *op) {
+    codegen(!(op->a == op->b));
+}
+
 void CodeGen_X86::visit(const Cast *op) {
+
+    if (!op->type.is_vector()) {
+        // We only have peephole optimizations for vectors in here.
+        CodeGen::visit(op);
+        return;
+    }
 
     vector<Expr> matches;
 
     struct Pattern {
         bool needs_sse_41;
-        bool extern_call;
         bool wide_op;
         Type type;
         string intrin;
@@ -289,95 +572,65 @@ void CodeGen_X86::visit(const Cast *op) {
     };
 
     static Pattern patterns[] = {
-        {false, false, true, Int(8, 16), "sse2.padds.b",
-         _i8(clamp(wild_i16x16 + wild_i16x16, -128, 127))},
-        {false, false, true, Int(8, 16), "sse2.psubs.b",
-         _i8(clamp(wild_i16x16 - wild_i16x16, -128, 127))},
-        {false, false, true, UInt(8, 16), "sse2.paddus.b",
-         _u8(min(wild_u16x16 + wild_u16x16, 255))},
-        {false, false, true, UInt(8, 16), "sse2.psubus.b",
-         _u8(max(wild_i16x16 - wild_i16x16, 0))},
-        {false, false, true, Int(16, 8), "sse2.padds.w",
-         _i16(clamp(wild_i32x8 + wild_i32x8, -32768, 32767))},
-        {false, false, true, Int(16, 8), "sse2.psubs.w",
-         _i16(clamp(wild_i32x8 - wild_i32x8, -32768, 32767))},
-        {false, false, true, UInt(16, 8), "sse2.paddus.w",
-         _u16(min(wild_u32x8 + wild_u32x8, 65535))},
-        {false, false, true, UInt(16, 8), "sse2.psubus.w",
-         _u16(max(wild_i32x8 - wild_i32x8, 0))},
-        {false, false, true, Int(16, 8), "sse2.pmulh.w",
-         _i16((wild_i32x8 * wild_i32x8) / 65536)},
-        {false, false, true, UInt(16, 8), "sse2.pmulhu.w",
-         _u16((wild_u32x8 * wild_u32x8) / 65536)},
-        {false, false, true, UInt(8, 16), "sse2.pavg.b",
-         _u8(((wild_u16x16 + wild_u16x16) + 1) / 2)},
-        {false, false, true, UInt(16, 8), "sse2.pavg.w",
-         _u16(((wild_u32x8 + wild_u32x8) + 1) / 2)},
-        {false, true, false, Int(16, 8), "packssdw",
-         _i16(clamp(wild_i32x8, -32768, 32767))},
-        {false, true, false, Int(8, 16), "packsswb",
-         _i8(clamp(wild_i16x16, -128, 127))},
-        {false, true, false, UInt(8, 16), "packuswb",
-         _u8(clamp(wild_i16x16, 0, 255))},
-        {true, true, false, UInt(16, 8), "packusdw",
-         _u16(clamp(wild_i32x8, 0, 65535))}
+        {false, true, Int(8, 16), "llvm.x86.sse2.padds.b",
+         _i8(clamp(wild_i16x0 + wild_i16x0, -128, 127))},
+        {false, true, Int(8, 16), "llvm.x86.sse2.psubs.b",
+         _i8(clamp(wild_i16x0 - wild_i16x0, -128, 127))},
+        {false, true, UInt(8, 16), "llvm.x86.sse2.paddus.b",
+         _u8(min(wild_u16x0 + wild_u16x0, 255))},
+        {false, true, UInt(8, 16), "llvm.x86.sse2.psubus.b",
+         _u8(max(wild_i16x0 - wild_i16x0, 0))},
+        {false, true, Int(16, 8), "llvm.x86.sse2.padds.w",
+         _i16(clamp(wild_i32x0 + wild_i32x0, -32768, 32767))},
+        {false, true, Int(16, 8), "llvm.x86.sse2.psubs.w",
+         _i16(clamp(wild_i32x0 - wild_i32x0, -32768, 32767))},
+        {false, true, UInt(16, 8), "llvm.x86.sse2.paddus.w",
+         _u16(min(wild_u32x0 + wild_u32x0, 65535))},
+        {false, true, UInt(16, 8), "llvm.x86.sse2.psubus.w",
+         _u16(max(wild_i32x0 - wild_i32x0, 0))},
+        {false, true, Int(16, 8), "llvm.x86.sse2.pmulh.w",
+         _i16((wild_i32x0 * wild_i32x0) / 65536)},
+        {false, true, UInt(16, 8), "llvm.x86.sse2.pmulhu.w",
+         _u16((wild_u32x0 * wild_u32x0) / 65536)},
+        {false, true, UInt(8, 16), "llvm.x86.sse2.pavg.b",
+         _u8(((wild_u16x0 + wild_u16x0) + 1) / 2)},
+        {false, true, UInt(16, 8), "llvm.x86.sse2.pavg.w",
+         _u16(((wild_u32x0 + wild_u32x0) + 1) / 2)},
+        {false, false, Int(16, 8), "packssdwx8",
+         _i16(clamp(wild_i32x0, -32768, 32767))},
+        {false, false, Int(8, 16), "packsswbx16",
+         _i8(clamp(wild_i16x0, -128, 127))},
+        {false, false, UInt(8, 16), "packuswbx16",
+         _u8(clamp(wild_i16x0, 0, 255))},
+        {true, false, UInt(16, 8), "packusdwx8",
+         _u16(clamp(wild_i32x0, 0, 65535))}
     };
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
         const Pattern &pattern = patterns[i];
-        if (!target.has_feature(Target::SSE41) && pattern.needs_sse_41) continue;
+
+        if (!target.has_feature(Target::SSE41) && pattern.needs_sse_41) {
+            continue;
+        }
+
         if (expr_match(pattern.pattern, op, matches)) {
-            bool ok = true;
+            bool match = true;
             if (pattern.wide_op) {
                 // Try to narrow the matches to the target type.
                 for (size_t i = 0; i < matches.size(); i++) {
-                    matches[i] = lossless_cast(pattern.type, matches[i]);
-                    if (!matches[i].defined()) ok = false;
+                    matches[i] = lossless_cast(op->type, matches[i]);
+                    if (!matches[i].defined()) match = false;
                 }
             }
-            if (!ok) continue;
-
-            if (pattern.extern_call) {
-                value = codegen(Call::make(pattern.type, pattern.intrin, matches, Call::Extern));
-            } else {
-                value = call_intrin(pattern.type, pattern.intrin, matches);
+            if (match) {
+                value = call_intrin(op->type, pattern.type.width, pattern.intrin, matches);
+                return;
             }
-            return;
         }
     }
 
     CodeGen::visit(op);
 
-    /*
-    check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, 127)));
-    check_sse("psubsb", 16, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, 127)));
-    check_sse("paddusb", 16, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
-    check_sse("psubusb", 16, u8(min(u16(u8_1) - u16(u8_2), max_u8)));
-    check_sse("paddsw", 8, i16(clamp(i32(i16_1) + i32(i16_2), -32768, 32767)));
-    check_sse("psubsw", 8, i16(clamp(i32(i16_1) - i32(i16_2), -32768, 32767)));
-    check_sse("paddusw", 8, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
-    check_sse("psubusw", 8, u16(min(u32(u16_1) - u32(u16_2), max_u16)));
-    check_sse("pmulhw", 8, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
-    check_sse("pmulhw", 8, i16_1 / 15);
-
-    // SSE 1
-    check_sse("rcpps", 4, 1.0f / f32_2);
-    check_sse("rsqrtps", 4, 1.0f / sqrt(f32_2));
-    check_sse("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
-    check_sse("pavgw", 8, u16((u32(u16_1) + u32(u16_2) + 1)/2));
-
-    check_sse("pmulhuw", 8, u16((u32(u16_1) * u32(u16_2))/(256*256)));
-    check_sse("pmulhuw", 8, u16_1 / 15);
-
-    check_sse("shufps", 4, in_f32(2*x));
-
-    // SSE 2
-    check_sse("packssdw", 8, i16(clamp(i32_1, -32768, 32767)));
-    check_sse("packsswb", 16, i8(clamp(i16_1, min_i8, 127)));
-    check_sse("packuswb", 16, u8(clamp(i16_1, 0, max_u8)));
-
-    check_sse("packusdw", 8, u16(clamp(i32_1, 0, max_u16)));
-    */
 }
 
 void CodeGen_X86::visit(const Div *op) {
@@ -435,8 +688,8 @@ void CodeGen_X86::visit(const Div *op) {
         Value *mult = ConstantInt::get(narrower, multiplier);
 
         // Widening multiply, keep high half, shift
-        if (op->type == Int(16, 8)) {
-            val = call_intrin(narrower, "sse2.pmulhu.w", vec(flipped, mult));
+        if (op->type.element_of() == Int(16) && op->type.is_vector()) {
+            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", vec(flipped, mult));
             if (shift) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
@@ -486,8 +739,8 @@ void CodeGen_X86::visit(const Div *op) {
         Value *mult = ConstantInt::get(narrower, multiplier);
         Value *val = num;
 
-        if (op->type == UInt(16, 8)) {
-            val = call_intrin(narrower, "sse2.pmulhu.w", vec(val, mult));
+        if (op->type.element_of() == UInt(16) && op->type.is_vector()) {
+            val = call_intrin(narrower, 8, "llvm.x86.sse2.pmulhu.w", vec(val, mult));
             if (shift && method == 1) {
                 Constant *shift_amount = ConstantInt::get(narrower, shift);
                 val = builder->CreateLShr(val, shift_amount);
@@ -535,38 +788,63 @@ void CodeGen_X86::visit(const Div *op) {
 }
 
 void CodeGen_X86::visit(const Min *op) {
+    if (!op->type.is_vector()) {
+        CodeGen::visit(op);
+        return;
+    }
+
     bool use_sse_41 = target.has_feature(Target::SSE41);
-    if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pminu.b", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pminsb", vec(op->a, op->b));
-    } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmins.w", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pminuw", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pminsd", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));
+    if (op->type.element_of() == UInt(8)) {
+        value = call_intrin(op->type, 16, "llvm.x86.sse2.pminu.b", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == Int(8)) {
+        value = call_intrin(op->type, 16, "llvm.x86.sse41.pminsb", vec(op->a, op->b));
+    } else if (op->type.element_of() == Int(16)) {
+        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmins.w", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
+        value = call_intrin(op->type, 8, "llvm.x86.sse41.pminuw", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == Int(32)) {
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminsd", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pminud", vec(op->a, op->b));
+    } else if (op->type.element_of() == Float(32)) {
+        if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
+            // This condition should possibly be > 4, rather than a
+            // multiple of 8, but shuffling in undefs seems to work
+            // poorly with avx.
+            value = call_intrin(op->type, 8, "min_f32x8", vec(op->a, op->b));
+        } else {
+            value = call_intrin(op->type, 4, "min_f32x4", vec(op->a, op->b));
+        }
     } else {
         CodeGen::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Max *op) {
+    if (!op->type.is_vector()) {
+        CodeGen::visit(op);
+        return;
+    }
+
     bool use_sse_41 = target.has_feature(Target::SSE41);
-    if (op->type == UInt(8, 16)) {
-        value = call_intrin(UInt(8, 16), "sse2.pmaxu.b", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(8, 16)) {
-        value = call_intrin(Int(8, 16), "sse41.pmaxsb", vec(op->a, op->b));
-    } else if (op->type == Int(16, 8)) {
-        value = call_intrin(Int(16, 8), "sse2.pmaxs.w", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(16, 8)) {
-        value = call_intrin(UInt(16, 8), "sse41.pmaxuw", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == Int(32, 4)) {
-        value = call_intrin(Int(32, 4), "sse41.pmaxsd", vec(op->a, op->b));
-    } else if (use_sse_41 && op->type == UInt(32, 4)) {
-        value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));
+    if (op->type.element_of() == UInt(8)) {
+        value = call_intrin(op->type, 16, "llvm.x86.sse2.pmaxu.b", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == Int(8)) {
+        value = call_intrin(op->type, 16, "llvm.x86.sse41.pmaxsb", vec(op->a, op->b));
+    } else if (op->type.element_of() == Int(16)) {
+        value = call_intrin(op->type, 8, "llvm.x86.sse2.pmaxs.w", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == UInt(16)) {
+        value = call_intrin(op->type, 8, "llvm.x86.sse41.pmaxuw", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == Int(32)) {
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxsd", vec(op->a, op->b));
+    } else if (use_sse_41 && op->type.element_of() == UInt(32)) {
+        value = call_intrin(op->type, 4, "llvm.x86.sse41.pmaxud", vec(op->a, op->b));
+    } else if (op->type.element_of() == Float(32)) {
+        if (op->type.width % 8 == 0 && target.has_feature(Target::AVX)) {
+            value = call_intrin(op->type, 8, "max_f32x8", vec(op->a, op->b));
+        } else {
+            value = call_intrin(op->type, 4, "max_f32x4", vec(op->a, op->b));
+        }
     } else {
         CodeGen::visit(op);
     }
@@ -732,6 +1010,14 @@ string CodeGen_X86::mattrs() const {
 
 bool CodeGen_X86::use_soft_float_abi() const {
     return false;
+}
+
+int CodeGen_X86::native_vector_bits() const {
+    if (target.has_feature(Target::AVX)) {
+        return 256;
+    } else {
+        return 128;
+    }
 }
 
 void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)

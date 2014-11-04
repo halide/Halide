@@ -84,6 +84,11 @@ public:
     virtual bool use_soft_float_abi() const = 0;
     // @}
 
+    // What's the natural vector bit-width to use for loads, stores, etc.
+    // @{
+    virtual int native_vector_bits() const = 0;
+    // @}
+
     /** Do any required target-specific things to the execution engine
      * and the module prior to jitting. Called by JITCompiledModule
      * just before it jits. Does nothing by default. */
@@ -316,7 +321,32 @@ protected:
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr>&);
+    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+
+    /** Take a slice of lanes out of an llvm vector. Pads with undefs
+     * if you ask for more lanes than the vector has. */
+    llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
+
+    /** Concatenate a bunch of llvm vectors. Must be of the same type. */
+    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+
+    /** Go looking for a vector version of a runtime function. Will
+     * return the best match. Matches in the following order:
+     *
+     * 1) The requested vector width.
+     *
+     * 2) The width which is the smallest power of two
+     * greater than or equal to the vector width.
+     *
+     * 3) All the factors of 2) greater than one, in decreasing order.
+     *
+     * 4) The smallest power of two not yet tried.
+     *
+     * So for a 5-wide vector, it tries: 5, 8, 4, 2, 16.
+     *
+     * If there's no match, returns (NULL, 0).
+     */
+    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
 
 private:
 

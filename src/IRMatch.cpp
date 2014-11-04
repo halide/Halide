@@ -61,6 +61,13 @@ public:
 
     using IRVisitor::visit;
 
+    bool types_match(Type pattern_type, Type expr_type) {
+        bool bits_matches = pattern_type.bits == 0 || pattern_type.bits == expr_type.bits;
+        bool width_matches = pattern_type.width == 0 || pattern_type.bits == expr_type.bits;
+        bool code_matches = pattern_type.code == expr_type.code;
+        return bits_matches && width_matches && code_matches;
+    }
+
     void visit(const IntImm *op) {
         const IntImm *e = expr.as<IntImm>();
         if (!e || e->value != op->value) {
@@ -77,7 +84,7 @@ public:
 
     void visit(const Cast *op) {
         const Cast *e = expr.as<Cast>();
-        if (result && e && e->type == op->type) {
+        if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
         } else {
@@ -90,8 +97,7 @@ public:
             return;
         }
 
-        // Represent 'don't care' types with type.bits == 0.
-        if (op->type.bits != 0 && op->type != expr.type()) {
+        if (!types_match(op->type, expr.type())) {
             result = false;
         } else if (matches) {
             if (op->name == "*") {
@@ -165,7 +171,7 @@ public:
 
     void visit(const Load *op) {
         const Load *e = expr.as<Load>();
-        if (result && e && e->type == op->type && e->name == op->name) {
+        if (result && e && types_match(op->type, e->type) && e->name == op->name) {
             expr = e->index;
             op->index.accept(this);
         } else {
@@ -187,7 +193,7 @@ public:
 
     void visit(const Broadcast *op) {
         const Broadcast *e = expr.as<Broadcast>();
-        if (result && e && e->width == op->width) {
+        if (result && e && types_match(op->type, e->type)) {
             expr = e->value;
             op->value.accept(this);
         } else {
@@ -198,7 +204,7 @@ public:
     void visit(const Call *op) {
         const Call *e = expr.as<Call>();
         if (result && e &&
-            e->type == op->type &&
+            types_match(op->type, e->type) &&
             e->name == op->name &&
             e->value_index == op->value_index &&
             e->call_type == op->call_type &&

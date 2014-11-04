@@ -1568,10 +1568,19 @@ void CodeGen::visit(const Call *op) {
             for (size_t i = 0; i < indices.size(); i++) {
                 const IntImm *idx = op->args[i+1].as<IntImm>();
                 internal_assert(idx);
+                internal_assert(idx->value >= 0 && idx->value <= op->args[0].type().width);
                 indices[i] = ConstantInt::get(i32, idx->value);
             }
             Value *arg = codegen(op->args[0]);
-            value = builder->CreateShuffleVector(arg, arg, ConstantVector::get(indices));
+
+            // Make a size 1 vector of undef at the end to mix in undef values.
+            //llvm::VectorType *undef_end_type = arg->getType();
+            Value *undefs = UndefValue::get(arg->getType());
+
+            arg->dump();
+            undefs->dump();
+
+            value = builder->CreateShuffleVector(arg, undefs, ConstantVector::get(indices));
 
             if (op->type.is_scalar()) {
                 value = builder->CreateExtractElement(value, ConstantInt::get(i32, 0));
@@ -1665,20 +1674,20 @@ void CodeGen::visit(const Call *op) {
                 value = builder->CreateLShr(codegen(op->args[0]), codegen(op->args[1]));
             }
         } else if (op->name == Call::abs) {
+
             internal_assert(op->args.size() == 1);
-            // Check if an abs for this type exists in the initial module
+
+            // Check if an appropriate vector abs for this type exists in the initial module
             Type t = op->args[0].type();
-            ostringstream type_name;
-            type_name << (t.is_float() ? 'f' : 'i') << t.bits;
-            if (t.is_vector()) {
-                type_name << 'x' << t.width;
-            }
-            llvm::Function *builtin_abs = module->getFunction("abs_" + type_name.str());
-            Value *arg = codegen(op->args[0]);
+            string name = "abs_" + (t.is_float() ? 'f' : 'i') + int_to_string(t.bits);
+            llvm::Function *builtin_abs =
+                find_vector_runtime_function(name, op->type.width).first;
+
             if (builtin_abs) {
-                value = builder->CreateCall(builtin_abs, vec(arg));
+                codegen(Call::make(op->type, name, op->args, Call::Extern));
             } else {
                 // Generate select(x >= 0, x, -x) instead
+                Value *arg = codegen(op->args[0]);
                 Value *zero = Constant::getNullValue(arg->getType());
                 Value *cmp, *neg;
                 if (t.is_float()) {
@@ -2189,22 +2198,38 @@ void CodeGen::visit(const Call *op) {
         } else {
 
             // Check if a vector version of the function already
-            // exists. We use the naming convention that a N-wide
-            // version of a function foo is called fooxN.
-            ostringstream ss;
-            ss << op->name << 'x' << op->type.width;
-            llvm::Function *vec_fn = module->getFunction(ss.str());
+            // exists at some useful width.
+            pair<llvm::Function *, int> vec =
+                find_vector_runtime_function(op->name, op->type.width);
+            llvm::Function *vec_fn = vec.first;
+            int w = vec.second;
+
             if (vec_fn) {
-                debug(4) << "Creating vector call to " << ss.str() << "\n";
-                CallInst *call = builder->CreateCall(vec_fn, args);
-                if (pure) {
-                    call->setDoesNotAccessMemory();
+                int num_calls = (op->type.width + w - 1) / w;
+
+                vector<Value *> results;
+
+                for (int j = 0; j < num_calls; j++) {
+                    // Take a slice of each arg.
+                    vector<Value *> args_slice(args.size());
+                    for (size_t k = 0; k < args.size(); k++) {
+                        args_slice[k] = slice_vector(args[k], j*w, w);
+                    }
+
+                    CallInst *call = builder->CreateCall(vec_fn, args_slice);
+                    if (pure) {
+                        call->setDoesNotAccessMemory();
+                    }
+                    call->setDoesNotThrow();
+
+                    results.push_back(call);
                 }
-                call->setDoesNotThrow();
-                value = call;
+
+                value = slice_vector(concat_vectors(results), 0, op->type.width);
             } else {
-                // Scalarize. Extract each simd lane in turn and do
-                // one scalar call to the function.
+
+                // No vector version found. Scalarize. Extract each simd
+                // lane in turn and do one scalar call to the function.
                 value = UndefValue::get(result_type);
                 for (int i = 0; i < op->type.width; i++) {
                     Value *idx = ConstantInt::get(i32, i);
@@ -2499,23 +2524,41 @@ void CodeGen::visit(const Store *op) {
         const Ramp *ramp = op->index.as<Ramp>();
         if (ramp && is_one(ramp->stride)) {
 
-            // Boost the alignment if possible
+            int native_bits = native_vector_bits();
+
+            // Boost the alignment if possible, up to the native vector width.
             ModulusRemainder mod_rem = modulus_remainder(ramp->base, alignment_info);
-            while ((mod_rem.remainder & 1) == 0 &&
-                   (mod_rem.modulus & 1) == 0 &&
-                   alignment < 256) {
-                mod_rem.modulus /= 2;
-                mod_rem.remainder /= 2;
-                alignment *= 2;
+            if (!possibly_misaligned) {
+                while ((mod_rem.remainder & 1) == 0 &&
+                       (mod_rem.modulus & 1) == 0 &&
+                       alignment < native_bits) {
+                    mod_rem.modulus /= 2;
+                    mod_rem.remainder /= 2;
+                    alignment *= 2;
+                }
             }
 
-            Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
-            Value *ptr2 = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
-            if (possibly_misaligned) {
-                alignment = op->value.type().element_of().bytes();
+            // For dense vector stores wider than the native vector
+            // width, bust them up into native vectors.
+            int store_bits = op->value.type().bits * op->value.type().width;
+            if (store_bits > native_bits && store_bits % native_bits == 0) {
+                int elements_per_vector = native_bits / op->value.type().bits;
+                for (int i = 0; i < op->value.type().width; i += elements_per_vector) {
+                    Expr sub_base = simplify(ramp->base + i);
+                    Expr sub_index = Ramp::make(sub_base, 1, elements_per_vector);
+                    Value *sub_val = slice_vector(val, i, elements_per_vector);
+                    Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), sub_base);
+                    Value *ptr2 = builder->CreatePointerCast(ptr, sub_val->getType()->getPointerTo());
+                    StoreInst *store = builder->CreateAlignedStore(sub_val, ptr2, alignment);
+                    add_tbaa_metadata(store, op->name, sub_index);
+                }
+            } else {
+                // Do a single big vector store and let llvm figure it out.
+                Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
+                Value *ptr2 = builder->CreatePointerCast(ptr, llvm_type_of(value_type)->getPointerTo());
+                StoreInst *store = builder->CreateAlignedStore(val, ptr2, alignment);
+                add_tbaa_metadata(store, op->name, op->index);
             }
-            StoreInst *store = builder->CreateAlignedStore(val, ptr2, alignment);
-            add_tbaa_metadata(store, op->name, op->index);
         } else if (ramp) {
             Value *ptr = codegen_buffer_pointer(op->name, value_type.element_of(), ramp->base);
             const IntImm *const_stride = ramp->stride.as<IntImm>();
@@ -2606,12 +2649,89 @@ Value *CodeGen::create_alloca_at_entry(llvm::Type *t, int n, const string &name)
     return ptr;
 }
 
-llvm::Value *CodeGen::get_user_context() const {
-    llvm::Value *ctx = sym_get("__user_context", false);
+Value *CodeGen::get_user_context() const {
+    Value *ctx = sym_get("__user_context", false);
     if (!ctx) {
         ctx = ConstantPointerNull::get(i8->getPointerTo()); // void*
     }
     return ctx;
+}
+
+Value *CodeGen::slice_vector(Value *vec, int start, int size) {
+    int vec_lanes = vec->getType()->getVectorNumElements();
+
+    if (start == 0 && size == vec_lanes) {
+        return vec;
+    }
+
+    vector<Constant *> indices(size);
+    for (int i = 0; i < size; i++) {
+        int idx = start + i;
+        if (idx >= 0 && idx < vec_lanes) {
+            indices[i] = ConstantInt::get(i32, idx);
+        } else {
+            indices[i] = UndefValue::get(i32);
+        }
+    }
+    Constant *indices_vec = ConstantVector::get(indices);
+    Value *undefs = UndefValue::get(vec->getType());
+    return builder->CreateShuffleVector(vec, undefs, indices_vec);
+}
+
+Value *CodeGen::concat_vectors(const vector<Value *> &v) {
+    internal_assert(!v.empty());
+
+    vector<Value *> vecs = v;
+    while (vecs.size() > 1) {
+        vector<Value *> new_vecs;
+
+        int w = vecs[0]->getType()->getVectorNumElements();
+        vector<Constant *> indices(w*2);
+        for (int i = 0; i < w*2; i++) {
+            indices[i] = ConstantInt::get(i32, i);
+        }
+
+        Constant *indices_vec = ConstantVector::get(indices);
+        for (size_t i = 0; i < vecs.size()-1; i += 2) {
+            Value *merged = builder->CreateShuffleVector(vecs[i], vecs[i+1], indices_vec);
+            new_vecs.push_back(merged);
+        }
+        vecs.swap(new_vecs);
+    }
+
+    return vecs[0];
+}
+
+std::pair<llvm::Function *, int> CodeGen::find_vector_runtime_function(const std::string &name, int width) {
+    // Check if a vector version of the function already
+    // exists at some useful width. We use the naming
+    // convention that a N-wide version of a function foo is
+    // called fooxN. All of our intrinsics are power-of-two
+    // sized, so starting at the first power of two >= the
+    // vector width, we'll try all powers of two in decreasing
+    // order.
+    vector<int> sizes_to_try;
+    int w = 1;
+    while (w < width) w *= 2;
+    for (int i = w; i > 1; i /= 2) {
+        sizes_to_try.push_back(i);
+    }
+
+    // If none of those match, we'll also try doubling
+    // the width up to the next power of two (this is to catch
+    // cases where we're a 64-bit vector and have a 128-bit
+    // vector implementation).
+    sizes_to_try.push_back(w*2);
+
+    for (size_t i = 0; i < sizes_to_try.size(); i++) {
+        int w = sizes_to_try[i];
+        llvm::Function *vec_fn = module->getFunction(name + "x" + int_to_string(w));
+        if (vec_fn) {
+            return std::make_pair(vec_fn, w);
+        }
+    }
+
+    return std::make_pair<llvm::Function *, int>(NULL, 0);
 }
 
 template<>
