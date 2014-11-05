@@ -48,6 +48,14 @@ private:
     Expr expr;
 };
 
+std::ostream& operator<< (std::ostream& out, StmtOrExpr se) {
+    if (se.is_expr()) {
+        return out << static_cast<Expr>(se);
+    } else {
+        return out << static_cast<Stmt>(se);
+    }
+}
+
 // The generic version of this class doesn't work for our
 // purposes. We need to dive into the current scope to decide if a
 // variable is used.
@@ -796,10 +804,10 @@ public:
         Branch b;
         b.min = min;
         b.extent = extent;
-        if (content.is_stmt()) {
-            b.stmt = content;
-        } else {
-            b.expr = content;
+        if (content.is_expr()) {
+            b.expr = simplify(static_cast<Expr>(content), true, bounds_info);
+        } else if (content.is_stmt()){
+            b.stmt = simplify(static_cast<Stmt>(content), true, bounds_info);
         }
 
         // debug(0) << "Making branch: " << b << "\n";
@@ -943,6 +951,8 @@ public:
         std::vector<Expr> branch_points;
         std::vector<std::vector<StmtOrExpr> > args;
 
+        // debug(0) << "Branching children of: " << StmtOrExpr(op) << "\n";
+
         Expr max = simplify(min + extent);
         branch_points.push_back(min);
         branch_points.push_back(max);
@@ -972,7 +982,7 @@ public:
                 // for (size_t j = 0; j < branch_points.size(); ++j) {
                 //   debug(0) << branch_points[j] << (j < branch_points.size()-1? ", ": "}\n");
                 // }
-                // debug(0) << "  Child branch points   " << child_branches.size() <<  " {";
+                // debug(0) << "  Child branch points   " << child_branches.size()+1 <<  " {";
                 // for (size_t j = 0; j < child_branches.size(); ++j) {
                 //   debug(0) << child_branches[j].min << ", ";
                 // }
@@ -1012,7 +1022,12 @@ public:
                         while (!found_interval && can_subdivide && k < args.size()) {
                             Expr min_k = branch_points[k];
                             Expr ext_k = branch_points[k+1] - min_k;
+
+                            // debug(0) << "comparing child branch point: " << b.min << "\n"
+                            //          << "to existing branch point:     " << min_k << "\n";
+
                             if (equal(b.min, min_k)) {
+                                // debug(0) << "<*> Equivalent!\n\n";
                                 // The branch point of the child branch matches exactly a branch
                                 // point we have already collected.
                                 is_equal[j] = true;
@@ -1020,20 +1035,26 @@ public:
                                 found_interval = true;
                             } else if (can_prove_in_range(b.min, min_k, ext_k, in_range)) {
                                 if (in_range) {
+                                    // debug(0) << "<*> Proved in range!\n\n";
                                     // We've found an interval that we can prove the child branch
                                     // point lives in.
                                     intervals[j] = k;
                                     found_interval = true;
                                 } else {
+                                    // debug(0) << "<*> Proved out of range!\n";
                                     ++k;
                                 }
                             } else {
-                                // We can't prove anything about where the child branch point lives, so we are going
-                                // to have to recursively divide all the branches. Simple interval subdivision
-                                // won't work.
-                                can_subdivide = false;
+                                // debug(0) << "<*> Can't prove!\n";
+                                ++k;
                             }
+                        }
 
+                        if (!found_interval) {
+                            // We can't prove anything about where the child branch point lives, so we are going
+                            // to have to recursively divide all the branches. Simple interval subdivision
+                            // won't work.
+                            can_subdivide = false;
                         }
                     }
 
@@ -1071,11 +1092,24 @@ public:
                                 new_args.back().push_back(arg);
                             }
                         }
-                        new_branch_points.push_back(branch_points.back());
-                        branch_points.swap(new_branch_points);
-                        args.swap(new_args);
+
+                        if (new_args.size() > branching_limit) {
+                            // debug(0) << "Too many branches! Bailing out...\n";
+
+                            // Branching on this child node would introduce too many branches, so we fall back
+                            // to adding the child argument directly to the branches collected thus far.
+                            for (size_t j = 0; j < args.size(); ++j) {
+                                args[j].push_back(child);
+                            }
+                        } else {
+                            new_branch_points.push_back(branch_points.back());
+                            branch_points.swap(new_branch_points);
+                            args.swap(new_args);
+                        }
                     } else {
                         if (child_branches.size() * args.size() > branching_limit) {
+                            // debug(0) << "Too many branches! Bailing out...\n";
+
                             // Branching on this child node would introduce too many branches, so we fall back
                             // to adding the child argument directly to the branches collected thus far.
                             for (size_t j = 0; j < args.size(); ++j) {
@@ -1123,6 +1157,13 @@ public:
                 if (!is_zero(extent)) {
                     Branch b = {min, extent, Expr(), Stmt()};
                     update_branch(b, op, args[i]);
+                    bounds_info.push(name, Interval(min, simplify(min + extent - 1)));
+                    if (b.expr.defined()) {
+                        b.expr = simplify(b.expr, true, bounds_info);
+                    } else if (b.stmt.defined()) {
+                        b.stmt = simplify(b.stmt, true, bounds_info);
+                    }
+                    bounds_info.pop(name);
                     branches.push_back(b);
                 }
             }

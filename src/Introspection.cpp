@@ -631,7 +631,7 @@ private:
             return;
         }
 
-        obj = maybe_obj.get().getBinary();
+        obj = maybe_obj.get().getBinary().get();
 
         #elif LLVM_VERSION >= 35
 
