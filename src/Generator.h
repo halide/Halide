@@ -99,7 +99,7 @@ namespace Halide {
 
 namespace Internal {
 
-EXPORT extern const std::map<std::string, Halide::Type> halide_type_enum_map;
+EXPORT extern const std::map<std::string, Halide::Type> &get_halide_type_enum_map();
 
 /** generate_filter_main() is a convenient wrapper for GeneratorRegistry::create() +
  * compile_to_files();
@@ -186,7 +186,7 @@ public:
     template <typename T2 = T, typename std::enable_if<std::is_same<T2, Halide::Type>::value>::type * = nullptr>
     GeneratorParam(const std::string &name, const T &value)
         : GeneratorParamBase(name), value(value), min(value),
-          max(value), enum_map(Internal::halide_type_enum_map) {
+          max(value), enum_map(Internal::get_halide_type_enum_map()) {
     }
 
     // Arithmetic values must fall within the range -- we don't silently clamp.
@@ -366,7 +366,7 @@ protected:
 
 class GeneratorBase : public NamesInterface {
 public:
-    GeneratorParam<Target> target{ "target", Halide::get_jit_target_from_environment() };
+    GeneratorParam<Target> target{ "target", Halide::get_host_target() };
 
     struct EmitOptions {
         bool emit_o, emit_h, emit_cpp, emit_assembly, emit_bitcode, emit_stmt, emit_stmt_html;
