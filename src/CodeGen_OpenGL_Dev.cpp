@@ -191,12 +191,8 @@ void CodeGen_GLSL::visit(const FloatImm *op) {
     // precision of 9 digits, which should be enough to recover the binary
     // float unambiguously from the decimal representation (if iostreams
     // implements correct rounding).
-#if _MSC_VER == 0 || _MSC_VER >= 1800
-    if (truncf(op->value) == op->value) {
-#else
-    const float truncated = (op->value < 0 ? ceilf(op->value) : floorf(op->value) );
+    const float truncated = (op->value < 0 ? std::ceil(op->value) : std::floor(op->value) );
     if (truncated == op->value) {
-#endif
         oss << std::fixed << std::setprecision(1) << op->value;
     } else {
         oss << std::setprecision(9) << op->value;
