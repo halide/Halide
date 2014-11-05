@@ -478,17 +478,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
  *  coordinate in its dimension, this function returns an expression for the
  *  GL device coordinates of the original expression.
  */
-Expr deviceCoordinates(Expr v, Expr max_dim) {
+Expr device_coordinates(Expr v, Expr max_dim) {
 
-    if (v.type() != Float(32)) {
-        v = Cast::make(Float(32),v);
-    }
-    
-    if (max_dim.type() != Float(32)) {
-        max_dim = Cast::make(Float(32),max_dim);
-    }
-    
-    return Sub::make(Mul::make(Div::make(Cast::make(Float(32),v), Cast::make(Float(32),max_dim)),2.0f),1.0f);
+    return (cast<float>(v) / cast<float>(max_dim)) * 2.0f - 1.0f;
 }
 
 template<typename CodeGen_CPU>
@@ -518,12 +510,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
         
-        Value* null_ptr_value = ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
-        Value* gpu_attribute_names = null_ptr_value;
-        Value* gpu_num_padded_attributes  = null_ptr_value;
-        Value* gpu_vertex_buffer     = null_ptr_value;
-        Value* gpu_num_coords_dim0 = null_ptr_value;
-        Value* gpu_num_coords_dim1 = null_ptr_value;
+        Value *null_ptr_value = ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
+        Value *gpu_attribute_names = null_ptr_value;
+        Value *gpu_num_padded_attributes  = null_ptr_value;
+        Value *gpu_vertex_buffer     = null_ptr_value;
+        Value *gpu_num_coords_dim0 = null_ptr_value;
+        Value *gpu_num_coords_dim1 = null_ptr_value;
         
         std::map<std::string,Expr> varying;
         
@@ -558,7 +550,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 oss << "_varyingf" << i << "_attrib";
                 std::string name = oss.str();
                 
-                Value* gpu_attribute = CodeGen::create_string_constant(name);
+                Value *gpu_attribute = CodeGen::create_string_constant(name);
 
                 builder->CreateStore(gpu_attribute, builder->CreateConstGEP1_32(gpu_attribute_names, i));
             }
@@ -598,9 +590,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                         // due to piecewise linear expressions, they are
                         // appended following this index and sorted at runtime
                         // when the expressions may be evaluated.
-                        value = deviceCoordinates(value,mesh.coords[0][1]);
+                        value = device_coordinates(value,mesh.coords[0][1]);
 
-                        Value* gpu_coord = codegen(value);
+                        Value *gpu_coord = codegen(value);
                         builder->CreateStore(gpu_coord,
                                              builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
                     }
@@ -609,9 +601,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                         Expr value = mesh.coords[1][j];
 
                         // Use the coordinate value in index 1 for the extent
-                        value = deviceCoordinates(value,mesh.coords[1][1]);
+                        value = device_coordinates(value,mesh.coords[1][1]);
 
-                        Value* gpu_coord = codegen(value);
+                        Value *gpu_coord = codegen(value);
                         builder->CreateStore(gpu_coord,
                                              builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
                     }
@@ -628,7 +620,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                             value = Cast::make(Float(32), value);
                         }
 
-                        Value* gpu_coord = codegen(value);
+                        Value *gpu_coord = codegen(value);
                         builder->CreateStore(gpu_coord,
                                              builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
 
@@ -636,7 +628,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
                     // Pad out the vertex with zeros
                     for (; a!=padded_num_attributes; ++a) {
-                        Value* gpu_coord = codegen(Expr(0.0f));
+                        Value *gpu_coord = codegen(Expr(0.0f));
                         builder->CreateStore(gpu_coord,
                                              builder->CreateConstGEP1_32(gpu_vertex_buffer, element_idx++));
                     }

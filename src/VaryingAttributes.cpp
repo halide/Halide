@@ -57,7 +57,7 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
     
-    Expr makeLinearLet(Expr e, const std::string& name = unique_name('a')) {
+    Expr make_linear_let(Expr e, const std::string& name = unique_name('a')) {
         
         if (total_found >= max_expressions) {
             return e;
@@ -95,7 +95,7 @@ protected:
             for (int i=0;i!=2;++i) {
                 new_args[2+i] = mutate(op->args[2+i]);
                 if (order == 1) {
-                    new_args[2+i] = makeLinearLet(new_args[2+i]);
+                    new_args[2+i] = make_linear_let(new_args[2+i]);
                 }
             }
         }
@@ -106,7 +106,7 @@ protected:
             // The value is the 5th argument to the intrinsic
             new_args[5] = mutate(new_args[5]);
             if (order == 1) {
-                new_args[5] = makeLinearLet(new_args[5]);
+                new_args[5] = make_linear_let(new_args[5]);
             }
         }
 
@@ -195,7 +195,7 @@ protected:
         }
         
         if ((order > 1) && (value_order == 1)) {
-            mutated_value = makeLinearLet(mutated_value);
+            mutated_value = make_linear_let(mutated_value);
         }
         
         expr = Cast::make(op->type, mutated_value);
@@ -215,10 +215,10 @@ protected:
         // If the whole expression is greater than linear, check to see if
         // either argument is linear and if so, add it to a candidate list
         if ((order > 1) && (order_a == 1)) {
-            a = makeLinearLet(a);
+            a = make_linear_let(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = makeLinearLet(b);
+            b = make_linear_let(b);
         }
         
         expr = T::make(a,b);
@@ -240,37 +240,40 @@ protected:
         // If the whole expression is greater than linear, check to see if
         // either argument is linear and if so, add it to a candidate list
         if ((order > 1) && (order_a == 1)) {
-            a = makeLinearLet(a);
+            a = make_linear_let(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = makeLinearLet(b);
+            b = make_linear_let(b);
         }
         
         expr = Mul::make(a,b);
     }
     
-    // Dividing is either multiplying by a constant, makes the result non-linear
-    // (i.e. order -1)
+    // Dividing is either multiplying by a constant, or makes the result
+    // non-linear (i.e. order -1)
     virtual void visit(const Div *op) {
         Expr a = mutate(op->a);
         unsigned int order_a = order;
         Expr b = mutate(op->b);
         unsigned int order_b = order;
-        
+
         if (order_a && !order_b) {
+            // Case: x / c
             order = order_a;
         }
         else if (!order_a && order_b) {
-            order = order_b;
+            // Case: c / x
+            order = 2;
         }
         else {
-            std::vector<Expr> matches;
-            if (expr_match(op->a,op->b,matches)) {
-                order = 0;
-            }
-            else {
-                order = order_a + order_b;
-            }
+            order = order_a + order_b;
+        }
+
+        if ((order > 1) && (order_a == 1)) {
+            a = make_linear_let(a);
+        }
+        if ((order > 1) && (order_b == 1)) {
+            b = make_linear_let(b);
         }
         
         expr = Div::make(a, b);
@@ -291,10 +294,10 @@ protected:
         }
         
         if ((order > 1) && (order_a == 1)) {
-            a = makeLinearLet(a);
+            a = make_linear_let(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = makeLinearLet(b);
+            b = make_linear_let(b);
         }
         
         expr = T::make(a,b);
@@ -337,7 +340,7 @@ protected:
         Expr a = mutate(op->value);
         
         if (order == 1) {
-            a = makeLinearLet(a);
+            a = make_linear_let(a);
         }
         
         if (order) {
@@ -360,13 +363,13 @@ protected:
         order = std::max(std::max(condition_order,true_value_order),false_value_order);
         
         if ((order > 1) && (condition_order == 1)) {
-            mutated_condition = makeLinearLet(mutated_condition);
+            mutated_condition = make_linear_let(mutated_condition);
         }
         if ((order > 1) && (true_value_order == 1)) {
-            mutated_true_value = makeLinearLet(mutated_true_value);
+            mutated_true_value = make_linear_let(mutated_true_value);
         }
         if ((order > 1) && (false_value_order == 1)) {
-            mutated_false_value = makeLinearLet(mutated_false_value);
+            mutated_false_value = make_linear_let(mutated_false_value);
         }
         
         expr = Select::make(mutated_condition, mutated_true_value, mutated_false_value);
@@ -669,17 +672,18 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string,Expr>& varyin
     FindVaryingAttributes find;
     loop_stmt.accept(&find);
     
-    std::vector<std::string> remove_list;    
-    for (auto i : varying) {
-        const std::string& name = i.first;
+    std::vector<std::string> remove_list;
+
+    for (std::map<std::string,Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
+        const std::string& name = i->first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
             remove_list.push_back(name);
         }
     }
     
-    for (auto name : remove_list) {
-        varying.erase(name);
+    for (std::vector<std::string>::iterator name = remove_list.begin(); name != remove_list.end(); ++name) {
+        varying.erase(*name);
     }
 }
     
@@ -823,9 +827,9 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     attribute_order["__vertex_y"] = 1;
     
     int idx = 2;
-    for (auto v : varyings) {
-        result.attributes.push_back(v.first);
-        attribute_order[v.first] = idx++;
+    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+        result.attributes.push_back(v->first);
+        attribute_order[v->first] = idx++;
     }
     
     result.coords.resize(2 + varyings.size());
@@ -845,7 +849,6 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     result.coords[1].push_back(loop1->min);
     result.coords[1].push_back(loop1_max);
 
-
     /*
     // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
 
@@ -858,12 +861,12 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     
     debug(2) << "Checking for piecewise linear expressions\n";
     
-    for (auto v : varyings) {
+    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
         
         // Determine the name of the variable without the .varying
-        std::string varying_name = v.first;
+        std::string varying_name = v->first;
         
-        Expr value = v.second;
+        Expr value = v->second;
         
         debug(2) << "Original value\n" << value << "\n";
         
@@ -873,8 +876,8 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
             continue;
         
         debug(2) << "Branch expressions\n";
-        for (auto e : exprs) {
-            debug(2) << e << "\n";
+        for (std::vector<Expr>::iterator e = exprs.begin(); e != exprs.end(); ++e) {
+            debug(2) << *e << "\n";
         }
         
         debug(2) << "Solutions:\n";
@@ -889,29 +892,49 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                 // Check to see if the equation can be solved in terms of
                 // the varying
                 for (auto var_name : { loop0->name, loop1->name }) {
-                    
-                    if (contains_variable(eq, var_name)) {
+                }
+     
+                if (contains_variable(eq, loop0->name)) {
 
-                        Expr solution = solve_for_linear_variable_or_fail(eq, Var(var_name));
-                        
-                        if (solution.defined()) {
-                            debug(2) << "SOLVED: " << solution << "\n";
-                            Expr rhs = solution.as<EQ>()->b;
-                            
-                            int dim = attribute_order[var_name];
-                            internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
-                            result.coords[dim].push_back(rhs);
-                        }
-                        else {
-                            internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << var_name << " expr: " << eq << "\n";
-                        }
+                    Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop0->name));
+
+                    if (solution.defined()) {
+                        debug(2) << "SOLVED: " << solution << "\n";
+                        Expr rhs = solution.as<EQ>()->b;
+
+                        int dim = attribute_order[loop0->name];
+                        internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
+                        result.coords[dim].push_back(rhs);
+                    }
+                    else {
+                        internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop0->name << " expr: " << eq << "\n";
                     }
                 }
+
+                if (contains_variable(eq, loop1->name)) {
+
+                    Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop1->name));
+
+                    if (solution.defined()) {
+                        debug(2) << "SOLVED: " << solution << "\n";
+                        Expr rhs = solution.as<EQ>()->b;
+
+                        int dim = attribute_order[loop1->name];
+                        internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
+                        result.coords[dim].push_back(rhs);
+                    }
+                    else {
+                        internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop1->name << " expr: " << eq << "\n";
+                    }
+                }
+
+
             }
         }
         debug(2) << "\n";
     }
     */
+
 
     // Create a list of expressions for each varying attribute that evaluates
     // it at each coordinate in the unsorted order of the coordinates found
