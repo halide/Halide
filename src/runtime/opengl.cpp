@@ -1,9 +1,6 @@
 #include "runtime_internal.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
-
-using namespace Halide::Runtime::Internal;
-
 #include "mini_opengl.h"
 
 // This constant is used to indicate that the application will take
@@ -158,7 +155,7 @@ struct GlobalState {
 };
 
 
-static GlobalState global_state;
+WEAK GlobalState global_state;
 
 // A list of module-specific state. Each module corresponds to a single Halide filter
 WEAK ModuleState *state_list;
@@ -887,7 +884,8 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         // vertex expressions interpolated by varying attributes are evaluated
         // by host code on the CPU and passed to the GPU as values in the
         // vertex buffer.
-        Printer<StringStreamPrinter,1024*256> vertex_src(user_context);
+        enum { PrinterLength = 1024*256 };
+        Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
 
         // Count the number of varying attributes, this is 2 for the spatial
         // x and y coordinates, plus the number of scalar varying attribute
@@ -926,6 +924,11 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
 
         vertex_src << "}\n";
 
+        // Check to see if there was sufficient storage for the vertex program.
+        if (vertex_src.size() >= PrinterLength) {
+            error(user_context) << "Vertex shader source truncated";
+            return 1;
+        }
         
         // Initialize vertex shader.
         GLuint vertex_shader_id = make_shader(user_context,

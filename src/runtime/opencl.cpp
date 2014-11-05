@@ -34,8 +34,7 @@ extern "C" {
 extern int64_t halide_current_time_ns(void *user_context);
 extern void free(void *);
 extern void *malloc(size_t);
-extern int snprintf(char *, size_t, const char *, ...);
-extern char * strstr(const char *, const char *);
+extern const char * strstr(const char *, const char *);
 extern int atoi(const char *);
 
 WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {

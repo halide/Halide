@@ -58,13 +58,12 @@ WEAK void halide_error(void *user_context, const char *msg);
 char *getenv(const char *);
 void free(void *);
 void *malloc(size_t);
-int snprintf(char *, size_t, const char *, ...);
-char *strstr(const char *, const char *);
+const char *strstr(const char *, const char *);
 int atoi(const char *);
 int strcmp(const char* s, const char* t);
 int strncmp(const char* s, const char* t, size_t n);
 size_t strlen(const char* s);
-char *strchr(const char* s, int c);
+const char *strchr(const char* s, int c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);
@@ -164,6 +163,11 @@ public:
     // Use it like a stringstream.
     const char *str() {
         return buf;
+    }
+
+    // Returns the number of characters in the buffer
+    uint64_t size() const {
+        return (uint64_t)(end-dst);
     }
 
     ~Printer() {

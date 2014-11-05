@@ -22,8 +22,7 @@ public:
     virtual void visit(const Variable *op) {
         if (scope.contains(op->name)) {
             expr = mutate(scope.get(op->name));
-        }
-        else {
+        } else {
             expr = op;
         }
     }
@@ -98,8 +97,7 @@ protected:
                     new_args[2+i] = make_linear_let(new_args[2+i]);
                 }
             }
-        }
-        else if (op->name == Call::glsl_texture_store) {
+        } else if (op->name == Call::glsl_texture_store) {
             // Check if the value expression is linear wrt the loop variables
             internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load";
             
@@ -131,8 +129,7 @@ protected:
             std::string var = unique_name(op->name + ".varying");
             expr = Let::make(var, mutated_value, Let::make(op->name, Variable::make(mutated_value.type(), var), mutated_body));
             ++total_found;
-        }
-        else {
+        } else {
             expr = Let::make(op->name,mutated_value,mutated_body);
         }
         
@@ -158,14 +155,11 @@ protected:
         if (op->name == name) {
             order = 1;
             found = true;
-        }
-        else if (std::find(loop_vars.begin(),loop_vars.end(),op->name) != loop_vars.end()) {
+        } else if (std::find(loop_vars.begin(),loop_vars.end(),op->name) != loop_vars.end()) {
             order = 1;
-        }
-        else if (scope.contains(op->name)) {
+        } else if (scope.contains(op->name)) {
             order = scope.get(op->name);
-        }
-        else {
+        } else {
             // If the variable is not found in scope, then we assume it is
             // constant in terms of the independent variables.
             order = 0;
@@ -174,14 +168,14 @@ protected:
     }
     
     template<typename T>
-    void visitImm(T* op) {
+    void visit_imm(T* op) {
         order = 0;
         expr = T::make(op->value);
     }
     
-    virtual void visit(const IntImm *op)    { visitImm(op); }
-    virtual void visit(const FloatImm *op)  { visitImm(op); }
-    virtual void visit(const StringImm *op) { visitImm(op); }
+    virtual void visit(const IntImm *op)    { visit_imm(op); }
+    virtual void visit(const FloatImm *op)  { visit_imm(op); }
+    virtual void visit(const StringImm *op) { visit_imm(op); }
     
     virtual void visit(const Cast *op) {
         
@@ -204,7 +198,7 @@ protected:
     // Add and subtract do not make the expression non-linear, if it is already
     // linear or constant
     template<typename T>
-    void visitBinaryLinear(T* op) {
+    void visit_binary_linear(T* op) {
         Expr a = mutate(op->a);
         unsigned int order_a = order;
         Expr b = mutate(op->b);
@@ -224,8 +218,8 @@ protected:
         expr = T::make(a,b);
     }
     
-    virtual void visit(const Add *op) { visitBinaryLinear(op); }
-    virtual void visit(const Sub *op) { visitBinaryLinear(op); }
+    virtual void visit(const Add *op) { visit_binary_linear(op); }
+    virtual void visit(const Sub *op) { visit_binary_linear(op); }
     
     // Multiplying increases the order of the expression, possibly making it
     // non-linear
@@ -260,12 +254,10 @@ protected:
         if (order_a && !order_b) {
             // Case: x / c
             order = order_a;
-        }
-        else if (!order_a && order_b) {
+        } else if (!order_a && order_b) {
             // Case: c / x
             order = 2;
-        }
-        else {
+        } else {
             order = order_a + order_b;
         }
 
@@ -282,7 +274,7 @@ protected:
     // For other binary operators, if either argument is non-constant, then the
     // whole expression is non-linear
     template<typename T>
-    void visitBinary(T* op) {
+    void visit_binary(T* op) {
         
         Expr a = mutate(op->a);
         unsigned int order_a = order;
@@ -303,27 +295,27 @@ protected:
         expr = T::make(a,b);
     }
     
-    virtual void visit(const Mod *op) { visitBinary(op); }
+    virtual void visit(const Mod *op) { visit_binary(op); }
     
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
     
     // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
     
-    // Once this is done, Min and Max should call visitBinaryLinear and the code
+    // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
     // expressions
-    virtual void visit(const Min *op) { visitBinary(op); }
-    virtual void visit(const Max *op) { visitBinary(op); }
+    virtual void visit(const Min *op) { visit_binary(op); }
+    virtual void visit(const Max *op) { visit_binary(op); }
     
-    virtual void visit(const EQ *op) { visitBinary(op); }
-    virtual void visit(const NE *op) { visitBinary(op); }
-    virtual void visit(const LT *op) { visitBinary(op); }
-    virtual void visit(const LE *op) { visitBinary(op); }
-    virtual void visit(const GT *op) { visitBinary(op); }
-    virtual void visit(const GE *op) { visitBinary(op); }
-    virtual void visit(const And *op) { visitBinary(op); }
-    virtual void visit(const Or *op) { visitBinary(op); }
+    virtual void visit(const EQ *op) { visit_binary(op); }
+    virtual void visit(const NE *op) { visit_binary(op); }
+    virtual void visit(const LT *op) { visit_binary(op); }
+    virtual void visit(const LE *op) { visit_binary(op); }
+    virtual void visit(const GT *op) { visit_binary(op); }
+    virtual void visit(const GE *op) { visit_binary(op); }
+    virtual void visit(const And *op) { visit_binary(op); }
+    virtual void visit(const Or *op) { visit_binary(op); }
     
     virtual void visit(const Not *op) {
         Expr a = mutate(op->a);
@@ -439,7 +431,7 @@ public:
     }
     
     template<typename T>
-    void visitBinaryPiecewise(const T* op) {
+    void visit_binary_piecewise(const T* op) {
         if (which() == 0) {
             push(op->a);
         }
@@ -448,8 +440,8 @@ public:
         }
     }
     
-    virtual void visit(const Min *op) { visitBinaryPiecewise(op); }
-    virtual void visit(const Max *op) { visitBinaryPiecewise(op); }
+    virtual void visit(const Min *op) { visit_binary_piecewise(op); }
+    virtual void visit(const Max *op) { visit_binary_piecewise(op); }
     
     TraverseBranches(std::vector<bool> traversal_) : branch(traversal_), depth(0) { }
     
@@ -473,14 +465,14 @@ public:
     }
 
     // Tree leaves
-    void visitLeaf() {
+    void visit_leaf() {
         Expr e = TraverseBranches(traversal).mutate(root);
         result.push_back(e);
     }
 
     // Visit a binary piecewise operation like min/max
     template<typename T>
-    void visitBinaryPiecewise(const T* op) {
+    void visit_binary_piecewise(const T* op) {
         
         // Traverse the first branch expression
         traversal.push_back(0);
@@ -492,7 +484,7 @@ public:
         // produce a complete expression
         int count_a = count;
         if (!count) {
-            visitLeaf();
+            visit_leaf();
         }
         
         // Traverse the second branch expression
@@ -501,7 +493,7 @@ public:
         push(op->b);
         int count_b = count;
         if (!count) {
-            visitLeaf();
+            visit_leaf();
         }
         
         traversal.pop_back();
@@ -510,8 +502,8 @@ public:
         count = std::max(count_a,count_b)+1;
     }
     
-    virtual void visit(const Min *op) { visitBinaryPiecewise(op); }
-    virtual void visit(const Max *op) { visitBinaryPiecewise(op); }
+    virtual void visit(const Min *op) { visit_binary_piecewise(op); }
+    virtual void visit(const Max *op) { visit_binary_piecewise(op); }
     
     std::vector<Expr> result;
     Expr root;
@@ -637,8 +629,7 @@ public:
             expr = mutate(op->body);
           
             scope.pop(op->name);
-        }
-        else {
+        } else {
             IRMutator::visit(op);
         }
     }
@@ -695,8 +686,7 @@ public:
     virtual void visit(const Variable *op) {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
             expr = Cast::make(Float(32),op);
-        }
-        else {
+        } else {
             expr = op;
         }
     }
@@ -706,7 +696,7 @@ public:
     }
     
     template<typename T>
-    void visitBinaryOp(const T* op) {
+    void visit_binary_op(const T* op) {
         Expr mutated_a = mutate(op->a);
         Expr mutated_b = mutate(op->b);
         
@@ -716,29 +706,28 @@ public:
         if ((a_float || b_float) && (a_float != b_float)) {
             if (a_float) {
                 mutated_b = Cast::make(float_type(op->a), mutated_b);
-            }
-            else {
+            } else {
                 mutated_a = Cast::make(float_type(op->b), mutated_a);
             }
         }
         expr = T::make(mutated_a,mutated_b);
     }
     
-    virtual void visit(const Add *op) { visitBinaryOp(op); }
-    virtual void visit(const Sub *op) { visitBinaryOp(op); }
-    virtual void visit(const Mul *op) { visitBinaryOp(op); }
-    virtual void visit(const Div *op) { visitBinaryOp(op); }
-    virtual void visit(const Mod *op) { visitBinaryOp(op); }
-    virtual void visit(const Min *op) { visitBinaryOp(op); }
-    virtual void visit(const Max *op) { visitBinaryOp(op); }
-    virtual void visit(const EQ *op) { visitBinaryOp(op); }
-    virtual void visit(const NE *op) { visitBinaryOp(op); }
-    virtual void visit(const LT *op) { visitBinaryOp(op); }
-    virtual void visit(const LE *op) { visitBinaryOp(op); }
-    virtual void visit(const GT *op) { visitBinaryOp(op); }
-    virtual void visit(const GE *op) { visitBinaryOp(op); }
-    virtual void visit(const And *op) { visitBinaryOp(op); }
-    virtual void visit(const Or *op) { visitBinaryOp(op); }
+    virtual void visit(const Add *op) { visit_binary_op(op); }
+    virtual void visit(const Sub *op) { visit_binary_op(op); }
+    virtual void visit(const Mul *op) { visit_binary_op(op); }
+    virtual void visit(const Div *op) { visit_binary_op(op); }
+    virtual void visit(const Mod *op) { visit_binary_op(op); }
+    virtual void visit(const Min *op) { visit_binary_op(op); }
+    virtual void visit(const Max *op) { visit_binary_op(op); }
+    virtual void visit(const EQ *op) { visit_binary_op(op); }
+    virtual void visit(const NE *op) { visit_binary_op(op); }
+    virtual void visit(const LT *op) { visit_binary_op(op); }
+    virtual void visit(const LE *op) { visit_binary_op(op); }
+    virtual void visit(const GT *op) { visit_binary_op(op); }
+    virtual void visit(const GE *op) { visit_binary_op(op); }
+    virtual void visit(const And *op) { visit_binary_op(op); }
+    virtual void visit(const Or *op) { visit_binary_op(op); }
     
     virtual void visit(const Select *op)  {
         Expr mutated_true_value = mutate(op->true_value);
@@ -766,8 +755,7 @@ public:
         
         if (std::find(names.begin(), names.end(), op->name) != names.end()) {
             expr = Sub::make(Cast::make(float_type(op),op),0.5f);
-        }
-        else {
+        } else {
             expr = op;
         }
     }
