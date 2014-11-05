@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
     ImageParam A(type_of<float>(), 2);
     ImageParam B(type_of<float>(), 2);
 
-    Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yo");
+    Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yo"), yii("yii"), xii("xii");
     Func matrix_mul("matrix_mul");
 
     RDom k(0, matrix_size);
@@ -33,15 +33,20 @@ int main(int argc, char **argv) {
     matrix_mul(x, y) = 0.0f;
     matrix_mul(x, y) += A(k, y) * B(x, k);
 
-    matrix_mul.vectorize(x, 4);
+    matrix_mul.vectorize(x, 8);
 
-    matrix_mul.update(0).split(x, x, xi, block_size).split(y, y, yi, block_size).split(k, k, ki, block_size).reorder(xi, ki, yi, k, x, y).parallel(y).vectorize(xi, 4).unroll(xi, 4);
+    matrix_mul.update(0)
+        .split(x, x, xi, block_size).split(xi, xi, xii, 8)
+        .split(y, y, yi, block_size).split(yi, yi, yii, 4)
+        .split(k, k, ki, block_size)
+        .reorder(xii, yii, xi, ki, yi, k, x, y)
+        .parallel(y).vectorize(xii).unroll(xi).unroll(yii);
 
-    matrix_mul.bound(x, 0, matrix_size);
-    matrix_mul.bound(y, 0, matrix_size);
+    matrix_mul
+        .bound(x, 0, matrix_size)
+        .bound(y, 0, matrix_size);
 
     matrix_mul.compile_jit();
-
 
     const int iterations = 50;
 
@@ -67,7 +72,7 @@ int main(int argc, char **argv) {
         double t3 = current_time();
         matrix_mul.realize(output);
         double t4 = current_time();
-        t += t4-t3;
+        t += t4 - t3;
     }
 
 
@@ -89,11 +94,21 @@ int main(int argc, char **argv) {
         printf("Halide results - OK\n");
     } else {
         printf("Halide results - FAIL\n");
+        return 1;
     }
+
+    // Uncomment to see the generated assembly.
+    /*
+    {
+        Target t = get_jit_target_from_environment();
+        t.set_feature(Target::NoAsserts);
+        matrix_mul.compile_to_assembly("/dev/stdout", matrix_mul.infer_arguments(), t);
+    }
+    */
 
     float flops = 2.0f * matrix_size * matrix_size * matrix_size;
 
-    printf("halide: %fms, %f MFLOP/s\n\n", t, (flops / t) * iterations / 1000);
+    printf("Halide: %fms, %f GFLOP/s\n\n", t, (flops / t) * iterations / 1000000);
 
     printf("Success!\n");
     return 0;
