@@ -1,3 +1,4 @@
+#include "ExprUsesVar.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
@@ -7,26 +8,6 @@
 
 namespace Halide {
 namespace Internal {
-
-namespace {
-
-class HasVariable : public IRVisitor {
-public:
-    const Scope<int> &free_vars;
-    bool has_var;
-
-    HasVariable(const Scope<int> &vars) : free_vars(vars), has_var(false) {}
-
-private:
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) {
-        if (free_vars.contains(op->name))
-            has_var = true;
-    }
-};
-
-}
 
 class CollectLinearTerms : public IRVisitor {
 public:
@@ -44,12 +25,6 @@ public:
     }
 private:
     SmallStack<Expr> coeff;
-
-    bool has_var(Expr e) {
-        HasVariable check(free_vars);
-        e.accept(&check);
-        return check.has_var;
-    }
 
     void add_to_constant_term(Expr e) {
         internal_assert(!e.type().is_uint()) << "cannot perform solve with uint types.\n";
@@ -91,13 +66,13 @@ private:
     void visit(const Broadcast *op) {success = false;}
 
     void visit(const Add *op) {
-        if (has_var(op->a)) {
+        if (expr_uses_vars(op->a, free_vars)) {
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
-        if (has_var(op->b)) {
+        if (expr_uses_vars(op->b, free_vars)) {
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -105,14 +80,14 @@ private:
     }
 
     void visit(const Sub *op) {
-        if (has_var(op->a)) {
+        if (expr_uses_vars(op->a, free_vars)) {
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
         coeff.push(-coeff.top_ref());
-        if (has_var(op->b)) {
+        if (expr_uses_vars(op->b, free_vars)) {
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -130,9 +105,9 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        if (has_var(b)) {
+        if (expr_uses_vars(b, free_vars)) {
             success = false;
-        } else if (has_var(a)) {
+        } else if (expr_uses_vars(a, free_vars)) {
             internal_assert(!b.type().is_uint()) << "cannot perform solve with uint types.\n";
 
             coeff.push(coeff.top() / b);
@@ -147,8 +122,8 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        bool a_has_var = has_var(a);
-        bool b_has_var = has_var(b);
+        bool a_has_var = expr_uses_vars(a, free_vars);
+        bool b_has_var = expr_uses_vars(b, free_vars);
 
         if (a_has_var && b_has_var) {
             success = false;
@@ -255,7 +230,7 @@ bool collect_linear_terms(Expr e, std::vector<Term> &terms,
 
 
 class SolveForLinearVariable : public IRMutator {
-public:
+  public:
     const Scope<int> &free_vars;
     std::string var_name;
     Scope<Expr> scope;
@@ -265,13 +240,14 @@ public:
             free_vars(vars), var_name(var), solved(false) {
         scope.set_containing_scope(s);
     }
-private:
+  private:
     using IRVisitor::visit;
 
     int find_var(const std::vector<Term>& terms) {
         for (size_t i = 0; i < terms.size(); ++i) {
-            if (terms[i].var && terms[i].var->name == var_name)
+            if (terms[i].var && terms[i].var->name == var_name) {
                 return i;
+            }
         }
         return -1;
     }
@@ -335,7 +311,7 @@ private:
                 // At this point we know that the variable we want
                 // only appears on the left hand side.
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
-                  if ((int)i != lhs_var) {
+                    if ((int)i != lhs_var) {
                         Term t = lhs_terms[i];
                         t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);
@@ -349,13 +325,13 @@ private:
 
                 rhs = linear_expr(rhs_terms);
                 if (var_term.var->type.is_int()) {
-                  // If we are dealing with integer types, then we
-                  // don't divide by the coefficient in the solver.
-                  rhs = simplify(Cast::make(var_term.var->type, rhs));
-                  lhs = simplify(var_term.coeff * var_term.var);
+                    // If we are dealing with integer types, then we
+                    // don't divide by the coefficient in the solver.
+                    rhs = simplify(Cast::make(var_term.var->type, rhs));
+                    lhs = simplify(var_term.coeff * var_term.var);
                 } else {
-                  rhs = simplify(Cast::make(var_term.var->type, rhs / var_term.coeff));
-                  lhs = var_term.var;
+                    rhs = simplify(Cast::make(var_term.var->type, rhs / var_term.coeff));
+                    lhs = var_term.var;
                 }
                 solved = true;
             }
@@ -404,7 +380,7 @@ private:
                 // At this point we know that the variable we want
                 // only appears on the left hand side.
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
-                  if ((int)i != lhs_var) {
+                    if ((int)i != lhs_var) {
                         Term t = lhs_terms[i];
                         t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);
