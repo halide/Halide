@@ -62,8 +62,8 @@ public:
     using IRVisitor::visit;
 
     bool types_match(Type pattern_type, Type expr_type) {
-        bool bits_matches = pattern_type.bits == 0 || pattern_type.bits == expr_type.bits;
-        bool width_matches = pattern_type.width == 0 || pattern_type.bits == expr_type.bits;
+        bool bits_matches = (pattern_type.bits == 0) || (pattern_type.bits == expr_type.bits);
+        bool width_matches = (pattern_type.width == 0) || (pattern_type.width == expr_type.width);
         bool code_matches = pattern_type.code == expr_type.code;
         return bits_matches && width_matches && code_matches;
     }
