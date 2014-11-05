@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
     bool halide_correct = true;
     for (int iy = 0; iy < matrix_size && halide_correct; iy++) {
         for (int ix = 0; ix < matrix_size; ix++) {
-            halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.000001f);
+            halide_correct = halide_correct && (std::abs(output_ref(ix, iy) - output_halide(ix, iy)) < 0.001f);
         }
     }
 
