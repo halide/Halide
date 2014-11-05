@@ -602,9 +602,9 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     }
     
     // Compute the number of vec4's needed to pack the arguments
-    num_varying_floats = ((num_varying_floats + 0x3) & ~0x3) / 4;
-    num_uniform_floats = ((num_uniform_floats + 0x3) & ~0x3) / 4;
-    num_uniform_ints   = ((num_uniform_ints + 0x3) & ~0x3) / 4;
+    num_varying_floats = (num_varying_floats + 3) / 4;
+    num_uniform_floats = (num_uniform_floats + 3) / 4;
+    num_uniform_ints   = (num_uniform_ints + 3) / 4;
 
     stream << header.str();
 
