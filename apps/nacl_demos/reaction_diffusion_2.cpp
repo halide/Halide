@@ -5,8 +5,6 @@ Var x("x"), y("y"), c("c");
 
 int main(int argc, char **argv) {
 
-    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
-
     // First define the function that gives the initial state.
     {
         Func initial;
@@ -109,11 +107,9 @@ int main(int argc, char **argv) {
         blur_y.store_at(new_state, y).compute_at(new_state, yi);
         clamped.store_at(new_state, y).compute_at(new_state, yi);
 
-        if (can_vectorize) {
-            new_state.vectorize(x, 4);
-            blur_x.vectorize(x, 4);
-            blur_y.vectorize(x, 4);
-        }
+        new_state.vectorize(x, 4);
+        blur_x.vectorize(x, 4);
+        blur_y.vectorize(x, 4);
 
         new_state.compile_to_file("reaction_diffusion_2_update", state, mouse_x, mouse_y);
     }
@@ -132,9 +128,7 @@ int main(int argc, char **argv) {
         Func render;
         render(x, y) = alpha + red + green + blue;
 
-        if (can_vectorize) {
-            render.vectorize(x, 4);
-        }
+        render.vectorize(x, 4);
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
 
