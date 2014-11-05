@@ -63,7 +63,9 @@ struct CodeGen_GPU_Dev {
     static bool is_block_uniform(Expr expr);
     /** Checks if the buffer is a candidate for constant storage. Most
      * GPUs (APIs) support a constant memory storage class that cannot be
-     * written to and performs well for block uniform accesses. */
+     * written to and performs well for block uniform accesses. A buffer is a 
+     * candidate for constant storage if it is never written to, and loads are 
+     * uniform within the workgroup. */
     static bool is_buffer_constant(Stmt kernel, const std::string &buffer);    
 };
 

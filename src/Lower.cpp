@@ -1869,15 +1869,13 @@ Stmt lower(Function f, const Target &t) {
     s = common_subexpression_elimination(s);
 
     if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Detecting varying attributes...\n" << s << "\n\n";
-
+        debug(1) << "Detecting varying attributes...\n";
         s = find_linear_expressions(s);
-
-        debug(1) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
+        debug(2) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
         
         // Simplify without changing Lets
         s = simplify(s,false);
-        debug(1) << "Lowering after final simplification (without simplifying Lets):\n" << s << "\n\n";        
+        debug(1) << "Lowering after final simplification (without simplifying Lets):\n" << s << "\n\n";
     }
     else {
         s = simplify(s);

@@ -20,7 +20,11 @@ using std::map;
 
 namespace {
 
-class Scalarize : public IRMutator {
+// In the event that the Call::glsl_texture_load intrinsic was vectorized,
+// the individual coordinates may be codegen'ed as GLSL vecN types instead of
+// scalars. In this case we un-vectorize the expression for the arguments by
+// removing the broadcast added by vectorize_loops.
+class UnvectorizeIntrinsicArg : public IRMutator {
 public:
     using IRMutator::visit;
     
@@ -39,9 +43,9 @@ public:
     }
 };
     
-Expr scalarize(Expr e) {
+Expr unvectorize_intrinsic_arg(Expr e) {
     
-    Scalarize s;
+    UnvectorizeIntrinsicArg s;
     return s.mutate(e);
 };
     
@@ -426,11 +430,11 @@ void CodeGen_GLSL::visit(const Call *op) {
 
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
-            // we un-vectorize the expression with scalarize(...)
+            // we un-vectorize the expression with unvectorize_intrinsic_arg(...)
             
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                << print_expr(scalarize(op->args[2])) << ", "
-                << print_expr(scalarize(op->args[3])) << "))"
+                << print_expr(unvectorize_intrinsic_arg(op->args[2])) << ", "
+                << print_expr(unvectorize_intrinsic_arg(op->args[3])) << "))"
                 << get_vector_suffix(op->args[4]);
             if (op->type.is_uint())
                 rhs << " * " << op->type.imax() << ".0";
@@ -647,20 +651,20 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
         } else if (ends_with(args[i].name, ".varying")) {
             do_indent();
             stream << "float " << print_name(args[i].name)
-            << " = _varyingf" << args[i].packed_index/4
-            << "[" << args[i].packed_index%4 << "];\n";
+                   << " = _varyingf" << args[i].packed_index/4
+                   << "[" << args[i].packed_index%4 << "];\n";
         } else if (args[i].type.is_float()) {
             do_indent();
             stream << print_type(args[i].type) << " "
-            << print_name(args[i].name)
-            << " = _uniformf" << args[i].packed_index/4
-            << "[" << args[i].packed_index%4 << "];\n";
+                   << print_name(args[i].name)
+                   << " = _uniformf" << args[i].packed_index/4
+                   << "[" << args[i].packed_index%4 << "];\n";
         } else if (args[i].type.is_int()) {
             do_indent();
             stream << print_type(args[i].type) << " "
-            << print_name(args[i].name)
-            << " = _uniformi" << args[i].packed_index/4
-            << "[" << args[i].packed_index%4 << "];\n";
+                   << print_name(args[i].name)
+                   << " = _uniformi" << args[i].packed_index/4
+                   << "[" << args[i].packed_index%4 << "];\n";
         }
     }
 
