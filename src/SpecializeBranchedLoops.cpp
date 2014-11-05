@@ -1028,6 +1028,7 @@ public:
 
                             if (equal(b.min, min_k)) {
                                 // debug(0) << "<*> Equivalent!\n\n";
+
                                 // The branch point of the child branch matches exactly a branch
                                 // point we have already collected.
                                 is_equal[j] = true;
@@ -1036,6 +1037,7 @@ public:
                             } else if (can_prove_in_range(b.min, min_k, ext_k, in_range)) {
                                 if (in_range) {
                                     // debug(0) << "<*> Proved in range!\n\n";
+
                                     // We've found an interval that we can prove the child branch
                                     // point lives in.
                                     intervals[j] = k;
@@ -1129,7 +1131,7 @@ public:
                                     get_branch_content(b, arg);
 
                                     new_branch_points.push_back(simplify(clamp(b.min, min, max)));
-                                    new_args.push_back(args[k]);
+                                    new_args.push_back(args[j]);
                                     new_args.back().push_back(arg);
                                 }
                             }
@@ -1449,8 +1451,8 @@ public:
                 new_branches.insert(new_branches.end(), branches.begin() + old_num_branches, branches.end());
                 branches.erase(branches.begin() + old_num_branches, branches.end());
 
-                debug(0) << "Branching LetStmt: let " << op->name << " = " << let_branches[i].expr << ". "
-                         << "Num branches = " << branches.size() << ".\n";
+                // debug(0) << "Branching LetStmt: let " << op->name << " = " << let_branches[i].expr << ". "
+                //          << "Num branches = " << branches.size() << ".\n";
             }
 
             if (branches.size() + new_branches.size() <= branching_limit) {
