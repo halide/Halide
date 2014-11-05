@@ -1373,6 +1373,7 @@ private:
 
         const Ramp *ramp_a = a.as<Ramp>();
         const Ramp *ramp_b = b.as<Ramp>();
+        const Ramp *delta_ramp = delta.as<Ramp>();
         const Broadcast *broadcast_a = a.as<Broadcast>();
         const Broadcast *broadcast_b = b.as<Broadcast>();
         const Add *add_a = a.as<Add>();
@@ -1381,6 +1382,10 @@ private:
         const Sub *sub_b = b.as<Sub>();
         const Mul *mul_a = a.as<Mul>();
         const Mul *mul_b = b.as<Mul>();
+        const Min *min_a = a.as<Min>();
+        const Min *min_b = b.as<Min>();
+        const Max *max_a = a.as<Max>();
+        const Max *max_b = b.as<Max>();
 
         int ia = 0, ib = 0;
 
@@ -1415,7 +1420,7 @@ private:
             // Comparing expression of type < minimum of type.  This can never be true.
             expr = const_false(op->type.width);
         } else if (is_zero(delta) || (no_overflow(delta.type()) && is_positive_const(delta))) {
-             expr = const_false(op->type.width);
+            expr = const_false(op->type.width);
         } else if (no_overflow(delta.type()) && is_negative_const(delta)) {
             expr = const_true(op->type.width);
         } else if (broadcast_a && broadcast_b) {
@@ -1461,6 +1466,66 @@ private:
                        equal(mul_a->b, mul_b->b)) {
                 // Divide both sides by a constant
                 expr = mutate(mul_a->a < mul_b->a);
+            } else if (min_a) {
+                Expr lt_a = mutate(min_a->a < b);
+                Expr lt_b = mutate(min_a->b < b);
+                if (is_one(lt_a) || is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) && is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (max_a) {
+                Expr lt_a = mutate(max_a->a < b);
+                Expr lt_b = mutate(max_a->b < b);
+                if (is_one(lt_a) && is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) || is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (min_b) {
+                Expr lt_a = mutate(a < min_b->a);
+                Expr lt_b = mutate(a < min_b->b);
+                if (is_one(lt_a) && is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) || is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (max_b) {
+                Expr lt_a = mutate(a < max_b->a);
+                Expr lt_b = mutate(a < max_b->b);
+                if (is_one(lt_a) || is_one(lt_b)) {
+                    expr = const_true();
+                } else if (is_zero(lt_a) && is_zero(lt_b)) {
+                    expr = const_false();
+                } else if (a.same_as(op->a) && b.same_as(op->b)) {
+                    expr = op;
+                } else {
+                    expr = LT::make(a, b);
+                }
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) < 0))) {
+                expr = const_true(delta_ramp->width);
+            } else if (delta_ramp && is_positive_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base >= 0))) {
+                expr = const_false(delta_ramp->width);
+            } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base < 0))) {
+                expr = const_true(delta_ramp->width);
+            } else if (delta_ramp && is_negative_const(delta_ramp->stride) &&
+                       is_one(mutate(delta_ramp->base + delta_ramp->stride*(delta_ramp->width - 1) >= 0))) {
+                expr = const_false(delta_ramp->width);
             } else if (a.same_as(op->a) && b.same_as(op->b)) {
                 expr = op;
             } else {
@@ -2308,6 +2373,18 @@ void check(Stmt a, Stmt b) {
     }
 }
 
+void check_in_bounds(Expr a, Expr b, const Scope<Interval> &bi) {
+    //debug(0) << "Checking that " << a << " -> " << b << "\n";
+    Expr simpler = simplify(a, true, bi);
+    if (!equal(simpler, b)) {
+        internal_error
+            << "\nSimplification failure:\n"
+            << "Input: " << a << '\n'
+            << "Output: " << simpler << '\n'
+            << "Expected output: " << b << '\n';
+    }
+}
+
 template <typename T>
 void test_int_cast_constant() {
     Type t = type_of<T>();
@@ -2745,6 +2822,11 @@ void simplify_test() {
     check(x < y && x >= y, f);
     check(x <= y && x > y, f);
 
+    check(x <= max(x, y), t);
+    check(x <  min(x, y), f);
+    check(min(x, y) <= x, t);
+    check(max(x, y) <  x, f);
+
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
                            Evaluate::make(x + y),
@@ -2834,6 +2916,14 @@ void simplify_test() {
 
     check(Call::make(Handle(), Call::stringify, vec<Expr>(3, x, 4, string(", "), 3.4f), Call::Intrinsic),
           Call::make(Handle(), Call::stringify, vec<Expr>(string("3"), x, string("4, 3.400000")), Call::Intrinsic));
+
+    // Check if we can simplify away comparison on vector types considering bounds.
+    Scope<Interval> bounds_info;
+    bounds_info.push("x", Interval(0,4));
+    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(0,4),  const_false(4), bounds_info);
+    check_in_bounds(Ramp::make(x, 1,4) < Broadcast::make(8,4),  const_true(4),  bounds_info);
+    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(-4,4), const_false(4), bounds_info);
+    check_in_bounds(Ramp::make(x,-1,4) < Broadcast::make(5,4),  const_true(4),  bounds_info);
 
     std::cout << "Simplify test passed" << std::endl;
 }

@@ -57,8 +57,8 @@ int main(int argc, char **argv) {
         Expr dy = clobber.y - mouse_y;
         Expr r = dx*dx + dy*dy;
 
-        output(clobber.x, clobber.y, c) = select(r < 100, 
-                                                 cast<uint8_t>(random_float() < 0.25f), 
+        output(clobber.x, clobber.y, c) = select(r < 100,
+                                                 cast<uint8_t>(random_float() < 0.25f),
                                                  output(clobber.x, clobber.y, c));
 
         if (can_vectorize) {
