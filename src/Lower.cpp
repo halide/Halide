@@ -1876,8 +1876,7 @@ Stmt lower(Function f, const Target &t) {
         // Simplify without changing Lets
         s = simplify(s,false);
         debug(1) << "Lowering after final simplification (without simplifying Lets):\n" << s << "\n\n";
-    }
-    else {
+    } else {
         s = simplify(s);
         debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
     }
