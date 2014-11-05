@@ -1327,7 +1327,7 @@ void CodeGen::visit(const Ramp *op) {
 }
 
 llvm::Value *CodeGen::create_broadcast(llvm::Value *v, int width) {
-    Constant *undef = UndefValue::get(VectorType::get(v->getType(), 1));
+    Constant *undef = UndefValue::get(VectorType::get(v->getType(), width));
     Constant *zero = ConstantInt::get(i32, 0);
     v = builder->CreateInsertElement(undef, v, zero);
     Constant *zeros = ConstantVector::getSplat(width, zero);
