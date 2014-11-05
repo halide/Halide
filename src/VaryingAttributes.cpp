@@ -434,8 +434,7 @@ public:
     void visit_binary_piecewise(const T* op) {
         if (which() == 0) {
             push(op->a);
-        }
-        else {
+        } else {
             push(op->b);
         }
     }
@@ -893,8 +892,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                         int dim = attribute_order[loop0->name];
                         internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
                         result.coords[dim].push_back(rhs);
-                    }
-                    else {
+                    } else {
                         internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop0->name << " expr: " << eq << "\n";
                     }
                 }
@@ -910,8 +908,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                         int dim = attribute_order[loop1->name];
                         internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
                         result.coords[dim].push_back(rhs);
-                    }
-                    else {
+                    } else {
                         internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop1->name << " expr: " << eq << "\n";
                     }
                 }
