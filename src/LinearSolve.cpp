@@ -188,7 +188,7 @@ Expr linear_expr(const std::vector<Term> &terms) {
     Expr expr;
 
     if (terms[0].var) {
-        expr = Mul::make(terms[0].coeff, terms[0].var);
+        expr = terms[0].coeff * terms[0].var;
     } else {
         expr = terms[0].coeff;
     }
@@ -277,74 +277,8 @@ class SolveForLinearVariable : public IRMutator {
         }
     }
 
-    template<class Cmp>
-    void visit_sym_cmp(const Cmp *op) {
-        Expr lhs = op->a;
-        Expr rhs = op->b;
-
-        std::vector<Term> lhs_terms;
-        std::vector<Term> rhs_terms;
-
-        bool lhs_is_linear = collect_linear_terms(lhs, lhs_terms, free_vars, scope);
-        bool rhs_is_linear = collect_linear_terms(rhs, rhs_terms, free_vars, scope);
-
-        if (lhs_is_linear && rhs_is_linear) {
-            int lhs_var = find_var(lhs_terms);
-            int rhs_var = find_var(rhs_terms);
-
-            if (rhs_var > -1) {
-                if (lhs_var > -1) {
-                    // First, move the instance of loop var from RHS to LHS.
-                    Term t1 = lhs_terms[lhs_var];
-                    Term t2 = rhs_terms[rhs_var];
-                    lhs_terms[lhs_var].coeff = simplify(t1.coeff - t2.coeff);
-                    rhs_terms[rhs_var] = rhs_terms.back();
-                    rhs_terms.pop_back();
-                } else {
-                    std::swap(lhs, rhs);
-                    std::swap(lhs_var, rhs_var);
-                    std::swap(lhs_terms, rhs_terms);
-                }
-            }
-
-            if (lhs_var > -1) {
-                // At this point we know that the variable we want
-                // only appears on the left hand side.
-                for (size_t i = 0; i < lhs_terms.size(); ++i) {
-                    if ((int)i != lhs_var) {
-                        Term t = lhs_terms[i];
-                        t.coeff = simplify(-t.coeff);
-                        rhs_terms.push_back(t);
-                    }
-                }
-
-                Term var_term = lhs_terms[lhs_var];
-                lhs_terms.clear();
-                collect_terms(rhs_terms, lhs_terms);
-                rhs_terms.swap(lhs_terms);
-
-                rhs = linear_expr(rhs_terms);
-                if (var_term.var->type.is_int()) {
-                    // If we are dealing with integer types, then we
-                    // don't divide by the coefficient in the solver.
-                    rhs = simplify(Cast::make(var_term.var->type, rhs));
-                    lhs = simplify(var_term.coeff * var_term.var);
-                } else {
-                    rhs = simplify(Cast::make(var_term.var->type, rhs / var_term.coeff));
-                    lhs = var_term.var;
-                }
-                solved = true;
-            }
-
-            match_types(lhs, rhs);
-            expr = Cmp::make(lhs, rhs);
-        } else {
-            expr = op;
-        }
-    }
-
     template<class Cmp, class Op>
-    void visit_asym_cmp(const Cmp *op, bool is_less, bool is_open) {
+    void visit_compare(const Cmp *op, bool is_equality, bool is_less, bool is_open) {
         Expr lhs = op->a;
         Expr rhs = op->b;
 
@@ -403,20 +337,27 @@ class SolveForLinearVariable : public IRMutator {
                     rhs = simplify(Cast::make(var_term.var->type, rhs));
                     lhs = make_zero(var_term.var->type);
                 } else {
-                    if (var_term.coeff.type().is_int() &&
-                        rhs.type().is_int() &&
-                        ((is_less != swapped && is_open) ||
-                         (is_less == swapped && !is_open))) {
-                        // If we are solving an integer < or a >=
-                        // comparison than we must use the ceiling of the
-                        // division as the respective bound.
-                        rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                    if (var_term.coeff.type().is_int() && rhs.type().is_int()) {
+                        if (is_equality) {
+                            // If we are dealing with integer types in an equality equation, then we
+                            // don't divide by the coefficient in the solver.
+                            lhs = simplify(var_term.coeff * var_term.var);
+                        } else if ((is_less != swapped && is_open) ||
+                                   (is_less == swapped && !is_open)) {
+                            // If we are solving an integer < or a >= comparison than we must use the
+                            // ceiling of the division as the respective bound.
+                            rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                            lhs = var_term.var;
+                        } else {
+                            rhs = rhs / var_term.coeff;
+                            lhs = var_term.var;
+                        }
                     } else {
                         rhs = rhs / var_term.coeff;
+                        lhs = var_term.var;
                     }
 
                     rhs = simplify(Cast::make(var_term.var->type, rhs));
-                    lhs = var_term.var;
                     solved = true;
                 }
             }
@@ -431,12 +372,12 @@ class SolveForLinearVariable : public IRMutator {
         }
     }
 
-    void visit(const EQ *op) {visit_sym_cmp<EQ>(op);}
-    void visit(const NE *op) {visit_sym_cmp<NE>(op);}
-    void visit(const LT *op) {visit_asym_cmp<LT, GT>(op, true, true);}
-    void visit(const LE *op) {visit_asym_cmp<LE, GE>(op, true, false);}
-    void visit(const GT *op) {visit_asym_cmp<GT, LT>(op, false, true);}
-    void visit(const GE *op) {visit_asym_cmp<GE, LE>(op, false, false);}
+    void visit(const EQ *op) {visit_compare<EQ, EQ>(op, true,  false, false);}
+    void visit(const NE *op) {visit_compare<NE, NE>(op, true,  false, false);}
+    void visit(const LT *op) {visit_compare<LT, GT>(op, false, true,  true);}
+    void visit(const LE *op) {visit_compare<LE, GE>(op, false, true,  false);}
+    void visit(const GT *op) {visit_compare<GT, LT>(op, false, false, true);}
+    void visit(const GE *op) {visit_compare<GE, LE>(op, false, false, false);}
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);
