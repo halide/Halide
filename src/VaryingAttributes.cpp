@@ -603,19 +603,7 @@ public:
 class RemoveVaryingAttributeLets : public IRMutator {
 public:
     using IRMutator::visit;
-    
-    virtual void visit(const Variable *op) {
-        if (ends_with(op->name,".varying")) {
-            Type value_type = scope.get(op->name).type();
-            if (op->type != value_type) {
-              
-              expr = Cast::make(op->type,Variable::make(value_type, op->name));
-              return;
-            }
-        }
-        expr = op;
-    }
-  
+      
     virtual void visit(const Let *op) {
         if (ends_with(op->name,".varying")) {
             
