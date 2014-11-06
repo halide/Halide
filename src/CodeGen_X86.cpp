@@ -425,8 +425,7 @@ bool should_use_pmaddwd(Expr a, Expr b, vector<Expr> &result) {
     const Mul *ma = a.as<Mul>();
     const Mul *mb = b.as<Mul>();
 
-    if (!(ma && mb && t.is_int() &&
-          t.bits == 32 && (t.width == 4 || t.width == 8))) {
+    if (!(ma && mb && t.is_int() && t.bits == 32 && (t.width >= 4))) {
         return false;
     }
 
