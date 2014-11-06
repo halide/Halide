@@ -1679,8 +1679,8 @@ void CodeGen::visit(const Call *op) {
 
             // Check if an appropriate vector abs for this type exists in the initial module
             Type t = op->args[0].type();
-            string name = "abs_" + (t.is_float() ? 'f' : 'i') + int_to_string(t.bits);
-            llvm::Function *builtin_abs =
+            string name = (t.is_float() ? "abs_f" : "abs_i") + int_to_string(t.bits);
+            llvm::Function * builtin_abs =
                 find_vector_runtime_function(name, op->type.width).first;
 
             if (builtin_abs) {
