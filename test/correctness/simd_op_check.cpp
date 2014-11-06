@@ -226,22 +226,31 @@ void check_sse_all() {
 
     // MMX and SSE1 (in 64 and 128 bits)
     for (int w = 1; w <= 4; w++) {
-        check("paddb",   8*w, u8_1 + u8_2);
-        check("psubb",   8*w, u8_1 - u8_2);
+        // LLVM promotes these to wider types for 64-bit vectors,
+        // which is probably fine. Often you're 64-bits wide because
+        // you're about to upcast, and using the wider types makes the
+        // upcast cheap.
+        if (w > 1) {
+            check("paddb",   8*w, u8_1 + u8_2);
+            check("psubb",   8*w, u8_1 - u8_2);
+            check("paddw",   4*w, u16_1 + u16_2);
+            check("psubw",   4*w, u16_1 - u16_2);
+            check("pmullw",  4*w, i16_1 * i16_2);
+            check("paddd",   2*w, i32_1 + i32_2);
+            check("psubd",   2*w, i32_1 - i32_2);
+        }
+
         check("paddsb",  8*w, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, max_i8)));
         // Add a test with a constant as there was a bug on this.
         check("paddsb",  8*w, i8(clamp(i16(i8_1) + i16(3), min_i8, max_i8)));
         check("psubsb",  8*w, i8(clamp(i16(i8_1) - i16(i8_2), min_i8, max_i8)));
         check("paddusb", 8*w, u8(min(u16(u8_1) + u16(u8_2), max_u8)));
         check("psubusb", 8*w, u8(max(i16(u8_1) - i16(u8_2), 0)));
-        check("paddw",   4*w, u16_1 + u16_2);
-        check("psubw",   4*w, u16_1 - u16_2);
+
         check("paddsw",  4*w, i16(clamp(i32(i16_1) + i32(i16_2), min_i16, max_i16)));
         check("psubsw",  4*w, i16(clamp(i32(i16_1) - i32(i16_2), min_i16, max_i16)));
         check("paddusw", 4*w, u16(min(u32(u16_1) + u32(u16_2), max_u16)));
         check("psubusw", 4*w, u16(max(i32(u16_1) - i32(u16_2), 0)));
-        check("paddd",   2*w, i32_1 + i32_2);
-        check("psubd",   2*w, i32_1 - i32_2);
         check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) / (256*256)));
         check("pmulhw",  4*w, i16((i32(i16_1) * i32(i16_2)) >> 16));
 
@@ -255,7 +264,7 @@ void check_sse_all() {
                                   i16((5 * i32(i16_2)) / (256*256))));
 
         check("pmulhuw", 4*w, i16_1 / 15);
-        check("pmullw",  4*w, i16_1 * i16_2);
+
 
         check("pcmpeqb", 8*w, select(u8_1 == u8_2, u8(1), u8(2)));
         check("pcmpgtb", 8*w, select(u8_1 > u8_2, u8(1), u8(2)));
