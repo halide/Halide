@@ -2822,6 +2822,11 @@ void simplify_test() {
     check(x < y && x >= y, f);
     check(x <= y && x > y, f);
 
+    check(x <= max(x, y), t);
+    check(x <  min(x, y), f);
+    check(min(x, y) <= x, t);
+    check(max(x, y) <  x, f);
+
     // Check anded conditions apply to the then case only
     check(IfThenElse::make(x == 4 && y == 5,
                            Evaluate::make(x + y),

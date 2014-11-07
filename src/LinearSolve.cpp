@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+#include "ExprUsesVar.h"
+>>>>>>> linear_solver
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
@@ -8,6 +12,7 @@
 namespace Halide {
 namespace Internal {
 
+<<<<<<< HEAD
 namespace {
 
 class HasVariable : public IRVisitor {
@@ -28,6 +33,8 @@ private:
 
 }
 
+=======
+>>>>>>> linear_solver
 class CollectLinearTerms : public IRVisitor {
 public:
     const Scope<int> &free_vars;
@@ -45,10 +52,15 @@ public:
 private:
     SmallStack<Expr> coeff;
 
+<<<<<<< HEAD
     bool has_var(Expr e) {
         HasVariable check(free_vars);
         e.accept(&check);
         return check.has_var;
+=======
+    bool has_vars(Expr expr) {
+        return expr_uses_vars(expr, free_vars, scope);
+>>>>>>> linear_solver
     }
 
     void add_to_constant_term(Expr e) {
@@ -91,13 +103,21 @@ private:
     void visit(const Broadcast *op) {success = false;}
 
     void visit(const Add *op) {
+<<<<<<< HEAD
         if (has_var(op->a)) {
+=======
+        if (has_vars(op->a)) {
+>>>>>>> linear_solver
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
+<<<<<<< HEAD
         if (has_var(op->b)) {
+=======
+        if (has_vars(op->b)) {
+>>>>>>> linear_solver
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -105,14 +125,22 @@ private:
     }
 
     void visit(const Sub *op) {
+<<<<<<< HEAD
         if (has_var(op->a)) {
+=======
+        if (has_vars(op->a)) {
+>>>>>>> linear_solver
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
         coeff.push(-coeff.top_ref());
+<<<<<<< HEAD
         if (has_var(op->b)) {
+=======
+        if (has_vars(op->b)) {
+>>>>>>> linear_solver
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -130,9 +158,15 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
+<<<<<<< HEAD
         if (has_var(b)) {
             success = false;
         } else if (has_var(a)) {
+=======
+        if (has_vars(b)) {
+            success = false;
+        } else if (has_vars(a)) {
+>>>>>>> linear_solver
             internal_assert(!b.type().is_uint()) << "cannot perform solve with uint types.\n";
 
             coeff.push(coeff.top() / b);
@@ -147,8 +181,13 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
+<<<<<<< HEAD
         bool a_has_var = has_var(a);
         bool b_has_var = has_var(b);
+=======
+        bool a_has_var = has_vars(a);
+        bool b_has_var = has_vars(b);
+>>>>>>> linear_solver
 
         if (a_has_var && b_has_var) {
             success = false;
@@ -213,7 +252,11 @@ Expr linear_expr(const std::vector<Term> &terms) {
     Expr expr;
 
     if (terms[0].var) {
+<<<<<<< HEAD
         expr = Mul::make(terms[0].coeff, terms[0].var);
+=======
+        expr = terms[0].coeff * terms[0].var;
+>>>>>>> linear_solver
     } else {
         expr = terms[0].coeff;
     }
@@ -255,7 +298,11 @@ bool collect_linear_terms(Expr e, std::vector<Term> &terms,
 
 
 class SolveForLinearVariable : public IRMutator {
+<<<<<<< HEAD
 public:
+=======
+  public:
+>>>>>>> linear_solver
     const Scope<int> &free_vars;
     std::string var_name;
     Scope<Expr> scope;
@@ -265,13 +312,23 @@ public:
             free_vars(vars), var_name(var), solved(false) {
         scope.set_containing_scope(s);
     }
+<<<<<<< HEAD
 private:
+=======
+  private:
+>>>>>>> linear_solver
     using IRVisitor::visit;
 
     int find_var(const std::vector<Term>& terms) {
         for (size_t i = 0; i < terms.size(); ++i) {
+<<<<<<< HEAD
             if (terms[i].var && terms[i].var->name == var_name)
                 return i;
+=======
+            if (terms[i].var && terms[i].var->name == var_name) {
+                return i;
+            }
+>>>>>>> linear_solver
         }
         return -1;
     }
@@ -301,6 +358,7 @@ private:
         }
     }
 
+<<<<<<< HEAD
     template<class Cmp>
     void visit_sym_cmp(const Cmp *op) {
         Expr lhs = op->a;
@@ -369,6 +427,10 @@ private:
 
     template<class Cmp, class Op>
     void visit_asym_cmp(const Cmp *op, bool is_less, bool is_open) {
+=======
+    template<class Cmp, class Op>
+    void visit_compare(const Cmp *op, bool is_equality, bool is_less, bool is_open) {
+>>>>>>> linear_solver
         Expr lhs = op->a;
         Expr rhs = op->b;
 
@@ -404,7 +466,11 @@ private:
                 // At this point we know that the variable we want
                 // only appears on the left hand side.
                 for (size_t i = 0; i < lhs_terms.size(); ++i) {
+<<<<<<< HEAD
                   if ((int)i != lhs_var) {
+=======
+                    if ((int)i != lhs_var) {
+>>>>>>> linear_solver
                         Term t = lhs_terms[i];
                         t.coeff = simplify(-t.coeff);
                         rhs_terms.push_back(t);
@@ -427,6 +493,7 @@ private:
                     rhs = simplify(Cast::make(var_term.var->type, rhs));
                     lhs = make_zero(var_term.var->type);
                 } else {
+<<<<<<< HEAD
                     if (var_term.coeff.type().is_int() &&
                         rhs.type().is_int() &&
                         ((is_less != swapped && is_open) ||
@@ -441,6 +508,29 @@ private:
 
                     rhs = simplify(Cast::make(var_term.var->type, rhs));
                     lhs = var_term.var;
+=======
+                    if (var_term.coeff.type().is_int() && rhs.type().is_int()) {
+                        if (is_equality) {
+                            // If we are dealing with integer types in an equality equation, then we
+                            // don't divide by the coefficient in the solver.
+                            lhs = simplify(var_term.coeff * var_term.var);
+                        } else if ((is_less != swapped && is_open) ||
+                                   (is_less == swapped && !is_open)) {
+                            // If we are solving an integer < or a >= comparison than we must use the
+                            // ceiling of the division as the respective bound.
+                            rhs = (rhs + var_term.coeff - 1) / var_term.coeff;
+                            lhs = var_term.var;
+                        } else {
+                            rhs = rhs / var_term.coeff;
+                            lhs = var_term.var;
+                        }
+                    } else {
+                        rhs = rhs / var_term.coeff;
+                        lhs = var_term.var;
+                    }
+
+                    rhs = simplify(Cast::make(var_term.var->type, rhs));
+>>>>>>> linear_solver
                     solved = true;
                 }
             }
@@ -455,12 +545,21 @@ private:
         }
     }
 
+<<<<<<< HEAD
     void visit(const EQ *op) {visit_sym_cmp<EQ>(op);}
     void visit(const NE *op) {visit_sym_cmp<NE>(op);}
     void visit(const LT *op) {visit_asym_cmp<LT, GT>(op, true, true);}
     void visit(const LE *op) {visit_asym_cmp<LE, GE>(op, true, false);}
     void visit(const GT *op) {visit_asym_cmp<GT, LT>(op, false, true);}
     void visit(const GE *op) {visit_asym_cmp<GE, LE>(op, false, false);}
+=======
+    void visit(const EQ *op) {visit_compare<EQ, EQ>(op, true,  false, false);}
+    void visit(const NE *op) {visit_compare<NE, NE>(op, true,  false, false);}
+    void visit(const LT *op) {visit_compare<LT, GT>(op, false, true,  true);}
+    void visit(const LE *op) {visit_compare<LE, GE>(op, false, true,  false);}
+    void visit(const GT *op) {visit_compare<GT, LT>(op, false, false, true);}
+    void visit(const GE *op) {visit_compare<GE, LE>(op, false, false, false);}
+>>>>>>> linear_solver
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);
