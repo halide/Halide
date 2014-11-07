@@ -710,14 +710,14 @@ public:
             // of branches.
             std::ostringstream branch_name;
             branch_name << name << ".b" << i;
-            if (should_extract(extent)) {
+            if (should_extract(b_extent)) {
                 std::string extent_name = branch_name.str() + ".extent";
                 bounds_vars.push(extent_name);
                 scope.push(extent_name, b_extent);
                 b_extent = Variable::make(b_extent.type(), extent_name);
             }
 
-            if (should_extract(min)) {
+            if (should_extract(b_min)) {
                 std::string min_name = branch_name.str() + ".min";
                 bounds_vars.push(min_name);
                 scope.push(min_name, b_min);
