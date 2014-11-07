@@ -12,8 +12,13 @@ namespace Halide {
 namespace Internal {
 
 /** Test if an expression references the given variable. */
-bool expr_uses_var(Expr e, const std::string &v);
-bool expr_uses_var(Expr e, const std::string &v, const Scope<Expr> &s);
+EXPORT bool expr_uses_var(Expr e, const std::string &v);
+
+/** Test if an expression references the given variable, additionally
+ *  considering variables bound to Expr's in the scope provided in the
+ *  final argument.
+ */
+EXPORT bool expr_uses_var(Expr e, const std::string &v, const Scope<Expr> &s);
 
 template<typename T>
 class ExprUsesVars : public IRGraphVisitor {
@@ -44,6 +49,9 @@ inline bool expr_uses_vars(Expr e, const Scope<T> &v) {
     return uses.result;
 }
 
+/** Test if an expression references any of the variables in a scope, additionally
+ *  considering variables bound to Expr's in the scope provided in the final argument.
+ */
 template<typename T>
 inline bool expr_uses_vars(Expr e, const Scope<T> &v, const Scope<Expr> &s) {
     ExprUsesVars<T> uses(v, &s);
