@@ -104,8 +104,8 @@ bool test_collect_linear_terms() {
     Expr e1 = 3.f*(x - y + (z - 1.f) / 15.f) + (x / 2.f) - (y + 3.f*z) / 6.f;
     Term t1_0 = {-0.2f, NULL};
     Term t1_x = {3.5f, x_var.as<Variable>()};
-    Term t1_y = {simplify(-3.f - 1.f/6.f), y_var.as<Variable>()};
-    Term t1_z = {simplify(-0.3f), z_var.as<Variable>()};
+    Term t1_y = {-3.f - 1.f/6.f, y_var.as<Variable>()};
+    Term t1_z = {-0.3f, z_var.as<Variable>()};
     std::vector<Term> e1_terms(4);
     e1_terms[0] = t1_0;
     e1_terms[1] = t1_x;
@@ -129,8 +129,8 @@ bool test_collect_linear_terms() {
      */
     Expr e2 = 10.f*z - (2.f*x + y)/3.f + 10.f*y;
     Term t2_0 = {Expr(), NULL};
-    Term t2_x = {simplify(2.f/3.f), x_var.as<Variable>()};
-    Term t2_y = {simplify(10.f - 1.f/3.f), y_var.as<Variable>()};
+    Term t2_x = {2.f / 3.f, x_var.as<Variable>()};
+    Term t2_y = {10.f - 1.f/3.f, y_var.as<Variable>()};
     Term t2_z = {10.f, z_var.as<Variable>()};
     std::vector<Term> e2_terms(4);
     e2_terms[0] = t2_0;
