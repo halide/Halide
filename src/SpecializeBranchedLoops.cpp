@@ -420,7 +420,7 @@ class NormalizeSelect : public IRMutator {
     std::stack<Expr> false_value;
 
     void visit(const Select *op) {
-        if (branch_count < branching_limit) {
+        if (!in_select_cond && branch_count < branching_limit) {
             bool old_in_select_cond = in_select_cond;
             in_select_cond = true;
             ++branch_count;
@@ -1371,7 +1371,7 @@ public:
         }
     }
 
-#if 1
+#if 0
     void update_branch(Branch &b, const Let *op, std::vector<StmtOrExpr> &args) {
         b.expr = Let::make(op->name, args[0], args[1]);
     }
@@ -1402,7 +1402,7 @@ public:
         // debug(0) << "Updated let branch:\n" << b.stmt << "\n";
     }
 
-    template<class StmtOrExpr, class LetOp>
+    template<class LetOp>
     void visit_let(const LetOp *op) {
         // First we branch the value of the let.
         size_t old_num_branches = branches.size();
@@ -1410,14 +1410,14 @@ public:
             op->value.accept(this);
         }
 
+        std::vector<StmtOrExpr> body(1, op->body);
         if (branches.size() == old_num_branches) {
             // If the value didn't branch we continue to branch the let body normally.
             scope.push(op->name, op->value);
-            std::vector<StmtOrExpr> body(1, op->body);
             branch_children(op, body);
             scope.pop(op->name);
         } else {
-            // Collect the branches for the let value
+            // Collect the branches from the let value
             std::vector<Branch> let_branches(branches.begin() + old_num_branches, branches.end());
             branches.erase(branches.begin() + old_num_branches, branches.end());
 
@@ -1435,31 +1435,34 @@ public:
                 // debug(0) << "\tBranching body on interval [" << min << ", " << extent << ") with "
                 //          << op->name << " = " << let_branches[i].expr << "\n";
 
-                // Now we branch the body, first pushing the value
-                // expr from the current value branch into the scope.
+                // Now we branch the body, first pushing the value expr from the current value branch into the scope.
                 old_num_branches = branches.size();
+                // debug(0) << "substituting " << op->name << " = " << let_branches[i].expr << " in let body.\n";
+                // body[0] = substitute(op->name, let_branches[i].expr, op->body);
+                // debug(0) << "new body: " << op->body << "\n";
                 scope.push(op->name, let_branches[i].expr);
-                std::vector<StmtOrExpr> body(1, op->body);
                 branch_children(op, body);
                 scope.pop(op->name);
 
                 if (branches.size() == old_num_branches) {
                     // If the body didn't branch then we need to rebuild the let using the current value branch.
-                    Branch b = make_branch(min, extent, LetOp::make(op->name, let_branches[i].expr, op->body));
+                    Branch b = make_branch(min, extent, LetOp::make(op->name, let_branches[i].expr, body[0]));
                     branches.push_back(b);
                 }
+
                 new_branches.insert(new_branches.end(), branches.begin() + old_num_branches, branches.end());
                 branches.erase(branches.begin() + old_num_branches, branches.end());
-
-                // debug(0) << "Branching LetStmt: let " << op->name << " = " << let_branches[i].expr << ". "
-                //          << "Num branches = " << branches.size() << ".\n";
             }
 
+            // debug(0) << "Branching LetStmt: let " << op->name << " = " << op->value << ". "
+            //          << "Num branches = " << new_branches.size() << ".\n";
+
             if (branches.size() + new_branches.size() <= branching_limit) {
-                branches.insert(branches.end(), new_branches.begin(), new_branches.end);
+                branches.insert(branches.end(), new_branches.begin(), new_branches.end());
             } else {
                 for (size_t i = 0; i < let_branches.size(); ++i) {
-
+                    update_branch(let_branches[i], op, body);
+                    branches.push_back(let_branches[i]);
                 }
             }
 
@@ -1468,8 +1471,8 @@ public:
         }
     }
 
-    void visit(const Let *op) {visit_let<Expr>(op);}
-    void visit(const LetStmt *op) {visit_let<Stmt>(op);}
+    void visit(const Let *op) {visit_let(op);}
+    void visit(const LetStmt *op) {visit_let(op);}
 #endif
 
     // AssertStmt
@@ -1615,9 +1618,17 @@ public:
 
             // Bail out if this condition depends on more than just
             // the current loop variable.
+            // debug(0) << "condition contains " << num_free_vars(if_stmt->condition, scope, free_vars)
+            //          << " free variables.\n";
             if (num_free_vars(if_stmt->condition, scope, free_vars) > 1) return;
 
+            // debug(0) << "Solving: " << if_stmt->condition << "\nScope:\n";
+            // for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
+            //     debug(0) << "\t" << iter.name() << " = " << iter.value() << "\n";
+            // }
+
             Expr solve = solve_for_linear_variable(if_stmt->condition, name, free_vars, scope);
+            // debug(0) << "solved condition: " << solve << "\n";
             if (!solve.same_as(if_stmt->condition)) {
                 Stmt then_stmt = if_stmt->then_case.defined()? if_stmt->then_case: Evaluate::make(0);
                 Stmt else_stmt = if_stmt->else_case.defined()? if_stmt->else_case: Evaluate::make(0);
