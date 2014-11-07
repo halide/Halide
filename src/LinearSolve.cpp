@@ -9,35 +9,6 @@
 namespace Halide {
 namespace Internal {
 
-class HasFreeVars : public IRVisitor {
-public:
-    bool result;
-
-    HasFreeVars(const Scope<int> &vars, const Scope<Expr> &s) :
-            result(false), free_vars(vars), scope(s)
-    {}
-
-private:
-    using IRVisitor::visit;
-
-    const Scope<int>  &free_vars;
-    const Scope<Expr> &scope;
-
-    void visit(const Variable *v) {
-        if (free_vars.contains(v->name)) {
-            result = true;
-        } else if (scope.contains(v->name)) {
-            scope.get(v->name).accept(this);
-        }
-    }
-};
-
-bool has_free_vars(Expr expr, const Scope<int> &vars, const Scope<Expr> &s) {
-    HasFreeVars has_vars(vars, s);
-    expr.accept(&has_vars);
-    return has_vars.result;
-}
-
 class CollectLinearTerms : public IRVisitor {
 public:
     const Scope<int> &free_vars;
@@ -56,7 +27,7 @@ private:
     SmallStack<Expr> coeff;
 
     bool has_vars(Expr expr) {
-        return has_free_vars(expr, free_vars, scope);
+        return expr_uses_vars(expr, free_vars, scope);
     }
 
     void add_to_constant_term(Expr e) {
