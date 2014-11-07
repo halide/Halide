@@ -27,18 +27,28 @@ struct Term {
  * linear, and so this can be used to detect linear expressions as
  * well.
  */
-bool collect_linear_terms(Expr e, std::vector<Term>& terms, const Scope<int> &free_vars);
-bool collect_linear_terms(Expr e, std::vector<Term>& terms,
-                          const Scope<int> &free_vars, const Scope<Expr>& scope);
+// @{
+EXPORT bool collect_linear_terms(Expr e, std::vector<Term> &terms,
+                                 const Scope<int> &free_vars);
 
+EXPORT bool collect_linear_terms(Expr e, std::vector<Term> &terms,
+                                 const Scope<int> &free_vars,
+                                 const Scope<Expr> &scope);
+// @}
 /* This function solves a conditional expression made up of linear
  * expressions for a particular variable. If the expression contains
  * logical conjunctives, then each proposition is solved
  * independently. It returns the solved expression if it succeeds,
  * otherwise it returns the inpute expression [e].
  */
-Expr solve_for_linear_variable(Expr e, Var x, const Scope<int> &free_vars);
-Expr solve_for_linear_variable(Expr e, Var x, const Scope<int> &free_vars, const Scope<Expr>& scope);
+// @{
+EXPORT Expr solve_for_linear_variable(Expr e, Var x,
+                                      const Scope<int> &free_vars);
+
+EXPORT Expr solve_for_linear_variable(Expr e, Var x,
+                                      const Scope<int> &free_vars,
+                                      const Scope<Expr> &scope);
+// @}
 
 }
 }
