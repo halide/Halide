@@ -18,7 +18,7 @@ namespace Internal {
  * into two stages. This is then done recursively to handle nested if
  * statements.
  */
-Stmt specialize_branched_loops(Stmt s);
+EXPORT Stmt specialize_branched_loops(Stmt s);
 
 EXPORT void specialize_branched_loops_test();
 

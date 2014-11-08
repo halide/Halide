@@ -2,6 +2,7 @@
 #include <vector>
 
 #include "SpecializeBranchedLoops.h"
+#include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
 #include "IROperator.h"
@@ -54,45 +55,6 @@ std::ostream& operator<< (std::ostream& out, StmtOrExpr se) {
     } else {
         return out << static_cast<Stmt>(se);
     }
-}
-
-// The generic version of this class doesn't work for our
-// purposes. We need to dive into the current scope to decide if a
-// variable is used.
-class ExprUsesVar : public IRVisitor {
-    using IRVisitor::visit;
-
-    std::string name;
-    Scope<Expr> scope;
-
-    void visit(const Variable *v) {
-        if (v->name == name) {
-            result = true;
-        } else if (scope.contains(v->name)) {
-            scope.get(v->name).accept(this);
-        }
-    }
-
-    void visit(const Let *op) {
-        scope.push(op->name, op->value);
-        op->body.accept(this);
-        scope.pop(op->name);
-    }
-  public:
-    ExprUsesVar(const std::string &var, const Scope<Expr> *s) :
-            name(var), result(false)
-    {
-        scope.set_containing_scope(s);
-    }
-
-    bool result;
-};
-
-/* Test if an expression references the given variable. */
-bool expr_uses_var(Expr expr, const std::string &var, const Scope<Expr> &scope) {
-    ExprUsesVar uses_var(var, &scope);
-    expr.accept(&uses_var);
-    return uses_var.result;
 }
 
 /* This mutator is used as a second pass after NormalizeIfStmts as a
@@ -634,36 +596,18 @@ bool expr_branches_in_var(const std::string &name, Expr value, const Scope<Expr>
     return check.has_branches;
 }
 
-/* Simple visitor that checks how many variables in a stmt or expr
- * appear in a fixed list of "free" variables.
- */
-class FindFreeVariables : public IRGraphVisitor {
-  public:
-    const Scope<Expr> &scope;
-    const Scope<int>  &free_vars;
-    std::set<std::string> vars;
-
-    FindFreeVariables(const Scope<Expr> &s, const Scope<int> &fv) : scope(s), free_vars(fv) {}
-  private:
-    using IRVisitor::visit;
-
-    void visit(const Variable *op) {
-        if (free_vars.contains(op->name)) {
-            vars.insert(op->name);
-        } else if (scope.contains(op->name)) {
-            include(scope.get(op->name));
+size_t num_free_vars(Expr expr, const Scope<int> &free_vars, const Scope<Expr> &scope) {
+    int count = 0;
+    for (Scope<int>::const_iterator var = free_vars.cbegin(); var != free_vars.cend(); ++var) {
+        if (expr_uses_var(expr, var.name(), scope)) {
+            ++count;
         }
     }
-};
-
-size_t num_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_vars) {
-    FindFreeVariables find(scope, free_vars);
-    expr.accept(&find);
-    return find.vars.size();
+    return count;
 }
 
-bool has_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_vars) {
-    return num_free_vars(expr, scope, free_vars) > 0;
+bool has_free_vars(Expr expr, const Scope<int> &free_vars, const Scope<Expr> &scope) {
+    return expr_uses_vars(expr, free_vars, scope);
 }
 
 /* This visitor performs the main work for the
@@ -674,7 +618,7 @@ bool has_free_vars(Expr expr, const Scope<Expr> &scope, const Scope<int> &free_v
  * variable and attempts to build up a list of Branch structs, which
  * define the bounds and contents of each branch of the loop.
  */
-class BranchCollector : public IRVisitor {
+class BranchCollector : public IRGraphVisitor {
 public:
     std::string name;
     std::vector<Branch> branches;
@@ -747,7 +691,7 @@ public:
     }
 
   private:
-    using IRVisitor::visit;
+    using IRGraphVisitor::visit;
 
     void print_branches() {
         std::cout << "Branch collector has branched loop " << name << " into:\n";
@@ -762,6 +706,14 @@ public:
             stmt_or_expr = b.expr;
         } else {
             stmt_or_expr = b.stmt;
+        }
+    }
+
+    void include_stmt_or_expr(const StmtOrExpr &se) {
+        if (se.is_expr()) {
+            include(static_cast<Expr>(se));
+        } else if (se.is_stmt()) {
+            include(static_cast<Stmt>(se));
         }
     }
 
@@ -963,7 +915,7 @@ public:
 
             size_t old_num_branches = branches.size();
             if (child.defined()) {
-                child.accept(this);
+                include_stmt_or_expr(child);
             }
 
             if (branches.size() == old_num_branches) {
@@ -1174,7 +1126,7 @@ public:
 
     void visit_simple_cond(Expr cond, Expr a, Expr b) {
         // Bail out if this condition depends on more than just the current loop variable.
-        if (num_free_vars(cond, scope, free_vars) > 1) return;
+        if (num_free_vars(cond, free_vars, scope) > 1) return;
 
         Expr solve = solve_for_linear_variable(cond, name, free_vars, scope);
         if (!solve.same_as(cond)) {
@@ -1188,7 +1140,7 @@ public:
                     if (branches.size() < branching_limit) {
                         min = b1.min;
                         extent = b1.extent;
-                        b1.expr.accept(this);
+                        include(b1.expr);
                     }
 
                     // If we didn't branch any further, push these branches onto the stack.
@@ -1202,7 +1154,7 @@ public:
                     if (branches.size() < branching_limit) {
                         min = b2.min;
                         extent = b2.extent;
-                        b2.expr.accept(this);
+                        include(b2.expr);
                     }
 
                     // If we didn't branch any further, push these branches onto the stack.
@@ -1398,8 +1350,8 @@ public:
     }
 
     void update_branch(Branch &b, const LetStmt *op, std::vector<StmtOrExpr> &body) {
+        debug(0) << "Updating let branch: " << op->name << " = " << scope.get(op->name) << " in\n" << body[0] << "\n";
         b.stmt = LetStmt::make(op->name, scope.get(op->name), body[0]);
-        // debug(0) << "Updated let branch:\n" << b.stmt << "\n";
     }
 
     template<class LetOp>
@@ -1407,7 +1359,7 @@ public:
         // First we branch the value of the let.
         size_t old_num_branches = branches.size();
         if (branches.size() < branching_limit) {
-            op->value.accept(this);
+            include(op->value);
         }
 
         std::vector<StmtOrExpr> body(1, op->body);
@@ -1460,9 +1412,17 @@ public:
             if (branches.size() + new_branches.size() <= branching_limit) {
                 branches.insert(branches.end(), new_branches.begin(), new_branches.end());
             } else {
+                // scope.push(op->name, op->value);
+                // branch_children(op, body);
+                // scope.pop(op->name);
+
                 for (size_t i = 0; i < let_branches.size(); ++i) {
-                    update_branch(let_branches[i], op, body);
+                    Branch b = let_branches[i];
+                    scope.push(op->name, b.expr);
+                    b.expr = Expr();
+                    update_branch(b, op, body);
                     branches.push_back(let_branches[i]);
+                    scope.pop(op->name);
                 }
             }
 
@@ -1618,9 +1578,9 @@ public:
 
             // Bail out if this condition depends on more than just
             // the current loop variable.
-            // debug(0) << "condition contains " << num_free_vars(if_stmt->condition, scope, free_vars)
+            // debug(0) << "condition contains " << num_free_vars(if_stmt->condition, free_vars, scope)
             //          << " free variables.\n";
-            if (num_free_vars(if_stmt->condition, scope, free_vars) > 1) return;
+            if (num_free_vars(if_stmt->condition, free_vars, scope) > 1) return;
 
             // debug(0) << "Solving: " << if_stmt->condition << "\nScope:\n";
             // for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
@@ -1642,7 +1602,7 @@ public:
                         if (branches.size() < branching_limit) {
                             min = b1.min;
                             extent = b1.extent;
-                            b1.stmt.accept(this);
+                            include(b1.stmt);
                         }
 
                         // If we didn't branch any further, push this branch onto the stack.
@@ -1656,7 +1616,7 @@ public:
                         if (branches.size() < branching_limit) {
                             min = b2.min;
                             extent = b2.extent;
-                            b2.stmt.accept(this);
+                            include(b2.stmt);
                         }
 
                         // If we didn't branch any further, push this
