@@ -311,7 +311,7 @@ private:
     }
 
     void visit(const Select *op) {
-        if (!in_select_cond && branch_count < branching_limit) {
+        if (!in_if_cond && !in_select_cond &&branch_count < branching_limit) {
             bool old_in_select_cond = in_select_cond;
             in_select_cond = true;
             ++branch_count;
