@@ -1,4 +1,4 @@
-#include "BranchUtils.h"
+#include "BranchVisitors.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -267,11 +267,11 @@ private:
 };
 
 Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit) {
-  return simplify(NormalizeBranches(&scope, limit).mutate(stmt));
+  return simplify(NormalizeBranches(&scope, branching_limit).mutate(stmt));
 }
 
 Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit) {
-  return simplify(NormalizeBranches(&scope, limit).mutate(expr));
+  return simplify(NormalizeBranches(&scope, branching_limit).mutate(expr));
 }
 
 // Prunes a nested tree of IfThenElse or Select nodes. Uses bounds inference on
