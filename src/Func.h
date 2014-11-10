@@ -437,7 +437,11 @@ class Func {
      * (to flush out deprecated usages), but Internal::Parameter is not. */
     Internal::Parameter jit_user_context;
 
-    // Some infrastructure that helps Funcs catch and handle runtime errors in JIT-compiled code.
+    /** A set of custom passes to use when lowering this Func. */
+    std::vector<Internal::Stmt (*)(Internal::Stmt)> custom_lowering_passes;
+
+    /** Some infrastructure that helps Funcs catch and handle runtime
+     * errors in JIT-compiled code. */
     bool prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf);
 
 public:
@@ -796,6 +800,16 @@ public:
      * and call halide_memoization_cache_set_size() instead.
      */
     EXPORT void memoization_cache_set_size(uint64_t size);
+
+    /** Add a custom pass to be used during lowering. It is run after
+     * all other lowering passes. The pass is expressed as a function
+     * that takes and returns an Internal::Stmt. Can be used to verify
+     * properties of the lowered Stmt, instrument it with extra
+     * code, or otherwise modify it. */
+    EXPORT void add_custom_lowering_pass(Internal::Stmt (*fn)(Internal::Stmt));
+
+    /** Remove all previously-set custom lowering passes */
+    EXPORT void clear_custom_lowering_passes();
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of
