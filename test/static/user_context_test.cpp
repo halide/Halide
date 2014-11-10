@@ -45,12 +45,12 @@ int main(int argc, char **argv) {
     }
     Image<float> output(10, 10);
 
-    user_context(input, context_pointer, output);
+    user_context(context_pointer, input, output);
     assert(called_malloc && called_free);
     assert(called_trace && !called_error);
 
     Image<float> big_output(11, 11);
-    user_context(input, context_pointer, big_output);
+    user_context(context_pointer, input, big_output);
     assert(called_error);
 
     printf("Success!\n");
