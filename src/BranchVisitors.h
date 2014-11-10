@@ -15,15 +15,46 @@ namespace Internal {
 
 /**
  * Returns true if [stmt] or [expr] branches in the variable [var],
- * given the bound expressions in [scope].  The last argument,
- * [branch_on_minmax], can be set to true if you wish to consider
- * min/max expressions as branch points.
+ * given the bound expressions in [scope]. By which we mean that the
+ * expression or statement contains a branch whose condition depends
+ * on the named variable. The last argument, [branch_on_minmax], can
+ * be set to true if you wish to consider min/max expressions as
+ * introducing branches.
  */
 // @(
 EXPORT bool branches_in_var(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
                             bool branch_on_minmax = false);
 EXPORT bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr> &scope,
                             bool branch_on_minmax = false);
+// @}
+
+/**
+ * Normalize the branching conditions in IfThenElse and Select
+ * nodes. By which we mean, reduce the condition to a simple
+ * inequality expression if possible. Equality/inequality conditions
+ * are converted into compound expressions involving inequalities and
+ * all logical connectives are removed from the conditions. We end up
+ * with a nested tree of branches, which can then be pruned by
+ * [prune_branches]. Here is an example:
+ *
+ *   if (x <= 10 && x != 5) {
+ *      ...
+ *   }
+ *
+ * will get mutated into:
+ *
+ *   if (x <= 10) {
+ *     if (x < 5) {
+ *       ...
+ *     } else if (x > 5) {
+ *       ...
+ *     }
+ *  }
+ *
+ */
+// @{
+EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit = 10);
+EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit = 10);
 // @}
 
 /**
@@ -53,35 +84,6 @@ EXPORT Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> 
 
 EXPORT Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
                            const Scope<Interval> &bounds, const Scope<int> &vars);
-// @}
-
-/**
- * Normalize the branching conditions in IfThenElse and Select
- * nodes. By which we mean, reduce the condition to a simple
- * inequality expression if possible. Equality/inequality conditions
- * are converted into compound expressions involving inequalities and
- * all logical connectives are removed from the conditions. We end up
- * with a nested tree of branches, which can then be pruned by
- * [prune_branches]. Here is an example:
- *
- *   if (x <= 10 && x != 5) {
- *      ...
- *   }
- *
- * will get mutated into:
- *
- *   if (x <= 10) {
- *     if (x < 5) {
- *       ...
- *     } else if (x > 5) {
- *       ...
- *     }
- *  }
- *
- */
-// @{
-EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope);
-EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope);
 // @}
 
 }
