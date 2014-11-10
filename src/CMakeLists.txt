@@ -303,7 +303,9 @@ set(HEADER_FILES
   Memoization.h
   CodeGen_MIPS.h
   Generator.h 
-  ObjectInstanceRegistry.h)
+  ObjectInstanceRegistry.h
+  BlockFlattening.h
+  LinearSolve.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -401,6 +403,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen_MIPS.cpp
   Generator.cpp 
   ObjectInstanceRegistry.cpp
+  BlockFlattening.cpp
+  LinearSolve.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

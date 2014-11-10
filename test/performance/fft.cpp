@@ -342,6 +342,10 @@ Func fft2d_c2c(Func x, const std::vector<int> &R0, const std::vector<int> &R1, f
     dft.bound(dft.args()[0], 0, product(R0));
     dft.bound(dft.args()[1], 0, product(R1));
 
+    Var n0 = xT.args()[0];
+    Var n1 = xT.args()[1];
+    xT.compute_at(dft, outermost(dft)).vectorize(n0).unroll(n1);
+
     dft1T.compute_at(dft, outermost(dft));
     dft.compute_root();
     return dft;
@@ -399,6 +403,8 @@ Func fft2d_r2c(Func r, const std::vector<int> &R0, const std::vector<int> &R1) {
     Func dft = transpose(dftT);
     dft.bound(dft.args()[0], 0, N0);
     dft.bound(dft.args()[1], 0, N1/2 + 1);
+    dft.vectorize(dft.args()[0]);
+    dft.unroll(dft.args()[1]);
 
     unzipped.compute_at(dftT, Var("g")).vectorize(n0, group).unroll(n0);
     dft1.compute_at(dftT, outermost(dft));

@@ -215,7 +215,20 @@ if (WITH_TEST_GENERATORS)
                                "nested_externs_leaf"
                                "nested_externs_leaf"
                                "target=host")
-
+    elseif(TEST_SRC STREQUAL "user_context_aottest.cpp")
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_${GEN_NAME}"
+                               "${GEN_NAME}"
+                               "${FUNC_NAME}"
+                               "target=host-user_context")
+    elseif(TEST_SRC STREQUAL "user_context_insanity_aottest.cpp")
+      add_generator_dependency("${TEST_RUNNER}"
+                               "${SCRATCH_DIR}"
+                               "generator_${GEN_NAME}"
+                               "${GEN_NAME}"
+                               "${FUNC_NAME}"
+                               "target=host-user_context")
     else()
       # All the other foo_test.cpp just depend on foo_generator.cpp
       add_generator_dependency("${TEST_RUNNER}"

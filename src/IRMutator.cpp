@@ -199,7 +199,9 @@ void IRMutator::visit(const Store *op) {
     Expr index = mutate(op->index);
     if (value.same_as(op->value) && index.same_as(op->index)) {
         stmt = op;
-    } else stmt = Store::make(op->name, value, index);
+    } else {
+        stmt = Store::make(op->name, value, index);
+    }
 }
 
 void IRMutator::visit(const Provide *op) {
