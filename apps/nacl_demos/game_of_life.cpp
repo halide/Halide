@@ -6,8 +6,6 @@ Var x("x"), y("y"), c("c");
 
 int main(int argc, char **argv) {
 
-    bool can_vectorize = (get_target_from_environment().arch != Target::PNaCl);
-
     Expr random_bit = cast<uint8_t>(random_float() > 0.5f);
 
     // First define the function that gives the initial state of the
@@ -24,14 +22,19 @@ int main(int argc, char **argv) {
         ImageParam state(UInt(8), 3);
         Param<int> mouse_x, mouse_y;
 
+        // Add a boundary condition.
+        Func clamped;
+        clamped(x, y, c) = state(clamp(x, state.left(), state.right()),
+                                 clamp(y, state.top(), state.bottom()), c);
+
         Expr xm = max(x-1, 0), xp = min(x+1, state.width()-1);
         Expr ym = max(y-1, 0), yp = min(y+1, state.height()-1);
 
         // Count the number of live neighbors.
-        Expr count = (state(xm, ym, c) + state(x, ym, c) +
-                      state(xp, ym, c) + state(xm, y, c) +
-                      state(xp, y, c) + state(xm, yp, c) +
-                      state(x, yp, c) + state(xp, yp, c));
+        Expr count = (clamped(x - 1, y - 1, c) + clamped(x, y - 1, c) +
+                      clamped(x + 1, y - 1, c) + clamped(x - 1, y, c) +
+                      clamped(x + 1, y, c) + clamped(x - 1, y + 1, c) +
+                      clamped(x, y + 1, c) + clamped(x + 1, y + 1, c));
 
         // Was this pixel alive in the previous generation?
         Expr alive_before = state(x, y, c) != 0;
@@ -57,13 +60,13 @@ int main(int argc, char **argv) {
         Expr dy = clobber.y - mouse_y;
         Expr r = dx*dx + dy*dy;
 
-        output(clobber.x, clobber.y, c) = select(r < 100,
-                                                 cast<uint8_t>(random_float() < 0.25f),
-                                                 output(clobber.x, clobber.y, c));
+        output(clobber.x, clobber.y, c) =
+            select(r < 100,
+                   cast<uint8_t>(random_float() < 0.25f),
+                   output(clobber.x, clobber.y, c));
 
-        if (can_vectorize) {
-            output.vectorize(x, 4);
-        }
+        output.vectorize(x, 16);
+        clamped.compute_at(output, x);
 
         Var yi;
         output.split(y, y, yi, 16).reorder(x, yi, c, y).parallel(y);
@@ -75,15 +78,17 @@ int main(int argc, char **argv) {
     {
         ImageParam state(UInt(8), 3);
 
+        Func state_32;
+        state_32(x, y, c) = cast<int32_t>(state(x, y, c));
+
         Func render;
-        Expr r = select(state(x, y, 0) == 1, 255, 0);
-        Expr g = select(state(x, y, 1) == 1, 255, 0);
-        Expr b = select(state(x, y, 2) == 1, 255, 0);
+        Expr r = select(state_32(x, y, 0) == 1, 255, 0);
+        Expr g = select(state_32(x, y, 1) == 1, 255, 0);
+        Expr b = select(state_32(x, y, 2) == 1, 255, 0);
         render(x, y) = (255 << 24) + (r << 16) + (g << 8) + b;
 
-        if (can_vectorize) {
-            render.vectorize(x, 4);
-        }
+        render.vectorize(x, 4);
+        state_32.compute_at(render, x);
 
         Var yi;
         render.split(y, y, yi, 16).parallel(y);
