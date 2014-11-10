@@ -18,20 +18,20 @@ using std::make_pair;
 class ContainsLoad : public IRVisitor {
 public:
     const std::string load_name;
-    bool has_load;
+    bool result;
 
     ContainsLoad(const std::string& name) :
-        load_name(name), has_load(false) {}
+        load_name(name), result(false) {}
 
-    operator bool() const {return has_load;}
 private:
 
     using IRVisitor::visit;
 
     void visit(const Load *op) {
         if (op->name == load_name) {
-            has_load = true;
-            return;
+            result = true;
+        } else {
+            IRVisitor::visit(op);
         }
     }
 };
@@ -39,45 +39,89 @@ private:
 class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
-    const int store_stride;
+    const int store_stride, max_stores;
     std::vector<LetStmt>& let_stmts;
     std::vector<Store>& stores;
 
-    StoreCollector(const std::string& name, int stride, std::vector<LetStmt>& lets, std::vector<Store>& ss) :
-        store_name(name), store_stride(stride), let_stmts(lets), stores(ss) {}
+    StoreCollector(const std::string& name, int stride, int ms,
+                   std::vector<LetStmt>& lets, std::vector<Store>& ss) :
+        store_name(name), store_stride(stride), max_stores(ms),
+        let_stmts(lets), stores(ss) {}
 private:
 
     using IRMutator::visit;
 
-    void visit(const For *op) {
-        stmt = op;
+    // Don't enter any inner constructs for which it's not safe to pull out stores.
+    void visit(const For *op) {stmt = op;}
+    void visit(const IfThenElse *op) {stmt = op;}
+    void visit(const Pipeline *op) {stmt = op;}
+    void visit(const Allocate *op) {stmt = op;}
+    void visit(const Realize *op) {stmt = op;}
+
+    // Returns whether the store was collected.
+    bool collect_store(const Store *op) {
+        // Check the value doesn't load from the buffer we're
+        // collecting stores for.
+        ContainsLoad has_load(store_name);
+        op->value.accept(&has_load);
+        if (has_load.result) {
+            return false;
+        }
+
+        if (op->name != store_name) {
+            // Not a store to the buffer we're looking for.
+            return false;
+        }
+
+        if (stores.size() >= (size_t)max_stores) {
+            // Already have enough stores.
+            return false;
+        }
+
+        const Ramp *r = op->index.as<Ramp>();
+        if (!r) {
+            // Store doesn't store to a ramp. Can't interleave it.
+            return false;
+        }
+
+        if (!is_const(r->stride, store_stride)) {
+            // Ramp has wrong stride.
+            return false;
+        }
+
+        // This store is good.
+        stores.push_back(*op);
+        return true;
+    }
+
+    bool collect_let(const LetStmt *op) {
+        // First check the value doesn't load from the buffer we're
+        // collecting stores for.
+        ContainsLoad has_load(store_name);
+        op->value.accept(&has_load);
+        if (has_load.result) {
+            return false;
+        } else {
+            let_stmts.push_back(*op);
+            return true;
+        }
     }
 
     void visit(const Store *op) {
-        if (op->name == store_name) {
-            const Ramp *r = op->index.as<Ramp>();
-
-            if (r && is_const(r->stride, store_stride)) {
-                stores.push_back(*op);
-                stmt = Evaluate::make(0);
-                return;
-            }
+        if (collect_store(op)) {
+            // Replace with a no-op.
+            stmt = Evaluate::make(0);
+        } else {
+            stmt = op;
         }
-
-        stmt = op;
     }
 
     void visit(const LetStmt *op) {
-        ContainsLoad let_has_load(store_name);
-        op->value.accept(&let_has_load);
-        if (let_has_load) {
+        if (collect_let(op)) {
+            stmt = mutate(op->body);
+        } else {
             stmt = op;
-            return;
         }
-
-        let_stmts.push_back(*op);
-        stmt = mutate(op->body);
-        return;
     }
 
     void visit(const Block *op) {
@@ -85,39 +129,28 @@ private:
         const Store   *store = op->first.as<Store>();
 
         if (let) {
-            ContainsLoad let_has_load(store_name);
-            let->value.accept(&let_has_load);
-            if (let_has_load) {
+            if (collect_let(let)) {
+                let_stmts.push_back(*let);
+                stmt = mutate(Block::make(let->body, op->rest));
+            } else {
                 stmt = op;
-                return;
             }
-
-            let_stmts.push_back(*let);
-            stmt = mutate(Block::make(let->body, op->rest));
-            return;
         } else if (store) {
-            ContainsLoad store_has_load(store_name);
-            store->value.accept(&store_has_load);
-            if (store_has_load) {
+            if (collect_store(store)) {
+                stmt = mutate(op->rest);
+            } else {
                 stmt = op;
-                return;
-            } else if (store->name == store_name) {
-                const Ramp *r = store->index.as<Ramp>();
-
-                if (r && is_const(r->stride, store_stride)) {
-                    stores.push_back(*store);
-                    stmt = mutate(op->rest);
-                    return;
-                }
             }
+        } else {
+            stmt = Block::make(op->first, mutate(op->rest));
         }
-
-        stmt = Block::make(op->first, mutate(op->rest));
     }
 };
 
-Stmt collect_strided_stores(Stmt stmt, const std::string& name, int stride, std::vector<LetStmt> lets, std::vector<Store>& stores) {
-    StoreCollector collect(name, stride, lets, stores);
+Stmt collect_strided_stores(Stmt stmt, const std::string& name, int stride, int max_stores,
+                            std::vector<LetStmt> lets, std::vector<Store>& stores) {
+
+    StoreCollector collect(name, stride, max_stores, lets, stores);
     return collect.mutate(stmt);
 }
 
@@ -528,15 +561,20 @@ class Interleaver : public IRMutator {
 
             const int stride = *stride_ptr;
             const int width = r0->width;
-            const int expected_stores = stride == 1? width: stride;
+            const int expected_stores = stride == 1 ? width : stride;
 
             // Collect the rest of the stores.
             std::vector<Store> stores;
             stores.push_back(*store);
             Stmt rest = collect_strided_stores(op->rest, store->name,
-                                               stride, let_stmts, stores);
+                                               stride, expected_stores,
+                                               let_stmts, stores);
 
-            // Wrong number of stores collected.
+            // Check the store collector didn't collect too many
+            // stores (that would be a bug).
+            internal_assert(stores.size() <= (size_t)expected_stores);
+
+            // Not enough stores collected.
             if (stores.size() != (size_t)expected_stores) goto fail;
 
             Type t = store->value.type();
@@ -595,8 +633,9 @@ class Interleaver : public IRMutator {
             // Gather the args for interleaving.
             for (size_t i = 0; i < stores.size(); ++i) {
                 int j = offsets[i] - min_offset;
-                if (stride == 1)
+                if (stride == 1) {
                     j /= stores.size();
+                }
 
                 if (j == 0) {
                     base = stores[i].index.as<Ramp>()->base;
