@@ -175,8 +175,8 @@ void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const strin
 
     hook_up_function_pointer(ee, m, function_name + "_jit_wrapper", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
-    hook_up_function_pointer(ee, m, "halide_copy_to_dev", false, &copy_to_dev);
-    hook_up_function_pointer(ee, m, "halide_dev_free", false, &free_dev_buffer);
+    hook_up_function_pointer(ee, m, "halide_copy_to_device", false, &copy_to_dev);
+    hook_up_function_pointer(ee, m, "halide_device_free", false, &free_dev_buffer);
     hook_up_function_pointer(ee, m, "halide_set_error_handler", true, &set_error_handler);
     hook_up_function_pointer(ee, m, "halide_set_custom_allocator", true, &set_custom_allocator);
     hook_up_function_pointer(ee, m, "halide_set_custom_do_par_for", true, &set_custom_do_par_for);

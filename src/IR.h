@@ -18,6 +18,15 @@
 
 namespace Halide {
 
+enum DeviceAPI {
+    Device_Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+    Device_Host,
+    Device_Default_GPU,
+    Device_CUDA,
+    Device_OpenCL,
+    Device_GLSL
+};
+
 namespace Internal {
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
@@ -482,9 +491,10 @@ struct For : public StmtNode<For> {
     Expr min, extent;
     typedef enum {Serial, Parallel, Vectorized, Unrolled} ForType;
     ForType for_type;
+    DeviceAPI device_api;
     Stmt body;
 
-    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body);
+    EXPORT static Stmt make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body);
 };
 
 /** Store a 'value' to the buffer called 'name' at a given

@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        blur.gpu_tile(x, y, 16, 16, GPU_Default);
+        blur.gpu_tile(x, y, 16, 16, Device_Default_GPU);
     }
 
     Image<uint16_t> out = blur.realize(W, H, target);

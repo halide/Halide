@@ -136,7 +136,7 @@ public:
 
     void copy_to_dev() {
         if (contents->buf.host_dirty) {
-            halide_copy_to_dev(NULL, &contents->buf);
+            halide_copy_to_device(NULL, &contents->buf);
             contents->buf.host_dirty = false;
         }
     }

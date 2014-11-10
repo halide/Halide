@@ -1353,7 +1353,7 @@ Expr unbroadcast(Expr e) {
 bool CodeGen::function_takes_user_context(const string &name) {
     static const char *user_context_runtime_funcs[] = {
         "halide_copy_to_host",
-        "halide_copy_to_dev",
+        "halide_copy_to_device",
         "halide_current_time_ns",
         "halide_debug_to_file",
         "halide_device_free",

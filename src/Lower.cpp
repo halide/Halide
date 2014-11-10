@@ -293,7 +293,7 @@ Stmt build_provide_loop_nest(Function f,
             const Dim &dim = s.dims()[nest[i].dim_idx];
             Expr min = Variable::make(Int(32), nest[i].name + ".loop_min");
             Expr extent = Variable::make(Int(32), nest[i].name + ".loop_extent");
-            stmt = For::make(nest[i].name, min, extent, dim.for_type, stmt);
+            stmt = For::make(nest[i].name, min, extent, dim.for_type, dim.device_api, stmt);
         }
     }
 
@@ -765,10 +765,11 @@ private:
             stmt = for_loop;
         } else {
             stmt = For::make(for_loop->name,
-                           for_loop->min,
-                           for_loop->extent,
-                           for_loop->for_type,
-                           body);
+                             for_loop->min,
+                             for_loop->extent,
+                             for_loop->for_type,
+                             for_loop->device_api,
+                             body);
         }
     }
 
@@ -1129,7 +1130,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, For::Serial, s);
+    s = For::make(root_var, 0, 1, For::Serial, Device_Host, s);
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1814,7 +1815,7 @@ Stmt lower(Function f, const Target &t) {
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
-        s = inject_host_dev_buffer_copies(s);
+        s = inject_host_dev_buffer_copies(s, t);
         debug(2) << "Lowering after injecting host <-> dev buffer copies:\n" << s << "\n\n";
     }
 

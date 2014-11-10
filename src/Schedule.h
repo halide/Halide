@@ -87,6 +87,7 @@ struct Split {
 struct Dim {
     std::string var;
     For::ForType for_type;
+    DeviceAPI device_api;
     bool pure;
 };
 

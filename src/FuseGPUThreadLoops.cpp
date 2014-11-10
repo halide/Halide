@@ -142,6 +142,7 @@ class NormalizeDimensionality : public IRMutator {
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
+    const DeviceAPI device_api;
 
     int depth;
     int max_depth;
@@ -154,7 +155,7 @@ class NormalizeDimensionality : public IRMutator {
         s = mutate(s);
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
-            s = For::make("." + name, 0, 1, For::Parallel, s);
+            s = For::make("." + name, 0, 1, For::Parallel, device_api, s);
             max_depth++;
         }
         return s;
@@ -207,7 +208,8 @@ class NormalizeDimensionality : public IRMutator {
     }
 
 public:
-    NormalizeDimensionality(const ExtractBlockSize &e) : block_size(e), depth(0), max_depth(0) {}
+  NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
+      : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
 };
 
 class ReplaceForWithIf : public IRMutator {
@@ -430,7 +432,7 @@ class FuseGPUThreadLoops : public IRMutator {
 
             debug(3) << "Fusing thread block:\n" << body << "\n\n";
 
-            NormalizeDimensionality n(e);
+            NormalizeDimensionality n(e, op->device_api);
             body = n.mutate(body);
 
             debug(3) << "Normalized dimensionality:\n" << body << "\n\n";
@@ -452,12 +454,12 @@ class FuseGPUThreadLoops : public IRMutator {
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < e.dimensions(); i++) {
-                body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, body);
+              body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen
             if (e.dimensions() == 0) {
-                body = For::make(".__thread_id_x", 0, 1, For::Parallel, body);
+                body = For::make(".__thread_id_x", 0, 1, For::Parallel, op->device_api, body);
             }
 
             debug(3) << "Rewrapped in for loops:\n" << body << "\n\n";
@@ -470,7 +472,7 @@ class FuseGPUThreadLoops : public IRMutator {
             if (body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, op->min, op->extent, op->for_type, body);
+                stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, body);
             }
         } else {
             IRMutator::visit(op);
@@ -492,7 +494,7 @@ class ZeroGPULoopMins : public IRMutator {
             internal_assert(op);
             Expr adjusted = Variable::make(Int(32), op->name) + op->min;
             Stmt body = substitute(op->name, adjusted, op->body);
-            stmt = For::make(op->name, 0, op->extent, op->for_type, body);
+            stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
     }
 };

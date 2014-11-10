@@ -17,7 +17,7 @@ struct device_handle_wrapper {
     const halide_device_interface *interface;
 };
 
-WEAK uint64_t new_device_wrapper(uint64_t handle, const halide_device_interface *interface) {
+WEAK uint64_t new_device_wrapper(uint64_t handle, const struct halide_device_interface *interface) {
     // Using malloc instead of halide_malloc avoids alignment overhead.
     device_handle_wrapper *wrapper = (device_handle_wrapper *)malloc(sizeof(device_handle_wrapper));
     if (wrapper == NULL) {
@@ -34,6 +34,9 @@ WEAK void delete_device_wrapper(uint64_t wrapper) {
 
 WEAK uint64_t get_device_handle(uint64_t dev_field) {
     const device_handle_wrapper *wrapper = (const device_handle_wrapper *)dev_field;
+    if (wrapper == NULL) {
+        return 0;
+    }
     return wrapper->device_handle;
 }
 
