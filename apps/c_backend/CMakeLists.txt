@@ -19,7 +19,14 @@ ADD_DEPENDENCIES(
     c_backend_pipeline
 )
 
+SET_SOURCE_FILES_PROPERTIES(${CMAKE_CURRENT_BINARY_DIR}/pipeline_c.cc PROPERTIES GENERATED 1)
+
 add_library(pipeline_c STATIC pipeline_c.cc)
+
+ADD_DEPENDENCIES(
+    pipeline_c
+    c_backend_pipeline
+)
 
 target_link_libraries(
     c_backend_run
