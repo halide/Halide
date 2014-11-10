@@ -10,7 +10,7 @@
 
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 
-WEAK halide_device_interface opencl_device_interface;
+extern WEAK halide_device_interface opencl_device_interface;
 
 WEAK const char *get_opencl_error_name(cl_int err);
 WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_queue *q);
@@ -96,7 +96,7 @@ WEAK int halide_release_cl_context(void *user_context) {
 
 } // extern "C"
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 
 // Helper object to acquire and release the OpenCL context.
 class ClContext {
@@ -352,7 +352,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     return err;
 }
 
-}}} // namespace Halide::Runtime::Internal
+}}}} // namespace Halide::Runtime::Internal::OpenCL
 
 extern "C" {
 
@@ -402,7 +402,7 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
 }
 
 
-WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* src, int size) {
+WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, const char* src, int size) {
     debug(user_context)
         << "CL: halide_init_kernels (user_context: " << user_context
         << ", state_ptr: " << state_ptr
@@ -629,7 +629,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
                             << get_opencl_error_name(err);
         return err;
     } else {
-        debug(user_context) << (void *)buf->dev << "\n";
+        debug(user_context) << (void *)dev_ptr << "\n";
     }
     buf->dev = new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
     if (buf->dev == 0) {
@@ -852,7 +852,8 @@ WEAK int halide_opencl_run(void *user_context,
                            int threadsX, int threadsY, int threadsZ,
                            int shared_mem_bytes,
                            size_t arg_sizes[],
-                           void* args[]) {
+                           void* args[],
+                           int8_t arg_is_buffer[]) {
     debug(user_context)
         << "CL: halide_opencl_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
@@ -898,8 +899,18 @@ WEAK int halide_opencl_run(void *user_context,
     while (arg_sizes[i] != 0) {
         debug(user_context) << "    clSetKernelArg " << i
                             << " " << arg_sizes[i]
-                            << " [" << (*((void **)args[i])) << " ...]\n";
-        cl_int err = clSetKernelArg(f, i, arg_sizes[i], args[i]);
+                            << " [" << (*((void **)args[i])) << " ...] "
+                            << arg_is_buffer[i] << "\n";
+        void *this_arg = args[i];
+        uint64_t opencl_handle;
+        if (arg_is_buffer[i]) {
+            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+            opencl_handle = get_device_handle(*(uint64_t *)this_arg);
+            debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
+            this_arg = &opencl_handle;
+        }
+                                
+        cl_int err = clSetKernelArg(f, i, arg_sizes[i], this_arg);
         if (err != CL_SUCCESS) {
             error(user_context) << "CL: clSetKernelArg failed: "
                                 << get_opencl_error_name(err);
@@ -937,6 +948,7 @@ WEAK int halide_opencl_run(void *user_context,
 
     debug(user_context) << "    clReleaseKernel " << (void *)f << "\n";
     clReleaseKernel(f);
+    debug(user_context) << "    clReleaseKernel finished" << (void *)f << "\n";
 
     #ifdef DEBUG_RUNTIME
     err = clFinish(ctx.cmd_queue);
@@ -956,7 +968,7 @@ WEAK const halide_device_interface *halide_opencl_device_interface() {
 
 } // extern "C" linkage
 
-namespace Halide { namespace Runtime { namespace Internal {
+namespace Halide { namespace Runtime { namespace Internal { namespace OpenCL {
 WEAK const char *get_opencl_error_name(cl_int err) {
     switch (err) {
     case CL_SUCCESS: return "CL_SUCCESS";
@@ -1019,4 +1031,5 @@ WEAK halide_device_interface opencl_device_interface = {
     halide_opencl_copy_to_device,
 };
 
-}}} // namespace Halide::Runtime::Internal
+}}}} // namespace Halide::Runtime::Internal::OpenCL
+

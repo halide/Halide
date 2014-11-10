@@ -1389,7 +1389,7 @@ void bounds_test() {
 
     Buffer in(Int(32), vec(10), NULL, "input");
 
-    Stmt loop = For::make("x", 3, 10, For::Serial,
+    Stmt loop = For::make("x", 3, 10, For::Serial, Device_Host,
                           Provide::make("output",
                                         vec(Add::make(
                                                 Call::make(in, input_site_1),

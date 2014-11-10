@@ -431,7 +431,6 @@ DECLARE_CPP_INITMOD(linux_clock)
 DECLARE_CPP_INITMOD(linux_host_cpu_count)
 DECLARE_CPP_INITMOD(linux_opengl_context)
 DECLARE_CPP_INITMOD(osx_opengl_context)
-DECLARE_CPP_INITMOD(nogpu)
 DECLARE_CPP_INITMOD(opencl)
 DECLARE_CPP_INITMOD(windows_opencl)
 DECLARE_CPP_INITMOD(opengl)
@@ -520,7 +519,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // The symbols that we actually might want to override as a user
     // must remain weak.
     string retain[] = {"halide_copy_to_host",
-                       "halide_copy_to_dev",
+                       "halide_copy_to_device",
                        "halide_device_malloc",
                        "halide_device_free",
                        "halide_set_error_handler",
@@ -533,7 +532,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_set_trace_file",
                        "halide_set_cuda_context",
                        "halide_set_cl_context",
-                       "halide_dev_sync",
+                       "halide_device_sync",
                        "halide_release",
                        "halide_current_time_ns",
                        "halide_host_cpu_count",
@@ -788,8 +787,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         } else {
             // You're on your own to provide definitions of halide_opengl_get_proc_address and halide_opengl_create_context
         }
-    } else {
-        modules.push_back(get_initmod_nogpu(c, bits_64, debug));
     }
 
     link_modules(modules);

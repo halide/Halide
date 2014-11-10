@@ -330,7 +330,7 @@ class VectorizeLoops : public IRMutator {
                 Stmt body = mutate(op->body);
                 scope.pop(op->name);
                 body = LetStmt::make(op->name, value, body);
-                Stmt transformed = For::make(op->name + ".scalar", 0, extent, for_type, body);
+                Stmt transformed = For::make(op->name + ".scalar", 0, extent, for_type, op->device_api, body);
                 stmt = transformed;
                 return;
             }
@@ -343,7 +343,7 @@ class VectorizeLoops : public IRMutator {
                 for_type == op->for_type) {
                 stmt = op;
             } else {
-                stmt = For::make(op->name, min, extent, for_type, body);
+                stmt = For::make(op->name, min, extent, for_type, op->device_api, body);
             }
         }
 

@@ -352,7 +352,7 @@ Stmt Pipeline::make(std::string name, Stmt produce, Stmt update, Stmt consume) {
     return node;
 }
 
-Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Stmt body) {
+Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, DeviceAPI device_api, Stmt body) {
     internal_assert(min.defined()) << "For of undefined\n";
     internal_assert(extent.defined()) << "For of undefined\n";
     internal_assert(min.type().is_scalar()) << "For with vector min\n";
@@ -364,6 +364,7 @@ Stmt For::make(std::string name, Expr min, Expr extent, ForType for_type, Stmt b
     node->min = min;
     node->extent = extent;
     node->for_type = for_type;
+    node->device_api = device_api;
     node->body = body;
     return node;
 }

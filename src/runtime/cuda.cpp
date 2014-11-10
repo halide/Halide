@@ -646,7 +646,8 @@ WEAK int halide_cuda_run(void *user_context,
                          int threadsX, int threadsY, int threadsZ,
                          int shared_mem_bytes,
                          size_t arg_sizes[],
-                         void* args[]) {
+                         void* args[],
+                         int8_t arg_is_buffer[]) {
     debug(user_context) << "CUDA: halide_cuda_run ("
                         << "user_context: " << user_context << ", "
                         << "entry: " << entry_name << ", "
@@ -675,13 +676,34 @@ WEAK int halide_cuda_run(void *user_context,
         return err;
     }
 
+    size_t num_args = 0;
+    while (arg_sizes[num_args] != 0) {
+      num_args++;
+    }
+
+    // We need storage for both the arg and the pointer to it if if
+    // has to be translated.
+    void** translated_args = (void **)malloc((num_args + 1) * sizeof(void *));
+    uint64_t *dev_handles = (uint64_t *)malloc(num_args * sizeof(uint64_t));
+    for (size_t i = 0; i <= num_args; i++) { // Get NULL at end.
+      if (arg_is_buffer[i]) {
+        halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+          dev_handles[i] = get_device_handle(*(uint64_t *)args[i]);
+          translated_args[i] = &(dev_handles[i]);
+      } else {
+          translated_args[i] = args[i];
+      }
+    }
+
     err = cuLaunchKernel(f,
                          blocksX,  blocksY,  blocksZ,
                          threadsX, threadsY, threadsZ,
                          shared_mem_bytes,
                          NULL, // stream
-                         args,
+                         translated_args,
                          NULL);
+    free(dev_handles);
+    free(translated_args);
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuLaunchKernel failed: "
                             << get_error_name(err);
