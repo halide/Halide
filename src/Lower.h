@@ -16,7 +16,8 @@ namespace Internal {
 /** Given a halide function with a schedule, create a statement that
  * evaluates it. Automatically pulls in all the functions f depends
  * on. Some stages of lowering may be target-specific. */
-EXPORT Stmt lower(Function f, const Target &t);
+EXPORT Stmt lower(Function f, const Target &t,
+                  const std::vector<Stmt (*)(Stmt)> &custom_passes = std::vector<Stmt (*)(Stmt)>());
 
 void lower_test();
 

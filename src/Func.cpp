@@ -1999,8 +1999,9 @@ std::vector<Argument> Func::infer_arguments() const {
 
 void Func::lower(const Target &t) {
     if (!lowered.defined() || t != lowered_target) {
-        lowered = Halide::Internal::lower(func, t);
+        lowered = Halide::Internal::lower(func, t, custom_lowering_passes);
         lowered_target = t;
+
         // Forbid new definitions of the func
         func.freeze();
     }
@@ -2313,6 +2314,16 @@ void Func::memoization_cache_set_size(uint64_t size) {
     if (compiled_module.memoization_cache_set_size) {
         compiled_module.memoization_cache_set_size(size);
     }
+}
+
+void Func::add_custom_lowering_pass(Internal::Stmt (*pass)(Internal::Stmt)) {
+    invalidate_cache();
+    custom_lowering_passes.push_back(pass);
+}
+
+void Func::clear_custom_lowering_passes() {
+    invalidate_cache();
+    custom_lowering_passes.clear();
 }
 
 void Func::realize(Buffer b, const Target &target) {
