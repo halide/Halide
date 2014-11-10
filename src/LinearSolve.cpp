@@ -26,6 +26,10 @@ public:
 private:
     SmallStack<Expr> coeff;
 
+    bool has_vars(Expr expr) {
+        return expr_uses_vars(expr, free_vars, scope);
+    }
+
     void add_to_constant_term(Expr e) {
         internal_assert(!e.type().is_uint()) << "cannot perform solve with uint types.\n";
 
@@ -66,13 +70,13 @@ private:
     void visit(const Broadcast *op) {success = false;}
 
     void visit(const Add *op) {
-        if (expr_uses_vars(op->a, free_vars)) {
+        if (has_vars(op->a)) {
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
-        if (expr_uses_vars(op->b, free_vars)) {
+        if (has_vars(op->b)) {
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -80,14 +84,14 @@ private:
     }
 
     void visit(const Sub *op) {
-        if (expr_uses_vars(op->a, free_vars)) {
+        if (has_vars(op->a)) {
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
         coeff.push(-coeff.top_ref());
-        if (expr_uses_vars(op->b, free_vars)) {
+        if (has_vars(op->b)) {
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -105,9 +109,9 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        if (expr_uses_vars(b, free_vars)) {
+        if (has_vars(b)) {
             success = false;
-        } else if (expr_uses_vars(a, free_vars)) {
+        } else if (has_vars(a)) {
             internal_assert(!b.type().is_uint()) << "cannot perform solve with uint types.\n";
 
             coeff.push(coeff.top() / b);
@@ -122,8 +126,8 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        bool a_has_var = expr_uses_vars(a, free_vars);
-        bool b_has_var = expr_uses_vars(b, free_vars);
+        bool a_has_var = has_vars(a);
+        bool b_has_var = has_vars(b);
 
         if (a_has_var && b_has_var) {
             success = false;
