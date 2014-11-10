@@ -75,14 +75,14 @@ private:
 };
 
 bool branches_in_var(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                     bool branch_on_minmax = false) {
+                     bool branch_on_minmax) {
     BranchesInVar check(var, &scope, branch_on_minmax);
     stmt.accept(&check);
     return check.has_branches;
 }
 
 bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                     bool branch_on_minmax = false) {
+                     bool branch_on_minmax) {
     BranchesInVar check(var, &scope, branch_on_minmax);
     expr.accept(&check);
     return check.has_branches;
@@ -118,7 +118,7 @@ public:
                 var_bounds = Interval(Expr(), Expr());
             }
 
-            bool is_inequality = true;
+            bool result = true;
             const LT *lt = solve.as<LT>();
             const LE *le = solve.as<LE>();
             const GT *gt = solve.as<GT>();
@@ -148,9 +148,13 @@ public:
                 false_range.min = var_bounds.min;
                 false_range.max = var_bounds.max.defined()? min(ge->b - 1, var_bounds.max): ge->b - 1;
             } else {
-                is_inequality = false;
+                result = false;
             }
+
+            return result;
         }
+
+        return false;
     }
 
     void visit(const IfThenElse *op) {
@@ -190,7 +194,7 @@ public:
     void visit(const Select *op) {
         Expr condition = simplify(op->condition, true, bounds_info);
         Expr true_value = op->true_value;
-        Stmt false_value = op->false_value;
+        Expr false_value = op->false_value;
 
         Interval true_range, false_range;
         if (is_inequality(condition, true_range, false_range)) {
@@ -208,15 +212,15 @@ public:
         if (!condition.same_as(op->condition) ||
             !true_value.same_as(op->true_value) ||
             !false_value.same_as(op->false_value)) {
-            stmt = Select::make(condition, true_value, false_value);
+            expr = Select::make(condition, true_value, false_value);
         } else {
             true_value = mutate(true_value);
             false_value = mutate(false_value);
 
             if (!true_value.same_as(op->true_value) || !false_value.same_as(op->false_value)) {
-                stmt = Select::make(condition, true_value, false_value);
+                expr = Select::make(condition, true_value, false_value);
             } else {
-                stmt = op;
+                expr = op;
             }
         }
     }
@@ -247,14 +251,14 @@ public:
 };
 
 Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                    const Scope<Interval> &bounds, const Scope<int> &vars)
+                    const Scope<Interval> &bounds, const Scope<int> &vars) {
     PruneBranches pruner(var, &scope, &bounds, vars);
     Stmt pruned = simplify(pruner.mutate(stmt), true, bounds);
     return pruned;
 }
 
 Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                    const Scope<Interval> &bounds, const Scope<int> &vars)
+                    const Scope<Interval> &bounds, const Scope<int> &vars) {
     PruneBranches pruner(var, &scope, &bounds, vars);
     Expr pruned = simplify(pruner.mutate(expr), true, bounds);
     return pruned;
@@ -262,7 +266,7 @@ Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
 
 class NormalizeBranches : public IRMutator {
 public:
-    NormalizeBranches(const Scope<Expr> *s, const int limit) :
+    NormalizeBranches(const Scope<Expr> *s, const int limit = 10) :
             branch_count(0), branching_limit(limit),
             in_if_cond(false), in_select_cond(false) {
         scope.set_containing_scope(s);
@@ -392,7 +396,6 @@ private:
     }
 
     void visit(const Call *op)   {expr = op;}
-    void visit(const Select *op) {expr = op;}
     void visit(const Store *op)  {stmt = op;}
 
     void visit(const Variable *op) {
@@ -441,4 +444,7 @@ Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope) {
 
 Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope) {
     return simplify(NormalizeBranches(&scope).mutate(expr));
+}
+
+}
 }

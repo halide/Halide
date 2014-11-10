@@ -7,6 +7,8 @@
  */
 
 #include "IR.h"
+#include "Bounds.h"
+#include "Scope.h"
 
 namespace Halide {
 namespace Internal {
