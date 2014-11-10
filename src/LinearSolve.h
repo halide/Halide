@@ -12,7 +12,7 @@
 namespace Halide {
 namespace Internal {
 
-/* A struct that represents a simple term in an expression. The term
+/** A struct that represents a simple term in an expression. The term
  * is defined as the coefficient times the variable. If the variable
  * is a null pointer, then the term is a constant value equal to the
  * coefficient.
@@ -22,7 +22,7 @@ struct Term {
   const Variable* var;
 };
 
-/* This function collects the terms of a linear expression into an
+/** This function collects the terms of a linear expression into an
  * array. The function will return true if the expression is indeed
  * linear, and so this can be used to detect linear expressions as
  * well.
