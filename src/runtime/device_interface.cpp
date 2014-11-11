@@ -25,18 +25,23 @@ WEAK uint64_t new_device_wrapper(uint64_t handle, const struct halide_device_int
     }
     wrapper->device_handle = handle;
     wrapper->interface = interface;
+    debug(NULL) << "Creating device wrapper for interface " << interface << " handle " << (void *)handle << " wrapper " << wrapper << "\n";
     return (uint64_t)wrapper;
 }
 
 WEAK void delete_device_wrapper(uint64_t wrapper) {
-    free((device_handle_wrapper *)wrapper);
+    device_handle_wrapper *wrapper_ptr = (device_handle_wrapper *)wrapper;
+    debug(NULL) << "Deleting device wrapper for interface " << wrapper_ptr->interface << " device_handle " << (void *)wrapper_ptr->device_handle << " at addr " << wrapper_ptr << "\n";
+    free(wrapper_ptr);
 }
 
 WEAK uint64_t get_device_handle(uint64_t dev_field) {
     const device_handle_wrapper *wrapper = (const device_handle_wrapper *)dev_field;
     if (wrapper == NULL) {
+        debug(NULL) << "Getting device handle for NULL wrappe\n";
         return 0;
     }
+    debug(NULL) << "Getting device handle for interface " << wrapper->interface << " device_handle " << (void *)wrapper->device_handle << " at addr " << wrapper << "\n";
     return wrapper->device_handle;
 }
 
