@@ -95,11 +95,13 @@ int halide_device_sync(void *user_context, struct buffer_t *buf) {
 
 /** Allocate device memory to back a buffer_t. */
 int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+    debug(user_context) << "halide_device_malloc: " << buf << " buf dev " << buf->dev << " interface " << interface << "\n";
     return interface->device_malloc(user_context, buf);
 }
 
 /** Free any device memory associated with a buffer_t. */
 int halide_device_free(void *user_context, struct buffer_t *buf) {
+    debug(user_context) << "halide_device_free: " << buf << " buf dev " << buf->dev << " interface " << get_device_interface(buf) << "\n";
     if (buf != NULL) {
         const halide_device_interface *interface = get_device_interface(buf);
         if (interface != NULL) {
