@@ -1,4 +1,4 @@
-#include "BranchUtils.h"
+#include "BranchVisitors.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -9,6 +9,8 @@
 namespace Halide {
 namespace Internal {
 
+// This visitor checks if a Stmt or Expr has branches in a particular variable,
+// by which we mean the branching condition depends on the variable.
 class BranchesInVar : public IRVisitor {
 public:
     std::string name;
@@ -88,182 +90,8 @@ bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr> &scope
     return check.has_branches;
 }
 
-
-class PruneBranches : public IRMutator {
-public:
-    std::string name;
-    Scope<Expr> scope;
-    Scope<Interval> bounds_info;
-    const Scope<int>& free_vars;
-
-    PruneBranches(const std::string &var, const Scope<Expr> *s,
-                  const Scope<Interval> *bi, const Scope<int> &v)
-            : name(var), free_vars(v) {
-        scope.set_containing_scope(s);
-        bounds_info.set_containing_scope(bi);
-    }
-
-  private:
-    using IRMutator::visit;
-
-    // Returns true if the expr is an inequality condition, and
-    // returns the intervals when the condition is true and false.
-    bool is_inequality(Expr condition, Interval &true_range, Interval &false_range) {
-        Expr solve = solve_for_linear_variable(condition, name, free_vars);
-        if (!solve.same_as(condition)) {
-            Interval var_bounds;
-            if (bounds_info.contains(name)) {
-                var_bounds = bounds_info.get(name);
-            } else {
-                var_bounds = Interval(Expr(), Expr());
-            }
-
-            bool result = true;
-            const LT *lt = solve.as<LT>();
-            const LE *le = solve.as<LE>();
-            const GT *gt = solve.as<GT>();
-            const GE *ge = solve.as<GE>();
-            if (lt) {
-                true_range.min = var_bounds.min;
-                true_range.max = var_bounds.max.defined()? min(lt->b - 1, var_bounds.max): lt->b - 1;
-
-                false_range.min = var_bounds.min.defined()? max(var_bounds.min, lt->b): lt->b;
-                false_range.max = var_bounds.max;
-            } else if (le) {
-                true_range.min = var_bounds.min;
-                true_range.max = var_bounds.max.defined()? min(le->b, var_bounds.max): le->b;
-
-                false_range.min = var_bounds.min.defined()? max(var_bounds.min, le->b + 1): le->b + 1;
-                false_range.max = var_bounds.max;
-            } else if (gt) {
-                true_range.min = var_bounds.min.defined()? max(var_bounds.min, gt->b + 1): gt->b + 1;
-                true_range.max = var_bounds.max;
-
-                false_range.min = var_bounds.min;
-                false_range.max = var_bounds.max.defined()? min(gt->b, var_bounds.max): gt->b;
-            } else if (ge) {
-                true_range.min = var_bounds.min.defined()? max(var_bounds.min, ge->b): ge->b;
-                true_range.max = var_bounds.max;
-
-                false_range.min = var_bounds.min;
-                false_range.max = var_bounds.max.defined()? min(ge->b - 1, var_bounds.max): ge->b - 1;
-            } else {
-                result = false;
-            }
-
-            return result;
-        }
-
-        return false;
-    }
-
-    void visit(const IfThenElse *op) {
-        Expr condition = simplify(op->condition, true, bounds_info);
-        Stmt then_case = op->then_case;
-        Stmt else_case = op->else_case;
-
-        Interval then_range, else_range;
-        if (is_inequality(condition, then_range, else_range)) {
-            bounds_info.push(name, then_range);
-            then_case = mutate(then_case);
-            then_case = simplify(then_case, true, bounds_info);
-            bounds_info.pop(name);
-
-            bounds_info.push(name, else_range);
-            else_case = mutate(else_case);
-            else_case = simplify(else_case, true, bounds_info);
-            bounds_info.pop(name);
-        }
-
-        if (!condition.same_as(op->condition) ||
-            !then_case.same_as(op->then_case) ||
-            !else_case.same_as(op->else_case)) {
-            stmt = IfThenElse::make(condition, then_case, else_case);
-        } else {
-            then_case = mutate(then_case);
-            else_case = mutate(else_case);
-
-            if (!then_case.same_as(op->then_case) || !else_case.same_as(op->else_case)) {
-                stmt = IfThenElse::make(condition, then_case, else_case);
-            } else {
-                stmt = op;
-            }
-        }
-    }
-
-    void visit(const Select *op) {
-        Expr condition = simplify(op->condition, true, bounds_info);
-        Expr true_value = op->true_value;
-        Expr false_value = op->false_value;
-
-        Interval true_range, false_range;
-        if (is_inequality(condition, true_range, false_range)) {
-            bounds_info.push(name, true_range);
-            true_value = mutate(true_value);
-            true_value = simplify(true_value, true, bounds_info);
-            bounds_info.pop(name);
-
-            bounds_info.push(name, false_range);
-            false_value = mutate(false_value);
-            false_value = simplify(false_value, true, bounds_info);
-            bounds_info.pop(name);
-        }
-
-        if (!condition.same_as(op->condition) ||
-            !true_value.same_as(op->true_value) ||
-            !false_value.same_as(op->false_value)) {
-            expr = Select::make(condition, true_value, false_value);
-        } else {
-            true_value = mutate(true_value);
-            false_value = mutate(false_value);
-
-            if (!true_value.same_as(op->true_value) || !false_value.same_as(op->false_value)) {
-                expr = Select::make(condition, true_value, false_value);
-            } else {
-                expr = op;
-            }
-        }
-    }
-
-    void visit(const Let *op) {
-        scope.push(op->name, op->value);
-        Expr new_body = mutate(op->body);
-        scope.pop(op->name);
-
-        if (!new_body.same_as(op->body)) {
-            expr = Let::make(op->name, op->value, new_body);
-        } else {
-            expr = op;
-        }
-    }
-
-    void visit(const LetStmt *op) {
-        scope.push(op->name, op->value);
-        Stmt new_body = mutate(op->body);
-        scope.pop(op->name);
-
-        if (!new_body.same_as(op->body)) {
-            stmt = LetStmt::make(op->name, op->value, new_body);
-        } else {
-            stmt = op;
-        }
-    }
-};
-
-Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                    const Scope<Interval> &bounds, const Scope<int> &vars) {
-    PruneBranches pruner(var, &scope, &bounds, vars);
-    Stmt pruned = simplify(pruner.mutate(stmt), true, bounds);
-    return pruned;
-}
-
-Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                    const Scope<Interval> &bounds, const Scope<int> &vars) {
-    PruneBranches pruner(var, &scope, &bounds, vars);
-    Expr pruned = simplify(pruner.mutate(expr), true, bounds);
-    return pruned;
-}
-
+// A mutator that "normalizes" IfThenElse and Select nodes. By normalizing these nodes
+// we mean converting the conditions to simple inequality constraints whenever possible.
 class NormalizeBranches : public IRMutator {
 public:
     NormalizeBranches(const Scope<Expr> *s, const int limit = 10) :
@@ -438,12 +266,191 @@ private:
     }
 };
 
-Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope) {
-    return simplify(NormalizeBranches(&scope).mutate(stmt));
+Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit) {
+  return simplify(NormalizeBranches(&scope, branching_limit).mutate(stmt));
 }
 
-Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope) {
-    return simplify(NormalizeBranches(&scope).mutate(expr));
+Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit) {
+  return simplify(NormalizeBranches(&scope, branching_limit).mutate(expr));
+}
+
+// Prunes a nested tree of IfThenElse or Select nodes. Uses bounds inference on
+// the condition Exprs of these nodes to decide if any internal branches can be
+// proven to be true/false and replaces them with the correct case. This is
+// intended to be used after we have normalized an IfThenElse Stmt or Select Expr.
+class PruneBranches : public IRMutator {
+public:
+    std::string name;
+    Scope<Expr> scope;
+    Scope<Interval> bounds_info;
+    const Scope<int>& free_vars;
+
+    PruneBranches(const std::string &var, const Scope<Expr> *s,
+                  const Scope<Interval> *bi, const Scope<int> &v)
+            : name(var), free_vars(v) {
+        scope.set_containing_scope(s);
+        bounds_info.set_containing_scope(bi);
+    }
+
+  private:
+    using IRMutator::visit;
+
+    // Returns true if the expr is an inequality condition, and
+    // returns the intervals when the condition is true and false.
+    bool is_inequality(Expr condition, Interval &true_range, Interval &false_range) {
+        Expr solve = solve_for_linear_variable(condition, name, free_vars);
+        if (!solve.same_as(condition)) {
+            Interval var_bounds;
+            if (bounds_info.contains(name)) {
+                var_bounds = bounds_info.get(name);
+            } else {
+                var_bounds = Interval(Expr(), Expr());
+            }
+
+            bool result = true;
+            const LT *lt = solve.as<LT>();
+            const LE *le = solve.as<LE>();
+            const GT *gt = solve.as<GT>();
+            const GE *ge = solve.as<GE>();
+            if (lt) {
+                true_range.min = var_bounds.min;
+                true_range.max = var_bounds.max.defined()? min(lt->b - 1, var_bounds.max): lt->b - 1;
+
+                false_range.min = var_bounds.min.defined()? max(var_bounds.min, lt->b): lt->b;
+                false_range.max = var_bounds.max;
+            } else if (le) {
+                true_range.min = var_bounds.min;
+                true_range.max = var_bounds.max.defined()? min(le->b, var_bounds.max): le->b;
+
+                false_range.min = var_bounds.min.defined()? max(var_bounds.min, le->b + 1): le->b + 1;
+                false_range.max = var_bounds.max;
+            } else if (gt) {
+                true_range.min = var_bounds.min.defined()? max(var_bounds.min, gt->b + 1): gt->b + 1;
+                true_range.max = var_bounds.max;
+
+                false_range.min = var_bounds.min;
+                false_range.max = var_bounds.max.defined()? min(gt->b, var_bounds.max): gt->b;
+            } else if (ge) {
+                true_range.min = var_bounds.min.defined()? max(var_bounds.min, ge->b): ge->b;
+                true_range.max = var_bounds.max;
+
+                false_range.min = var_bounds.min;
+                false_range.max = var_bounds.max.defined()? min(ge->b - 1, var_bounds.max): ge->b - 1;
+            } else {
+                result = false;
+            }
+
+            return result;
+        }
+
+        return false;
+    }
+
+    void visit(const IfThenElse *op) {
+        Expr condition = simplify(op->condition, true, bounds_info);
+        Stmt then_case = op->then_case;
+        Stmt else_case = op->else_case;
+
+        Interval then_range, else_range;
+        if (is_inequality(condition, then_range, else_range)) {
+            bounds_info.push(name, then_range);
+            then_case = mutate(then_case);
+            then_case = simplify(then_case, true, bounds_info);
+            bounds_info.pop(name);
+
+            bounds_info.push(name, else_range);
+            else_case = mutate(else_case);
+            else_case = simplify(else_case, true, bounds_info);
+            bounds_info.pop(name);
+        }
+
+        if (!condition.same_as(op->condition) ||
+            !then_case.same_as(op->then_case) ||
+            !else_case.same_as(op->else_case)) {
+            stmt = IfThenElse::make(condition, then_case, else_case);
+        } else {
+            then_case = mutate(then_case);
+            else_case = mutate(else_case);
+
+            if (!then_case.same_as(op->then_case) || !else_case.same_as(op->else_case)) {
+                stmt = IfThenElse::make(condition, then_case, else_case);
+            } else {
+                stmt = op;
+            }
+        }
+    }
+
+    void visit(const Select *op) {
+        Expr condition = simplify(op->condition, true, bounds_info);
+        Expr true_value = op->true_value;
+        Expr false_value = op->false_value;
+
+        Interval true_range, false_range;
+        if (is_inequality(condition, true_range, false_range)) {
+            bounds_info.push(name, true_range);
+            true_value = mutate(true_value);
+            true_value = simplify(true_value, true, bounds_info);
+            bounds_info.pop(name);
+
+            bounds_info.push(name, false_range);
+            false_value = mutate(false_value);
+            false_value = simplify(false_value, true, bounds_info);
+            bounds_info.pop(name);
+        }
+
+        if (!condition.same_as(op->condition) ||
+            !true_value.same_as(op->true_value) ||
+            !false_value.same_as(op->false_value)) {
+            expr = Select::make(condition, true_value, false_value);
+        } else {
+            true_value = mutate(true_value);
+            false_value = mutate(false_value);
+
+            if (!true_value.same_as(op->true_value) || !false_value.same_as(op->false_value)) {
+                expr = Select::make(condition, true_value, false_value);
+            } else {
+                expr = op;
+            }
+        }
+    }
+
+    void visit(const Let *op) {
+        scope.push(op->name, op->value);
+        Expr new_body = mutate(op->body);
+        scope.pop(op->name);
+
+        if (!new_body.same_as(op->body)) {
+            expr = Let::make(op->name, op->value, new_body);
+        } else {
+            expr = op;
+        }
+    }
+
+    void visit(const LetStmt *op) {
+        scope.push(op->name, op->value);
+        Stmt new_body = mutate(op->body);
+        scope.pop(op->name);
+
+        if (!new_body.same_as(op->body)) {
+            stmt = LetStmt::make(op->name, op->value, new_body);
+        } else {
+            stmt = op;
+        }
+    }
+};
+
+Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
+                    const Scope<Interval> &bounds, const Scope<int> &vars) {
+    PruneBranches pruner(var, &scope, &bounds, vars);
+    Stmt pruned = simplify(pruner.mutate(stmt), true, bounds);
+    return pruned;
+}
+
+Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
+                    const Scope<Interval> &bounds, const Scope<int> &vars) {
+    PruneBranches pruner(var, &scope, &bounds, vars);
+    Expr pruned = simplify(pruner.mutate(expr), true, bounds);
+    return pruned;
 }
 
 }
