@@ -9,6 +9,121 @@
 namespace Halide {
 namespace Internal {
 
+class ExprLinearInVars : public IRVisitor {
+public:
+    const Scope<int> &free_vars;
+    bool result;
+
+    ExprLinearInVars(const Scope<int> &fv, const Scope<bool> *bv = NULL) :
+            free_vars(fv), result(false) {
+        bound_vars.set_containing_scope(bv);
+    }
+private:
+    using IRVisitor::visit;
+
+    Scope<bool> bound_vars;
+
+    void visit(const IntImm *op) {
+        result = false;
+    }
+
+    void visit(const FloatImm *op) {
+        result = false;
+    }
+
+    // These nodes are considered to introduce non-linearities.
+    void visit(const Mod *op) {result = false;}
+    void visit(const Min *op) {result = false;}
+    void visit(const Max *op) {result = false;}
+    void visit(const Select *op) {result = false;}
+    void visit(const Call *op) {result = false;}
+    void visit(const Load *op) {result = false;}
+    void visit(const Ramp *op) {result = false;}
+    void visit(const Broadcast *op) {result = false;}
+
+    template<class Op>
+    void visit_binary_op(const Op *op) {
+        op->a.accept(this);
+        bool a_is_linear = result;
+
+        op->b.accept(this);
+        bool b_is_linear = result;
+
+        result = a_is_linear && b_is_linear;
+    }
+
+    void visit(const Add *op) {visit_binary_op(op);}
+    void visit(const Sub *op) {visit_binary_op(op);}
+    void visit(const EQ *op) {visit_binary_op(op);}
+    void visit(const NE *op) {visit_binary_op(op);}
+    void visit(const LT *op) {visit_binary_op(op);}
+    void visit(const GT *op) {visit_binary_op(op);}
+    void visit(const LE *op) {visit_binary_op(op);}
+    void visit(const GE *op) {visit_binary_op(op);}
+    void visit(const And *op) {visit_binary_op(op);}
+    void visit(const Or *op) {visit_binary_op(op);}
+
+    void visit(const Div *op) {
+        // Integer division is considered non-linear.
+        if (op->type.is_int() || op->type.is_uint()) {
+            result = false;
+        } else {
+            op->a.accept(this);
+            bool a_is_linear = result;
+
+            op->b.accept(this);
+            bool b_is_linear = result;
+
+            result = a_is_linear && !b_is_linear;
+        }
+    }
+
+    void visit(const Mul *op) {
+        op->a.accept(this);
+        bool a_is_linear = result;
+
+        op->b.accept(this);
+        bool b_is_linear = result;
+
+        result = !(a_is_linear && b_is_linear) && (a_is_linear || b_is_linear);
+    }
+
+    void visit(const Let *op) {
+        op->value.accept(this);
+        bound_vars.push(op->name, result);
+        op->body.accept(this);
+        bound_vars.pop(op->name);
+    }
+
+    void visit(const Variable *op) {
+        if (free_vars.contains(op->name)) {
+            result = true;
+        } else if (bound_vars.contains(op->name)) {
+            result = bound_vars.get(op->name);
+        } else {
+            result = false;
+        }
+    }
+};
+
+bool expr_is_linear_in_var(Expr expr, const std::string &var) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    ExprLinearInVars is_linear(free_vars);
+    return is_linear.result;
+}
+
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars) {
+    ExprLinearInVars is_linear(free_vars);
+    return is_linear.result;
+}
+
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<bool> &bound_vars) {
+    ExprLinearInVars is_linear(free_vars, &bound_vars);
+    return is_linear.result;
+}
+
 class CollectLinearTerms : public IRVisitor {
 public:
     const Scope<int> &free_vars;
