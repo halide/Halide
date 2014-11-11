@@ -108,6 +108,10 @@ Func::Func(Function f) : func(f),
                          jit_user_context(make_user_context()) {
 }
 
+Func::~Func() {
+    clear_custom_lowering_passes();
+}
+
 const string &Func::name() const {
     return func.name();
 }
@@ -1999,7 +2003,11 @@ std::vector<Argument> Func::infer_arguments() const {
 
 void Func::lower(const Target &t) {
     if (!lowered.defined() || t != lowered_target) {
-        lowered = Halide::Internal::lower(func, t, custom_lowering_passes);
+        vector<IRMutator *> custom_passes;
+        for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
+            custom_passes.push_back(custom_lowering_passes[i].pass);
+        }
+        lowered = Halide::Internal::lower(func, t, custom_passes);
         lowered_target = t;
 
         // Forbid new definitions of the func
@@ -2316,13 +2324,19 @@ void Func::memoization_cache_set_size(uint64_t size) {
     }
 }
 
-void Func::add_custom_lowering_pass(Internal::Stmt (*pass)(Internal::Stmt)) {
+void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     invalidate_cache();
-    custom_lowering_passes.push_back(pass);
+    CustomLoweringPass p = {pass, deleter};
+    custom_lowering_passes.push_back(p);
 }
 
 void Func::clear_custom_lowering_passes() {
     invalidate_cache();
+    for (size_t i = 0; i < custom_lowering_passes.size(); i++) {
+        if (custom_lowering_passes[i].deleter) {
+            custom_lowering_passes[i].deleter(custom_lowering_passes[i].pass);
+        }
+    }
     custom_lowering_passes.clear();
 }
 

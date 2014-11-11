@@ -1724,7 +1724,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     return s;
 }
 
-Stmt lower(Function f, const Target &t, const vector<Stmt (*)(Stmt)> &custom_passes) {
+Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
 
@@ -1872,7 +1872,7 @@ Stmt lower(Function f, const Target &t, const vector<Stmt (*)(Stmt)> &custom_pas
         debug(2) << "Lowering after final simplification:\n" << s << "\n\n";
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
-            s = custom_passes[i](s);
+            s = custom_passes[i]->mutate(s);
             if (i + 1 < custom_passes.size()) {
                 debug(2) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
             }
