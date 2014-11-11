@@ -139,7 +139,7 @@ private:
     }
 
     void visit(const Select *op) {
-        if (!in_if_cond && !in_select_cond &&branch_count < branching_limit) {
+        if (!in_if_cond && !in_select_cond && (branch_count < branching_limit)) {
             bool old_in_select_cond = in_select_cond;
             in_select_cond = true;
             ++branch_count;
@@ -267,17 +267,27 @@ private:
 };
 
 Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit) {
-  return simplify(NormalizeBranches(&scope, branching_limit).mutate(stmt));
+  stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
+  stmt = simplify(stmt);
+  return stmt;
 }
 
 Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit) {
-  return simplify(NormalizeBranches(&scope, branching_limit).mutate(expr));
+  expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
+  expr = simplify(expr);
+  return expr;
 }
 
 // Prunes a nested tree of IfThenElse or Select nodes. Uses bounds inference on
 // the condition Exprs of these nodes to decide if any internal branches can be
 // proven to be true/false and replaces them with the correct case. This is
 // intended to be used after we have normalized an IfThenElse Stmt or Select Expr.
+//
+// NOTE: This mutator is not included as part of the general simplify code, since it
+// requires calling the linear solver, which depends on simplify, and thus would
+// create a circular dependency. In the future we may be able to change how the
+// linear solver and simplifier work together so that this mutator can be merged
+// into the simply function.
 class PruneBranches : public IRMutator {
 public:
     std::string name;
@@ -298,7 +308,7 @@ public:
     // Returns true if the expr is an inequality condition, and
     // returns the intervals when the condition is true and false.
     bool is_inequality(Expr condition, Interval &true_range, Interval &false_range) {
-        Expr solve = solve_for_linear_variable(condition, name, free_vars);
+      Expr solve = solve_for_linear_variable(condition, name, free_vars, scope);
         if (!solve.same_as(condition)) {
             Interval var_bounds;
             if (bounds_info.contains(name)) {
