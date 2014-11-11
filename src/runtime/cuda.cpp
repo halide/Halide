@@ -678,7 +678,11 @@ WEAK int halide_cuda_run(void *user_context,
 
     size_t num_args = 0;
     while (arg_sizes[num_args] != 0) {
-      num_args++;
+        debug(user_context) << "    halide_cuda_run " << num_args
+                            << " " << arg_sizes[num_args]
+                            << " [" << (*((void **)args[num_args])) << " ...] "
+                            << arg_is_buffer[num_args] << "\n";
+        num_args++;
     }
 
     // We need storage for both the arg and the pointer to it if if
@@ -686,13 +690,15 @@ WEAK int halide_cuda_run(void *user_context,
     void** translated_args = (void **)malloc((num_args + 1) * sizeof(void *));
     uint64_t *dev_handles = (uint64_t *)malloc(num_args * sizeof(uint64_t));
     for (size_t i = 0; i <= num_args; i++) { // Get NULL at end.
-      if (arg_is_buffer[i]) {
-        halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-          dev_handles[i] = get_device_handle(*(uint64_t *)args[i]);
-          translated_args[i] = &(dev_handles[i]);
-      } else {
-          translated_args[i] = args[i];
-      }
+        if (arg_is_buffer[i]) {
+            halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
+            dev_handles[i] = get_device_handle(*(uint64_t *)args[i]);
+            translated_args[i] = &(dev_handles[i]);
+            debug(user_context) << "    halide_cuda_run translated arg" << i
+                                << " [" << (*((void **)translated_args[i])) << " ...]\n";
+        } else {
+            translated_args[i] = args[i];
+        }
     }
 
     err = cuLaunchKernel(f,

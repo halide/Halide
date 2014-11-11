@@ -22,7 +22,7 @@ cl_command_queue WEAK weak_cl_q = 0;
 volatile int WEAK weak_cl_lock = 0;
 
 // In the non-JIT case, the context is stored in the weak globals above.
-// JIT modules will call halide_set_cl_context, changing the pointers below.
+// JIT modules will call halide_opencl_set_context, changing the pointers below.
 cl_context WEAK *cl_ctx_ptr = NULL;
 cl_command_queue WEAK *cl_q_ptr = NULL;
 volatile int WEAK *cl_lock_ptr = NULL;
@@ -42,7 +42,7 @@ extern void *malloc(size_t);
 extern const char * strstr(const char *, const char *);
 extern int atoi(const char *);
 
-WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
+WEAK void halide_opencl_set_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
     cl_ctx_ptr = ctx_ptr;
     cl_q_ptr = q_ptr;
     cl_lock_ptr = lock_ptr;
