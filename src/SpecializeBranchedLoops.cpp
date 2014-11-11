@@ -2,7 +2,7 @@
 #include <vector>
 
 #include "SpecializeBranchedLoops.h"
-#include "BranchUtils.h"
+#include "BranchVisitors.h"
 #include "ExprUsesVar.h"
 #include "IREquality.h"
 #include "IRMutator.h"
@@ -723,7 +723,7 @@ public:
     void visit(const Select *op) {
         if (expr_uses_var(op->condition, name, scope) &&
             op->condition.type().is_scalar()) {
-            Expr select = normalize_branch_conditions(op, scope);
+          Expr select = normalize_branch_conditions(op, scope, branching_limit);
             select = prune_branches(select, name, scope, bounds_info, free_vars);
             op = select.as<Select>();
             visit_simple_cond(op->condition, op->true_value, op->false_value);
@@ -918,7 +918,7 @@ public:
 
     void visit(const IfThenElse *op) {
         if (expr_uses_var(op->condition, name, scope)) {
-            Stmt normalized = normalize_branch_conditions(op, scope);
+          Stmt normalized = normalize_branch_conditions(op, scope, branching_limit);
             normalized = prune_branches(normalized, name, scope, bounds_info, free_vars);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
