@@ -1,7 +1,8 @@
-// Gridding algoithm, adopted from bilateral_grid demo app.
-// There's nothing left from bilateral_grid except ideas and typical Halide idioms.
+// Ensure that vectorized div/mod of constant powers of 2 are able to
+// be compiled by the underlying OpenCL implementation.
 
 #include "Halide.h"
+#include <stdio.h>
 
 using namespace Halide;
 
@@ -30,6 +31,3 @@ int main(int argc, char **argv) {
     printf("Success!");
     return 0;
 }
-
-
-
