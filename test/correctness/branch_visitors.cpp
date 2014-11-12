@@ -9,6 +9,7 @@ using namespace Halide;
 using namespace Halide::Internal;
 
 Scope<Expr> scope;
+Scope<bool> is_linear;
 
 Expr x = Variable::make(Int(32), "x");
 Expr y = Variable::make(Int(32), "y");
@@ -17,9 +18,15 @@ constexpr int N = 100;
 Expr v[N];
 
 void fill_scope() {
+    // e.g. let y = 4*x
     scope.push("y", 4*x);
+    is_linear.push("y", true);
 
     for (int i = 0; i < N; ++i) {
+        // e.g. let x0 = x*x
+        //      let x1 = x0*x0
+        //      let x2 = x1*x1
+        //      ...
         std::string vi = "v" + int_to_string(i);
         v[i] = Variable::make(Int(32), vi);
         if (i == 0) {
@@ -27,6 +34,7 @@ void fill_scope() {
         } else {
             scope.push(vi, v[i-1]*v[i-1]);
         }
+        is_linear.push(vi, false);
     }
 }
 
@@ -36,46 +44,46 @@ bool test_branches_in_var() {
     Expr e1 = Select::make(x < 0, 0, x);
     Expr e2 = clamp(x, 0, 100);
 
-    if (!branches_in_var(s1, "x", scope)) {
+    if (!branches_linearly_in_var(s1, "x", is_linear)) {
         std::cout << "Expected to branch in x:\n" << s1;
         return false;
     }
 
-    if (!branches_in_var(e1, "x", scope)) {
+    if (!branches_linearly_in_var(e1, "x", is_linear)) {
         std::cout << "Expected to branch in x: " << e1 << "\n";
         return false;
     }
 
-    if (branches_in_var(e2, "x", scope)) {
+    if (branches_linearly_in_var(e2, "x", is_linear)) {
         std::cout << "Expected not to branch in x: " << e2 << "\n";
         return false;
     }
 
-    if (!branches_in_var(e2, "x", scope, true)) {
+    if (!branches_linearly_in_var(e2, "x", is_linear, true)) {
         std::cout << "Expected to branch in x: " << e2 << "\n";
         return false;
     }
 
-    // Test branches_in_var uses scope correctly.
+    // Test branches_in_var uses is_linear correctly.
     Stmt s2 = IfThenElse::make(y < 0, Evaluate::make(0));
     Expr e3 = Select::make(y < 0, 0, x);
 
-    if (!branches_in_var(s2, "x", scope)) {
+    if (!branches_linearly_in_var(s2, "x", is_linear)) {
         std::cout << "Expected to branch in x:\n" << s2;
         return false;
     }
 
-    if (!branches_in_var(e3, "x", scope)) {
+    if (!branches_linearly_in_var(e3, "x", is_linear)) {
         std::cout << "Expected to branch in x: " << e3 << "\n";
         return false;
     }
 
-    // Test branches_in_var doesn't explode with deeply nested scopes.
+    // Test branches_in_var doesn't explode with deeply nested is_linears.
     Expr vN = v[N-1];
     Stmt s3 = IfThenElse::make(vN < 0, Evaluate::make(0));
 
-    if (!branches_in_var(s3, "x", scope)) {
-        std::cout << "Expected to branch in x:\n" << s3;
+    if (branches_linearly_in_var(s3, "x", is_linear)) {
+        std::cout << "Expected not to branch in x:\n" << s3;
         return false;
     }
 

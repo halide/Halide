@@ -14,18 +14,46 @@ namespace Halide {
 namespace Internal {
 
 /**
- * Returns true if [stmt] or [expr] branches in the variable [var],
- * given the bound expressions in [scope]. By which we mean that the
- * expression or statement contains a branch whose condition depends
- * on the named variable. The last argument, [branch_on_minmax], can
- * be set to true if you wish to consider min/max expressions as
- * introducing branches.
+ * Returns true if [stmt] or [expr] branches linearly in the variable [var] or any of
+ * the variables in the scope [free_vars]. By which we mean that the expression or
+ * statement contains a branch whose condition depends linearly on the named variable
+ * or any of the variables in the scope [free_vars]. The optional scope argument
+ * [bound_vars] should contain entries for each bound variable that may appear in [stmt]
+ * or [expr], and have its value set to true if the variable is bound to a linear expression
+ * of the free variables, and false otherwise.
  */
 // @(
-EXPORT bool branches_in_var(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                            bool branch_on_minmax = false);
-EXPORT bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                            bool branch_on_minmax = false);
+EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
+                                     const Scope<bool> &bound_vars,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
+                                     const Scope<bool> &bound_vars,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Stmt stmt,
+                                      const Scope<int> &free_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Expr expr,
+                                      const Scope<int> &free_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Stmt stmt,
+                                      const Scope<int> &free_vars,
+                                      const Scope<bool> &bound_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Expr expr,
+                                      const Scope<int> &free_vars,
+                                      const Scope<bool> &bound_vars,
+                                      bool branch_on_minmax = false);
 // @}
 
 /**
