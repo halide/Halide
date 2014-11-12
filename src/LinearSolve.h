@@ -12,6 +12,28 @@
 namespace Halide {
 namespace Internal {
 
+
+namespace Linearity {
+enum {
+  Constant  = 0,
+  Linear    = 1,
+  NonLinear = 2
+};
+
+bool is_constant(int lin) {
+  return lin == 0;
+}
+
+bool is_linear(int lin) {
+  return lin == 1;
+}
+
+bool is_nonlinear(int lin) {
+  return lin > 1;
+}
+
+}
+
 /**
  * Returns true if the input Expr is linear in the named variable, or in any of the free
  * variables contained in the first scope argument. We say that an expression is linear
@@ -21,9 +43,10 @@ namespace Internal {
  * in the free variables.
  */
 // @{
-bool expr_is_linear_in_var(Expr expr, const std::string &var);
-bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars);
-bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<bool> &bound_vars);
+int expr_is_linear_in_var(Expr expr, const std::string &var);
+int expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars);
+int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars);
+int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
 // @}
 
 /**
