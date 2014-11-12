@@ -9,59 +9,66 @@
 namespace Halide {
 namespace Internal {
 
-class ExprLinearInVars : public IRVisitor {
+class ExprLinearity : public IRVisitor {
 public:
     const Scope<int> &free_vars;
-    bool result;
+    int result;
 
-    ExprLinearInVars(const Scope<int> &fv, const Scope<bool> *bv = NULL) :
-            free_vars(fv), result(false) {
+    ExprLinearity(const Scope<int> &fv, const Scope<int> *bv = NULL) :
+            free_vars(fv), result(0) {
         bound_vars.set_containing_scope(bv);
     }
 private:
     using IRVisitor::visit;
 
-    Scope<bool> bound_vars;
+    Scope<int> bound_vars;
 
     void visit(const IntImm *op) {
-        result = false;
+        result = Linearity::Constant;
     }
 
     void visit(const FloatImm *op) {
-        result = false;
+        result = Linearity::Constant;
     }
 
     // These nodes are considered to introduce non-linearities.
-    void visit(const Mod *op) {result = false;}
-    void visit(const Min *op) {result = false;}
-    void visit(const Max *op) {result = false;}
-    void visit(const Select *op) {result = false;}
-    void visit(const Call *op) {result = false;}
-    void visit(const Load *op) {result = false;}
-    void visit(const Ramp *op) {result = false;}
-    void visit(const Broadcast *op) {result = false;}
+    void visit(const Mod *op) {result = Linearity::NonLinear;}
+    void visit(const Min *op) {result = Linearity::NonLinear;}
+    void visit(const Max *op) {result = Linearity::NonLinear;}
+    void visit(const Select *op) {result = Linearity::NonLinear;}
+    void visit(const Call *op) {result = Linearity::NonLinear;}
+    void visit(const Load *op) {result = Linearity::NonLinear;}
+    void visit(const Ramp *op) {result = Linearity::NonLinear;}
+    void visit(const Broadcast *op) {result = Linearity::NonLinear;}
 
     template<class Op>
     void visit_binary_op(const Op *op) {
         op->a.accept(this);
-        bool a_is_linear = result;
+        int result_a = result;
 
+        result = 0;
         op->b.accept(this);
-        bool b_is_linear = result;
+        int result_b = result;
 
-        result = a_is_linear && b_is_linear;
+        if (Linearity::is_nonlinear(result_a) || Linearity::is_nonlinear(result_b)) {
+            result = Linearity::NonLinear;
+        } else if (Linearity::is_constant(result_a) && Linearity::is_constant(result_b)) {
+            result = Linearity::Constant;
+        } else {
+            result = Linearity::Linear;
+        }
     }
 
     void visit(const Add *op) {visit_binary_op(op);}
     void visit(const Sub *op) {visit_binary_op(op);}
-    void visit(const EQ *op) {visit_binary_op(op);}
-    void visit(const NE *op) {visit_binary_op(op);}
-    void visit(const LT *op) {visit_binary_op(op);}
-    void visit(const GT *op) {visit_binary_op(op);}
-    void visit(const LE *op) {visit_binary_op(op);}
-    void visit(const GE *op) {visit_binary_op(op);}
+    void visit(const EQ *op)  {visit_binary_op(op);}
+    void visit(const NE *op)  {visit_binary_op(op);}
+    void visit(const LT *op)  {visit_binary_op(op);}
+    void visit(const GT *op)  {visit_binary_op(op);}
+    void visit(const LE *op)  {visit_binary_op(op);}
+    void visit(const GE *op)  {visit_binary_op(op);}
     void visit(const And *op) {visit_binary_op(op);}
-    void visit(const Or *op) {visit_binary_op(op);}
+    void visit(const Or *op)  {visit_binary_op(op);}
 
     void visit(const Div *op) {
         // Integer division is considered non-linear.
@@ -69,58 +76,74 @@ private:
             result = false;
         } else {
             op->a.accept(this);
-            bool a_is_linear = result;
+            int result_a = result;
 
+            result = 0;
             op->b.accept(this);
-            bool b_is_linear = result;
+            int result_b = result;
 
-            result = a_is_linear && !b_is_linear;
+            if (!Linearity::is_constant(result_b)) {
+                result = Linearity::NonLinear;
+            } else if (Linearity::is_linear(result_a)) {
+                result = Linearity::Linear;
+            }
         }
     }
 
     void visit(const Mul *op) {
         op->a.accept(this);
-        bool a_is_linear = result;
+        int result_a = result;
 
+        result = 0;
         op->b.accept(this);
-        bool b_is_linear = result;
+        int result_b = result;
 
-        result = !(a_is_linear && b_is_linear) && (a_is_linear || b_is_linear);
+        result = result_a + result_b;
     }
 
     void visit(const Let *op) {
+        int old_result = result;
         op->value.accept(this);
         bound_vars.push(op->name, result);
+        result = old_result;
         op->body.accept(this);
         bound_vars.pop(op->name);
     }
 
     void visit(const Variable *op) {
         if (free_vars.contains(op->name)) {
-            result = true;
+            result = Linearity::Linear;
         } else if (bound_vars.contains(op->name)) {
             result = bound_vars.get(op->name);
         } else {
-            result = false;
+            result = Linearity::Constant;
         }
     }
 };
 
-bool expr_is_linear_in_var(Expr expr, const std::string &var) {
+int expr_is_linear_in_var(Expr expr, const std::string &var) {
     Scope<int> free_vars;
     free_vars.push(var, 0);
 
-    ExprLinearInVars is_linear(free_vars);
+    ExprLinearity is_linear(free_vars);
     return is_linear.result;
 }
 
-bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars) {
-    ExprLinearInVars is_linear(free_vars);
+int expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    ExprLinearity is_linear(free_vars, &bound_vars);
     return is_linear.result;
 }
 
-bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<bool> &bound_vars) {
-    ExprLinearInVars is_linear(free_vars, &bound_vars);
+int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars) {
+    ExprLinearity is_linear(free_vars);
+    return is_linear.result;
+}
+
+int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars) {
+    ExprLinearity is_linear(free_vars, &bound_vars);
     return is_linear.result;
 }
 
