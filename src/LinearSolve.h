@@ -12,7 +12,16 @@
 namespace Halide {
 namespace Internal {
 
-
+/**
+ * This namespace defines a coding of the linearity of an expression as a simple integer, and
+ * a few functions for deciding linearity from a coded value. The code is fuzzy, in the sense that
+ * 0 is reserved for constant exprs, 1 for linear exprs, but any number >1 can be used to indicate
+ * an expr is non-linear. The functions included in this namespace should be used when deciding what
+ * case a particular int corresponds to, whereas the enum values can be used to set the value of a
+ * coded variable. We introduce this as in a namespace so that linearity can be stored and tracked
+ * in a simple integer. Users of the linearity test functions will therefore rarely need to directly
+ * use this namespace and do not need to be aware of another custom class.
+ */
 namespace Linearity {
 enum {
   Constant  = 0,
