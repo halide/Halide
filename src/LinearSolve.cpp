@@ -121,30 +121,50 @@ private:
     }
 };
 
-int expr_is_linear_in_var(Expr expr, const std::string &var) {
+int expr_linearity(Expr expr, const std::string &var) {
     Scope<int> free_vars;
     free_vars.push(var, 0);
 
-    ExprLinearity is_linear(free_vars);
-    return is_linear.result;
+    ExprLinearity linearity(free_vars);
+    expr.accept(&linearity);
+    return linearity.result;
 }
 
-int expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars) {
+int expr_linearity(Expr expr, const std::string &var, const Scope<int> &bound_vars) {
     Scope<int> free_vars;
     free_vars.push(var, 0);
 
-    ExprLinearity is_linear(free_vars, &bound_vars);
-    return is_linear.result;
+    ExprLinearity linearity(free_vars, &bound_vars);
+    expr.accept(&linearity);
+    return linearity.result;
 }
 
-int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars) {
-    ExprLinearity is_linear(free_vars);
-    return is_linear.result;
+int expr_linearity(Expr expr, const Scope<int> &free_vars) {
+    ExprLinearity linearity(free_vars);
+    expr.accept(&linearity);
+    return linearity.result;
 }
 
-int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars) {
-    ExprLinearity is_linear(free_vars, &bound_vars);
-    return is_linear.result;
+int expr_linearity(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars) {
+    ExprLinearity linearity(free_vars, &bound_vars);
+    expr.accept(&linearity);
+    return linearity.result;
+}
+
+bool expr_is_linear_in_var(Expr expr, const std::string &var) {
+    return Linearity::is_linear(expr_linearity(expr, var));
+}
+
+bool expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars) {
+    return Linearity::is_linear(expr_linearity(expr, var, bound_vars));
+}
+
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars) {
+    return Linearity::is_linear(expr_linearity(expr, free_vars));
+}
+
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars) {
+    return Linearity::is_linear(expr_linearity(expr, free_vars, bound_vars));
 }
 
 class CollectLinearTerms : public IRVisitor {
