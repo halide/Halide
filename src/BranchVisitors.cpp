@@ -15,7 +15,7 @@ class BranchesLinearlyInVars : public IRVisitor {
 public:
     bool result;
 
-    BranchesLinearlyInVars(const Scope<int>& fv, const Scope<bool> *bv, bool minmax) :
+    BranchesLinearlyInVars(const Scope<int>& fv, const Scope<int> *bv, bool minmax) :
             result(false), free_vars(fv), branch_on_minmax(minmax)
     {
         bound_vars.set_containing_scope(bv);
@@ -24,7 +24,7 @@ public:
 private:
     const Scope<int> &free_vars;
     bool branch_on_minmax;
-    Scope<bool> bound_vars;
+    Scope<int> bound_vars;
 
     using IRVisitor::visit;
 
@@ -67,8 +67,7 @@ private:
 
     template<class LetOp>
     void visit_let(const LetOp *op) {
-        bool is_linear = expr_is_linear_in_vars(op->value, free_vars, bound_vars);
-        bound_vars.push(op->name, is_linear);
+        bound_vars.push(op->name, expr_linearity(op->value, free_vars, bound_vars));
         op->body.accept(this);
         bound_vars.pop(op->name);
     }
@@ -96,7 +95,7 @@ bool branches_linearly_in_var(Expr expr, const std::string &var, bool branch_on_
 }
 
 
-bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<bool> &bound_vars,
+bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<int> &bound_vars,
                               bool branch_on_minmax) {
     Scope<int> free_vars;
     free_vars.push(var, 0);
@@ -106,7 +105,7 @@ bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<boo
     return has_branches.result;
 }
 
-bool branches_linearly_in_var(Expr expr, const std::string &var, const Scope<bool> &bound_vars,
+bool branches_linearly_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars,
                               bool branch_on_minmax) {
     Scope<int> free_vars;
     free_vars.push(var, 0);
@@ -129,14 +128,14 @@ bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, bool bran
     return has_branches.result;
 }
 
-bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, const Scope<bool> &bound_vars,
+bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, const Scope<int> &bound_vars,
                                bool branch_on_minmax) {
     BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
     stmt.accept(&has_branches);
     return has_branches.result;
 }
 
-bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<bool> &bound_vars,
+bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars,
                                bool branch_on_minmax) {
     BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
     expr.accept(&has_branches);
