@@ -279,20 +279,25 @@ private:
     void visit(const Call *op)   {expr = op;}
     void visit(const Store *op)  {stmt = op;}
 
-    void visit(const Variable *op) {
-        if ((in_if_cond || in_select_cond) &&
-            op->type.is_bool() && scope.contains(op->name)) {
-            Expr val = scope.get(op->name);
-            Expr new_val = mutate(val);
-            if (new_val.same_as(val)) {
-                expr = op;
-            } else {
-                expr = new_val;
-            }
-        } else {
-            expr = op;
-        }
-    }
+    /* TODO:
+       It is currently not clear whether it is useful to dive into bound boolean valued variables
+       inside conditionals, and if so how to do it safely. The code below is commented out in case
+       we need to revisit this in the future.
+    */
+    // void visit(const Variable *op) {
+    //     if ((in_if_cond || in_select_cond) &&
+    //         op->type.is_bool() && scope.contains(op->name)) {
+    //         Expr val = scope.get(op->name);
+    //         Expr new_val = mutate(val);
+    //         if (new_val.same_as(val)) {
+    //             expr = op;
+    //         } else {
+    //             expr = new_val;
+    //         }
+    //     } else {
+    //         expr = op;
+    //     }
+    // }
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);
@@ -318,18 +323,6 @@ private:
         }
     }
 };
-
-Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit) {
-  stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
-  stmt = simplify(stmt);
-  return stmt;
-}
-
-Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit) {
-  expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
-  expr = simplify(expr);
-  return expr;
-}
 
 // Prunes a nested tree of IfThenElse or Select nodes. Uses bounds inference on
 // the condition Exprs of these nodes to decide if any internal branches can be
@@ -502,18 +495,22 @@ public:
     }
 };
 
-Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                    const Scope<Interval> &bounds, const Scope<int> &vars) {
-    PruneBranches pruner(var, &scope, &bounds, vars);
-    Stmt pruned = simplify(pruner.mutate(stmt), true, bounds);
-    return pruned;
+Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
+                                 const Scope<Interval> &bounds, const Scope<int> &vars,
+                                 const int branching_limit) {
+  stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
+  stmt = PruneBranches(var, &scope, &bounds, vars).mutate(stmt);
+  stmt = simplify(stmt, true, bounds);
+  return stmt;
 }
 
-Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                    const Scope<Interval> &bounds, const Scope<int> &vars) {
-    PruneBranches pruner(var, &scope, &bounds, vars);
-    Expr pruned = simplify(pruner.mutate(expr), true, bounds);
-    return pruned;
+Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope,
+                                 const Scope<Interval> &bounds, const Scope<int> &vars,
+                                 const int branching_limit) {
+  expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
+  stmt = PruneBranches(var, &scope, &bounds, vars).mutate(stmt);
+  expr = simplify(expr, true, bounds);
+  return expr;
 }
 
 }

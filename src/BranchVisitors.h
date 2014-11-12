@@ -79,39 +79,19 @@ EXPORT bool branches_linearly_in_vars(Expr expr,
  *     }
  *  }
  *
+ * The result of this mutation then gets pruned by testing the nested
+ * conditions using the bounds imposed by the outer conditions.
  */
 // @{
-EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit = 10);
-EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit = 10);
-// @}
+EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
+                                        const Scope<Interval> &bounds,
+                                        const Scope<int> &free_vars,
+                                        const int branching_limit = 10);
 
-/**
- * Prune the branches in [stmt] or [expr] relative to the variable
- * [var], considering the bounds provided by [bounds].  Branching
- * conditions are used to modify the bounds on [var], and thus we can
- * potentially reduce some of the nested branching structure. Here is
- * an example:
- *
- *   if (x < 0) {
- *      if (x < 1) {
- *          ...
- *      }
- *   }
- *
- * Will be reduced to:
- *
- *   if (x < 0) {
- *     ...
- *   }
- *
- * The final argument [vars] is a scope containing all the free variables.
- */
-// @{
-EXPORT Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                           const Scope<Interval> &bounds, const Scope<int> &vars);
-
-EXPORT Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                           const Scope<Interval> &bounds, const Scope<int> &vars);
+EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope,
+                                        const Scope<Interval> &bounds,
+                                        const Scope<int> &free_vars,
+                                        const int branching_limit = 10);
 // @}
 
 }
