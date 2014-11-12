@@ -12,7 +12,16 @@
 namespace Halide {
 namespace Internal {
 
-
+/**
+ * This namespace defines a coding of the linearity of an expression as a simple integer, and
+ * a few functions for deciding linearity from a coded value. The code is fuzzy, in the sense that
+ * 0 is reserved for constant exprs, 1 for linear exprs, but any number >1 can be used to indicate
+ * an expr is non-linear. The functions included in this namespace should be used when deciding what
+ * case a particular int corresponds to, whereas the enum values can be used to set the value of a
+ * coded variable. We introduce this as in a namespace so that linearity can be stored and tracked
+ * in a simple integer. Users of the linearity test functions will therefore rarely need to directly
+ * use this namespace and do not need to be aware of another custom class.
+ */
 namespace Linearity {
 enum {
   Constant  = 0,
@@ -20,33 +29,45 @@ enum {
   NonLinear = 2
 };
 
-bool is_constant(int lin) {
+inline bool is_constant(int lin) {
   return lin == 0;
 }
 
-bool is_linear(int lin) {
+inline bool is_linear(int lin) {
   return lin == 1;
 }
 
-bool is_nonlinear(int lin) {
+inline bool is_nonlinear(int lin) {
   return lin > 1;
 }
 
 }
 
 /**
+ * Returns an integer describing the linearity of the expression with respect to the named variable or
+ * scope of free variables.
+ */
+// @{
+int expr_linearity(Expr expr, const std::string &var);
+int expr_linearity(Expr expr, const std::string &var, const Scope<int> &bound_vars);
+int expr_linearity(Expr expr, const Scope<int> &free_vars);
+int expr_linearity(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
+// @}
+
+/**
  * Returns true if the input Expr is linear in the named variable, or in any of the free
  * variables contained in the first scope argument. We say that an expression is linear
  * if at least one of the variables appear in the expression and at most one free variable
  * appears in each linear term. So expressions constant in the variables are not considered
- * linear. The second scope argument contains variables that are bound to linear expressions
- * in the free variables.
+ * linear. The second scope argument contains variables mapped to int codes describing their
+ * linearity with respect to the free variables. This last scope can be aggregated using the
+ * expr_linearity functions above.
  */
 // @{
-int expr_is_linear_in_var(Expr expr, const std::string &var);
-int expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars);
-int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars);
-int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
+bool expr_is_linear_in_var(Expr expr, const std::string &var);
+bool expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars);
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars);
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
 // @}
 
 /**
