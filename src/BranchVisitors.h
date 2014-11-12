@@ -30,11 +30,11 @@ EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
                                      bool branch_on_minmax = false);
 
 EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
-                                     const Scope<bool> &bound_vars,
+                                     const Scope<int> &bound_vars,
                                      bool branch_on_minmax = false);
 
 EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
-                                     const Scope<bool> &bound_vars,
+                                     const Scope<int> &bound_vars,
                                      bool branch_on_minmax = false);
 
 EXPORT bool branches_linearly_in_vars(Stmt stmt,
@@ -47,12 +47,12 @@ EXPORT bool branches_linearly_in_vars(Expr expr,
 
 EXPORT bool branches_linearly_in_vars(Stmt stmt,
                                       const Scope<int> &free_vars,
-                                      const Scope<bool> &bound_vars,
+                                      const Scope<int> &bound_vars,
                                       bool branch_on_minmax = false);
 
 EXPORT bool branches_linearly_in_vars(Expr expr,
                                       const Scope<int> &free_vars,
-                                      const Scope<bool> &bound_vars,
+                                      const Scope<int> &bound_vars,
                                       bool branch_on_minmax = false);
 // @}
 
