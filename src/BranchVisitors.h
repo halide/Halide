@@ -14,18 +14,46 @@ namespace Halide {
 namespace Internal {
 
 /**
- * Returns true if [stmt] or [expr] branches in the variable [var],
- * given the bound expressions in [scope]. By which we mean that the
- * expression or statement contains a branch whose condition depends
- * on the named variable. The last argument, [branch_on_minmax], can
- * be set to true if you wish to consider min/max expressions as
- * introducing branches.
+ * Returns true if [stmt] or [expr] branches linearly in the variable [var] or any of
+ * the variables in the scope [free_vars]. By which we mean that the expression or
+ * statement contains a branch whose condition depends linearly on the named variable
+ * or any of the variables in the scope [free_vars]. The optional scope argument
+ * [bound_vars] should contain entries for each bound variable that may appear in [stmt]
+ * or [expr], and have its value set to true if the variable is bound to a linear expression
+ * of the free variables, and false otherwise.
  */
 // @(
-EXPORT bool branches_in_var(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                            bool branch_on_minmax = false);
-EXPORT bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                            bool branch_on_minmax = false);
+EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
+                                     const Scope<int> &bound_vars,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
+                                     const Scope<int> &bound_vars,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Stmt stmt,
+                                      const Scope<int> &free_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Expr expr,
+                                      const Scope<int> &free_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Stmt stmt,
+                                      const Scope<int> &free_vars,
+                                      const Scope<int> &bound_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Expr expr,
+                                      const Scope<int> &free_vars,
+                                      const Scope<int> &bound_vars,
+                                      bool branch_on_minmax = false);
 // @}
 
 /**
@@ -51,39 +79,19 @@ EXPORT bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr>
  *     }
  *  }
  *
+ * The result of this mutation then gets pruned by testing the nested
+ * conditions using the bounds imposed by the outer conditions.
  */
 // @{
-EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope, const int branching_limit = 10);
-EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope, const int branching_limit = 10);
-// @}
+EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
+                                        const Scope<Interval> &bounds,
+                                        const Scope<int> &free_vars,
+                                        const int branching_limit = 10);
 
-/**
- * Prune the branches in [stmt] or [expr] relative to the variable
- * [var], considering the bounds provided by [bounds].  Branching
- * conditions are used to modify the bounds on [var], and thus we can
- * potentially reduce some of the nested branching structure. Here is
- * an example:
- *
- *   if (x < 0) {
- *      if (x < 1) {
- *          ...
- *      }
- *   }
- *
- * Will be reduced to:
- *
- *   if (x < 0) {
- *     ...
- *   }
- *
- * The final argument [vars] is a scope containing all the free variables.
- */
-// @{
-EXPORT Stmt prune_branches(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                           const Scope<Interval> &bounds, const Scope<int> &vars);
-
-EXPORT Expr prune_branches(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                           const Scope<Interval> &bounds, const Scope<int> &vars);
+EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope,
+                                        const Scope<Interval> &bounds,
+                                        const Scope<int> &free_vars,
+                                        const int branching_limit = 10);
 // @}
 
 }
