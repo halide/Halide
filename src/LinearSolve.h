@@ -20,33 +20,45 @@ enum {
   NonLinear = 2
 };
 
-bool is_constant(int lin) {
+inline bool is_constant(int lin) {
   return lin == 0;
 }
 
-bool is_linear(int lin) {
+inline bool is_linear(int lin) {
   return lin == 1;
 }
 
-bool is_nonlinear(int lin) {
+inline bool is_nonlinear(int lin) {
   return lin > 1;
 }
 
 }
 
 /**
+ * Returns an integer describing the linearity of the expression with respect to the named variable or
+ * scope of free variables.
+ */
+// @{
+int expr_linearity(Expr expr, const std::string &var);
+int expr_linearity(Expr expr, const std::string &var, const Scope<int> &bound_vars);
+int expr_linearity(Expr expr, const Scope<int> &free_vars);
+int expr_linearity(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
+// @}
+
+/**
  * Returns true if the input Expr is linear in the named variable, or in any of the free
  * variables contained in the first scope argument. We say that an expression is linear
  * if at least one of the variables appear in the expression and at most one free variable
  * appears in each linear term. So expressions constant in the variables are not considered
- * linear. The second scope argument contains variables that are bound to linear expressions
- * in the free variables.
+ * linear. The second scope argument contains variables mapped to int codes describing their
+ * linearity with respect to the free variables. This last scope can be aggregated using the
+ * expr_linearity functions above.
  */
 // @{
-int expr_is_linear_in_var(Expr expr, const std::string &var);
-int expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars);
-int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars);
-int expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
+bool expr_is_linear_in_var(Expr expr, const std::string &var);
+bool expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars);
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars);
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars);
 // @}
 
 /**
