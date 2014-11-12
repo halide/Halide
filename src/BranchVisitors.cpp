@@ -9,36 +9,37 @@
 namespace Halide {
 namespace Internal {
 
-// This visitor checks if a Stmt or Expr has branches in a particular variable,
-// by which we mean the branching condition depends on the variable.
-class BranchesInVar : public IRVisitor {
+// This visitor checks if a Stmt or Expr branches linearly in a set of free variables,
+// by which we mean the branching condition depends linearly on the variables.
+class BranchesLinearlyInVars : public IRVisitor {
 public:
-    std::string name;
-    Scope<Expr> scope;
-    bool has_branches;
-    bool branch_on_minmax;
+    bool result;
 
-    BranchesInVar(const std::string& n, const Scope<Expr> *s, bool minmax) :
-            name(n), has_branches(false), branch_on_minmax(minmax)
+    BranchesLinearlyInVars(const Scope<int>& fv, const Scope<bool> *bv, bool minmax) :
+            result(false), free_vars(fv), branch_on_minmax(minmax)
     {
-        scope.set_containing_scope(s);
+        bound_vars.set_containing_scope(bv);
     }
 
 private:
+    const Scope<int> &free_vars;
+    bool branch_on_minmax;
+    Scope<bool> bound_vars;
+
     using IRVisitor::visit;
 
     void visit(const IfThenElse *op) {
-        if (expr_uses_var(op->condition, name, scope)) {
-            has_branches = true;
+        if (expr_is_linear_in_vars(op->condition, free_vars, bound_vars)) {
+            result = true;
         } else {
             IRVisitor::visit(op);
         }
     }
 
     void visit(const Select *op) {
-        if (expr_uses_var(op->condition, name, scope) &&
+        if (expr_is_linear_in_vars(op->condition, free_vars, bound_vars) &&
             op->condition.type().is_scalar()) {
-            has_branches = true;
+            result = true;
         } else {
             IRVisitor::visit(op);
         }
@@ -46,9 +47,9 @@ private:
 
     void visit(const Min *op) {
         if (branch_on_minmax &&
-            (expr_uses_var(op->a, name, scope) ||
-             expr_uses_var(op->b, name, scope))) {
-            has_branches = true;
+            (expr_is_linear_in_vars(op->a, free_vars, bound_vars) ||
+             expr_is_linear_in_vars(op->b, free_vars, bound_vars))) {
+            result = true;
         } else {
             IRVisitor::visit(op);
         }
@@ -56,9 +57,9 @@ private:
 
     void visit(const Max *op) {
         if (branch_on_minmax &&
-            (expr_uses_var(op->a, name, scope) ||
-             expr_uses_var(op->b, name, scope))) {
-            has_branches = true;
+            (expr_is_linear_in_vars(op->a, free_vars, bound_vars) ||
+             expr_is_linear_in_vars(op->b, free_vars, bound_vars))) {
+            result = true;
         } else {
             IRVisitor::visit(op);
         }
@@ -66,29 +67,82 @@ private:
 
     template<class LetOp>
     void visit_let(const LetOp *op) {
-        op->value.accept(this);
-        scope.push(op->name, op->value);
+        bool is_linear = expr_is_linear_in_vars(op->value, free_vars, bound_vars);
+        bound_vars.push(op->name, is_linear);
         op->body.accept(this);
-        scope.pop(op->name);
+        bound_vars.pop(op->name);
     }
 
     void visit(const LetStmt *op) {visit_let(op);}
     void visit(const Let *op) {visit_let(op);}
 };
 
-bool branches_in_var(Stmt stmt, const std::string &var, const Scope<Expr> &scope,
-                     bool branch_on_minmax) {
-    BranchesInVar check(var, &scope, branch_on_minmax);
-    stmt.accept(&check);
-    return check.has_branches;
+bool branches_linearly_in_var(Stmt stmt, const std::string &var, bool branch_on_minmax) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    stmt.accept(&has_branches);
+    return has_branches.result;
 }
 
-bool branches_in_var(Expr expr, const std::string &var, const Scope<Expr> &scope,
-                     bool branch_on_minmax) {
-    BranchesInVar check(var, &scope, branch_on_minmax);
-    expr.accept(&check);
-    return check.has_branches;
+bool branches_linearly_in_var(Expr expr, const std::string &var, bool branch_on_minmax) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    expr.accept(&has_branches);
+    return has_branches.result;
 }
+
+
+bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<bool> &bound_vars,
+                              bool branch_on_minmax) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    stmt.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_var(Expr expr, const std::string &var, const Scope<bool> &bound_vars,
+                              bool branch_on_minmax) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    expr.accept(&has_branches);
+    return has_branches.result;
+}
+
+
+bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, bool branch_on_minmax) {
+    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    stmt.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, bool branch_on_minmax) {
+    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    expr.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, const Scope<bool> &bound_vars,
+                               bool branch_on_minmax) {
+    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    stmt.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<bool> &bound_vars,
+                               bool branch_on_minmax) {
+    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    expr.accept(&has_branches);
+    return has_branches.result;
+}
+
 
 // A mutator that "normalizes" IfThenElse and Select nodes. By normalizing these nodes
 // we mean converting the conditions to simple inequality constraints whenever possible.
