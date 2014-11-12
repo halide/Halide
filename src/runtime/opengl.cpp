@@ -925,7 +925,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     }
 
     GLuint tex = get_texture_id(buf);
-    debug(user_context) << "halide_copy_to_device: " << tex << "\n";
+    debug(user_context) << "halide_opengl_copy_to_device: " << tex << "\n";
 
     global_state.BindTexture(GL_TEXTURE_2D, tex);
     CHECK_GLERROR(1);

@@ -657,7 +657,7 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
     }
 
     debug(user_context)
-        << "CL: halide_copy_to_device (user_context: " << user_context
+        << "CL: halide_opencl_copy_to_device (user_context: " << user_context
         << ", buf: " << buf << ")\n";
 
     // Acquire the context so we can use the command queue. This also avoids multiple

@@ -214,9 +214,14 @@ extern void halide_device_release(void *user_context, const halide_device_interf
  * explicitly to copy back the results of a GPU-based filter. */
 extern int halide_copy_to_host(void *user_context, struct buffer_t *buf);
 
-/** Copy image data from host memory to device memory. This should not be
- * called directly; Halide handles copying to the device automatically. */
-extern int halide_copy_to_device(void *user_context, struct buffer_t *buf);
+/** Copy image data from host memory to device memory. This should not
+ * be called directly; Halide handles copying to the device
+ * automatically.  If interface is NULL and the bug has a non-zero dev
+ * field, the device associated with the dev handle will be
+ * used. Otherwise if the dev field is 0 and interface is NULL, an
+ * error is returned. */
+extern int halide_copy_to_device(void *user_context, struct buffer_t *buf,
+                                 const halide_device_interface *interface);
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
