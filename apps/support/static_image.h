@@ -12,6 +12,8 @@
 #include <stdlib.h>
 #include <cassert>
 
+#include <HalideRuntime.h>
+
 #ifndef BUFFER_T_DEFINED
 #define BUFFER_T_DEFINED
 #include <stdint.h>
@@ -26,9 +28,6 @@ typedef struct buffer_t {
     bool dev_dirty;
 } buffer_t;
 #endif
-
-extern "C" int halide_copy_to_host(void *user_context, buffer_t* buf);
-extern "C" int halide_dev_free(void *user_context, buffer_t *buf);
 
 template<typename T>
 class Image {
@@ -134,9 +133,10 @@ public:
         }
     }
 
-    void copy_to_dev() {
+    void copy_to_device(const struct halide_device_interface *device_interface) {
         if (contents->buf.host_dirty) {
-            halide_copy_to_device(NULL, &contents->buf);
+            // If host 
+            halide_copy_to_device(NULL, &contents->buf, device_interface);
             contents->buf.host_dirty = false;
         }
     }

@@ -66,21 +66,74 @@ void halide_device_release(void *user_context, const halide_device_interface *in
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
 int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
-    const halide_device_interface *interface = get_device_interface(buf);
-    if (interface == NULL) {
-        return 0;
+    int result = 0;
+    debug(NULL) << "halide_copy_to_host " << buf << "\n";
+    if (buf->dev_dirty) {
+        debug(NULL) << "halide_copy_to_host " << buf << "dev_dirty is true\n";
+        const halide_device_interface *interface = get_device_interface(buf);
+        if (buf->host_dirty) {
+            debug(NULL) << "halide_copy_to_host " << buf << "dev_dirty and host_dirty are true\n";
+            result = -1; // TODO: what value?
+        } else if (interface == NULL) {
+            debug(NULL) << "halide_copy_to_host " << buf << "interface is NULL\n";
+            result = -2; // TODO: What value?
+        } else {
+            result = interface->copy_to_host(user_context, buf);
+            if (result == 0) {
+              buf->dev_dirty = false;
+            } else {
+              debug(NULL) << "halide_copy_to_host " << buf << "device copy_to_host returned an error\n";
+            }
+        }
     }
-    return interface->copy_to_host(user_context, buf);
+    return result;
 }
 
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
-int halide_copy_to_device(void *user_context, struct buffer_t *buf) {
-    const halide_device_interface *interface = get_device_interface(buf);
-    if (interface == NULL) {
-        return 0;
+int halide_copy_to_device(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+    int result = 0;
+    debug(NULL) << "halide_copy_to_device " << buf << "\n";
+    if (buf->host_dirty) {
+        debug(NULL) << "halide_copy_to_device " << buf << "host_dirty is true\n";
+        const halide_device_interface *buf_dev_interface = get_device_interface(buf);
+        if (interface == NULL) { // TODO: Is this a good idea?
+            debug(NULL) << "halide_copy_to_device " << buf << "interface is NULL\n";
+            interface = buf_dev_interface;
+        } else if (buf_dev_interface != NULL && buf_dev_interface != interface) {
+            debug(NULL) << "halide_copy_to_device " << buf << "flipping buffer to new device\n";
+            result = halide_copy_to_host(user_context, buf);
+            if (result != 0) {
+                debug(NULL) << "halide_copy_to_device " << buf << "flipping buffer halide_copy_to_host failed\n";
+                return result;
+            }
+            result = halide_device_free(user_context, buf);
+            if (result != 0) {
+                debug(NULL) << "halide_copy_to_device " << buf << "flipping buffer halide_device_free failed\n";
+                return result;
+            }
+            result = halide_device_malloc(user_context, buf, interface);
+            if (result != 0) {
+                debug(NULL) << "halide_copy_to_device " << buf << "flipping buffer halide_device_malloc failed\n";
+                return result;
+            }
+        }
+
+        if (buf->dev_dirty) {
+            debug(NULL) << "halide_copy_to_device " << buf << "dev_dirty is true error\n";
+            result = -1; // TODO: What value?
+        } else if (interface == NULL) {
+            debug(NULL) << "halide_copy_to_device " << buf << "no interface error\n";
+            result = -2; // TODO: What value?
+        }
+        result = interface->copy_to_device(user_context, buf);
+        if (result == 0) {
+            buf->host_dirty = 0;
+        } else {
+            debug(NULL) << "halide_copy_to_device " << buf << "device copy_to_device returned an error\n";
+        }
     }
-    return interface->copy_to_device(user_context, buf);
+    return result;
 }
 
 /** Wait for current GPU operations to complete. Calling this explicitly
@@ -88,7 +141,7 @@ int halide_copy_to_device(void *user_context, struct buffer_t *buf) {
 int halide_device_sync(void *user_context, struct buffer_t *buf) { 
     const halide_device_interface *interface = get_device_interface(buf);
     if (interface == NULL) {
-        return 0;
+        return -1;
     }
     return interface->device_sync(user_context, buf);
 }
@@ -96,7 +149,11 @@ int halide_device_sync(void *user_context, struct buffer_t *buf) {
 /** Allocate device memory to back a buffer_t. */
 int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
     debug(user_context) << "halide_device_malloc: " << buf << " buf dev " << buf->dev << " interface " << interface << "\n";
-    return interface->device_malloc(user_context, buf);
+    int result = interface->device_malloc(user_context, buf);
+    if (result == 0) {
+      buf->host_dirty = true;
+    }
+    return result;
 }
 
 /** Free any device memory associated with a buffer_t. */
@@ -105,9 +162,13 @@ int halide_device_free(void *user_context, struct buffer_t *buf) {
     if (buf != NULL) {
         const halide_device_interface *interface = get_device_interface(buf);
         if (interface != NULL) {
-            return interface->device_sync(user_context, buf);
+            int result = interface->device_free(user_context, buf);
+            halide_assert(user_context, buf->dev == 0);
+            return result;
         }
+        // TODO: Should it be an error to call halide_device_free on a buffer with no device interface? I don't think so...
     }
+    buf->dev_dirty = false;
     return 0;
 }
 

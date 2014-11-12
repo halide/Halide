@@ -144,6 +144,26 @@ class InjectBufferCopies : public IRMutator {
     const Target &target;
     DeviceAPI device_api;
 
+    Expr make_device_interface_call(DeviceAPI device_api) {
+        std::string interface_name;
+        switch (device_api) {
+          case Device_CUDA:
+            interface_name = "halide_cuda_device_interface";
+            break;
+          case Device_OpenCL:
+            interface_name = "halide_opencl_device_interface";
+            break;
+          case Device_GLSL:
+            interface_name = "halide_opengl_device_interface";
+            break;
+          default:
+            internal_error << "Bad DeviceAPI in make_dev_malloc " << device_api << "\n";
+            break;
+        }
+        std::vector<Expr> no_args;
+        return Call::make(Handle(), interface_name, no_args, Call::Extern);
+    }
+
     // Prepend code to the statement that copies everything marked as
     // a dev read to host or dev.
     Stmt do_copies(Stmt s) {
@@ -219,7 +239,12 @@ class InjectBufferCopies : public IRMutator {
 
             if (!direction.empty()) {
                 // Make the copy
-                Expr copy = Call::make(Int(32), "halide_copy_to_" + direction, vec(buffer), Call::Extern);
+                std::vector<Expr> args;
+                args.push_back(buffer);
+                if (direction == "device") {
+                    args.push_back(make_device_interface_call(buf.device_api));
+                }
+                Expr copy = Call::make(Int(32), "halide_copy_to_" + direction, args, Call::Extern);
                 Stmt check = AssertStmt::make(copy == 0,
                                               "Failed to copy buffer " + iter->first +
                                               " to " + direction + ".");
@@ -327,23 +352,7 @@ class InjectBufferCopies : public IRMutator {
 
     Stmt make_dev_malloc(string buf_name, DeviceAPI target_device_api) {
         Expr buf = Variable::make(Handle(), buf_name + ".buffer");
-        std::string interface_name;
-        switch (target_device_api) {
-          case Device_CUDA:
-            interface_name = "halide_cuda_device_interface";
-            break;
-          case Device_OpenCL:
-            interface_name = "halide_opencl_device_interface";
-            break;
-          case Device_GLSL:
-            interface_name = "halide_opengl_device_interface";
-            break;
-          default:
-            internal_error << "Bad DeviceAPI in make_dev_malloc " << target_device_api << "\n";
-            break;
-        }
-        std::vector<Expr> no_args;
-        Expr device_interface = Call::make(Handle(), interface_name, no_args, Call::Extern);
+        Expr device_interface = make_device_interface_call(target_device_api);
         Expr call = Call::make(Int(32), "halide_device_malloc", vec(buf, device_interface), Call::Extern);
         string msg = "Failed to allocate device buffer for " + buf_name;
         return AssertStmt::make(call == 0, msg);
@@ -584,7 +593,7 @@ class InjectDevFrees : public IRMutator {
 
     void visit(const Call *op) {
         if (op->name == "halide_copy_to_device" || op->name == "halide_device_malloc") {
-            internal_assert(op->args.size() >= 1); // halide_device_malloc takes the device interface as well
+            internal_assert(op->args.size() == 2);
             const Variable *var = op->args[0].as<Variable>();
             internal_assert(var);
             needs_freeing.insert(var->name);
