@@ -279,11 +279,11 @@ private:
     void visit(const Call *op)   {expr = op;}
     void visit(const Store *op)  {stmt = op;}
 
-    /* TODO:
-       It is currently not clear whether it is useful to dive into bound boolean valued variables
-       inside conditionals, and if so how to do it safely. The code below is commented out in case
-       we need to revisit this in the future.
-    */
+    /* This visitor appears to subsitute in exprs for variables that are bound to boolean expressions.
+     * In this case we should not encounter code explosion, as the only combinators we are considering
+     * are &&, ||, ~, ==, and !=, which reduce to trivial cases when a variable is repeated on either
+     * side of the operator.
+     */
     void visit(const Variable *op) {
         if ((in_if_cond || in_select_cond) &&
             op->type.is_bool() && scope.contains(op->name)) {
