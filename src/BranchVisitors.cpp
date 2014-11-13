@@ -284,20 +284,20 @@ private:
        inside conditionals, and if so how to do it safely. The code below is commented out in case
        we need to revisit this in the future.
     */
-    // void visit(const Variable *op) {
-    //     if ((in_if_cond || in_select_cond) &&
-    //         op->type.is_bool() && scope.contains(op->name)) {
-    //         Expr val = scope.get(op->name);
-    //         Expr new_val = mutate(val);
-    //         if (new_val.same_as(val)) {
-    //             expr = op;
-    //         } else {
-    //             expr = new_val;
-    //         }
-    //     } else {
-    //         expr = op;
-    //     }
-    // }
+    void visit(const Variable *op) {
+        if ((in_if_cond || in_select_cond) &&
+            op->type.is_bool() && scope.contains(op->name)) {
+            Expr val = scope.get(op->name);
+            Expr new_val = mutate(val);
+            if (new_val.same_as(val)) {
+                expr = op;
+            } else {
+                expr = new_val;
+            }
+        } else {
+            expr = op;
+        }
+    }
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);
@@ -354,7 +354,7 @@ public:
     // Returns true if the expr is an inequality condition, and
     // returns the intervals when the condition is true and false.
     bool is_inequality(Expr condition, Interval &true_range, Interval &false_range) {
-      Expr solve = solve_for_linear_variable(condition, name, free_vars, scope);
+        Expr solve = solve_for_linear_variable(condition, name, free_vars, scope);
         if (!solve.same_as(condition)) {
             Interval var_bounds;
             if (bounds_info.contains(name)) {
@@ -495,7 +495,7 @@ public:
     }
 };
 
-Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
+Stmt normalize_branch_conditions(Stmt stmt, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
                                  const int branching_limit) {
   stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
@@ -504,11 +504,11 @@ Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
   return stmt;
 }
 
-Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope,
+Expr normalize_branch_conditions(Expr expr, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
                                  const int branching_limit) {
   expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
-  stmt = PruneBranches(var, &scope, &bounds, vars).mutate(stmt);
+  expr = PruneBranches(var, &scope, &bounds, vars).mutate(expr);
   expr = simplify(expr, true, bounds);
   return expr;
 }
