@@ -83,12 +83,14 @@ EXPORT bool branches_linearly_in_vars(Expr expr,
  * conditions using the bounds imposed by the outer conditions.
  */
 // @{
-EXPORT Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
+EXPORT Stmt normalize_branch_conditions(Stmt stmt, const std::string& var,
+                                        const Scope<Expr> &scope,
                                         const Scope<Interval> &bounds,
                                         const Scope<int> &free_vars,
                                         const int branching_limit = 10);
 
-EXPORT Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope,
+EXPORT Expr normalize_branch_conditions(Expr expr, const std::string& var,
+                                        const Scope<Expr> &scope,
                                         const Scope<Interval> &bounds,
                                         const Scope<int> &free_vars,
                                         const int branching_limit = 10);

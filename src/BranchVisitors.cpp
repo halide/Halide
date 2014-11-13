@@ -284,20 +284,20 @@ private:
        inside conditionals, and if so how to do it safely. The code below is commented out in case
        we need to revisit this in the future.
     */
-    // void visit(const Variable *op) {
-    //     if ((in_if_cond || in_select_cond) &&
-    //         op->type.is_bool() && scope.contains(op->name)) {
-    //         Expr val = scope.get(op->name);
-    //         Expr new_val = mutate(val);
-    //         if (new_val.same_as(val)) {
-    //             expr = op;
-    //         } else {
-    //             expr = new_val;
-    //         }
-    //     } else {
-    //         expr = op;
-    //     }
-    // }
+    void visit(const Variable *op) {
+        if ((in_if_cond || in_select_cond) &&
+            op->type.is_bool() && scope.contains(op->name)) {
+            Expr val = scope.get(op->name);
+            Expr new_val = mutate(val);
+            if (new_val.same_as(val)) {
+                expr = op;
+            } else {
+                expr = new_val;
+            }
+        } else {
+            expr = op;
+        }
+    }
 
     void visit(const Let *op) {
         scope.push(op->name, op->value);
@@ -495,7 +495,7 @@ public:
     }
 };
 
-Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
+Stmt normalize_branch_conditions(Stmt stmt, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
                                  const int branching_limit) {
   stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
@@ -504,11 +504,11 @@ Stmt normalize_branch_conditions(Stmt stmt, const Scope<Expr> &scope,
   return stmt;
 }
 
-Expr normalize_branch_conditions(Expr expr, const Scope<Expr> &scope,
+Expr normalize_branch_conditions(Expr expr, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
                                  const int branching_limit) {
   expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
-  stmt = PruneBranches(var, &scope, &bounds, vars).mutate(stmt);
+  expr = PruneBranches(var, &scope, &bounds, vars).mutate(expr);
   expr = simplify(expr, true, bounds);
   return expr;
 }
