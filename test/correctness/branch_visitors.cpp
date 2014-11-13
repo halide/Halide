@@ -13,6 +13,7 @@ Scope<int> linearity;
 
 Expr x = Variable::make(Int(32), "x");
 Expr y = Variable::make(Int(32), "y");
+Expr z = Variable::make(Int(32), "z");
 
 constexpr int N = 100;
 Expr v[N];
@@ -84,6 +85,13 @@ bool test_branches_in_var() {
 
     if (branches_linearly_in_var(s3, "x", linearity)) {
         std::cout << "Expected not to branch in x:\n" << s3;
+        return false;
+    }
+
+    Stmt s4 = LetStmt::make("z", e3, For::make("w", 0, 10, For::Serial, Store::make("s", 0, z)));
+
+    if (!branches_linearly_in_var(s4, "x", linearity)) {
+        std::cout << "Expected to branch in x: " << s4 << "\n";
         return false;
     }
 
