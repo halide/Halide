@@ -67,9 +67,13 @@ private:
 
     template<class LetOp>
     void visit_let(const LetOp *op) {
-        bound_vars.push(op->name, expr_linearity(op->value, free_vars, bound_vars));
-        op->body.accept(this);
-        bound_vars.pop(op->name);
+        op->value.accept(this);
+
+        if (!result) {
+            bound_vars.push(op->name, expr_linearity(op->value, free_vars, bound_vars));
+            op->body.accept(this);
+            bound_vars.pop(op->name);
+        }
     }
 
     void visit(const LetStmt *op) {visit_let(op);}
