@@ -354,7 +354,7 @@ public:
     // Returns true if the expr is an inequality condition, and
     // returns the intervals when the condition is true and false.
     bool is_inequality(Expr condition, Interval &true_range, Interval &false_range) {
-      Expr solve = solve_for_linear_variable(condition, name, free_vars, scope);
+        Expr solve = solve_for_linear_variable(condition, name, free_vars, scope);
         if (!solve.same_as(condition)) {
             Interval var_bounds;
             if (bounds_info.contains(name)) {
@@ -425,14 +425,7 @@ public:
             !else_case.same_as(op->else_case)) {
             stmt = IfThenElse::make(condition, then_case, else_case);
         } else {
-            then_case = mutate(then_case);
-            else_case = mutate(else_case);
-
-            if (!then_case.same_as(op->then_case) || !else_case.same_as(op->else_case)) {
-                stmt = IfThenElse::make(condition, then_case, else_case);
-            } else {
-                stmt = op;
-            }
+            stmt = op;
         }
     }
 
@@ -459,14 +452,7 @@ public:
             !false_value.same_as(op->false_value)) {
             expr = Select::make(condition, true_value, false_value);
         } else {
-            true_value = mutate(true_value);
-            false_value = mutate(false_value);
-
-            if (!true_value.same_as(op->true_value) || !false_value.same_as(op->false_value)) {
-                expr = Select::make(condition, true_value, false_value);
-            } else {
-                expr = op;
-            }
+            expr = op;
         }
     }
 
