@@ -19,8 +19,8 @@ namespace Internal {
  * statement contains a branch whose condition depends linearly on the named variable
  * or any of the variables in the scope [free_vars]. The optional scope argument
  * [bound_vars] should contain entries for each bound variable that may appear in [stmt]
- * or [expr], and have its value set to true if the variable is bound to a linear expression
- * of the free variables, and false otherwise.
+ * or [expr], and have its value set the linearity of the expression it is bound to,
+ * which can be computed from the [expr_linearity] function defined in LinearSolve.h.
  */
 // @(
 EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
