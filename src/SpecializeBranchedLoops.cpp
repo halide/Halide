@@ -129,7 +129,6 @@ public:
      */
     Stmt construct_stmt() {
         Stmt stmt;
-        bool first = true;
         std::queue<std::string> bounds_vars;
         for (int i = branches.size()-1; i >= 0; --i) {
             Branch &b = branches[i];
@@ -160,9 +159,8 @@ public:
 
             Stmt branch_stmt = simplify(b.stmt, true, bounds_info);
             branch_stmt = For::make(name, b_min, b_extent, For::Serial, branch_stmt);
-            if (first) {
+            if (!stmt.defined()) {
                 stmt = branch_stmt;
-                first = false;
             } else {
                 stmt = Block::make(branch_stmt, stmt);
             }
@@ -250,7 +248,6 @@ public:
         return true;
     }
 
-    // template<class StmtOrExpr>
     Branch make_branch(Expr min, Expr extent, StmtOrExpr content) {
         Branch b;
         b.min = min;
@@ -343,7 +340,6 @@ public:
     // Build a pair of branches for 2 exprs, based on a simple inequality conditional.
     // It is assumed that the inequality has been solved and so the variable of interest
     // is on the left hand side.
-    // template<class StmtOrExpr>
     bool build_branches(Expr cond, StmtOrExpr a, StmtOrExpr b, Branch &b1, Branch &b2) {
         Expr max = simplify(min + extent - 1);
         bounds_info.push(name, Interval(min, max));
@@ -394,7 +390,7 @@ public:
     }
 
     // This function generalizes how we must visit all expr or stmt nodes with child nodes.
-    template<class Op> //, class StmtOrExpr>
+    template<class Op>
     void branch_children(const Op *op, const std::vector<StmtOrExpr>& children) {
         std::vector<Expr> branch_points;
         std::vector<std::vector<StmtOrExpr> > args;
@@ -638,17 +634,7 @@ public:
         b.expr = Cast::make(op->type, value[0]);
     }
 
-    void visit(const Cast *op) {
-        std::vector<StmtOrExpr> children(1, op->value);
-        branch_children(op, children);
-    }
-
-    // void visit(const Variable *op) {
-    //     if (scope.contains(op->name)) {
-    //         Expr expr = scope.get(op->name);
-    //         expr.accept(this);
-    //     }
-    // }
+    void visit(const Cast *op) {branch_children(op, vec<StmtOrExpr>(op->value));}
 
     template<class Op>
     void update_binary_op_branch(Branch &b, const Op *op, const std::vector<StmtOrExpr> &ab) {
@@ -673,13 +659,7 @@ public:
     void update_branch(Branch &b, const Or *op,  const std::vector<StmtOrExpr> &ab) {update_binary_op_branch(b, op, ab);}
 
     template<class Op>
-    void visit_binary_op(const Op *op) {
-        std::vector<StmtOrExpr> ab(2, Expr());
-        ab[0] = op->a;
-        ab[1] = op->b;
-
-        branch_children(op, ab);
-    }
+    void visit_binary_op(const Op *op) {branch_children(op, vec<StmtOrExpr>(op->a, op->b));}
 
     template<class Op, class Cmp>
     void visit_min_or_max(const Op *op) {
@@ -716,10 +696,7 @@ public:
         b.expr = Not::make(ab[0]);
     }
 
-    void visit(const Not *op) {
-        std::vector<StmtOrExpr> a(1, op->a);
-        branch_children(op, a);
-    }
+    void visit(const Not *op) {branch_children(op, vec<StmtOrExpr>(op->a));}
 
     void update_branch(Branch &b, const Select *op, const std::vector<StmtOrExpr> &vals) {
         b.expr = Select::make(op->condition, vals[0], vals[1]);
@@ -732,10 +709,7 @@ public:
             op = select.as<Select>();
             visit_simple_cond(op->condition, op->true_value, op->false_value);
         } else {
-            std::vector<StmtOrExpr> vals(2);
-            vals[0] = op->true_value;
-            vals[1] = op->false_value;
-            branch_children(op, vals);
+            branch_children(op, vec<StmtOrExpr>(op->true_value, op->false_value));
         }
     }
 
@@ -743,30 +717,19 @@ public:
         b.expr = Load::make(op->type, op->name, index[0], op->image, op->param);
     }
 
-    void visit(const Load *op) {
-        std::vector<StmtOrExpr> index(1, op->index);
-        branch_children(op, index);
-    }
+    void visit(const Load *op) {branch_children(op, vec<StmtOrExpr>(op->index));}
 
     void update_branch(Branch &b, const Ramp *op, const std::vector<StmtOrExpr> &args) {
         b.expr = Ramp::make(args[0], args[1], op->width);
     }
 
-    void visit(const Ramp *op) {
-        std::vector<StmtOrExpr> children(2, Expr());
-        children[0] = op->base;
-        children[1] = op->stride;
-        branch_children(op, children);
-    }
+    void visit(const Ramp *op) {branch_children(op, vec<StmtOrExpr>(op->base, op->stride));}
 
     void update_branch(Branch &b, const Broadcast *op, const std::vector<StmtOrExpr> &value) {
         b.expr = Broadcast::make(value[0], op->width);
     }
 
-    void visit(const Broadcast *op) {
-        std::vector<StmtOrExpr> value(1, op->value);
-        branch_children(op, value);
-    }
+    void visit(const Broadcast *op) {branch_children(op, vec<StmtOrExpr>(op->value));}
 
     void update_branch(Branch &b, const Call *op, const std::vector<StmtOrExpr> &branch_args) {
         std::vector<Expr> args;
@@ -787,11 +750,11 @@ public:
         }
     }
 
-    void update_branch(Branch &b, const Let *op, std::vector<StmtOrExpr> &body) {
+    void update_branch(Branch &b, const Let *op, const std::vector<StmtOrExpr> &body) {
         b.expr = Let::make(op->name, scope.get(op->name), body[0]);
     }
 
-    void update_branch(Branch &b, const LetStmt *op, std::vector<StmtOrExpr> &body) {
+    void update_branch(Branch &b, const LetStmt *op, const std::vector<StmtOrExpr> &body) {
         b.stmt = LetStmt::make(op->name, scope.get(op->name), body[0]);
     }
 
@@ -803,13 +766,12 @@ public:
             include(op->value);
         }
 
-        std::vector<StmtOrExpr> body(1, op->body);
         if (branches.size() == old_num_branches) {
             // If the value didn't branch we continue to branch the let body normally.
             int linearity = expr_linearity(op->value, free_vars, bound_vars_linearity);
             bound_vars_linearity.push(op->name, linearity);
             scope.push(op->name, op->value);
-            branch_children(op, body);
+            branch_children(op, vec<StmtOrExpr>(op->body));
             bound_vars_linearity.pop(op->name);
             scope.pop(op->name);
         } else {
@@ -830,13 +792,13 @@ public:
                 int linearity = expr_linearity(let_branches[i].expr, free_vars, bound_vars_linearity);
                 bound_vars_linearity.push(op->name, linearity);
                 scope.push(op->name, let_branches[i].expr);
-                branch_children(op, body);
+                branch_children(op, vec<StmtOrExpr>(op->body));
                 bound_vars_linearity.pop(op->name);
                 scope.pop(op->name);
 
                 if (branches.size() == old_num_branches) {
                     // If the body didn't branch then we need to rebuild the let using the current value branch.
-                    Branch b = make_branch(min, extent, LetOp::make(op->name, let_branches[i].expr, body[0]));
+                    Branch b = make_branch(min, extent, LetOp::make(op->name, let_branches[i].expr, op->body));
                     branches.push_back(b);
                 }
 
@@ -851,7 +813,7 @@ public:
                     Branch b = let_branches[i];
                     scope.push(op->name, b.expr);
                     b.expr = Expr();
-                    update_branch(b, op, body);
+                    update_branch(b, op, vec<StmtOrExpr>(op->body));
                     branches.push_back(let_branches[i]);
                     scope.pop(op->name);
                 }
@@ -870,11 +832,7 @@ public:
     }
 
     void visit(const Pipeline *op) {
-        std::vector<StmtOrExpr> children(3);
-        children[0] = op->produce;
-        children[1] = op->update;
-        children[2] = op->consume;
-        branch_children(op, children);
+        branch_children(op, vec<StmtOrExpr>(op->produce, op->update, op->consume));
     }
 
     void update_branch(Branch &b, const For *op, const std::vector<StmtOrExpr> &args) {
@@ -882,12 +840,8 @@ public:
     }
 
     void visit(const For *op) {
-        std::vector<StmtOrExpr> children(3);
-        children[0] = op->min;
-        children[1] = op->extent;
-        children[2] = op->body;
         free_vars.push(op->name, 0);
-        branch_children(op, children);
+        branch_children(op, vec<StmtOrExpr>(op->min, op->extent, op->body));
         free_vars.pop(op->name);
     }
 
@@ -895,32 +849,19 @@ public:
         b.stmt = Store::make(op->name, args[0], args[1]);
     }
 
-    void visit(const Store *op) {
-        std::vector<StmtOrExpr> args(2);
-        args[0] = op->value;
-        args[1] = op->index;
-        branch_children(op, args);
-    }
+    void visit(const Store *op) {branch_children(op, vec<StmtOrExpr>(op->value, op->index));}
 
     void update_branch(Branch &b, const Allocate *op, const std::vector<StmtOrExpr> &body) {
         b.stmt = Allocate::make(op->name, op->type, op->extents, op->condition, body[0]);
     }
 
-    void visit(const Allocate *op) {
-        std::vector<StmtOrExpr> children(1, op->body);
-        branch_children(op, children);
-    }
+    void visit(const Allocate *op) {branch_children(op, vec<StmtOrExpr>(op->body));}
 
     void update_branch(Branch &b, const Block *op, const std::vector<StmtOrExpr> &args) {
         b.stmt = Block::make(args[0], args[1]);
     }
 
-    void visit(const Block *op) {
-        std::vector<StmtOrExpr> children(2, Stmt());
-        children[0] = op->first;
-        children[1] = op->rest;
-        branch_children(op, children);
-    }
+    void visit(const Block *op) {branch_children(op, vec<StmtOrExpr>(op->first, op->rest));}
 
     void update_branch(Branch &b, const IfThenElse *op, const std::vector<StmtOrExpr> &cases) {
         b.stmt = IfThenElse::make(op->condition, cases[0], cases[1]);
@@ -979,10 +920,7 @@ public:
             }
         }
 
-        std::vector<StmtOrExpr> cases(2);
-        cases[0] = op->then_case;
-        cases[1] = op->else_case;
-        branch_children(op, cases);
+        branch_children(op, vec<StmtOrExpr>(op->then_case, op->else_case));
     }
 
     void update_branch(Branch &b, const Evaluate *op, const std::vector<StmtOrExpr> &value) {
@@ -990,8 +928,7 @@ public:
     }
 
     void visit(const Evaluate *op) {
-        std::vector<StmtOrExpr> children(1, op->value);
-        branch_children(op, children);
+        branch_children(op, vec<StmtOrExpr>(op->value));
     }
 };
 
