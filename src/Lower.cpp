@@ -1867,19 +1867,16 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
     s = simplify(s);
+    debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
     if (!custom_passes.empty()) {
-        debug(2) << "Lowering after final simplification:\n" << s << "\n\n";
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
             s = custom_passes[i]->mutate(s);
-            if (i + 1 < custom_passes.size()) {
-                debug(2) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
-            }
+            debug(1) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
         }
     }
 
-    debug(1) << "Final lowered statement:\n" << s << "\n\n";
 
     return s;
 }
