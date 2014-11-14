@@ -15,7 +15,7 @@ Expr x = Variable::make(Int(32), "x");
 Expr y = Variable::make(Int(32), "y");
 Expr z = Variable::make(Int(32), "z");
 
-constexpr int N = 100;
+const int N = 100;
 Expr v[N];
 
 void fill_scope() {
