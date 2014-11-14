@@ -1322,6 +1322,14 @@ WEAK int halide_opengl_dev_run(
             GLuint tex = *((GLuint *)args[i]);
             ST.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             ST.BindTexture(GL_TEXTURE_2D, tex);
+
+            // Textures not created by the Halide runtime might not have
+            // parameters set, or might have had parameters set differently 
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
             ST.Uniform1iv(loc, 1, &num_active_textures);
             num_active_textures++;
             // TODO: check maximum number of active textures
