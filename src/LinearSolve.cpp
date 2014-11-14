@@ -416,6 +416,9 @@ private:
     }
 
     /* We don't deal with these nodes. */
+    void visit(const And *op) {solved = false;}
+    void visit(const Or *op)  {solved = false;}
+    void visit(const Not *op) {solved = false;}
     void visit(const Add *op) {solved = false;}
     void visit(const Sub *op) {solved = false;}
     void visit(const Mul *op) {solved = false;}
