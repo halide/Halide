@@ -9,6 +9,164 @@
 namespace Halide {
 namespace Internal {
 
+class ExprLinearity : public IRVisitor {
+public:
+    const Scope<int> &free_vars;
+    int result;
+
+    ExprLinearity(const Scope<int> &fv, const Scope<int> *bv = NULL) :
+            free_vars(fv), result(0) {
+        bound_vars.set_containing_scope(bv);
+    }
+private:
+    using IRVisitor::visit;
+
+    Scope<int> bound_vars;
+
+    void visit(const IntImm *op) {
+        result = Linearity::Constant;
+    }
+
+    void visit(const FloatImm *op) {
+        result = Linearity::Constant;
+    }
+
+    // These nodes are considered to introduce non-linearities.
+    void visit(const Mod *op) {result = Linearity::NonLinear;}
+    void visit(const Min *op) {result = Linearity::NonLinear;}
+    void visit(const Max *op) {result = Linearity::NonLinear;}
+    void visit(const Select *op) {result = Linearity::NonLinear;}
+    void visit(const Call *op) {result = Linearity::NonLinear;}
+    void visit(const Load *op) {result = Linearity::NonLinear;}
+    void visit(const Ramp *op) {result = Linearity::NonLinear;}
+    void visit(const Broadcast *op) {result = Linearity::NonLinear;}
+
+    template<class Op>
+    void visit_binary_op(const Op *op) {
+        op->a.accept(this);
+        int result_a = result;
+
+        result = 0;
+        op->b.accept(this);
+        int result_b = result;
+
+        if (Linearity::is_nonlinear(result_a) || Linearity::is_nonlinear(result_b)) {
+            result = Linearity::NonLinear;
+        } else if (Linearity::is_constant(result_a) && Linearity::is_constant(result_b)) {
+            result = Linearity::Constant;
+        } else {
+            result = Linearity::Linear;
+        }
+    }
+
+    void visit(const Add *op) {visit_binary_op(op);}
+    void visit(const Sub *op) {visit_binary_op(op);}
+    void visit(const EQ *op)  {visit_binary_op(op);}
+    void visit(const NE *op)  {visit_binary_op(op);}
+    void visit(const LT *op)  {visit_binary_op(op);}
+    void visit(const GT *op)  {visit_binary_op(op);}
+    void visit(const LE *op)  {visit_binary_op(op);}
+    void visit(const GE *op)  {visit_binary_op(op);}
+    void visit(const And *op) {visit_binary_op(op);}
+    void visit(const Or *op)  {visit_binary_op(op);}
+
+    void visit(const Div *op) {
+        // Integer division is considered non-linear.
+        if (op->type.is_int() || op->type.is_uint()) {
+            result = false;
+        } else {
+            op->a.accept(this);
+            int result_a = result;
+
+            result = 0;
+            op->b.accept(this);
+            int result_b = result;
+
+            if (!Linearity::is_constant(result_b)) {
+                result = Linearity::NonLinear;
+            } else if (Linearity::is_linear(result_a)) {
+                result = Linearity::Linear;
+            }
+        }
+    }
+
+    void visit(const Mul *op) {
+        op->a.accept(this);
+        int result_a = result;
+
+        result = 0;
+        op->b.accept(this);
+        int result_b = result;
+
+        result = result_a + result_b;
+    }
+
+    void visit(const Let *op) {
+        int old_result = result;
+        op->value.accept(this);
+        bound_vars.push(op->name, result);
+        result = old_result;
+        op->body.accept(this);
+        bound_vars.pop(op->name);
+    }
+
+    void visit(const Variable *op) {
+        if (free_vars.contains(op->name)) {
+            result = Linearity::Linear;
+        } else if (bound_vars.contains(op->name)) {
+            result = bound_vars.get(op->name);
+        } else {
+            result = Linearity::Constant;
+        }
+    }
+};
+
+int expr_linearity(Expr expr, const std::string &var) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    ExprLinearity linearity(free_vars);
+    expr.accept(&linearity);
+    return linearity.result;
+}
+
+int expr_linearity(Expr expr, const std::string &var, const Scope<int> &bound_vars) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    ExprLinearity linearity(free_vars, &bound_vars);
+    expr.accept(&linearity);
+    return linearity.result;
+}
+
+int expr_linearity(Expr expr, const Scope<int> &free_vars) {
+    ExprLinearity linearity(free_vars);
+    expr.accept(&linearity);
+    return linearity.result;
+}
+
+int expr_linearity(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars) {
+    ExprLinearity linearity(free_vars, &bound_vars);
+    expr.accept(&linearity);
+    return linearity.result;
+}
+
+bool expr_is_linear_in_var(Expr expr, const std::string &var) {
+    return Linearity::is_linear(expr_linearity(expr, var));
+}
+
+bool expr_is_linear_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars) {
+    return Linearity::is_linear(expr_linearity(expr, var, bound_vars));
+}
+
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars) {
+    return Linearity::is_linear(expr_linearity(expr, free_vars));
+}
+
+bool expr_is_linear_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars) {
+    return Linearity::is_linear(expr_linearity(expr, free_vars, bound_vars));
+}
+
 class CollectLinearTerms : public IRVisitor {
 public:
     const Scope<int> &free_vars;
@@ -25,6 +183,10 @@ public:
     }
 private:
     SmallStack<Expr> coeff;
+
+    bool has_vars(Expr expr) {
+        return expr_uses_vars(expr, free_vars, scope);
+    }
 
     void add_to_constant_term(Expr e) {
         internal_assert(!e.type().is_uint()) << "cannot perform solve with uint types.\n";
@@ -66,13 +228,13 @@ private:
     void visit(const Broadcast *op) {success = false;}
 
     void visit(const Add *op) {
-        if (expr_uses_vars(op->a, free_vars)) {
+        if (has_vars(op->a)) {
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
-        if (expr_uses_vars(op->b, free_vars)) {
+        if (has_vars(op->b)) {
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -80,14 +242,14 @@ private:
     }
 
     void visit(const Sub *op) {
-        if (expr_uses_vars(op->a, free_vars)) {
+        if (has_vars(op->a)) {
             op->a.accept(this);
         } else {
             add_to_constant_term(op->a);
         }
 
         coeff.push(-coeff.top_ref());
-        if (expr_uses_vars(op->b, free_vars)) {
+        if (has_vars(op->b)) {
             op->b.accept(this);
         } else {
             add_to_constant_term(op->b);
@@ -105,9 +267,9 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        if (expr_uses_vars(b, free_vars)) {
+        if (has_vars(b)) {
             success = false;
-        } else if (expr_uses_vars(a, free_vars)) {
+        } else if (has_vars(a)) {
             internal_assert(!b.type().is_uint()) << "cannot perform solve with uint types.\n";
 
             coeff.push(coeff.top() / b);
@@ -122,8 +284,8 @@ private:
         Expr a = op->a;
         Expr b = op->b;
 
-        bool a_has_var = expr_uses_vars(a, free_vars);
-        bool b_has_var = expr_uses_vars(b, free_vars);
+        bool a_has_var = has_vars(a);
+        bool b_has_var = has_vars(b);
 
         if (a_has_var && b_has_var) {
             success = false;
