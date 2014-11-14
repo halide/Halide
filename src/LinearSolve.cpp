@@ -33,8 +33,6 @@ private:
 
     // These nodes are considered to introduce non-linearities.
     void visit(const Mod *op) {result = Linearity::NonLinear;}
-    void visit(const Min *op) {result = Linearity::NonLinear;}
-    void visit(const Max *op) {result = Linearity::NonLinear;}
     void visit(const Select *op) {result = Linearity::NonLinear;}
     void visit(const Call *op) {result = Linearity::NonLinear;}
     void visit(const Load *op) {result = Linearity::NonLinear;}
@@ -61,6 +59,8 @@ private:
 
     void visit(const Add *op) {visit_binary_op(op);}
     void visit(const Sub *op) {visit_binary_op(op);}
+    void visit(const Min *op) {visit_binary_op(op);}
+    void visit(const Max *op) {visit_binary_op(op);}
     void visit(const EQ *op)  {visit_binary_op(op);}
     void visit(const NE *op)  {visit_binary_op(op);}
     void visit(const LT *op)  {visit_binary_op(op);}
