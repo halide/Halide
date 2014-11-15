@@ -59,13 +59,13 @@ extern "C" {
 /** Release all data associated with the current GPU backend, in particular
  * all resources (memory, texture, context handles) allocated by Halide. Must
  * be called explicitly when using AOT compilation. */
-void halide_device_release(void *user_context, const halide_device_interface *interface) {
+WEAK void halide_device_release(void *user_context, const halide_device_interface *interface) {
     interface->device_release(user_context);
 }
 
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
-int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
+WEAK int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
     int result = 0;
     debug(NULL) << "halide_copy_to_host " << buf << "\n";
     if (buf->dev_dirty) {
@@ -91,7 +91,7 @@ int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
 
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
-int halide_copy_to_device(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
     int result = 0;
     debug(NULL) << "halide_copy_to_device " << buf << "\n";
     if (buf->host_dirty) {
@@ -138,7 +138,7 @@ int halide_copy_to_device(void *user_context, struct buffer_t *buf, const halide
 
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
-int halide_device_sync(void *user_context, struct buffer_t *buf) { 
+WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) { 
     const halide_device_interface *interface = get_device_interface(buf);
     if (interface == NULL) {
         return -1;
@@ -147,7 +147,7 @@ int halide_device_sync(void *user_context, struct buffer_t *buf) {
 }
 
 /** Allocate device memory to back a buffer_t. */
-int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
+WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
     debug(user_context) << "halide_device_malloc: " << buf << " buf dev " << buf->dev << " interface " << interface << "\n";
     int result = interface->device_malloc(user_context, buf);
     if (result == 0) {
@@ -157,7 +157,7 @@ int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_
 }
 
 /** Free any device memory associated with a buffer_t. */
-int halide_device_free(void *user_context, struct buffer_t *buf) {
+WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
     debug(user_context) << "halide_device_free: " << buf << " buf dev " << buf->dev << " interface " << get_device_interface(buf) << "\n";
     if (buf != NULL) {
         const halide_device_interface *interface = get_device_interface(buf);
