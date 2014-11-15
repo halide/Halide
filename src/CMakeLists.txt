@@ -315,6 +315,9 @@ add_custom_command(OUTPUT "${CMAKE_BINARY_DIR}/include/Halide.h"
   DEPENDS build_halide_h ${HEADER_FILES})
 
 file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeCuda.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenCL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
+file(COPY runtime/HalideRuntimeOpenGL.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 
 add_definitions("-DCOMPILING_HALIDE")
 
