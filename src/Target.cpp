@@ -563,6 +563,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_memoization_cache_lookup",
                        "halide_memoization_cache_store",
                        "halide_memoization_cache_cleanup",
+                       "halide_cuda_device_interface",
+                       "halide_opencl_device_interface",
+                       "halide_opengl_device_interface",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
