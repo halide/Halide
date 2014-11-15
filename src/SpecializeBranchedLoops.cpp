@@ -814,7 +814,7 @@ public:
                     scope.push(op->name, b.expr);
                     b.expr = Expr();
                     update_branch(b, op, vec<StmtOrExpr>(op->body));
-                    branches.push_back(let_branches[i]);
+                    branches.push_back(b);
                     scope.pop(op->name);
                 }
             }
