@@ -6,6 +6,12 @@
 #include <assert.h>
 #include "../common/gpu_object_lifetime.h"
 
+#if COMPILING_FOR_CUDA
+#include <HalideRuntimeCuda.h>
+#elif COMPILING_FOR_OPENCL
+#include <HalideRuntimeOpenCL.h>
+#endif
+
 extern "C" void halide_print(void *user_context, const char *str) {
     printf("%s", str);
 
@@ -30,7 +36,11 @@ int main(int argc, char **argv) {
             }
         }
 
-        halide_release(NULL);
+#if COMPILING_FOR_CUDA
+        halide_device_release(NULL, halide_cuda_device_interface());
+#elif COMPILING_FOR_OPENCL
+        halide_device_release(NULL, halide_opencl_device_interface());
+#endif
     }
 
     int ret = validate_gpu_object_lifetime(false /* allow_globals */, true /* allow_none */);
