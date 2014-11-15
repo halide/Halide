@@ -11,14 +11,14 @@ extern "C" {
  *  Routines specific to the Halide OpenCL runtime.
  */
 
-extern WEAK struct halide_device_interface *halide_opencl;
+extern const struct halide_device_interface *halide_opencl_device_interface();
 
 /** These are forward declared here to allow clients to override the
  *  Halide OpenCL runtime. Do not call them. */
 // @{
-extern WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr,
+extern int halide_opencl_initialize_kernels(void *user_context, void **state_ptr,
                                                const char *src, int size);
-extern WEAK int halide_opencl_run(void *user_context,
+extern int halide_opencl_run(void *user_context,
                                   void *state_ptr,
                                   const char *entry_name,
                                   int blocksX, int blocksY, int blocksZ,

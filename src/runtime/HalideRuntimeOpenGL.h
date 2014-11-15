@@ -26,7 +26,8 @@ extern WEAK int halide_opengl_run(void *user_context,
                                   int threadsX, int threadsY, int threadsZ,
                                   int shared_mem_bytes,
                                   size_t arg_sizes[],
-                                  void *args[]);
+                                  void *args[],
+				  int8_t is_buffer[]);
 // @}
 
 /** This functions MUST be provided by the host environment to retrieve pointers
