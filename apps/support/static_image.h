@@ -38,7 +38,7 @@ class Image {
         uint8_t *alloc;
 
         void dev_free() {
-            halide_dev_free(NULL, &buf);
+            halide_device_free(NULL, &buf);
         }
 
         ~Contents() {
