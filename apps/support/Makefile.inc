@@ -1,6 +1,9 @@
 CXX ?= g++
 GXX ?= g++
 
+CFLAGS += -I../../include/ -I../support/
+CXXFLAGS += -I../../include/ -I../support/
+
 ifdef BUILD_PREFIX
 LIB_HALIDE = bin/$(BUILD_PREFIX)/libHalide.a
 else
