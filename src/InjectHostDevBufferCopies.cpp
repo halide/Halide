@@ -320,7 +320,7 @@ class InjectBufferCopies : public IRMutator {
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
-            BufferInfo &info(state[op->name]);
+            BufferInfo &info(state[buf_name]);
             debug(2) << "Setting dev_read to true in glsl_texture_load for " << buffer_var->name << "\n";
             info.dev_read = true;
             internal_assert(info.device_api == Device_Host ||
@@ -336,7 +336,7 @@ class InjectBufferCopies : public IRMutator {
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
-            BufferInfo &info(state[op->name]);
+            BufferInfo &info(state[buf_name]);
             debug(2) << "Setting dev_write to true in glsl_texture_store for " << buffer_var->name << "\n";
             info.dev_write = true;
             internal_assert(info.device_api == Device_Host ||
