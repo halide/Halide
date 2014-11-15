@@ -914,10 +914,6 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         return err;
     }
 
-    if (!buf->host_dirty) {
-        return 0;
-    }
-
     if (!buf->host || !buf->dev) {
         debug_buffer(user_context, buf);
         error(user_context) << "Invalid copy_to_device operation: host or dev NULL";
@@ -981,7 +977,7 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         halide_free(user_context, tmp);
     }
     global_state.BindTexture(GL_TEXTURE_2D, 0);
-    buf->host_dirty = false;
+
     return 0;
 }
 
@@ -1008,9 +1004,6 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
 // Copy image data from texture back to host memory.
 WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
     CHECK_INITIALIZED(1);
-    if (!buf->dev_dirty) {
-        return 0;
-    }
 
     if (!buf->host || !buf->dev) {
         debug_buffer(user_context, buf);
@@ -1075,7 +1068,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         halide_free(user_context, tmp);
     }
     CHECK_GLERROR(1);
-    buf->dev_dirty = false;
+
     return 0;
 }
 
@@ -1103,7 +1096,7 @@ WEAK int halide_opengl_run(void *user_context,
                            int blocksX, int blocksY, int blocksZ,
                            int threadsX, int threadsY, int threadsZ,
                            int shared_mem_bytes,
-                           size_t arg_sizes[], void *args[]) {
+                           size_t arg_sizes[], void *args[], int8_t is_buffer[]) {
     CHECK_INITIALIZED(1);
 
     ModuleState *mod = (ModuleState *)state_ptr;
@@ -1138,7 +1131,7 @@ WEAK int halide_opengl_run(void *user_context,
         if (kernel_arg->kind == Argument::Outbuf) {
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            GLuint tex = *((GLuint *)args[i]);
+            GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
             if (tex == (GLuint)HALIDE_OPENGL_CLIENT_BOUND) {
                 bind_render_targets = false;
             }
@@ -1152,7 +1145,7 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            GLuint tex = *((GLuint *)args[i]);
+            GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             global_state.BindTexture(GL_TEXTURE_2D, tex);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
@@ -1354,7 +1347,7 @@ WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
 // is responsible for setting up the OpenGL environment and compiling the GLSL
 // code into a fragment shader.
 WEAK int halide_opengl_initialize_kernels(void *user_context, void **state_ptr,
-                                    const char *src, int size) {
+                                          const char *src, int size) {
     if (int error = halide_opengl_init(user_context)) {
         return error;
     }

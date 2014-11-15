@@ -668,90 +668,84 @@ WEAK int halide_opencl_copy_to_device(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
-    if (buf->host_dirty) {
-        #ifdef DEBUG_RUNTIME
-        uint64_t t_before = halide_current_time_ns(user_context);
-        #endif
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
 
-        halide_assert(user_context, buf->host && buf->dev);
-        halide_assert(user_context, validate_device_pointer(user_context, buf));
+    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
 
-        device_copy c = make_host_to_device_copy(buf);
+    device_copy c = make_host_to_device_copy(buf);
 
-        for (int w = 0; w < c.extent[3]; w++) {
-            for (int z = 0; z < c.extent[2]; z++) {
+    for (int w = 0; w < c.extent[3]; w++) {
+	for (int z = 0; z < c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
-                // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
-                // can deal with the 2 innermost strides with OpenCL.
-                uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
+	    // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+	    // can deal with the 2 innermost strides with OpenCL.
+	    uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
 
-                size_t offset[3] = { off, 0, 0 };
-                size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+	    size_t offset[3] = { off, 0, 0 };
+	    size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
-                debug(user_context)
-                    << "    clEnqueueWriteBufferRect ((" << z << ", " << w << "), "
-                    << "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
-                    << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
-                    << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
+	    debug(user_context)
+		<< "    clEnqueueWriteBufferRect ((" << z << ", " << w << "), "
+		<< "(" << (void *)c.src << " -> " << c.dst << ") + " << off << ", "
+		<< region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+		<< c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
-                cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
-                                                      offset, offset, region,
-                                                      c.stride_bytes[0], c.stride_bytes[1],
-                                                      c.stride_bytes[0], c.stride_bytes[1],
-                                                      (void *)c.src,
-                                                      0, NULL, NULL);
+	    cl_int err = clEnqueueWriteBufferRect(ctx.cmd_queue, (cl_mem)c.dst, CL_FALSE,
+						  offset, offset, region,
+						  c.stride_bytes[0], c.stride_bytes[1],
+						  c.stride_bytes[0], c.stride_bytes[1],
+						  (void *)c.src,
+						  0, NULL, NULL);
 
-                if (err != CL_SUCCESS) {
-                    error(user_context) << "CL: clEnqueueWriteBufferRect failed: "
-                                        << get_opencl_error_name(err);
-                    return err;
-                }
+	    if (err != CL_SUCCESS) {
+		error(user_context) << "CL: clEnqueueWriteBufferRect failed: "
+				    << get_opencl_error_name(err);
+		return err;
+	    }
 #else
-                for (int y = 0; y < c.extent[1]; y++) {
-                    for (int x = 0; x < c.extent[0]; x++) {
-                        uint64_t off = (x * c.stride_bytes[0] +
-                                        y * c.stride_bytes[1] +
-                                        z * c.stride_bytes[2] +
-                                        w * c.stride_bytes[3]);
-                        void *src = (void *)(c.src + off);
-                        void *dst = (void *)(c.dst + off);
-                        uint64_t size = c.chunk_size;
+	    for (int y = 0; y < c.extent[1]; y++) {
+		for (int x = 0; x < c.extent[0]; x++) {
+		    uint64_t off = (x * c.stride_bytes[0] +
+				    y * c.stride_bytes[1] +
+				    z * c.stride_bytes[2] +
+				    w * c.stride_bytes[3]);
+		    void *src = (void *)(c.src + off);
+		    void *dst = (void *)(c.dst + off);
+		    uint64_t size = c.chunk_size;
 
-                        debug(user_context)
-                            << "    clEnqueueWriteBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
-                            << size << " bytes, " << src << " -> " << (void *)dst << ")\n";
+		    debug(user_context)
+			<< "    clEnqueueWriteBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
+			<< size << " bytes, " << src << " -> " << (void *)dst << ")\n";
 
-                        cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
-                                                          CL_FALSE, off, size, src, 0, NULL, NULL);
-                        if (err != CL_SUCCESS) {
-                            error(user_context) << "CL: clEnqueueWriteBuffer failed: "
-                                                << get_opencl_error_name(err);
-                            return err;
-                        }
-                    }
-                }
+		    cl_int err = clEnqueueWriteBuffer(ctx.cmd_queue, (cl_mem)c.dst,
+						      CL_FALSE, off, size, src, 0, NULL, NULL);
+		    if (err != CL_SUCCESS) {
+			error(user_context) << "CL: clEnqueueWriteBuffer failed: "
+					    << get_opencl_error_name(err);
+			return err;
+		    }
+		}
+	    }
 #endif
-            }
-        }
-        // The writes above are all non-blocking, so empty the command
-        // queue before we proceed so that other host code won't write
-        // to the buffer while the above writes are still running.
-        clFinish(ctx.cmd_queue);
-
-        #ifdef DEBUG_RUNTIME
-        uint64_t t_after = halide_current_time_ns(user_context);
-        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-        #endif
+	}
     }
-    buf->host_dirty = false;
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't write
+    // to the buffer while the above writes are still running.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
     return 0;
 }
 
 WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
-    if (!buf->dev_dirty) {
-        return 0;
-    }
-
     debug(user_context)
         << "CL: halide_copy_to_host (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -764,84 +758,80 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
         return ctx.error;
     }
 
-    // Need to check dev_dirty again, in case another thread did the
-    // copy_to_host before the serialization point above.
-    if (buf->dev_dirty) {
-        #ifdef DEBUG_RUNTIME
-        uint64_t t_before = halide_current_time_ns(user_context);
-        #endif
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_before = halide_current_time_ns(user_context);
+    #endif
 
-        halide_assert(user_context, buf->host && buf->dev);
-        halide_assert(user_context, validate_device_pointer(user_context, buf));
+    halide_assert(user_context, buf->host && buf->dev);
+    halide_assert(user_context, validate_device_pointer(user_context, buf));
 
-        device_copy c = make_device_to_host_copy(buf);
+    device_copy c = make_device_to_host_copy(buf);
 
-        for (int w = 0; w < c.extent[3]; w++) {
-            for (int z = 0; z < c.extent[2]; z++) {
+    for (int w = 0; w < c.extent[3]; w++) {
+	for (int z = 0; z < c.extent[2]; z++) {
 #ifdef ENABLE_OPENCL_11
-                // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
-                // can deal with the 2 innermost strides with OpenCL.
-                uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
+	    // OpenCL 1.1 supports stride-aware memory transfers up to 3D, so we
+	    // can deal with the 2 innermost strides with OpenCL.
+	    uint64_t off = z * c.stride_bytes[2] + w * c.stride_bytes[3];
 
-                size_t offset[3] = { off, 0, 0 };
-                size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
+	    size_t offset[3] = { off, 0, 0 };
+	    size_t region[3] = { c.chunk_size, c.extent[0], c.extent[1] };
 
-                debug(user_context)
-                    << "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
-                    << "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
-                    << region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
-                    << c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
+	    debug(user_context)
+		<< "    clEnqueueReadBufferRect ((" << z << ", " << w << "), "
+		<< "(" << (void *)c.src << " -> " << (void *)c.dst << ") + " << off << ", "
+		<< region[0] << "x" << region[1] << "x" << region[2] << " bytes, "
+		<< c.stride_bytes[0] << "x" << c.stride_bytes[1] << ")\n";
 
-                cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
-                                                     offset, offset, region,
-                                                     c.stride_bytes[0], c.stride_bytes[1],
-                                                     c.stride_bytes[0], c.stride_bytes[1],
-                                                     (void *)c.dst,
-                                                     0, NULL, NULL);
+	    cl_int err = clEnqueueReadBufferRect(ctx.cmd_queue, (cl_mem)c.src, CL_FALSE,
+						 offset, offset, region,
+						 c.stride_bytes[0], c.stride_bytes[1],
+						 c.stride_bytes[0], c.stride_bytes[1],
+						 (void *)c.dst,
+						 0, NULL, NULL);
 
-                if (err != CL_SUCCESS) {
-                    error(user_context) << "CL: clEnqueueReadBufferRect failed: "
-                                        << get_opencl_error_name(err);
-                    return err;
-                }
+	    if (err != CL_SUCCESS) {
+		error(user_context) << "CL: clEnqueueReadBufferRect failed: "
+				    << get_opencl_error_name(err);
+		return err;
+	    }
 #else
-                for (int y = 0; y < c.extent[1]; y++) {
-                    for (int x = 0; x < c.extent[0]; x++) {
-                        uint64_t off = (x * c.stride_bytes[0] +
-                                        y * c.stride_bytes[1] +
-                                        z * c.stride_bytes[2] +
-                                        w * c.stride_bytes[3]);
-                        void *src = (void *)(c.src + off);
-                        void *dst = (void *)(c.dst + off);
-                        uint64_t size = c.chunk_size;
+	    for (int y = 0; y < c.extent[1]; y++) {
+		for (int x = 0; x < c.extent[0]; x++) {
+		    uint64_t off = (x * c.stride_bytes[0] +
+				    y * c.stride_bytes[1] +
+				    z * c.stride_bytes[2] +
+				    w * c.stride_bytes[3]);
+		    void *src = (void *)(c.src + off);
+		    void *dst = (void *)(c.dst + off);
+		    uint64_t size = c.chunk_size;
 
-                        debug(user_context)
-                            << "    clEnqueueReadBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
-                            << size << " bytes, " << src << " -> " << dst << ")\n";
+		    debug(user_context)
+			<< "    clEnqueueReadBuffer  ((" << x << ", " << y << ", " << z << ", " << w << "), "
+			<< size << " bytes, " << src << " -> " << dst << ")\n";
 
-                        cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
-                                                         CL_FALSE, off, size, dst, 0, NULL, NULL);
-                        if (err != CL_SUCCESS) {
-                            error(user_context) << "CL: clEnqueueReadBuffer failed: "
-                                                << get_opencl_error_name(err);
-                            return err;
-                        }
-                    }
-                }
+		    cl_int err = clEnqueueReadBuffer(ctx.cmd_queue, (cl_mem)c.src,
+						     CL_FALSE, off, size, dst, 0, NULL, NULL);
+		    if (err != CL_SUCCESS) {
+			error(user_context) << "CL: clEnqueueReadBuffer failed: "
+					    << get_opencl_error_name(err);
+			return err;
+		    }
+		}
+	    }
 #endif
-            }
-        }
-        // The writes above are all non-blocking, so empty the command
-        // queue before we proceed so that other host code won't read
-        // bad data.
-        clFinish(ctx.cmd_queue);
-
-        #ifdef DEBUG_RUNTIME
-        uint64_t t_after = halide_current_time_ns(user_context);
-        debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
-        #endif
+	}
     }
-    buf->dev_dirty = false;
+    // The writes above are all non-blocking, so empty the command
+    // queue before we proceed so that other host code won't read
+    // bad data.
+    clFinish(ctx.cmd_queue);
+
+    #ifdef DEBUG_RUNTIME
+    uint64_t t_after = halide_current_time_ns(user_context);
+    debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
+    #endif
+
     return 0;
 }
 
@@ -962,7 +952,7 @@ WEAK int halide_opencl_run(void *user_context,
     return 0;
 }
 
-WEAK const halide_device_interface *halide_opencl_device_interface() {
+WEAK const struct halide_device_interface *halide_opencl_device_interface() {
     return &opencl_device_interface;
 }
 
