@@ -36,7 +36,7 @@ StmtCompiler::StmtCompiler(Target target) {
             contents = new CodeGen_GPU_Host<CodeGen_MIPS>(target);
         }
 #endif
-#ifdef WITH_PNACL
+#ifdef WITH_NATIVE_CLIENT
         if (target.arch == Target::PNACL) {
             contents = new CodeGen_GPU_Host<CodeGen_PNaCl>(target);
         }
