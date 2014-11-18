@@ -20,7 +20,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen(host) {
+CodeGen_PTX_Dev::CodeGen_PTX_Dev(Target host) : CodeGen_LLVM(host) {
     #if !(WITH_PTX)
     user_error << "ptx not enabled for this build of Halide.\n";
     #endif
@@ -125,7 +125,7 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
 
 void CodeGen_PTX_Dev::init_module() {
 
-    CodeGen::init_module();
+    CodeGen_LLVM::init_module();
 
     #ifdef WITH_PTX
     module = get_initial_module_for_ptx_device(target, context);
@@ -164,7 +164,7 @@ void CodeGen_PTX_Dev::visit(const For *loop) {
         codegen(loop->body);
         sym_pop(loop->name);
     } else {
-        CodeGen::visit(loop);
+        CodeGen_LLVM::visit(loop);
     }
 }
 

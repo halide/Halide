@@ -226,7 +226,7 @@ set(HEADER_FILES
   Buffer.h
   buffer_t.h
   CodeGen_C.h
-  CodeGen.h
+  CodeGen_LLVM.h
   CodeGen_X86.h
   CodeGen_GPU_Host.h
   CodeGen_PTX_Dev.h
@@ -326,7 +326,7 @@ file(COPY runtime/HalideRuntime.h DESTINATION "${CMAKE_BINARY_DIR}/include")
 add_definitions("-DCOMPILING_HALIDE")
 
 add_library(Halide ${HALIDE_LIBRARY_TYPE}
-  CodeGen.cpp
+  CodeGen_LLVM.cpp
   CodeGen_Internal.cpp
   CodeGen_X86.cpp
   CodeGen_GPU_Host.cpp
