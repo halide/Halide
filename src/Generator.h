@@ -332,13 +332,6 @@ private:
     }
 };
 
-namespace Internal {
-
-// Note that various sections of code rely on being able to iterate
-// through this in a predictable order; do not change to unordered_map (etc)
-// without considering that.
-using GeneratorParamValues = std::map<std::string, std::string>;
-
 class NamesInterface {
     // Names in this class are only intended for use in derived classes.
 protected:
@@ -363,6 +356,13 @@ protected:
     inline Type Int(int bits, int width = 1) { return Halide::Int(bits, width); }
     inline Type UInt(int bits, int width = 1) { return Halide::UInt(bits, width); }
 };
+
+namespace Internal {
+
+// Note that various sections of code rely on being able to iterate
+// through this in a predictable order; do not change to unordered_map (etc)
+// without considering that.
+using GeneratorParamValues = std::map<std::string, std::string>;
 
 class GeneratorBase : public NamesInterface {
 public:
