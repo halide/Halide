@@ -383,30 +383,6 @@ llvm::Triple CodeGen_ARM::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_ARM::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    // Fix the target triple.
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
-}
-
-
 Value *CodeGen_ARM::call_intrin(Type result_type, const string &name, vector<Expr> args) {
     vector<Value *> arg_values(args.size());
     for (size_t i = 0; i < args.size(); i++) {
@@ -533,7 +509,7 @@ Expr try_narrow(Expr a, Type target) {
 void CodeGen_ARM::visit(const Cast *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -610,20 +586,20 @@ void CodeGen_ARM::visit(const Cast *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 
 }
 
 void CodeGen_ARM::visit(const Mul *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
     // We only have peephole optimizations for int vectors for now
     if (op->type.is_scalar() || op->type.is_float()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -662,13 +638,13 @@ void CodeGen_ARM::visit(const Mul *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Div *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -835,18 +811,18 @@ void CodeGen_ARM::visit(const Div *op) {
 
     } else {
 
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_ARM::visit(const Add *op) {
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Sub *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -879,13 +855,13 @@ void CodeGen_ARM::visit(const Sub *op) {
         return;
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Min *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -927,13 +903,13 @@ void CodeGen_ARM::visit(const Min *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Max *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -975,13 +951,13 @@ void CodeGen_ARM::visit(const Max *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const LT *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1023,10 +999,10 @@ void CodeGen_ARM::visit(const LT *op) {
             value = call_intrin(Int(32, 2), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
-            CodeGen::visit(op);
+            CodeGen_Posix::visit(op);
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 
 }
@@ -1034,7 +1010,7 @@ void CodeGen_ARM::visit(const LT *op) {
 void CodeGen_ARM::visit(const LE *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1076,10 +1052,10 @@ void CodeGen_ARM::visit(const LE *op) {
             value = call_intrin(Int(32, 2), name, vec(vb, va));
             value = builder->CreateICmpNE(value, zero);
         } else {
-            CodeGen::visit(op);
+            CodeGen_Posix::visit(op);
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 
 }
@@ -1087,7 +1063,7 @@ void CodeGen_ARM::visit(const LE *op) {
 void CodeGen_ARM::visit(const Select *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1126,19 +1102,19 @@ void CodeGen_ARM::visit(const Select *op) {
             ss << "vabd" << (t.is_int() ? "s" : "u") << ".v" << t.width << "i" << t.bits;
             value = call_intrin(t, ss.str(), vec(cmp->a, cmp->b));
         } else {
-            CodeGen::visit(op);
+            CodeGen_Posix::visit(op);
         }
 
         return;
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Store *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1147,7 +1123,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
     // We only deal with ramps here
     if (!ramp) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1226,7 +1202,7 @@ void CodeGen_ARM::visit(const Store *op) {
     // If the stride is one or minus one, we can deal with that using vanilla codegen
     const IntImm *stride = ramp->stride.as<IntImm>();
     if (stride && (stride->value == 1 || stride->value == -1)) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1251,14 +1227,14 @@ void CodeGen_ARM::visit(const Store *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 
 }
 
 void CodeGen_ARM::visit(const Load *op) {
     // AArch64 SIMD not yet supported
     if (target.bits == 64) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1266,7 +1242,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
     // We only deal with ramps here
     if (!ramp) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1274,7 +1250,7 @@ void CodeGen_ARM::visit(const Load *op) {
 
     // If the stride is one or minus one, we can deal with that using vanilla codegen
     if (stride && (stride->value == 1 || stride->value == -1)) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -1365,7 +1341,7 @@ void CodeGen_ARM::visit(const Load *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 void CodeGen_ARM::visit(const Call *op) {
@@ -1378,7 +1354,7 @@ void CodeGen_ARM::visit(const Call *op) {
         e.accept(this);
         return;
     }
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 }
 
 string CodeGen_ARM::mcpu() const {

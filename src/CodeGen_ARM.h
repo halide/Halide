@@ -17,16 +17,6 @@ public:
     /** Create an ARM code generator for the given arm target. */
     CodeGen_ARM(Target);
 
-    /** Compile to an internally-held llvm module. Takes a halide
-     * statement, the name of the function produced, and the arguments
-     * to the function produced. After calling this, call
-     * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the ARM machine
-     * code. */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
-
     static void test();
 
 protected:

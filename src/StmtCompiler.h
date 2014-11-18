@@ -20,9 +20,9 @@ namespace Internal {
 /** A handle to a generic statement compiler. Can take Halide
  * statements and turn them into assembly, bitcode, machine code, or a
  * jit-compiled module. */
-class CodeGen;
+class CodeGen_LLVM;
 class StmtCompiler {
-    IntrusivePtr<CodeGen> contents;
+    IntrusivePtr<CodeGen_LLVM> contents;
 public:
 
     /** Build a code generator for the given target. */

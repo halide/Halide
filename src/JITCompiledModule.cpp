@@ -3,7 +3,7 @@
 
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
-#include "CodeGen.h"
+#include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
 #include "Debug.h"
 
@@ -107,7 +107,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
 
 }
 
-void JITCompiledModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name) {
+void JITCompiledModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const string &function_name) {
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
