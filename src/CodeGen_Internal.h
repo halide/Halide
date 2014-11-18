@@ -4,7 +4,7 @@
 /** \file
  *
  * Defines functionality that's useful to multiple target-specific
- * CodeGen paths, but shouldn't live in CodeGen.h (because that's the
+ * CodeGen paths, but shouldn't live in CodeGen_LLVM.h (because that's the
  * front-end-facing interface to CodeGen).
  */
 

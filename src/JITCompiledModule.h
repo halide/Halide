@@ -16,14 +16,14 @@ namespace Halide {
 namespace Internal {
 
 class JITModuleHolder;
-class CodeGen;
+class CodeGen_LLVM;
 
 /** Function pointers into a compiled halide module. These function
  * pointers are meaningless once the last copy of a JITCompiledModule
  * is deleted, so don't cache them. */
 struct JITCompiledModule {
     /** A pointer to the raw halide function. It's true type depends
-     * on the Argument vector passed to CodeGen::compile. Image
+     * on the Argument vector passed to CodeGen_LLVM::compile. Image
      * parameters become (buffer_t *), and scalar parameters become
      * pointers to the appropriate values. The final argument is a
      * pointer to the buffer_t defining the output. */
@@ -101,7 +101,7 @@ struct JITCompiledModule {
 
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */
-    void compile_module(CodeGen *cg, llvm::Module *mod, const std::string &function_name);
+    void compile_module(CodeGen_LLVM *cg, llvm::Module *mod, const std::string &function_name);
 
     /** Holds a cleanup routine and context parameter. */
     struct CleanupRoutine {

@@ -86,27 +86,6 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    // Fix the target triple
-    module = get_initial_module_for_target(target, context);
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
-}
-
 Expr _i64(Expr e) {
     return cast(Int(64, e.type().width), e);
 }
@@ -255,7 +234,7 @@ void CodeGen_X86::visit(const Add *op) {
     if (should_use_pmaddwd(op->a, op->b, matches)) {
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -271,7 +250,7 @@ void CodeGen_X86::visit(const Sub *op) {
         }
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -346,7 +325,7 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 
     /*
     check_sse("paddsb", 16, i8(clamp(i16(i8_1) + i16(i8_2), min_i8, 127)));
@@ -530,7 +509,7 @@ void CodeGen_X86::visit(const Div *op) {
         value = val;
 
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -549,7 +528,7 @@ void CodeGen_X86::visit(const Min *op) {
     } else if (use_sse_41 && op->type == UInt(32, 4)) {
         value = call_intrin(UInt(32, 4), "sse41.pminud", vec(op->a, op->b));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -568,7 +547,7 @@ void CodeGen_X86::visit(const Max *op) {
     } else if (use_sse_41 && op->type == UInt(32, 4)) {
         value = call_intrin(UInt(32, 4), "sse41.pmaxud", vec(op->a, op->b));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 

@@ -1,5 +1,5 @@
-#ifndef HALIDE_CODEGEN_H
-#define HALIDE_CODEGEN_H
+#ifndef HALIDE_CODEGEN_LLVM_H
+#define HALIDE_CODEGEN_LLVM_H
 
 /** \file
  *
@@ -48,19 +48,12 @@ namespace Internal {
  * code in an object file, or machine code accessible through a
  * function pointer.
  */
-class CodeGen : public IRVisitor {
+class CodeGen_LLVM : public IRVisitor {
 public:
     mutable RefCount ref_count;
 
-    CodeGen(Target t);
-    virtual ~CodeGen();
-
-    /** Take a halide statement and compiles it to an llvm module held
-     * internally. Call this before calling compile_to_bitcode or
-     * compile_to_native. */
-    virtual void compile(Stmt stmt, std::string name,
-                         const std::vector<Argument> &args,
-                         const std::vector<Buffer> &images_to_embed);
+    CodeGen_LLVM(Target t);
+    virtual ~CodeGen_LLVM();
 
     /** Emit a compiled halide statement as llvm bitcode. Call this
      * after calling compile. */
@@ -103,7 +96,13 @@ public:
     /** Which built-in functions require a user-context first argument? */
     static bool function_takes_user_context(const std::string &name);
 
+    virtual void compile(Stmt stmt, std::string name,
+                         const std::vector<Argument> &args,
+                         const std::vector<Buffer> &images_to_embed);
+
 protected:
+
+    virtual llvm::Triple get_target_triple() const = 0;
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently
@@ -128,10 +127,10 @@ protected:
     /** The target we're generating code for */
     Halide::Target target;
 
-    /** Initialize the CodeGen internal state to compile a fresh
-     * module. This allows reuse of one CodeGen object to compiled
+    /** Initialize the CodeGen_LLVM internal state to compile a fresh
+     * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
-    void init_module();
+    virtual void init_module();
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -158,6 +157,35 @@ protected:
     // @{
     llvm::Type *void_t, *i1, *i8, *i16, *i32, *i64, *f16, *f32, *f64;
     llvm::StructType *buffer_t_type;
+    // @}
+
+    /** Some useful llvm types for subclasses */
+    // @{
+    llvm::Type *i8x8, *i8x16, *i8x32;
+    llvm::Type *i16x4, *i16x8, *i16x16;
+    llvm::Type *i32x2, *i32x4, *i32x8;
+    llvm::Type *i64x2, *i64x4;
+    llvm::Type *f32x2, *f32x4, *f32x8;
+    llvm::Type *f64x2, *f64x4;
+    // @}
+
+    /** Some wildcard variables used for peephole optimizations in
+     * subclasses */
+    // @{
+    Expr wild_i8x8, wild_i16x4, wild_i32x2; // 64-bit signed ints
+    Expr wild_u8x8, wild_u16x4, wild_u32x2; // 64-bit unsigned ints
+    Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2; // 128-bit signed ints
+    Expr wild_u8x16, wild_u16x8, wild_u32x4, wild_u64x2; // 128-bit unsigned ints
+    Expr wild_i8x32, wild_i16x16, wild_i32x8, wild_i64x4; // 256-bit signed ints
+    Expr wild_u8x32, wild_u16x16, wild_u32x8, wild_u64x4; // 256-bit unsigned ints
+    Expr wild_f32x2; // 64-bit floats
+    Expr wild_f32x4, wild_f64x2; // 128-bit floats
+    Expr wild_f32x8, wild_f64x4; // 256-bit floats
+    Expr min_i8, max_i8, max_u8;
+    Expr min_i16, max_i16, max_u16;
+    Expr min_i32, max_i32, max_u32;
+    Expr min_i64, max_i64, max_u64;
+    Expr min_f32, max_f32, min_f64, max_f64;
     // @}
 
     /** The name of the function being generated. */
@@ -289,7 +317,7 @@ protected:
     virtual void visit(const Free *) = 0;
 
     /** These IR nodes should have been removed during
-     * lowering. CodeGen will error out if they are present */
+     * lowering. CodeGen_LLVM will error out if they are present */
     // @{
     virtual void visit(const Provide *);
     virtual void visit(const Realize *);
