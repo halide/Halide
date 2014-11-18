@@ -7,7 +7,7 @@
 
 #include "buffer_t.h"
 #include "JITModule.h"
-#include "CodeGen.h"
+#include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
 #include "Debug.h"
 
@@ -238,7 +238,7 @@ public:
 
 }
 
-void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
+void JITModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const string &function_name,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
 
@@ -412,7 +412,7 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
                 gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_module(module, s.llvm_type));
             } else {
                 gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
-            }            
+            }
             gv->setLinkage(GlobalValue::ExternalWeakLinkage);
         }
     }
@@ -582,7 +582,7 @@ template <typename function_t>
 function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
     std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
-    function_t (*hook_setter)(function_t) = 
+    function_t (*hook_setter)(function_t) =
         reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
     return (*hook_setter)(hook);
 }
@@ -633,11 +633,11 @@ JITModule &shared_runtimes(RuntimeKind k) {
     return m[k];
 }
 
-JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
+JITModule &make_module(CodeGen_LLVM *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
     if (!shared_runtimes(runtime_kind).jit_module.defined()) {
         LLVMContext *llvm_context = new LLVMContext();
 
-        llvm::Module *shared_runtime = 
+        llvm::Module *shared_runtime =
             get_initial_module_for_target(target, llvm_context, true, runtime_kind != MainShared);
 
         std::set<std::string> halide_exports_unique;
@@ -655,7 +655,7 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
         shared_runtimes(runtime_kind).compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
-            runtime_internal_handlers.custom_print = 
+            runtime_internal_handlers.custom_print =
                 hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_print", print_handler);
 
             runtime_internal_handlers.custom_malloc =
@@ -664,16 +664,16 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             runtime_internal_handlers.custom_free =
                 hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_free", free_handler);
 
-            runtime_internal_handlers.custom_do_task = 
+            runtime_internal_handlers.custom_do_task =
                 hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_task", do_task_handler);
 
-            runtime_internal_handlers.custom_do_par_for = 
+            runtime_internal_handlers.custom_do_par_for =
                 hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_do_par_for", do_par_for_handler);
 
-            runtime_internal_handlers.custom_error = 
+            runtime_internal_handlers.custom_error =
                 hook_function(shared_runtimes(MainShared).exports(), "halide_set_error_handler", error_handler_handler);
 
-            runtime_internal_handlers.custom_trace = 
+            runtime_internal_handlers.custom_trace =
                 hook_function(shared_runtimes(MainShared).exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
@@ -688,7 +688,7 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             shared_runtimes(runtime_kind).jit_module.ptr->name = "GPU";
         }
 
-        uint64_t arg_addr = 
+        uint64_t arg_addr =
             shared_runtimes(runtime_kind).jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = shared_runtimes(runtime_kind).jit_module.ptr;
@@ -710,7 +710,7 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
  * JITSharedRuntime::release_all is called. If
  * JITSharedRuntime::release_all is called, the global state is rest
  * and any newly compiled Funcs will get a new runtime. */
-std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) {
+std::vector<JITModule> JITSharedRuntime::get(CodeGen_LLVM *cg, const Target &target) {
     #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
     #endif

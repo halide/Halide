@@ -90,33 +90,6 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_X86::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-
-    init_module();
-
-    // Fix the target triple
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-
-        JITModule::make_externs(shared_runtime, module);
-    }
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
-}
-
 Expr _i64(Expr e) {
     return cast(Int(64, e.type().width), e);
 }
@@ -235,7 +208,7 @@ void CodeGen_X86::visit(const Add *op) {
     if (should_use_pmaddwd(op->a, op->b, matches)) {
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -251,7 +224,7 @@ void CodeGen_X86::visit(const Sub *op) {
         }
         codegen(Call::make(op->type, "pmaddwd", matches, Call::Extern));
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
@@ -296,7 +269,7 @@ void CodeGen_X86::visit(const EQ *op) {
     int bits = t.width * t.bits;
     if (t.width == 1 || bits % 128 == 0) {
         // LLVM is fine for native vector widths or scalars
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     } else {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
@@ -466,7 +439,7 @@ void CodeGen_X86::visit(const Cast *op) {
         }
     }
 
-    CodeGen::visit(op);
+    CodeGen_Posix::visit(op);
 
 }
 
@@ -620,13 +593,13 @@ void CodeGen_X86::visit(const Div *op) {
         value = val;
 
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Min *op) {
     if (!op->type.is_vector()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -659,13 +632,13 @@ void CodeGen_X86::visit(const Min *op) {
             value = call_intrin(op->type, 2, "min_f64x2", vec(op->a, op->b));
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 
 void CodeGen_X86::visit(const Max *op) {
     if (!op->type.is_vector()) {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 
@@ -695,7 +668,7 @@ void CodeGen_X86::visit(const Max *op) {
             value = call_intrin(op->type, 2, "max_f64x2", vec(op->a, op->b));
         }
     } else {
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     }
 }
 

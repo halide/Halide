@@ -30,32 +30,9 @@ llvm::Triple CodeGen_PNaCl::get_target_triple() const {
     return triple;
 }
 
-void CodeGen_PNaCl::compile(Stmt stmt, string name,
-                          const vector<Argument> &args,
-                          const vector<Buffer> &images_to_embed) {
-    #if (WITH_NATIVE_CLIENT)
-
-    // TODO: Remove or handle vectorized code in the stmt
-
-    init_module();
-
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-        JITModule::make_externs(shared_runtime, module);
-    }
-
-    llvm::Triple triple = get_target_triple();
-    module->setTargetTriple(triple.str());
+void CodeGen_PNaCl::init_module() {
+    CodeGen_Posix::init_module();
     module->setDataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
-
-    // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
-
-    // Optimize
-    CodeGen::optimize_module();
-    #endif
 }
 
 string CodeGen_PNaCl::mcpu() const {

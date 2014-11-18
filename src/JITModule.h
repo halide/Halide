@@ -22,7 +22,7 @@ struct Target;
 namespace Internal {
 
 class JITModuleContents;
-class CodeGen;
+class CodeGen_LLVM;
 
 struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
@@ -49,7 +49,7 @@ struct JITModule {
     EXPORT const std::map<std::string, Symbol> &exports() const;
 
     /** A pointer to the raw halide function. It's true type depends
-     * on the Argument vector passed to CodeGen::compile. Image
+     * on the Argument vector passed to CodeGen_LLVM::compile. Image
      * parameters become (buffer_t *), and scalar parameters become
      * pointers to the appropriate values. The final argument is a
      * pointer to the buffer_t defining the output. This will be NULL for
@@ -67,7 +67,7 @@ struct JITModule {
     // TODO: This should likely be a constructor.
     /** Take an llvm module and compile it. The requested exports will
         be available via the Exports method. */
-    EXPORT void compile_module(CodeGen *cg,
+    EXPORT void compile_module(CodeGen_LLVM *cg,
                                llvm::Module *mod, const std::string &function_name,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports);
@@ -105,8 +105,8 @@ struct JITUserContext {
 
 class JITSharedRuntime {
 public:
-    // Note only the first CodeGen passed in here is used. The same shared runtime is used for all JIT.
-    EXPORT static std::vector<JITModule> get(CodeGen *cg, const Target &target);
+    // Note only the first CodeGen_LLVM passed in here is used. The same shared runtime is used for all JIT.
+    EXPORT static std::vector<JITModule> get(CodeGen_LLVM *cg, const Target &target);
     EXPORT static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
     EXPORT static JITHandlers set_default_handlers(const JITHandlers &handlers);
 

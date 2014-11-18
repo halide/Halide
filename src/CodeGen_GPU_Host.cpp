@@ -266,7 +266,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
     // Pass to the generic codegen
-    CodeGen::compile(stmt, name, args, images_to_embed);
+    CodeGen_CPU::compile(stmt, name, args, images_to_embed);
 
     // Unset constant flag for embedded image global variables
     for (size_t i = 0; i < images_to_embed.size(); i++) {
@@ -300,7 +300,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     builder->CreateBr(entry);
 
     // Optimize the module
-    CodeGen::optimize_module();
+    CodeGen_CPU::optimize_module();
 }
 
 template<typename CodeGen_CPU>
@@ -407,8 +407,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
-        
-        Value *null_float_ptr = ConstantPointerNull::get(CodeGen::f32->getPointerTo());
+
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen_LLVM::f32->getPointerTo());
         Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
         Value *gpu_num_padded_attributes  = zero_int32;
@@ -417,7 +417,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim1 = zero_int32;
 
         if (target.has_feature(Target::OpenGL)) {
-            
+
             // GL draw calls that invoke the GLSL shader are issued for pairs of
             // for-loops over spatial x and y dimensions. For each for-loop we create
             // one scalar vertex attribute for the spatial dimension corresponding to
@@ -434,13 +434,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // right type
             gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
             gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
-                                                           CodeGen::f32->getPointerTo());
+                                                           CodeGen_LLVM::f32->getPointerTo());
 
         }
 
         // compute a closure over the state passed into the kernel
         GPU_Host_Closure c(loop, loop->name);
-        
+
         // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
 

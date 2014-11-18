@@ -5,7 +5,7 @@
  * Defines the code-generator for producing CUDA host code
  */
 
-#include "CodeGen.h"
+#include "CodeGen_LLVM.h"
 #include "CodeGen_GPU_Host.h"
 #include "CodeGen_GPU_Dev.h"
 
@@ -17,7 +17,7 @@ namespace Halide {
 namespace Internal {
 
 /** A code generator that emits GPU code from a given Halide stmt. */
-class CodeGen_PTX_Dev : public CodeGen, public CodeGen_GPU_Dev {
+class CodeGen_PTX_Dev : public CodeGen_LLVM, public CodeGen_GPU_Dev {
 public:
     friend class CodeGen_GPU_Host<CodeGen_X86>;
     friend class CodeGen_GPU_Host<CodeGen_ARM>;
@@ -29,24 +29,24 @@ public:
                     const std::string &name,
                     const std::vector<GPU_Argument> &args);
 
-    /** (Re)initialize the PTX module. This is separate from compile, since
-     * a PTX device module will often have many kernels compiled into it for
-     * a single pipeline. */
-    void init_module();
-
     static void test();
 
     std::vector<char> compile_to_src();
     std::string get_current_kernel_name();
 
-    llvm::Triple get_target_triple() const;
-
     void dump();
-    
+
     virtual std::string print_gpu_name(const std::string &name);
 
 protected:
-    using CodeGen::visit;
+    using CodeGen_LLVM::visit;
+
+    /** (Re)initialize the PTX module. This is separate from compile, since
+     * a PTX device module will often have many kernels compiled into it for
+     * a single pipeline. */
+    /* override */ virtual void init_module();
+
+    /* override */ virtual llvm::Triple get_target_triple() const;
 
     /** We hold onto the basic block at the start of the device
      * function in order to inject allocas */
