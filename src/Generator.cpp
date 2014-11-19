@@ -215,6 +215,15 @@ void GeneratorBase::build_params() {
     }
 }
 
+std::vector<Internal::Parameter> GeneratorBase::get_filter_parameters() {
+    build_params();
+    std::vector<Internal::Parameter> result;
+    for (int i = 0; i < filter_arguments.size(); ++i) {
+        result.push_back(*filter_params[filter_arguments[i].name]);
+    }
+    return result;
+}
+
 GeneratorParamValues GeneratorBase::get_generator_param_values() {
     build_params();
     GeneratorParamValues results;
