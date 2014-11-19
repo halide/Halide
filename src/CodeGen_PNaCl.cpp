@@ -27,9 +27,12 @@ void CodeGen_PNaCl::init_module() {
 llvm::Triple CodeGen_PNaCl::get_target_triple() const {
     // PNaCl expects the triple le32-unknown-nacl
     llvm::Triple triple;
+
+    #if (WITH_NATIVE_CLIENT)
     triple.setArch(llvm::Triple::le32);
     triple.setVendor(llvm::Triple::UnknownVendor);
     triple.setOS(llvm::Triple::NaCl);
+    #endif
 
     return triple;
 }
