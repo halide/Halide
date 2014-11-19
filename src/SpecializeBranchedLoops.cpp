@@ -679,6 +679,7 @@ private:
     void visit(const Variable *op) {
         if (let_branches.contains(op->name)) {
             vector<Branch> &var_branches = let_branches.ref(op->name);
+
             for (size_t i = 0; i < var_branches.size(); ++i) {
                 Branch &branch = var_branches[i];
                 string new_name = op->name;
@@ -898,11 +899,14 @@ private:
             collect(op->body, body_branches);
             for (size_t i = 0; i < body_branches.size(); ++i) {
                 Branch &branch = body_branches[i];
+                // Add all the value branch let bindings.
                 for (size_t j = 0; j < value_branches.size(); ++j) {
                     Branch &val_branch = value_branches[j];
                     string new_name = op->name + "." + int_to_string(j);
                     branch.content = LetOp::make(new_name, val_branch.content, branch.content);
                 }
+                // Add back the original let binding as well, in case we had to bailout somewhere.
+                branch.content = LetOp::make(op->name, op->value, branch.content);
                 branches.push_back(branch);
             }
             let_branches.pop(op->name);
@@ -989,19 +993,36 @@ private:
         merge_child_branches(op, vec(value_branches, index_branches));
     }
 
+    StmtOrExpr make_branch_content(const Allocate *op, const vector<StmtOrExpr> &args) {
+        vector<Expr> extents(args.size()-2);
+        size_t i;
+        for (i = 0; i < args.size()-2; ++i) {
+            extents[i] = args[i];
+        };
+
+        return Allocate::make(op->name, op->type, extents, args[i], args[i+1]);
+    }
+
     void visit(const Allocate *op) {
+        vector<vector<Branch> > child_branches(op->extents.size());
+        for (size_t i = 0; i < op->extents.size(); ++i) {
+            collect(op->extents[i], child_branches[i]);
+        }
+
+        vector<Branch> cond_branches;
+        if (op->condition.defined()) {
+            collect(op->condition, cond_branches);
+        } else {
+            Branch branch = {curr_min.top(), curr_extent.top(), op->condition};
+            cond_branches.push_back(branch);
+        }
+        child_branches.push_back(cond_branches);
+
         vector<Branch> body_branches;
         collect(op->body, body_branches);
-        for (size_t i = 0; i < body_branches.size(); ++i) {
-            Branch &branch = body_branches[i];
-            Stmt body = branch.content;
-            if (body.same_as(op->body)) {
-                branch.content = op;
-            } else {
-                branch.content = Allocate::make(op->name, op->type, op->extents, op->condition, body);
-            }
-            branches.push_back(branch);
-        }
+        child_branches.push_back(body_branches);
+
+        merge_child_branches(op, child_branches);
     }
 
     StmtOrExpr make_branch_content(const Block *op, const vector<StmtOrExpr> &args) {
@@ -1115,7 +1136,9 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
+    // debug(0) << "Specializing branched loops on Stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
+    // debug(0) << "Specialized Stmt:\n" << s << "\n\n";
     return s;
 }
 
