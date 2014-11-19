@@ -296,6 +296,7 @@ private:
     // These variables store the actual branches.
     vector<Branch> branches;
     Scope<vector<Branch> > let_branches;
+    Scope<int> let_num_branches;
 
     // These are the scopes that the branch objects point to.
     Scope<Expr> scope;
@@ -782,8 +783,8 @@ private:
         }
     }
 
-    StmtOrExpr make_branch_content(const Select *op, const vector<StmtOrExpr> &vals) {
-        return Select::make(op->condition, vals[0], vals[1]);
+    StmtOrExpr make_branch_content(const Select *op, const vector<StmtOrExpr> &args) {
+        return Select::make(args[0], args[1], args[2]);
     }
 
     void visit(const Select *op) {
@@ -795,13 +796,16 @@ private:
                 add_branch(StmtOrExpr(op));
             }
         } else {
+            vector<Branch> cond_branches;
+            collect(op->condition, cond_branches);
+
             vector<Branch> true_branches;
             collect(op->true_value, true_branches);
 
             vector<Branch> false_branches;
             collect(op->false_value, false_branches);
 
-            merge_child_branches(op, vec(true_branches, false_branches));
+            merge_child_branches(op, vec(cond_branches, true_branches, false_branches));
         }
     }
 
@@ -871,7 +875,7 @@ private:
     template<class LetOp>
     void visit_let(const LetOp *op) {
         // First we branch the value of the let if necessary.
-        if (branches_linearly_in_var(op->value, name, linearity, true)) {
+        if (branches_linearly_in_var(op->value, name, linearity, let_num_branches, true)) {
             vector<Branch> value_branches;
             collect(op->value, value_branches);
             for (size_t i = 0; i < value_branches.size(); ++i) {
@@ -885,6 +889,7 @@ private:
 
             vector<Branch> body_branches;
             let_branches.push(op->name, value_branches);
+            let_num_branches.push(op->name, value_branches.size()-1);
             collect(op->body, body_branches);
             for (size_t i = 0; i < body_branches.size(); ++i) {
                 Branch &branch = body_branches[i];
@@ -896,6 +901,7 @@ private:
                 branches.push_back(branch);
             }
             let_branches.pop(op->name);
+            let_num_branches.pop(op->name);
 
             for (size_t i = 0; i < value_branches.size(); ++i) {
                 string new_name = op->name + "." + int_to_string(i);
@@ -1007,8 +1013,8 @@ private:
         merge_child_branches(op, vec(first_branches, rest_branches));
     }
 
-    StmtOrExpr make_branch_content(const IfThenElse *op, const vector<StmtOrExpr> &cases) {
-        return IfThenElse::make(op->condition, cases[0], cases[1]);
+    StmtOrExpr make_branch_content(const IfThenElse *op, const vector<StmtOrExpr> &args) {
+        return IfThenElse::make(args[0], args[1], args[2]);
     }
 
     void visit(const IfThenElse *op) {
@@ -1021,6 +1027,9 @@ private:
                 add_branch(StmtOrExpr(op));
             }
         } else {
+            vector<Branch> cond_branches;
+            collect(op->condition, cond_branches);
+
             vector<Branch> then_branches;
             collect(op->then_case, then_branches);
 
@@ -1032,7 +1041,7 @@ private:
                 else_branches.push_back(branch);
             }
 
-            merge_child_branches(op, vec(then_branches, else_branches));
+            merge_child_branches(op, vec(cond_branches, then_branches, else_branches));
         }
     }
 
@@ -1101,10 +1110,7 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-    // debug(0) << "Specializing branched loops on stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
-    // debug(0) << "Specialized stmt:\n" << s << "\n\n";
-
     return s;
 }
 
@@ -1261,12 +1267,15 @@ void specialize_branched_loops_test() {
     {
         // Test that we don't modify loop when we encounter a branch
         // with a more complex condition that we can't solve.
+        //
+        // NOTE: We can solve this now. Will leave this test here for
+        // futur reference.
         Expr cond = !Cast::make(UInt(1), Select::make(x == 0 || x > 5, 0, 1));
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
         Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
         Stmt branched = specialize_branched_loops(stmt);
-        check_num_branches(branched, "x", 1);
+        check_num_branches(branched, "x", 3);
     }
 
     {
