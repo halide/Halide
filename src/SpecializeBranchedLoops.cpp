@@ -637,30 +637,18 @@ private:
 
         Expr solve = solve_for_linear_variable(cond, name, free_vars, scope);
         if (!solve.same_as(cond)) {
+            int num_old_branches = branches.size();
             if (add_branches(solve, a, b)) {
-                vector<Branch> ab_branches;
-                branches.swap(ab_branches);
-                for (size_t i = 0; i < ab_branches.size(); ++i) {
-                    Branch branch = ab_branches[i];
+                int num_children = branches.size() - num_old_branches;
+                for (int i = 0; i < num_children; ++i) {
+                    vector<Branch>::iterator child_branch = branches.begin() + num_old_branches;
+                    Branch branch = *child_branch;
+                    branches.erase(child_branch);
 
-                    if (branches.size() < branching_limit - branches.size() + i) {
-                        push_bounds(branch.min, branch.extent);
-                        vector<Branch> child_branches;
-                        collect(branch.content, child_branches);
-                        pop_bounds();
-
-                        if (child_branches.size() < branching_limit - branches.size() + i) {
-                            for (size_t j = 0; j < child_branches.size(); ++j) {
-                                branches.push_back(child_branches[j]);
-                            }
-                        } else {
-                            branches.push_back(branch);
-                        }
-                    } else {
-                        branches.push_back(branch);
-                    }
+                    push_bounds(branch.min, branch.extent);
+                    collect(branch.content, branches);
+                    pop_bounds();
                 }
-
                 return true;
             }
         }
