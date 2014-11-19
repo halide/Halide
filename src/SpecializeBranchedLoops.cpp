@@ -735,18 +735,23 @@ private:
         for (size_t i = 0; i < child_branches.size(); ++i) {
             Branch &branch = child_branches[i];
             const Op *min_or_max = branch.content.as<Op>();
-            Expr a = min_or_max->a;
-            Expr b = min_or_max->b;
-            if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
-                push_bounds(branch.min, branch.extent);
-                Expr cond = Cmp::make(a, b);
-                if (!visit_simple_cond(cond, a, b)) {
-                    branches.push_back(branch);
+            if (min_or_max) {
+                Expr a = min_or_max->a;
+                Expr b = min_or_max->b;
+                if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
+                    push_bounds(branch.min, branch.extent);
+                    Expr cond = Cmp::make(a, b);
+                    if (!visit_simple_cond(cond, a, b)) {
+                        branches.push_back(branch);
+                    }
+                    pop_bounds();
+
+                    continue;
                 }
-                pop_bounds();
-            } else {
-                branches.push_back(branch);
             }
+
+            // We did not branch, so add current branch as is.
+            branches.push_back(branch);
         }
     }
 
