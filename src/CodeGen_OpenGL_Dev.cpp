@@ -36,15 +36,47 @@ public:
     virtual void visit(const Variable *op) {
         Type t = op->type;
         t.width = 1;
-        expr = Cast::make(t,Variable::make(op->type, op->name, op->image, op->param, op->reduction_domain));
+        expr = Cast::make(t,Variable::make(op->type, op->name,
+                                           op->image, op->param,
+                                           op->reduction_domain));
+    }
+    virtual void visit(const Ramp *) {
+        // Only scalar expressions that have been widened to vector width
+        // may be unvectorized by this visitor. The Call::glsl_texture_load
+        // intrinsic coordinate parameters start off as scalars, it is an error
+        // if some other pass mutates them into a form other than a broadcast
+        // scalar.
+        internal_error << "Cannot unvectorize ramp for Call::glsl_texture_load"
+                       << "coordinate argument";
     }
     virtual void visit(const Broadcast *op) {
         expr = mutate(op->value);
     }
+    virtual void visit(const Call *op) {
+        if (op->name == Call::glsl_texture_load) {
+            // TODO: The problem here is that we vectorize the coordinate
+            // arguments to a Call::glsl_texture_load, as if it was a scalar
+            // function that returned a scalar value, however, the function has
+            // scalar arguments and returns a vector width value.
+            //
+            // In the dependent texture lookup case, we don't have a way in the
+            // IR to CSE'ify out the texture load and then use two channels
+            // from it as the scalar arguments to the dependent lookup.
+            internal_error << "Dependent texture loads are unsupported";
+        }
+
+        // TODO: The fix here is likely to not vectorize a call's arguments in a
+        // manner that subsequently cannot be codegen'ed and must be undone. In
+        // this case, for an arbitrary call, we can't determine if the call
+        // actually returns a vector width of data or if it is a scalar function
+        // that has been widened by VectorizeLoops
+        internal_error << "Cannot unvectorize argument in Call::glsl_texture_load";
+    }
+
 };
     
 Expr unvectorize_intrinsic_arg(Expr e) {
-    
+
     UnvectorizeIntrinsicArg s;
     return s.mutate(e);
 };
