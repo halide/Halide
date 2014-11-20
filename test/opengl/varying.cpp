@@ -13,8 +13,6 @@ using namespace Halide;
 // transformed by a matrix and interpolated across the domain. Both cases arise
 // when GLSL shaders are ported to Halide.
 
-int check(const Image<float>& out);
-
 int main() {
 
     // This test must be run with an OpenGL target
@@ -173,5 +171,6 @@ int main() {
 
     // The will return early on error.
     printf("Success!\n");
+    
     return 0;
 }
