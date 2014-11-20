@@ -540,7 +540,7 @@ private:
                         size_t last  = j < child_branches[i].size()-1? intervals[j+1]: args.size();
 
                         // Case: First interval...
-                        Expr first_point = is_equal[first]? branch_points[first]: branch.min;
+                        Expr first_point = is_equal[j]? branch_points[first]: branch.min;
                         new_branch_points.push_back(first_point);
                         new_args.push_back(args[first]);
                         new_args.back().push_back(branch.content);
@@ -557,7 +557,7 @@ private:
                         }
 
                         // Case: Last interval...
-                        if (last > first && j < child_branches[i].size()-1 && !is_equal[last]) {
+                        if (last > first && j < child_branches[i].size()-1 && !is_equal[j+1]) {
                             Expr last_point = branch_points[last];
                             new_branch_points.push_back(last_point);
                             new_args.push_back(args[last]);
@@ -903,6 +903,9 @@ private:
                 collect(op->args[i], arg_branches[i]);
             }
             merge_child_branches(op, arg_branches);
+        } else {
+            Branch branch = {curr_min.top(), curr_extent.top(), Expr(op)};
+            branches.push_back(branch);
         }
     }
 
@@ -1062,7 +1065,13 @@ private:
         collect(op->first, first_branches);
 
         vector<Branch> rest_branches;
-        collect(op->rest, rest_branches);
+        if (op->rest.defined()) {
+            // debug(0) << "collecting branches in block: rest = " << op->rest;
+            collect(op->rest, rest_branches);
+        } else {
+            Branch branch = {curr_min.top(), curr_extent.top(), op->rest};
+            rest_branches.push_back(branch);
+        }
 
         merge_child_branches(op, vec(first_branches, rest_branches));
     }
