@@ -15,8 +15,10 @@
 namespace Halide {
 namespace Internal {
     
-// This mutator substitutes out variables and corresponding let expressions.
-class Unletify : public IRMutator {
+// This mutator substitutes out variables and corresponding let expressions. No
+// new variables are added to the scope passed to the visitor when it is
+// created, only lets outside of the visited expression are substituted.
+class ExternalUnletify : public IRMutator {
 public:
     using IRMutator::visit;
     virtual void visit(const Variable *op) {
@@ -26,20 +28,8 @@ public:
             expr = op;
         }
     }
-    
-    virtual void visit(const Let *op) {
-        scope.push(op->name, op->value);
-        expr = mutate(op->body);
-        scope.pop(op->name);
-    }
-    
-    virtual void visit(const LetStmt *op) {
-        scope.push(op->name, op->value);
-        stmt = mutate(op->body);
-        scope.pop(op->name);
-    }
-    
-    Unletify(Scope<Expr>& scope_) { scope.set_containing_scope(&scope_); }
+
+    ExternalUnletify(Scope<Expr>& scope_) { scope.set_containing_scope(&scope_); }
     
     Scope<Expr> scope;
 };
@@ -577,7 +567,7 @@ public:
             
             // Unletify the expression so that it can be moved outside of the
             // GPU For-loops and depend only on parameters
-            varyings[op->name] = Unletify(scope).mutate(op->value);
+            varyings[op->name] = ExternalUnletify(scope).mutate(op->value);
         }
         
         scope.push(op->name, op->value);
