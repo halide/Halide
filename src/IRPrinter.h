@@ -32,7 +32,7 @@ namespace Internal {
 
 /** Emit a halide statement on an output stream (such as std::cout) in
  * a human-readable form */
-std::ostream &operator<<(std::ostream &stream, const Stmt &);
+EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */

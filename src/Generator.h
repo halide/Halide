@@ -332,13 +332,6 @@ private:
     }
 };
 
-namespace Internal {
-
-// Note that various sections of code rely on being able to iterate
-// through this in a predictable order; do not change to unordered_map (etc)
-// without considering that.
-using GeneratorParamValues = std::map<std::string, std::string>;
-
 class NamesInterface {
     // Names in this class are only intended for use in derived classes.
 protected:
@@ -363,6 +356,13 @@ protected:
     inline Type Int(int bits, int width = 1) { return Halide::Int(bits, width); }
     inline Type UInt(int bits, int width = 1) { return Halide::UInt(bits, width); }
 };
+
+namespace Internal {
+
+// Note that various sections of code rely on being able to iterate
+// through this in a predictable order; do not change to unordered_map (etc)
+// without considering that.
+using GeneratorParamValues = std::map<std::string, std::string>;
 
 class GeneratorBase : public NamesInterface {
 public:
@@ -407,6 +407,10 @@ public:
         build_params();
         return filter_arguments;
     }
+
+    // This is a bit of a stopgap: we need info that isn't in Argument,
+    // but there's probably a better way than surfacing Internal::Parameter.
+    std::vector<Internal::Parameter> get_filter_parameters();
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
