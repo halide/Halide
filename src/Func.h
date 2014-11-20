@@ -340,8 +340,18 @@ enum StmtOutputFormat {
      HTML
 };
 
+namespace {
+// Helper for deleting custom lowering passes. In the header so that
+// it goes in user code on windows, where you can have multiple heaps.
+template<typename T>
+void delete_lowering_pass(T *pass) {
+    delete pass;
+}
+}
+
 namespace Internal {
-    struct ErrorBuffer;
+struct ErrorBuffer;
+class IRMutator;
 }
 
 /** A halide function. This class represents one stage in a Halide
@@ -437,7 +447,16 @@ class Func {
      * (to flush out deprecated usages), but Internal::Parameter is not. */
     Internal::Parameter jit_user_context;
 
-    // Some infrastructure that helps Funcs catch and handle runtime errors in JIT-compiled code.
+    struct CustomLoweringPass {
+        Internal::IRMutator *pass;
+        void (*deleter)(Internal::IRMutator *);
+    };
+
+    /** A set of custom passes to use when lowering this Func. */
+    std::vector<CustomLoweringPass> custom_lowering_passes;
+
+    /** Some infrastructure that helps Funcs catch and handle runtime
+     * errors in JIT-compiled code. */
     bool prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf);
 
 public:
@@ -450,6 +469,9 @@ public:
     /** Declare a new undefined function with an
      * automatically-generated unique name */
     EXPORT Func();
+
+    /** Destructor */
+    EXPORT ~Func();
 
     /** Declare a new function with an automatically-generated unique
      * name, and define it to return the given expression (which may
@@ -796,6 +818,32 @@ public:
      * and call halide_memoization_cache_set_size() instead.
      */
     EXPORT void memoization_cache_set_size(uint64_t size);
+
+    /** Add a custom pass to be used during lowering. It is run after
+     * all other lowering passes. Can be used to verify properties of
+     * the lowered Stmt, instrument it with extra code, or otherwise
+     * modify it. The Func takes ownership of the pass, and will call
+     * delete on it when the Func goes out of scope. So don't pass a
+     * stack object, or share pass instances between multiple
+     * Funcs. */
+    template<typename T>
+    void add_custom_lowering_pass(T *pass) {
+        // Template instantiate a custom deleter for this type, then
+        // cast it to a deleter that takes a IRMutator *. The custom
+        // deleter lives in user code, so that deletion is on the same
+        // heap as construction (I hate Windows).
+        void (*deleter)(Internal::IRMutator *) =
+            (void (*)(Internal::IRMutator *))(&delete_lowering_pass<T>);
+        add_custom_lowering_pass(pass, deleter);
+    }
+
+    /** Add a custom pass to be used during lowering, with the
+     * function that will be called to delete it also passed in. Set
+     * it to NULL if you wish to retain ownership of the object. */
+    EXPORT void add_custom_lowering_pass(Internal::IRMutator *pass, void (*deleter)(Internal::IRMutator *));
+
+    /** Remove all previously-set custom lowering passes */
+    EXPORT void clear_custom_lowering_passes();
 
     /** When this function is compiled, include code that dumps its
      * values to a file after it is realized, for the purpose of

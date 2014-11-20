@@ -350,6 +350,21 @@ ifeq ($(CXX11),true)
 ALL_TESTS += test_generators
 endif
 
+profile_correctness: init_profile_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=profile_test_%)
+profile_static: init_profile_static $(STATIC_TESTS:test/static/%_generate.cpp=profile_static_%)
+profile_performance: init_profile_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=profile_performance_%)
+profile_opengl: init_profile_opengl $(OPENGL_TESTS:test/opengl/%.cpp=profile_opengl_%)
+ifeq ($(CXX11),true)
+profile_generators: init_profile_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=profile_generator_%)
+else
+profile_generators: ;
+endif
+
+init_profile_%:
+	echo "TEST,User (s),System (s),Real" > $(@:init_profile_%=profile_%.csv)
+
+PROFILE ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
+
 run_tests: $(ALL_TESTS)
 	make test_performance
 
@@ -358,6 +373,8 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
 	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
 	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
+
+profile_tests: profile_correctness profile_performance profile_static profile_generators
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
@@ -529,6 +546,24 @@ tutorial_%: $(BIN_DIR)/tutorial_% tmp/images/rgb.png tmp/images/gray.png
 	@-mkdir -p tmp
 	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
+
+profile_test_%: $(BIN_DIR)/test_%
+	$(PROFILE) profile_correctness.csv make $(@:profile_test_%=test_%)
+
+profile_performance_%: $(BIN_DIR)/performance_%
+	$(PROFILE) profile_performance.csv make $(@:profile_performance_%=performance_%)
+
+profile_opengl_%: $(BIN_DIR)/opengl_%
+	$(PROFILE) profile_opengl.csv make $(@:profile_opengl_%=opengl_%)
+
+profile_static_%: $(BIN_DIR)/static_%_generate
+	$(PROFILE) profile_static.csv make $(@:profile_static_%=tmp/static/%/%.o)
+
+profile_generator_%: $(FILTERS_DIR)/%.generator
+	$(PROFILE) profile_generator.csv make $(@:profile_generator_%=$(FILTERS_DIR)/%.o)
+
+profile_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.generator
+	$(PROFILE) profile_generator.csv make $(FILTERS_DIR)/tiled_blur_interleaved.o
 
 .PHONY: test_apps
 test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
