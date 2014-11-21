@@ -32,8 +32,6 @@ public:
 
 protected:
 
-    llvm::Triple get_target_triple() const;
-
     using CodeGen_Posix::visit;
 
     /** Initialize internal state to compile a fresh module. */
