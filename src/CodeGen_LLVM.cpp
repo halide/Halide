@@ -451,6 +451,8 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
 
+    compile_for_device(stmt, name, args,images_to_embed);
+
     // Optimize
     CodeGen_LLVM::optimize_module();
 }

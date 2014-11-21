@@ -135,6 +135,15 @@ protected:
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
 
+    /** Extend the already generated LLVM IR for the host code with
+     * the device specific part of the host code. Called by compile
+     * after doing the main host compilation but before optimizing the
+     * module.  Default implementation does nothing. */
+    virtual void compile_for_device(Stmt stmt, std::string name,
+                                    const std::vector<Argument> &args,
+                                    const std::vector<Buffer> &images_to_embed) {
+    }
+
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
 
