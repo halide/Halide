@@ -480,7 +480,10 @@ void CodeGen_LLVM::optimize_module() {
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
 
+    #if LLVM_VERSION >= 36
+    internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
     module_pass_manager.add(new DataLayoutPass());
+    #endif
 
     // Make sure things marked as always-inline get inlined
     module_pass_manager.add(createAlwaysInlinerPass());
