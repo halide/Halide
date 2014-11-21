@@ -349,6 +349,8 @@ ifeq ($(CXX11),true)
 ALL_TESTS += test_generators
 endif
 
+# These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
+# For static and generator tests they time the compile time only. The times are recorded in CSV files.
 profile_correctness: init_profile_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=profile_test_%)
 profile_static: init_profile_static $(STATIC_TESTS:test/static/%_generate.cpp=profile_static_%)
 profile_performance: init_profile_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=profile_performance_%)
