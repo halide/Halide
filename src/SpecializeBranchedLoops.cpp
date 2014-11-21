@@ -732,28 +732,30 @@ private:
     void visit_min_or_max(const Op *op) {
         visit_binary_op(op);
 
-        vector<Branch> child_branches;
-        branches.swap(child_branches);
-        for (size_t i = 0; i < child_branches.size(); ++i) {
-            Branch &branch = child_branches[i];
-            const Op *min_or_max = branch.content.as<Op>();
-            if (min_or_max) {
-                Expr a = min_or_max->a;
-                Expr b = min_or_max->b;
-                if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
-                    push_bounds(branch.min, branch.extent);
-                    Expr cond = Cmp::make(a, b);
-                    if (!visit_simple_cond(cond, a, b)) {
-                        branches.push_back(branch);
+        if (!branching_vars) {
+            vector<Branch> child_branches;
+            branches.swap(child_branches);
+            for (size_t i = 0; i < child_branches.size(); ++i) {
+                Branch &branch = child_branches[i];
+                const Op *min_or_max = branch.content.as<Op>();
+                if (min_or_max) {
+                    Expr a = min_or_max->a;
+                    Expr b = min_or_max->b;
+                    if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
+                        push_bounds(branch.min, branch.extent);
+                        Expr cond = Cmp::make(a, b);
+                        if (!visit_simple_cond(cond, a, b)) {
+                            branches.push_back(branch);
+                        }
+                        pop_bounds();
+
+                        continue;
                     }
-                    pop_bounds();
-
-                    continue;
                 }
-            }
 
-            // We did not branch, so add current branch as is.
-            branches.push_back(branch);
+                // We did not branch, so add current branch as is.
+                branches.push_back(branch);
+            }
         }
     }
 
@@ -816,30 +818,30 @@ private:
                 Branch branch = var_branches[i];
                 Expr expr = branch.content;
                 const Select *select = expr.as<Select>();
-                internal_assert(select) << "Branch content wasn't a select: " << expr << "\n";
+                // internal_assert(select) << "Branch content wasn't a select: " << expr << "\n";
 
                 push_bounds(branch.min, branch.extent);
                 if (select->condition.type().is_scalar() && expr_is_linear_in_var(select->condition, name, linearity)) {
                     Expr normalized = normalize_branch_conditions(expr, name, scope, bounds_info, free_vars,
                                                                   branching_limit);
                     select = normalized.as<Select>();
-                    internal_assert(select) << "Normalizing a select produced something other than a select: \n"
-                                            << expr << " -> " << normalized << "\n";
+                    // internal_assert(select) << "Normalizing a select produced something other than a select: \n"
+                    //                         << expr << " -> " << normalized << "\n";
 
-                    if (!visit_simple_cond(select->condition, select->true_value, select->false_value)) {
-                        add_branch(StmtOrExpr(op));
+                    if (!select || !visit_simple_cond(select->condition, select->true_value, select->false_value)) {
+                        branches.push_back(branch);
                     }
                 } else {
                     vector<Branch> cond_branches;
-                    collect(op->condition, cond_branches);
+                    collect(select->condition, cond_branches);
 
                     vector<Branch> true_branches;
-                    collect(op->true_value, true_branches);
+                    collect(select->true_value, true_branches);
 
                     vector<Branch> false_branches;
-                    collect(op->false_value, false_branches);
+                    collect(select->false_value, false_branches);
 
-                    merge_child_branches(op, vec(cond_branches, true_branches, false_branches));
+                    merge_child_branches(select, vec(cond_branches, true_branches, false_branches));
                 }
                 pop_bounds();
             }
@@ -1069,7 +1071,6 @@ private:
 
         vector<Branch> rest_branches;
         if (op->rest.defined()) {
-            // debug(0) << "collecting branches in block: rest = " << op->rest;
             collect(op->rest, rest_branches);
         } else {
             Branch branch = {curr_min.top(), curr_extent.top(), op->rest};
@@ -1117,25 +1118,25 @@ private:
                                                                   free_vars, branching_limit);
                     if_stmt = normalized.as<IfThenElse>();
 
-                    if (!visit_simple_cond(if_stmt->condition, if_stmt->then_case, if_stmt->else_case)) {
-                        add_branch(StmtOrExpr(op));
+                    if (!if_stmt || !visit_simple_cond(if_stmt->condition, if_stmt->then_case, if_stmt->else_case)) {
+                        branches.push_back(branch);
                     }
                 } else {
                     vector<Branch> cond_branches;
-                    collect(op->condition, cond_branches);
+                    collect(if_stmt->condition, cond_branches);
 
                     vector<Branch> then_branches;
-                    collect(op->then_case, then_branches);
+                    collect(if_stmt->then_case, then_branches);
 
                     vector<Branch> else_branches;
-                    if (op->else_case.defined()) {
-                        collect(op->else_case, else_branches);
+                    if (if_stmt->else_case.defined()) {
+                        collect(if_stmt->else_case, else_branches);
                     } else {
-                        Branch else_branch = {curr_min.top(), curr_extent.top(), op->else_case};
+                        Branch else_branch = {curr_min.top(), curr_extent.top(), if_stmt->else_case};
                         else_branches.push_back(else_branch);
                     }
 
-                    merge_child_branches(op, vec(cond_branches, then_branches, else_branches));
+                    merge_child_branches(if_stmt, vec(cond_branches, then_branches, else_branches));
                 }
                 pop_bounds();
             }
@@ -1207,9 +1208,9 @@ private:
 };
 
 Stmt specialize_branched_loops(Stmt s) {
-    //debug(0) << "Specializing branched loops on Stmt:\n" << s << "\n";
+    // debug(0) << "Specializing branched loops on Stmt:\n" << s << "\n";
     s = SpecializeBranchedLoops().mutate(s);
-    //debug(0) << "Specialized Stmt:\n" << s << "\n\n";
+    // debug(0) << "Specialized Stmt:\n" << s << "\n\n";
     return s;
 }
 
