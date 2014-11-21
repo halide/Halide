@@ -65,11 +65,11 @@ public:
     /** If the parameter is a scalar parameter, get its currently
      * bound value. Only relevant when jitting */
     template<typename T>
-    NO_INLINE T get_scalar() {
+    NO_INLINE T get_scalar() const {
         user_assert(type() == type_of<T>())
             << "Can't get Param<" << type()
             << "> as scalar of type " << type_of<T>() << "\n";
-        return *((T *)(get_scalar_address()));
+        return *((const T *)(get_scalar_address()));
     }
 
     /** If the parameter is a scalar parameter, set its current
