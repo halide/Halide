@@ -449,6 +449,8 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     verifyModule(*module);
     debug(2) << "Done generating llvm bitcode\n";
 
+    compile_for_device(stmt, name, args,images_to_embed);
+
     // Optimize
     CodeGen_LLVM::optimize_module();
 }
@@ -477,6 +479,8 @@ void CodeGen_LLVM::optimize_module() {
 
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
+
+    module_pass_manager.add(new DataLayoutPass());
 
     // Make sure things marked as always-inline get inlined
     module_pass_manager.add(createAlwaysInlinerPass());
