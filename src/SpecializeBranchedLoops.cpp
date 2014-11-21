@@ -816,12 +816,15 @@ private:
                 Branch branch = var_branches[i];
                 Expr expr = branch.content;
                 const Select *select = expr.as<Select>();
+                internal_assert(select) << "Branch content wasn't a select: " << expr << "\n";
 
                 push_bounds(branch.min, branch.extent);
                 if (select->condition.type().is_scalar() && expr_is_linear_in_var(select->condition, name, linearity)) {
                     Expr normalized = normalize_branch_conditions(expr, name, scope, bounds_info, free_vars,
                                                                   branching_limit);
                     select = normalized.as<Select>();
+                    internal_assert(select) << "Normalizing a select produced something other than a select: \n"
+                                            << expr << " -> " << normalized << "\n";
 
                     if (!visit_simple_cond(select->condition, select->true_value, select->false_value)) {
                         add_branch(StmtOrExpr(op));
