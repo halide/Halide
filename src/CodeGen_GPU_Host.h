@@ -28,16 +28,6 @@ public:
 
     virtual ~CodeGen_GPU_Host();
 
-    /** Compile to an internally-held llvm module. Takes a halide
-     * statement, the name of the function produced, and the arguments
-     * to the function produced. After calling this, call
-     * CodeGen::compile_to_file or
-     * CodeGen::compile_to_function_pointer to get at the generated machine
-     * code. */
-    void compile(Stmt stmt, std::string name,
-                 const std::vector<Argument> &args,
-                 const std::vector<Buffer> &images_to_embed);
-
 protected:
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
@@ -77,6 +67,16 @@ protected:
     // @{
     void visit(const For *);
     // @}
+
+    /** Initialize the CodeGen_GPU_Host internal state to compile a fresh
+     * module. Also initializes the device specific module. */
+    virtual void init_module();
+
+    /** Extend the already generated LLVM IR for the host code with
+     * the device specific part of the host code. */
+    void compile_for_device(Stmt stmt, std::string name,
+                            const std::vector<Argument> &args,
+                            const std::vector<Buffer> &images_to_embed);
 
     /** Finds and links in the CUDA runtime symbols prior to jitting */
     void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);

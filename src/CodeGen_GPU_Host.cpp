@@ -238,36 +238,19 @@ CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
-                                            const vector<Argument> &args,
-                                            const vector<Buffer> &images_to_embed) {
-
-    init_module();
+void CodeGen_GPU_Host<CodeGen_CPU>::init_module() {
+    CodeGen_CPU::init_module();
 
     // also set up the child codegenerator - this is set up once per
     // PTX_Host::compile, and reused across multiple PTX_Dev::compile
     // invocations for different kernels.
     cgdev->init_module();
+}
 
-    module = get_initial_module_for_target(target, context);
-
-    if (target.has_feature(Target::JIT)) {
-        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
-
-        JITModule::make_externs(shared_runtime, module);
-    }
-
-    // Fix the target triple
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    llvm::Triple triple = CodeGen_CPU::get_target_triple();
-    module->setTargetTriple(triple.str());
-
-    debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
-
-    // Pass to the generic codegen
-    CodeGen_CPU::compile(stmt, name, args, images_to_embed);
-
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
+                                                       const vector<Argument> &args,
+                                                       const vector<Buffer> &images_to_embed) {
     // Unset constant flag for embedded image global variables
     for (size_t i = 0; i < images_to_embed.size(); i++) {
         string name = images_to_embed[i].name();
@@ -298,9 +281,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     // Upon success, jump to the original entry.
     builder->CreateBr(entry);
-
-    // Optimize the module
-    CodeGen_CPU::optimize_module();
 }
 
 template<typename CodeGen_CPU>
