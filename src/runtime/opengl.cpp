@@ -1241,7 +1241,7 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        GLuint tex = *((GLuint*)args[i]);
+        GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
 
         // Check to see if the object name is actually a FBO
         if (bind_render_targets) {
