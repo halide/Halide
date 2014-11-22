@@ -1873,13 +1873,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         s = find_linear_expressions(s);
         debug(2) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
         
-        // Simplify without changing Lets
-        s = simplify(s,false);
-        debug(1) << "Lowering after final simplification (without simplifying Lets):\n" << s << "\n\n";
-    } else {
-        s = simplify(s);
-        debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
     }
+
+    s = simplify(s);
+    debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
     
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {

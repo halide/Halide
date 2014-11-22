@@ -485,6 +485,15 @@ void CodeGen_GLSL::visit(const Call *op) {
             // no return value.
             id = "";
             return;
+        } else if (op->name == Call::glsl_varying) {
+            // Varying attributes should be substituted out by this point in
+            // codegen.
+            debug(2) << "Found skipped varying attribute: " << op->args[0] << "\n";
+
+            // Output the tagged expression.
+            print_expr(op->args[1]);
+            return;
+
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
             // floating point arithmetic.
