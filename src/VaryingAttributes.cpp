@@ -28,6 +28,14 @@ public:
             expr = op;
         }
     }
+    virtual void visit(const Call *op) {
+        if (op->name == Call::glsl_varying) {
+            // Unwrap the the intrinsic from the tagged expression
+            expr = mutate(op->args[1]);
+        } else {
+            IRMutator::visit(op);
+        }
+    }
 
     ExternalUnletify(Scope<Expr>& scope_) { scope.set_containing_scope(&scope_); }
     
@@ -46,28 +54,23 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
     
-    Expr make_linear_let(Expr e, const std::string& name = unique_name('a')) {
-        
+    Expr tag_linear_expression(Expr e, const std::string& name = unique_name('a')) {
+
+        internal_assert(name.length() > 0);
+
         if (total_found >= max_expressions) {
             return e;
         }
-        
-        // Perform some simplification: if the expression is a variable and its
-        // name is in scope, then the visitor has already determined that it is
-        // linear and will add a let for it higher in the IR tree. In this case,
-        // skip replacing the expression with another .varying tagged let
-        if (e.as<Variable>() && scope.contains(e.as<Variable>()->name)) {
-            return e;
-        }
-        
-        // Otherwise, replace the expression with a Let expression introducing
-        // a variable tagged .varying. These tagged variables will be pulled
-        // out of the fragment shader during a subsequent pass
-        std::string var = name + ".varying";
-        Expr let = Let::make(var, e, Variable::make(e.type(),var));
+
+        // Wrap the expression with an intrinsic to tag that it is a varying
+        // attribute. These tagged variables will be pulled out of the fragment
+        // shader during a subsequent pass
+        Expr intrinsic = Call::make(e.type(), Call::glsl_varying,
+                                    vec(Expr(name + ".varying"),e),
+                                    Call::Intrinsic);
         ++total_found;
         
-        return let;
+        return intrinsic;
     }
     
     virtual void visit(const Call *op) {
@@ -84,7 +87,7 @@ protected:
             for (int i=0;i!=2;++i) {
                 new_args[2+i] = mutate(op->args[2+i]);
                 if (order == 1) {
-                    new_args[2+i] = make_linear_let(new_args[2+i]);
+                    new_args[2+i] = tag_linear_expression(new_args[2+i]);
                 }
             }
         } else if (op->name == Call::glsl_texture_store) {
@@ -94,7 +97,7 @@ protected:
             // The value is the 5th argument to the intrinsic
             new_args[5] = mutate(new_args[5]);
             if (order == 1) {
-                new_args[5] = make_linear_let(new_args[5]);
+                new_args[5] = tag_linear_expression(new_args[5]);
             }
         }
 
@@ -114,15 +117,15 @@ protected:
         Expr mutated_body = mutate(op->body);
         
         if ((value_order == 1) && (total_found < max_expressions)) {
-            // Insert a let with a name tagged .varying, and point the existing
-            // let name at this variable.
-            std::string var = unique_name(op->name + ".varying");
-            expr = Let::make(var, mutated_value, Let::make(op->name, Variable::make(mutated_value.type(), var), mutated_body));
+            // Wrap the let value with a varying tag
+            mutated_value = Call::make(mutated_value.type(), Call::glsl_varying,
+                              vec<Expr>(op->name + ".varying",mutated_value),
+                              Call::Intrinsic);
             ++total_found;
-        } else {
-            expr = Let::make(op->name,mutated_value,mutated_body);
         }
-        
+
+        expr = Let::make(op->name,mutated_value,mutated_body);
+
         scope.pop(op->name);
     }
     
@@ -142,10 +145,7 @@ protected:
     }
     
     virtual void visit(const Variable *op) {
-        if (op->name == name) {
-            order = 1;
-            found = true;
-        } else if (std::find(loop_vars.begin(),loop_vars.end(),op->name) != loop_vars.end()) {
+        if (std::find(loop_vars.begin(),loop_vars.end(),op->name) != loop_vars.end()) {
             order = 1;
         } else if (scope.contains(op->name)) {
             order = scope.get(op->name);
@@ -179,7 +179,7 @@ protected:
         }
         
         if ((order > 1) && (value_order == 1)) {
-            mutated_value = make_linear_let(mutated_value);
+            mutated_value = tag_linear_expression(mutated_value);
         }
         
         expr = Cast::make(op->type, mutated_value);
@@ -199,10 +199,10 @@ protected:
         // If the whole expression is greater than linear, check to see if
         // either argument is linear and if so, add it to a candidate list
         if ((order > 1) && (order_a == 1)) {
-            a = make_linear_let(a);
+            a = tag_linear_expression(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = make_linear_let(b);
+            b = tag_linear_expression(b);
         }
         
         expr = T::make(a,b);
@@ -224,10 +224,10 @@ protected:
         // If the whole expression is greater than linear, check to see if
         // either argument is linear and if so, add it to a candidate list
         if ((order > 1) && (order_a == 1)) {
-            a = make_linear_let(a);
+            a = tag_linear_expression(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = make_linear_let(b);
+            b = tag_linear_expression(b);
         }
         
         expr = Mul::make(a,b);
@@ -252,10 +252,10 @@ protected:
         }
 
         if ((order > 1) && (order_a == 1)) {
-            a = make_linear_let(a);
+            a = tag_linear_expression(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = make_linear_let(b);
+            b = tag_linear_expression(b);
         }
         
         expr = Div::make(a, b);
@@ -276,10 +276,10 @@ protected:
         }
         
         if ((order > 1) && (order_a == 1)) {
-            a = make_linear_let(a);
+            a = tag_linear_expression(a);
         }
         if ((order > 1) && (order_b == 1)) {
-            b = make_linear_let(b);
+            b = tag_linear_expression(b);
         }
         
         expr = T::make(a,b);
@@ -322,7 +322,7 @@ protected:
         Expr a = mutate(op->value);
         
         if (order == 1) {
-            a = make_linear_let(a);
+            a = tag_linear_expression(a);
         }
         
         if (order) {
@@ -345,13 +345,13 @@ protected:
         order = std::max(std::max(condition_order,true_value_order),false_value_order);
         
         if ((order > 1) && (condition_order == 1)) {
-            mutated_condition = make_linear_let(mutated_condition);
+            mutated_condition = tag_linear_expression(mutated_condition);
         }
         if ((order > 1) && (true_value_order == 1)) {
-            mutated_true_value = make_linear_let(mutated_true_value);
+            mutated_true_value = tag_linear_expression(mutated_true_value);
         }
         if ((order > 1) && (false_value_order == 1)) {
-            mutated_false_value = make_linear_let(mutated_false_value);
+            mutated_false_value = tag_linear_expression(mutated_false_value);
         }
         
         expr = Select::make(mutated_condition, mutated_true_value, mutated_false_value);
@@ -376,7 +376,6 @@ public:
     
     Scope<int> scope;
     
-    std::string name;
     unsigned int order;
     bool found;
 
@@ -553,23 +552,28 @@ Type type_of_variable(Expr e, const std::string& name)
     return c.result->type;
 }
 
-// This visitor produces a map containing name and expression pairs from Let
-// expressions tagged with .varying
+// This visitor produces a map containing name and expression pairs from varying
+// tagged intrinsics
 class FindVaryingAttributeLets : public IRVisitor
 {
 public:
     FindVaryingAttributeLets(std::map<std::string,Expr>& varyings_) : varyings(varyings_) { }
     
     using IRVisitor::visit;
-    
-    virtual void visit(const Let *op) {
-        if (ends_with(op->name,".varying")) {
-            
+
+    virtual void visit(const Call *op) {
+        if (op->name == Call::glsl_varying) {
             // Unletify the expression so that it can be moved outside of the
             // GPU For-loops and depend only on parameters
-            varyings[op->name] = ExternalUnletify(scope).mutate(op->value);
+            std::string name = op->args[0].as<StringImm>()->value;
+            Expr value = op->args[1];
+            varyings[name] = ExternalUnletify(scope).mutate(value);
+            debug(1) << varyings[name] << "\n";
         }
-        
+        IRVisitor::visit(op);
+    }
+
+    virtual void visit(const Let *op) {
         scope.push(op->name, op->value);
         IRVisitor::visit(op);
         scope.pop(op->name);
@@ -586,32 +590,26 @@ public:
     std::map<std::string,Expr>& varyings;
 };
 
-// This visitor removes inlined let statements with names tagged .varying from
-// the expression tree. After this visitor is called, the varying attribute
+// This visitor removes  After this visitor is called, the varying attribute
 // expressions will no longer appear in the tree, only variables with the
 // .varying tag will remain.
 class RemoveVaryingAttributeLets : public IRMutator {
 public:
     using IRMutator::visit;
-      
-    virtual void visit(const Let *op) {
-        if (ends_with(op->name,".varying")) {
-            
-            // Add the varying attribute expression to the scope so that we can
-            // subsequently query its type
-            scope.push(op->name, op->value);
-          
-            // Skip the let statement, the variable name will become an argument
-            // picked up by the host closure
-            expr = mutate(op->body);
-          
-            scope.pop(op->name);
+
+    virtual void visit(const Call *op) {
+        if (op->name == Call::glsl_varying) {
+            // Replace the intrinsic tag wrapper with a variable the variable
+            // name ends with the tag ".varying"
+            std::string name = op->args[0].as<StringImm>()->value;
+
+            internal_assert(ends_with(name, ".varying"));
+
+            expr = Variable::make(op->type, name);
         } else {
             IRMutator::visit(op);
         }
     }
-  
-    Scope<Expr> scope;
 };
 
 Stmt remove_varying_attributes(Stmt s)
@@ -619,7 +617,8 @@ Stmt remove_varying_attributes(Stmt s)
     return RemoveVaryingAttributeLets().mutate(s);
 }
 
-// This visitor produces a set of variable names that are tagged with ".varying"
+// This visitor produces a set of variable names that are tagged with
+// ".varying", it is run after
 class FindVaryingAttributes : public IRVisitor {
 public:
     using IRVisitor::visit;
@@ -750,9 +749,9 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
 
     // Construct a mesh of expressions to instantiate during runtime
-    FindVaryingAttributeLets let_finder(varyings);
-    op->accept(&let_finder);
-    
+    FindVaryingAttributeLets tag_finder(varyings);
+    op->accept(&tag_finder);
+
     // Remove the varying attribute let expressions from the statement
     Stmt loop_stmt = remove_varying_attributes(op);
     
@@ -761,7 +760,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     loop_stmt = simplify(loop_stmt,true);
     
     // It is possible that linear expressions we tagged in higher-level
-    // lets were removed by simplification if they were only used in
+    // intrinsics were removed by simplification if they were only used in
     // subsequent tagged linear expressions. Run a pass to check for
     // these and remove them from the varying attribute list
     prune_varying_attributes(loop_stmt,varyings);
