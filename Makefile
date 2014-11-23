@@ -218,6 +218,7 @@ SOURCE_FILES = \
   BoundsInference.cpp \
   BranchVisitors.cpp \
   Buffer.cpp \
+  CodeGen.cpp \
   CodeGen_ARM.cpp \
   CodeGen_C.cpp \
   CodeGen_LLVM.cpp \
@@ -313,6 +314,7 @@ HEADER_FILES = \
   BranchVisitors.h \
   Buffer.h \
   buffer_t.h \
+  CodeGen.h \
   CodeGen_ARM.h \
   CodeGen_C.h \
   CodeGen_GPU_Dev.h \

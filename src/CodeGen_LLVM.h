@@ -98,9 +98,6 @@ public:
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
 
-    /** Which built-in functions require a user-context first argument? */
-    static bool function_takes_user_context(const std::string &name);
-
     /** Takes a halide statement and compiles it to an llvm module held
      * internally. Call this before calling compile_to_bitcode or
      * compile_to_native. */
