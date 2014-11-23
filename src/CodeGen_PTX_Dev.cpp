@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "Target.h"
 #include "LLVM_Headers.h"
+#include "LLVM_Runtime_Linker.h"
 
 // This is declared in NVPTX.h, which is not exported. Ugly, but seems better than
 // hardcoding a path to the .h file.
