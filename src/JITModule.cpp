@@ -7,8 +7,9 @@
 
 #include "buffer_t.h"
 #include "JITModule.h"
-#include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
+#include "CodeGen_LLVM.h"
+#include "LLVM_Runtime_Linker.h"
 #include "Debug.h"
 
 namespace Halide {

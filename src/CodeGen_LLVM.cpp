@@ -11,6 +11,7 @@
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
 #include "Util.h"
+#include "LLVM_Runtime_Linker.h"
 
 namespace Halide {
 namespace Internal {
@@ -287,6 +288,12 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
 
     // Fix the target triple
     module = get_initial_module_for_target(target, context);
+
+    if (target.has_feature(Target::JIT)) {
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
+
+        JITModule::make_externs(shared_runtime, module);
+    }
 
     llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
