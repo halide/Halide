@@ -11,6 +11,7 @@
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
 #include "Util.h"
+#include "LLVM_Runtime_Linker.h"
 
 namespace Halide {
 namespace Internal {
