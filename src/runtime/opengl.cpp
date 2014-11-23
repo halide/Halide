@@ -72,6 +72,43 @@ namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
 extern WEAK halide_device_interface opengl_device_interface;
 
+WEAK const char *gl_error_name(int32_t err) {
+  const char *result;
+  switch (err) {
+  case 0x500:
+    result = "GL_INVALID_ENUM";
+    break;
+  case 0x501:
+    result = "GL_INVALID_VALUE";
+    break;
+  case 0x502:
+    result = "GL_INVALID_OPERATION";
+    break;
+  case 0x503:
+    result = "GL_STACK_OVERFLOW";
+    break;
+  case 0x504:
+    result = "GL_STACK_UNDERFLOW";
+    break;
+  case 0x505:
+    result = "GL_OUT_OF_MEMORY";
+    break;
+  case 0x506:
+    result = "GL_INVALID_FRAMEBUFFER_OPERATION";
+    break;
+  case 0x507:
+    result = "GL_CONTEXT_LOST";
+    break;
+  case 0x8031:
+    result = "GL_TABLE_TOO_LARGE";
+    break;
+  default:
+    result = "<unknown GL error>";
+    break;
+  }
+  return result;
+}
+
 enum OpenGLProfile {
     OpenGL,
     OpenGLES
@@ -122,6 +159,16 @@ struct ModuleState {
 struct GlobalState {
     void init();
 
+    bool CheckAndReportError(void *user_context, const char *location) {
+        GLenum err = GetError();
+        if (err != GL_NO_ERROR) {
+          error(user_context) << "OpenGL error " << gl_error_name(err) << "(" << (int)err << ")" <<
+                " at " << location << ".\n" ;
+            return true;
+        }
+        return false;
+    }
+
     bool initialized;
 
     // Information about the OpenGL platform we're running on.
@@ -150,7 +197,6 @@ struct GlobalState {
     PFNGLDELETEVERTEXARRAYS DeleteVertexArrays;
 };
 
-
 WEAK GlobalState global_state;
 
 // A list of module-specific state. Each module corresponds to a single Halide filter
@@ -171,31 +217,6 @@ WEAK const char *kernel_marker = "/// KERNEL ";
 WEAK const char *input_marker  = "/// IN_BUFFER ";
 WEAK const char *output_marker = "/// OUT_BUFFER ";
 WEAK const char *var_marker    = "/// VAR ";
-
-// Ensure that OpenGL runtime is correctly initialized. Used in all public API
-// functions.
-#define CHECK_INITIALIZED(ERRORCODE)                            \
-    if (!global_state.initialized) {                                      \
-        error(user_context) << "OpenGL runtime not initialized.";   \
-        return ERRORCODE;                                       \
-    }
-
-// Macro for error checking.
-#ifdef DEBUG_RUNTIME
-#define LOG_GLERROR(ERR)                                        \
-    error(user_context) << __FILE__ << ":" << __LINE__ << ": OpenGL error " << (ERR);
-#else
-#define LOG_GLERROR(ERR)
-#endif
-
-#define CHECK_GLERROR(ERRORCODE) do {                                   \
-        GLenum err = global_state.GetError();                           \
-        if (err != GL_NO_ERROR) {                                       \
-            LOG_GLERROR(err);                                           \
-            error(user_context) << "OpenGL error";                      \
-            return ERRORCODE;                                           \
-        }} while (0)
-
 
 // ---------- Helper functions ----------
 
@@ -233,11 +254,17 @@ WEAK void debug_buffer(void *user_context, buffer_t *buf) {
 WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
     GLuint shader = global_state.CreateShader(type);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "make_shader(1)")) {
+        return 1;
+    }
     global_state.ShaderSource(shader, 1, (const GLchar **)&source, length);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "make_shader(2)")) {
+        return 1;
+    }
     global_state.CompileShader(shader);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "make_shader(3)")) {
+        return 1;
+    }
 
     GLint shader_ok = 0;
     global_state.GetShaderiv(shader, GL_COMPILE_STATUS, &shader_ok);
@@ -569,7 +596,9 @@ WEAK int halide_opengl_init(void *user_context) {
 
     // Initialize framebuffer.
     global_state.GenFramebuffers(1, &global_state.framebuffer_id);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_init GenFramebuffers")) {
+        return 1;
+    }
 
     // Initialize vertex shader.
     global_state.vertex_shader_id = make_shader(user_context, GL_VERTEX_SHADER,
@@ -593,9 +622,11 @@ WEAK int halide_opengl_init(void *user_context) {
 
     if (global_state.have_vertex_array_objects) {
         global_state.GenVertexArrays(1, &global_state.vertex_array_object);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_init GenVertexArrays")) {
+            return 1;
+        }
     }
 
-    CHECK_GLERROR(1);
     global_state.initialized = true;
     return 0;
 }
@@ -605,7 +636,9 @@ WEAK int halide_opengl_init(void *user_context) {
 // The OpenGL context itself is generally managed by the host application, so
 // we leave it untouched.
 WEAK int halide_opengl_device_release(void *user_context) {
-    if (!global_state.initialized) return 0;
+    if (!global_state.initialized) {
+        return 0;
+    }
 
     debug(user_context) << "halide_opengl_release\n";
     global_state.DeleteShader(global_state.vertex_shader_id);
@@ -629,7 +662,9 @@ WEAK int halide_opengl_device_release(void *user_context) {
         TextureInfo *next = tex->next;
         if (tex->halide_allocated) {
             global_state.DeleteTextures(1, &tex->id);
-            CHECK_GLERROR(1);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_release DeleteTextures")) {
+                return 1;
+            }
             freed_textures++;
         }
         free(tex);
@@ -742,7 +777,9 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         global_state.BindTexture(GL_TEXTURE_2D, tex);
         global_state.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_WIDTH, &width);
         global_state.GetTexLevelParameteriv(GL_TEXTURE_2D, 0, GL_TEXTURE_HEIGHT, &height);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture (GLES3)")) {
+            return 1;
+        }
         if (width < buf->extent[0] || height < buf->extent[1]) {
 
             error(user_context)
@@ -761,7 +798,9 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
 
         // Generate texture ID
         global_state.GenTextures(1, &tex);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc GenTextures")) {
+            return 1;
+        }
 
         // Set parameters for this texture: no interpolation and clamp to edges.
         global_state.BindTexture(GL_TEXTURE_2D, tex);
@@ -769,7 +808,9 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         global_state.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc binding texture")) {
+            return 1;
+        }
 
         // Create empty texture here and fill it with glTexSubImage2D later.
         GLint internal_format = 0;
@@ -783,7 +824,9 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
         height = buf->extent[1];
         global_state.TexImage2D(GL_TEXTURE_2D, 0, internal_format,
                       width, height, 0, format, type, NULL);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_malloc TexImage2D")) {
+            return 1;
+        }
 
         buf->dev = new_device_wrapper(tex, &opengl_device_interface);
         if (buf->dev == 0) {
@@ -851,7 +894,9 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
     if (texinfo->halide_allocated) {
         debug(user_context) << "Deleting texture " << tex << "\n";
         global_state.DeleteTextures(1, &tex);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_device_free DeleteTextures")) {
+            return 1;
+        }
         delete_device_wrapper(buf->dev);
         buf->dev = 0;
     }
@@ -861,7 +906,10 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_opengl_dev_sync(void *user_context) {
-    CHECK_INITIALIZED(1);
+    if (!global_state.initialized) {
+        error(user_context) << "OpenGL runtime not initialized (halide_opengl_dev_sync).";
+        return 1;
+    }
     // TODO: glFinish()
     return 0;
 }
@@ -924,7 +972,9 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     debug(user_context) << "halide_opengl_copy_to_device: " << tex << "\n";
 
     global_state.BindTexture(GL_TEXTURE_2D, tex);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
+        return 1;
+    }
 
     GLint internal_format, format, type;
     if (!get_texture_format(user_context, buf, &internal_format, &format, &type)) {
@@ -948,7 +998,9 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         global_state.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
                          format, type, host_ptr);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(1)")) {
+            return 1;
+        }
     } else {
         debug(user_context)
             << "Warning: In copy_to_device, host buffer is not interleaved. Doing slow interleave.\n";
@@ -972,11 +1024,16 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
         global_state.TexSubImage2D(GL_TEXTURE_2D, 0,
                          0, 0, width, height,
                          format, type, tmp);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device TexSubImage2D(2)")) {
+            return 1;
+        }
 
         halide_free(user_context, tmp);
     }
     global_state.BindTexture(GL_TEXTURE_2D, 0);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
+        return 1;
+    }
 
     return 0;
 }
@@ -1003,7 +1060,10 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
 
 // Copy image data from texture back to host memory.
 WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
-    CHECK_INITIALIZED(1);
+    if (!global_state.initialized) {
+        error(user_context) << "OpenGL runtime not initialized (halide_opengl_copy_to_host).";
+        return 1;
+    }
 
     if (!buf->host || !buf->dev) {
         debug_buffer(user_context, buf);
@@ -1067,7 +1127,9 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
 
         halide_free(user_context, tmp);
     }
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_host")) {
+        return 1;
+    }
 
     return 0;
 }
@@ -1097,7 +1159,10 @@ WEAK int halide_opengl_run(void *user_context,
                            int threadsX, int threadsY, int threadsZ,
                            int shared_mem_bytes,
                            size_t arg_sizes[], void *args[], int8_t is_buffer[]) {
-    CHECK_INITIALIZED(1);
+    if (!global_state.initialized) {
+        error(user_context) << "OpenGL runtime not initialized (halide_opengl_run).";
+        return 1;
+    }
 
     ModuleState *mod = (ModuleState *)state_ptr;
     if (!mod) {
@@ -1112,7 +1177,9 @@ WEAK int halide_opengl_run(void *user_context,
     }
 
     global_state.UseProgram(kernel->program_id);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_run UseProgram")) {
+        return 1;
+    }
 
     Argument *kernel_arg;
     bool bind_render_targets = true;
@@ -1129,6 +1196,7 @@ WEAK int halide_opengl_run(void *user_context,
         }
 
         if (kernel_arg->kind == Argument::Outbuf) {
+            halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
             GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
@@ -1138,9 +1206,12 @@ WEAK int halide_opengl_run(void *user_context,
             // Outbuf textures are handled explicitly below
             continue;
         } else if (kernel_arg->kind == Argument::Inbuf) {
+            halide_assert(user_context, is_buffer[i] && "OpenGL Inbuf argument is not a buffer.")
             GLint loc =
                 global_state.GetUniformLocation(kernel->program_id, kernel_arg->name);
-            CHECK_GLERROR(1);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_run GetUniformLocation(InBuf)")) {
+                return 1;
+            }
             if (loc == -1) {
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
@@ -1154,7 +1225,9 @@ WEAK int halide_opengl_run(void *user_context,
         } else if (kernel_arg->kind == Argument::Var) {
             GLint loc =
                 global_state.GetUniformLocation(kernel->program_id, kernel_arg->name);
-            CHECK_GLERROR(1);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_run GetUniformLocation(Var)")) {
+                return 1;
+            }
             if (loc == -1) {
                 // Argument was probably optimized away by GLSL compiler.
                 continue;
@@ -1234,6 +1307,8 @@ WEAK int halide_opengl_run(void *user_context,
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
         if (kernel_arg->kind != Argument::Outbuf) continue;
 
+        halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
+
         // TODO: GL_MAX_COLOR_ATTACHMENTS
         if (num_output_textures >= 1) {
             error(user_context)
@@ -1250,7 +1325,9 @@ WEAK int halide_opengl_run(void *user_context,
             global_state.FramebufferTexture2D(GL_FRAMEBUFFER,
                                     GL_COLOR_ATTACHMENT0 + num_output_textures,
                                     GL_TEXTURE_2D, tex, 0);
-            CHECK_GLERROR(1);
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_run FramebufferTexture2D")) {
+                return 1;
+            }
         }
 
         TextureInfo *texinfo = find_texture(tex);
@@ -1266,26 +1343,34 @@ WEAK int halide_opengl_run(void *user_context,
     }
     // TODO: GL_MAX_DRAW_BUFFERS
     if (num_output_textures == 0) {
-        error(user_context) << "kernel has no output";
+        error(user_context) << "halide_opengl_run: kernel has no output\n";
         // TODO: cleanup
         return 1;
-    } else {
+    } else if (num_output_textures > 1) {
+#ifdef HAVE_GLES3
         GLenum *draw_buffers = (GLenum*)
             malloc(num_output_textures * sizeof(GLenum));
         for (int i=0; i<num_output_textures; i++)
             draw_buffers[i] = GL_COLOR_ATTACHMENT0 + i;
-        // TODO: disabled for now, since OpenGL ES 2 doesn't support multiple render
-        // targets.
-        //        global_state.DrawBuffers(num_output_textures, draw_buffers);
+        global_state.DrawBuffers(num_output_textures, draw_buffers);
         free(draw_buffers);
 
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_run DrawBuffers")) {
+            return 1;
+        }
+#else
+        error(user_context) << "halide_opengl_run: kernel has more than one output and GL ES 3.0 is not enabled.\n";
+        // TODO: cleanup
+        return 1;
+#endif
     }
 
     if (bind_render_targets) {
         // Check that framebuffer is set up correctly
         GLenum status = global_state.CheckFramebufferStatus(GL_FRAMEBUFFER);
-        CHECK_GLERROR(1);
+        if (global_state.CheckAndReportError(user_context, "halide_opengl_run CheckFramebufferStatus")) {
+            return 1;
+        }
         if (status != GL_FRAMEBUFFER_COMPLETE) {
             error(user_context)
                 << "Setting up GL framebuffer " << global_state.framebuffer_id
@@ -1298,10 +1383,14 @@ WEAK int halide_opengl_run(void *user_context,
     // Set vertex attributes
     GLint loc = global_state.GetUniformLocation(kernel->program_id, "output_extent");
     global_state.Uniform2iv(loc, 1, output_extent);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_run Uniform2iv(1)")) {
+        return 1;
+    }
     loc = global_state.GetUniformLocation(kernel->program_id, "output_min");
     global_state.Uniform2iv(loc, 1, output_min);
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_run Uniform2iv(2)")) {
+        return 1;
+    }
 
     // Setup viewport
     global_state.Viewport(0, 0, output_extent[0], output_extent[1]);
@@ -1322,7 +1411,9 @@ WEAK int halide_opengl_run(void *user_context,
     if (global_state.have_vertex_array_objects) {
         global_state.BindVertexArray(0);
     }
-    CHECK_GLERROR(1);
+    if (global_state.CheckAndReportError(user_context, "halide_opengl_run BindVertexArray et al")) {
+        return 1;
+    }
 
     // Cleanup
     for (int i = 0; i < num_active_textures; i++) {
@@ -1338,7 +1429,10 @@ WEAK int halide_opengl_run(void *user_context,
 }
 
 WEAK int halide_opengl_device_sync(void *user_context, struct buffer_t *) {
-    CHECK_INITIALIZED(1);
+    if (!global_state.initialized) {
+        error(user_context) << "OpenGL runtime not initialized (halide_opengl_device_sync).";
+        return 1;
+    }
     // TODO: glFinish()
     return 0;
 }
