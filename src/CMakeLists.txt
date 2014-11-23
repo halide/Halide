@@ -313,6 +313,8 @@ set(HEADER_FILES
   BranchVisitors.h
   SpecializeBranchedLoops.h
   RemoveDeadAllocations.h)
+  LLVM_Runtime_Linker.h
+)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -416,8 +418,10 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BranchVisitors.cpp
   SpecializeBranchedLoops.cpp
   RemoveDeadAllocations.cpp
+  LLVM_Runtime_Linker.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
-  ${HEADER_FILES})
+  ${HEADER_FILES}
+)
 
 # CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
 # to target_link_libraries. This makes the CMake generation step take a very
