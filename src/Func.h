@@ -442,10 +442,12 @@ class Func {
 
     /** The user context that's used when jitting. This is not settable
      * by user code, but is reserved for internal use.
-     * Note that this is an Internal::Parameter (rather than a Param<void*>)
-     * because Param is forbidden from using the name "__user_context"
-     * (to flush out deprecated usages), but Internal::Parameter is not. */
-    Internal::Parameter jit_user_context;
+     * Note that this is dynamically allocated so that it won't be seen
+     * as an embedded member field if a Generator declares a Func as a
+     * member variable. It's lazily allocated by get_user_context(). */
+    Internal::Parameter *jit_user_context;
+
+    Internal::Parameter &get_jit_user_context();
 
     struct CustomLoweringPass {
         Internal::IRMutator *pass;
