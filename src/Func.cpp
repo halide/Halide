@@ -39,10 +39,6 @@ using namespace Internal;
 
 namespace {
 
-Internal::Parameter make_user_context() {
-    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
-}
-
 vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
     for (size_t i = 0; i < args.size(); ++i) {
         internal_assert(!(args[i].type.is_handle() && args[i].name == "__user_context"));
@@ -65,7 +61,7 @@ Func::Func(const string &name) : func(unique_name(name)),
                                  custom_print(NULL),
                                  cache_size(0),
                                  random_seed(0),
-                                 jit_user_context(make_user_context()) {
+                                 jit_user_context(NULL) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -78,7 +74,7 @@ Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
                custom_print(NULL),
                cache_size(0),
                random_seed(0),
-               jit_user_context(make_user_context()) {
+               jit_user_context(NULL) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
@@ -91,7 +87,7 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
                      custom_print(NULL),
                      cache_size(0),
                      random_seed(0),
-                     jit_user_context(make_user_context()) {
+                     jit_user_context(NULL) {
     (*this)(_) = e;
 }
 
@@ -105,11 +101,20 @@ Func::Func(Function f) : func(f),
                          custom_print(NULL),
                          cache_size(0),
                          random_seed(0),
-                         jit_user_context(make_user_context()) {
+                         jit_user_context(NULL) {
 }
 
 Func::~Func() {
     clear_custom_lowering_passes();
+    delete jit_user_context;
+}
+
+Internal::Parameter &Func::get_jit_user_context() {
+    if (jit_user_context == NULL) {
+        jit_user_context = new Internal::Parameter(type_of<void*>(), false, 0,
+                                "__user_context", /*is_explicit_name*/ true);
+    }
+    return *jit_user_context;
 }
 
 const string &Func::name() const {
@@ -2403,7 +2408,7 @@ bool Func::prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf) {
     buf->end = 0;
     buf->next_error_handler = has_custom_error_handler ? error_handler : NULL;
     compiled_module.set_error_handler(Internal::ErrorBuffer::handler);
-    jit_user_context.set_scalar(buf);
+    get_jit_user_context().set_scalar(buf);
     return has_custom_error_handler;
 }
 
@@ -2671,7 +2676,7 @@ void *Func::compile_jit(const Target &target) {
 
     // For jitting, we always add jit_user_context,
     // regardless of whether Target::UserContext is set.
-    Expr uc_expr = Internal::Variable::make(type_of<void*>(), jit_user_context.name(), jit_user_context);
+    Expr uc_expr = Internal::Variable::make(type_of<void*>(), get_jit_user_context().name(), get_jit_user_context());
     uc_expr.accept(&infer_args);
 
     arg_values = infer_args.arg_values;
