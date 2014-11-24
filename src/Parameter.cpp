@@ -11,6 +11,7 @@ struct ParameterContents {
     bool is_buffer;
     int dimensions;
     bool is_explicit_name;
+    bool is_registered;
     std::string name;
     Buffer buffer;
     uint64_t data;
@@ -18,8 +19,8 @@ struct ParameterContents {
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e = false)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e)
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(true), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -69,11 +70,15 @@ Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, boo
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    if (!contents.ptr || contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    }
 }
 
 Parameter::~Parameter() {
-    ObjectInstanceRegistry::unregister_instance(this);
+    if (!contents.ptr || contents.ptr->is_registered) {
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
 }
 
 Type Parameter::type() const {
@@ -200,6 +205,15 @@ Expr Parameter::get_max_value() const {
     return contents.ptr->max_value;
 }
 
+void Parameter::unregister_instance() {
+    internal_assert(contents.ptr != NULL)
+        << "unregister_instance must not be called on an undefined Parameter";
+    if (contents.ptr->is_registered) {
+        ObjectInstanceRegistry::unregister_instance(this);
+        contents.ptr->is_registered = false;
+    }
+}
+
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
     user_assert(args->size() == (size_t)dims)
         << args->size() << "-argument call to \""
@@ -224,3 +238,4 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
 
 }
 }
+

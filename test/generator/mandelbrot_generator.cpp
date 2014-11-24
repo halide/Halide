@@ -49,7 +49,6 @@ public:
     Param<int> h{"h"};
 
     Func build() override {
-        Func mandelbrot;
         Var x, y, z;
 
         Complex initial(lerp(x_min, x_max, cast<float>(x) / w),
@@ -75,6 +74,10 @@ public:
 
         return count;
     }
+private:
+    // Declared as a member variable to verify that Funcs-as-members won't cause
+    // spurious "Invalid Param name: __user_context" errors (Issue #561)
+    Func mandelbrot{"mandelbrot"};
 };
 
 RegisterGenerator<Mandelbrot> register_my_gen{"mandelbrot"};
