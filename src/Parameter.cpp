@@ -54,7 +54,7 @@ void Parameter::check_dim_ok(int dim) const {
 }
 
 Parameter::Parameter() : contents(NULL) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    // Undefined Parameters are never registered.
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d) :
@@ -70,13 +70,25 @@ Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, boo
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
-    if (!contents.ptr || contents.ptr->is_registered) {
+    if (contents.defined() && contents.ptr->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
     }
 }
 
+Parameter& Parameter::operator=(const Parameter& that) {
+    bool was_registered = contents.defined() && contents.ptr->is_registered;
+    contents = that.contents;
+    bool should_be_registered = contents.defined() && contents.ptr->is_registered;
+    if (should_be_registered && !was_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    } else if (!should_be_registered && was_registered) {
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
+    return *this;
+}
+
 Parameter::~Parameter() {
-    if (!contents.ptr || contents.ptr->is_registered) {
+    if (contents.defined() && contents.ptr->is_registered) {
         ObjectInstanceRegistry::unregister_instance(this);
     }
 }
@@ -206,7 +218,7 @@ Expr Parameter::get_max_value() const {
 }
 
 void Parameter::unregister_instance() {
-    internal_assert(contents.ptr != NULL)
+    internal_assert(contents.defined())
         << "unregister_instance must not be called on an undefined Parameter";
     if (contents.ptr->is_registered) {
         ObjectInstanceRegistry::unregister_instance(this);
