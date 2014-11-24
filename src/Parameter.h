@@ -120,6 +120,11 @@ public:
     EXPORT void set_max_value(Expr e);
     EXPORT Expr get_max_value() const;
     // @}
+
+    /** Unregister this Parameter from the global registry, so it
+     * won't be found when enumerating Params in a Generator. This is present
+     * primarily to allow for special-casing of the __user_context param. */
+    EXPORT void unregister_instance();
 };
 
 /** Validate arguments to a call to a func, image or imageparam. */
