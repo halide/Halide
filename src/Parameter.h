@@ -43,8 +43,9 @@ public:
     EXPORT Parameter(Type t, bool is_buffer, int dimensions,
                      const std::string &name, bool is_explicit_name = false);
 
-    /** Copy ctor and dtor, needed for ObjectRegistry accounting. */
+    /** Copy ctor, operator=, and dtor, needed for ObjectRegistry accounting. */
     EXPORT Parameter(const Parameter&);
+    EXPORT Parameter& operator=(const Parameter&);
     EXPORT ~Parameter();
 
     /** Get the type of this parameter */
