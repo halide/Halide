@@ -116,9 +116,9 @@ public:
      * directly by Param, so they must be exported. */
     // @{
     EXPORT void set_min_value(Expr e);
-    EXPORT Expr get_min_value();
+    EXPORT Expr get_min_value() const;
     EXPORT void set_max_value(Expr e);
-    EXPORT Expr get_max_value();
+    EXPORT Expr get_max_value() const;
     // @}
 };
 

@@ -180,7 +180,7 @@ void Parameter::set_min_value(Expr e) {
     contents.ptr->min_value = e;
 }
 
-Expr Parameter::get_min_value() {
+Expr Parameter::get_min_value() const {
     check_is_scalar();
     return contents.ptr->min_value;
 }
@@ -195,7 +195,7 @@ void Parameter::set_max_value(Expr e) {
     contents.ptr->max_value = e;
 }
 
-Expr Parameter::get_max_value() {
+Expr Parameter::get_max_value() const {
     check_is_scalar();
     return contents.ptr->max_value;
 }
