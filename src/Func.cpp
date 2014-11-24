@@ -40,7 +40,11 @@ using namespace Internal;
 namespace {
 
 Internal::Parameter make_user_context() {
-    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
+    Parameter p = Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
+    // __user_context is handled specially and should never show up when enumerating
+    // Generator params.
+    p.unregister_instance();
+    return p;
 }
 
 vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
