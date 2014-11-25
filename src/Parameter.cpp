@@ -8,9 +8,10 @@ namespace Internal {
 struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
-    bool is_buffer;
+    const bool is_buffer;
     int dimensions;
-    bool is_explicit_name;
+    const bool is_explicit_name;
+    const bool is_registered;
     std::string name;
     Buffer buffer;
     uint64_t data;
@@ -18,8 +19,8 @@ struct ParameterContents {
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e = false)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -53,27 +54,54 @@ void Parameter::check_dim_ok(int dim) const {
 }
 
 Parameter::Parameter() : contents(NULL) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    // Undefined Parameters are never registered.
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false)) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    }
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    }
+}
+
+Parameter& Parameter::operator=(const Parameter& that) {
+    bool was_registered = contents.defined() && contents.ptr->is_registered;
+    contents = that.contents;
+    bool should_be_registered = contents.defined() && contents.ptr->is_registered;
+    if (should_be_registered && !was_registered) {
+        // This can happen if you do:
+        // Parameter p; // undefined
+        // p = make_interesting_parameter();
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    } else if (!should_be_registered && was_registered) {
+        // This can happen if you do:
+        // Parameter p = make_interesting_parameter();
+        // p = Parameter();
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
+    return *this;
 }
 
 Parameter::~Parameter() {
-    ObjectInstanceRegistry::unregister_instance(this);
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::unregister_instance(this);
+    }
 }
 
 Type Parameter::type() const {
@@ -224,3 +252,4 @@ void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int 
 
 }
 }
+
