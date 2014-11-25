@@ -36,7 +36,7 @@ public:
     virtual void visit(const Variable *op) {
         Type t = op->type;
         t.width = 1;
-        expr = Cast::make(t,Variable::make(op->type, op->name,
+        expr = Cast::make(t, Variable::make(op->type, op->name,
                                            op->image, op->param,
                                            op->reduction_domain));
     }
@@ -565,7 +565,7 @@ void CodeGen_GLSL::visit(const Ramp *op) {
     rhs << print_expr(op->base);
     
     for (int i = 1; i < op->width; ++i) {
-        rhs << ", " << print_expr(Add::make(op->base,Mul::make(i,op->stride)));
+        rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
     }
     
     rhs << ")";

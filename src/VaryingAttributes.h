@@ -35,7 +35,7 @@ namespace Internal {
         std::vector<std::string> attributes;        
     };
     
-    Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr>& varyings);
+    Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string, Expr>& varyings);
 }
 }
 
