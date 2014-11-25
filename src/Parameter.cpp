@@ -60,6 +60,7 @@ Parameter::Parameter() : contents(NULL) {
 Parameter::Parameter(Type t, bool is_buffer, int d) :
     contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
+    // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents.ptr->is_registered) {
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
     }
@@ -84,8 +85,14 @@ Parameter& Parameter::operator=(const Parameter& that) {
     contents = that.contents;
     bool should_be_registered = contents.defined() && contents.ptr->is_registered;
     if (should_be_registered && !was_registered) {
+        // This can happen if you do:
+        // Param p; // undefined
+        // p = make_interesting_param();
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
     } else if (!should_be_registered && was_registered) {
+        // This can happen if you do:
+        // Param p = make_interesting_param();
+        // p = Param();
         ObjectInstanceRegistry::unregister_instance(this);
     }
     return *this;
