@@ -8,10 +8,10 @@ namespace Internal {
 struct ParameterContents {
     mutable RefCount ref_count;
     Type type;
-    bool is_buffer;
+    const bool is_buffer;
     int dimensions;
-    bool is_explicit_name;
-    bool is_registered;
+    const bool is_explicit_name;
+    const bool is_registered;
     std::string name;
     Buffer buffer;
     uint64_t data;
@@ -19,8 +19,8 @@ struct ParameterContents {
     Expr extent_constraint[4];
     Expr stride_constraint[4];
     Expr min_value, max_value;
-    ParameterContents(Type t, bool b, int d, const std::string &n, bool e)
-        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(true), name(n), buffer(Buffer()), data(0) {
+    ParameterContents(Type t, bool b, int d, const std::string &n, bool e, bool r)
+        : type(t), is_buffer(b), dimensions(d), is_explicit_name(e), is_registered(r), name(n), buffer(Buffer()), data(0) {
         // stride_constraint[0] defaults to 1. This is important for
         // dense vectorization. You can unset it by setting it to a
         // null expression. (param.set_stride(0, Expr());)
@@ -58,15 +58,19 @@ Parameter::Parameter() : contents(NULL) {
 }
 
 Parameter::Parameter(Type t, bool is_buffer, int d) :
-    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false)) {
+    contents(new ParameterContents(t, is_buffer, d, unique_name('p'), false, true)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    }
 }
 
-Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name) :
-    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name)) {
+Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, bool is_explicit_name, bool register_instance) :
+    contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
-    ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    if (contents.defined() && contents.ptr->is_registered) {
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+    }
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
@@ -215,15 +219,6 @@ void Parameter::set_max_value(Expr e) {
 Expr Parameter::get_max_value() const {
     check_is_scalar();
     return contents.ptr->max_value;
-}
-
-void Parameter::unregister_instance() {
-    internal_assert(contents.defined())
-        << "unregister_instance must not be called on an undefined Parameter";
-    if (contents.ptr->is_registered) {
-        ObjectInstanceRegistry::unregister_instance(this);
-        contents.ptr->is_registered = false;
-    }
 }
 
 void check_call_arg_types(const std::string &name, std::vector<Expr> *args, int dims) {
