@@ -379,14 +379,16 @@ public:
     unsigned int order;
     bool found;
 
-    unsigned int total_found = 0;
+    unsigned int total_found;
 
     // This parameter controls the maximum number of linearly varying
     // expressions halide will pull out of the fragment shader and evaluate per
     // vertex, and allow the GPU to linearly interpolate across the domain. For
     // OpenGL ES 2.0 we can pass 16 vec4 varying attributes, or 64 scalars. Two
     // scalar slots are used by boilerplate code to pass pixel coordinates.
-    const unsigned int max_expressions = 62;
+    const unsigned int max_expressions;
+
+    FindLinearExpressions() : total_found(0), max_expressions(62) {}
 };
 
 Stmt find_linear_expressions(Stmt s) {
@@ -439,8 +441,7 @@ public:
     
 // This visitor traverses the IR tree to find vectors of branch choices to
 //  supply to TraverseBranches.
-class EnumerateBranches : public IRVisitor
-{
+class EnumerateBranches : public IRVisitor {
 public:
     using IRVisitor::visit;
     
@@ -497,8 +498,10 @@ public:
     Expr root;
     
     std::vector<bool> traversal;
-    int depth = 0;
-    int count = 0;
+    int depth;
+    int count;
+
+    EnumerateBranches() : depth(0), count(0) {}
 };
 
 // This function returns a vector containing an expression for each possible
@@ -775,8 +778,9 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string, Exp
     // The GPU will take texture coordinates at pixel centers during
     // interpolation, we offset the Halide integer grid by 0.5 so that these
     // coordinates line up on integer coordinate values.
-    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-        varyings[v->first] = CastVariablesToFloatAndOffset({loop0->name, loop1->name}).mutate(v->second);
+    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+        varyings[v->first] = 
+            CastVariablesToFloatAndOffset(vec(loop0->name, loop1->name)).mutate(v->second);
     }
     
     // Establish and order for the attributes in each vertex

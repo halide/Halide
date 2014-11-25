@@ -79,7 +79,7 @@ Expr unvectorize_intrinsic_arg(Expr e) {
 
     UnvectorizeIntrinsicArg s;
     return s.mutate(e);
-};
+}
     
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
