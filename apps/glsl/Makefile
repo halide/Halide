@@ -13,9 +13,6 @@ UNAME := $(shell uname)
 ifeq ($(UNAME), Linux)
 OPENGL_LIBS = -lX11 -lGL
 endif
-ifeq ($(UNAME), Darwin)
-OPENGL_LIBS = -framework AGL
-endif
 
 HALIDE_LIBS = $(HALIDE_LIB) -ldl $(LLVM_LDFLAGS)
 

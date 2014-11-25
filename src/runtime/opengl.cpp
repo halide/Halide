@@ -64,6 +64,15 @@
     GLFUNC(PFNGLGETINTEGERV, GetIntegerv);                              \
     GLFUNC(PFNGLGETSTRINGI, GetStringi)
 
+// List of all OpenGL functions used by the runtime, which may not
+// exist due to an older or less capable version of GL. In using any
+// of these functions, code must test if they are NULL.
+#define OPTIONAL_GL_FUNCTIONS                                           \
+    GLFUNC(PFNGLGENVERTEXARRAYS, GenVertexArrays);                      \
+    GLFUNC(PFNGLBINDVERTEXARRAY, BindVertexArray);                      \
+    GLFUNC(PFNGLDELETEVERTEXARRAYS, DeleteVertexArrays);                \
+    GLFUNC(PFNDRAWBUFFERS, DrawBuffers)
+
 // ---------- Types ----------
 
 using namespace Halide::Runtime::Internal;
@@ -191,10 +200,8 @@ struct GlobalState {
     // Declare pointers used OpenGL functions
 #define GLFUNC(PTYPE,VAR) PTYPE VAR
     USED_GL_FUNCTIONS;
+    OPTIONAL_GL_FUNCTIONS;
 #undef GLFUNC
-    PFNGLGENVERTEXARRAYS GenVertexArrays;
-    PFNGLBINDVERTEXARRAY BindVertexArray;
-    PFNGLDELETEVERTEXARRAYS DeleteVertexArrays;
 };
 
 WEAK GlobalState global_state;
@@ -457,11 +464,16 @@ WEAK void GlobalState::init() {
     textures = NULL;
     have_vertex_array_objects = false;
     have_texture_rg = false;
+    // Initialize all GL function pointers to NULL
+#define GLFUNC(type, name) name = NULL;
+    USED_GL_FUNCTIONS;
+    OPTIONAL_GL_FUNCTIONS;
+#undef GLFUNC
 }
 
-WEAK int load_gl_func(void *user_context, const char *name, void **ptr) {
+WEAK int load_gl_func(void *user_context, const char *name, void **ptr, bool required) {
     void *p = halide_opengl_get_proc_address(user_context, name);
-    if (!p) {
+    if (!p && required) {
         error(user_context) << "Could not load function pointer for " << name;
         return -1;
     }
@@ -500,12 +512,15 @@ WEAK bool extension_supported(void *user_context, const char *name) {
 // Check for availability of various version- and extension-specific features
 // and hook up functions pointers as necessary
 WEAK void init_extensions(void *user_context) {
-    if (global_state.major_version >= 3) {
-        global_state.have_vertex_array_objects = true;
-        load_gl_func(user_context, "glGenVertexArrays", (void**)&global_state.GenVertexArrays);
-        load_gl_func(user_context, "glBindVertexArray", (void**)&global_state.BindVertexArray);
-        load_gl_func(user_context, "glDeleteVertexArrays", (void**)&global_state.DeleteVertexArrays);
+    if (global_state.major_version >= 3) { // This is likely valied for both OpenGL and OpenGL ES
+        load_gl_func(user_context, "glGenVertexArrays", (void**)&global_state.GenVertexArrays, false);
+        load_gl_func(user_context, "glBindVertexArray", (void**)&global_state.BindVertexArray, false);
+        load_gl_func(user_context, "glDeleteVertexArrays", (void**)&global_state.DeleteVertexArrays, false);
+        if (global_state.GenVertexArrays && global_state.BindVertexArray && global_state.DeleteVertexArrays) {
+            global_state.have_vertex_array_objects = true;
+        }
     }
+    load_gl_func(user_context, "glDrawBuffers", (void**)&global_state.DrawBuffers, false);
 
     global_state.have_texture_rg =
         global_state.major_version >= 3 ||
@@ -560,7 +575,7 @@ WEAK int halide_opengl_init(void *user_context) {
 
     // Initialize pointers to core OpenGL functions.
 #define GLFUNC(TYPE, VAR)                                               \
-    if (load_gl_func(user_context, "gl" #VAR, (void**)&global_state.VAR) < 0) {   \
+    if (load_gl_func(user_context, "gl" #VAR, (void**)&global_state.VAR, true) < 0) { \
         return -1;                                                      \
     }
     USED_GL_FUNCTIONS;
@@ -1347,22 +1362,22 @@ WEAK int halide_opengl_run(void *user_context,
         // TODO: cleanup
         return 1;
     } else if (num_output_textures > 1) {
-#ifdef HAVE_GLES3
-        GLenum *draw_buffers = (GLenum*)
-            malloc(num_output_textures * sizeof(GLenum));
-        for (int i=0; i<num_output_textures; i++)
-            draw_buffers[i] = GL_COLOR_ATTACHMENT0 + i;
-        global_state.DrawBuffers(num_output_textures, draw_buffers);
-        free(draw_buffers);
+        if (global_state.DrawBuffers) {
+            GLenum *draw_buffers = (GLenum*)
+                malloc(num_output_textures * sizeof(GLenum));
+            for (int i=0; i<num_output_textures; i++)
+                draw_buffers[i] = GL_COLOR_ATTACHMENT0 + i;
+            global_state.DrawBuffers(num_output_textures, draw_buffers);
+            free(draw_buffers);
 
-        if (global_state.CheckAndReportError(user_context, "halide_opengl_run DrawBuffers")) {
+            if (global_state.CheckAndReportError(user_context, "halide_opengl_run DrawBuffers")) {
+                return 1;
+            }
+        } else {
+            error(user_context) << "halide_opengl_run: kernel has more than one output and DrawBuffers is not available (earlier than GL ES 3.0?).\n";
+            // TODO: cleanup
             return 1;
         }
-#else
-        error(user_context) << "halide_opengl_run: kernel has more than one output and GL ES 3.0 is not enabled.\n";
-        // TODO: cleanup
-        return 1;
-#endif
     }
 
     if (bind_render_targets) {
