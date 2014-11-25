@@ -508,28 +508,28 @@ WEAK int halide_cuda_copy_to_device(void *user_context, buffer_t* buf) {
     device_copy c = make_host_to_device_copy(buf);
 
     for (int w = 0; w < c.extent[3]; w++) {
-	for (int z = 0; z < c.extent[2]; z++) {
-	    for (int y = 0; y < c.extent[1]; y++) {
-		for (int x = 0; x < c.extent[0]; x++) {
-		    uint64_t off = (x * c.stride_bytes[0] +
-				    y * c.stride_bytes[1] +
-				    z * c.stride_bytes[2] +
-				    w * c.stride_bytes[3]);
-		    void *src = (void *)(c.src + off);
-		    CUdeviceptr dst = (CUdeviceptr)(c.dst + off);
-		    uint64_t size = c.chunk_size;
-		    debug(user_context) << "    cuMemcpyHtoD "
-					<< "(" << x << ", " << y << ", " << z << ", " << w << "), "
-					<< src << " -> " << (void *)dst << ", " << size << " bytes\n";
-		    CUresult err = cuMemcpyHtoD(dst, src, size);
-		    if (err != CUDA_SUCCESS) {
-			error(user_context) << "CUDA: cuMemcpyHtoD failed: "
-					    << get_error_name(err);
-			return err;
-		    }
-		}
-	    }
-	}
+        for (int z = 0; z < c.extent[2]; z++) {
+            for (int y = 0; y < c.extent[1]; y++) {
+                for (int x = 0; x < c.extent[0]; x++) {
+                    uint64_t off = (x * c.stride_bytes[0] +
+                                    y * c.stride_bytes[1] +
+                                    z * c.stride_bytes[2] +
+                                    w * c.stride_bytes[3]);
+                    void *src = (void *)(c.src + off);
+                    CUdeviceptr dst = (CUdeviceptr)(c.dst + off);
+                    uint64_t size = c.chunk_size;
+                    debug(user_context) << "    cuMemcpyHtoD "
+                                        << "(" << x << ", " << y << ", " << z << ", " << w << "), "
+                                        << src << " -> " << (void *)dst << ", " << size << " bytes\n";
+                    CUresult err = cuMemcpyHtoD(dst, src, size);
+                    if (err != CUDA_SUCCESS) {
+                        error(user_context) << "CUDA: cuMemcpyHtoD failed: "
+                                            << get_error_name(err);
+                        return err;
+                    }
+                }
+            }
+        }
     }
 
 
@@ -561,30 +561,30 @@ WEAK int halide_cuda_copy_to_host(void *user_context, buffer_t* buf) {
     device_copy c = make_device_to_host_copy(buf);
 
     for (int w = 0; w < c.extent[3]; w++) {
-	for (int z = 0; z < c.extent[2]; z++) {
-	    for (int y = 0; y < c.extent[1]; y++) {
-		for (int x = 0; x < c.extent[0]; x++) {
-		    uint64_t off = (x * c.stride_bytes[0] +
-				    y * c.stride_bytes[1] +
-				    z * c.stride_bytes[2] +
-				    w * c.stride_bytes[3]);
-		    CUdeviceptr src = (CUdeviceptr)(c.src + off);
-		    void *dst = (void *)(c.dst + off);
-		    uint64_t size = c.chunk_size;
+        for (int z = 0; z < c.extent[2]; z++) {
+            for (int y = 0; y < c.extent[1]; y++) {
+                for (int x = 0; x < c.extent[0]; x++) {
+                    uint64_t off = (x * c.stride_bytes[0] +
+                                    y * c.stride_bytes[1] +
+                                    z * c.stride_bytes[2] +
+                                    w * c.stride_bytes[3]);
+                    CUdeviceptr src = (CUdeviceptr)(c.src + off);
+                    void *dst = (void *)(c.dst + off);
+                    uint64_t size = c.chunk_size;
 
-		    debug(user_context) << "    cuMemcpyDtoH "
-					<< "(" << x << ", " << y << ", " << z << ", " << w << "), "
-					<< (void *)src << " -> " << dst << ", " << size << " bytes\n";
+                    debug(user_context) << "    cuMemcpyDtoH "
+                                        << "(" << x << ", " << y << ", " << z << ", " << w << "), "
+                                        << (void *)src << " -> " << dst << ", " << size << " bytes\n";
 
-		    CUresult err = cuMemcpyDtoH(dst, src, size);
-		    if (err != CUDA_SUCCESS) {
-			error(user_context) << "CUDA: cuMemcpyDtoH failed: "
-					    << get_error_name(err);
-			return err;
-		    }
-		}
-	    }
-	}
+                    CUresult err = cuMemcpyDtoH(dst, src, size);
+                    if (err != CUDA_SUCCESS) {
+                        error(user_context) << "CUDA: cuMemcpyDtoH failed: "
+                                            << get_error_name(err);
+                        return err;
+                    }
+                }
+            }
+        }
     }
 
     #ifdef DEBUG_RUNTIME
