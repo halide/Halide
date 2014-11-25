@@ -86,13 +86,13 @@ Parameter& Parameter::operator=(const Parameter& that) {
     bool should_be_registered = contents.defined() && contents.ptr->is_registered;
     if (should_be_registered && !was_registered) {
         // This can happen if you do:
-        // Param p; // undefined
-        // p = make_interesting_param();
+        // Parameter p; // undefined
+        // p = make_interesting_parameter();
         ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
     } else if (!should_be_registered && was_registered) {
         // This can happen if you do:
-        // Param p = make_interesting_param();
-        // p = Param();
+        // Parameter p = make_interesting_parameter();
+        // p = Parameter();
         ObjectInstanceRegistry::unregister_instance(this);
     }
     return *this;
