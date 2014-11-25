@@ -443,8 +443,7 @@ class Func {
     /** The user context that's used when jitting. This is not settable
      * by user code, but is reserved for internal use.
      * Note that this is an Internal::Parameter (rather than a Param<void*>)
-     * because Param is forbidden from using the name "__user_context"
-     * (to flush out deprecated usages), but Internal::Parameter is not. */
+     * so that we can exclude it from the ObjectInstanceRegistry. */
     Internal::Parameter jit_user_context;
 
     struct CustomLoweringPass {
