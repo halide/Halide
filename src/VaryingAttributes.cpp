@@ -66,7 +66,7 @@ protected:
         // attribute. These tagged variables will be pulled out of the fragment
         // shader during a subsequent pass
         Expr intrinsic = Call::make(e.type(), Call::glsl_varying,
-                                    vec(Expr(name + ".varying"),e),
+                                    vec(Expr(name + ".varying"), e),
                                     Call::Intrinsic);
         ++total_found;
         
@@ -119,12 +119,12 @@ protected:
         if ((value_order == 1) && (total_found < max_expressions)) {
             // Wrap the let value with a varying tag
             mutated_value = Call::make(mutated_value.type(), Call::glsl_varying,
-                              vec<Expr>(op->name + ".varying",mutated_value),
+                              vec<Expr>(op->name + ".varying", mutated_value),
                               Call::Intrinsic);
             ++total_found;
         }
 
-        expr = Let::make(op->name,mutated_value,mutated_body);
+        expr = Let::make(op->name, mutated_value, mutated_body);
 
         scope.pop(op->name);
     }
@@ -145,7 +145,7 @@ protected:
     }
     
     virtual void visit(const Variable *op) {
-        if (std::find(loop_vars.begin(),loop_vars.end(),op->name) != loop_vars.end()) {
+        if (std::find(loop_vars.begin(), loop_vars.end(), op->name) != loop_vars.end()) {
             order = 1;
         } else if (scope.contains(op->name)) {
             order = scope.get(op->name);
@@ -205,7 +205,7 @@ protected:
             b = tag_linear_expression(b);
         }
         
-        expr = T::make(a,b);
+        expr = T::make(a, b);
     }
     
     virtual void visit(const Add *op) { visit_binary_linear(op); }
@@ -230,7 +230,7 @@ protected:
             b = tag_linear_expression(b);
         }
         
-        expr = Mul::make(a,b);
+        expr = Mul::make(a, b);
     }
     
     // Dividing is either multiplying by a constant, or makes the result
@@ -282,7 +282,7 @@ protected:
             b = tag_linear_expression(b);
         }
         
-        expr = T::make(a,b);
+        expr = T::make(a, b);
     }
     
     virtual void visit(const Mod *op) { visit_binary(op); }
@@ -342,7 +342,7 @@ protected:
         Expr mutated_false_value = mutate(op->false_value);
         int false_value_order = order;
         
-        order = std::max(std::max(condition_order,true_value_order),false_value_order);
+        order = std::max(std::max(condition_order, true_value_order), false_value_order);
         
         if ((order > 1) && (condition_order == 1)) {
             mutated_condition = tag_linear_expression(mutated_condition);
@@ -366,9 +366,9 @@ protected:
         Stmt mutated_else_case = mutate(op->else_case);
         int else_case_order = order;
         
-        order = std::max(std::max(condition_order,then_case_order),else_case_order);
+        order = std::max(std::max(condition_order, then_case_order), else_case_order);
         
-        stmt = IfThenElse::make(mutated_condition,mutated_then_case,mutated_else_case);
+        stmt = IfThenElse::make(mutated_condition, mutated_then_case, mutated_else_case);
     }
     
 public:
@@ -487,7 +487,7 @@ public:
         traversal.pop_back();
         
         // Keep track of the number of branch expressions found in this sub-tree
-        count = std::max(count_a,count_b)+1;
+        count = std::max(count_a, count_b)+1;
     }
     
     virtual void visit(const Min *op) { visit_binary_piecewise(op); }
@@ -554,10 +554,10 @@ Type type_of_variable(Expr e, const std::string& name)
 
 // This visitor produces a map containing name and expression pairs from varying
 // tagged intrinsics
-class FindVaryingAttributeLets : public IRVisitor
+class FindVaryingAttributeTags : public IRVisitor
 {
 public:
-    FindVaryingAttributeLets(std::map<std::string,Expr>& varyings_) : varyings(varyings_) { }
+    FindVaryingAttributeTags(std::map<std::string, Expr>& varyings_) : varyings(varyings_) { }
     
     using IRVisitor::visit;
 
@@ -587,13 +587,13 @@ public:
     
     Scope<Expr> scope;
 
-    std::map<std::string,Expr>& varyings;
+    std::map<std::string, Expr>& varyings;
 };
 
-// This visitor removes  After this visitor is called, the varying attribute
-// expressions will no longer appear in the tree, only variables with the
-// .varying tag will remain.
-class RemoveVaryingAttributeLets : public IRMutator {
+// This visitor removes glsl_varying intrinsics. After this visitor is called,
+// the varying attribute expressions will no longer appear in the IR tree, only
+// variables with the .varying tag will remain.
+class RemoveVaryingAttributeTags : public IRMutator {
 public:
     using IRMutator::visit;
 
@@ -614,12 +614,12 @@ public:
 
 Stmt remove_varying_attributes(Stmt s)
 {
-    return RemoveVaryingAttributeLets().mutate(s);
+    return RemoveVaryingAttributeTags().mutate(s);
 }
 
 // This visitor produces a set of variable names that are tagged with
 // ".varying", it is run after
-class FindVaryingAttributes : public IRVisitor {
+class FindVaryingAttributeVars : public IRVisitor {
 public:
     using IRVisitor::visit;
     
@@ -634,14 +634,14 @@ public:
 
 // Remove varying attributes from the varying's map if they do not appear in the
 // loop_stmt because they were simplified away.
-void prune_varying_attributes(Stmt loop_stmt, std::map<std::string,Expr>& varying)
+void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varying)
 {
-    FindVaryingAttributes find;
+    FindVaryingAttributeVars find;
     loop_stmt.accept(&find);
     
     std::vector<std::string> remove_list;
 
-    for (std::map<std::string,Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
+    for (std::map<std::string, Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
         const std::string& name = i->first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
@@ -661,14 +661,14 @@ class CastVaryingVariablesToFloat : public IRMutator {
 public:
     virtual void visit(const Variable *op) {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
-            expr = Cast::make(Float(32),op);
+            expr = Cast::make(Float(32), op);
         } else {
             expr = op;
         }
     }
     
     Type float_type(Expr e) {
-        return Float(e.type().bits,e.type().width);
+        return Float(e.type().bits, e.type().width);
     }
     
     template<typename T>
@@ -686,7 +686,7 @@ public:
                 mutated_a = Cast::make(float_type(op->b), mutated_a);
             }
         }
-        expr = T::make(mutated_a,mutated_b);
+        expr = T::make(mutated_a, mutated_b);
     }
     
     virtual void visit(const Add *op) { visit_binary_op(op); }
@@ -730,7 +730,7 @@ public:
     virtual void visit(const Variable *op) {
         
         if (std::find(names.begin(), names.end(), op->name) != names.end()) {
-            expr = Sub::make(Cast::make(float_type(op),op),0.5f);
+            expr = Sub::make(Cast::make(float_type(op), op), 0.5f);
         } else {
             expr = op;
         }
@@ -741,7 +741,7 @@ public:
     const std::vector<std::string>& names;
 };
 
-Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr>& varyings)
+Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string, Expr>& varyings)
 {
     const For* loop1 = op;
     const For* loop0 = loop1->body.as<For>();
@@ -749,7 +749,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
 
     // Construct a mesh of expressions to instantiate during runtime
-    FindVaryingAttributeLets tag_finder(varyings);
+    FindVaryingAttributeTags tag_finder(varyings);
     op->accept(&tag_finder);
 
     // Remove the varying attribute let expressions from the statement
@@ -757,13 +757,13 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     
     // Perform the Let-simplification pass that was skipped during
     // Lowering
-    loop_stmt = simplify(loop_stmt,true);
+    loop_stmt = simplify(loop_stmt, true);
     
     // It is possible that linear expressions we tagged in higher-level
     // intrinsics were removed by simplification if they were only used in
     // subsequent tagged linear expressions. Run a pass to check for
     // these and remove them from the varying attribute list
-    prune_varying_attributes(loop_stmt,varyings);
+    prune_varying_attributes(loop_stmt, varyings);
     
     // At this point the varying attribute expressions have been removed from
     // loop_stmt- it only contains variables tagged with .varying
@@ -775,12 +775,12 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     // The GPU will take texture coordinates at pixel centers during
     // interpolation, we offset the Halide integer grid by 0.5 so that these
     // coordinates line up on integer coordinate values.
-    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-        varyings[v->first] = CastVariablesToFloatAndOffset({loop0->name,loop1->name}).mutate(v->second);
+    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+        varyings[v->first] = CastVariablesToFloatAndOffset({loop0->name, loop1->name}).mutate(v->second);
     }
     
     // Establish and order for the attributes in each vertex
-    std::map<std::string,int> attribute_order;
+    std::map<std::string, int> attribute_order;
     
     // Add the attribute names to the mesh in the order that they appear in
     // each vertex
@@ -791,7 +791,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     attribute_order["__vertex_y"] = 1;
     
     int idx = 2;
-    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
         result.attributes.push_back(v->first);
         attribute_order[v->first] = idx++;
     }
@@ -804,8 +804,8 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     attribute_order[loop0->name] = 0;
     attribute_order[loop1->name] = 1;
     
-    Expr loop0_max = Add::make(loop0->min,loop0->extent);
-    Expr loop1_max = Add::make(loop1->min,loop1->extent);
+    Expr loop0_max = Add::make(loop0->min, loop0->extent);
+    Expr loop1_max = Add::make(loop1->min, loop1->extent);
     
     result.coords[0].push_back(loop0->min);
     result.coords[0].push_back(loop0_max);
@@ -825,7 +825,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     
     debug(2) << "Checking for piecewise linear expressions\n";
     
-    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
         
         // Determine the name of the variable without the .varying
         std::string varying_name = v->first;
@@ -902,7 +902,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
     // it at each coordinate in the unsorted order of the coordinates found
     // above
     
-    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
         
         std::string varying_name = v->first;
         
@@ -927,7 +927,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
             v->second.accept(&c);
             
             if (c.found && (c.result->type != cast_y.type())) {
-                cast_y = Cast::make(c.result->type,cast_y);
+                cast_y = Cast::make(c.result->type, cast_y);
             }
 
             for (unsigned x = 0; x != result.coords[0].size(); ++x) {
@@ -940,7 +940,7 @@ Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string,Expr
                 v->second.accept(&c);
                 
                 if (c.found && (c.result->type != cast_x.type())) {
-                    cast_x = Cast::make(c.result->type,cast_x);
+                    cast_x = Cast::make(c.result->type, cast_x);
                 }
 
                 Expr value = Let::make(loop1->name, cast_y, Let::make(loop0->name, cast_x, v->second));

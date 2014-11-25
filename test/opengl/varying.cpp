@@ -32,7 +32,7 @@ int main() {
     Param<float> p("p"); p.set(p_value);
 
     Func f0("f");
-    f0(x,y,c) = select(c == 0, 4.0f,             // Constant term
+    f0(x, y, c) = select(c == 0, 4.0f,             // Constant term
                       c == 1, p * 10.0f,        // Linear expression not in terms of a loop parameter
                       cast<float>(x) * 100.0f); // Linear expression in terms of x
 
@@ -57,7 +57,7 @@ int main() {
                         expected = static_cast<float>(x) * 100.0f;
 
                 }
-                float result = out0(x,y,c);
+                float result = out0(x, y, c);
                 if (result != expected) {
                     fprintf(stderr, "Incorrect value: %f != %f at %d,%d,%d.\n",
                             result, expected, x, y, c);
@@ -85,7 +85,7 @@ int main() {
     m3.set(m[3]); m4.set(m[4]); m5.set(m[5]);
 
     Func f1("f");
-    f1(x,y,c) = select(c == 0, m0 * x + m1 * y + m2,
+    f1(x, y, c) = select(c == 0, m0 * x + m1 * y + m2,
                        c == 1, m3 * x + m4 * y + m5,
                        1.0f);
 
@@ -111,7 +111,7 @@ int main() {
                         expected = 1.0f;
 
                 }
-                float result = out1(x,y,c);
+                float result = out1(x, y, c);
 
                 // There is no defined precision requirement in this case so an
                 // arbitrary threshold is used to compare the result of the CPU
@@ -129,7 +129,7 @@ int main() {
     // so for example, if the above expressions are wrapped in a non-linear
     // function like sqrt, they should still be extracted.
     Func f2("f");
-    f2(x,y,c) = select(c == 0, sqrt(m0 * x + m1 * y + m2),
+    f2(x, y, c) = select(c == 0, sqrt(m0 * x + m1 * y + m2),
                        c == 1, sqrt(m3 * x + m4 * y + m5),
                        1.0f);
 
@@ -155,7 +155,7 @@ int main() {
                         expected = 1.0f;
 
                 }
-                float result = out2(x,y,c);
+                float result = out2(x, y, c);
 
                 // There is no defined precision requirement in this case so an
                 // arbitrary threshold is used to compare the result of the CPU
@@ -168,6 +168,65 @@ int main() {
             }
         }
     }
+
+    // This case tests a large expression linearly varying in terms of a loop
+    // variable
+
+    Expr foo = p;
+    for (int i = 0; i < 10; i++) {
+        foo = foo+foo+foo;
+    }
+    foo = x + foo;
+
+    float foo_value = p_value;
+    for (int i = 0; i < 10; i++) {
+        foo_value = foo_value+foo_value+foo_value;
+    }
+
+    Func f3("f");
+    f3(x, y, c) = select(c == 0, foo,
+                       c == 1, 1.0f,
+                       2.0f);
+
+    f3.bound(c, 0, 3);
+    f3.glsl(x, y, c);
+
+    Image<float> out3(8, 8, 3);
+    f3.realize(out3);
+    out3.copy_to_host();
+
+    for (int c=0; c != out3.extent(2); ++c) {
+        for (int y=0; y != out3.extent(1); ++y) {
+            for (int x=0; x != out3.extent(0); ++x) {
+                float expected;
+                switch (c) {
+                    case 0:
+                        expected = (float)x + foo_value;
+                        break;
+                    case 1:
+                        expected = 1.0f;
+                        break;
+                    default:
+                        expected = 2.0f;
+
+                }
+                float result = out3(x, y, c);
+
+                // There is no defined precision requirement in this case so an
+                // arbitrary threshold is used to compare the result of the CPU
+                // and GPU arithmetic
+                if (fabs(result-expected) > 0.000001f) {
+                    fprintf(stderr, "Incorrect value: %f != %f at %d,%d,%d.\n",
+                            result, expected, x, y, c);
+                    return 1;
+                }
+            }
+        }
+    }
+
+    // TODO: Add tests to check that the glsl_varying attribute was applied
+    // correctly.
+
 
     // The will return early on error.
     printf("Success!\n");

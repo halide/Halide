@@ -517,7 +517,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim0 = null_ptr_value;
         Value *gpu_num_coords_dim1 = null_ptr_value;
         
-        std::map<std::string,Expr> varying;
+        std::map<std::string, Expr> varying;
         
         Stmt loop_stmt;
         
@@ -530,7 +530,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // labeled as ".varying"
             
             ExpressionMesh mesh;
-            loop_stmt = setup_mesh(loop,mesh,varying);
+            loop_stmt = setup_mesh(loop, mesh, varying);
             
             // Create an array of null terminated strings containing the attribute
             // names in the order they appear per vertex channel
@@ -590,7 +590,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                         // due to piecewise linear expressions, they are
                         // appended following this index and sorted at runtime
                         // when the expressions may be evaluated.
-                        value = device_coordinates(value,mesh.coords[0][1]);
+                        value = device_coordinates(value, mesh.coords[0][1]);
 
                         Value *gpu_coord = codegen(value);
                         builder->CreateStore(gpu_coord,
@@ -601,7 +601,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                         Expr value = mesh.coords[1][j];
 
                         // Use the coordinate value in index 1 for the extent
-                        value = device_coordinates(value,mesh.coords[1][1]);
+                        value = device_coordinates(value, mesh.coords[1][1]);
 
                         Value *gpu_coord = codegen(value);
                         builder->CreateStore(gpu_coord,
