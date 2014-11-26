@@ -188,7 +188,7 @@ int main(int argc, char **argv) {
     {
         Func f;
         Expr e = 0;
-        for (int i = 0; i < 20; i++) {
+        for (int i = 19; i >= 0; i--) {
             e = select(x <= i, i*i, e);
         }
         f(x) = e;
