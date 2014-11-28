@@ -126,6 +126,17 @@ struct module_state {
 };
 WEAK module_state *state_list = NULL;
 
+struct event_list
+{
+    cl_event event;
+    event_list *next;
+};
+WEAK event_list *events = NULL;
+WEAK event_list *events_tail = NULL;
+WEAK bool dump_events = false;
+
+typedef Printer<BasicPrinter> dump;
+
 WEAK bool validate_dev_pointer(void *user_context, buffer_t* buf, size_t size=0) {
     if (buf->dev == 0) {
         return true;
@@ -260,6 +271,13 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     cl_device_id dev = devices[device];
 
+
+    // Check for enabling event profiling
+    const char *eventDumpStr = getenv("HL_OCL_EVENT_DUMP");
+    if (eventDumpStr && atoi(eventDumpStr))
+        dump_events = true;
+
+
     #ifdef DEBUG_RUNTIME
     // Declare variables for other state we want to query.
     char device_name[256] = "";
@@ -331,8 +349,13 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         debug(user_context) << *ctx << "\n";
     }
 
+    // Enable event profiling in command queue if necessary
+    cl_command_queue_properties queue_properties = 0;
+    if (dump_events)
+        queue_properties |= CL_QUEUE_PROFILING_ENABLE;
+
     debug(user_context) << "    clCreateCommandQueue ";
-    *q = clCreateCommandQueue(*ctx, dev, 0, &err);
+    *q = clCreateCommandQueue(*ctx, dev, queue_properties, &err);
     if (err != CL_SUCCESS) {
         debug(user_context) << get_opencl_error_name(err);
         error(user_context) << "CL: clCreateCommandQueue failed: "
@@ -561,6 +584,52 @@ WEAK void halide_release(void *user_context) {
             state->program = NULL;
         }
         state = state->next;
+    }
+
+    // Dump event profiling info
+    if (dump_events) {
+        int i = 0;
+        cl_ulong latestEnd = 0;
+
+        // Find earliest start time
+        cl_ulong min = -1;
+        event_list *tmp = events;
+        while (tmp) {
+            cl_ulong start = 0;
+            clGetEventProfilingInfo(events->event, CL_PROFILING_COMMAND_START,
+                                    sizeof(cl_ulong), &start, NULL);
+            min = start < min ? start : min;
+            tmp = tmp->next;
+        }
+
+        while (events) {
+            // Print profiling info
+            cl_ulong start = 0, end = 0;
+            clGetEventProfilingInfo(events->event, CL_PROFILING_COMMAND_START,
+                                    sizeof(cl_ulong), &start, NULL);
+            clGetEventProfilingInfo(events->event, CL_PROFILING_COMMAND_END,
+                                    sizeof(cl_ulong), &end, NULL);
+            dump(user_context)
+                 << "Event " << i
+                 << "   start=" << (float)((start-min)*1e-6)
+                 << "   end=" << (float)((end-min)*1e-6);
+
+            if (start < latestEnd)
+                dump(user_context) << "   (overlap detected)";
+
+            dump(user_context) << "\n";
+
+            latestEnd = end > latestEnd ? end : latestEnd;
+
+
+            // Move to next event
+            event_list *next = events->next;
+            delete events;
+            events = next;
+            i++;
+        }
+
+        events_tail = NULL;
     }
 
     // Release the context itself, if we created it.
@@ -900,6 +969,17 @@ WEAK int halide_dev_run(void *user_context,
         return err;
     }
 
+    event_list *this_event = NULL;
+    if (dump_events) {
+        this_event = new event_list;
+        this_event->next = NULL;
+        if (events)
+            events_tail->next = this_event;
+        else
+            events = this_event;
+        events_tail = this_event;
+    }
+
     // Launch kernel
     debug(user_context)
         << "    clEnqueueNDRangeKernel "
@@ -909,7 +989,8 @@ WEAK int halide_dev_run(void *user_context,
                                  // NDRange
                                  3, NULL, global_dim, local_dim,
                                  // Events
-                                 0, NULL, NULL);
+                                 0, NULL,
+                                 dump_events ? &(this_event->event) : NULL);
     debug(user_context) << get_opencl_error_name(err) << "\n";
     if (err != CL_SUCCESS) {
         error(user_context) << "CL: clEnqueueNDRangeKernel failed: "
