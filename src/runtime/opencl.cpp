@@ -483,6 +483,12 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* s
         options << "-D MAX_CONSTANT_BUFFER_SIZE=" << max_constant_buffer_size
                 << " -D MAX_CONSTANT_ARGS=" << max_constant_args;
 
+        // Enable kernel argument information
+        char vendor[256];
+        clGetDeviceInfo(devices[0], CL_DEVICE_VENDOR, sizeof(vendor), vendor, NULL);
+        if (!strstr(vendor, "NVIDIA"))
+            options << " -cl-kernel-arg-info";
+
         const char * sources[] = { src };
         debug(user_context) << "    clCreateProgramWithSource -> ";
         cl_program program = clCreateProgramWithSource(ctx.context, 1, &sources[0], NULL, &err );
