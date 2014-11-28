@@ -278,7 +278,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         dump_events = true;
 
 
-    #ifdef DEBUG_RUNTIME
+    //#ifdef DEBUG_RUNTIME
+    if (dump_events) {
     // Declare variables for other state we want to query.
     char device_name[256] = "";
     char device_vendor[256] = "";
@@ -319,7 +320,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         }
     }
 
-    debug(user_context)
+    dump(user_context)
         << "      device name: " << device_name << "\n"
         << "      device vendor: " << device_vendor << "\n"
         << "      device profile: " << device_profile << "\n"
@@ -333,7 +334,8 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
         << "x" << max_work_item_sizes[1]
         << "x" << max_work_item_sizes[2]
         << "x" << max_work_item_sizes[3] << "\n";
-    #endif
+    }
+    //#endif
 
 
     // Create context and command queue.
