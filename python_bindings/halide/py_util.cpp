@@ -3,7 +3,7 @@
    ----------------------------------------------------------------------- */
 
 #include "py_util.h"
-#include "../apps/support/image_io.h"
+#include "../../apps/support/image_io.h"
 #include <signal.h>
 #include <string>
 #include "Python.h"
@@ -130,8 +130,8 @@ void signal_handler(int sig_num) {
         printf("Python stack trace:\n");
         while (NULL != frame) {
             int line = frame->f_lineno;
-            const char *filename = PyString_AsString(frame->f_code->co_filename);
-            const char *funcname = PyString_AsString(frame->f_code->co_name);
+            const char *filename = PyBytes_AsString(frame->f_code->co_filename);
+            const char *funcname = PyBytes_AsString(frame->f_code->co_name);
             printf("    %s(%d): %s\n", filename, line, funcname);
             frame = frame->f_back;
         }
