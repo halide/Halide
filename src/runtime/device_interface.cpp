@@ -1,7 +1,10 @@
 #include "runtime_internal.h"
+
+#include "device_interface.h"
+
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
-#include "device_interface.h"
+#include "scoped_mutex_lock.h"
 
 extern "C" {
 
@@ -52,6 +55,39 @@ inline const halide_device_interface *get_device_interface(struct buffer_t *buf)
     return ((device_handle_wrapper *)buf->dev)->interface;
 }
 
+// TODO: Coarser grained locking, also consider all things that need
+// to be atomic with respect to each other. At present only
+// halide_copy_to_host and halide_copy_to_device are atomic with
+// respect to each other. halide_device_malloc and halide_device_free
+// are also candidates, but to do so they likely need to be able to do
+// a copy internaly as well.
+WEAK halide_mutex device_copy_mutex;
+
+WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
+    int result = 0;
+
+    if (buf->dev_dirty) {
+        debug(NULL) << "copy_to_host_already_locked " << buf << "dev_dirty is true\n";
+        const halide_device_interface *interface = get_device_interface(buf);
+        if (buf->host_dirty) {
+            debug(NULL) << "copy_to_host_already_locked " << buf << "dev_dirty and host_dirty are true\n";
+            result = -1; // TODO: what value?
+        } else if (interface == NULL) {
+            debug(NULL) << "copy_to_host_already_locked " << buf << "interface is NULL\n";
+            result = -2; // TODO: What value?
+        } else {
+            result = interface->copy_to_host(user_context, buf);
+            if (result == 0) {
+              buf->dev_dirty = false;
+            } else {
+              debug(NULL) << "copy_to_host_already_locked " << buf << "device copy_to_host returned an error\n";
+            }
+        }
+    }
+
+    return result;
+}
+
 }}} // namespace Halide::Runtime::Internal
 
 extern "C" {
@@ -66,33 +102,20 @@ WEAK void halide_device_release(void *user_context, const halide_device_interfac
 /** Copy image data from device memory to host memory. This must be called
  * explicitly to copy back the results of a GPU-based filter. */
 WEAK int halide_copy_to_host(void *user_context, struct buffer_t *buf) {
-    int result = 0;
+    ScopedMutexLock lock(&device_copy_mutex);
+
     debug(NULL) << "halide_copy_to_host " << buf << "\n";
-    if (buf->dev_dirty) {
-        debug(NULL) << "halide_copy_to_host " << buf << "dev_dirty is true\n";
-        const halide_device_interface *interface = get_device_interface(buf);
-        if (buf->host_dirty) {
-            debug(NULL) << "halide_copy_to_host " << buf << "dev_dirty and host_dirty are true\n";
-            result = -1; // TODO: what value?
-        } else if (interface == NULL) {
-            debug(NULL) << "halide_copy_to_host " << buf << "interface is NULL\n";
-            result = -2; // TODO: What value?
-        } else {
-            result = interface->copy_to_host(user_context, buf);
-            if (result == 0) {
-              buf->dev_dirty = false;
-            } else {
-              debug(NULL) << "halide_copy_to_host " << buf << "device copy_to_host returned an error\n";
-            }
-        }
-    }
-    return result;
+
+    return copy_to_host_already_locked(user_context, buf);
 }
 
 /** Copy image data from host memory to device memory. This should not be
  * called directly; Halide handles copying to the device automatically. */
 WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const halide_device_interface *interface) {
     int result = 0;
+
+    ScopedMutexLock lock(&device_copy_mutex);
+
     debug(NULL) << "halide_copy_to_device " << buf << "\n";
     if (buf->host_dirty) {
         debug(NULL) << "halide_copy_to_device " << buf << "host_dirty is true\n";
@@ -102,7 +125,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
             interface = buf_dev_interface;
         } else if (buf_dev_interface != NULL && buf_dev_interface != interface) {
             debug(NULL) << "halide_copy_to_device " << buf << "flipping buffer to new device\n";
-            result = halide_copy_to_host(user_context, buf);
+            result = copy_to_host_already_locked(user_context, buf);
             if (result != 0) {
                 debug(NULL) << "halide_copy_to_device " << buf << "flipping buffer halide_copy_to_host failed\n";
                 return result;
