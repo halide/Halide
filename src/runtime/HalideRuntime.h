@@ -233,45 +233,6 @@ extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const 
 /** Free any device memory associated with a buffer_t. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
 
-/** This function is called to populate the buffer_t.dev field with a constant
- * indicating that the OpenGL object corresponding to the buffer_t is bound by
- * the app and not by the Halide runtime. For example, the buffer_t may be
- * backed by an FBO already bound by the application. */
-extern uint64_t halide_opengl_output_client_bound();
-
-/** Forget all state associated with the previous OpenGL context.  This is
- * similar to halide_opengl_release, except that we assume that all OpenGL
- * resources have already been reclaimed by the OS. */
-extern void halide_opengl_context_lost(void *user_context);
-
-/** Set the platform name for OpenCL to use (e.g. "Intel" or
- * "NVIDIA"). The argument is copied internally. The opencl runtime
- * will select a platform that includes this as a substring. If never
- * called, Halide uses the environment variable HL_OCL_PLATFORM_NAME,
- * or defaults to the first available platform. */
-extern void halide_set_ocl_platform_name(const char *n);
-
-/** Halide calls this to get the desired OpenCL platform
- * name. Implement this yourself to use a different platform per
- * user_context. The default implementation returns the value set by
- * halide_set_ocl_platform_name, or the value of the environment
- * variable HL_OCL_PLATFORM_NAME. The output is valid until the next
- * call to halide_set_ocl_platform_name. */
-extern const char *halide_get_ocl_platform_name(void *user_context);
-
-/** Set the device type for OpenCL to use. The argument is copied
- * internally. It must be "cpu", "gpu", or "acc". If never called,
- * Halide uses the environment variable HL_OCL_DEVICE_TYPE. */
-extern void halide_set_ocl_device_type(const char *n);
-
-/** Halide calls this to gets the desired OpenCL device
- * type. Implement this yourself to use a different device type per
- * user_context. The default implementation returns the value set by
- * halide_set_ocl_device_type, or the environment variable
- * HL_OCL_DEVICE_TYPE. The result is valid until the next call to
- * halide_set_ocl_device_type. */
-extern const char *halide_get_ocl_device_type(void *user_context);
-
 /** Selects which gpu device to use. 0 is usually the display
  * device. If never called, Halide uses the environment variable
  * HL_GPU_DEVICE. If that variable is unset, Halide uses the last

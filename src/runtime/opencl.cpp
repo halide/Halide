@@ -27,6 +27,14 @@ cl_context WEAK *cl_ctx_ptr = NULL;
 cl_command_queue WEAK *cl_q_ptr = NULL;
 volatile int WEAK *cl_lock_ptr = NULL;
 
+WEAK char platform_name[256];
+WEAK int platform_name_lock = 0;
+WEAK bool platform_name_initialized = false;
+
+WEAK char device_type[256];
+WEAK int device_type_lock = 0;
+WEAK bool device_type_initialized = false;
+
 }}}} // namespace Halide::Runtime::Internal::OpenCL
 
 using namespace Halide::Runtime::Internal::OpenCL;
@@ -40,7 +48,46 @@ extern int64_t halide_current_time_ns(void *user_context);
 extern void free(void *);
 extern void *malloc(size_t);
 extern const char * strstr(const char *, const char *);
+extern char *strncpy(char *dst, const char *src, size_t n);
 extern int atoi(const char *);
+extern char *getenv(const char *);
+
+WEAK void halide_opencl_set_platform_name(const char *n) {
+    if (n) {
+        strncpy(platform_name, n, 255);
+    } else {
+        platform_name[0] = 0;
+    }
+    platform_name_initialized = true;
+}
+
+WEAK const char *halide_opencl_get_platform_name(void *user_context) {
+    ScopedSpinLock lock(&platform_name_lock);
+    if (!platform_name_initialized) {
+        const char *name = getenv("HL_OCL_PLATFORM_NAME");
+        halide_opencl_set_platform_name(name);
+    }
+    return platform_name;
+}
+
+
+WEAK void halide_opencl_set_device_type(const char *n) {
+    if (n) {
+        strncpy(device_type, n, 255);
+    } else {
+        device_type[0] = 0;
+    }
+    device_type_initialized = true;
+}
+
+WEAK const char *halide_opencl_get_device_type(void *user_context) {
+    ScopedSpinLock lock(&device_type_lock);
+    if (!device_type_initialized) {
+        const char *name = getenv("HL_OCL_DEVICE_TYPE");
+        halide_opencl_set_device_type(name);
+    }
+    return device_type;
+}
 
 WEAK void halide_opencl_set_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
     cl_ctx_ptr = ctx_ptr;
@@ -182,7 +229,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
     cl_platform_id platform = NULL;
 
     // Find the requested platform, or the first if none specified.
-    const char *name = halide_get_ocl_platform_name(user_context);
+    const char *name = halide_opencl_get_platform_name(user_context);
     if (name != NULL) {
         for (cl_uint i = 0; i < platform_count; ++i) {
             const cl_uint max_platform_name = 256;
@@ -223,7 +270,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
     // Get the types of devices requested.
     cl_device_type device_type = 0;
-    const char * dev_type = halide_get_ocl_device_type(user_context);
+    const char * dev_type = halide_opencl_get_device_type(user_context);
     if (dev_type != NULL) {
         if (strstr("cpu", dev_type)) {
             device_type |= CL_DEVICE_TYPE_CPU;
