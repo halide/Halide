@@ -10,12 +10,12 @@ build_prefix = os.getenv('BUILD_PREFIX')
 if not build_prefix:
     build_prefix = ''
 halide_root = '..'
-include_path = os.path.join(halide_root, 'include')
+include_path = os.path.join(halide_root, 'build2/include')
 bin_path = os.path.join(halide_root, 'bin', build_prefix)
 image_path = os.path.join(halide_root, 'apps', 'images')
 
-png_cflags  = subprocess.check_output('libpng-config --cflags',  shell=True).strip()
-png_ldflags = subprocess.check_output('libpng-config --ldflags', shell=True).strip()
+png_cflags  = subprocess.check_output('libpng-config --cflags',  shell=True).strip().decode()
+png_ldflags = subprocess.check_output('libpng-config --ldflags', shell=True).strip().decode()
 
 ext_modules = [Extension("halide/_cHalide", ["halide/cHalide_wrap.cxx", 'halide/py_util.cpp'],
                          include_dirs=[include_path],
