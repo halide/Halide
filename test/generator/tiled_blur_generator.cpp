@@ -1,10 +1,8 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class TiledBlur : public Generator<TiledBlur> {
+class TiledBlur : public Halide::Generator<TiledBlur> {
 public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
@@ -20,16 +18,15 @@ public:
         Func brighter1("brighter1");
         brighter1(x, y, c) = input(x, y, c) * 1.2f;
 
-        Func tiled_blur("tiled_blur");
-        std::vector<ExternFuncArgument> args(3);
-        args[0] = brighter1;
-        // Pass input.width() and input.height() down to the blur so
-        // it knows the global boundary it should clamp to. We assume
-        // the global min is at 0, 0.
-        args[1] = input.width();
-        args[2] = input.height();
-        tiled_blur.define_extern(is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
-                                 args, Float(32), 3);
+        Func tiled_blur = call_extern_by_name(
+            /* generator_name */
+            "tiled_blur_blur",
+            /* ExternFuncArguments */
+            { brighter1, input.width(), input.height() },
+            /* optional: function name */
+            is_interleaved ? "tiled_blur_blur_interleaved" : "tiled_blur_blur",
+            /* optional: generator_args */
+            { { "is_interleaved", is_interleaved ? "true" : "false" } });
 
         Func brighter2("brighter2");
         brighter2(x, y, c) = tiled_blur(x, y, c) * 1.2f;
@@ -56,7 +53,6 @@ public:
         return brighter2;
     }
 };
-
-RegisterGenerator<TiledBlur> register_my_gen("tiled_blur");
+Halide::RegisterGenerator<TiledBlur> register_my_gen{"tiled_blur"};
 
 }  // namespace

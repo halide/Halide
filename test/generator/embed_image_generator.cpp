@@ -1,10 +1,8 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class EmbedImage : public Generator<EmbedImage> {
+class EmbedImage : public Halide::Generator<EmbedImage> {
 public:
     ImageParam input{ Float(32), 3, "input" };
 
@@ -27,6 +25,6 @@ public:
     }
 };
 
-RegisterGenerator<EmbedImage> register_my_gen("embed_image");
+Halide::RegisterGenerator<EmbedImage> register_my_gen{"embed_image"};
 
 }  // namespace

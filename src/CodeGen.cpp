@@ -373,6 +373,11 @@ void CodeGen::optimize_module() {
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
 
+    #if LLVM_VERSION >= 36
+    internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
+    module_pass_manager.add(new DataLayoutPass());
+    #endif
+
     // Make sure things marked as always-inline get inlined
     module_pass_manager.add(createAlwaysInlinerPass());
 
@@ -1326,7 +1331,7 @@ void CodeGen::visit(const Ramp *op) {
 }
 
 llvm::Value *CodeGen::create_broadcast(llvm::Value *v, int width) {
-    Constant *undef = UndefValue::get(VectorType::get(v->getType(), 1));
+    Constant *undef = UndefValue::get(VectorType::get(v->getType(), width));
     Constant *zero = ConstantInt::get(i32, 0);
     v = builder->CreateInsertElement(undef, v, zero);
     Constant *zeros = ConstantVector::getSplat(width, zero);
@@ -1691,6 +1696,14 @@ void CodeGen::visit(const Call *op) {
                 }
                 value = builder->CreateSelect(cmp, arg, neg);
             }
+        } else if (op->name == Call::copy_buffer_t) {
+            // Make some memory for this buffer_t
+            Value *dst = create_alloca_at_entry(buffer_t_type, 1);
+            Value *src = codegen(op->args[0]);
+            src = builder->CreatePointerCast(src, buffer_t_type->getPointerTo());
+            src = builder->CreateLoad(src);
+            builder->CreateStore(src, dst);
+            value = dst;
         } else if (op->name == Call::create_buffer_t) {
             // Make some memory for this buffer_t
             Value *buffer = create_alloca_at_entry(buffer_t_type, 1);
@@ -2060,16 +2073,24 @@ void CodeGen::visit(const Call *op) {
             internal_error << "Unknown intrinsic: " << op->name << "\n";
         }
     } else if (op->call_type == Call::Extern && op->name == "pow_f32") {
+        internal_assert(op->args.size() == 2);
         Expr x = op->args[0];
         Expr y = op->args[1];
         Expr e = Internal::halide_exp(Internal::halide_log(x) * y);
         e.accept(this);
     } else if (op->call_type == Call::Extern && op->name == "log_f32") {
+        internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_log(op->args[0]);
         e.accept(this);
     } else if (op->call_type == Call::Extern && op->name == "exp_f32") {
+        internal_assert(op->args.size() == 1);
         Expr e = Internal::halide_exp(op->args[0]);
         e.accept(this);
+    } else if (op->call_type == Call::Extern &&
+               (op->name == "is_nan_f32" || op->name == "is_nan_f64")) {
+        internal_assert(op->args.size() == 1);
+        Value *a = codegen(op->args[0]);
+        value = builder->CreateFCmpUNO(a, a);
     } else {
         // It's an extern call.
 

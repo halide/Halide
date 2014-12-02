@@ -1,10 +1,8 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class AcquireRelease : public Generator<AcquireRelease> {
+class AcquireRelease : public Halide::Generator<AcquireRelease> {
 public:
     ImageParam input{ Float(32), 2, "input" };
 
@@ -23,6 +21,6 @@ public:
     }
 };
 
-RegisterGenerator<AcquireRelease> register_my_gen("acquire_release");
+Halide::RegisterGenerator<AcquireRelease> register_my_gen{"acquire_release"};
 
 }  // namespace

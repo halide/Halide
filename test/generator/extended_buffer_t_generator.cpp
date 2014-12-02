@@ -35,6 +35,6 @@ public:
     }
 };
 
-RegisterGenerator<ExtendedBufferT> register_my_gen("extended_buffer_t");
+RegisterGenerator<ExtendedBufferT> register_my_gen{"extended_buffer_t"};
 
 }  // namespace

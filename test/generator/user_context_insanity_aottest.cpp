@@ -25,7 +25,7 @@ int launcher_task(void *user_context, int index, uint8_t *closure) {
     }
     Image<float> output(10, 10);
 
-    user_context_insanity(input, &got_context[index], output);
+    user_context_insanity(&got_context[index], input, output);
 
     return 0;
 }

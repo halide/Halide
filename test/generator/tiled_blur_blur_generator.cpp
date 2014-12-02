@@ -1,10 +1,8 @@
 #include "Halide.h"
 
-using namespace Halide;
-
 namespace {
 
-class TiledBlurBlur : public Generator<TiledBlurBlur> {
+class TiledBlurBlur : public Halide::Generator<TiledBlurBlur> {
 public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
@@ -36,7 +34,6 @@ public:
         return blur;
     }
 };
-
-RegisterGenerator<TiledBlurBlur> register_my_gen("tiled_blur_blur");
+Halide::RegisterGenerator<TiledBlurBlur> register_my_gen{"tiled_blur_blur"};
 
 }  // namespace

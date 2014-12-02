@@ -9,8 +9,11 @@
  * if you are compiling with C++11 enabled.
  */
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <map>
-#if __cplusplus > 199711L
+#if __cplusplus > 199711L || _MSC_VER >= 1800
 #include <mutex>
 #endif
 #include <vector>
@@ -24,7 +27,7 @@ public:
         Invalid,
         Generator,
         GeneratorParam,
-        FilterParam,
+        FilterParam
     };
 
     /** Add an instance to the registry. The size may be 0 for Param Kinds,
@@ -58,7 +61,7 @@ private:
             : subject_ptr(subject_ptr), size(size), kind(kind) {}
     };
 
-#if __cplusplus > 199711L
+#if __cplusplus > 199711L || _MSC_VER >= 1800
     std::mutex mutex;
 #endif
     std::map<uintptr_t, InstanceInfo> instances;
