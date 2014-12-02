@@ -16,6 +16,31 @@ else
 LLVM_LDFLAGS = $(shell $(LLVM_CONFIG) --ldflags --system-libs)
 endif
 
+# Try to automatically check if we can use a shared library for 
+# LLVM. Using a shared library avoids a problem with LLVM's command
+# line parameters when loading an OpenCL implementation that also 
+# links in LLVM.
+LLVM_CONFIG ?= llvm-config
+LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
+LLVM_LIBDIR = $(shell $(LLVM_CONFIG) --libdir)
+
+ifndef USE_LLVM_SHARED_LIB
+ifneq (,$(wildcard $(LLVM_LIBDIR)/LLVM-$(LLVM_FULL_VERSION).so))
+USE_LLVM_SHARED_LIB = 0
+else
+USE_LLVM_SHARED_LIB = 1
+endif
+endif
+
+ifeq ($(USE_LLVM_SHARED_LIB), 0)
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
+LLVM_SHARED_LIBS = 
+else 
+LLVM_STATIC_LIBS = 
+LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
+endif
+
+
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
 LIBPNG_CXX_FLAGS ?= $(shell libpng-config --cflags)
 # Workaround for libpng-config pointing to 64-bit versions on linux even when we're building for 32-bit
