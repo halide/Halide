@@ -38,6 +38,13 @@ struct InternalError : public Error {
     EXPORT InternalError(const std::string &msg);
 };
 
+typedef void (*ErrorReporterFunc)(const char* msg, bool warning);
+
+/** The default error reporter logs to stderr, then throws an exception
+ * (if WITH_EXCEPTIONS) or calls abort (if not). This allows customization
+ * of that behavior if a more gentle response to error reporting is desired.
+ */
+void set_custom_error_reporter(ErrorReporterFunc error_reporter);
 
 namespace Internal {
 

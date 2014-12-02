@@ -2,6 +2,16 @@
 
 namespace Halide {
 
+namespace {
+
+ErrorReporterFunc custom_error_reporter = NULL;
+
+}  // namespace
+
+void set_custom_error_reporter(ErrorReporterFunc error_reporter) {
+    custom_error_reporter = error_reporter;
+}
+
 bool exceptions_enabled() {
     #ifdef WITH_EXCEPTIONS
     return true;
@@ -33,6 +43,12 @@ InternalError _internal_error("");
 }
 
 void ErrorReport::explode() {
+    if (custom_error_reporter != NULL) {
+        custom_error_reporter(msg->str().c_str(), warning);
+        delete msg;
+        return;
+    }
+
     // TODO: Add an option to error out on warnings too
     if (warning) {
         std::cerr << msg->str();
