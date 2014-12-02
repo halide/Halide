@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <memory>
 
 #include "Target.h"
 #include "Debug.h"
@@ -215,11 +216,7 @@ bool Target::merge_string(const std::string &target) {
             is_arch = true;
         } else if (tok == "pnacl") {
             arch = Target::PNaCl;
-            os = Target::NaCl;
-            bits = 32;
-            is_os = true;
             is_arch = true;
-            is_bits = true;
         } else if (tok == "mips") {
             arch = Target::MIPS;
             is_arch = true;
@@ -282,6 +279,8 @@ bool Target::merge_string(const std::string &target) {
             set_feature(Target::Debug);
         } else if (tok == "opengl") {
             set_feature(Target::OpenGL);
+        } else if (tok == "user_context") {
+            set_feature(Target::UserContext);
         } else if (tok == "no_asserts") {
             set_feature(Target::NoAsserts);
         } else if (tok == "no_bounds_query") {
@@ -324,6 +323,16 @@ bool Target::merge_string(const std::string &target) {
         return false;
     }
 
+    // If arch is PNaCl, require explicit setting of os and bits as well.
+    if (arch_specified && arch == Target::PNaCl) {
+        if (!os_specified || os != Target::NaCl) {
+            return false;
+        }
+        if (!bits_specified || bits != 32) {
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -341,7 +350,8 @@ std::string Target::to_string() const {
       "armv7s",
       "cuda", "cuda_capability_30", "cuda_capability_32", "cuda_capability_35", "cuda_capability_50",
       "opencl", "cl_doubles",
-      "opengl"
+      "opengl",
+      "user_context"
   };
   internal_assert(sizeof(feature_names) / sizeof(feature_names[0]) == FeatureEnd);
   string result = string(arch_names[arch])
@@ -494,10 +504,27 @@ namespace {
 // Link all modules together and with the result in modules[0],
 // all other input modules are destroyed.
 void link_modules(std::vector<llvm::Module *> &modules) {
+    #if LLVM_VERSION >= 35
+    // LLVM is moving to requiring data layouts to exist. Use the
+    // datalayout of the first module that has one for all modules.
+    const llvm::DataLayout *data_layout = NULL;
+    for (size_t i = 0; data_layout == NULL && i < modules.size(); i++) {
+        data_layout = modules[i]->getDataLayout();
+    }
+
+    // If LLVM is 3.5 or greater, we have C++11.
+    std::unique_ptr<llvm::DataLayout> default_layout;
+    if (data_layout == NULL) {
+        // An empty data layout is acceptable as a last ditch default.
+        default_layout.reset(new llvm::DataLayout(""));
+        data_layout = default_layout.get();
+    }
+    #endif
+
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
         #if LLVM_VERSION >= 35
-        modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
+        modules[i]->setDataLayout(data_layout);
         #endif
         // This is a workaround to silence some linkage warnings during
         // tests: normally all modules will have the same triple,
@@ -505,8 +532,12 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         // as a workaround for -m64 requiring an explicit 64-bit target.
         modules[i]->setTargetTriple(modules[0]->getTargetTriple());
         string err_msg;
+        #if LLVM_VERSION >= 36
+        bool failed = llvm::Linker::LinkModules(modules[0], modules[i]);
+        #else
         bool failed = llvm::Linker::LinkModules(modules[0], modules[i],
                                                 llvm::Linker::DestroySource, &err_msg);
+        #endif
         if (failed) {
             internal_error << "Failure linking initial modules: " << err_msg << "\n";
         }

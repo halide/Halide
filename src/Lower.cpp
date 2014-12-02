@@ -215,20 +215,10 @@ Stmt build_provide_loop_nest(Function f,
 
             string base_name = prefix + split.inner + ".base";
             Expr base_var = Variable::make(Int(32), base_name);
-            //stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
+            // Substitute in the new expression for the split variable ...
             stmt = substitute(prefix + split.old_var, base_var + inner, stmt);
-
-            if (split.exact) {
-                // The bounds of the old reduction variable need to be
-                // explicitly defined for the benefit of producers
-                // that feed into this stage. They run from base to
-                // base + split factor.
-                stmt = LetStmt::make(prefix + split.old_var + ".min",
-                                     base_var, stmt);
-                stmt = LetStmt::make(prefix + split.old_var + ".max",
-                                     base_var + split.factor - 1, stmt);
-            }
-
+            // ... but also define it as a let for the benefit of bounds inference.
+            stmt = LetStmt::make(prefix + split.old_var, base_var + inner, stmt);
             stmt = LetStmt::make(base_name, base, stmt);
 
         } else if (split.is_fuse()) {
@@ -241,10 +231,10 @@ Stmt build_provide_loop_nest(Function f,
             Expr inner = fused % inner_extent + inner_min;
             Expr outer = fused / inner_extent + outer_min;
 
-            //stmt = LetStmt::make(prefix + split.inner, inner, stmt);
-            //stmt = LetStmt::make(prefix + split.outer, outer, stmt);
             stmt = substitute(prefix + split.inner, inner, stmt);
             stmt = substitute(prefix + split.outer, outer, stmt);
+            stmt = LetStmt::make(prefix + split.inner, inner, stmt);
+            stmt = LetStmt::make(prefix + split.outer, outer, stmt);
 
             // Maintain the known size of the fused dim if
             // possible. This is important for possible later splits.
@@ -256,8 +246,8 @@ Stmt build_provide_loop_nest(Function f,
             }
 
         } else {
-            // stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
             stmt = substitute(prefix + split.old_var, outer, stmt);
+            stmt = LetStmt::make(prefix + split.old_var, outer, stmt);
         }
     }
 
@@ -426,7 +416,7 @@ Stmt build_produce(Function f) {
                 }
             } else if (args[j].is_buffer()) {
                 Buffer b = args[j].buffer;
-                Parameter p(b.type(), true, b.name());
+                Parameter p(b.type(), true, b.dimensions(), b.name());
                 p.set_buffer(b);
                 Expr buf = Variable::make(Handle(), b.name() + ".buffer", p);
                 extern_call_args.push_back(buf);
@@ -838,11 +828,7 @@ public:
             Result r;
             r.param = op->param;
             r.type = op->param.type();
-            // We don't know the dimensionality from the Param
-            // alone. Treating it as zero dimensional skips all the
-            // min/extent checks, which is what we want anyway for
-            // image parameters that are only used by buffer handle.
-            r.dimensions = 0;
+            r.dimensions = op->param.dimensions();
             buffers[op->param.name()] = r;
         }
     }
@@ -1250,7 +1236,10 @@ Stmt add_parameter_checks(Stmt s, const Target &t) {
 // inserted. The second is a piece of code which will rewrite the
 // buffer_t sizes, mins, and strides in order to satisfy the
 // requirements.
-Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds &fb) {
+Stmt add_image_checks(Stmt s, Function f, const Target &t,
+                      const vector<string> &order,
+                      const map<string, Function> &env,
+                      const FuncValueBounds &fb) {
 
     bool no_asserts = t.has_feature(Target::NoAsserts);
     bool no_bounds_query = t.has_feature(Target::NoBoundsQuery);
@@ -1348,7 +1337,44 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
         string buffer_name = is_output_buffer ? f.name() : name;
 
         Box touched = boxes[buffer_name];
-        internal_assert((int)(touched.size()) == dimensions);
+        internal_assert(touched.empty() || (int)(touched.size()) == dimensions);
+
+        // The buffer may be used in one or more extern stage. If so we need to
+        // expand the box touched to include the results of the
+        // top-level bounds query calls to those extern stages.
+        if (param.defined()) {
+            // Find the extern users.
+            vector<string> extern_users;
+            for (size_t i = 0; i < order.size(); i++) {
+                Function f = env.find(order[i])->second;
+                if (f.has_extern_definition()) {
+                    const vector<ExternFuncArgument> &args = f.extern_arguments();
+                    for (size_t j = 0; j < args.size(); j++) {
+                        if ((args[j].image_param.defined() &&
+                             args[j].image_param.name() == param.name()) ||
+                            (args[j].buffer.defined() &&
+                             args[j].buffer.name() == param.name())) {
+                            extern_users.push_back(order[i]);
+                        }
+                    }
+                }
+            }
+
+            // Expand the box by the result of the bounds query from each.
+            for (size_t i = 0; i < extern_users.size(); i++) {
+                const string &extern_user = extern_users[i];
+                Box query_box;
+                Expr query_buf = Variable::make(Handle(), param.name() + ".bounds_query." + extern_user);
+                for (int j = 0; j < dimensions; j++) {
+                    Expr min = Call::make(Int(32), Call::extract_buffer_min,
+                                          vec<Expr>(query_buf, j), Call::Intrinsic);
+                    Expr max = Call::make(Int(32), Call::extract_buffer_max,
+                                          vec<Expr>(query_buf, j), Call::Intrinsic);
+                    query_box.push_back(Interval(min, max));
+                }
+                merge_boxes(touched, query_box);
+            }
+        }
 
         // An expression returning whether or not we're in inference mode
         ReductionDomain rdom;
@@ -1698,7 +1724,7 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t, const FuncValueBounds
     return s;
 }
 
-Stmt lower(Function f, const Target &t) {
+Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
 
@@ -1735,7 +1761,7 @@ Stmt lower(Function f, const Target &t) {
     // The checks will be in terms of the symbols defined by bounds
     // inference.
     debug(1) << "Adding checks for images\n";
-    s = add_image_checks(s, f, t, func_bounds);
+    s = add_image_checks(s, f, t, order, env, func_bounds);
     debug(2) << "Lowering after injecting image checks:\n" << s << '\n';
 
     // This pass injects nested definitions of variable names, so we
@@ -1842,6 +1868,15 @@ Stmt lower(Function f, const Target &t) {
     s = common_subexpression_elimination(s);
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
+
+    if (!custom_passes.empty()) {
+        for (size_t i = 0; i < custom_passes.size(); i++) {
+            debug(1) << "Running custom lowering pass " << i << "...\n";
+            s = custom_passes[i]->mutate(s);
+            debug(1) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
+        }
+    }
+
 
     return s;
 }

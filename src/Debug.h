@@ -22,7 +22,7 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Type &);
 namespace Internal {
 
 struct Stmt;
-std::ostream &operator<<(std::ostream &stream, const Stmt &);
+EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
 /** For optional debugging during codegen, use the debug class as
  * follows:

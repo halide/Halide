@@ -197,6 +197,9 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
 
+/** Split the source string using 'delim' as the divider. */
+EXPORT std::vector<std::string> split_string(const std::string &source, const std::string &delim);
+
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
 
 template <typename T>
