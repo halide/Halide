@@ -1371,7 +1371,7 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_malloc",
         "halide_print",
         "halide_profiling_timer",
-        "halide_release",
+        "halide_device_release",
         "halide_start_clock",
         "halide_trace",
         "halide_memoization_cache_lookup",
@@ -1382,6 +1382,7 @@ bool CodeGen::function_takes_user_context(const string &name) {
         "halide_cuda_initialize_kernels",
         "halide_opencl_initialize_kernels",
         "halide_opengl_initialize_kernels"
+        "halide_get_gpu_device",
     };
     const int num_funcs = sizeof(user_context_runtime_funcs) /
         sizeof(user_context_runtime_funcs[0]);
