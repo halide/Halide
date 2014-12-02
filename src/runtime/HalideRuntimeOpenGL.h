@@ -48,6 +48,13 @@ extern int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, 
  */
 extern uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf);
 
+/** Return the underlying texture for a buffer_t. This buffer
+ *  must be valid on an OpenGL device, or not have any associated device
+ *  memory. If there is no device memory (dev field is NULL), this
+ *  returns 0.
+ */
+extern uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *buf);
+
 /** This function is called to populate the buffer_t.dev field with a constant
  * indicating that the OpenGL object corresponding to the buffer_t is bound by
  * the app and not by the Halide runtime. For example, the buffer_t may be

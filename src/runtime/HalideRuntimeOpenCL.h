@@ -76,6 +76,13 @@ extern int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, u
  */
 extern uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct buffer_t *buf);
 
+/** Return the underlying cl_mem for a buffer_t. This buffer must be
+ *  valid on an OpenCL device, or not have any associated device
+ *  memory. If there is no device memory (dev field is NULL), this
+ *  returns 0.
+ */
+extern uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif
