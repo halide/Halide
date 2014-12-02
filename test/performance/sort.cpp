@@ -76,15 +76,15 @@ Func merge_sort(Func input, int total_size) {
         Expr b2 = min(a2, a3);
         Expr b3 = max(a2, a3);
 
-        a0 = min(b0, b3);
-        a1 = min(b1, b2);
-        a2 = max(b1, b2);
-        a3 = max(b0, b3);
+        a0 = min(b0, b2);
+        a1 = max(b0, b2);
+        a2 = min(b1, b3);
+        a3 = max(b1, b3);
 
-        b0 = min(a0, a1);
-        b1 = max(a0, a1);
-        b2 = min(a2, a3);
-        b3 = max(a2, a3);
+        b0 = a0;
+        b1 = min(a1, a2);
+        b2 = max(a1, a2);
+        b3 = a3;
 
         result(x, y) = select(x == 0, b0,
                               select(x == 1, b1,
