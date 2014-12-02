@@ -29,6 +29,25 @@ extern int halide_cuda_run(void *user_context,
                            int8_t arg_is_buffer[]);
 // @}
 
+/** Set the underlying cuda device poiner for a buffer. The device
+ * pointer should be allocated using cuMemAlloc or similar and must
+ * have an extent large enough to cover that specified by the buffer_t
+ * extent fields. The dev field of the buffer_t must be NULL when this
+ * routine is called. This call can fail due to running out of memory
+ * or being passed an invalid device pointer. The device and host
+ * dirty bits are left unmodified. */
+extern int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, uintptr_t device_ptr);
+
+/** Disconnect this buffer_t from the device pointer it was previously
+ * wrapped around. Should only be called for a buffer_t that
+ * halide_cuda_wrap_device_ptr was previously called on. Frees any
+ * storage associated with the binding of the buffer_t and the device
+ * pointer, but does not free the device pointer. The previously
+ * wrapped device pointer is returned. . The dev field of the buffer_t
+ * will be NULL on return.
+ */
+extern uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct buffer_t *buf);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif

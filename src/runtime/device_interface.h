@@ -19,6 +19,7 @@ namespace Halide { namespace Runtime { namespace Internal {
 extern WEAK uint64_t new_device_wrapper(uint64_t handle, const struct halide_device_interface *interface);
 extern WEAK void delete_device_wrapper(uint64_t dev_field);
 extern WEAK uint64_t get_device_handle(uint64_t dev_field);
+extern WEAK const struct halide_device_interface *get_device_interface(uint64_t dev_field);
 
 }}} // namespace Halide::Runtime::Internal
 
