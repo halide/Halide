@@ -1027,7 +1027,16 @@ WEAK uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct buffer_t *
     uint64_t mem = get_device_handle(buf->dev);
     delete_device_wrapper(buf->dev);
     buf->dev = 0;
-    return mem;
+    return (uintptr_t)mem;
+}
+
+WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, get_device_interface(buf->dev) == &opencl_device_interface);
+    uint64_t mem = get_device_handle(buf->dev);
+    return (uintptr_t)mem;
 }
 
 WEAK const struct halide_device_interface *halide_opencl_device_interface() {

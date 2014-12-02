@@ -739,10 +739,19 @@ WEAK uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct buffer_t
         return 0;
     }
     halide_assert(user_context, get_device_interface(buf->dev) == &cuda_device_interface);
-    uint64_t result = get_device_handle(buf->dev);
+    uint64_t dev_ptr = get_device_handle(buf->dev);
     delete_device_wrapper(buf->dev);
     buf->dev = 0;
-    return result;
+    return (uintptr_t)dev_ptr;
+}
+
+WEAK uintptr_t halide_cuda_get_device_ptr(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, get_device_interface(buf->dev) == &cuda_device_interface);
+    uint64_t dev_ptr = get_device_handle(buf->dev);
+    return (uintptr_t)dev_ptr;
 }
 
 WEAK const halide_device_interface *halide_cuda_device_interface() {

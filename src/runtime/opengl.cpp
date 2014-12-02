@@ -1553,7 +1553,16 @@ WEAK uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t 
     uint64_t texture_id = get_device_handle(buf->dev);
     delete_device_wrapper(buf->dev);
     buf->dev = 0;
-    return texture_id;
+    return (uintptr_t)texture_id;
+}
+
+WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, get_device_interface(buf->dev) == &opengl_device_interface);
+    uint64_t texture_id = get_device_handle(buf->dev);
+    return (uintptr_t)texture_id;
 }
 
 // This function is called to populate the buffer_t.dev field with a constant

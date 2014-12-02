@@ -48,6 +48,13 @@ extern int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf,
  */
 extern uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct buffer_t *buf);
 
+/** Return the underlying device pointer for a buffer_t. This buffer
+ *  must be valid on a Cuda device, or not have any associated device
+ *  memory. If there is no device memory (dev field is NULL), this
+ *  returns 0.
+ */
+extern uintptr_t halide_cuda_get_device_ptr(void *user_context, struct buffer_t *buf);
+
 #ifdef __cplusplus
 } // End extern "C"
 #endif
