@@ -1,4 +1,3 @@
-
 project(Halide)
 cmake_minimum_required(VERSION 2.8.7)
 
@@ -7,6 +6,13 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
+if(NOT DEFINED LLVM_CONFIG)
+    set(LLVM_CONFIG "llvm-config")
+endif()
+if(NOT DEFINED CLANG_PATH)
+    set(CLANG_PATH "clang")
+endif()
 
 function(get_llvm_info key output)
     execute_process(
@@ -19,6 +25,11 @@ endfunction()
 message(STATUS "Gathering LLVM information")
 
 get_llvm_info("components" LLVM_COMPONENTS)
+if("${LLVM_COMPONENTS}" STREQUAL "")
+    message(FATAL_ERROR
+        "Could not find llvm-config. You can pass -DLLVM_CONFIG=path_to_llvm_config"
+        " to use a specific version.")
+endif()
 message(STATUS "LLVM_COMPONENTS: ${LLVM_COMPONENTS}")
 
 get_llvm_info("version" LLVM_VERSION)
@@ -45,6 +56,11 @@ execute_process(
     OUTPUT_STRIP_TRAILING_WHITESPACE
     OUTPUT_VARIABLE CLANG_VERSION)
 message(STATUS "CLANG_VERSION: ${CLANG_VERSION}")
+if("${CLANG_VERSION}" STREQUAL "")
+    message(FATAL_ERROR
+        "Could not find clang. You can pass -DCLANG_PATH=path_to_clang"
+        " to use a specific version.")
+endif()
 
 set(OPTIMIZE "-O3"
   CACHE STRING "Optimization level")
