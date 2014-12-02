@@ -1533,6 +1533,29 @@ WEAK void halide_opengl_context_lost(void *user_context) {
     return;
 }
 
+WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t texture_id) {
+    halide_assert(user_context, buf->dev == 0);
+    if (buf->dev != 0) {
+        return -2;
+    }
+    buf->dev = new_device_wrapper(texture_id, &opengl_device_interface);
+    if (buf->dev == 0) {
+        return -1;
+    }
+    return 0;
+}
+
+WEAK uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, get_device_interface(buf->dev) == &opengl_device_interface);
+    uint64_t texture_id = get_device_handle(buf->dev);
+    delete_device_wrapper(buf->dev);
+    buf->dev = 0;
+    return texture_id;
+}
+
 // This function is called to populate the buffer_t.dev field with a constant
 // indicating that the OpenGL object corresponding to the buffer_t is bound by
 // the app and not by the Halide runtime. For example, the buffer_t may be

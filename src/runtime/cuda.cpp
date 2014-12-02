@@ -714,6 +714,37 @@ WEAK int halide_cuda_run(void *user_context,
     return 0;
 }
 
+WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, uintptr_t device_ptr) {
+    halide_assert(user_context, buf->dev == 0);
+    if (buf->dev != 0) {
+        return -2;
+    }
+    buf->dev = new_device_wrapper(device_ptr, &cuda_device_interface);
+    if (buf->dev == 0) {
+        return -1;
+    }
+#if 0
+    // TODO: Is this reliable?
+    if (!validate_device_pointer(user_context, buf->dev)) {
+        delete_device_wrapper(buf->dev);
+        buf->dev = 0;
+        return -3;
+    }
+#endif
+    return 0;
+}
+
+WEAK uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct buffer_t *buf) {
+    if (buf->dev == NULL) {
+        return 0;
+    }
+    halide_assert(user_context, get_device_interface(buf->dev) == &cuda_device_interface);
+    uint64_t result = get_device_handle(buf->dev);
+    delete_device_wrapper(buf->dev);
+    buf->dev = 0;
+    return result;
+}
+
 WEAK const halide_device_interface *halide_cuda_device_interface() {
     return &cuda_device_interface;
 }

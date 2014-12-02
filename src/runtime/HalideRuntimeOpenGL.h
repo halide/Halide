@@ -30,6 +30,24 @@ extern WEAK int halide_opengl_run(void *user_context,
                                   int8_t is_buffer[]);
 // @}
 
+/** Set the underlying OpenGL texture for a buffer. The texture must
+ * have an extent large enough to cover that specified by the buffer_t
+ * extent fields. The dev field of the buffer_t must be NULL when this
+ * routine is called. This call can fail due to running out of memory
+ * or being passed an invalid texture. The device and host dirty bits
+ * are left unmodified. */
+extern int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, uintptr_t texture_id);
+
+/** Disconnect this buffer_t from the texture it was previously
+ * wrapped around. Should only be called for a buffer_t that
+ * halide_cuda_wrap_device_ptr was previously called on. Frees any
+ * storage associated with the binding of the buffer_t and the device
+ * pointer, but does not free the texture. The previously wrapped
+ * texture is returned. . The dev field of the buffer_t will be NULL
+ * on return.
+ */
+extern uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t *buf);
+
 /** This function is called to populate the buffer_t.dev field with a constant
  * indicating that the OpenGL object corresponding to the buffer_t is bound by
  * the app and not by the Halide runtime. For example, the buffer_t may be

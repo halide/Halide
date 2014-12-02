@@ -41,14 +41,14 @@ WEAK void delete_device_wrapper(uint64_t wrapper) {
 WEAK uint64_t get_device_handle(uint64_t dev_field) {
     const device_handle_wrapper *wrapper = (const device_handle_wrapper *)dev_field;
     if (wrapper == NULL) {
-        debug(NULL) << "Getting device handle for NULL wrappe\n";
+        debug(NULL) << "Getting device handle for NULL wrapper\n";
         return 0;
     }
     debug(NULL) << "Getting device handle for interface " << wrapper->interface << " device_handle " << (void *)wrapper->device_handle << " at addr " << wrapper << "\n";
     return wrapper->device_handle;
 }
 
-inline const halide_device_interface *get_device_interface(struct buffer_t *buf) {
+WEAK const halide_device_interface *get_device_interface(struct buffer_t *buf) {
     if (buf->dev == 0) {
         return NULL;
     }
