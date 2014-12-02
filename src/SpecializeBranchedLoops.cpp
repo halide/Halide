@@ -1307,13 +1307,24 @@ void specialize_branched_loops_test() {
         // with a more complex condition that we can't solve.
         //
         // NOTE: We can solve this now. Will leave this test here for
-        // futur reference.
+        // future reference.
         Expr cond = !Cast::make(UInt(1), Select::make(x == 0 || x > 5, 0, 1));
         Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
                                        Store::make("out", 0, x));
         Stmt stmt = For::make("x", 0, 10, For::Serial, branch);
         Stmt branched = specialize_branched_loops(stmt);
         check_num_branches(branched, "x", 3);
+    }
+
+    {
+        // Test that we don't touch parallel loops - it would
+        // partially serialize them.
+        Expr cond = x > 5;
+        Stmt branch = IfThenElse::make(cond, Store::make("out", 1, x),
+                                       Store::make("out", 0, x));
+        Stmt stmt = For::make("x", 0, 10, For::Parallel, branch);
+        Stmt branched = specialize_branched_loops(stmt);
+        check_num_branches(branched, "x", 1);
     }
 
     {
