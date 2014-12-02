@@ -3,15 +3,16 @@
 
 using namespace Halide;
 
-
 #ifdef _MSC_VER
 #define DLLEXPORT __declspec(dllexport)
 #else
 #define DLLEXPORT
 #endif
 
+bool extern_error_called = false;
 extern "C" DLLEXPORT
-int extern_error(buffer_t *out) {
+int extern_error(void *user_context, buffer_t *out) {
+    extern_error_called = true;
     return -1;
 }
 
@@ -23,14 +24,15 @@ void my_halide_error(void *user_context, const char *msg) {
 }
 
 int main(int argc, char **argv) {
-    Func f;
-    f.define_extern("extern_error", std::vector<ExternFuncArgument>(),
-                    Float(32), 1);
+    std::vector<ExternFuncArgument> args;
+    args.push_back(user_context_value());
 
+    Func f;
+    f.define_extern("extern_error", args, Float(32), 1);
     f.set_error_handler(&my_halide_error);
     f.realize(100);
 
-    if (!error_occurred) {
+    if (!error_occurred || !extern_error_called) {
         printf("There was supposed to be an error\n");
         return -1;
     }

@@ -33,6 +33,9 @@ else
     export LIBPNG_CXX_FLAGS="-Itesting/deps -I../../testing/deps"
 fi
 
+# Turn on C++11
+export CXX11=true
+
 echo Testing target $HL_TARGET with llvm $LLVM
 echo Using LD = $LD
 echo Using CC = $CC
@@ -53,9 +56,7 @@ elif [[ "$HL_TARGET" == *nacl ]]; then
     # The tests don't work for nacl yet. It's still worth testing that everything builds.
 
     # Also check that the nacl apps compile.
-    make -C apps/HelloNaCl clean &&
     make -C apps/nacl_demos clean &&
-    make -C apps/HelloNaCl &&
     make -C apps/nacl_demos &&
     echo "Halide builds but tests not run."
 else
@@ -65,6 +66,6 @@ else
     make test_tutorials -j8 &&
     make test_performance &&
     make test_apps &&
+    make test_generators &&
     echo "All tests pass"
 fi
-
