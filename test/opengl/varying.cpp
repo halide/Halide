@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 using namespace Halide;
+using namespace Halide::Internal;
 
 // This test exercises several use cases for the GLSL varying attributes
 // feature. This feature detects expressions that are linear in terms of the
@@ -12,6 +13,40 @@ using namespace Halide;
 // coordinates interpolated across a Func domain or texture coordinates
 // transformed by a matrix and interpolated across the domain. Both cases arise
 // when GLSL shaders are ported to Halide.
+
+// This is a mutator that injects code that counts the number of variables
+// tagged .varying
+#ifdef _MSC_VER
+#define DLLEXPORT __declspec(dllexport)
+#else
+#define DLLEXPORT
+#endif
+
+// This global variable is used to count the number of unique varying attribute
+// variables that appear in the lowered Halide IR.
+std::set<std::string> varyings;
+
+// This function is a HalideExtern used to add variables to the set. The tests
+// below check the total number of unique variables found--not the specific
+// names of the variables which are arbitrary.
+extern "C" DLLEXPORT const Variable* record_varying(const Variable *op) {
+    if (varyings.find(op->name) == varyings.end()) {
+        fprintf(stderr, "Found varying attribute: %s\n", op->name.c_str());
+        varyings.insert(op->name);
+    }
+    return op;
+}
+HalideExtern_1(const Variable *, record_varying, const Variable *);
+
+// This visitor inserts the above function in the IR tree.
+class CountVarying : public IRMutator {
+    void visit(const Variable *op) {
+        IRMutator::visit(op);
+        if (ends_with(op->name, ".varying")) {
+            expr = record_varying(op);
+        }
+    }
+};
 
 int main() {
 
@@ -28,7 +63,7 @@ int main() {
 
     // This is a simple test case where there are two expressions that are not
     // linearly varying in terms of a loop variable and one expression that is.
-    printf("Test f0\n");
+    fprintf(stderr, "Test f0\n");
 
     float p_value = 8.0f;
     Param<float> p("p"); p.set(p_value);
@@ -41,7 +76,21 @@ int main() {
     Image<float> out0(8, 8, 3);
     f0.bound(c, 0, 3);
     f0.glsl(x, y, c);
+
+    // Run the test
+    varyings.clear();
+    f0.add_custom_lowering_pass(new CountVarying);
     f0.realize(out0);
+
+    // Check for the correct number of varying attributes
+    if (varyings.size() != 2) {
+        fprintf(stderr,
+                "Error: wrong number of varying attributes: %d should be %d\n",
+                (int)varyings.size(), 2);
+        return 1;
+    }
+
+    // Check for correct result values
     out0.copy_to_host();
 
     for (int c=0; c != out0.extent(2); ++c) {
@@ -68,11 +117,11 @@ int main() {
             }
         }
     }
-    printf("Passed!\n");
+    fprintf(stderr, "Passed!\n");
 
     // This is a more complicated test case where several expressions are linear
     // in all of the loop variables. This is the coordinate transformation case
-    printf("Test f1\n");
+    fprintf(stderr, "Test f1\n");
 
     float th = M_PI/8.0f;
     float s_th = sinf(th);
@@ -98,9 +147,22 @@ int main() {
     f1.glsl(x, y, c);
 
     Image<float> out1(8, 8, 3);
-    f1.realize(out1);
-    out1.copy_to_host();
 
+    // Run the test
+    varyings.clear();
+    f1.add_custom_lowering_pass(new CountVarying);
+    f1.realize(out1);
+
+    // Check for the correct number of varying attributes
+    if (varyings.size() != 4) {
+        fprintf(stderr,
+                "Error: wrong number of varying attributes: %d should be %d\n",
+                (int)varyings.size(), 4);
+        return 1;
+    }
+
+    // Check for correct result values
+    out1.copy_to_host();
     for (int c=0; c != out1.extent(2); ++c) {
         for (int y=0; y != out1.extent(1); ++y) {
             for (int x=0; x != out1.extent(0); ++x) {
@@ -129,12 +191,12 @@ int main() {
             }
         }
     }
-    printf("Passed!\n");
+    fprintf(stderr, "Passed!\n");
 
     // The feature is supposed to find linearly varying sub-expressions as well
     // so for example, if the above expressions are wrapped in a non-linear
     // function like sqrt, they should still be extracted.
-    printf("Test f2\n");
+    fprintf(stderr, "Test f2\n");
     Func f2("f2");
     f2(x, y, c) = select(c == 0, sqrt(m0 * x + m1 * y + m2),
                        c == 1, sqrt(m3 * x + m4 * y + m5),
@@ -144,7 +206,21 @@ int main() {
     f2.glsl(x, y, c);
 
     Image<float> out2(8, 8, 3);
+
+    // Run the test
+    varyings.clear();
+    f2.add_custom_lowering_pass(new CountVarying);
     f2.realize(out2);
+
+    // Check for the correct number of varying attributes
+    if (varyings.size() != 4) {
+        fprintf(stderr,
+                "Error: wrong number of varying attributes: %d should be %d\n",
+                (int)varyings.size(), 4);
+        return 1;
+    }
+
+    // Check for correct result values
     out2.copy_to_host();
 
     for (int c=0; c != out2.extent(2); ++c) {
@@ -175,12 +251,11 @@ int main() {
             }
         }
     }
-    printf("Passed!\n");
+    fprintf(stderr, "Passed!\n");
 
     // This case tests a large expression linearly varying in terms of a loop
     // variable
-    printf("Test f3\n");
-
+    fprintf(stderr, "Test f3\n");
 
     Expr foo = p;
     for (int i = 0; i < 10; i++) {
@@ -202,7 +277,21 @@ int main() {
     f3.glsl(x, y, c);
 
     Image<float> out3(8, 8, 3);
+
+    // Run the test
+    varyings.clear();
+    f3.add_custom_lowering_pass(new CountVarying);
     f3.realize(out3);
+
+    // Check for the correct number of varying attributes
+    if (varyings.size() != 2) {
+        fprintf(stderr,
+                "Error: wrong number of varying attributes: %d should be %d\n",
+                (int)varyings.size(), 2);
+        return 1;
+    }
+
+    // Check for correct result values
     out3.copy_to_host();
 
     for (int c=0; c != out3.extent(2); ++c) {
@@ -233,14 +322,12 @@ int main() {
             }
         }
     }
-    printf("Passed!\n");
-
-    // TODO: Add tests to check that the glsl_varying attribute was applied
-    // correctly.
-
+    fprintf(stderr, "Passed!\n");
 
     // The test will return early on error.
-    printf("Success!\n");
-    
+    fprintf(stderr, "Success!\n");
+
+    // This test may abort with the message "Failed to free device buffer" due
+    // to https://github.com/halide/Halide/issues/559
     return 0;
 }
