@@ -84,7 +84,8 @@ public:
     EXPORT Stage &reorder(const std::vector<VarOrRVar> &vars);
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
-    EXPORT Stage &reorder(VarOrRVar x, VarOrRVar y, Args... args) {
+    EXPORT typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Stage &>::type
+    reorder(VarOrRVar x, VarOrRVar y, Args... args) {
         std::vector<VarOrRVar> collected_args;
         collected_args.push_back(x);
         collected_args.push_back(y);
@@ -1003,7 +1004,8 @@ public:
     EXPORT FuncRefExpr operator()(std::vector<Expr>) const;
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
-    EXPORT FuncRefExpr operator()(Expr x, Args... args) const {
+    EXPORT typename std::enable_if<Internal::all_are_convertible<Expr, Args...>::value, FuncRefExpr>::type
+    operator()(Expr x, Args... args) const {
         std::vector<Expr> collected_args;
         collected_args.push_back(x);
         Internal::collect_args(collected_args, args...);
@@ -1102,7 +1104,8 @@ public:
 
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
     template <typename... Args>
-    EXPORT Func &reorder(VarOrRVar x, VarOrRVar y, Args... args) {
+    EXPORT typename std::enable_if<Internal::all_are_convertible<VarOrRVar, Args...>::value, Func &>::type
+    reorder(VarOrRVar x, VarOrRVar y, Args... args) {
         std::vector<VarOrRVar> collected_args;
         collected_args.push_back(x);
         collected_args.push_back(y);
@@ -1472,7 +1475,8 @@ public:
 #if __cplusplus > 199711L // C++11 arbitrary number of args support
     EXPORT Func &reorder_storage(Var x, Var y);
     template <typename... Args>
-    EXPORT Func &reorder_storage(Var x, Var y, Args... args) {
+    EXPORT typename std::enable_if<Internal::all_are_convertible<Var, Args...>::value, Func &>::type
+    reorder_storage(Var x, Var y, Args... args) {
         std::vector<Var> collected_args;
         collected_args.push_back(x);
         collected_args.push_back(y);

@@ -225,7 +225,7 @@ inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collec
     collected_args.push_back(std::make_pair<T1, T2>(a1, a2));
 }
 
- template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
+template <typename T1, typename T2, typename T3, typename T4, typename ...Args>
 inline NO_INLINE void collect_paired_args(std::vector<std::pair<T1, T2>> &collected_args,
                                    T3 a1, T4 a2, Args... args) {
     collected_args.push_back(std::make_pair<T1, T2>(a1, a2));
