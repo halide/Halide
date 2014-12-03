@@ -15,18 +15,20 @@ except ImportError:
 import os
 import pkgutil
 try:
-    import cStringIO as StringIO
+    import cStringIO
 except ImportError:
-    import io as StringIO
+    import io
 import tempfile
 
 import sys
 if sys.version < '3':
     # python 2
     integer_types = (int, long,)
+    str_types = (str, unicode)
 else:
     # python 3
     integer_types = (int,)
+    str_types = (str,)
 
 
 __version__ = '0.3.0'
@@ -982,6 +984,8 @@ def flip_xy(flip=True):
     global _flip_xy
     _flip_xy = flip
 
+import ctypes
+
 def _image_getattr(self, name):
     if name == '__array_interface__':
         #print('get array')
@@ -1000,9 +1004,20 @@ def _image_getattr(self, name):
         if _flip_xy and len(strides) >= 2:
             strides = (strides[1], strides[0]) + strides[2:]
             shape = (shape[1], shape[0]) + shape[2:]
+
+        #print("About to call image_to_string on", type(self))
         data = image_to_string(self)
+        #print(type(data))
+        #data = image_to_uint8(self)
+        #data_p = get_image_bytes(self)
+        #print(type(data))
+        #data = ctypes.c_uint8_p(int(data_p))
+        #void_data_p = ctypes.c_void_p(int(data_p))
+        #uint8_data = ctypes.cast(void_data_p, ctypes.POINTER(ctypes.c_uint8))
+
         return {'shape': shape,
                 'typestr': typestr,
+                #'data': uint8_data,
                 'data': data,
                 'strides': strides}
     raise AttributeError(name)
@@ -1021,6 +1036,7 @@ Image_float64.type = lambda x: Float(64)
 
 def _to_pil(I, maxval=None):
     "Convert an Image instance to a PIL image."
+    #print(I.__array_interface__)
     A = numpy.asarray(I)
     if maxval is not None:
         A = numpy.asarray(A,'float32')*(1.0/maxval)
@@ -1104,7 +1120,7 @@ class Image(object):
         if contents is None:                        # If contents is None then Image(contents) is assumed as the call
             (typeval, contents) = (None, typeval)
 
-        if isinstance(contents, (str, unicode)):    # Convert filename to PIL image
+        if isinstance(contents, str_types):    # Convert filename to PIL image
             contents = PIL.open(contents)
             if typeval is None:
                 typeval = UInt(8)
@@ -1660,7 +1676,8 @@ def test_core():
                 check([x + y,
                 x - y,
                 x * y,
-                x / y,
+                #x / y,
+                x.__div__(y),
                 x % y,
                 x < y,
                 x <= y,
@@ -1678,7 +1695,8 @@ def test_core():
                     check([x])
                     x *= y
                     check([x])
-                    x /= y
+                    #x /= y
+                    x.__idiv__(y)
                     check([x])
 
     #blur_x += expr_x
@@ -1737,7 +1755,11 @@ def builtin_image(filename=None, raw_string=False):
     s = pkgutil.get_data('halide', os.path.join('data', filename))
     if raw_string:
         return s
-    f = StringIO.StringIO(str(s))
+
+    if sys.version < '3':
+        f = cStringIO.StringIO(s)
+    else:
+        f = io.BytesIO(s)
     return PIL.open(f)
 
 def filter_image(input, out_func, in_image, disp_time=False, compile=True, eval_func=None, out_dims=None, times=1): #, pad_multiple=1):
@@ -1839,7 +1861,7 @@ def test_blur():
         out_filename = 'test_out.png'
         out.save(out_filename)
         s = image_to_string(out)
-        assert isinstance(s, str)
+        assert isinstance(s, (str, bytes))
         I1 = numpy.asarray(PIL.open(out_filename))
         os.remove(out_filename)
 
