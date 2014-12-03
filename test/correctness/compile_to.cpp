@@ -13,7 +13,7 @@ void testCompileToOutput(Func j) {
     assert(access(fn_object, F_OK) != 0 && "Output file already exists.");
 
     std::vector<Argument> empty_args;
-    j.compile_to(TargetFilenames::object(fn_object), empty_args);
+    j.compile_to(Outputs::object(fn_object), empty_args, "");
 
     #ifndef _MSC_VER
     assert(access(fn_object, F_OK) == 0 && "Output file not created.");
@@ -30,7 +30,10 @@ void testCompileToOutputAndAssembly(Func j) {
     assert(access(fn_assembly, F_OK) != 0 && "Assembly file already exists.");
 
     std::vector<Argument> empty_args;
-    j.compile_to(TargetFilenames(fn_object, fn_assembly), empty_args);
+    Outputs output_filenames;
+    output_filenames.object_name = fn_object;
+    output_filenames.assembly_name = fn_assembly;
+    j.compile_to(output_filenames, empty_args, "");
 
     #ifndef _MSC_VER
     assert(access(fn_object, F_OK) == 0 && "Output file not created.");

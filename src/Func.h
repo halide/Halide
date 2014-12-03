@@ -355,28 +355,30 @@ class IRMutator;
 }
 
 
-struct TargetFilenames {
-    static const std::string NO_FILENAME;
+struct Outputs {
+private:
+    Outputs(const std::string& object_name_,
+            const std::string& assembly_name_,
+            const std::string& bitcode_name_ = ""):
+        object_name(object_name_),
+        assembly_name(assembly_name_),
+        bitcode_name(bitcode_name_) {}
 
-    const std::string& fn_object;
-    const std::string& fn_assembly;
-    const std::string& fn_bitcode;
+public:
+   std::string object_name;
+   std::string assembly_name;
+   std::string bitcode_name;
 
-    TargetFilenames(const std::string& fn_object_,
-                    const std::string& fn_assembly_,
-                    const std::string& fn_bitcode_ = NO_FILENAME):
-        fn_object(fn_object_),
-        fn_assembly(fn_assembly_),
-        fn_bitcode(fn_bitcode_) {}
+   Outputs() {}
 
-    static TargetFilenames object(const std::string& fn) {
-        return TargetFilenames(fn, NO_FILENAME, NO_FILENAME);
+   static Outputs object(const std::string& object_name) {
+        return Outputs(object_name, "", "");
     }
-    static TargetFilenames assembly(const std::string& fn) {
-        return TargetFilenames(NO_FILENAME, fn, NO_FILENAME);
+    static Outputs assembly(const std::string& assembly_name) {
+        return Outputs("", assembly_name, "");
     }
-    static TargetFilenames bitcode(const std::string& fn) {
-        return TargetFilenames(NO_FILENAME, NO_FILENAME, fn);
+    static Outputs bitcode(const std::string& bitcode_name) {
+        return Outputs("", "", bitcode_name);
     }
 };
 
@@ -733,17 +735,13 @@ public:
                                 const Target &target = get_target_from_environment());
     // @}
 
-    /** Basic compile function, that allows to generate multiple target files
-     * with single call.
+    /** Compile and generate multiple target files with single call.
      *  Deduces target files based on filenames specified in target_fns struct.
      */
     //@{
-    EXPORT void compile_to(const TargetFilenames target_fns,
+    EXPORT void compile_to(const Outputs& output_files,
                            std::vector<Argument> args,
                            const std::string &fn_name,
-                           const Target &target = get_target_from_environment());
-    EXPORT void compile_to(const TargetFilenames target_fns,
-                           std::vector<Argument> args,
                            const Target &target = get_target_from_environment());
     // @}
 
