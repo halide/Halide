@@ -1636,12 +1636,10 @@ else:
     # Work around swig bug for python 3
     # see https://github.com/swig/swig/pull/136
 
-    FuncRefExpr.__truediv__ = FuncRefExpr.__div__
-    FuncRefVar.__truediv__ = FuncRefVar.__div__
-    #Expr.__truediv__ = Expr.__div__
-    #Expr.__truediv__ = Expr.__getattr__('__div__')
-    pass
-
+    #for C in [VarType, FuncRefExpr, FuncRefVar]:
+    for C in (ExprType, FuncRefExpr, FuncRefVar, VarType, RDomType, RVarType, FuncType) + ParamTypes:
+        C.__truediv__ = C.__div__
+        C.__itruediv__ = C.__idiv__
 
 # ----------------------------------------------------
 # Test
@@ -1676,8 +1674,7 @@ def test_core():
                 check([x + y,
                 x - y,
                 x * y,
-                #x / y,
-                x.__div__(y),
+                x / y,
                 x % y,
                 x < y,
                 x <= y,
@@ -1741,10 +1738,8 @@ def get_blur():
     bb_a = input_clamped[x-1,y,c] / 4
     bb_b = input_clamped[x,y,c] / 4
     bb_c = input_clamped[x+1,y,c] / 4
-    #blur_x[x,y,c] = (bb_a + bb_b + bb_c) / 3
-    blur_x[x,y,c] = (bb_a + bb_b + bb_c).__div__(3)
-    #blur_y[x,y,c] = ((blur_x[x,y-1,c] + blur_x[x,y,c] + blur_x[x,y+1,c]) / 3) * 4
-    blur_y[x,y,c] = ((blur_x[x,y-1,c] + blur_x[x,y,c] + blur_x[x,y+1,c]).__div__(3)) * 4
+    blur_x[x,y,c] = (bb_a + bb_b + bb_c) / 3
+    blur_y[x,y,c] = ((blur_x[x,y-1,c] + blur_x[x,y,c] + blur_x[x,y+1,c]) / 3) * 4
 
     return (input, x, y, c, blur_x, blur_y, input_clamped)
 
@@ -1895,18 +1890,22 @@ def test_segfault():
     # TODO: Implement a test that segfaults...
 
 def test_examples():
-    import apps
+    """
+    This function seems deprecated
+    """
     in_grayscale = '../../apps/images/gray.png'
     in_color = '../../apps/images/rgb.png'
 
     names = []
     do_filter = True
+    from importlib import import_module
 
 #    for example_name in ['interpolate']: #
     for example_name in 'interpolate blur dilate local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example_name in 'interpolate blur dilate boxblur_sat boxblur_cumsum local_laplacian snake'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
 #    for example_name in 'interpolate snake blur dilate boxblur_sat boxblur_cumsum local_laplacian'.split(): #[examples.snake, examples.blur, examples.dilate, examples.boxblur_sat, examples.boxblur_cumsum, examples.local_laplacian]:
-        example = getattr(apps, example_name)
+
+        example = import_module("apps." + example_name)
         first = True
 #    for example in [apps.boxblur_cumsum]:
         for input_image0 in [in_grayscale, in_color]:
@@ -1914,14 +1913,14 @@ def test_examples():
                 input_image = input_image0
 #            for dtype in [UInt(16)]:
 #            for dtype in [UInt(8), UInt(16)]:
-                if example is apps.local_laplacian:
+                if example_name == "local_laplacian":
                     if input_image == in_color and (dtype == UInt(8) or dtype == UInt(16)):
                         pass
                     else:
                         continue
                 #print(dtype.isFloat(), dtype.bits)
-                if example is apps.interpolate:
-                    if not dtype.isFloat() or input_image != in_color:
+                if example_name == "interpolate":
+                    if not dtype.is_float() or input_image != in_color:
                         continue
                     input_image = '../../apps/images/rgba.png'
         #        (in_func, out_func) = apps.blur_color(dtype)
@@ -2041,7 +2040,14 @@ def test_image_constructors():
             check(Image(typeval, I), typeval)
             check(Image(typeval, A), typeval)
             check(Image(typeval, filename), typeval)
-            check(Image(typeval, unicode(filename)), typeval)
+            if sys.version < '3':
+                # python 2
+                check(Image(typeval, unicode(filename)), typeval)
+            else:
+                # python 3
+                #check(Image(typeval, bytes(filename, "utf-8")), typeval)
+                pass
+
             if typeval is not None:
                 B = Buffer(typeval, 5, 5, 3)
                 check(Image(typeval, B), typeval)
@@ -2070,6 +2076,8 @@ def test():
     test_core()
     test_numpy()
     test_image_constructors()
+
+
 
 if __name__ == '__main__':
     test()
