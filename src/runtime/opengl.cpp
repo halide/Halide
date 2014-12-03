@@ -1215,7 +1215,6 @@ WEAK int halide_opengl_dev_run(
     int shared_mem_bytes,
     size_t arg_sizes[],
     void *args[],
-    char** attribute_names,
     int num_padded_attributes,
     float* vertex_buffer,
     int num_coords_dim0,
@@ -1618,15 +1617,17 @@ WEAK int halide_opengl_dev_run(
 
     for (int i=0;i!=num_packed_attributes;i++) {
 
+        // The attribute names can synthesized by the runtime based on the
+        // number of packed varying attributes
+        Printer<StringStreamPrinter> attribute_name(user_context);
+        attribute_name << "_varyingf" << i << "_attrib";
+
         // TODO(abstephensg): Switch to glBindAttribLocation
-        GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_names[i]);
+        GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_name.buf);
         attrib_ids[i] = attrib_id;
 
         // Check to see if the varying attribute was simplified out of the
-        // program by the GLSL compiler. This may occur because the .varying attribute
-        // let expression might be unused, but it is never run through a simplification
-        // pass--with Let simplification turned on--since the pass would remove the
-        // .varying variable in several cases.
+        // program by the GLSL compiler.
         if (attrib_id == -1) {
           continue;
         }
@@ -1729,7 +1730,6 @@ WEAK int halide_dev_run(void *user_context,
                           int threadsX, int threadsY, int threadsZ,
                           int shared_mem_bytes,
                           size_t arg_sizes[], void *args[],
-                          char** attribute_names,
                           int num_padded_attributes,
                           float* vertex_buffer,
                           int num_coords_dim0,
@@ -1740,7 +1740,6 @@ WEAK int halide_dev_run(void *user_context,
                                  threadsX, threadsY, threadsY,
                                  shared_mem_bytes,
                                  arg_sizes, args,
-                                 attribute_names,
                                  num_padded_attributes,
                                  vertex_buffer,
                                  num_coords_dim0,

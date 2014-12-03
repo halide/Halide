@@ -14,34 +14,7 @@
 
 namespace Halide {
 namespace Internal {
-    
-// This mutator substitutes out variables and corresponding let expressions. No
-// new variables are added to the scope passed to the visitor when it is
-// created, only lets outside of the visited expression are substituted.
-class ExternalUnletify : public IRMutator {
-public:
-    using IRMutator::visit;
-    virtual void visit(const Variable *op) {
-        if (scope.contains(op->name)) {
-            expr = mutate(scope.get(op->name));
-        } else {
-            expr = op;
-        }
-    }
-    virtual void visit(const Call *op) {
-        if (op->name == Call::glsl_varying) {
-            // Unwrap the the intrinsic from the tagged expression
-            expr = mutate(op->args[1]);
-        } else {
-            IRMutator::visit(op);
-        }
-    }
 
-    ExternalUnletify(Scope<Expr>& scope_) { scope.set_containing_scope(&scope_); }
-    
-    Scope<Expr> scope;
-};
-    
 // Find expressions that we can evaluate with interpolation hardware in the GPU
 //
 // This visitor keeps track of the "order" of the expression in terms of the
@@ -566,12 +539,8 @@ public:
 
     virtual void visit(const Call *op) {
         if (op->name == Call::glsl_varying) {
-            // Unletify the expression so that it can be moved outside of the
-            // GPU For-loops and depend only on parameters
             std::string name = op->args[0].as<StringImm>()->value;
-            Expr value = op->args[1];
-            varyings[name] = ExternalUnletify(scope).mutate(value);
-            debug(1) << varyings[name] << "\n";
+            varyings[name] = op->args[1];
         }
         IRVisitor::visit(op);
     }
@@ -593,10 +562,31 @@ public:
     std::map<std::string, Expr>& varyings;
 };
 
-// This visitor removes glsl_varying intrinsics. After this visitor is called,
-// the varying attribute expressions will no longer appear in the IR tree, only
-// variables with the .varying tag will remain.
+// This visitor removes glsl_varying intrinsics.
 class RemoveVaryingAttributeTags : public IRMutator {
+public:
+    using IRMutator::visit;
+
+    virtual void visit(const Call *op) {
+        if (op->name == Call::glsl_varying) {
+            // Replace the call expression with its wrapped argument expression
+            expr = op->args[1];
+        } else {
+            IRMutator::visit(op);
+        }
+    }
+};
+
+Stmt remove_varying_attributes(Stmt s)
+{
+    return RemoveVaryingAttributeTags().mutate(s);
+}
+
+// This visitor removes glsl_varying intrinsics and replaces them with
+// variables. After this visitor is called, the varying attribute expressions
+// will no longer appear in the IR tree, only variables with the .varying tag
+// will remain.
+class ReplaceVaryingAttributeTags : public IRMutator {
 public:
     using IRMutator::visit;
 
@@ -615,10 +605,11 @@ public:
     }
 };
 
-Stmt remove_varying_attributes(Stmt s)
+Stmt replace_varying_attributes(Stmt s)
 {
-    return RemoveVaryingAttributeTags().mutate(s);
+    return ReplaceVaryingAttributeTags().mutate(s);
 }
+
 
 // This visitor produces a set of variable names that are tagged with
 // ".varying", it is run after
@@ -661,10 +652,10 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 // then propagates the float expression up through the expression, casting where
 // necessary.
 class CastVaryingVariablesToFloat : public IRMutator {
-public:
+protected:
     virtual void visit(const Variable *op) {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
-            expr = Cast::make(Float(32), op);
+            expr = Variable::make(Float(32),op->name);
         } else {
             expr = op;
         }
@@ -724,253 +715,737 @@ public:
         
         expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
     }
+
+    virtual void visit(const Let *op) { IRMutator::visit(op); };
+    virtual void visit(const LetStmt *op) { IRMutator::visit(op); }
 };
 
 // This visitor casts the named variables to float, and then propagates the
 // float type through the expression. The variable is offset by 0.5f
 class CastVariablesToFloatAndOffset : public CastVaryingVariablesToFloat {
-public:
+protected:
     virtual void visit(const Variable *op) {
-        
+
+        // Check to see if the variable matches a loop variable name
         if (std::find(names.begin(), names.end(), op->name) != names.end()) {
+            // This case is used by integer type loop variables. They are cast
+            // to float and offset.
             expr = Sub::make(Cast::make(float_type(op), op), 0.5f);
+
+        } else if (scope.contains(op->name) && (op->type != scope.get(op->name).type())) {
+            // Otherwise, check to see if it is defined by a modified let
+            // expression and if so, change the type of the variable to match
+            // the modified expression
+            expr = Variable::make(scope.get(op->name).type(), op->name);
         } else {
             expr = op;
         }
     }
-    
+
+    virtual void visit(const Let *op) {
+        Expr mutated_value = mutate(op->value);
+
+        bool changed = op->value.type().is_float() != mutated_value.type().is_float();
+        if (changed) {
+            scope.push(op->name,mutated_value);
+        }
+
+        Expr mutated_body = mutate(op->body);
+
+        if (changed) {
+            scope.pop(op->name);
+        }
+
+        expr = Let::make(op->name, mutated_value, mutated_body);
+    }
+    virtual void visit(const LetStmt *op) {
+
+        Expr mutated_value = mutate(op->value);
+
+        bool changed = op->value.type().is_float() != mutated_value.type().is_float();
+        if (changed) {
+            scope.push(op->name,mutated_value);
+        }
+
+        Stmt mutated_body = mutate(op->body);
+
+        if (changed) {
+            scope.pop(op->name);
+        }
+
+        stmt = LetStmt::make(op->name, mutated_value, mutated_body);
+    }
+public:
     CastVariablesToFloatAndOffset(const std::vector<std::string>& names_) : names(names_) { }
     
     const std::vector<std::string>& names;
+    Scope<Expr> scope;
 };
 
-Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string, Expr>& varyings)
-{
-    const For* loop1 = op;
-    const For* loop0 = loop1->body.as<For>();
-    
-    internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
+// This is the base class for a special mutator that, by default, turns an IR
+// tree into a tree of Stmts. Derived classes overload visit methods to filter
+// out specific expressions which are placed in Evaluate nodes within the new
+// tree.  This functionality is used by GLSL varying attributes to transform
+// tagged linear expressions into Store nodes for the vertex buffer. The
+// IRFilter allows these expressions to be filtered out while maintaining the
+// existing structure of Let variable scopes around them.
+class IRFilter : public IRVisitor {
+public:
+    EXPORT virtual Stmt mutate(Expr expr);
+    EXPORT virtual Stmt mutate(Stmt stmt);
 
-    // Construct a mesh of expressions to instantiate during runtime
-    FindVaryingAttributeTags tag_finder(varyings);
-    op->accept(&tag_finder);
+protected:
 
-    // Remove the varying attribute let expressions from the statement
-    Stmt loop_stmt = remove_varying_attributes(op);
-    
-    // Perform the Let-simplification pass that was skipped during
-    // Lowering
-    loop_stmt = simplify(loop_stmt, true);
-    
-    // It is possible that linear expressions we tagged in higher-level
-    // intrinsics were removed by simplification if they were only used in
-    // subsequent tagged linear expressions. Run a pass to check for
-    // these and remove them from the varying attribute list
-    prune_varying_attributes(loop_stmt, varyings);
-    
-    // At this point the varying attribute expressions have been removed from
-    // loop_stmt- it only contains variables tagged with .varying
-    
-    // The GPU will only interpolate floating point values so the varying
-    // attribute expression must be converted to floating point.
-    loop_stmt = CastVaryingVariablesToFloat().mutate(loop_stmt);
-    
-    // The GPU will take texture coordinates at pixel centers during
-    // interpolation, we offset the Halide integer grid by 0.5 so that these
-    // coordinates line up on integer coordinate values.
-    for (std::map<std::string,Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-        varyings[v->first] = 
-            CastVariablesToFloatAndOffset(vec(loop0->name, loop1->name)).mutate(v->second);
+    Stmt stmt;
+
+    EXPORT virtual void visit(const IntImm *);
+    EXPORT virtual void visit(const FloatImm *);
+    EXPORT virtual void visit(const StringImm *);
+    EXPORT virtual void visit(const Cast *);
+    EXPORT virtual void visit(const Variable *);
+    EXPORT virtual void visit(const Add *);
+    EXPORT virtual void visit(const Sub *);
+    EXPORT virtual void visit(const Mul *);
+    EXPORT virtual void visit(const Div *);
+    EXPORT virtual void visit(const Mod *);
+    EXPORT virtual void visit(const Min *);
+    EXPORT virtual void visit(const Max *);
+    EXPORT virtual void visit(const EQ *);
+    EXPORT virtual void visit(const NE *);
+    EXPORT virtual void visit(const LT *);
+    EXPORT virtual void visit(const LE *);
+    EXPORT virtual void visit(const GT *);
+    EXPORT virtual void visit(const GE *);
+    EXPORT virtual void visit(const And *);
+    EXPORT virtual void visit(const Or *);
+    EXPORT virtual void visit(const Not *);
+    EXPORT virtual void visit(const Select *);
+    EXPORT virtual void visit(const Load *);
+    EXPORT virtual void visit(const Ramp *);
+    EXPORT virtual void visit(const Broadcast *);
+    EXPORT virtual void visit(const Call *);
+    EXPORT virtual void visit(const Let *);
+    EXPORT virtual void visit(const LetStmt *);
+    EXPORT virtual void visit(const AssertStmt *);
+    EXPORT virtual void visit(const Pipeline *);
+    EXPORT virtual void visit(const For *);
+    EXPORT virtual void visit(const Store *);
+    EXPORT virtual void visit(const Provide *);
+    EXPORT virtual void visit(const Allocate *);
+    EXPORT virtual void visit(const Free *);
+    EXPORT virtual void visit(const Realize *);
+    EXPORT virtual void visit(const Block *);
+    EXPORT virtual void visit(const IfThenElse *);
+    EXPORT virtual void visit(const Evaluate *);
+};
+
+Stmt IRFilter::mutate(Expr e) {
+    if (e.defined()) {
+        e.accept(this);
     }
-    
-    // Establish and order for the attributes in each vertex
+    else {
+        stmt = Stmt();
+    }
+    return stmt;
+}
+
+Stmt IRFilter::mutate(Stmt s) {
+    if (s.defined()) {
+        s.accept(this);
+    } else {
+        stmt = Stmt();
+    }
+    return stmt;
+}
+
+namespace {
+    template<typename T, typename A>
+    void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
+        Stmt a = mutator->mutate(op_a);
+        *stmt = NULL;
+        if (a.defined()) {
+            *stmt = a;
+        }
+    }
+    template<typename T, typename A, typename B>
+    void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
+        Stmt a = mutator->mutate(op_a);
+        Stmt b = mutator->mutate(op_b);
+        *stmt = NULL;
+        if (b.defined()) {
+            *stmt = Block::make(b, *stmt);
+        }
+        if (a.defined()) {
+            *stmt = Block::make(a, *stmt);
+        }
+    }
+    template<typename T, typename A, typename B, typename C>
+    void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, const C op_c, Stmt *stmt) {
+        Stmt a = mutator->mutate(op_a);
+        Stmt b = mutator->mutate(op_b);
+        Stmt c = mutator->mutate(op_c);
+        *stmt = NULL;
+        if (c.defined()) {
+            *stmt = Block::make(c, *stmt);
+        }
+        if (b.defined()) {
+            *stmt = Block::make(b, *stmt);
+        }
+        if (a.defined()) {
+            *stmt = Block::make(a, *stmt);
+        }
+    }
+}
+
+void IRFilter::visit(const IntImm *op)   {stmt = Stmt();}
+void IRFilter::visit(const FloatImm *op) {stmt = Stmt();}
+void IRFilter::visit(const StringImm *op) {stmt = Stmt();}
+void IRFilter::visit(const Variable *op) {stmt = Stmt();}
+
+void IRFilter::visit(const Cast *op) {
+    mutate_operator(this, op, op->value, &stmt);
+}
+
+void IRFilter::visit(const Add *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Sub *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Mul *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Div *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Mod *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Min *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Max *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const EQ *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const NE *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const LT *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const LE *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const GT *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const GE *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const And *op)     {mutate_operator(this, op, op->a, op->b, &stmt);}
+void IRFilter::visit(const Or *op)      {mutate_operator(this, op, op->a, op->b, &stmt);}
+
+void IRFilter::visit(const Not *op) {
+    mutate_operator(this, op, op->a, &stmt);
+}
+
+void IRFilter::visit(const Select *op)  {
+    mutate_operator(this, op, op->condition, op->true_value, op->false_value, &stmt);
+}
+
+void IRFilter::visit(const Load *op) {
+    mutate_operator(this, op, op->index, &stmt);
+}
+
+void IRFilter::visit(const Ramp *op) {
+    mutate_operator(this, op, op->base, op->stride, &stmt);
+}
+
+void IRFilter::visit(const Broadcast *op) {
+    mutate_operator(this, op, op->value, &stmt);
+}
+
+void IRFilter::visit(const Call *op) {
+    std::vector<Stmt> new_args(op->args.size());
+    bool changed = false;
+
+    // Mutate the args
+    for (size_t i = 0; i < op->args.size(); i++) {
+        Expr old_arg = op->args[i];
+        Stmt new_arg = mutate(old_arg);
+        if (!new_arg.same_as(old_arg)) changed = true;
+        new_args[i] = new_arg;
+    }
+
+    stmt = NULL;
+    for (size_t i = 0; i < new_args.size(); ++i) {
+        if (new_args[i].defined()) {
+            stmt = Block::make(new_args[i], stmt);
+        }
+    }
+}
+
+void IRFilter::visit(const Let *op) {
+    mutate_operator(this, op, op->value, op->body, &stmt);
+}
+
+void IRFilter::visit(const LetStmt *op) {
+    mutate_operator(this, op, op->value, op->body, &stmt);
+}
+
+void IRFilter::visit(const AssertStmt *op) {
+    mutate_operator(this, op, op->condition, op->message, &stmt);
+}
+
+void IRFilter::visit(const Pipeline *op) {
+    mutate_operator(this, op, op->produce, op->update, op->consume, &stmt);
+}
+
+void IRFilter::visit(const For *op) {
+    mutate_operator(this, op, op->min, op->extent, op->body, &stmt);
+}
+
+void IRFilter::visit(const Store *op) {
+    mutate_operator(this, op, op->value, op->index, &stmt);
+}
+
+void IRFilter::visit(const Provide *op) {
+    stmt = NULL;
+    for (size_t i = 0; i < op->args.size(); i++) {
+        Stmt new_arg = mutate(op->args[i]);
+        if (new_arg.defined()) {
+            stmt = Block::make(new_arg, stmt);
+        }
+        Stmt new_value = mutate(op->values[i]);
+        if (new_value.defined()) {
+            stmt = Block::make(new_value, stmt);
+        }
+    }
+}
+
+void IRFilter::visit(const Allocate *op) {
+    stmt = NULL;
+    for (size_t i = 0; i < op->extents.size(); i++) {
+        Stmt new_extent = mutate(op->extents[i]);
+        if (new_extent.defined())
+            stmt = Block::make(new_extent, stmt);
+    }
+
+    Stmt body = mutate(op->body);
+    if (body.defined())
+        stmt = Block::make(body, stmt);
+
+    Stmt condition = mutate(op->condition);
+    if (condition.defined())
+        stmt = Block::make(condition, stmt);
+}
+
+void IRFilter::visit(const Free *op) {
+}
+
+void IRFilter::visit(const Realize *op) {
+
+    stmt = NULL;
+
+    // Mutate the bounds
+    for (size_t i = 0; i < op->bounds.size(); i++) {
+        Expr old_min    = op->bounds[i].min;
+        Expr old_extent = op->bounds[i].extent;
+        Stmt new_min    = mutate(old_min);
+        Stmt new_extent = mutate(old_extent);
+
+        if (new_min.defined())
+            stmt = Block::make(new_min, stmt);
+        if (new_extent.defined())
+            stmt = Block::make(new_extent, stmt);
+    }
+
+    Stmt body = mutate(op->body);
+    if (body.defined())
+        stmt = Block::make(body, stmt);
+
+    Stmt condition = mutate(op->condition);
+    if (condition.defined())
+        stmt = Block::make(condition, stmt);
+}
+
+void IRFilter::visit(const Block *op) {
+    mutate_operator(this, op, op->first, op->rest, &stmt);
+}
+
+void IRFilter::visit(const IfThenElse *op) {
+    mutate_operator(this, op, op->condition, op->then_case, op->else_case, &stmt);
+}
+
+void IRFilter::visit(const Evaluate *op) {
+    mutate_operator(this, op, op->value, &stmt);
+}
+
+
+// This visitor takes a IR tree containing a set of .glsl scheduled for-loops
+// and creates a matching set of serial for-loops to setup a vertex buffer on
+// the  host. The visitor  filters out glsl_varying intrinsics and transforms
+// them into Store nodes to evaluate the linear expressions they tag within the
+// scope of all of the Let definitions they fall within.
+// The statement returned by this operation should be executed on the host
+// before the call to halide_dev_run.
+class CreateVertexBufferOnHost : public IRFilter {
+public:
+    virtual void visit(const Call *op) {
+
+        // Transform glsl_varying intrinsics into store operations to output the
+        // vertex coordinate values.
+        if (op->name == Call::glsl_varying) {
+
+            // Construct an expression for the offset of the coordinate value in
+            // terms of the current integer loop variables and the varying
+            // attribute channel number
+            std::string attribute_name = op->args[0].as<StringImm>()->value;
+
+            Expr offset_expression = Variable::make(Int(32), "gpu.vertex_offset") +
+                                     attribute_order[attribute_name];
+
+            stmt = Store::make(vertex_buffer_name, op->args[1], offset_expression);
+        } else {
+            IRFilter::visit(op);
+        }
+
+    }
+    virtual void visit(const Let *op) {
+        stmt = NULL;
+
+        Stmt mutated_value = mutate(op->value);
+        Stmt mutated_body = mutate(op->body);
+
+        // If an operation was filtered out of the body, also filter out the
+        // whole let expression so that the body may be evaluated completely. In
+        // the case that the let variable is not used in the mutated body, it
+        // will be removed by simplification.
+        if (mutated_body.defined()) {
+            stmt = LetStmt::make(op->name, op->value, mutated_body);
+        }
+
+        // If an operation with a side effect was filtered out of the value, the
+        // stmt'ified value is placed in a Block, so that the side effect will
+        // be included in filtered IR tree.
+        if (mutated_value.defined()) {
+            stmt = Block::make(mutated_value, stmt);
+        }
+    }
+
+    virtual void visit(const LetStmt *op) {
+        stmt = NULL;
+
+        Stmt mutated_value = mutate(op->value);
+        Stmt mutated_body = mutate(op->body);
+
+        if (mutated_body.defined()) {
+            stmt = LetStmt::make(op->name, op->value, mutated_body);
+        }
+
+        if (mutated_value.defined()) {
+            stmt = Block::make(mutated_value, stmt);
+        }
+    }
+
+    virtual void visit(const For *op) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+            // Create a for-loop of integers iterating over the coordinates in
+            // this dimension
+
+            std::string name = op->name + ".idx";
+            const std::vector<Expr>& dim = dims[op->name];
+
+            internal_assert(for_loops.size() <= 1);
+            for_loops.push_back(op);
+
+            Expr loop_variable = Variable::make(Int(32),name);
+            loop_variables.push_back(loop_variable);
+
+            // TODO: When support for piecewise linear expressions is added this
+            // expression must support more than two coordinates in each
+            // dimension.
+            Expr coord_expr = select(loop_variable == 0, dim[0], dim[1]);
+
+            // Visit the body of the for-loop
+            Stmt mutated_body = mutate(op->body);
+
+            // If this was the inner most for-loop of the .glsl scheduled pair,
+            // add a let definition for the vertex index and Store the spatial
+            // coordinates
+            const For* nested_for = op->body.as<For>();
+            if (!(nested_for && CodeGen_GPU_Dev::is_gpu_var(nested_for->name))) {
+
+                // Create a variable to store the offset in floats of this
+                // vertex
+                Expr gpu_varying_offset = Variable::make(Int(32), "gpu.vertex_offset");
+
+                // Add expressions for the x and y vertex coordinates.
+                Expr coord1 = cast<float>(Variable::make(Int(32),for_loops[0]->name));
+                Expr coord0 = cast<float>(Variable::make(Int(32),for_loops[1]->name));
+
+                // Transform the vertex coordinates to GPU device coordinates on
+                // [-1,1]
+                coord1 = (coord1 / for_loops[0]->extent) * 2.0f - 1.0f;
+                coord0 = (coord0 / for_loops[1]->extent) * 2.0f - 1.0f;
+
+                // Remove varying attribute intrinsics from the vertex setup IR
+                // tree.
+                mutated_body = remove_varying_attributes(mutated_body);
+
+                // The GPU will take texture coordinates at pixel centers during
+                // interpolation, we offset the Halide integer grid by 0.5 so that
+                // these coordinates line up on integer coordinate values.
+                mutated_body = CastVariablesToFloatAndOffset(vec(for_loops[0]->name,
+                                                                 for_loops[1]->name)).mutate(mutated_body);
+
+                // Store the coordinates into the vertex buffer in interleaved
+                // order
+                mutated_body = Block::make(Store::make(vertex_buffer_name,
+                                                       coord1,
+                                                       gpu_varying_offset + 1),
+                                           mutated_body);
+
+                mutated_body = Block::make(Store::make(vertex_buffer_name,
+                                                       coord0,
+                                                       gpu_varying_offset + 0),
+                                           mutated_body);
+
+                // TODO: The value 2 in this expression must be changed to reflect
+                // addition coordinate values in the fastest changing dimension when
+                // support for piecewise linear functions is added
+                Expr offset_expression = (loop_variables[0] * num_padded_attributes * 2) +
+                (loop_variables[1] * num_padded_attributes);
+                mutated_body = LetStmt::make("gpu.vertex_offset",
+                                             offset_expression, mutated_body);
+
+            }
+
+
+            // Add a let statement for the for-loop name variable
+            Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
+
+            stmt = For::make(name, 0, (int)dim.size(), For::ForType::Serial, loop_var);
+
+        } else {
+            IRFilter::visit(op);
+        }
+    }
+
+    // The name of the previously allocated vertex buffer to store values
+    std::string vertex_buffer_name;
+
+    // Expressions for the spatial values of each coordinate in the GPU scheduled
+    // loop dimensions.
+    typedef std::map<std::string, std::vector<Expr> > DimsType;
+    DimsType dims;
+
+    // The channel of each varying attribute in the interleaved vertex buffer
     std::map<std::string, int> attribute_order;
-    
-    // Add the attribute names to the mesh in the order that they appear in
-    // each vertex
-    result.attributes.push_back("__vertex_x");
-    result.attributes.push_back("__vertex_y");
-    
-    attribute_order["__vertex_x"] = 0;
-    attribute_order["__vertex_y"] = 1;
-    
-    int idx = 2;
-    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-        result.attributes.push_back(v->first);
-        attribute_order[v->first] = idx++;
-    }
-    
-    result.coords.resize(2 + varyings.size());
-    
-    // Construct a list of expressions giving to coordinate locations along
-    // each dimension, starting with the minimum and maximum coordinates
-    
-    attribute_order[loop0->name] = 0;
-    attribute_order[loop1->name] = 1;
-    
-    Expr loop0_max = Add::make(loop0->min, loop0->extent);
-    Expr loop1_max = Add::make(loop1->min, loop1->extent);
-    
-    result.coords[0].push_back(loop0->min);
-    result.coords[0].push_back(loop0_max);
-    
-    result.coords[1].push_back(loop1->min);
-    result.coords[1].push_back(loop1_max);
 
-    /*
-    // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+    // The number of attributes padded up to the next multiple of four. This is
+    // the stride from one vertex to the next in the buffer
+    int num_padded_attributes;
 
-    // Varying attribute expressions often contain piecewise linear
-    // components, especially at the image border. These expressions often
-    // depend on unknown parameters and cannot be evaluated during
-    // compilation.  Instead we pass a list of expressions for the vertex
-    // coordinates to the runtime, and it evaluates the expressions, sorts
-    // their results, and produces the mesh.
-    
-    debug(2) << "Checking for piecewise linear expressions\n";
-    
-    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-        
-        // Determine the name of the variable without the .varying
-        std::string varying_name = v->first;
-        
-        Expr value = v->second;
-        
-        debug(2) << "Original value\n" << value << "\n";
-        
-        std::vector<Expr> exprs = enumerate_branches(value);
-        
-        if (!exprs.size())
-            continue;
-        
-        debug(2) << "Branch expressions\n";
-        for (std::vector<Expr>::iterator e = exprs.begin(); e != exprs.end(); ++e) {
-            debug(2) << *e << "\n";
-        }
-        
-        debug(2) << "Solutions:\n";
-        
-        for (int j=0;j!=(int)exprs.size();++j) {
-            Expr a = exprs[j];
-            for (int i=j+1;i!=(int)exprs.size();++i) {
-                Expr b = exprs[i];
-                
-                Expr eq = EQ::make(a, b);
-                
-                // Check to see if the equation can be solved in terms of
-                // the varying
-                for (auto var_name : { loop0->name, loop1->name }) {
-                }
-     
-                if (contains_variable(eq, loop0->name)) {
+    // Independent variable names in the linear expressions
+    std::vector<const For*> for_loops;
 
-                    Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop0->name));
+    // Loop variables iterated across per GPU scheduled loop dimension to
+    // construct the vertex buffer
+    std::vector<Expr> loop_variables;
+};
 
-                    if (solution.defined()) {
-                        debug(2) << "SOLVED: " << solution << "\n";
-                        Expr rhs = solution.as<EQ>()->b;
+// This mutator inserts a set of serial for-loops to create the vertex buffer
+// on the host using CreateVertexBufferOnHost above.
+class CreateVertexBufferHostLoops : public IRMutator {
+public:
+    virtual void visit(const For *op) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
 
-                        int dim = attribute_order[loop0->name];
-                        internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
-                        result.coords[dim].push_back(rhs);
-                    } else {
-                        internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop0->name << " expr: " << eq << "\n";
-                    }
-                }
+            const For* loop1 = op;
+            const For* loop0 = loop1->body.as<For>();
 
-                if (contains_variable(eq, loop1->name)) {
+            internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
 
-                    Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop1->name));
+            // Construct a mesh of expressions to instantiate during runtime
+            std::map<std::string, Expr> varyings;
 
-                    if (solution.defined()) {
-                        debug(2) << "SOLVED: " << solution << "\n";
-                        Expr rhs = solution.as<EQ>()->b;
+            FindVaryingAttributeTags tag_finder(varyings);
+            op->accept(&tag_finder);
 
-                        int dim = attribute_order[loop1->name];
-                        internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
-                        result.coords[dim].push_back(rhs);
-                    } else {
-                        internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop1->name << " expr: " << eq << "\n";
-                    }
-                }
+            // Establish and order for the attributes in each vertex
+            std::map<std::string, int> attribute_order;
 
+            // Add the attribute names to the mesh in the order that they appear in
+            // each vertex
+            attribute_order["__vertex_x"] = 0;
+            attribute_order["__vertex_y"] = 1;
 
-            }
-        }
-        debug(2) << "\n";
-    }
-    */
-
-
-    // Create a list of expressions for each varying attribute that evaluates
-    // it at each coordinate in the unsorted order of the coordinates found
-    // above
-    
-    for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-        
-        std::string varying_name = v->first;
-        
-        // Iterate over all of the coordinates for the variable in this
-        // varying attribute expression
-        
-        // Determine the dimension (or interleaved channel) of the vertex
-        // for this attribute
-        int attrib_dim = attribute_order[varying_name];
-        
-        // The varying attribute expressions may be defined wrt both of the
-        // loop variables. Produce pairs of let expressions to evaluate each
-        // varying attribute expression at each pair of coordinates
-        
-        for (unsigned y = 0; y != result.coords[1].size(); ++y) {
-            
-            // Check if the varying expression contains the y dimension
-            // variable and has the same type
-            Expr cast_y = result.coords[1][y];
-            
-            ContainsVariable c(loop1->name);
-            v->second.accept(&c);
-            
-            if (c.found && (c.result->type != cast_y.type())) {
-                cast_y = Cast::make(c.result->type, cast_y);
+            int idx = 2;
+            for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+                attribute_order[v->first] = idx++;
             }
 
-            for (unsigned x = 0; x != result.coords[0].size(); ++x) {
-                
-                // Check if the varying expression contains the y dimension
-                // variable and has the same type
-                Expr cast_x = result.coords[0][x];
-                
-                ContainsVariable c(loop0->name);
-                v->second.accept(&c);
-                
-                if (c.found && (c.result->type != cast_x.type())) {
-                    cast_x = Cast::make(c.result->type, cast_x);
-                }
+            // Construct a list of expressions giving to coordinate locations along
+            // each dimension, starting with the minimum and maximum coordinates
 
-                Expr value = Let::make(loop1->name, cast_y, Let::make(loop0->name, cast_x, v->second));
-                
-                // Clean up the lets and other redundant terms
-                value = simplify(value);
+            attribute_order[loop0->name] = 0;
+            attribute_order[loop1->name] = 1;
 
-                // Add the expression for the varying attribute value to the vertex list
-                result.coords[attrib_dim].push_back(value);
-            }
+            Expr loop0_max = Add::make(loop0->min, loop0->extent);
+            Expr loop1_max = Add::make(loop1->min, loop1->extent);
+
+            std::vector<std::vector<Expr> > coords(2);
+
+            coords[0].push_back(loop0->min);
+            coords[0].push_back(loop0_max);
+
+            coords[1].push_back(loop1->min);
+            coords[1].push_back(loop1_max);
+
+            /*
+             // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
+
+             // Varying attribute expressions often contain piecewise linear
+             // components, especially at the image border. These expressions often
+             // depend on unknown parameters and cannot be evaluated during
+             // compilation.  Instead we pass a list of expressions for the vertex
+             // coordinates to the runtime, and it evaluates the expressions, sorts
+             // their results, and produces the mesh.
+
+             debug(2) << "Checking for piecewise linear expressions\n";
+
+             for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
+
+             // Determine the name of the variable without the .varying
+             std::string varying_name = v->first;
+
+             Expr value = v->second;
+
+             debug(2) << "Original value\n" << value << "\n";
+
+             std::vector<Expr> exprs = enumerate_branches(value);
+
+             if (!exprs.size())
+             continue;
+
+             debug(2) << "Branch expressions\n";
+             for (std::vector<Expr>::iterator e = exprs.begin(); e != exprs.end(); ++e) {
+             debug(2) << *e << "\n";
+             }
+
+             debug(2) << "Solutions:\n";
+
+             for (int j=0;j!=(int)exprs.size();++j) {
+             Expr a = exprs[j];
+             for (int i=j+1;i!=(int)exprs.size();++i) {
+             Expr b = exprs[i];
+
+             Expr eq = EQ::make(a, b);
+
+             // Check to see if the equation can be solved in terms of
+             // the varying
+             for (auto var_name : { loop0->name, loop1->name }) {
+             }
+
+             if (contains_variable(eq, loop0->name)) {
+
+             Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop0->name));
+
+             if (solution.defined()) {
+             debug(2) << "SOLVED: " << solution << "\n";
+             Expr rhs = solution.as<EQ>()->b;
+
+             int dim = attribute_order[loop0->name];
+             internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
+             result.coords[dim].push_back(rhs);
+             } else {
+             internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop0->name << " expr: " << eq << "\n";
+             }
+             }
+
+             if (contains_variable(eq, loop1->name)) {
+
+             Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop1->name));
+
+             if (solution.defined()) {
+             debug(2) << "SOLVED: " << solution << "\n";
+             Expr rhs = solution.as<EQ>()->b;
+
+             int dim = attribute_order[loop1->name];
+             internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
+             result.coords[dim].push_back(rhs);
+             } else {
+             internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop1->name << " expr: " << eq << "\n";
+             }
+             }
+
+
+             }
+             }
+             debug(2) << "\n";
+             }
+             */
+
+            // Count the two spatial x and y coordinates plus the number of
+            // varying attribute expressions found
+            int num_attributes = varyings.size() + 2;
+
+            // Pad the number of attributes up to a multiple of four
+            int num_padded_attributes = (num_attributes + 0x3) & ~0x3;
+            int vertex_buffer_size = num_padded_attributes*coords[0].size()*coords[1].size();
+
+            // Filter out varying attribute expressions from the glsl scheduled
+            // loops. The expressions are filtered out in situ, among the
+            // variables in scope
+            CreateVertexBufferOnHost vs;
+            vs.vertex_buffer_name = "glsl.vertex_buffer";
+            vs.num_padded_attributes = num_padded_attributes;
+            vs.dims[loop0->name] = coords[0];
+            vs.dims[loop1->name] = coords[1];
+            vs.attribute_order = attribute_order;
+
+            Stmt vertex_setup = vs.mutate(loop1);
+
+            // Remove varying attribute intrinsics from the vertex setup IR
+            // tree. These may occur if an expression such as a Let-value was
+            // filtered out without being mutated.
+            vertex_setup = remove_varying_attributes(vertex_setup);
+
+            // Replace varying attribute intriniscs in the gpu scheduled loops
+            // with variables with ".varying" tagged names
+            Stmt loop_stmt = replace_varying_attributes(op);
+
+            // Perform the Let-simplification pass that was skipped during
+            // Lowering
+            loop_stmt = simplify(loop_stmt, true);
+
+            // It is possible that linear expressions we tagged in higher-level
+            // intrinsics were removed by simplification if they were only used in
+            // subsequent tagged linear expressions. Run a pass to check for
+            // these and remove them from the varying attribute list
+            prune_varying_attributes(loop_stmt, varyings);
+            
+            // At this point the varying attribute expressions have been removed from
+            // loop_stmt- it only contains variables tagged with .varying
+            
+            // The GPU will only interpolate floating point values so the varying
+            // attribute expression must be converted to floating point.
+            loop_stmt = CastVaryingVariablesToFloat().mutate(loop_stmt);
+
+            // TODO: We want to define a set of variables here, and then use
+            // them during GLSL host codegen to pass values to the
+            // halide_dev_run function. It turns out that these variables will
+            // be simplified away since the call to the function does not appear
+            // in the IR. To avoid this we wrap the declaration in a
+            // return_second intrinsic as well as add a return_second intrinsic
+            // to consume the value.
+            // This prevents simplification passes that occur before codegen
+            // from removing the variables or substituting in their constant
+            // values.
+
+            #define DONT_SIMPLIFY(v_) Internal::Call::make((v_)->type, Internal::Call::return_second, Internal::vec<Expr>(0, v_), Internal::Call::Intrinsic)
+            #define USED_IN_CODEGEN(type_,v_) Evaluate::make(Internal::Call::make(Int(32), Internal::Call::return_second, Internal::vec<Expr>(Variable::make(type_,v_), 0), Internal::Call::Intrinsic))
+
+            // Insert two new for-loops for vertex buffer generation on the host
+            // before the two GPU scheduled for-loops
+            stmt = LetStmt::make("glsl.num_coords_dim0", DONT_SIMPLIFY(IntImm::make(coords[0].size())),
+                   LetStmt::make("glsl.num_coords_dim1", DONT_SIMPLIFY(IntImm::make(coords[1].size())),
+                   LetStmt::make("glsl.num_padded_attributes", DONT_SIMPLIFY(IntImm::make(num_padded_attributes)),
+                   Allocate::make(vs.vertex_buffer_name, Float(32), vec(Expr(vertex_buffer_size)), true,
+                   Block::make(vertex_setup,
+                   Block::make(loop_stmt,
+                   Block::make(USED_IN_CODEGEN(Int(32),"glsl.num_coords_dim0"),
+                   Block::make(USED_IN_CODEGEN(Int(32),"glsl.num_coords_dim1"),
+                   Block::make(USED_IN_CODEGEN(Int(32),"glsl.num_padded_attributes"),
+                               Free::make(vs.vertex_buffer_name))))))))));
+        } else {
+            IRMutator::visit(op);
         }
     }
+};
 
-    // Output coordinates for debugging
-    debug(1) << "MESH COORD EXPRESSIONS:\n";
-    
-    for (unsigned a=0;a!=result.coords.size();++a) {
-        std::string attrib_name = result.attributes[a];
-        debug(1) << attrib_name << " (total: " << result.coords[a].size() << ")\n";
+Stmt setup_gpu_vertex_buffer(Stmt s) {
 
-        for (std::vector<Expr>::const_iterator c = result.coords[a].begin(); c != result.coords[a].end(); ++c) {
-            debug(1) << "    " << *c << "\n";
-        }
-    }
-    
-    return loop_stmt;
+    CreateVertexBufferHostLoops vb;
+    return vb.mutate(s);
 }
 
 }
