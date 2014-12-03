@@ -27,7 +27,6 @@ endif()
 include_directories ( "${LLVM_INCLUDE}")
 link_directories ("${LLVM_LIB}")
 
-set(LLVM_CONFIG ${LLVM_BIN}/llvm-config)
 if(WIN32)
   file(GLOB LIBS RELATIVE "${LLVM_LIB}" "${LLVM_LIB}/*.lib")
 else()

@@ -5,6 +5,7 @@
 
 #include <static_image.h>
 #include <image_io.h>
+#include "bilateral_grid.h"
 
 int main(int argc, char **argv) {
 

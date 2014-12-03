@@ -5,7 +5,7 @@ link_directories ("${LLVM_LIB}")
 include_directories ("${CMAKE_CURRENT_LIST_DIR}/support")
 
 if(WITH_APPS)
-  #add_subdirectory(bilateral_grid)
+  add_subdirectory(bilateral_grid)
   add_subdirectory(blur)
   add_subdirectory(c_backend)
   #add_subdirectory(camera_pipe)

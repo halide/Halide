@@ -9,12 +9,7 @@ if (NOT CMAKE_BUILD_TYPE MATCHES "Release")
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 endif()
 
-if(NOT DEFINED LLVM_CONFIG)
-    set(LLVM_CONFIG "llvm-config")
-endif()
-if(NOT DEFINED CLANG_PATH)
-    set(CLANG_PATH "clang")
-endif()
+set(LLVM_CONFIG "llvm-config" CACHE PATH "Path to llvm-config executable")
 
 function(get_llvm_info key output)
     execute_process(
@@ -23,8 +18,7 @@ function(get_llvm_info key output)
         OUTPUT_VARIABLE ${output})
     if("${${output}}" STREQUAL "")
         message(FATAL_ERROR
-            "Could not find llvm-config. You can pass -DLLVM_CONFIG=path_to_llvm_config"
-            " to use a specific version.")
+            "Could not find llvm-config. You can indicate its path via -DLLVM_CONFIG=path_to_llvm-config")
     endif()
     message(STATUS "${output}: ${${output}}")
     set(${output} ${${output}} PARENT_SCOPE)
@@ -45,31 +39,9 @@ get_llvm_info("bindir" LLVM_BINDIR)
 get_llvm_info("libs" LLVM_LIBS)
 get_llvm_info("cppflags" LLVM_CXX_FLAGS)
 
-execute_process(
-    COMMAND ${CLANG_PATH} --version
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    OUTPUT_VARIABLE CLANG_VERSION)
-message(STATUS "CLANG_VERSION: ${CLANG_VERSION}")
-if("${CLANG_VERSION}" STREQUAL "")
-    message(FATAL_ERROR
-        "Could not find clang. You can pass -DCLANG_PATH=path_to_clang"
-        " to use a specific version.")
-endif()
-
-set(OPTIMIZE "-O3"
-  CACHE STRING "Optimization level")
-
-#if (${LLVM_COMPONENTS} MATCHES x86)
-#  set(WITH_X86 ON)
-#else()
-#  set(WITH_X86 OFF)
-#endif()
-
 file(TO_NATIVE_PATH "${LLVM_BINDIR}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
 file(TO_NATIVE_PATH "${LLVM_BINDIR}/llvm-nm${CMAKE_EXECUTABLE_SUFFIX}" LLVM_NM)
 file(TO_NATIVE_PATH "${LLVM_BINDIR}/clang${CMAKE_EXECUTABLE_SUFFIX}" CLANG)
-
-message(${CLANG})
 
 option(TARGET_NATIVE_CLIENT "Include Native Client" ON)
 option(TARGET_X86 "Include x86 target" ON)
@@ -104,7 +76,7 @@ add_subdirectory(src)
 add_subdirectory(test)
 
 # The apps and tutorials don't really compile on windows yet
-IF(CMAKE_SYSTEM_NAME STREQUAL Linux)
+IF(NOT CMAKE_SYSTEM_NAME MATCHES Windows)
     add_subdirectory(apps)
     add_subdirectory(tutorial)
 endif()
