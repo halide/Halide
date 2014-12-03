@@ -365,13 +365,13 @@ private:
         bitcode_name(bitcode_name_) {}
 
 public:
-   std::string object_name;
-   std::string assembly_name;
-   std::string bitcode_name;
+    std::string object_name;
+    std::string assembly_name;
+    std::string bitcode_name;
 
-   Outputs() {}
+    Outputs() {}
 
-   static Outputs object(const std::string& object_name) {
+    static Outputs object(const std::string& object_name) {
         return Outputs(object_name, "", "");
     }
     static Outputs assembly(const std::string& assembly_name) {
