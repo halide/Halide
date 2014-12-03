@@ -16,26 +16,18 @@ namespace Internal {
 
     /** find_linear_expressions(Stmt s) identifies expressions that may be moved
      * out of the generated fragment shader into a varying attribute. These 
-     * expressions are tagged by wrapping them in a let expression with a 
-     * variable whose name ends in ".varying"
+     * expressions are tagged by wrapping them in a glsl_varying intrinsic
      */
     Stmt find_linear_expressions(Stmt s);
 
     /** Compute a set of 2D mesh coordinates based on the behavior of varying
      * attribute expressions contained within a GLSL scheduled for loop. This 
-     * method is called during host codegen to extract varying attribute 
-     * expressions and generate code to evalue them at each mesh vertex location
+     * method is called during lowering to extract varying attribute
+     * expressions and generate code to evalue them at each mesh vertex 
+     * location. The operation is performed on the host before the draw call 
+     * to invoke the shader
      */
-    struct ExpressionMesh {
-
-        // Unsorted coordinate expressions along each spatial dimension
-        std::vector<std::vector<Expr> > coords;
-
-        // Attribute names, including the x and y coordinates
-        std::vector<std::string> attributes;        
-    };
-    
-    Stmt setup_mesh(const For* op, ExpressionMesh& result, std::map<std::string, Expr>& varyings);
+    Stmt setup_gpu_vertex_buffer(Stmt s);
 }
 }
 

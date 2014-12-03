@@ -1872,7 +1872,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         debug(1) << "Detecting varying attributes...\n";
         s = find_linear_expressions(s);
         debug(2) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
-        
+
+        debug(1) << "Moving varying attribute expressions out of the shader...\n";
+        s = setup_gpu_vertex_buffer(s);
+        debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
 
     s = simplify(s);

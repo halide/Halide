@@ -28,10 +28,12 @@ int main() {
 
     // This is a simple test case where there are two expressions that are not
     // linearly varying in terms of a loop variable and one expression that is.
+    printf("Test f0\n");
+
     float p_value = 8.0f;
     Param<float> p("p"); p.set(p_value);
 
-    Func f0("f");
+    Func f0("f0");
     f0(x, y, c) = select(c == 0, 4.0f,             // Constant term
                       c == 1, p * 10.0f,        // Linear expression not in terms of a loop parameter
                       cast<float>(x) * 100.0f); // Linear expression in terms of x
@@ -66,9 +68,12 @@ int main() {
             }
         }
     }
+    printf("Passed!\n");
 
     // This is a more complicated test case where several expressions are linear
     // in all of the loop variables. This is the coordinate transformation case
+    printf("Test f1\n");
+
     float th = M_PI/8.0f;
     float s_th = sinf(th);
     float c_th = cosf(th);
@@ -84,7 +89,7 @@ int main() {
     m0.set(m[0]); m1.set(m[1]); m2.set(m[2]);
     m3.set(m[3]); m4.set(m[4]); m5.set(m[5]);
 
-    Func f1("f");
+    Func f1("f1");
     f1(x, y, c) = select(c == 0, m0 * x + m1 * y + m2,
                        c == 1, m3 * x + m4 * y + m5,
                        1.0f);
@@ -124,11 +129,13 @@ int main() {
             }
         }
     }
+    printf("Passed!\n");
 
     // The feature is supposed to find linearly varying sub-expressions as well
     // so for example, if the above expressions are wrapped in a non-linear
     // function like sqrt, they should still be extracted.
-    Func f2("f");
+    printf("Test f2\n");
+    Func f2("f2");
     f2(x, y, c) = select(c == 0, sqrt(m0 * x + m1 * y + m2),
                        c == 1, sqrt(m3 * x + m4 * y + m5),
                        1.0f);
@@ -168,9 +175,12 @@ int main() {
             }
         }
     }
+    printf("Passed!\n");
 
     // This case tests a large expression linearly varying in terms of a loop
     // variable
+    printf("Test f3\n");
+
 
     Expr foo = p;
     for (int i = 0; i < 10; i++) {
@@ -183,7 +193,7 @@ int main() {
         foo_value = foo_value+foo_value+foo_value;
     }
 
-    Func f3("f");
+    Func f3("f3");
     f3(x, y, c) = select(c == 0, foo,
                        c == 1, 1.0f,
                        2.0f);
@@ -223,12 +233,13 @@ int main() {
             }
         }
     }
+    printf("Passed!\n");
 
     // TODO: Add tests to check that the glsl_varying attribute was applied
     // correctly.
 
 
-    // The will return early on error.
+    // The test will return early on error.
     printf("Success!\n");
     
     return 0;
