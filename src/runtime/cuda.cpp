@@ -723,9 +723,8 @@ WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, u
     if (buf->dev == 0) {
         return -1;
     }
-#if 0
-    // TODO: Is this reliable?
-    if (!validate_device_pointer(user_context, buf->dev)) {
+#if DEBUG_RUNTIME
+    if (!validate_device_pointer(user_context, buf)) {
         delete_device_wrapper(buf->dev);
         buf->dev = 0;
         return -3;
