@@ -412,6 +412,16 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
 
 target_link_libraries(Halide InitialModules ${LIBS})
 
+if (CMAKE_BUILD_TYPE MATCHES "Release")
+    INSTALL(TARGETS Halide Halide
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib)
+    INSTALL(FILES
+        ${CMAKE_BINARY_DIR}/include/Halide.h
+        ${CMAKE_BINARY_DIR}/include/HalideRuntime.h
+        DESTINATION include)
+endif()
+
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
     execute_process(COMMAND "${LLVM_CONFIG}" --system-libs OUTPUT_VARIABLE EXTRA_LIBS)
