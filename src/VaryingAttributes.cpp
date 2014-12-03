@@ -1280,89 +1280,9 @@ public:
             coords[1].push_back(loop1->min);
             coords[1].push_back(loop1_max);
 
-            /*
-             // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-
-             // Varying attribute expressions often contain piecewise linear
-             // components, especially at the image border. These expressions often
-             // depend on unknown parameters and cannot be evaluated during
-             // compilation.  Instead we pass a list of expressions for the vertex
-             // coordinates to the runtime, and it evaluates the expressions, sorts
-             // their results, and produces the mesh.
-
-             debug(2) << "Checking for piecewise linear expressions\n";
-
-             for (std::map<std::string, Expr>::iterator v = varyings.begin(); v != varyings.end(); ++v) {
-
-             // Determine the name of the variable without the .varying
-             std::string varying_name = v->first;
-
-             Expr value = v->second;
-
-             debug(2) << "Original value\n" << value << "\n";
-
-             std::vector<Expr> exprs = enumerate_branches(value);
-
-             if (!exprs.size())
-             continue;
-
-             debug(2) << "Branch expressions\n";
-             for (std::vector<Expr>::iterator e = exprs.begin(); e != exprs.end(); ++e) {
-             debug(2) << *e << "\n";
-             }
-
-             debug(2) << "Solutions:\n";
-
-             for (int j=0;j!=(int)exprs.size();++j) {
-             Expr a = exprs[j];
-             for (int i=j+1;i!=(int)exprs.size();++i) {
-             Expr b = exprs[i];
-
-             Expr eq = EQ::make(a, b);
-
-             // Check to see if the equation can be solved in terms of
-             // the varying
-             for (auto var_name : { loop0->name, loop1->name }) {
-             }
-
-             if (contains_variable(eq, loop0->name)) {
-
-             Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop0->name));
-
-             if (solution.defined()) {
-             debug(2) << "SOLVED: " << solution << "\n";
-             Expr rhs = solution.as<EQ>()->b;
-
-             int dim = attribute_order[loop0->name];
-             internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
-             result.coords[dim].push_back(rhs);
-             } else {
-             internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop0->name << " expr: " << eq << "\n";
-             }
-             }
-
-             if (contains_variable(eq, loop1->name)) {
-
-             Expr solution = solve_for_linear_variable_or_fail(eq, Var(loop1->name));
-
-             if (solution.defined()) {
-             debug(2) << "SOLVED: " << solution << "\n";
-             Expr rhs = solution.as<EQ>()->b;
-
-             int dim = attribute_order[loop1->name];
-             internal_assert(dim < 2) << "New coordinate must be in first or second dimension";
-             result.coords[dim].push_back(rhs);
-             } else {
-             internal_error << "GLSL Codegen: Did not solve: " << varying_name << " for: " << loop1->name << " expr: " << eq << "\n";
-             }
-             }
-
-
-             }
-             }
-             debug(2) << "\n";
-             }
-             */
+            // TODO:(abstephensg) Need to integrate with the
+            // specialize_branched_loops branch linear solver functionality to
+            // handle piecewise linear expressions.
 
             // Count the two spatial x and y coordinates plus the number of
             // varying attribute expressions found

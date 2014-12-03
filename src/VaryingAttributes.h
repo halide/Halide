@@ -1,5 +1,5 @@
-#ifndef __HALIDE_EXPRESSION_GRID__H
-#define __HALIDE_EXPRESSION_GRID__H
+#ifndef __HALIDE_VARYING_ATTRIBUTES__H
+#define __HALIDE_VARYING_ATTRIBUTES__H
 
 /** \file
  * This file contains functions that detect expressions in a GLSL scheduled 
@@ -8,8 +8,6 @@
  */
 
 #include "IR.h"
-
-#include <vector>
 
 namespace Halide {
 namespace Internal {
