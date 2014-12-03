@@ -1,6 +1,6 @@
 from distutils.core import setup
 from distutils.extension import Extension
-import os, os.path, sys
+import os, os.path
 import glob
 
 import subprocess
@@ -20,12 +20,12 @@ png_ldflags = subprocess.check_output('libpng-config --ldflags', shell=True).str
 ext_modules = [Extension("halide/_cHalide", ["halide/cHalide_wrap.cxx", 'halide/py_util.cpp'],
                          include_dirs=[include_path],
                          extra_compile_args=('-ffast-math -O3 -msse -Wl,-dead_strip -fno-common' + ' ' + png_cflags).split(),
-                         extra_link_args=[os.path.join(bin_path, 'libHalide.a'), '-lpthread', '-ldl', '-lstdc++', '-lc']+png_ldflags.split(),
+                         extra_link_args=[os.path.join(bin_path, 'libHalide.a'), '-lpthread', '-ldl', '-lstdc++', '-lc', '-ltinfo']+png_ldflags.split(),
                          language='c++')]
 
 if glob.glob('halide/data/*.png') == []:
     shutil.copytree(image_path, 'halide/data')
-    
+
 setup(
     name = 'halide',
     version = '0.2',
