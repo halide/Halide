@@ -47,7 +47,7 @@ class FindBuffersToTrack : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Allocate *op) {
-      debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << device_api << "\n";
+        debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << device_api << "\n";
         internal_assert(internal.find(op->name) == internal.end()) << "Duplicate Allocate node in FindBuffersToTrack.\n";
         internal[op->name] = device_api;
         IRVisitor::visit(op);
@@ -55,7 +55,7 @@ class FindBuffersToTrack : public IRVisitor {
 
     void visit(const For *op) {
       if (different_device_api(device_api, op->device_api, target)) {
-          debug(2) << "Buffers to track: switching from " << device_api << " to " << op->device_api << " for loop " << op->name << "\n";
+            debug(2) << "Buffers to track: switching from " << device_api << " to " << op->device_api << " for loop " << op->name << "\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
             IRVisitor::visit(op);
@@ -556,7 +556,7 @@ class InjectBufferCopies : public IRMutator {
         loop_level = op->name;
 
         if (different_device_api(device_api, op->device_api, target)) {
-          debug(2) << "Switching from device_api " << device_api << " to op->device_api " << op->device_api << " in for loop " << op->name <<"\n";
+            debug(2) << "Switching from device_api " << device_api << " to op->device_api " << op->device_api << " in for loop " << op->name <<"\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
             IRMutator::visit(op);
@@ -568,11 +568,11 @@ class InjectBufferCopies : public IRMutator {
     }
 
 public:
-  InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(Device_Host) {}
+    InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(Device_Host) {}
 
 };
 
-  Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
+Stmt inject_host_dev_buffer_copies(Stmt s, const Target &t) {
     FindBuffersToTrack f(t);
     s.accept(&f);
 
