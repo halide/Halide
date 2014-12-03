@@ -48,11 +48,11 @@ WEAK uint64_t get_device_handle(uint64_t dev_field) {
     return wrapper->device_handle;
 }
 
-WEAK const halide_device_interface *get_device_interface(struct buffer_t *buf) {
-    if (buf->dev == 0) {
+WEAK const halide_device_interface *get_device_interface(uint64_t dev_field) {
+    if (dev_field == 0) {
         return NULL;
     }
-    return ((device_handle_wrapper *)buf->dev)->interface;
+    return ((device_handle_wrapper *)dev_field)->interface;
 }
 
 // TODO: Coarser grained locking, also consider all things that need
@@ -68,7 +68,7 @@ WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
 
     if (buf->dev_dirty) {
         debug(NULL) << "copy_to_host_already_locked " << buf << "dev_dirty is true\n";
-        const halide_device_interface *interface = get_device_interface(buf);
+        const halide_device_interface *interface = get_device_interface(buf->dev);
         if (buf->host_dirty) {
             debug(NULL) << "copy_to_host_already_locked " << buf << "dev_dirty and host_dirty are true\n";
             result = -1; // TODO: what value?
@@ -119,7 +119,7 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
     debug(NULL) << "halide_copy_to_device " << buf << "\n";
     if (buf->host_dirty) {
         debug(NULL) << "halide_copy_to_device " << buf << "host_dirty is true\n";
-        const halide_device_interface *buf_dev_interface = get_device_interface(buf);
+        const halide_device_interface *buf_dev_interface = get_device_interface(buf->dev);
         if (interface == NULL) { // TODO: Is this a good idea?
             debug(NULL) << "halide_copy_to_device " << buf << "interface is NULL\n";
             interface = buf_dev_interface;
@@ -162,7 +162,10 @@ WEAK int halide_copy_to_device(void *user_context, struct buffer_t *buf, const h
 /** Wait for current GPU operations to complete. Calling this explicitly
  * should rarely be necessary, except maybe for profiling. */
 WEAK int halide_device_sync(void *user_context, struct buffer_t *buf) { 
-    const halide_device_interface *interface = get_device_interface(buf);
+    const halide_device_interface *interface = NULL;
+    if (buf) {
+        interface = get_device_interface(buf->dev);
+    }
     if (interface == NULL) {
         return -1;
     }
@@ -181,9 +184,13 @@ WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const ha
 
 /** Free any device memory associated with a buffer_t. */
 WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
-    debug(user_context) << "halide_device_free: " << buf << " buf dev " << buf->dev << " interface " << get_device_interface(buf) << "\n";
+    uint64_t dev_field = 0;
+    if (buf) {
+        dev_field = buf->dev;
+    }
+    debug(user_context) << "halide_device_free: " << buf << " buf dev " << buf->dev << " interface " << get_device_interface(dev_field) << "\n";
     if (buf != NULL) {
-        const halide_device_interface *interface = get_device_interface(buf);
+        const halide_device_interface *interface = get_device_interface(dev_field);
         if (interface != NULL) {
             int result = interface->device_free(user_context, buf);
             halide_assert(user_context, buf->dev == 0);
