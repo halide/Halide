@@ -1,12 +1,13 @@
 #include "Deinterleave.h"
+#include "BlockFlattening.h"
+#include "Debug.h"
 #include "IRMutator.h"
-#include "Simplify.h"
 #include "IROperator.h"
 #include "IREquality.h"
 #include "IRPrinter.h"
 #include "ModulusRemainder.h"
-#include "Debug.h"
 #include "Scope.h"
+#include "Simplify.h"
 
 namespace Halide {
 namespace Internal {
@@ -17,20 +18,20 @@ using std::make_pair;
 class ContainsLoad : public IRVisitor {
 public:
     const std::string load_name;
-    bool has_load;
+    bool result;
 
     ContainsLoad(const std::string& name) :
-        load_name(name), has_load(false) {}
+        load_name(name), result(false) {}
 
-    operator bool() const {return has_load;}
 private:
 
     using IRVisitor::visit;
 
     void visit(const Load *op) {
         if (op->name == load_name) {
-            has_load = true;
-            return;
+            result = true;
+        } else {
+            IRVisitor::visit(op);
         }
     }
 };
@@ -38,45 +39,89 @@ private:
 class StoreCollector : public IRMutator {
 public:
     const std::string store_name;
-    const int store_stride;
+    const int store_stride, max_stores;
     std::vector<LetStmt>& let_stmts;
     std::vector<Store>& stores;
 
-    StoreCollector(const std::string& name, int stride, std::vector<LetStmt>& lets, std::vector<Store>& ss) :
-        store_name(name), store_stride(stride), let_stmts(lets), stores(ss) {}
+    StoreCollector(const std::string& name, int stride, int ms,
+                   std::vector<LetStmt>& lets, std::vector<Store>& ss) :
+        store_name(name), store_stride(stride), max_stores(ms),
+        let_stmts(lets), stores(ss) {}
 private:
 
     using IRMutator::visit;
 
-    void visit(const For *op) {
-        stmt = op;
+    // Don't enter any inner constructs for which it's not safe to pull out stores.
+    void visit(const For *op) {stmt = op;}
+    void visit(const IfThenElse *op) {stmt = op;}
+    void visit(const Pipeline *op) {stmt = op;}
+    void visit(const Allocate *op) {stmt = op;}
+    void visit(const Realize *op) {stmt = op;}
+
+    // Returns whether the store was collected.
+    bool collect_store(const Store *op) {
+        // Check the value doesn't load from the buffer we're
+        // collecting stores for.
+        ContainsLoad has_load(store_name);
+        op->value.accept(&has_load);
+        if (has_load.result) {
+            return false;
+        }
+
+        if (op->name != store_name) {
+            // Not a store to the buffer we're looking for.
+            return false;
+        }
+
+        if (stores.size() >= (size_t)max_stores) {
+            // Already have enough stores.
+            return false;
+        }
+
+        const Ramp *r = op->index.as<Ramp>();
+        if (!r) {
+            // Store doesn't store to a ramp. Can't interleave it.
+            return false;
+        }
+
+        if (!is_const(r->stride, store_stride)) {
+            // Ramp has wrong stride.
+            return false;
+        }
+
+        // This store is good.
+        stores.push_back(*op);
+        return true;
+    }
+
+    bool collect_let(const LetStmt *op) {
+        // First check the value doesn't load from the buffer we're
+        // collecting stores for.
+        ContainsLoad has_load(store_name);
+        op->value.accept(&has_load);
+        if (has_load.result) {
+            return false;
+        } else {
+            let_stmts.push_back(*op);
+            return true;
+        }
     }
 
     void visit(const Store *op) {
-        if (op->name == store_name) {
-            const Ramp *r = op->index.as<Ramp>();
-
-            if (r && is_const(r->stride, store_stride)) {
-                stores.push_back(*op);
-                stmt = Evaluate::make(0);
-                return;
-            }
+        if (collect_store(op)) {
+            // Replace with a no-op.
+            stmt = Evaluate::make(0);
+        } else {
+            stmt = op;
         }
-
-        stmt = op;
     }
 
     void visit(const LetStmt *op) {
-        ContainsLoad let_has_load(store_name);
-        op->value.accept(&let_has_load);
-        if (let_has_load) {
+        if (collect_let(op)) {
+            stmt = mutate(op->body);
+        } else {
             stmt = op;
-            return;
         }
-
-        let_stmts.push_back(*op);
-        stmt = mutate(op->body);
-        return;
     }
 
     void visit(const Block *op) {
@@ -84,39 +129,28 @@ private:
         const Store   *store = op->first.as<Store>();
 
         if (let) {
-            ContainsLoad let_has_load(store_name);
-            let->value.accept(&let_has_load);
-            if (let_has_load) {
+            if (collect_let(let)) {
+                let_stmts.push_back(*let);
+                stmt = mutate(Block::make(let->body, op->rest));
+            } else {
                 stmt = op;
-                return;
             }
-
-            let_stmts.push_back(*let);
-            stmt = mutate(Block::make(let->body, op->rest));
-            return;
         } else if (store) {
-            ContainsLoad store_has_load(store_name);
-            store->value.accept(&store_has_load);
-            if (store_has_load) {
+            if (collect_store(store)) {
+                stmt = mutate(op->rest);
+            } else {
                 stmt = op;
-                return;
-            } else if (store->name == store_name) {
-                const Ramp *r = store->index.as<Ramp>();
-
-                if (r && is_const(r->stride, store_stride)) {
-                    stores.push_back(*store);
-                    stmt = mutate(op->rest);
-                    return;
-                }
             }
+        } else {
+            stmt = Block::make(op->first, mutate(op->rest));
         }
-
-        stmt = Block::make(op->first, mutate(op->rest));
     }
 };
 
-Stmt collect_strided_stores(Stmt stmt, const std::string& name, int stride, std::vector<LetStmt> lets, std::vector<Store>& stores) {
-    StoreCollector collect(name, stride, lets, stores);
+Stmt collect_strided_stores(Stmt stmt, const std::string& name, int stride, int max_stores,
+                            std::vector<LetStmt> lets, std::vector<Store>& stores) {
+
+    StoreCollector collect(name, stride, max_stores, lets, stores);
     return collect.mutate(stmt);
 }
 
@@ -522,25 +556,38 @@ class Interleaver : public IRMutator {
 
             const int *stride_ptr = as_const_int(r0->stride);
 
-            // The stride isn't a constant > 1
-            if (!stride_ptr || *stride_ptr <= 1) goto fail;
+            // The stride isn't a constant or is <= 0
+            if (!stride_ptr || *stride_ptr < 1) goto fail;
 
             const int stride = *stride_ptr;
             const int width = r0->width;
+            const int expected_stores = stride == 1 ? width : stride;
 
             // Collect the rest of the stores.
             std::vector<Store> stores;
             stores.push_back(*store);
             Stmt rest = collect_strided_stores(op->rest, store->name,
-                                               stride, let_stmts, stores);
+                                               stride, expected_stores,
+                                               let_stmts, stores);
 
-            // Wrong number of stores collected.
-            if (stores.size() != (size_t)stride) goto fail;
+            // Check the store collector didn't collect too many
+            // stores (that would be a bug).
+            internal_assert(stores.size() <= (size_t)expected_stores);
 
-            // Figure out the offset of each store relative to the first one.
+            // Not enough stores collected.
+            if (stores.size() != (size_t)expected_stores) goto fail;
+
+            Type t = store->value.type();
+            Expr base;
+            std::vector<Expr> args(stores.size());
+
             int min_offset = 0;
-            std::vector<int> offsets(stride);
-            for (int i = 0; i < stride; ++i) {
+            std::vector<int> offsets(stores.size());
+
+            std::string load_name;
+            Buffer load_image;
+            Parameter load_param;
+            for (size_t i = 0; i < stores.size(); ++i) {
                 const Ramp *ri = stores[i].index.as<Ramp>();
                 internal_assert(ri);
 
@@ -550,39 +597,68 @@ class Interleaver : public IRMutator {
                 Expr diff = simplify(ri->base - r0->base);
                 const int *offs = as_const_int(diff);
 
-                // Difference between bases is not a constant.
+                // Difference between bases is not constant.
                 if (!offs) goto fail;
 
                 offsets[i] = *offs;
                 if (*offs < min_offset) {
                     min_offset = *offs;
                 }
+
+                if (stride == 1) {
+                    // Difference between bases is not a multiple of the width.
+                    if (*offs % width != 0) goto fail;
+
+                    // This case only triggers if we have an immediate load of the correct stride on the RHS.
+                    // TODO: Could we consider mutating the RHS so that we can handle more complex Expr's than just loads?
+                    const Load *load = stores[i].value.as<Load>();
+                    if (!load) goto fail;
+
+                    const Ramp *ramp = load->index.as<Ramp>();
+                    if (!ramp) goto fail;
+
+                    // Load stride or width is not eqaul to the store width.
+                    if (!is_const(ramp->stride, width) || ramp->width != width) goto fail;
+
+                    if (i == 0) {
+                        load_name  = load->name;
+                        load_image = load->image;
+                        load_param = load->param;
+                    } else {
+                        if (load->name != load_name) goto fail;
+                    }
+                }
             }
 
-            // Bucket the stores by offset.
-            Expr base;
-            std::vector<Expr> args(stride);
-            for (int i = 0; i < stride; ++i) {
+            // Gather the args for interleaving.
+            for (size_t i = 0; i < stores.size(); ++i) {
                 int j = offsets[i] - min_offset;
+                if (stride == 1) {
+                    j /= stores.size();
+                }
+
                 if (j == 0) {
                     base = stores[i].index.as<Ramp>()->base;
                 }
 
                 // The offset is not between zero and the stride.
-                if (j < 0 || j >= stride) goto fail;
+                if (j < 0 || (size_t)j >= stores.size()) goto fail;
 
                 // We already have a store for this offset.
                 if (args[j].defined()) goto fail;
 
-                args[j] = stores[i].value;
+                if (stride == 1) {
+                    args[j] = Load::make(t, load_name, stores[i].index, load_image, load_param);
+                } else {
+                    args[j] = stores[i].value;
+                }
             }
 
             // One of the stores should have had the minimum offset.
             internal_assert(base.defined());
 
             // Generate a single interleaving store.
-            Type t = store->value.type();
-            t.width = width*stride;
+            t.width = width*stores.size();
             Expr index = Ramp::make(base, make_one(Int(32)), t.width);
             Expr value = Call::make(t, Call::interleave_vectors, args, Call::Intrinsic);
             Stmt new_store = Store::make(store->name, value, index);
@@ -607,11 +683,12 @@ class Interleaver : public IRMutator {
         // opportunities within. Continue recursively.
         stmt = Block::make(mutate(op->first), mutate(op->rest));
     }
-public:
+  public:
     Interleaver() : should_deinterleave(false) {}
 };
 
 Stmt rewrite_interleavings(Stmt s) {
+    s = flatten_blocks(s);
     return Interleaver().mutate(s);
 }
 

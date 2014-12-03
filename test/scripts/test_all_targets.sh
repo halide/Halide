@@ -18,9 +18,9 @@ mkdir -p testing/deps
 if [[ ! -f testing/deps/libpng32.a ]]; then
     cd testing/deps
     echo Acquiring and building libpng
-    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.6/lpng166.zip/download -o lpng166.zip || exit 1
-    unzip -n lpng166.zip
-    cd lpng166
+    curl -L http://sourceforge.net/projects/libpng/files/libpng16/1.6.14/lpng1614.zip/download -o lpng1614.zip || exit 1
+    unzip -n lpng1614.zip
+    cd lpng1614
     if [[ `uname` == Darwin ]]; then
         make -f scripts/makefile.darwin clean
         make -f scripts/makefile.darwin ARCH="-arch i386 -arch x86_64" || exit 1
@@ -70,16 +70,16 @@ if [[ ! -f testing/deps/libz32.a ]]; then
 fi
 
 if [[ `uname` == Darwin ]]; then
-    export CXX="clang++ -std=c++98 -stdlib=libc++"
-    export GXX="clang++ -std=c++98 -stdlib=libc++"
+    export CXX="clang++ -stdlib=libc++"
+    export GXX="clang++ -stdlib=libc++"
     export CC="clang"
-    export LLVMS="pnacl trunk release-3.3 release-3.4"
+    export LLVMS="trunk release-3.5 release-3.4 pnacl"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
-    export LLVMS="trunk release-3.2 release-3.3 release-3.4 pnacl"
+    export LLVMS="release-3.5 trunk release-3.4 pnacl"
 fi
 
 
@@ -103,10 +103,6 @@ for LLVM in ${LLVMS}; do
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
-    elif [[ "$LLVM" == release-3.2 ]]; then
-        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_32
-        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_32
-        LLVM_TARGETS="X86;ARM;NVPTX"
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
@@ -114,6 +110,10 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == release-3.4 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+    elif [[ "$LLVM" == release-3.5 ]]; then
+        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
+        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
     fi
 

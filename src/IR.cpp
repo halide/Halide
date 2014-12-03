@@ -242,7 +242,7 @@ Expr Select::make(Expr condition, Expr true_value, Expr false_value) {
     internal_assert(condition.defined()) << "Select of undefined\n";
     internal_assert(true_value.defined()) << "Select of undefined\n";
     internal_assert(false_value.defined()) << "Select of undefined\n";
-    internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool\n";
+    internal_assert(condition.type().is_bool()) << "First argument to Select is not a bool: " << condition.type() << "\n";
     internal_assert(false_value.type() == true_value.type()) << "Select of mismatched types\n";
     internal_assert(condition.type().is_scalar() ||
                     condition.type().width == true_value.type().width)
@@ -573,6 +573,7 @@ const string Call::random = "random";
 const string Call::rewrite_buffer = "rewrite_buffer";
 const string Call::profiling_timer = "profiling_timer";
 const string Call::create_buffer_t = "create_buffer_t";
+const string Call::copy_buffer_t = "copy_buffer_t";
 const string Call::extract_buffer_min = "extract_buffer_min";
 const string Call::extract_buffer_max = "extract_buffer_max";
 const string Call::set_host_dirty = "set_host_dirty";

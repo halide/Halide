@@ -6,9 +6,11 @@
  */
 
 #include <bitset>
+#include <limits>
 #include <stdint.h>
 #include <string>
 #include "Error.h"
+#include "Type.h"
 #include "Util.h"
 
 namespace llvm {
@@ -59,6 +61,8 @@ struct Target {
 
         OpenGL,  ///< Enable the OpenGL runtime.
 
+        UserContext,  ///< Generated code takes a user_context pointer as first argument
+
         FeatureEnd
         // NOTE: Changes to this enum must be reflected in the definition of
         // to_string()!
@@ -79,7 +83,7 @@ struct Target {
 
     void set_features(std::vector<Feature> features_to_set, bool value = true) {
         for (size_t i = 0; i < features_to_set.size(); i++) {
-            set_feature(features_to_set[i]);
+            set_feature(features_to_set[i], value);
         }
     }
 
@@ -191,6 +195,30 @@ struct Target {
     EXPORT bool from_string(const std::string &target) {
         *this = Target();
         return merge_string(target);
+    }
+
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for this Target. */
+    int natural_vector_size(Halide::Type t) const {
+        const bool is_avx2 = has_feature(Halide::Target::AVX2);
+        const bool is_avx = has_feature(Halide::Target::AVX) && !is_avx2;
+        const bool is_integer = t.is_int() || t.is_uint();
+
+        // AVX has 256-bit SIMD registers, other existing targets have 128-bit ones.
+        // However, AVX has a very limited complement of integer instructions;
+        // restricting us to SSE4.1 size for integer operations produces much
+        // better performance. (AVX2 does have good integer operations for 256-bit
+        // registers.)
+        const int vector_byte_size = (is_avx2 || (is_avx && !is_integer)) ? 32 : 16;
+        const int data_size = t.bits / 8;
+        return vector_byte_size / data_size;
+    }
+
+    /** Given a data type, return an estimate of the "natural" vector size
+     * for that data type when compiling for this Target. */
+    template <typename data_t>
+    int natural_vector_size() const {
+        return natural_vector_size(type_of<data_t>());
     }
 
 private:

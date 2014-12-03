@@ -267,9 +267,9 @@ void check_sse_all() {
     check("subps", 4, f32_1 - f32_2);
     check("mulps", 4, f32_1 * f32_2);
     check("divps", 4, f32_1 / f32_2);
-    check("rcpps", 4, 1.0f / f32_2);
+    check("rcpps", 4, fast_inverse(f32_2));
     check("sqrtps", 4, sqrt(f32_2));
-    check("rsqrtps", 4, 1.0f / sqrt(f32_2));
+    check("rsqrtps", 4, fast_inverse_sqrt(f32_2));
     check("maxps", 4, max(f32_1, f32_2));
     check("minps", 4, min(f32_1, f32_2));
     check("pavgb", 16, u8((u16(u8_1) + u16(u8_2) + 1)/2));
@@ -301,7 +301,6 @@ void check_sse_all() {
     //check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
 
     check("shufps", 4, in_f32(2*x));
-    if (!use_avx) check("pshufd", 4, in_f32(100-x));
 
     // SSE 2
 
@@ -397,8 +396,8 @@ void check_sse_all() {
     if (use_avx) {
         check("vsqrtps", 8, sqrt(f32_1));
         check("vsqrtpd", 4, sqrt(f64_1));
-        check("vrsqrtps", 8, 1.0f/sqrt(f32_1));
-        check("vrcpps", 8, 1.0f/f32_1);
+        check("vrsqrtps", 8, fast_inverse_sqrt(f32_1));
+        check("vrcpps", 8, fast_inverse(f32_1));
 
         /* Not implemented yet in the front-end
            check("vandnps", 8, bool1 & (!bool2));
@@ -1202,8 +1201,8 @@ void check_neon_all() {
     */
 
     // VRECPE   I, F    -       Reciprocal Estimate
-    check("vrecpe.f32", 4, 1.0f/f32_1);
-    check("vrecpe.f32", 2, 1.0f/f32_1);
+    check("vrecpe.f32", 4, fast_inverse(f32_1));
+    check("vrecpe.f32", 2, fast_inverse(f32_1));
 
     // VRECPS   F       -       Reciprocal Step
     // This does one newton-rhapson iteration for finding the reciprocal. Skip it.
@@ -1239,7 +1238,7 @@ void check_neon_all() {
     // We use the non-rounding forms of these
 
     // VRSQRTE  I, F    -       Reciprocal Square Root Estimate
-    check("vrsqrte.f32", 4, 1.0f/sqrt(f32_1));
+    check("vrsqrte.f32", 4, fast_inverse_sqrt(f32_1));
 
     // VRSQRTS  F       -       Reciprocal Square Root Step
     // One newtown rhapson iteration of 1/sqrt(x). Skip it.

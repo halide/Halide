@@ -10,6 +10,97 @@
 namespace Halide {
 namespace Internal {
 
+/** A compare struct suitable for use in std::map and std::set that
+ * computes a lexical ordering on IR nodes. */
+struct IRDeepCompare {
+    EXPORT bool operator()(const Expr &a, const Expr &b) const;
+    EXPORT bool operator()(const Stmt &a, const Stmt &b) const;
+};
+
+/** Lossily track known equal exprs with a cache. On collision, the
+ * old pair is evicted. Used below by ExprWithCompareCache. */
+class IRCompareCache {
+private:
+    struct Entry {
+        Expr a, b;
+    };
+
+    int bits;
+
+    uint32_t hash(const Expr &a, const Expr &b) const {
+        // Note this hash is symmetric in a and b, so that a
+        // comparison in a and b hashes to the same bucket as
+        // a comparison on b and a.
+        uint64_t pa = (uint64_t)(a.ptr);
+        uint64_t pb = (uint64_t)(b.ptr);
+        pa ^= pb;
+        pa ^= pa >> bits;
+        pa ^= pa >> (bits*2);
+        return pa & ((1 << bits) - 1);
+    }
+
+    std::vector<Entry> entries;
+
+public:
+    void insert(const Expr &a, const Expr &b) {
+        uint32_t h = hash(a, b);
+        entries[h].a = a;
+        entries[h].b = b;
+    }
+
+    bool contains(const Expr &a, const Expr &b) const {
+        uint32_t h = hash(a, b);
+        const Entry &e = entries[h];
+        return ((a.same_as(e.a) && b.same_as(e.b)) ||
+                (a.same_as(e.b) && b.same_as(e.a)));
+    }
+
+    void clear() {
+        for (size_t i = 0; i < entries.size(); i++) {
+            entries[i].a = Expr();
+            entries[i].b = Expr();
+        }
+    }
+
+    IRCompareCache() {}
+    IRCompareCache(int b) : bits(b), entries(1 << bits) {}
+
+};
+
+/** A wrapper about Exprs so that they can be deeply compared with a
+ * cache for known-equal subexpressions. Useful for unsanitized Exprs
+ * coming in from the front-end, which may be horrible graphs with
+ * sub-expressions that are equal by value but not by identity. This
+ * isn't a comparison object like IRDeepCompare above, because libc++
+ * requires that comparison objects be stateless (and constructs a new
+ * one for each comparison!), so they can't have a cache associated
+ * with them. However, by sneakily making the cache a mutable member
+ * of the objects being compared, we can dodge this issue.
+ *
+ * Clunky example usage:
+ *
+\code
+Expr a, b, c, query;
+std::set<ExprWithCompareCache> s;
+IRCompareCache cache(8);
+s.insert(ExprWithCompareCache(a, &cache));
+s.insert(ExprWithCompareCache(b, &cache));
+s.insert(ExprWithCompareCache(c, &cache));
+if (m.contains(ExprWithCompareCache(query, &cache))) {...}
+\endcode
+ *
+ */
+struct ExprWithCompareCache {
+    Expr expr;
+    mutable IRCompareCache *cache;
+
+    ExprWithCompareCache() : cache(NULL) {}
+    ExprWithCompareCache(const Expr &e, IRCompareCache *c) : expr(e), cache(c) {}
+
+    /** The comparison uses (and updates) the cache */
+    EXPORT bool operator<(const ExprWithCompareCache &other) const;
+};
+
 /** Compare IR nodes for equality of value. Traverses entire IR
  * tree. For equality of reference, use Expr::same_as */
 // @{
@@ -17,29 +108,7 @@ EXPORT bool equal(Expr a, Expr b);
 EXPORT bool equal(Stmt a, Stmt b);
 // @}
 
-/** Computes a lexical ordering on IR nodes. Returns -1 if the first
- * expression is before the second, 0 if they're equal, and 1 if the
- * first expression is after the second. */
-// @{
-EXPORT int deep_compare(Expr a, Expr b);
-EXPORT int deep_compare(Stmt a, Stmt b);
-// @}
-
-/** A compare struct suitable for use in std::map and std::set that
- * uses the ordering defined by deep_compare. */
-struct ExprDeepCompare {
-    bool operator()(const Expr &a, const Expr &b) const {
-        return deep_compare(a, b) < 0;
-    }
-};
-
-/** A compare struct suitable for use in std::map and std::set that
- * uses the ordering defined by deep_compare. */
-struct StmtDeepCompare {
-    bool operator()(const Stmt &a, const Stmt &b) const {
-        return deep_compare(a, b) < 0;
-    }
-};
+EXPORT void ir_equality_test();
 
 }
 }
