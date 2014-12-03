@@ -562,7 +562,7 @@ WEAK int halide_opencl_initialize_kernels(void *user_context, void **state_ptr, 
 }
 
 // Used to generate correct timings when tracing
-  WEAK int halide_opencl_device_sync(void *user_context, struct buffer_t *) {
+WEAK int halide_opencl_device_sync(void *user_context, struct buffer_t *) {
     debug(user_context) << "CL: halide_opencl_device_sync (user_context: " << user_context << ")\n";
 
     ClContext ctx(user_context);

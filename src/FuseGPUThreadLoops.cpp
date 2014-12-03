@@ -208,7 +208,7 @@ class NormalizeDimensionality : public IRMutator {
     }
 
 public:
-  NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
+    NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
       : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
 };
 
@@ -454,7 +454,7 @@ class FuseGPUThreadLoops : public IRMutator {
 
             // Rewrap the whole thing in the loop over threads
             for (int i = 0; i < e.dimensions(); i++) {
-              body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, op->device_api, body);
+                body = For::make("." + thread_names[i], 0, e.extent(i), For::Parallel, op->device_api, body);
             }
 
             // There at least needs to be a loop over __thread_id_x as a marker for codegen

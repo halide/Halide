@@ -174,7 +174,7 @@ WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const ha
     debug(user_context) << "halide_device_malloc: " << buf << " buf dev " << buf->dev << " interface " << interface << "\n";
     int result = interface->device_malloc(user_context, buf);
     if (result == 0) {
-      buf->host_dirty = true;
+        buf->host_dirty = true;
     }
     return result;
 }
@@ -189,7 +189,6 @@ WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
             halide_assert(user_context, buf->dev == 0);
             return result;
         }
-        // TODO: Should it be an error to call halide_device_free on a buffer with no device interface? I don't think so...
     }
     buf->dev_dirty = false;
     return 0;
