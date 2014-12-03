@@ -739,7 +739,7 @@ public:
      *  Deduces target files based on filenames specified in target_fns struct.
      */
     //@{
-    EXPORT void compile_to(const Outputs& output_files,
+    EXPORT void compile_to(const Outputs &output_files,
                            std::vector<Argument> args,
                            const std::string &fn_name,
                            const Target &target = get_target_from_environment());
