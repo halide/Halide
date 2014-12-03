@@ -10,6 +10,9 @@ namespace Halide {
 
 static const int small_matrix_limit = 4;
 
+using namespace Internal;
+using std::string;
+using std::vector;
 
 namespace {
 
@@ -27,23 +30,19 @@ bool is_size_const(Expr i) {
     return valid;
 }
 
-std::vector<Expr> vector_of(Expr v) {
-    return std::vector<Expr>(1, v);
-}
-
-std::string strip(std::string name) {
+string strip(string name) {
     int pos = name.find('$');
     return name.substr(0, pos);
 }
 
-std::string block_var_name(std::string base_name, int level) {
+string block_var_name(string base_name, int level) {
     std::ostringstream sout;
     sout << "b" << level << "_" << base_name;
     return sout.str();
 }
 
-std::string matrix_name(Matrix *M, std::string name, std::string alt_name = "") {
-    static std::string default_name = Internal::make_entity_name(M, "Halide::Matrix", 'M');
+string matrix_name(Matrix *M, string name, string alt_name = "") {
+    static string default_name = make_entity_name(M, "Halide::Matrix", 'M');
 
     if (name.empty()) {
         if (alt_name.empty()) {
@@ -56,16 +55,32 @@ std::string matrix_name(Matrix *M, std::string name, std::string alt_name = "") 
     }
 }
 
+const vector<string> &matrix_args() {
+    static const vector<string> args = vec(string("i"), string("j"));
+    return args;
+}
+
+// Inject a suitable base-case definition given an update
+// definition. This is a helper for MatrixRef::operator+= and co.
+void define_base_case(Function func, const vector<Expr> &a, Expr e) {
+    if (func.has_pure_definition()) return;
+    func.define(matrix_args(), vec(e));
+}
+
 }
 
 MatrixRef::MatrixRef(Matrix& M, Expr i, Expr j) : mat(M), row(i), col(j) {
-    internal_assert(row.defined() && is_int(row));
-    internal_assert(col.defined() && is_int(col));
+    internal_assert(i.defined() && is_int(i));
+    internal_assert(j.defined() && is_int(j));
 }
 
 void MatrixRef::operator=(Expr x) {
     if (mat.is_large) {
-        mat.func(row, col) = x;
+        if (mat.func.has_pure_definition()) {
+            mat.func.define_update(vec(row, col), vec(x));
+        } else {
+            mat.func.define(matrix_args(), vec(x));
+        }
     } else {
         const int i = mat.small_offset(row, col);
         mat.coeffs[i] = x;
@@ -74,7 +89,10 @@ void MatrixRef::operator=(Expr x) {
 
 void MatrixRef::operator+=(Expr x) {
     if (mat.is_large) {
-        mat.func(row, col) += x;
+        vector<Expr> args = vec(row, col);
+        define_base_case(mat.func, args, cast(x.type(), 0));
+        Expr value = *this;
+        mat.func.define_update(args, vec(value + x));
     } else {
         const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] + x;
@@ -83,7 +101,10 @@ void MatrixRef::operator+=(Expr x) {
 
 void MatrixRef::operator-=(Expr x) {
     if (mat.is_large) {
-        mat.func(row, col) -= x;
+        vector<Expr> args = vec(row, col);
+        define_base_case(mat.func, args, cast(x.type(), 0));
+        Expr value = *this;
+        mat.func.define_update(vec(row, col), vec(value - x));
     } else {
         const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] - x;
@@ -92,7 +113,10 @@ void MatrixRef::operator-=(Expr x) {
 
 void MatrixRef::operator*=(Expr x) {
     if (mat.is_large) {
-        mat.func(row, col) *= x;
+        vector<Expr> args = vec(row, col);
+        define_base_case(mat.func, args, cast(x.type(), 1));
+        Expr value = *this;
+        mat.func.define_update(vec(row, col), vec(value * x));
     } else {
         const int i = mat.small_offset(row, col);
         mat.coeffs[i] = mat.coeffs[i] * x;
@@ -101,10 +125,13 @@ void MatrixRef::operator*=(Expr x) {
 
 void MatrixRef::operator/=(Expr x) {
     if (mat.is_large) {
-        mat.func(row, col) /= x;
+        vector<Expr> args = vec(row, col);
+        define_base_case(mat.func, args, cast(x.type(), 1));
+        Expr value = *this;
+        mat.func.define_update(vec(row, col), vec(value / x));
     } else {
         const int i = mat.small_offset(row, col);
-        mat.coeffs[i] = mat.coeffs[i] - x;
+        mat.coeffs[i] = mat.coeffs[i] / x;
     }
 }
 
@@ -124,107 +151,241 @@ void MatrixRef::operator=(const FuncRefExpr &e) {
 
 MatrixRef::operator Expr() const {
     if (mat.is_large) {
-        return mat.func(row, col);
+        return Call::make(mat.func, vec(row, col));
     } else {
         const int i = mat.small_offset(row, col);
         return mat.coeffs[i];
     }
 }
 
-Partition::Partition(Stage s, Expr m, Expr n) :
-    stage(s), prev(0), next(0),
-    par_rows(1), par_cols(1),
-    min_rows(0), min_cols(0),
-    mat_rows(m), mat_cols(n),
-    is_special(false)
-{
-    bi = Var("i");
-    bj = Var("j");
+struct PartitionContents : public RefCount {
+    // Partitions are stored in a doubly-linked list hierachy, with the root being the lowest
+    // level, representing individual coefficients of the matrix, and the following levels
+    // corresponding to blocks of the matrix.
+    IntrusivePtr<PartitionContents> prev;
+    IntrusivePtr<PartitionContents> next;
+
+    // Name of the matrix that this partition is applied to.
+    string name;
+
+    // A reference to the schedule for this level of the partition hierarchy.
+    Schedule schedule;
+
+    // Block variables, indexing the blocks at this level of the partition.
+    Var  bi, bj;
+
+    // The number of rows and columns in the matrix that we are partitioning.
+    Expr mat_rows, mat_cols;
+
+    // The number of rows and columns per block in this partition.
+    Expr par_rows, par_cols;
+
+    // The minimum number of rows and columns we must have in the
+    // matrix in order to use this partition.
+    Expr min_rows, min_cols;
+
+    // A flag to indicate that the schedule for this partition is a specialization
+    // of the root schedule.
+    bool is_special;
+
+    mutable RefCount ref_count;
+
+    PartitionContents() : bi("i"), bj("j"), par_rows(1), par_cols(1),
+                          min_rows(1), min_cols(1), is_special(false)
+    {}
+};
+
+namespace Internal {
+
+template<>
+EXPORT RefCount &ref_count<PartitionContents>(const PartitionContents *p) {
+    return p->ref_count;
 }
 
-Partition::Partition(Partition *p, Expr m, Expr n) :
-    stage(p->stage), prev(p), next(0),
-    par_rows(m), par_cols(n),
-    min_rows(m * p->min_rows), min_cols(n * p->min_cols),
-    mat_rows(p->mat_rows), mat_cols(p->mat_cols),
-    is_special(false)
-{
+template<>
+EXPORT void destroy<PartitionContents>(const PartitionContents *p) {
+    delete p;
+}
+
+}
+
+Partition::Partition(IntrusivePtr<PartitionContents> c) :
+        contents(c)
+{}
+
+Partition::Partition(Schedule schedule, const string &name, Expr m, Expr n) :
+        contents(new PartitionContents) {
+    contents.ptr->schedule = schedule;
+    contents.ptr->name = name;
+    contents.ptr->mat_rows = m;
+    contents.ptr->mat_cols = n;
+}
+
+Partition::Partition(Partition p, Expr m, Expr n) :
+        contents(new PartitionContents) {
+    PartitionContents *prev_contents = p.contents.ptr;
+    prev_contents->next = contents;
+
+    contents.ptr->prev = p.contents;
+    contents.ptr->name = prev_contents->name;
+    contents.ptr->par_rows = m;
+    contents.ptr->par_cols = n;
+    contents.ptr->min_rows = simplify(m * prev_contents->min_rows);
+    contents.ptr->min_cols = simplify(n * prev_contents->min_cols);
+    contents.ptr->mat_rows = prev_contents->mat_rows;
+    contents.ptr->mat_cols = prev_contents->mat_cols;
+
     int lvl = level();
-    prev->next = this;
+    contents.ptr->bi = Var(block_var_name("i", lvl));
+    contents.ptr->bj = Var(block_var_name("j", lvl));
 
-    bi = Var(block_var_name("i", lvl));
-    bj = Var(block_var_name("j", lvl));
+    std::cout << "Partitioning matrix " << prev_contents->name << " at level " << lvl
+              << " into " << contents.ptr->par_rows << " x " << contents.ptr->par_cols << " blocks. "
+              << "Partition vars: (" << contents.ptr->bi.name() << ", " << contents.ptr->bj.name() << ")\n"
+              << "\tPartion blocks total size = " << contents.ptr->min_rows << " x " << contents.ptr->min_cols << "\n";
 
-    std::cout << "Partitioning matrix " << prev->schedule().name() << " at level " << lvl
-              << " into " << par_rows << " x " << par_cols << " blocks. "
-              << "Partition vars: (" << bi.name() << ", " << bj.name() << ")\n"
-              << "\tPartion blocks total size = " << min_rows << " x " << min_cols << "\n";
+    bool const_size_blocks =
+            is_size_const(m) && is_size_const(n) &&
+            is_size_const(contents.ptr->min_rows) &&
+            is_size_const(contents.ptr->min_cols);
 
-    bool const_size_blocks = is_size_const(par_rows) && is_size_const(par_cols);
-    if (const_size_blocks && is_size_const(min_rows) && is_size_const(min_cols)) {
-        stage = prev->schedule();
+    if (const_size_blocks) {
+        contents.ptr->schedule = prev_contents->schedule;
+        contents.ptr->is_special = false;
     } else {
-        is_special = true;
-        stage = prev->schedule().specialize(mat_rows >= min_rows && mat_cols >= min_cols);
-        std::cout << "\tPartition schedule is specialized on the condition "
-                  << (mat_rows >= min_rows && mat_cols >= min_cols) << "\n";
+        Expr condition = contents.ptr->mat_rows >= contents.ptr->min_rows &&
+                contents.ptr->mat_cols >= contents.ptr->min_cols;
+
+        std::cout << "\tPartition schedule is specialized on the condition:\n\t\t"
+                  << condition << "\n";
+
+        // I do not think that the condtion should ever have been previously specialized, however,
+        // I am copying the code from Func.cpp that searches for existing specializations below.
+        // Just in case I need to revisit this.
+        //
+        // for (size_t i = 0; i < schedule.specializations().size(); i++) {
+        //     if (equal(condition, schedule.specializations()[i].condition)) {
+        //         return Stage(schedule.specializations()[i].schedule, stage_name);
+        //     }
+        // }
+
+        const Specialization &s = prev_contents->schedule.add_specialization(condition);
+        contents.ptr->schedule = s.schedule;
+        contents.ptr->is_special = true;
     }
 
-    Var pi = prev->row_var();
-    Var pj = prev->col_var();
+    Var bi = contents.ptr->bi;
+    Var bj = contents.ptr->bj;
+    Var pi = prev_contents->bi;
+    Var pj = prev_contents->bj;
 
     std::cout << "\tPartition tiled as: " << name() << "("
               << pi.name() << ", " << pj.name() << ", "
-              << bi.name() << ", " << bj.name() << ", "
-              << pi.name() << ", " << pj.name() << ")\n";
-    stage.tile(pi, pj, bi, bj, pi, pj, par_rows, par_cols);
+              << bi.name() << ", " << bj.name() << ")\n";
+    schedule().tile(pi, pj, bi, bj, m, n);
 }
 
-int Partition::level() const {
+int Partition::level() {
     if (is_root()) {
         return 0;
     } else {
-        return prev->level() + 1;
+        return parent().level() + 1;
     }
 }
 
-int Partition::depth() const {
+int Partition::depth() {
     int d = level();
-    const Partition *p = this;
-    while(p) {
-        p = p->next;
+    IntrusivePtr<PartitionContents> p = contents.ptr;
+    while(p.defined()) {
+        p = p.ptr->next;
         ++d;
     }
     return d;
 }
 
-Partition &Partition::get_level(int n) {
+Partition Partition::get_level(int n) {
     int lvl = level();
-    
-    Partition *p = this;
-    
-    while (p && n < lvl) {
-        p = p->prev;
+
+    IntrusivePtr<PartitionContents> p = contents;
+    while (p.defined() && n < lvl) {
+        p = p.ptr->prev;
         --lvl;
     }
-    
-    while (p && n > lvl) {
-        p = p->next;
+
+    while (p.defined() && n > lvl) {
+        p = p.ptr->next;
         ++lvl;
     }
 
-    return *p;
+    return Partition(p);
+}
+
+Partition Partition::get_root() {
+    return get_level(0);
+}
+
+Partition Partition::get_leaf() {
+    return get_level(depth()-1);
+}
+
+const string &Partition::name() const {
+    return contents.ptr->name;
+}
+
+Stage Partition::schedule() {
+    return Stage(contents.ptr->schedule, contents.ptr->name);
+}
+
+Partition Partition::split(Expr m, Expr n) {
+    return Partition(get_leaf(), m, n);
+}
+
+Partition Partition::parent() {
+    IntrusivePtr<PartitionContents> prev_contents = contents.ptr->prev;
+    internal_assert(prev_contents.defined());
+    return Partition(prev_contents);
+}
+
+Partition Partition::child() {
+    IntrusivePtr<PartitionContents> next_contents = contents.ptr->next;
+    internal_assert(next_contents.defined());
+    return Partition(next_contents);
+}
+
+bool Partition::is_root() const {
+    IntrusivePtr<PartitionContents> prev_contents = contents.ptr->prev;
+    return !prev_contents.defined();
+}
+
+bool Partition::is_specialization() const {
+    return contents.ptr->is_special;
+}
+
+Expr Partition::num_rows() const {
+    return contents.ptr->par_rows;
+}
+
+Expr Partition::num_cols() const {
+    return contents.ptr->par_cols;
+}
+
+Var Partition::row_var() const {
+    return contents.ptr->bi;
+}
+
+Var Partition::col_var() const {
+    return contents.ptr->bj;
 }
 
 void Partition::rename_row(Var v) {
     if (!v.same_as(row_var())) {
-        stage.rename(row_var(), v);
+        schedule().rename(row_var(), v);
     }
 }
 
 void Partition::rename_col(Var v) {
     if (!v.same_as(col_var())) {
-        stage.rename(col_var(), v);
+        schedule().rename(col_var(), v);
     }
 }
 
@@ -245,11 +406,11 @@ int Matrix::small_offset(Expr row, Expr col) const {
     return -1;
 }
 
-void Matrix::init(Expr num_row = 0, Expr num_col = 0) {
-    partitions.push_back(Partition(func, num_row, num_col));
+void Matrix::init(Expr num_rows = 0, Expr num_cols = 0) {
+    partitions.push_back(Partition(func.schedule(), func.name(), num_rows, num_cols));
 
-    nrows = num_row;
-    ncols = num_col;
+    nrows = num_rows;
+    ncols = num_cols;
 
     internal_assert(nrows.defined() && is_int(nrows));
     internal_assert(ncols.defined() && is_int(ncols));
@@ -270,7 +431,7 @@ void Matrix::init(Expr num_row = 0, Expr num_col = 0) {
 
 bool Matrix::const_num_rows(int &m) {
     if (is_size_const(nrows)) {
-        m = *Internal::as_const_int(nrows);
+        m = *as_const_int(nrows);
         return true;
     } else {
         return false;
@@ -279,7 +440,7 @@ bool Matrix::const_num_rows(int &m) {
 
 bool Matrix::const_num_cols(int &n) {
     if (is_size_const(ncols)) {
-        n = *Internal::as_const_int(ncols);
+        n = *as_const_int(ncols);
         return true;
     } else {
         return false;
@@ -287,28 +448,27 @@ bool Matrix::const_num_cols(int &n) {
 }
 
 bool Matrix::const_size(int &m, int &n) {
-    bool is_const = const_num_rows(m);
-    is_const = is_const && const_num_cols(n);
+    bool is_const = const_num_rows(m) && const_num_cols(n);
     return is_const;
 }
 
-Stage Matrix::root_schedule(int update) {
-    internal_assert(func.defined());
+// Stage Matrix::root_schedule(int update) {
+//     internal_assert(func.defined());
 
-    if (update < 0) {
-        return static_cast<Stage>(func);
-    } else {
-        return func.update(update);
-    }
-}
+//     if (update < 0) {
+//         return static_cast<Stage>(func);
+//     } else {
+//         return func.update(update);
+//     }
+// }
 
-Matrix::Matrix(std::string name)
-        : func(matrix_name(this, name)) {
+Matrix::Matrix(string name) :
+        func(matrix_name(this, name)) {
     init(0, 0);
 }
 
-Matrix::Matrix(Expr num_row, Expr num_col, Type t, std::string name)
-        : func(matrix_name(this, name)) {
+Matrix::Matrix(Expr num_row, Expr num_col, Type t, string name) :
+        func(matrix_name(this, name)) {
     init(num_row, num_col);
 
     if (!is_large) {
@@ -318,7 +478,7 @@ Matrix::Matrix(Expr num_row, Expr num_col, Type t, std::string name)
     }
 }
 
-Matrix::Matrix(Expr num_row, Expr num_col, Tuple c, std::string name)
+Matrix::Matrix(Expr num_row, Expr num_col, Tuple c, string name)
         : func(matrix_name(this, name)) {
     init(num_row, num_col);
     internal_assert(!is_large);
@@ -335,7 +495,7 @@ Matrix::Matrix(Expr num_row, Expr num_col, Tuple c, std::string name)
     }
 }
 
-Matrix::Matrix(Expr num_row, Expr num_col, std::vector<Expr> c, std::string name)
+Matrix::Matrix(Expr num_row, Expr num_col, vector<Expr> c, string name)
         : func(matrix_name(this, name)) {
     init(num_row, num_col);
     internal_assert(!is_large);
@@ -352,7 +512,7 @@ Matrix::Matrix(Expr num_row, Expr num_col, std::vector<Expr> c, std::string name
     }
 }
 
-Matrix::Matrix(ImageParam img, std::string name)
+Matrix::Matrix(ImageParam img, string name)
         : func(matrix_name(this, name, img.name())) {
     if (img.dimensions() == 1) {
         init(img.width(), 1);
@@ -360,7 +520,8 @@ Matrix::Matrix(ImageParam img, std::string name)
         if (is_large) {
             Var i = row_var();
             Var j = col_var();
-            func(i, j) = img(i);
+            Matrix &A = *this;
+            A(i, j) = img(i);
         } else {
             int m, n;
             const_size(m, n);
@@ -377,7 +538,8 @@ Matrix::Matrix(ImageParam img, std::string name)
         if (is_large) {
             Var i = row_var();
             Var j = col_var();
-            func(i, j) = img(i, j);
+            Matrix &A = *this;
+            A(i, j) = img(i, j);
         } else {
             int m, n;
             const_size(m, n);
@@ -393,7 +555,7 @@ Matrix::Matrix(ImageParam img, std::string name)
     }
 }
 
-Matrix::Matrix(Expr num_row, Expr num_col, Func f, std::string name)
+Matrix::Matrix(Expr num_row, Expr num_col, Func f, string name)
         : func(matrix_name(this, name, f.name())) {
     internal_assert(f.outputs() == 1);
 
@@ -412,11 +574,13 @@ Matrix::Matrix(Expr num_row, Expr num_col, Func f, std::string name)
         } else if (is_one(ncols)) {
             Var i = row_var();
             Var j = col_var();
-            func(i, j) = f(i);
+            Matrix &A = *this;
+            A(i, j) = f(i);
         } else {// is_one(nrows)
             Var i = row_var();
             Var j = col_var();
-            func(i, j) = f(j);
+            Matrix &A = *this;
+            A(i, j) = f(j);
         }
     } else {
         internal_assert(f.dimensions() == 2);
@@ -424,7 +588,8 @@ Matrix::Matrix(Expr num_row, Expr num_col, Func f, std::string name)
         if (is_large) {
             Var i = row_var();
             Var j = col_var();
-            func(i, j) = f(i, j);
+            Matrix &A = *this;
+            A(i, j) = f(i, j);
         } else {
             int m, n;
             const_size(m, n);
@@ -469,7 +634,7 @@ Matrix::operator Tuple() {
 }
 
 Matrix::operator Func() {
-    if (!is_large && !func.defined()) {
+    if (!is_large && !func.has_pure_definition()) {
         int m, n;
         const_size(m, n);
 
@@ -482,31 +647,36 @@ Matrix::operator Func() {
             }
         }
 
-        func(row_var(), col_var()) = mat;
+        func.define(matrix_args(), vec(mat));
     }
 
-    return func;
+    return Func(func);
 }
 
 Matrix &Matrix::compute_at_rows(Matrix &other, int level) {
     if (is_large) {
         internal_assert(0 <= level);
 
-        Partition &p = other.get_partition().get_level(level);
+        Partition p = other.get_partition().get_level(level);
 
         // Inject the compute_at variable into all other branches of the
         // specialization tree via renames.
         if (p.is_specialization()) {
-            Partition *q = p.parent();
-            while(q && q->is_specialization()) {
-                std::cout << "Renaming row var in partition " << q->level()
-                          << ": " << q->row_var() << " --> " << p.row_var() << "\n";
-                q->rename_row(p.row_var());
-                q = q->parent();
+            Partition q = p;
+            while(!q.is_root() && q.is_specialization()) {
+                std::cout << "Renaming row var in partition " << q.level()
+                          << ": " << q.row_var() << " --> " << p.row_var() << "\n";
+                q.rename_row(p.row_var());
+                q = q.parent();
             }
         }
-    
-        func.compute_at(static_cast<Func>(other), p.row_var());
+
+        LoopLevel loop_level(p.name(), p.col_var().name());
+        Schedule schedule = p.contents.ptr->schedule;
+        schedule.compute_level() = loop_level;
+        if (schedule.store_level().is_inline()) {
+            schedule.store_level() = loop_level;
+        }
     }
 
     return *this;
@@ -516,21 +686,26 @@ Matrix &Matrix::compute_at_columns(Matrix &other, int level) {
     if (is_large) {
         internal_assert(0 <= level);
 
-        Partition &p = other.get_partition().get_level(level);
+        Partition p = other.get_partition().get_level(level);
 
         // Inject the compute_at variable into all other branches of the
         // specialization tree via renames.
         if (p.is_specialization()) {
-            Partition *q = p.parent();
-            while(q && q->is_specialization()) {
-                std::cout << "Renaming col var in partition " << q->level()
-                          << ": " << q->col_var() << " --> " << p.col_var() << "\n";
-                q->rename_col(p.col_var());
-                q = q->parent();
+            Partition q = p;
+            while(!q.is_root() && q.is_specialization()) {
+                std::cout << "Renaming col var in partition " << q.level()
+                          << ": " << q.col_var() << " --> " << p.col_var() << "\n";
+                q.rename_col(p.col_var());
+                q = q.parent();
             }
         }
 
-        func.compute_at(static_cast<Func>(other), p.col_var());
+        LoopLevel loop_level(p.name(), p.col_var().name());
+        Schedule schedule = p.contents.ptr->schedule;
+        schedule.compute_level() = loop_level;
+        if (schedule.store_level().is_inline()) {
+            schedule.store_level() = loop_level;
+        }
     }
 
     return *this;
@@ -552,8 +727,8 @@ Matrix &Matrix::compute_at_columns(Matrix &other, int level) {
 //   internal_assert(is_size_const(nrows));
 //   internal_assert(is_size_const(ncols));
 
-//   const int nr = *Internal::as_const_int(nrows);
-//   const int nc = *Internal::as_const_int(ncols);
+//   const int nr = *as_const_int(nrows);
+//   const int nc = *as_const_int(ncols);
 
 //   Func f = *this;
 //   f.bound(x, 0, nrows).bound(y, 0, ncols);
@@ -585,18 +760,19 @@ Matrix &Matrix::partition(Expr row_size, Expr col_size) {
 
 Matrix &Matrix::vectorize(int level) {
     user_assert(vec_level == -1) <<
-            "The vectorize schedule on matrices may only be applied at one level "
+            "You may only schedule one level of a matrix partition with vectorize, "
             "you have already called vectorize on matrix " << name() << " at "
             "level " << vec_level << ".\n";
 
+    Partition p = get_partition();
     if (level < 0) {
-        vec_level = get_partition().depth();
+        vec_level = p.depth()-1;
     } else {
         vec_level = level;
     }
 
-    if (vec_level < (int)partitions.size()) {
-        Partition &p = partitions[vec_level];
+    if (vec_level < p.depth()) {
+        p = p.get_level(vec_level);
 
         const int *vec_size = as_const_int(p.num_rows());
         user_assert(vec_size) <<
@@ -610,20 +786,21 @@ Matrix &Matrix::vectorize(int level) {
     return *this;
 }
 
-Matrix &Matrix::parallelize(int level) {
+Matrix &Matrix::parallel(int level) {
     user_assert(par_level == -1) <<
-            "The parallel schedule on matrices may only be applied at one level "
+            "You may only schedule one level of a matrix partition with parallel, "
             "you have already called parallelize on matrix " << name() << " at "
             "level " << par_level << ".\n";
 
+    Partition p = get_partition();
     if (level < 0) {
-        par_level = get_partition().depth();
+        par_level = p.depth();
     } else {
         par_level = level;
     }
 
-    if (par_level < (int)partitions.size()) {
-        Partition &p = partitions[par_level];
+    if (par_level < p.depth()) {
+        Partition p = p.get_level(par_level);
         p.schedule().parallel(p.col_var());
     }
 
@@ -643,7 +820,7 @@ const Partition &Matrix::get_partition(int update) const {
 Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
     Matrix &A = *this;
 
-    std::string result_name = strip(this->name()) + "_block";
+    string result_name = strip(this->name()) + "_block";
 
     Expr block_nrows = simplify(max_i - min_i + 1);
     Expr block_ncols = simplify(max_j - min_j + 1);
@@ -652,7 +829,7 @@ Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
         int m, n;
         const_size(m, n);
 
-        std::vector<Expr> block_coeffs(m * n);
+        vector<Expr> block_coeffs(m * n);
         for (int j = 0; j < n; ++j) {
             for (int i = 0; i < m; ++i) {
                 const int idx = i + j * m;
@@ -674,13 +851,13 @@ Matrix Matrix::block(Expr min_i, Expr max_i, Expr min_j, Expr max_j) {
 Matrix Matrix::row(Expr i) {
     Matrix &A = *this;
 
-    std::string result_name = strip(this->name()) + "_block";
+    string result_name = strip(this->name()) + "_block";
 
     if (!is_large) {
         int m, n;
         const_size(m, n);
 
-        std::vector<Expr> row_coeffs(m * n);
+        vector<Expr> row_coeffs(m * n);
         for (int j = 0; j < n; ++j) {
             row_coeffs[j] = static_cast<Expr>(A(i, j));
         }
@@ -696,12 +873,12 @@ Matrix Matrix::row(Expr i) {
 Matrix Matrix::col(Expr j) {
     Matrix &A = *this;
 
-    std::string result_name = strip(this->name()) + "_col";
+    string result_name = strip(this->name()) + "_col";
 
     int m;
     if (const_num_rows(m)) {
         if (m <= 4) {
-            std::vector<Expr> col_coeffs(m);
+            vector<Expr> col_coeffs(m);
             for (int i = 0; i < m; ++i) {
                 col_coeffs[i] = static_cast<Expr>(A(i, j));
             }
@@ -716,7 +893,7 @@ Matrix Matrix::col(Expr j) {
 }
 
 Matrix Matrix::transpose() {
-    std::string result_name = strip(this->name()) + "_t";
+    string result_name = strip(this->name()) + "_t";
 
     if (is_large) {
         Matrix &A = *this;
@@ -727,7 +904,7 @@ Matrix Matrix::transpose() {
         const int m = *as_const_int(nrows);
         const int n = *as_const_int(ncols);
 
-        std::vector<Expr> coeff_trans(m * n);
+        vector<Expr> coeff_trans(m * n);
         for (int j = 0; j < n; ++j) {
             for (int i = 0; i < m; ++i) {
                 const int idx = small_offset(i, j);
@@ -841,7 +1018,7 @@ Matrix identity_matrix(Type t, Expr size) {
         const int n = *as_const_int(size);
 
         if (n <= 4) {
-            Tuple ident(std::vector<Expr>(n*n));
+            Tuple ident(vector<Expr>(n*n));
             for (int j = 0; j < n; ++j) {
                 for (int i =0; i < n; ++i) {
                     const int idx = i + j * n;
@@ -865,7 +1042,7 @@ Matrix operator+(Matrix A, Matrix B) {
                 equal(A.num_cols(), B.num_cols())) <<
             "Attempting to add matrices of different sizes.";
 
-    std::string result_name = strip(A.name()) + "_plus_" + strip(B.name());
+    string result_name = strip(A.name()) + "_plus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
         Matrix sum(A.num_rows(), A.num_cols(), A.type(), result_name);
@@ -889,7 +1066,7 @@ Matrix operator-(Matrix A, Matrix B) {
                 equal(A.num_cols(), B.num_cols())) <<
             "Attempting to subtract matrices of different sizes.";
 
-    std::string result_name = strip(A.name()) + "_minus_" + strip(B.name());
+    string result_name = strip(A.name()) + "_minus_" + strip(B.name());
 
     if (A.is_large_matrix()) {
         Matrix diff(A.num_rows(), A.num_cols(), A.type(), result_name);
@@ -909,7 +1086,7 @@ Matrix operator-(Matrix A, Matrix B) {
 }
 
 Matrix operator*(Expr a, Matrix B) {
-    std::string result_name = strip(B.name()) + "_scaled";
+    string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
         Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
@@ -928,7 +1105,7 @@ Matrix operator*(Expr a, Matrix B) {
 }
 
 Matrix operator*(Matrix B, Expr a) {
-    std::string result_name = strip(B.name()) + "_scaled";
+    string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
         Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
@@ -947,7 +1124,7 @@ Matrix operator*(Matrix B, Expr a) {
 }
 
 Matrix operator/(Matrix B, Expr a) {
-    std::string result_name = strip(B.name()) + "_scaled";
+    string result_name = strip(B.name()) + "_scaled";
 
     if (B.is_large_matrix()) {
         Matrix scale(B.num_rows(), B.num_cols(), B.type(), result_name);
@@ -974,7 +1151,7 @@ Matrix operator*(Matrix A, Matrix B) {
     Expr prod_nrows = A.num_rows();
     Expr prod_ncols = B.num_cols();
 
-    std::string result_name = strip(A.name()) + "_times_" + strip(B.name());
+    string result_name = strip(A.name()) + "_times_" + strip(B.name());
 
     if (is_positive_const(prod_nrows) && is_positive_const(prod_ncols)) {
         const int m = *as_const_int(prod_nrows);
@@ -982,7 +1159,7 @@ Matrix operator*(Matrix A, Matrix B) {
 
         if (m <= 4 && n <= 4) {
             // Product will be a small matrix.
-            Tuple prod(std::vector<Expr> (m*n));
+            Tuple prod(vector<Expr> (m*n));
 
             for (int j = 0; j < n; ++j) {
                 for (int i = 0; i < m; ++i) {
@@ -1015,7 +1192,7 @@ Matrix operator*(Matrix A, Matrix B) {
     const int tile_size = 4;
     prod.partition(vec_size).vectorize()
         .partition(tile_size)
-        .partition(2).parallelize();
+        .partition(2).parallel();
 
     A.compute_at_rows(prod, 2);
     B.compute_at_rows(prod, 2);

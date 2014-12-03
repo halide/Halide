@@ -8,6 +8,8 @@
 #include "IR.h"
 #include "Func.h"
 #include "Function.h"
+#include "IntrusivePtr.h"
+#include "Schedule.h"
 #include "Tuple.h"
 
 namespace Halide {
@@ -23,8 +25,7 @@ class MatrixRef {
     Matrix& mat;
     Expr row;
     Expr col;
-
-  public:
+public:
     MatrixRef(Matrix& M, Expr i, Expr j);
 
     /** Use this as the left-hand-side of a reduction definition (see
@@ -74,6 +75,9 @@ class MatrixRef {
     EXPORT operator Expr() const;
 };
 
+class Matrix;
+class PartitionContents;
+
 /**
  * A Partition defines a decomposition of a Matrix into a hierarchy of
  * blocks that is used for scheduling matrix computations. A Matrix
@@ -86,76 +90,62 @@ class MatrixRef {
  * computations will not be tiled.
  */
 class Partition {
-    Stage stage;
-    Partition *prev;
-    Partition *next;
+    Internal::IntrusivePtr<PartitionContents>  contents;
 
-    // Block variables, indexing the blocks at this level of the partition.
-    Var  bi, bj;
-
-    // The number of rows and columns per block in this partition.
-    Expr par_rows, par_cols;
-
-    // The minimum number of rows and columns we must have in the
-    // matrix in order to use this partition.
-    Expr min_rows, min_cols;
-
-    // The number of rows and columns in the matrix that we are partitioning.
-    Expr mat_rows, mat_cols;
-
-    // A flag to indicate that the schedule for this partition is a specialization
-    // of the root schedule.
-    bool is_special;
-
-    Partition(Partition *p, Expr m, Expr n);
+    friend class Matrix;
 public:
-    Partition(Stage s, Expr m, Expr n);
+    // Create a root partition.
+    Partition(Internal::Schedule schedule, const std::string &name, Expr m, Expr n);
+
+    // Create a partition that splits an existing partition into blocks of size m x n.
+    Partition(Partition p, Expr m, Expr n);
+
+    // Create a partition from known contents.
+    Partition(Internal::IntrusivePtr<PartitionContents> c);
 
     // Returns the level of this partition in the hierarchy.
-    int level() const;
+    int level();
 
     // Returns the depth of the partition hierarchy that this partition belongs to.
-    int depth() const;
+    int depth();
 
-    // Get a reference to Partition object representing a particular level of the hierachy 
+    // Get a reference to Partition object representing a particular level of the hierachy
     // this partition belongs to.
-    Partition &get_level(int n);
+    Partition get_level(int n);
 
     // Get a reference to the root Partition of the hierachy this partition belongs to.
-    Partition &get_root() {return get_level(0);}
+    Partition get_root();
 
     // Get a reference to the leaf Partition of the hierachy this partition belongs to.
-    Partition &get_leaf() {return get_level(depth()-1);}
+    Partition get_leaf();
+
+    const std::string &name() const;
+
+    Stage schedule();
+
+    Partition split(Expr m, Expr n);
+    Partition parent();
+    Partition child();
+
+    bool is_root() const;
+    bool is_specialization() const;
+
+    Expr num_rows() const;
+    Expr num_cols() const;
+
+    Var row_var() const;
+    Var col_var() const;
 
     void rename_row(Var v);
     void rename_col(Var v);
-
-    const std::string &name() const {return stage.name();}
-    Partition split(Expr m, Expr n) {return Partition(&get_leaf(), m, n);}
-
-    Stage schedule() {return stage;}
-    Partition *parent() {return prev;}
-    Partition *child() {return next;}
-    bool is_root() const {return prev == NULL;}
-    bool is_specialization() const {return is_special;}
-
-    Expr num_rows() const {return par_rows;}
-    Expr num_cols() const {return par_cols;}
-
-    Var row_var() const {return bi;}
-    Var col_var() const {return bj;}
 };
 
 class Matrix {
     /* For small matrices we store the coefficient Expr's directly. */
     std::vector<Expr> coeffs;
 
-    /* For large matrices (m > 4 || n > 4) we simply wrap a Func. */
-    Func func;
-
-    /* We store a schedule here, which we can apply to the Func as
-     * soon as we receive a compute_* call. */
-    /* Internal::Schedule schedule; */
+    /* For large matrices (m > 4 || n > 4) we express a matrix via a Function. */
+    Internal::Function func;
 
     /* Variables for accessing the function as a matrix. */
     Var ij[2];
@@ -183,9 +173,9 @@ class Matrix {
     /* Returns the offset into the expression vector for small matrices. */
     int small_offset(Expr row, Expr col) const;
 
-    void init(Expr num_row, Expr num_col);
+    void init(Expr num_rows, Expr num_cols);
 
-    Stage root_schedule(int update=-1);
+    // Stage root_schedule(int update=-1);
 
     friend class MatrixRef;
     friend class Partition;
@@ -231,7 +221,7 @@ public:
     EXPORT Matrix &partition(Expr size);
     EXPORT Matrix &partition(Expr row_size, Expr col_size);
     EXPORT Matrix &vectorize(int level = -1);
-    EXPORT Matrix &parallelize(int level = -1);
+    EXPORT Matrix &parallel(int level = -1);
 
     EXPORT Partition &get_partition(int update = 0);
     EXPORT const Partition &get_partition(int update = 0) const;
