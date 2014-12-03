@@ -40,7 +40,8 @@ using namespace Internal;
 namespace {
 
 Internal::Parameter make_user_context() {
-    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
+    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context",
+        /*is_explicit_name*/ true, /*register_instance*/ false);
 }
 
 vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {

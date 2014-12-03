@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <memory>
 
 #include "Target.h"
 #include "Debug.h"
@@ -503,10 +504,27 @@ namespace {
 // Link all modules together and with the result in modules[0],
 // all other input modules are destroyed.
 void link_modules(std::vector<llvm::Module *> &modules) {
+    #if LLVM_VERSION >= 35
+    // LLVM is moving to requiring data layouts to exist. Use the
+    // datalayout of the first module that has one for all modules.
+    const llvm::DataLayout *data_layout = NULL;
+    for (size_t i = 0; data_layout == NULL && i < modules.size(); i++) {
+        data_layout = modules[i]->getDataLayout();
+    }
+
+    // If LLVM is 3.5 or greater, we have C++11.
+    std::unique_ptr<llvm::DataLayout> default_layout;
+    if (data_layout == NULL) {
+        // An empty data layout is acceptable as a last ditch default.
+        default_layout.reset(new llvm::DataLayout(""));
+        data_layout = default_layout.get();
+    }
+    #endif
+
     // Link them all together
     for (size_t i = 1; i < modules.size(); i++) {
-        #if LLVM_VERSION == 35
-        modules[i]->setDataLayout(modules[0]->getDataLayout()); // Use the datalayout of the first module.
+        #if LLVM_VERSION >= 35
+        modules[i]->setDataLayout(data_layout);
         #endif
         // This is a workaround to silence some linkage warnings during
         // tests: normally all modules will have the same triple,
