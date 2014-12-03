@@ -11,7 +11,7 @@ extern "C" {
  *  Routines specific to the Halide OpenGL runtime.
  */
 
-extern WEAK struct halide_device_interface *halide_glsl;
+extern struct halide_device_interface *halide_glsl;
 
 /** These are forward declared here to allow clients to override the
  *  Halide Glsl runtime. Do not call them. */
