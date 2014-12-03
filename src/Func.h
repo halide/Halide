@@ -354,6 +354,33 @@ struct ErrorBuffer;
 class IRMutator;
 }
 
+
+struct TargetFilenames {
+    static const std::string NO_FILENAME;
+
+    const std::string& fn_object;
+    const std::string& fn_assembly;
+    const std::string& fn_bitcode;
+
+    TargetFilenames(const std::string& fn_object_,
+                    const std::string& fn_assembly_,
+                    const std::string& fn_bitcode_ = NO_FILENAME):
+        fn_object(fn_object_),
+        fn_assembly(fn_assembly_),
+        fn_bitcode(fn_bitcode_) {}
+
+    static TargetFilenames object(const std::string& fn) {
+        return TargetFilenames(fn, NO_FILENAME, NO_FILENAME);
+    }
+    static TargetFilenames assembly(const std::string& fn) {
+        return TargetFilenames(NO_FILENAME, fn, NO_FILENAME);
+    }
+    static TargetFilenames bitcode(const std::string& fn) {
+        return TargetFilenames(NO_FILENAME, NO_FILENAME, fn);
+    }
+};
+
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -704,6 +731,20 @@ public:
                                 const Target &target = get_target_from_environment());
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
                                 const Target &target = get_target_from_environment());
+    // @}
+
+    /** Basic compile function, that allows to generate multiple target files
+     * with single call.
+     *  Deduces target files based on filenames specified in target_fns struct.
+     */
+    //@{
+    EXPORT void compile_to(const TargetFilenames target_fns,
+                           std::vector<Argument> args,
+                           const std::string &fn_name,
+                           const Target &target = get_target_from_environment());
+    EXPORT void compile_to(const TargetFilenames target_fns,
+                           std::vector<Argument> args,
+                           const Target &target = get_target_from_environment());
     // @}
 
     /** Eagerly jit compile the function to machine code. This

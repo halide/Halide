@@ -2016,8 +2016,10 @@ void Func::lower(const Target &t) {
     }
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
-                              const Target &target) {
+const std::string TargetFilenames::NO_FILENAME = "";
+
+void Func::compile_to(const TargetFilenames target_fns, vector<Argument> args,
+                      const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
     args = add_user_context_arg(args, target);
@@ -2033,7 +2035,26 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
     StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_bitcode(filename);
+
+    if (!target_fns.fn_object.empty()) {
+        cg.compile_to_native(target_fns.fn_object, false);
+    }
+    if (!target_fns.fn_assembly.empty()) {
+        cg.compile_to_native(target_fns.fn_assembly, true);
+    }
+    if (!target_fns.fn_bitcode.empty()) {
+        cg.compile_to_bitcode(target_fns.fn_bitcode);
+    }
+}
+
+void Func::compile_to(const TargetFilenames target_fns, vector<Argument> args,
+                      const Target &target) {
+    compile_to(target_fns, args, "", target);
+}
+
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+                              const Target &target) {
+    compile_to(TargetFilenames::bitcode(filename), args, fn_name, target);
 }
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
@@ -2042,22 +2063,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
 void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, false);
+    compile_to(TargetFilenames::object(filename), args, fn_name, target);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
@@ -2252,22 +2258,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, true);
+    compile_to(TargetFilenames::assembly(filename), args, fn_name, target);
 }
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
