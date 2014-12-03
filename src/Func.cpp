@@ -2016,7 +2016,7 @@ void Func::lower(const Target &t) {
     }
 }
 
-void Func::compile_to(const Outputs& output_files, vector<Argument> args,
+void Func::compile_to(const Outputs &output_files, vector<Argument> args,
                       const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
