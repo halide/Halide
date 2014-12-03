@@ -256,27 +256,26 @@ template<typename CodeGen_CPU>
 std::map<DeviceAPI, CodeGen_GPU_Dev *> CodeGen_GPU_Host<CodeGen_CPU>::make_devices(Target t)
 {
     std::map<DeviceAPI, CodeGen_GPU_Dev *> result;
-    DeviceAPI default_api = Device_Default_GPU;
 
+    // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL last.
+    // The code is in reverse order to allow later tests to override earlier ones.
+    DeviceAPI default_api = Device_Default_GPU;
+    if (t.has_feature(Target::OpenGL)) {
+        debug(1) << "Constructing OpenGL device codegen\n";
+        result[Device_GLSL] = new CodeGen_OpenGL_Dev(t);
+        default_api = Device_GLSL;
+    }
+    if (t.has_feature(Target::CUDA)) {
+        debug(1) << "Constructing CUDA device codegen\n";
+        result[Device_CUDA] = new CodeGen_PTX_Dev(t);
+        default_api = Device_CUDA;
+    }
     if (t.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
         result[Device_OpenCL] = new CodeGen_OpenCL_Dev(t);
         default_api = Device_OpenCL;
     }
-    if (t.has_feature(Target::CUDA)) {
-        debug(1) << "Constructing CUDA device codegen\n";
-        result[Device_CUDA] = new CodeGen_PTX_Dev(t);
-        if (default_api == Device_Default_GPU) {
-            default_api = Device_CUDA;
-        }
-    }
-    if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
-        result[Device_GLSL] = new CodeGen_OpenGL_Dev(t);
-        if (default_api == Device_Default_GPU) {
-            default_api = Device_GLSL;
-        }
-    }
+
     if (result.empty()) {
         internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
     } else {
