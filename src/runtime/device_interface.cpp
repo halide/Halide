@@ -67,20 +67,20 @@ WEAK int copy_to_host_already_locked(void *user_context, struct buffer_t *buf) {
     int result = 0;
 
     if (buf->dev_dirty) {
-        debug(NULL) << "copy_to_host_already_locked " << buf << "dev_dirty is true\n";
+        debug(user_context) << "copy_to_host_already_locked " << buf << "dev_dirty is true\n";
         const halide_device_interface *interface = get_device_interface(buf->dev);
         if (buf->host_dirty) {
-            debug(NULL) << "copy_to_host_already_locked " << buf << "dev_dirty and host_dirty are true\n";
+            debug(user_context) << "copy_to_host_already_locked " << buf << "dev_dirty and host_dirty are true\n";
             result = -1; // TODO: what value?
         } else if (interface == NULL) {
-            debug(NULL) << "copy_to_host_already_locked " << buf << "interface is NULL\n";
+            debug(user_context) << "copy_to_host_already_locked " << buf << "interface is NULL\n";
             result = -2; // TODO: What value?
         } else {
             result = interface->copy_to_host(user_context, buf);
             if (result == 0) {
-              buf->dev_dirty = false;
+                buf->dev_dirty = false;
             } else {
-              debug(NULL) << "copy_to_host_already_locked " << buf << "device copy_to_host returned an error\n";
+                debug(user_context) << "copy_to_host_already_locked " << buf << "device copy_to_host returned an error\n";
             }
         }
     }
