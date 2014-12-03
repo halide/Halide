@@ -59,7 +59,7 @@ public:
  * it is up to the caller to ensure that this is the case (and to do any
  * cleanup necessary).
  */
-void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
+EXPORT void set_custom_compile_time_error_reporter(CompileTimeErrorReporter* error_reporter);
 
 namespace Internal {
 
