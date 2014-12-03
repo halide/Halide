@@ -736,7 +736,8 @@ public:
     // @}
 
     /** Compile and generate multiple target files with single call.
-     *  Deduces target files based on filenames specified in target_fns struct.
+     * Deduces target files based on filenames specified in
+     * output_files struct.
      */
     //@{
     EXPORT void compile_to(const Outputs &output_files,
