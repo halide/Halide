@@ -86,7 +86,7 @@ class MatrixRef {
  * computations will not be tiled.
  */
 class Partition {
-    Stage sched;
+    Stage stage;
     Partition *prev;
     Partition *next;
 
@@ -103,21 +103,44 @@ class Partition {
     // The number of rows and columns in the matrix that we are partitioning.
     Expr mat_rows, mat_cols;
 
+    // A flag to indicate that the schedule for this partition is a specialization
+    // of the root schedule.
+    bool is_special;
+
     Partition(Partition *p, Expr m, Expr n);
 public:
     Partition(Stage s, Expr m, Expr n);
 
-    const std::string &name() const;
-
-    Stage schedule();
-    Partition &parent();
-    Partition &child();
+    // Returns the level of this partition in the hierarchy.
     int level() const;
 
-    Partition split(Expr m, Expr n);
+    // Returns the depth of the partition hierarchy that this partition belongs to.
+    int depth() const;
 
-    Expr num_rows() const {return nrows;}
-    Expr num_cols() const {return ncols;}
+    // Get a reference to Partition object representing a particular level of the hierachy 
+    // this partition belongs to.
+    Partition &get_level(int n);
+
+    // Get a reference to the root Partition of the hierachy this partition belongs to.
+    Partition &get_root() {return get_level(0);}
+
+    // Get a reference to the leaf Partition of the hierachy this partition belongs to.
+    Partition &get_leaf() {return get_level(depth()-1);}
+
+    void rename_row(Var v);
+    void rename_col(Var v);
+
+    const std::string &name() const {return stage.name();}
+    Partition split(Expr m, Expr n) {return Partition(&get_leaf(), m, n);}
+
+    Stage schedule() {return stage;}
+    Partition *parent() {return prev;}
+    Partition *child() {return next;}
+    bool is_root() const {return prev == NULL;}
+    bool is_specialization() const {return is_special;}
+
+    Expr num_rows() const {return par_rows;}
+    Expr num_cols() const {return par_cols;}
 
     Var row_var() const {return bi;}
     Var col_var() const {return bj;}
@@ -210,12 +233,8 @@ public:
     EXPORT Matrix &vectorize(int level = -1);
     EXPORT Matrix &parallelize(int level = -1);
 
-    EXPORT int num_partitions();
-    EXPORT Partition &root_partition();
-    EXPORT Partition &get_partition(int level);
-
-    EXPORT const Partition &root_partition() const;
-    EXPORT const Partition &get_partition(int level) const;
+    EXPORT Partition &get_partition(int update = 0);
+    EXPORT const Partition &get_partition(int update = 0) const;
 
     EXPORT Matrix row(Expr i);
     EXPORT Matrix col(Expr j);
