@@ -77,7 +77,7 @@ private:
         if (value.same_as(op->value) && body.same_as(op->body)) {
             expr = op;
         } else {
-            expr = Let::make(op->name, op->value, op->body);
+            expr = Let::make(op->name, value, body);
         }
 
         min_predicate = substitute(op->name, value, min_predicate);

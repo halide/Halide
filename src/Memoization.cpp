@@ -60,6 +60,7 @@ public:
                 } else if (extern_args[i].is_buffer()) {
                     // Function with an extern definition
                     record(Halide::Internal::Parameter(extern_args[i].buffer.type(), true,
+                                                       extern_args[i].buffer.dimensions(),
                                                        extern_args[i].buffer.name()));
                 } else if (extern_args[i].is_image_param()) {
                     record(extern_args[i].image_param);
