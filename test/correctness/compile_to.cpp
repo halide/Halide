@@ -7,7 +7,7 @@
 using namespace Halide;
 
 void testCompileToOutput(Func j) {
-    const char* fn_object = "compile_to_native.o";
+    const char *fn_object = "compile_to_native.o";
 
     if (access(fn_object, F_OK) == 0) { unlink(fn_object); }
     assert(access(fn_object, F_OK) != 0 && "Output file already exists.");
@@ -21,8 +21,8 @@ void testCompileToOutput(Func j) {
 }
 
 void testCompileToOutputAndAssembly(Func j) {
-    const char* fn_object = "compile_to_native1.o";
-    const char* fn_assembly = "compile_to_assembly1.s";
+    const char *fn_object = "compile_to_native1.o";
+    const char *fn_assembly = "compile_to_assembly1.s";
 
     if (access(fn_object, F_OK) == 0) { unlink(fn_object); }
     if (access(fn_assembly, F_OK) == 0) { unlink(fn_assembly); }
