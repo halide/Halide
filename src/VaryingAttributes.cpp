@@ -27,7 +27,7 @@ class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
     
-    Expr tag_linear_expression(Expr e, const std::string& name = unique_name('a')) {
+    Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
         internal_assert(name.length() > 0);
 
@@ -131,7 +131,7 @@ protected:
     }
     
     template<typename T>
-    void visit_imm(T* op) {
+    void visit_imm(T *op) {
         order = 0;
         expr = T::make(op->value);
     }
@@ -161,7 +161,7 @@ protected:
     // Add and subtract do not make the expression non-linear, if it is already
     // linear or constant
     template<typename T>
-    void visit_binary_linear(T* op) {
+    void visit_binary_linear(T *op) {
         Expr a = mutate(op->a);
         unsigned int order_a = order;
         Expr b = mutate(op->b);
@@ -237,7 +237,7 @@ protected:
     // For other binary operators, if either argument is non-constant, then the
     // whole expression is non-linear
     template<typename T>
-    void visit_binary(T* op) {
+    void visit_binary(T *op) {
         
         Expr a = mutate(op->a);
         unsigned int order_a = order;
@@ -395,7 +395,7 @@ public:
     }
     
     template<typename T>
-    void visit_binary_piecewise(const T* op) {
+    void visit_binary_piecewise(const T *op) {
         if (which() == 0) {
             push(op->a);
         } else {
@@ -434,7 +434,7 @@ public:
 
     // Visit a binary piecewise operation like min/max
     template<typename T>
-    void visit_binary_piecewise(const T* op) {
+    void visit_binary_piecewise(const T *op) {
         
         // Traverse the first branch expression
         traversal.push_back(0);
@@ -502,14 +502,14 @@ public:
         }
     }
     
-    ContainsVariable(const std::string& name_) : found(false), result(NULL), name(name_) { }
+    ContainsVariable(const std::string &name_) : found(false), result(NULL), name(name_) { }
     
     bool found;
-    const Variable* result;
+    const Variable *result;
     std::string name;
 };
     
-bool contains_variable(Expr e, const std::string& name)
+bool contains_variable(Expr e, const std::string &name)
 {
     ContainsVariable c(name);
     e.accept(&c);
@@ -517,7 +517,7 @@ bool contains_variable(Expr e, const std::string& name)
     return c.found;
 }
     
-Type type_of_variable(Expr e, const std::string& name)
+Type type_of_variable(Expr e, const std::string &name)
 {
     ContainsVariable c(name);
     e.accept(&c);
@@ -617,7 +617,7 @@ class FindVaryingAttributeVars : public IRVisitor {
 public:
     using IRVisitor::visit;
     
-    virtual void visit(const Variable* op) {
+    virtual void visit(const Variable *op) {
         if (ends_with(op->name, ".varying")) {
             variables.insert(op->name);
         }
@@ -636,7 +636,7 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
     std::vector<std::string> remove_list;
 
     for (std::map<std::string, Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
-        const std::string& name = i->first;
+        const std::string &name = i->first;
         if (find.variables.find(name) == find.variables.end()) {
             debug(2) << "Removed varying attribute " << name << "\n";
             remove_list.push_back(name);
@@ -655,7 +655,7 @@ class CastVaryingVariablesToFloat : public IRMutator {
 protected:
     virtual void visit(const Variable *op) {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
-            expr = Variable::make(Float(32),op->name);
+            expr = Variable::make(Float(32), op->name);
         } else {
             expr = op;
         }
@@ -666,7 +666,7 @@ protected:
     }
     
     template<typename T>
-    void visit_binary_op(const T* op) {
+    void visit_binary_op(const T *op) {
         Expr mutated_a = mutate(op->a);
         Expr mutated_b = mutate(op->b);
         
@@ -747,7 +747,7 @@ protected:
 
         bool changed = op->value.type().is_float() != mutated_value.type().is_float();
         if (changed) {
-            scope.push(op->name,mutated_value);
+            scope.push(op->name, mutated_value);
         }
 
         Expr mutated_body = mutate(op->body);
@@ -764,7 +764,7 @@ protected:
 
         bool changed = op->value.type().is_float() != mutated_value.type().is_float();
         if (changed) {
-            scope.push(op->name,mutated_value);
+            scope.push(op->name, mutated_value);
         }
 
         Stmt mutated_body = mutate(op->body);
@@ -1150,7 +1150,7 @@ public:
             // If this was the inner most for-loop of the .glsl scheduled pair,
             // add a let definition for the vertex index and Store the spatial
             // coordinates
-            const For* nested_for = op->body.as<For>();
+            const For *nested_for = op->body.as<For>();
             if (!(nested_for && CodeGen_GPU_Dev::is_gpu_var(nested_for->name))) {
 
                 // Create a variable to store the offset in floats of this
@@ -1239,8 +1239,8 @@ public:
     virtual void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
 
-            const For* loop1 = op;
-            const For* loop0 = loop1->body.as<For>();
+            const For *loop1 = op;
+            const For *loop0 = loop1->body.as<For>();
 
             internal_assert(loop1->body.as<For>()) << "Did not find pair of nested For loops";
 
@@ -1342,7 +1342,7 @@ public:
             // values.
 
             #define DONT_SIMPLIFY(v_) Internal::Call::make((v_)->type, Internal::Call::return_second, Internal::vec<Expr>(0, v_), Internal::Call::Intrinsic)
-            #define USED_IN_CODEGEN(type_,v_) Evaluate::make(Internal::Call::make(Int(32), Internal::Call::return_second, Internal::vec<Expr>(Variable::make(type_,v_), 0), Internal::Call::Intrinsic))
+            #define USED_IN_CODEGEN(type_, v_) Evaluate::make(Internal::Call::make(Int(32), Internal::Call::return_second, Internal::vec<Expr>(Variable::make(type_, v_), 0), Internal::Call::Intrinsic))
 
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops

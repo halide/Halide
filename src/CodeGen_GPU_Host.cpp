@@ -181,7 +181,7 @@ protected:
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
 
-            const StringImm* string_imm = op->args[0].as<StringImm>();
+            const StringImm *string_imm = op->args[0].as<StringImm>();
             if (!string_imm) {
                 internal_assert(op->args[0].as<Broadcast>());
                 string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
@@ -633,7 +633,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // store the closure value into the stack space
             builder->CreateStore(val, ptr);
 
-            // store a void* pointer to the argument into the gpu_args_arr
+            // store a void * pointer to the argument into the gpu_args_arr
             Value *bits = builder->CreateBitCast(ptr, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
