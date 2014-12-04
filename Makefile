@@ -5,12 +5,16 @@
 # 'make test_foo' builds and runs test/correctness/foo.cpp for any
 #     cpp file in the correctness/ subdirectoy of the test folder
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
+# 'make time_compilation_tests' records the compile time for each test module into a csv file.
+#     For correctness and performance tests this include halide build time and run time. For
+#     the tests in test/static/ and test/generator/ this times only the halide build time.
 
 SHELL = bash
 CXX ?= g++
 LLVM_CONFIG ?= llvm-config
 LLVM_COMPONENTS= $(shell $(LLVM_CONFIG) --components)
 LLVM_VERSION = $(shell $(LLVM_CONFIG) --version | cut -b 1-3)
+LLVM_FULL_VERSION = $(shell $(LLVM_CONFIG) --version)
 CLANG ?= clang
 CLANG_VERSION = $(shell $(CLANG) --version)
 LLVM_BINDIR = $(shell $(LLVM_CONFIG) --bindir)
@@ -119,7 +123,13 @@ endif
 print-%:
 	@echo '$*=$($*)'
 
-LLVM_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
+ifeq ($(USE_LLVM_SHARED_LIB), )
+LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
+LLVM_SHARED_LIBS = 
+else 
+LLVM_STATIC_LIBS = 
+LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
+endif
 
 LLVM_34_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34)
 ifneq ($(LLVM_34_OR_OLDER), )
@@ -141,7 +151,7 @@ endif
 endif
 
 # Remove some non-llvm libs that llvm-config has helpfully included
-LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_LIBS))
+LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_STATIC_LIBS))
 
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
@@ -240,7 +250,7 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) src/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p include
@@ -350,20 +360,22 @@ ifeq ($(CXX11),true)
 ALL_TESTS += test_generators
 endif
 
-profile_correctness: init_profile_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=profile_test_%)
-profile_static: init_profile_static $(STATIC_TESTS:test/static/%_generate.cpp=profile_static_%)
-profile_performance: init_profile_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=profile_performance_%)
-profile_opengl: init_profile_opengl $(OPENGL_TESTS:test/opengl/%.cpp=profile_opengl_%)
+# These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
+# For static and generator tests they time the compile time only. The times are recorded in CSV files.
+time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
+time_compilation_static: init_time_compilation_static $(STATIC_TESTS:test/static/%_generate.cpp=time_compilation_static_%)
+time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
+time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
 ifeq ($(CXX11),true)
-profile_generators: init_profile_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=profile_generator_%)
+time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
 else
-profile_generators: ;
+time_compilation_generators: ;
 endif
 
-init_profile_%:
-	echo "TEST,User (s),System (s),Real" > $(@:init_profile_%=profile_%.csv)
+init_time_compilation_%:
+	echo "TEST,User (s),System (s),Real" > $(@:init_time_compilation_%=compile_times_%.csv)
 
-PROFILE ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
+TIME_COMPILATION ?= /usr/bin/time -a -f "$@,%U,%S,%E" -o
 
 run_tests: $(ALL_TESTS)
 	make test_performance
@@ -374,7 +386,7 @@ build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
 	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
 
-profile_tests: profile_correctness profile_performance profile_static profile_generators
+time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
 
 $(BIN_DIR)/test_internal: test/internal.cpp $(BIN_DIR)/libHalide.so
 	$(CXX) $(CXX_FLAGS)  $< -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
@@ -547,23 +559,23 @@ tutorial_%: $(BIN_DIR)/tutorial_% tmp/images/rgb.png tmp/images/gray.png
 	cd tmp ; $(LD_PATH_SETUP) ../$<
 	@-echo
 
-profile_test_%: $(BIN_DIR)/test_%
-	$(PROFILE) profile_correctness.csv make $(@:profile_test_%=test_%)
+time_compilation_test_%: $(BIN_DIR)/test_%
+	$(TIME_COMPILATION) compile_times_correctness.csv make $(@:time_compilation_test_%=test_%)
 
-profile_performance_%: $(BIN_DIR)/performance_%
-	$(PROFILE) profile_performance.csv make $(@:profile_performance_%=performance_%)
+time_compilation_performance_%: $(BIN_DIR)/performance_%
+	$(TIME_COMPILATION) compile_times_performance.csv make $(@:time_compilation_performance_%=performance_%)
 
-profile_opengl_%: $(BIN_DIR)/opengl_%
-	$(PROFILE) profile_opengl.csv make $(@:profile_opengl_%=opengl_%)
+time_compilation_opengl_%: $(BIN_DIR)/opengl_%
+	$(TIME_COMPILATION) compile_times_opengl.csv make $(@:time_compilation_opengl_%=opengl_%)
 
-profile_static_%: $(BIN_DIR)/static_%_generate
-	$(PROFILE) profile_static.csv make $(@:profile_static_%=tmp/static/%/%.o)
+time_compilation_static_%: $(BIN_DIR)/static_%_generate
+	$(TIME_COMPILATION) compile_times_static.csv make $(@:time_compilation_static_%=tmp/static/%/%.o)
 
-profile_generator_%: $(FILTERS_DIR)/%.generator
-	$(PROFILE) profile_generator.csv make $(@:profile_generator_%=$(FILTERS_DIR)/%.o)
+time_compilation_generator_%: $(FILTERS_DIR)/%.generator
+	$(TIME_COMPILATION) compile_times_generator.csv make $(@:time_compilation_generator_%=$(FILTERS_DIR)/%.o)
 
-profile_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.generator
-	$(PROFILE) profile_generator.csv make $(FILTERS_DIR)/tiled_blur_interleaved.o
+time_compilation_generator_tiled_blur_interleaved: $(FILTERS_DIR)/tiled_blur.generator
+	$(TIME_COMPILATION) compile_times_generator.csv make $(FILTERS_DIR)/tiled_blur_interleaved.o
 
 .PHONY: test_apps
 test_apps: $(BIN_DIR)/libHalide.a include/Halide.h
