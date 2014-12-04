@@ -21,5 +21,6 @@ ADD_DEPENDENCIES(
 
 target_link_libraries(
     local_laplacian_run
+    png
     ${CMAKE_CURRENT_BINARY_DIR}/local_laplacian.o
 )

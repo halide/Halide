@@ -22,4 +22,5 @@ ADD_DEPENDENCIES(
 target_link_libraries(
     bilateral_grid_run
     ${CMAKE_CURRENT_BINARY_DIR}/bilateral_grid.o
+    png
 )

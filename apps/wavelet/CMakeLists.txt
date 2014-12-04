@@ -21,6 +21,7 @@ ADD_DEPENDENCIES(
 
 target_link_libraries(
     wavelet_run
+    png
     ${CMAKE_CURRENT_BINARY_DIR}/daubechies_x.o
     ${CMAKE_CURRENT_BINARY_DIR}/haar_x.o
     ${CMAKE_CURRENT_BINARY_DIR}/inverse_daubechies_x.o

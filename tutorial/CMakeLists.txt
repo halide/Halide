@@ -8,6 +8,7 @@ if (WITH_TUTORIALS)
   foreach(file ${TUTORIALS})  
     string(REPLACE ".cpp" "" name ${file})
     halide_project(${name} "tutorials" ${file})
+    target_link_libraries(${name} png)
   endforeach()
 
   ADD_CUSTOM_COMMAND(
