@@ -9,7 +9,10 @@ import shutil
 build_prefix = os.getenv('BUILD_PREFIX')
 if not build_prefix:
     build_prefix = ''
-halide_root = '..'
+
+halide_root = os.getenv('HALIDE_ROOT')
+if not halide_root:
+    halide_root = '..'
 include_path = os.path.join(halide_root, 'include')
 bin_path = os.path.join(halide_root, 'bin', build_prefix)
 image_path = os.path.join(halide_root, 'apps', 'images')
@@ -20,7 +23,7 @@ png_ldflags = subprocess.check_output('libpng-config --ldflags', shell=True).str
 ext_modules = [Extension("halide/_cHalide", ["halide/cHalide_wrap.cxx", 'halide/py_util.cpp'],
                          include_dirs=[include_path],
                          extra_compile_args=('-ffast-math -O3 -msse -Wl,-dead_strip -fno-common' + ' ' + png_cflags).split(),
-                         extra_link_args=[os.path.join(bin_path, 'libHalide.a'),
+                         extra_link_args=[os.path.join(bin_path, 'libHalide.so'),
                                           '-ltinfo', '-lpthread',
                                           '-ldl', '-lstdc++', '-lc'] + png_ldflags.split(),
                          language='c++')]
