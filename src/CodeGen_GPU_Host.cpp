@@ -474,15 +474,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
     CodeGen_CPU::jit_finalize(ee, module, cleanup_routines);
 }
 
-/** Given an expression for a spatial coordinate and the maximum spatial 
- *  coordinate in its dimension, this function returns an expression for the
- *  GL device coordinates of the original expression.
- */
-Expr device_coordinates(Expr v, Expr max_dim) {
-
-    return (cast<float>(v) / cast<float>(max_dim)) * 2.0f - 1.0f;
-}
-
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
