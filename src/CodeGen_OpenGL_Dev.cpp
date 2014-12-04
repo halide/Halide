@@ -449,7 +449,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             internal_assert(op->args[0].as<StringImm>() ||
                             (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
 
-            const StringImm* string_imm = op->args[0].as<StringImm>();
+            const StringImm *string_imm = op->args[0].as<StringImm>();
             if (!string_imm) {
                 string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
                 width = op->args[0].as<Broadcast>()->width;
