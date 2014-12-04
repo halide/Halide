@@ -2047,7 +2047,7 @@ void Func::compile_to(const Outputs &output_files, vector<Argument> args,
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
                               const Target &target) {
-    compile_to(Outputs::bitcode(filename), args, fn_name, target);
+    compile_to(Outputs().bitcode(filename), args, fn_name, target);
 }
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
@@ -2056,7 +2056,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
 void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
-    compile_to(Outputs::object(filename), args, fn_name, target);
+    compile_to(Outputs().object(filename), args, fn_name, target);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
@@ -2251,7 +2251,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
-    compile_to(Outputs::assembly(filename), args, fn_name, target);
+    compile_to(Outputs().assembly(filename), args, fn_name, target);
 }
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
