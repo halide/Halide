@@ -7,7 +7,7 @@
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 # 'make time_compilation_tests' records the compile time for each test module into a csv file.
 #     For correctness and performance tests this include halide build time and run time. For
-#     the tests in test/generator/ this times only the halide build time.
+#     the tests in test/static/ and test/generator/ this times only the halide build time.
 
 SHELL = bash
 CXX ?= g++
