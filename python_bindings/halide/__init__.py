@@ -1628,18 +1628,13 @@ class ImageParam(object):
 
 # ----------------------------------------------------
 
-
-if sys.version < '3':
-    # python 2
-    pass
-else:
-    # Work around swig bug for python 3
-    # see https://github.com/swig/swig/pull/136
-
-    #for C in [VarType, FuncRefExpr, FuncRefVar]:
-    for C in (ExprType, FuncRefExpr, FuncRefVar, VarType, RDomType, RVarType, FuncType) + ParamTypes:
-        C.__truediv__ = C.__div__
-        C.__itruediv__ = C.__idiv__
+# Work around swig bug for python3
+# see https://github.com/swig/swig/pull/136
+# also used in python2 since using __future__.division
+#for C in [VarType, FuncRefExpr, FuncRefVar]:
+for C in (ExprType, FuncRefExpr, FuncRefVar, VarType, RDomType, RVarType, FuncType) + ParamTypes:
+    C.__truediv__ = C.__div__
+    C.__itruediv__ = C.__idiv__
 
 # ----------------------------------------------------
 # Test
