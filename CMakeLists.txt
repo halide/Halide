@@ -37,6 +37,7 @@ get_llvm_info("includedir" LLVM_INCLUDE)
 get_llvm_info("libdir" LLVM_LIB)
 get_llvm_info("bindir" LLVM_BINDIR)
 get_llvm_info("libs" LLVM_LIBS)
+get_llvm_info("system-libs" LLVM_SYSTEM_LIBS)
 get_llvm_info("cppflags" LLVM_CXX_FLAGS)
 
 file(TO_NATIVE_PATH "${LLVM_BINDIR}/llvm-as${CMAKE_EXECUTABLE_SUFFIX}" LLVM_AS)
@@ -56,7 +57,7 @@ if(WIN32)
   set(CAT type)
 endif()
 
-set(PROJECT_LIBS ${LLVM_LIBS} z pthread tinfo dl png)
+set(PROJECT_LIBS ${LLVM_LIBS} ${LLVM_SYSTEM_LIBS})
 
 if (WIN32)
   list(APPEND PROJECT_LIBS Kernel32)
