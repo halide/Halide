@@ -1,17 +1,17 @@
 all: halide/cHalide_wrap.cxx halide/_cHalide.so
 
-HALIDE_BUILD_PATH = ..
+HALIDE_BUILD_PATH = ../build2
 PYTHON = python3
 
 halide/_cHalide.so: halide/cHalide_wrap.cxx halide/*.py halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h $(HALIDE_BUILD_PATH)/include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h setup.py
-	$(PYTHON) setup.py build_ext --inplace
+	HALIDE_ROOT=$(HALIDE_BUILD_PATH) BUILD_PREFIX=../lib $(PYTHON) setup.py build_ext --inplace
 
 halide/cHalide_wrap.cxx: halide/cHalide.i ../src/*.cpp ../src/runtime/*.cpp ../src/*.h $(HALIDE_BUILD_PATH)/include/*.h halide/py_util.cpp halide/py_util.h halide/expand_types.h setup.py
 #make -C ..
 	swig -c++ -python -w362,325,314,389,381,382,361,401,503,509 -I$(HALIDE_BUILD_PATH)/include halide/cHalide.i
 
 install: all
-	$(PYTHON) setup.py install
+	HALIDE_ROOT=$(HALIDE_BUILD_PATH) BUILD_PREFIX=../lib $(PYTHON) setup.py install
 
 clean:
 	rm -rf build
