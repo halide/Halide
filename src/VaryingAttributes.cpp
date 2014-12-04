@@ -1073,6 +1073,35 @@ public:
     std::vector<Expr> loop_variables;
 };
 
+// These two methods provide a workaround to maintain unused let statements in
+// the IR tree util calls are added that used them in codegen.
+
+// TODO: We want to define a set of variables during lowering, and then use
+// them during GLSL host codegen to pass values to the
+// halide_dev_run function. It turns out that these variables will
+// be simplified away since the call to the function does not appear
+// in the IR. To avoid this we wrap the declaration in a
+// return_second intrinsic as well as add a return_second intrinsic
+// to consume the value.
+// This prevents simplification passes that occur before codegen
+// from removing the variables or substituting in their constant
+// values.
+
+Expr dont_simplify(Expr v_) {
+    return Internal::Call::make(v_.type(),
+                                Internal::Call::return_second,
+                                Internal::vec<Expr>(0, v_),
+                                Internal::Call::Intrinsic);
+}
+
+Stmt used_in_codegen(Type type_, const std::string &v_) {
+    return Evaluate::make(Internal::Call::make(Int(32),
+                                               Internal::Call::return_second,
+                                               Internal::vec<Expr>(Variable::make(type_, v_), 0),
+                                               Internal::Call::Intrinsic));
+}
+
+
 // This mutator inserts a set of serial for-loops to create the vertex buffer
 // on the host using CreateVertexBufferOnHost above.
 class CreateVertexBufferHostLoops : public IRMutator {
@@ -1150,12 +1179,14 @@ public:
             // filtered out without being mutated.
             vertex_setup = remove_varying_attributes(vertex_setup);
 
+            // Simplify the new host code.
+            vertex_setup = simplify(vertex_setup);
+
             // Replace varying attribute intriniscs in the gpu scheduled loops
             // with variables with ".varying" tagged names
             Stmt loop_stmt = replace_varying_attributes(op);
 
-            // Perform the Let-simplification pass that was skipped during
-            // Lowering
+            // Simplify
             loop_stmt = simplify(loop_stmt, true);
 
             // It is possible that linear expressions we tagged in higher-level
@@ -1171,31 +1202,17 @@ public:
             // attribute expression must be converted to floating point.
             loop_stmt = CastVaryingVariablesToFloat().mutate(loop_stmt);
 
-            // TODO: We want to define a set of variables here, and then use
-            // them during GLSL host codegen to pass values to the
-            // halide_dev_run function. It turns out that these variables will
-            // be simplified away since the call to the function does not appear
-            // in the IR. To avoid this we wrap the declaration in a
-            // return_second intrinsic as well as add a return_second intrinsic
-            // to consume the value.
-            // This prevents simplification passes that occur before codegen
-            // from removing the variables or substituting in their constant
-            // values.
-
-            #define DONT_SIMPLIFY(v_) Internal::Call::make((v_)->type, Internal::Call::return_second, Internal::vec<Expr>(0, v_), Internal::Call::Intrinsic)
-            #define USED_IN_CODEGEN(type_, v_) Evaluate::make(Internal::Call::make(Int(32), Internal::Call::return_second, Internal::vec<Expr>(Variable::make(type_, v_), 0), Internal::Call::Intrinsic))
-
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
-            stmt = LetStmt::make("glsl.num_coords_dim0", DONT_SIMPLIFY(IntImm::make(coords[0].size())),
-                   LetStmt::make("glsl.num_coords_dim1", DONT_SIMPLIFY(IntImm::make(coords[1].size())),
-                   LetStmt::make("glsl.num_padded_attributes", DONT_SIMPLIFY(IntImm::make(num_padded_attributes)),
+            stmt = LetStmt::make("glsl.num_coords_dim0", dont_simplify(IntImm::make(coords[0].size())),
+                   LetStmt::make("glsl.num_coords_dim1", dont_simplify(IntImm::make(coords[1].size())),
+                   LetStmt::make("glsl.num_padded_attributes", dont_simplify(IntImm::make(num_padded_attributes)),
                    Allocate::make(vs.vertex_buffer_name, Float(32), vec(Expr(vertex_buffer_size)), true,
                    Block::make(vertex_setup,
                    Block::make(loop_stmt,
-                   Block::make(USED_IN_CODEGEN(Int(32),"glsl.num_coords_dim0"),
-                   Block::make(USED_IN_CODEGEN(Int(32),"glsl.num_coords_dim1"),
-                   Block::make(USED_IN_CODEGEN(Int(32),"glsl.num_padded_attributes"),
+                   Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim0"),
+                   Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim1"),
+                   Block::make(used_in_codegen(Int(32),"glsl.num_padded_attributes"),
                                Free::make(vs.vertex_buffer_name))))))))));
         } else {
             IRMutator::visit(op);

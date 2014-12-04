@@ -1880,7 +1880,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
 
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
-    
+
     if (!custom_passes.empty()) {
         for (size_t i = 0; i < custom_passes.size(); i++) {
             debug(1) << "Running custom lowering pass " << i << "...\n";
