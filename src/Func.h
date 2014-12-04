@@ -356,29 +356,24 @@ class IRMutator;
 
 
 struct Outputs {
-private:
-    Outputs(const std::string &object_name_,
-            const std::string &assembly_name_,
-            const std::string &bitcode_name_ = ""):
-        object_name(object_name_),
-        assembly_name(assembly_name_),
-        bitcode_name(bitcode_name_) {}
-
-public:
     std::string object_name;
     std::string assembly_name;
     std::string bitcode_name;
 
-    Outputs() {}
-
-    static Outputs object(const std::string &object_name) {
-        return Outputs(object_name, "", "");
+    Outputs object(const std::string &object_name) {
+        Outputs updated = *this;
+        updated.object_name = object_name;
+        return updated;
     }
-    static Outputs assembly(const std::string &assembly_name) {
-        return Outputs("", assembly_name, "");
+    Outputs assembly(const std::string &assembly_name) {
+        Outputs updated = *this;
+        updated.assembly_name = assembly_name;
+        return updated;
     }
-    static Outputs bitcode(const std::string &bitcode_name) {
-        return Outputs("", "", bitcode_name);
+    Outputs bitcode(const std::string &bitcode_name) {
+        Outputs updated = *this;
+        updated.bitcode_name = bitcode_name;
+        return updated;
     }
 };
 
