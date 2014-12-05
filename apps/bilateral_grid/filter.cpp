@@ -3,12 +3,9 @@
 #include <assert.h>
 #include <sys/time.h>
 
-extern "C" {
-  #include "bilateral_grid.h"
-}
-
 #include <static_image.h>
 #include <image_io.h>
+#include "bilateral_grid.h"
 
 int main(int argc, char **argv) {
 

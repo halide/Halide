@@ -117,7 +117,7 @@ int main(int argc, char **argv) {
 
     Target target = get_target_from_environment();
     if (target.has_gpu_feature()) {
-        // gpu schedule
+        std::cout << "gpu schedule" << std::endl;
         output.compute_root().gpu_tile(x, y, 16, 8, GPU_Default);
         for (int j = 0; j < J; j++) {
             int blockw = 16, blockh = 8;
@@ -130,7 +130,7 @@ int main(int argc, char **argv) {
             outGPyramid[j].compute_root().gpu_tile(x, y, blockw, blockh, GPU_Default);
         }
     } else {
-        // cpu schedule
+        std::cout << "cpu schedule" << std::endl;
         Var yi;
         output.parallel(y, 4).vectorize(x, 8);
         gray.compute_root().parallel(y, 4).vectorize(x, 8);

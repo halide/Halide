@@ -8,5 +8,22 @@ if (WITH_TUTORIALS)
   foreach(file ${TUTORIALS})  
     string(REPLACE ".cpp" "" name ${file})
     halide_project(${name} "tutorials" ${file})
+    target_link_libraries(${name} png)
   endforeach()
+
+  ADD_CUSTOM_COMMAND(
+    TARGET lesson_10_aot_compilation_generate
+    POST_BUILD
+    COMMAND cd ${CMAKE_BINARY_DIR}/include && ${CMAKE_BINARY_DIR}/bin/lesson_10_aot_compilation_generate
+  )
+
+  ADD_DEPENDENCIES(
+    lesson_10_aot_compilation_run
+    lesson_10_aot_compilation_generate
+  )
+  
+  target_link_libraries(
+    lesson_10_aot_compilation_run
+    ${CMAKE_BINARY_DIR}/include/lesson_10_halide.o
+  )
 endif()
