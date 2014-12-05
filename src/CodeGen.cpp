@@ -387,7 +387,6 @@ void CodeGen::optimize_module() {
     b.populateModulePassManager(module_pass_manager);
 
     // Run optimization passes
-    // TODO: Comment out for workaround for crash in PassManagerImpl due to NULL DL
     module_pass_manager.run(*module);
     if (!function_name.empty()) {
         llvm::Function *fn = module->getFunction(function_name);

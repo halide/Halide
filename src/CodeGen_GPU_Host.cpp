@@ -632,7 +632,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                              builder->CreateConstGEP2_32(gpu_args_arr, 0, num_args));
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
-        
+
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));

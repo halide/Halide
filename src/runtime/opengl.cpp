@@ -1205,7 +1205,6 @@ public:
     float* values;
 };
 
-extern "C"
 WEAK int halide_opengl_dev_run(
     void *user_context,
     void *state_ptr,
@@ -1510,34 +1509,9 @@ WEAK int halide_opengl_dev_run(
     debug(user_context) << "output_min: " << output_min[0] << "," << output_min[1] << "\n";
 #endif
 
-
     // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
     // Sort the coordinates
-    /*
-    int sorted_order0[num_coords_dim0];
-    for (int i=0;i!=num_coords_dim0;++i)
-        sorted_order0[i] = i;
 
-    int sorted_order1[num_coords_dim1];
-    for (int i=0;i!=num_coords_dim1;++i)
-        sorted_order1[i] = i;
-
-    std::sort(&sorted_order0[0], &sorted_order0[num_coords_dim0], IndexSorter(coords_per_dim[0]));
-    std::sort(&sorted_order1[0], &sorted_order1[num_coords_dim1], IndexSorter(coords_per_dim[1]));
-    */
-
-#if 0 // DEBUG_RUNTIME
-    debug(user_context) << "Sorted x coords: ";
-    for (int i=0;i!=num_coords_dim0;++i)
-        debug(user_context) << coords_per_dim[0][sorted_order0[i]] << " ";
-    debug(user_context) << "\n";
-    
-    debug(user_context) << "Sorted y coords: ";
-    for (int i=0;i!=num_coords_dim1;++i)
-        debug(user_context) << coords_per_dim[1][sorted_order1[i]] << " ";
-    debug(user_context) << "\n";
-#endif
-    
     // Construct an element buffer using the sorted vertex order
     int width = num_coords_dim0;
     int height = num_coords_dim1;
@@ -1654,7 +1628,7 @@ WEAK int halide_opengl_dev_run(
         ST.ActiveTexture(GL_TEXTURE0 + i);
         ST.BindTexture(GL_TEXTURE_2D, 0);
     }
-    
+
     if (bind_render_targets) {
         ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
     }
@@ -1666,7 +1640,7 @@ WEAK int halide_opengl_dev_run(
         ST.BindVertexArray(0);
         ST.DeleteVertexArrays(1,&vertex_array_object);
     }
-    
+
     ST.DeleteBuffers(1,&vertex_buffer_id);
     ST.DeleteBuffers(1,&element_buffer_id);
 
