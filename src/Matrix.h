@@ -123,7 +123,6 @@ public:
 
     Stage schedule();
 
-    Partition split(Expr m, Expr n);
     Partition parent();
     Partition child();
 
@@ -138,6 +137,11 @@ public:
 
     void rename_row(Var v);
     void rename_col(Var v);
+
+    Partition partition(Expr n);
+    Partition partition(Expr m, Expr n);
+    Partition &vectorize();
+    Partition &parallel();
 };
 
 class Matrix {
@@ -174,6 +178,8 @@ class Matrix {
     int small_offset(Expr row, Expr col) const;
 
     void init(Expr num_rows, Expr num_cols);
+    void define(Expr value);
+    void define_update(Expr row, Expr col, Expr value);
 
     // Stage root_schedule(int update=-1);
 
@@ -215,8 +221,8 @@ public:
     EXPORT bool const_num_cols(int &n);
     EXPORT bool const_size(int &m, int &n);
 
-    EXPORT Matrix &compute_at_rows(Matrix &other, int level = 0);
-    EXPORT Matrix &compute_at_columns(Matrix &other, int level = 0);
+    EXPORT Matrix &compute_at_rows(Partition p);
+    EXPORT Matrix &compute_at_columns(Partition p);
 
     EXPORT Matrix &partition(Expr size);
     EXPORT Matrix &partition(Expr row_size, Expr col_size);

@@ -126,7 +126,7 @@ void test_matrix_multiply(const int N, const int num_iters) {
 
     Expr size = A_in.width();
 
-    Matrix A(A_in), B(B_in);
+    Matrix A(A_in, "A"), B(B_in, "B");
     Matrix C = A * B;
 
     //Var tx("tx"), ty("ty"), ttx("ttx"), tty("tty");
@@ -148,8 +148,8 @@ void test_matrix_multiply(const int N, const int num_iters) {
     t.set_feature(Target::NoBoundsQuery);
 
     Func prod = static_cast<Func>(C);
-    prod.compile_jit(t);
     prod.compile_to_lowered_stmt("mat_mul.stmt", Text, t);
+    prod.compile_jit(t);
 
     // Uncomment to see the generated asm
     // C.compile_to_assembly("/dev/stdout", Internal::vec<Argument>(A, B), "");
