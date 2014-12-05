@@ -57,10 +57,10 @@ protected:
             internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load";
             
             // Iterate over the texture coordinate arguments
-            for (int i=0;i!=2;++i) {
-                new_args[2+i] = mutate(op->args[2+i]);
+            for (int i = 2; i != 4; ++i) {
+                new_args[i] = mutate(op->args[i]);
                 if (order == 1) {
-                    new_args[2+i] = tag_linear_expression(new_args[2+i]);
+                    new_args[i] = tag_linear_expression(new_args[i]);
                 }
             }
         } else if (op->name == Call::glsl_texture_store) {
@@ -147,7 +147,7 @@ protected:
         
         // We can only interpolate float values, disqualify the expression if
         // this is a cast to a different type
-        if (op->type.code != Type::Float) {
+        if (order && (op->type.code != Type::Float)) {
             order = 2;
         }
         
@@ -306,8 +306,21 @@ protected:
     }
     
     virtual void visit(const Select *op) {
+
+        // If either the true expression or the false expression is non-linear
+        // in terms of the loop variables, then the select expression might
+        // evaluate to a non-linear expression and is disqualified.
+
+        // If both are either linear or constant, and the condition expression
+        // is constant with respect to the loop variables, then either the true
+        // or false expression will be evaluated across the whole loop domain,
+        // and the select expression is linear. Otherwise, the expression is
+        // disqualified.
+
+        // The condition expression must be constant (order == 0) with respect
+        // to the loop variables.
         Expr mutated_condition = mutate(op->condition);
-        int condition_order = order;
+        int condition_order = (order != 0) ? 2 : 0;
         
         Expr mutated_true_value = mutate(op->true_value);
         int true_value_order = order;
@@ -328,20 +341,6 @@ protected:
         }
         
         expr = Select::make(mutated_condition, mutated_true_value, mutated_false_value);
-    }
-    virtual void visit(const IfThenElse *op) {
-        Expr mutated_condition = mutate(op->condition);
-        int condition_order = order;
-        
-        Stmt mutated_then_case = mutate(op->then_case);
-        int then_case_order = order;
-        
-        Stmt mutated_else_case = mutate(op->else_case);
-        int else_case_order = order;
-        
-        order = std::max(std::max(condition_order, then_case_order), else_case_order);
-        
-        stmt = IfThenElse::make(mutated_condition, mutated_then_case, mutated_else_case);
     }
     
 public:
@@ -385,20 +384,6 @@ public:
         }
         IRVisitor::visit(op);
     }
-
-    virtual void visit(const Let *op) {
-        scope.push(op->name, op->value);
-        IRVisitor::visit(op);
-        scope.pop(op->name);
-    }
-    
-    virtual void visit(const LetStmt *op) {
-        scope.push(op->name, op->value);
-        IRVisitor::visit(op);
-        scope.pop(op->name);
-    }
-    
-    Scope<Expr> scope;
 
     std::map<std::string, Expr>& varyings;
 };
@@ -453,7 +438,7 @@ Stmt replace_varying_attributes(Stmt s)
 
 
 // This visitor produces a set of variable names that are tagged with
-// ".varying", it is run after
+// ".varying".
 class FindVaryingAttributeVars : public IRVisitor {
 public:
     using IRVisitor::visit;
@@ -513,14 +498,17 @@ protected:
         
         bool a_float = mutated_a.type().is_float();
         bool b_float = mutated_b.type().is_float();
-        
-        if ((a_float || b_float) && (a_float != b_float)) {
-            if (a_float) {
-                mutated_b = Cast::make(float_type(op->a), mutated_b);
-            } else {
+
+        // If either argument is a float, then make sure both are float
+        if (a_float || b_float) {
+            if (!a_float) {
                 mutated_a = Cast::make(float_type(op->b), mutated_a);
             }
+            if (!b_float) {
+                mutated_b = Cast::make(float_type(op->a), mutated_b);
+            }
         }
+
         expr = T::make(mutated_a, mutated_b);
     }
     
@@ -546,12 +534,15 @@ protected:
         
         bool t_float = mutated_true_value.type().is_float();
         bool f_float = mutated_false_value.type().is_float();
-        
-        if ((t_float || f_float) && !(t_float && f_float)) {
-            if (!t_float)
+
+        // If either argument is a float, then make sure both are float
+        if (t_float || f_float) {
+            if (!t_float) {
                 mutated_true_value = Cast::make(float_type(op->true_value), mutated_true_value);
-            if (!f_float)
+            }
+            if (!f_float) {
                 mutated_false_value = Cast::make(float_type(op->false_value), mutated_false_value);
+            }
         }
         
         expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
@@ -703,7 +694,7 @@ namespace {
     template<typename T, typename A>
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
-        *stmt = NULL;
+        *stmt = Stmt();
         if (a.defined()) {
             *stmt = a;
         }
@@ -712,7 +703,7 @@ namespace {
     void mutate_operator(IRFilter *mutator, const T *op, const A op_a, const B op_b, Stmt *stmt) {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
-        *stmt = NULL;
+        *stmt = Stmt();
         if (b.defined()) {
             *stmt = Block::make(b, *stmt);
         }
@@ -725,7 +716,7 @@ namespace {
         Stmt a = mutator->mutate(op_a);
         Stmt b = mutator->mutate(op_b);
         Stmt c = mutator->mutate(op_c);
-        *stmt = NULL;
+        *stmt = Stmt();
         if (c.defined()) {
             *stmt = Block::make(c, *stmt);
         }
@@ -795,7 +786,7 @@ void IRFilter::visit(const Call *op) {
         new_args[i] = new_arg;
     }
 
-    stmt = NULL;
+    stmt = Stmt();
     for (size_t i = 0; i < new_args.size(); ++i) {
         if (new_args[i].defined()) {
             stmt = Block::make(new_args[i], stmt);
@@ -828,7 +819,7 @@ void IRFilter::visit(const Store *op) {
 }
 
 void IRFilter::visit(const Provide *op) {
-    stmt = NULL;
+    stmt = Stmt();
     for (size_t i = 0; i < op->args.size(); i++) {
         Stmt new_arg = mutate(op->args[i]);
         if (new_arg.defined()) {
@@ -842,7 +833,7 @@ void IRFilter::visit(const Provide *op) {
 }
 
 void IRFilter::visit(const Allocate *op) {
-    stmt = NULL;
+    stmt = Stmt();
     for (size_t i = 0; i < op->extents.size(); i++) {
         Stmt new_extent = mutate(op->extents[i]);
         if (new_extent.defined())
@@ -863,7 +854,7 @@ void IRFilter::visit(const Free *op) {
 
 void IRFilter::visit(const Realize *op) {
 
-    stmt = NULL;
+    stmt = Stmt();
 
     // Mutate the bounds
     for (size_t i = 0; i < op->bounds.size(); i++) {
@@ -952,7 +943,7 @@ public:
     }
 
     virtual void visit(const LetStmt *op) {
-        stmt = NULL;
+        stmt = Stmt();
 
         Stmt mutated_value = mutate(op->value);
         Stmt mutated_body = mutate(op->body);

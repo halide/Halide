@@ -566,13 +566,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
 
-
-        // Call CodeGen_OpenGL_Dev via a pointer to CodeGen_GPU_Dev. The stmt,
-        // function name, and arguments are passed to GLSL codegen.
-        // The arguments are used in CodeGen_GLSL::compile to output a comment
-        // header that is interpreted at runtime to determine argument types and
-        // names. CodeGen_GLSL::compile also outputs  boiler plate code for
-        // uniform and varying declarations.
         cgdev->add_kernel(loop, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop
