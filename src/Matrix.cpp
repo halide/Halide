@@ -1,3 +1,7 @@
+#include <map>
+#include <string>
+#include <vector>
+
 #include "InlineReductions.h"
 #include "IREquality.h"
 #include "Matrix.h"
@@ -11,6 +15,7 @@ namespace Halide {
 static const int small_matrix_limit = 4;
 
 using namespace Internal;
+using std::map;
 using std::string;
 using std::vector;
 
@@ -260,6 +265,16 @@ Partition::Partition(Partition p, Expr m, Expr n) :
     Var pi = prev_contents->bi;
     Var pj = prev_contents->bj;
 
+    // In order to allow vectorization during partitioning, we cache the schedule's dims
+    // before splitting. Then set all of the for_type entries to serial during the split,
+    // and finally restore their for_types after we are done;
+    map<string, For::ForType> cached_dims;
+    std::vector<Dim> &dims =  contents.ptr->schedule.dims();
+    for (size_t i = 0; i < dims.size(); ++i) {
+        cached_dims[dims[i].var] = dims[i].for_type;
+        dims[i].for_type = For::Serial;
+    }
+
     // std::cout << "\tPartition tiled as: " << name() << "("
     //           << pi.name() << ", " << pj.name() << ", "
     //           << bi.name() << ", " << bj.name() << ", "
@@ -267,11 +282,12 @@ Partition::Partition(Partition p, Expr m, Expr n) :
     //           << m << ", " << n << ")\n";
     schedule().tile(pi, pj, bi, bj, pi, pj, m, n);
 
-    // std::cout << "\tPartition vars: ";
-    // const vector<Dim> &dims = contents.ptr->schedule.dims();
-    // for (size_t i = 0; i < dims.size(); i++) {
-    //     std::cout << dims[i].var << " ";
-    // } std::cout << "\n";
+    // Restore the for_type value for each dim in the schedule.
+    for (size_t i = 0; i < dims.size(); ++i) {
+        if (cached_dims.count(dims[i].var) > 0) {
+            dims[i].for_type = cached_dims[dims[i].var];
+        }
+    }
 }
 
 int Partition::level() {
@@ -1203,12 +1219,13 @@ Matrix operator*(Matrix A, Matrix B) {
     Var j = prod.col_var();
 
     RDom k(0, A.num_cols(), "k");
+    prod(i, j)  = undef(A.type());
     prod(i, j) += A(i, k) * B(k, j);
 
     const int vec_size  = 16 / A.type().bytes();
     const int tile_size = 4;
     Partition prod_part = prod.get_partition(1);
-    prod_part.partition(vec_size) //.vectorize();
+    prod_part.partition(vec_size).vectorize()
              .partition(tile_size)
              .partition(tile_size).parallel();
 
