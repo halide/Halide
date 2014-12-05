@@ -464,14 +464,14 @@ void CodeGen_GLSL::visit(const Call *op) {
             // In the event that this intrinsic was vectorized, the individual
             // coordinates may be GLSL vecN types instead of scalars. In this case
             // we un-vectorize the expression with unvectorize_intrinsic_arg(...)
-            
+
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
                 << print_expr(unvectorize_intrinsic_arg(op->args[2])) << ", "
                 << print_expr(unvectorize_intrinsic_arg(op->args[3])) << "))"
                 << get_vector_suffix(op->args[4]);
             if (op->type.is_uint())
                 rhs << " * " << op->type.imax() << ".0";
-          
+
         } else if (op->name == Call::glsl_texture_store) {
             internal_assert(op->args.size() == 6);
             std::string sval = print_expr(op->args[5]);

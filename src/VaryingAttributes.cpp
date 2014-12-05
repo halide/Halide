@@ -5,7 +5,6 @@
 #include "CodeGen_GPU_Dev.h"
 
 #include "IRMutator.h"
-#include "IRMatch.h"
 #include "CSE.h"
 #include "Simplify.h"
 
