@@ -180,14 +180,10 @@ struct PartitionContents : public RefCount {
     // matrix in order to use this partition.
     Expr min_rows, min_cols;
 
-    // A flag to indicate that the schedule for this partition is a specialization
-    // of the root schedule.
-    bool is_special;
-
     mutable RefCount ref_count;
 
     PartitionContents() : bi("i"), bj("j"), par_rows(1), par_cols(1),
-                          min_rows(1), min_cols(1), is_special(false)
+                          min_rows(1), min_cols(1)
     {}
 };
 
@@ -240,35 +236,24 @@ Partition::Partition(Partition p, Expr m, Expr n) :
     //           << "Partition vars: (" << contents.ptr->bi.name() << ", " << contents.ptr->bj.name() << ")\n"
     //           << "\tPartion blocks total size = " << contents.ptr->min_rows << " x " << contents.ptr->min_cols << "\n";
 
-    bool const_size_blocks = false;
-            // is_size_const(m) && is_size_const(n) &&
-            // is_size_const(contents.ptr->min_rows) &&
-            // is_size_const(contents.ptr->min_cols);
+    Expr condition = contents.ptr->mat_rows >= contents.ptr->min_rows &&
+            contents.ptr->mat_cols >= contents.ptr->min_cols;
 
-    if (const_size_blocks) {
-        contents.ptr->schedule = prev_contents->schedule;
-        contents.ptr->is_special = false;
-    } else {
-        Expr condition = contents.ptr->mat_rows >= contents.ptr->min_rows &&
-                contents.ptr->mat_cols >= contents.ptr->min_cols;
+    // std::cout << "\tPartition schedule is specialized on the condition:\n\t\t"
+    //           << condition << "\n";
 
-        // std::cout << "\tPartition schedule is specialized on the condition:\n\t\t"
-        //           << condition << "\n";
+    // I do not think that the condtion should ever have been previously specialized, however,
+    // I am copying the code from Func.cpp that searches for existing specializations below.
+    // Just in case I need to revisit this.
+    //
+    // for (size_t i = 0; i < schedule.specializations().size(); i++) {
+    //     if (equal(condition, schedule.specializations()[i].condition)) {
+    //         return Stage(schedule.specializations()[i].schedule, stage_name);
+    //     }
+    // }
 
-        // I do not think that the condtion should ever have been previously specialized, however,
-        // I am copying the code from Func.cpp that searches for existing specializations below.
-        // Just in case I need to revisit this.
-        //
-        // for (size_t i = 0; i < schedule.specializations().size(); i++) {
-        //     if (equal(condition, schedule.specializations()[i].condition)) {
-        //         return Stage(schedule.specializations()[i].schedule, stage_name);
-        //     }
-        // }
-
-        const Specialization &s = prev_contents->schedule.add_specialization(condition);
-        contents.ptr->schedule = s.schedule;
-        contents.ptr->is_special = true;
-    }
+    const Specialization &s = prev_contents->schedule.add_specialization(condition);
+    contents.ptr->schedule = s.schedule;
 
     Var bi = contents.ptr->bi;
     Var bj = contents.ptr->bj;
@@ -358,11 +343,6 @@ bool Partition::is_root() const {
     internal_assert(contents.defined());
     IntrusivePtr<PartitionContents> prev_contents = contents.ptr->prev;
     return !prev_contents.defined();
-}
-
-bool Partition::is_specialization() const {
-    internal_assert(contents.defined());
-    return contents.ptr->is_special;
 }
 
 Expr Partition::num_rows() const {

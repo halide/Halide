@@ -127,7 +127,6 @@ public:
     Partition child();
 
     bool is_root() const;
-    bool is_specialization() const;
 
     Expr num_rows() const;
     Expr num_cols() const;
