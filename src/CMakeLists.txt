@@ -275,6 +275,7 @@ set(HEADER_FILES
   Tracing.h
   UnrollLoops.h
   Var.h
+  VaryingAttributes.h
   VectorizeLoops.h
   CodeGen_Posix.h
   CodeGen_ARM.h
@@ -388,6 +389,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Inline.cpp
   Qualify.cpp
   UnifyDuplicateLets.cpp
+  VaryingAttributes.cpp
   ExprUsesVar.cpp
   Introspection.cpp
   Buffer.cpp

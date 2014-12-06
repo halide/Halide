@@ -414,5 +414,9 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 void CodeGen_PTX_Dev::dump() {
     module->dump();
 }
+    
+std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
+    return name;
+}
 
 }}
