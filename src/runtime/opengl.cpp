@@ -236,7 +236,13 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
     GLuint shader = ST.CreateShader(type);
     CHECK_GLERROR(1);
-    ST.ShaderSource(shader, 1, (const GLchar **)&source, length);
+    if (*source == '\0') {
+        debug(user_context) << "Halide GLSL: passed shader source is empty, using default.\n";
+        const char *default_shader = "varying vec2 pixcoord;\n void main() { }";
+        ST.ShaderSource(shader, 1, (const GLchar **)&default_shader, NULL);
+    } else {
+        ST.ShaderSource(shader, 1, (const GLchar **)&source, length);
+    }
     CHECK_GLERROR(1);
     ST.CompileShader(shader);
     CHECK_GLERROR(1);
