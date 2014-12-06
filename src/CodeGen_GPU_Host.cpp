@@ -501,11 +501,13 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             }
         }
         
-        Value *null_ptr_value = ConstantPointerNull::get(llvm::Type::getInt8PtrTy(*context));
-        Value *gpu_num_padded_attributes  = null_ptr_value;
-        Value *gpu_vertex_buffer     = null_ptr_value;
-        Value *gpu_num_coords_dim0 = null_ptr_value;
-        Value *gpu_num_coords_dim1 = null_ptr_value;
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen::f32->getPointerTo());
+        Value *zero_int32 = codegen(Expr(cast<int>(0)));
+
+        Value *gpu_num_padded_attributes  = zero_int32;
+        Value *gpu_vertex_buffer   = null_float_ptr;
+        Value *gpu_num_coords_dim0 = zero_int32;
+        Value *gpu_num_coords_dim1 = zero_int32;
 
         if (target.has_feature(Target::OpenGL)) {
             
