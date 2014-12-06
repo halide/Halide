@@ -441,9 +441,6 @@ void CodeGen_GLSL::visit(const Call *op) {
         if (op->name == Call::glsl_texture_load) {
             internal_assert(op->args.size() == 5);
 
-            // Keep track of whether or not the intrinsic was vectorized
-            int width = 1;
-
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
             internal_assert(op->args[0].as<StringImm>() ||
@@ -452,7 +449,6 @@ void CodeGen_GLSL::visit(const Call *op) {
             const StringImm *string_imm = op->args[0].as<StringImm>();
             if (!string_imm) {
                 string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
-                width = op->args[0].as<Broadcast>()->width;
             }
 
             // Determine the halide buffer associated with this load
