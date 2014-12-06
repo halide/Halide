@@ -3,7 +3,7 @@
    ----------------------------------------------------------------------- */
 
 #include "py_util.h"
-#include "../apps/support/image_io.h"
+#include "../../apps/support/image_io.h"
 #include <signal.h>
 #include <string>
 #include "Python.h"
@@ -121,7 +121,7 @@ DEFINE_TYPE(double)
 
 void signal_handler(int sig_num) {
     printf("Trapped signal %d in C++ layer, exiting\n", sig_num);
- 	//PyErr_SetString(PyExc_ValueError,"Trapped signal in C++ layer, exiting");
+    //PyErr_SetString(PyExc_ValueError,"Trapped signal in C++ layer, exiting");
     printf("\n");
     PyThreadState *tstate = PyThreadState_GET();
     if (NULL != tstate && NULL != tstate->frame) {
@@ -130,8 +130,8 @@ void signal_handler(int sig_num) {
         printf("Python stack trace:\n");
         while (NULL != frame) {
             int line = frame->f_lineno;
-            const char *filename = PyString_AsString(frame->f_code->co_filename);
-            const char *funcname = PyString_AsString(frame->f_code->co_name);
+            const char *filename = PyBytes_AsString(frame->f_code->co_filename);
+            const char *funcname = PyBytes_AsString(frame->f_code->co_name);
             printf("    %s(%d): %s\n", filename, line, funcname);
             frame = frame->f_back;
         }
@@ -153,7 +153,8 @@ void exit_on_signal() {
 std::string image_to_string(const Image<T> &a) { \
     int dims = a.dimensions(); \
     Buffer d(a); \
-    return std::string((char *) a.data(), (d.type().bits/8)*d.stride(dims-1)*a.extent(dims-1)); \
+    const size_t size = (d.type().bits/8) * d.stride(dims-1) * a.extent(dims-1); \
+    return std::string((char *) a.data(), size); \
 }
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
@@ -180,7 +181,7 @@ DEFINE_TYPE(double)
 Expr call(Image<T> &a, Expr b) { return a(b); } \
 Expr call(Image<T> &a, Expr b, Expr c) { return a(b,c); } \
 Expr call(Image<T> &a, Expr b, Expr c, Expr d) { return a(b,c,d); }                     \
-Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e) { return a(b,c,d,e); }                   
+Expr call(Image<T> &a, Expr b, Expr c, Expr d, Expr e) { return a(b,c,d,e); }
 DEFINE_TYPE(uint8_t)
 DEFINE_TYPE(uint16_t)
 DEFINE_TYPE(uint32_t)
