@@ -478,6 +478,8 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 // necessary.
 class CastVaryingVariablesToFloat : public IRMutator {
 protected:
+    using IRMutator::visit;
+
     virtual void visit(const Variable *op) {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
             expr = Variable::make(Float(32), op->name);
@@ -555,6 +557,8 @@ protected:
 // float type through the expression. The variable is offset by 0.5f
 class CastVariablesToFloatAndOffset : public CastVaryingVariablesToFloat {
 protected:
+    using CastVaryingVariablesToFloat::visit;
+
     virtual void visit(const Variable *op) {
 
         // Check to see if the variable matches a loop variable name
@@ -626,6 +630,7 @@ public:
     virtual Stmt mutate(Stmt stmt);
 
 protected:
+    using IRVisitor::visit;
 
     Stmt stmt;
 
@@ -775,13 +780,11 @@ void IRFilter::visit(const Broadcast *op) {
 
 void IRFilter::visit(const Call *op) {
     std::vector<Stmt> new_args(op->args.size());
-    bool changed = false;
 
     // Mutate the args
     for (size_t i = 0; i < op->args.size(); i++) {
         Expr old_arg = op->args[i];
         Stmt new_arg = mutate(old_arg);
-        if (!new_arg.same_as(old_arg)) changed = true;
         new_args[i] = new_arg;
     }
 
@@ -899,6 +902,8 @@ void IRFilter::visit(const Evaluate *op) {
 // before the call to halide_dev_run.
 class CreateVertexBufferOnHost : public IRFilter {
 public:
+    using IRFilter::visit;
+
     virtual void visit(const Call *op) {
 
         // Transform glsl_varying intrinsics into store operations to output the
@@ -1096,6 +1101,8 @@ Stmt used_in_codegen(Type type_, const std::string &v_) {
 // on the host using CreateVertexBufferOnHost above.
 class CreateVertexBufferHostLoops : public IRMutator {
 public:
+    using IRMutator::visit;
+
     virtual void visit(const For *op) {
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
 
