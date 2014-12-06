@@ -26,7 +26,11 @@ extern int halide_cuda_run(void *user_context,
                            int shared_mem_bytes,
                            size_t arg_sizes[],
                            void *args[],
-                           int8_t arg_is_buffer[]);
+                           int8_t arg_is_buffer[],
+                           int num_attributes,
+                           float* vertex_buffer,
+                           int num_coords_dim0,
+                           int num_coords_dim1);
 // @}
 
 /** Set the underlying cuda device poiner for a buffer. The device

@@ -19,6 +19,7 @@ typedef void GLvoid;
 #define GL_NO_ERROR 0x0
 #define GL_FALSE 0x0
 #define GL_TRUE 0x1
+#define GL_TRIANGLES 0x0004
 #define GL_TRIANGLE_STRIP 0x0005
 #define GL_CULL_FACE 0x0B44
 #define GL_DEPTH_TEST 0x0B71

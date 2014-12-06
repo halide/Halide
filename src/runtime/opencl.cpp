@@ -882,21 +882,26 @@ WEAK int halide_opencl_copy_to_host(void *user_context, buffer_t* buf) {
     return 0;
 }
 
-WEAK int halide_opencl_run(void *user_context,
-                           void *state_ptr,
-                           const char* entry_name,
-                           int blocksX, int blocksY, int blocksZ,
-                           int threadsX, int threadsY, int threadsZ,
-                           int shared_mem_bytes,
-                           size_t arg_sizes[],
-                           void* args[],
-                           int8_t arg_is_buffer[]) {
+WEAK int halide_dev_run(void *user_context,
+                        void *state_ptr,
+                        const char* entry_name,
+                        int blocksX, int blocksY, int blocksZ,
+                        int threadsX, int threadsY, int threadsZ,
+                        int shared_mem_bytes,
+                        size_t arg_sizes[],
+                        void* args[],
+			int8_t arg_is_buffer[],
+                        int num_attributes,
+                        float* vertex_buffer,
+                        int num_coords_dim0,
+                        int num_coords_dim1) {
     debug(user_context)
         << "CL: halide_opencl_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
         << "shmem: " << shared_mem_bytes << "\n";
+
 
     cl_int err;
     ClContext ctx(user_context);

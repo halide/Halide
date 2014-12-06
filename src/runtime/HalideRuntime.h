@@ -230,7 +230,6 @@ extern int halide_device_sync(void *user_context, struct buffer_t *buf);
 /** Allocate device memory to back a buffer_t. */
 extern int halide_device_malloc(void *user_context, struct buffer_t *buf, const halide_device_interface *interface);
 
-/** Free any device memory associated with a buffer_t. */
 extern int halide_device_free(void *user_context, struct buffer_t *buf);
 
 /** Selects which gpu device to use. 0 is usually the display
