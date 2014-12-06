@@ -834,13 +834,19 @@ WEAK int halide_dev_run(void *user_context,
                         int threadsX, int threadsY, int threadsZ,
                         int shared_mem_bytes,
                         size_t arg_sizes[],
-                        void* args[]) {
+                        void* args[],
+                        int num_attributes,
+                        float* vertex_buffer,
+                        int num_coords_dim0,
+                        int num_coords_dim1) {
+
     debug(user_context)
         << "CL: halide_dev_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
         << "shmem: " << shared_mem_bytes << "\n";
+
 
     cl_int err;
     ClContext ctx(user_context);
