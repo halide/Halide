@@ -1,6 +1,6 @@
 #include "CodeGen_LLVM.h"
 #include "LLVM_Headers.h"
-#include "Outputs.h"
+#include "Output.h"
 
 #include <iostream>
 
