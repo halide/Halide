@@ -213,8 +213,11 @@ CodeGen_LLVM *CodeGen_LLVM::new_for_target(Target target) {
             return new CodeGen_GPU_Host<CodeGen_PNaCl>(target);
         }
 #endif
+
         user_error << "Invalid target architecture for GPU backend: "
                    << target.to_string() << "\n";
+        return NULL;
+
     } else if (target.arch == Target::X86) {
         return new CodeGen_X86(target);
     } else if (target.arch == Target::ARM) {
