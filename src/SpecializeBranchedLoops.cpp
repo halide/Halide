@@ -950,6 +950,7 @@ private:
 
     StmtOrExpr make_branch_content(const Pipeline *op, const vector<StmtOrExpr> &args) {
         if (!args[0].defined()) {
+            internal_assert(!args[1].defined());
             return args[2];
         } else {
             return Pipeline::make(op->name, args[0], args[1], args[2]);
