@@ -1,7 +1,6 @@
 #include "CodeGen.h"
 
 namespace Halide {
-
 namespace Internal {
 
 // Returns true if the given function name is one of the Halide runtime
@@ -41,5 +40,4 @@ bool function_takes_user_context(const std::string &name) {
 }
 
 }
-
 }

@@ -444,16 +444,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
         set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
     }
 
-    // If the module contains a halide_release function, run it when the module dies.
-    llvm::Function *fn = module->getFunction("halide_release");
-    if (fn) {
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_release in module\n";
-        void (*cleanup_routine)(void *) =
-            reinterpret_bits<void (*)(void *)>(f);
-        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
-    }
-    CodeGen_CPU::jit_finalize(ee, module, cleanup_routines);
 }
 
 template<typename CodeGen_CPU>
