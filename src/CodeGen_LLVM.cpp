@@ -184,7 +184,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     initialize_llvm();
 }
 
-CodeGen_LLVM *CodeGen_LLVM::for_target(Target target) {
+CodeGen_LLVM *CodeGen_LLVM::new_for_target(Target target) {
     if (target.os == Target::OSUnknown) {
         target = get_host_target();
     }

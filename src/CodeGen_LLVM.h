@@ -55,7 +55,7 @@ public:
     CodeGen_LLVM(Target t);
     virtual ~CodeGen_LLVM();
 
-    static CodeGen_LLVM *for_target(Target target);
+    static CodeGen_LLVM *new_for_target(Target target);
 
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should

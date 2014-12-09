@@ -2241,7 +2241,7 @@ void Func::compile_to(std::vector<Output> outputs, vector<Argument> args, const 
         args.push_back(output_buffers()[i]);
     }
 
-    CodeGen_LLVM *cg = CodeGen_LLVM::for_target(target);
+    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(target);
     cg->compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
 
     for (std::vector<Output>::iterator i = outputs.begin(); i != outputs.end(); i++) {
@@ -2680,7 +2680,7 @@ void *Func::compile_jit(const Target &target) {
 
     Target t = target;
     t.set_feature(Target::JIT);
-    CodeGen_LLVM *cg = CodeGen_LLVM::for_target(t);
+    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(t);
 
     // Sanitise the name of the generated function
     string n = name();
