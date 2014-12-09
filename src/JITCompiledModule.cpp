@@ -50,6 +50,19 @@ public:
 
     /** Do any target-specific module cleanup. */
     std::vector<JITCompiledModule::CleanupRoutine> cleanup_routines;
+
+    /** Add a cleanup routine of the specified name from the module. */
+    void add_cleanup_routine(const char *name) {
+        // If the module contains the function, run it when the module dies.
+        llvm::Function *fn = module->getFunction(name);
+        if (fn) {
+            void *f = execution_engine->getPointerToFunction(fn);
+            internal_assert(f) << "Could not find compiled form of " << name << " in module.\n";
+            void (*cleanup_routine)(void *) =
+                reinterpret_bits<void (*)(void *)>(f);
+            cleanup_routines.push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
+        }
+    }
 };
 
 template<>
@@ -105,9 +118,39 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
     #endif
 }
 
-}
+}  // namespace
 
-void JITCompiledModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const string &function_name) {
+JITCompiledModule::JITCompiledModule() :
+    function(NULL),
+    wrapped_function(NULL),
+    copy_to_host(NULL),
+    copy_to_dev(NULL),
+    free_dev_buffer(NULL),
+    set_error_handler(NULL),
+    set_custom_allocator(NULL),
+    set_custom_do_par_for(NULL),
+    set_custom_do_task(NULL),
+    set_custom_trace(NULL),
+    set_custom_print(NULL),
+    shutdown_thread_pool(NULL),
+    memoization_cache_set_size(NULL) {}
+
+JITCompiledModule::JITCompiledModule(CodeGen_LLVM *cg, const std::string &function_name) :
+    function(NULL),
+    wrapped_function(NULL),
+    copy_to_host(NULL),
+    copy_to_dev(NULL),
+    free_dev_buffer(NULL),
+    set_error_handler(NULL),
+    set_custom_allocator(NULL),
+    set_custom_do_par_for(NULL),
+    set_custom_do_task(NULL),
+    set_custom_trace(NULL),
+    set_custom_print(NULL),
+    shutdown_thread_pool(NULL),
+    memoization_cache_set_size(NULL) {
+    // Take ownership of the module in cg.
+    llvm::Module *m = cg->take_module();
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
@@ -173,7 +216,7 @@ void JITCompiledModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const 
     void *function_address = reinterpret_bits<void *>(function);
     debug(1) << "JIT compiled function pointer " << function_address << "\n";
 
-    hook_up_function_pointer(ee, m, function_name + "_jit_wrapper", true, &wrapped_function);
+    hook_up_function_pointer(ee, m, function_name + "_argv", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
     hook_up_function_pointer(ee, m, "halide_copy_to_dev", false, &copy_to_dev);
     hook_up_function_pointer(ee, m, "halide_dev_free", false, &free_dev_buffer);
@@ -195,6 +238,10 @@ void JITCompiledModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const 
     // Do any target-specific post-compilation module meddling
     cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
 
+    // Add some more target independent cleanup routines.
+    module.ptr->add_cleanup_routine("halide_memoization_cache_cleanup");
+    module.ptr->add_cleanup_routine("halide_release");
+
     #ifdef __arm__
     // Flush each function from the dcache so that it gets pulled into
     // the icache correctly.
@@ -212,7 +259,6 @@ void JITCompiledModule::compile_module(CodeGen_LLVM *cg, llvm::Module *m, const 
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     ee->runStaticConstructorsDestructors(false);
-
 }
 
 }

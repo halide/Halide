@@ -16,6 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
+#include "Outputs.h"
 
 namespace Halide {
 
@@ -706,6 +707,11 @@ public:
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
                                 const Target &target = get_target_from_environment());
     // @}
+
+    EXPORT void compile_to(std::vector<Output> outputs, std::vector<Argument> args, const std::string &fn_name = "",
+                           const Target &target = get_target_from_environment());
+    EXPORT void compile_to(Output output, std::vector<Argument> args, const std::string &fn_name = "",
+                           const Target &target = get_target_from_environment());
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're

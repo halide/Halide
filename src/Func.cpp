@@ -15,7 +15,6 @@
 #include "Function.h"
 #include "Argument.h"
 #include "Lower.h"
-#include "StmtCompiler.h"
 #include "CodeGen_C.h"
 #include "Image.h"
 #include "Param.h"
@@ -2017,22 +2016,7 @@ void Func::lower(const Target &t) {
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
                               const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_bitcode(filename);
+    compile_to(Output::bitcode(filename), args, fn_name, target);
 }
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
@@ -2041,22 +2025,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
 void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, false);
+    compile_to(Output::bitcode(filename), args, fn_name, target);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
@@ -2251,6 +2220,14 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
+    compile_to(Output::assembly(filename), args, fn_name, target);
+}
+
+void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
+    compile_to_assembly(filename, args, "", target);
+}
+
+void Func::compile_to(std::vector<Output> outputs, vector<Argument> args, const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
     args = add_user_context_arg(args, target);
@@ -2260,17 +2237,22 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
     vector<Buffer> images_to_embed;
     validate_arguments(name(), args, lowered, images_to_embed);
 
-    for (int i = 0; i < outputs(); i++) {
+    for (int i = 0; i < this->outputs(); i++) {
         args.push_back(output_buffers()[i]);
     }
 
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, true);
+    CodeGen_LLVM *cg = CodeGen_LLVM::for_target(target);
+    cg->compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+
+    for (std::vector<Output>::iterator i = outputs.begin(); i != outputs.end(); i++) {
+        i->generate(cg);
+    }
+
+    delete cg;
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
-    compile_to_assembly(filename, args, "", target);
+void Func::compile_to(Output output, vector<Argument> args, const string &fn_name, const Target &target) {
+    compile_to(vec(output), args, fn_name, target);
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
@@ -2698,7 +2680,7 @@ void *Func::compile_jit(const Target &target) {
 
     Target t = target;
     t.set_feature(Target::JIT);
-    StmtCompiler cg(t);
+    CodeGen_LLVM *cg = CodeGen_LLVM::for_target(t);
 
     // Sanitise the name of the generated function
     string n = name();
@@ -2708,16 +2690,18 @@ void *Func::compile_jit(const Target &target) {
         }
     }
 
-    cg.compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+    cg->compile(lowered, n, infer_args.arg_types, vector<Buffer>());
 
     if (debug::debug_level >= 3) {
-        cg.compile_to_native(name() + ".s", true);
-        cg.compile_to_bitcode(name() + ".bc");
+        Output::assembly(name() + ".s").generate(cg);
+        Output::bitcode(name() + ".bc").generate(cg);
         ofstream stmt_debug((name() + ".stmt").c_str());
         stmt_debug << lowered;
     }
 
-    compiled_module = cg.compile_to_function_pointers();
+    compiled_module = JITCompiledModule(cg, n);
+
+    delete cg;
 
     return compiled_module.function;
 }

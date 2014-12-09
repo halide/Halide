@@ -11,6 +11,8 @@
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
 
+#include "CodeGen.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -610,15 +612,15 @@ void CodeGen_X86::test() {
 
     Stmt s = Block::make(init, loop);
 
-    CodeGen_X86 cg(get_host_target());
-    cg.compile(s, "test1", args, vector<Buffer>());
+    CodeGen_LLVM *cg = CodeGen_LLVM::for_target(get_host_target());
+    cg->compile(s, "test1", args, vector<Buffer>());
 
     //cg.compile_to_bitcode("test1.bc");
     //cg.compile_to_native("test1.o", false);
     //cg.compile_to_native("test1.s", true);
 
     debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule m = cg.compile_to_function_pointers();
+    JITCompiledModule m(cg, "test1");
 
     typedef int (*fn_type)(::buffer_t *, float, int);
     fn_type fn = reinterpret_bits<fn_type>(m.function);

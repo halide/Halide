@@ -9,14 +9,12 @@
 #include <string>
 
 namespace Halide {
-
 namespace Internal {
 
 /** Which built-in functions require a user-context first argument? */
 bool function_takes_user_context(const std::string &name);
 
 }
-
 }
 
 #endif
