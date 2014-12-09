@@ -1920,7 +1920,8 @@ private:
             int bits;
 
             if (const_castint(b, &ib) &&
-                (((ib + 1) > ib) && is_const_power_of_two(ib + 1, &bits))) {
+                ((ib < b.type().imax()) && (ib < std::numeric_limits<int>::max()) &&
+                 is_const_power_of_two(ib + 1, &bits))) {
                   expr = Mod::make(a, ib + 1);
             } else  if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
                 expr = op;
