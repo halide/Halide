@@ -16,7 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
-#include "Outputs.h"
+#include "Output.h"
 
 namespace Halide {
 
