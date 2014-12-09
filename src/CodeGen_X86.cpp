@@ -612,7 +612,9 @@ void CodeGen_X86::test() {
 
     Stmt s = Block::make(init, loop);
 
-    CodeGen_LLVM *cg = CodeGen_LLVM::for_target(get_host_target());
+    Target target = get_host_target();
+    internal_assert(target.arch == Target::X86);
+    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(target);
     cg->compile(s, "test1", args, vector<Buffer>());
 
     //cg.compile_to_bitcode("test1.bc");
