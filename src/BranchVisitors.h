@@ -21,7 +21,7 @@ namespace Internal {
  * [bound_vars] should contain entries for each bound variable that may appear in [stmt]
  * or [expr], and have its value set the linearity of the expression it is bound to,
  * which can be computed from the [expr_linearity] function defined in LinearSolve.h.
- * The second optional scope [branch_vars], should have a non-zero entry for variable
+ * The second optional scope [branch_vars], should have a non-zero entry for each variable
  * that has previously been detected to branch in the given variable(s).
  */
 // @(

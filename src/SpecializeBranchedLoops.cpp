@@ -308,6 +308,9 @@ private:
     stack<Expr> curr_min;
     stack<Expr> curr_extent;
 
+	Scope<Expr> conditional_alloc;
+	stack<string> producer;
+
     using IRVisitor::visit;
 
     friend std::ostream &operator<<(std::ostream &out, const Branch &b) {
@@ -400,7 +403,7 @@ private:
     // It is assumed that the inequality has been solved and so the variable of interest
     // is on the left hand side.
     bool add_branches(Expr cond, StmtOrExpr a, StmtOrExpr b) {
-        debug(3) << "Branching on condition " << cond << "\n";
+        debug(3) << "Branching on condition: " << cond << "\n";
 
         Expr min = curr_min.top();
         Expr extent = curr_extent.top();
@@ -800,20 +803,20 @@ private:
         if (op->condition.type().is_scalar() && expr_is_linear_in_var(op->condition, name, linearity)) {
             Expr normalized = normalize_branch_conditions(op, name, scope, bounds_info, free_vars, branching_limit);
             const Select *select = normalized.as<Select>();
-            
+
             if (!select || !visit_simple_cond(select->condition, select->true_value, select->false_value)) {
                 add_branch(Expr(op));
             }
         } else {
             vector<Branch> cond_branches;
             collect(op->condition, cond_branches);
-            
+
             vector<Branch> true_branches;
             collect(op->true_value, true_branches);
-            
+
             vector<Branch> false_branches;
             collect(op->false_value, false_branches);
-            
+
             merge_child_branches(op, vec(cond_branches, true_branches, false_branches));
         }
     }
@@ -949,6 +952,7 @@ private:
     }
 
     void visit(const Pipeline *op) {
+        producer.push(op->name);
         vector<Branch> produce_branches;
         collect(op->produce, produce_branches);
 
@@ -959,6 +963,7 @@ private:
             Branch branch = {curr_min.top(), curr_extent.top(), op->update};
             update_branches.push_back(branch);
         }
+        producer.pop();
 
         vector<Branch> consume_branches;
         collect(op->consume, consume_branches);
@@ -1015,18 +1020,19 @@ private:
             collect(op->extents[i], child_branches[i]);
         }
 
-        vector<Branch> cond_branches;
-        if (op->condition.defined()) {
-            collect(op->condition, cond_branches);
-        } else {
-            Branch branch = {curr_min.top(), curr_extent.top(), op->condition};
-            cond_branches.push_back(branch);
-        }
-        child_branches.push_back(cond_branches);
+        Expr cond = simplify(op->condition, true, bounds_info);
+        Branch branch = {curr_min.top(), curr_extent.top(), op->condition};
+        child_branches.push_back(vec(branch));
 
+        if (!is_one(cond)) {
+            conditional_alloc.push(op->name, cond);
+        }
         vector<Branch> body_branches;
         collect(op->body, body_branches);
         child_branches.push_back(body_branches);
+        if (!is_one(cond)) {
+            conditional_alloc.pop(op->name);
+        }
 
         merge_child_branches(op, child_branches);
     }
@@ -1055,7 +1061,10 @@ private:
     }
 
     void visit(const IfThenElse *op) {
-        if (expr_is_linear_in_var(op->condition, name, linearity)) {
+        bool is_alloc_condition = !producer.empty() && conditional_alloc.contains(producer.top()) &&
+                equal(op->condition, conditional_alloc.get(producer.top()));
+
+        if (!is_alloc_condition && expr_is_linear_in_var(op->condition, name, linearity)) {
             Stmt normalized = normalize_branch_conditions(op, name, scope, bounds_info, free_vars, branching_limit);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
@@ -1065,7 +1074,7 @@ private:
         } else {
             vector<Branch> cond_branches;
             collect(op->condition, cond_branches);
-            
+
             vector<Branch> then_branches;
             collect(op->then_case, then_branches);
 
