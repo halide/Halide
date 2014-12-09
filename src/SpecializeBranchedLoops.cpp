@@ -308,9 +308,6 @@ private:
     stack<Expr> curr_min;
     stack<Expr> curr_extent;
 
-	Scope<Expr> conditional_alloc;
-	stack<string> producer;
-
     using IRVisitor::visit;
 
     friend std::ostream &operator<<(std::ostream &out, const Branch &b) {
@@ -332,6 +329,10 @@ private:
         if (se.defined()) {
             branches.swap(se_branches);
             se.accept(this);
+            branches.swap(se_branches);
+        } else {
+            branches.swap(se_branches);
+            add_branch(se, curr_min.top(), curr_extent.top());
             branches.swap(se_branches);
         }
     }
@@ -356,7 +357,7 @@ private:
     bool add_branch(StmtOrExpr content) {
         if (branches.size() >= branching_limit) {
             return false;
-        } else if (!content.defined() || is_zero(curr_extent.top())) {
+        } else if (is_zero(curr_extent.top())) {
             return true;
         }
 
@@ -634,7 +635,7 @@ private:
         if (b.defined()) ++num_defined;
 
         // Bail out if this condition depends on more than just the current loop variable,
-        // or we are ging to branch too much.
+        // or we are going to branch too much.
         if (num_free_vars(cond, free_vars, scope) > 1 ||
             static_cast<int>(branches.size()) > branching_limit - num_defined) {
             return false;
@@ -948,11 +949,14 @@ private:
     void visit(const LetStmt *op) {visit_let(op);}
 
     StmtOrExpr make_branch_content(const Pipeline *op, const vector<StmtOrExpr> &args) {
-        return Pipeline::make(op->name, args[0], args[1], args[2]);
+        if (!args[0].defined()) {
+            return args[2];
+        } else {
+            return Pipeline::make(op->name, args[0], args[1], args[2]);
+        }
     }
 
     void visit(const Pipeline *op) {
-        producer.push(op->name);
         vector<Branch> produce_branches;
         collect(op->produce, produce_branches);
 
@@ -963,7 +967,6 @@ private:
             Branch branch = {curr_min.top(), curr_extent.top(), op->update};
             update_branches.push_back(branch);
         }
-        producer.pop();
 
         vector<Branch> consume_branches;
         collect(op->consume, consume_branches);
@@ -1011,7 +1014,7 @@ private:
             extents[i] = args[i];
         };
 
-        return Allocate::make(op->name, op->type, extents, args[i], args[i+1]);
+        return Allocate::make(op->name, op->type, extents, simplify(args[i], true, bounds_info), args[i+1]);
     }
 
     void visit(const Allocate *op) {
@@ -1024,21 +1027,19 @@ private:
         Branch branch = {curr_min.top(), curr_extent.top(), op->condition};
         child_branches.push_back(vec(branch));
 
-        if (!is_one(cond)) {
-            conditional_alloc.push(op->name, cond);
-        }
         vector<Branch> body_branches;
         collect(op->body, body_branches);
         child_branches.push_back(body_branches);
-        if (!is_one(cond)) {
-            conditional_alloc.pop(op->name);
-        }
 
         merge_child_branches(op, child_branches);
     }
 
     StmtOrExpr make_branch_content(const Block *op, const vector<StmtOrExpr> &args) {
-        return Block::make(args[0], args[1]);
+        if (!args[0].defined()) {
+            return args[1];
+        } else {
+            return Block::make(args[0], args[1]);
+        }
     }
 
     void visit(const Block *op) {
@@ -1061,10 +1062,7 @@ private:
     }
 
     void visit(const IfThenElse *op) {
-        bool is_alloc_condition = !producer.empty() && conditional_alloc.contains(producer.top()) &&
-                equal(op->condition, conditional_alloc.get(producer.top()));
-
-        if (!is_alloc_condition && expr_is_linear_in_var(op->condition, name, linearity)) {
+        if (expr_is_linear_in_var(op->condition, name, linearity)) {
             Stmt normalized = normalize_branch_conditions(op, name, scope, bounds_info, free_vars, branching_limit);
             const IfThenElse *if_stmt = normalized.as<IfThenElse>();
 
