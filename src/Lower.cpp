@@ -40,6 +40,7 @@
 #include "FuseGPUThreadLoops.h"
 #include "InjectHostDevBufferCopies.h"
 #include "Memoization.h"
+#include "VaryingAttributes.h"
 
 namespace Halide {
 namespace Internal {
@@ -1866,6 +1867,17 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
 
     debug(1) << "Simplifying...\n";
     s = common_subexpression_elimination(s);
+
+    if (t.has_feature(Target::OpenGL)) {
+        debug(1) << "Detecting varying attributes...\n";
+        s = find_linear_expressions(s);
+        debug(2) << "Lowering after detecting varying attributes:\n" << s << "\n\n";
+
+        debug(1) << "Moving varying attribute expressions out of the shader...\n";
+        s = setup_gpu_vertex_buffer(s);
+        debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
+    }
+
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
 
@@ -1876,7 +1888,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
             debug(1) << "Lowering after custom pass " << i << ":\n" << s << "\n\n";
         }
     }
-
 
     return s;
 }

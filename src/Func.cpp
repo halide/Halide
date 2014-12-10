@@ -3,7 +3,7 @@
 #include <string.h>
 #include <fstream>
 
-#ifdef WIN32
+#ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -2016,8 +2016,8 @@ void Func::lower(const Target &t) {
     }
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
-                              const Target &target) {
+void Func::compile_to(const Outputs &output_files, vector<Argument> args,
+                      const string &fn_name, const Target &target) {
     user_assert(defined()) << "Can't compile undefined Func.\n";
 
     args = add_user_context_arg(args, target);
@@ -2033,7 +2033,21 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
     StmtCompiler cg(target);
     cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_bitcode(filename);
+
+    if (!output_files.object_name.empty()) {
+        cg.compile_to_native(output_files.object_name, false);
+    }
+    if (!output_files.assembly_name.empty()) {
+        cg.compile_to_native(output_files.assembly_name, true);
+    }
+    if (!output_files.bitcode_name.empty()) {
+        cg.compile_to_bitcode(output_files.bitcode_name);
+    }
+}
+
+void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+                              const Target &target) {
+    compile_to(Outputs().bitcode(filename), args, fn_name, target);
 }
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
@@ -2042,22 +2056,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
 void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, false);
+    compile_to(Outputs().object(filename), args, fn_name, target);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
@@ -2252,22 +2251,7 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    StmtCompiler cg(target);
-    cg.compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
-    cg.compile_to_native(filename, true);
+    compile_to(Outputs().assembly(filename), args, fn_name, target);
 }
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
@@ -2362,7 +2346,7 @@ struct ErrorBuffer {
         }
 
         // Atomically claim some space in the buffer
-#ifdef WIN32
+#ifdef _MSC_VER
         int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
 #else
         int old_end = __sync_fetch_and_add(&end, len);
