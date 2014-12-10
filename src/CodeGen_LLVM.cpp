@@ -184,11 +184,7 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     initialize_llvm();
 }
 
-CodeGen_LLVM *CodeGen_LLVM::new_for_target(Target target) {
-    if (target.os == Target::OSUnknown) {
-        target = get_host_target();
-    }
-
+CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target) {
     // The awkward mapping from targets to code generators
     if (target.features_any_of(vec(Target::CUDA,
                                    Target::OpenCL,
@@ -462,7 +458,35 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
 
     // Make a wrapper to call the function with an array of pointer
     // args. This is useful for the JIT and other machine interfaces
-    // that will call the compiled function.
+    // that will call the compiled function. This function has the
+    // following prototype in C:
+    //
+    //  int function_name_argv(void **args);
+    //
+    // It expects 'args' to be a pointer to N void* pointers, where N
+    // is the number of arguments to the pipeline. The pointers are
+    // casted to the type expected by the pipeline, and then the
+    // argument is loaded from that pointer, with the exception of
+    // buffer_t arguments, where the pointer is passed directly.
+    //
+    // If we have a pipeline defined like this (in C):
+    //
+    //  int function_name(buffer_t* arg1, int arg2, float arg3, buffer_t* out);
+    //
+    // A call to the argv function would look like this:
+    //
+    //  buffer_t arg1;
+    //  int arg2;
+    //  float arg3;
+    //  buffer_t out;
+    //  void **argv[] = {
+    //      &arg1,
+    //      &arg2,
+    //      &arg3,
+    //      &out,
+    //  };
+    //  int result = function_name_argv(argv);
+    //
     string wrapper_name = function_name + "_argv";
     func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
