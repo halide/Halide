@@ -293,7 +293,7 @@ class InjectBufferCopies : public IRMutator {
             internal_assert(info.device_api == Device_Host ||
                             info.device_api == device_api) <<
                 "Buffer " << op->name << " is read from two different devices (" <<
-                info.device_api << " and " << device_api << "\n";
+                info.device_api << " and " << device_api << ")\n";
             info.device_api = device_api;
         } else {
             state[op->name].host_read = true;
