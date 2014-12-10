@@ -3,7 +3,7 @@
 #include <string.h>
 #include <fstream>
 
-#ifdef WIN32
+#ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -2346,7 +2346,7 @@ struct ErrorBuffer {
         }
 
         // Atomically claim some space in the buffer
-#ifdef WIN32
+#ifdef _MSC_VER
         int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
 #else
         int old_end = __sync_fetch_and_add(&end, len);
