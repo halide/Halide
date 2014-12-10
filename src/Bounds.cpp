@@ -686,6 +686,15 @@ private:
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
+        } else if (op->call_type == Call::Intrinsic && 
+                   (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
+            Expr simplified = simplify(op);
+            if (!simplified.same_as(op)) {
+                simplified.accept(this);
+            } else {
+                // Just use the bounds of the type
+                bounds_of_type(op->type);
+            }
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||

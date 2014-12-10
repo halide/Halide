@@ -123,7 +123,7 @@ int main() {
     // in all of the loop variables. This is the coordinate transformation case
     fprintf(stderr, "Test f1\n");
 
-    float th = M_PI/8.0f;
+    float th = 3.141592f/8.0f;
     float s_th = sinf(th);
     float c_th = cosf(th);
 

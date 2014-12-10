@@ -27,7 +27,7 @@ protected:
     using IRMutator::visit;
 
     bool in_glsl_loops;
-    
+
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
         internal_assert(name.length() > 0);
@@ -43,20 +43,20 @@ protected:
                                     vec(Expr(name + ".varying"), e),
                                     Call::Intrinsic);
         ++total_found;
-        
+
         return intrinsic;
     }
-    
+
     virtual void visit(const Call *op) {
-        
+
         std::vector<Expr> new_args = op->args;
-        
+
         // Check to see if this call is a load
         if (op->name == Call::glsl_texture_load) {
             // Check if the texture coordinate arguments are linear wrt the GPU
             // loop variables
             internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load";
-            
+
             // Iterate over the texture coordinate arguments
             for (int i = 2; i != 4; ++i) {
                 new_args[i] = mutate(op->args[i]);
@@ -67,7 +67,7 @@ protected:
         } else if (op->name == Call::glsl_texture_store) {
             // Check if the value expression is linear wrt the loop variables
             internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load";
-            
+
             // The value is the 5th argument to the intrinsic
             new_args[5] = mutate(new_args[5]);
             if (order == 1) {
@@ -80,16 +80,16 @@ protected:
         expr = Call::make(op->type, op->name, new_args, op->call_type,
                           op->func, op->value_index, op->image, op->param);
     }
-    
+
     virtual void visit(const Let *op) {
 
         Expr mutated_value = mutate(op->value);
         int value_order = order;
-        
+
         scope.push(op->name, order);
-        
+
         Expr mutated_body = mutate(op->body);
-        
+
         if ((value_order == 1) && (total_found < max_expressions)) {
             // Wrap the let value with a varying tag
             mutated_value = Call::make(mutated_value.type(), Call::glsl_varying,
@@ -102,7 +102,7 @@ protected:
 
         scope.pop(op->name);
     }
-    
+
     virtual void visit(const For *op) {
         bool old_in_glsl_loops = in_glsl_loops;
         // Check if the loop variable is a GPU variable thread variable and for GLSL
@@ -111,9 +111,9 @@ protected:
             loop_vars.push_back(op->name);
             in_glsl_loops = true;
         }
-        
+
         Stmt mutated_body = mutate(op->body);
-        
+
         if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == Device_GLSL) {
             loop_vars.pop_back();
         }
@@ -126,7 +126,7 @@ protected:
             stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, mutated_body);
         }
     }
-    
+
     virtual void visit(const Variable *op) {
         if (std::find(loop_vars.begin(), loop_vars.end(), op->name) != loop_vars.end()) {
             order = 1;
@@ -139,35 +139,35 @@ protected:
         }
         expr = op;
     }
-    
+
     template<typename T>
     void visit_imm(T *op) {
         order = 0;
         expr = T::make(op->value);
     }
-    
+
     virtual void visit(const IntImm *op)    { visit_imm(op); }
     virtual void visit(const FloatImm *op)  { visit_imm(op); }
     virtual void visit(const StringImm *op) { visit_imm(op); }
-    
+
     virtual void visit(const Cast *op) {
-        
+
         Expr mutated_value = mutate(op->value);
         int value_order = order;
-        
+
         // We can only interpolate float values, disqualify the expression if
         // this is a cast to a different type
         if (order && (op->type.code != Type::Float)) {
             order = 2;
         }
-        
+
         if ((order > 1) && (value_order == 1)) {
             mutated_value = tag_linear_expression(mutated_value);
         }
-        
+
         expr = Cast::make(op->type, mutated_value);
     }
-    
+
     // Add and subtract do not make the expression non-linear, if it is already
     // linear or constant
     template<typename T>
@@ -176,9 +176,9 @@ protected:
         unsigned int order_a = order;
         Expr b = mutate(op->b);
         unsigned int order_b = order;
-        
+
         order = std::max(order_a, order_b);
-        
+
         // If the whole expression is greater than linear, check to see if
         // either argument is linear and if so, add it to a candidate list
         if ((order > 1) && (order_a == 1)) {
@@ -187,13 +187,13 @@ protected:
         if ((order > 1) && (order_b == 1)) {
             b = tag_linear_expression(b);
         }
-        
+
         expr = T::make(a, b);
     }
-    
+
     virtual void visit(const Add *op) { visit_binary_linear(op); }
     virtual void visit(const Sub *op) { visit_binary_linear(op); }
-    
+
     // Multiplying increases the order of the expression, possibly making it
     // non-linear
     virtual void visit(const Mul *op) {
@@ -201,9 +201,9 @@ protected:
         unsigned int order_a = order;
         Expr b = mutate(op->b);
         unsigned int order_b = order;
-        
+
         order = order_a + order_b;
-        
+
         // If the whole expression is greater than linear, check to see if
         // either argument is linear and if so, add it to a candidate list
         if ((order > 1) && (order_a == 1)) {
@@ -212,10 +212,10 @@ protected:
         if ((order > 1) && (order_b == 1)) {
             b = tag_linear_expression(b);
         }
-        
+
         expr = Mul::make(a, b);
     }
-    
+
     // Dividing is either multiplying by a constant, or makes the result
     // non-linear (i.e. order -1)
     virtual void visit(const Div *op) {
@@ -240,47 +240,47 @@ protected:
         if ((order > 1) && (order_b == 1)) {
             b = tag_linear_expression(b);
         }
-        
+
         expr = Div::make(a, b);
     }
-    
+
     // For other binary operators, if either argument is non-constant, then the
     // whole expression is non-linear
     template<typename T>
     void visit_binary(T *op) {
-        
+
         Expr a = mutate(op->a);
         unsigned int order_a = order;
         Expr b = mutate(op->b);
         unsigned int order_b = order;
-        
+
         if (order_a || order_b) {
             order = 2;
         }
-        
+
         if ((order > 1) && (order_a == 1)) {
             a = tag_linear_expression(a);
         }
         if ((order > 1) && (order_b == 1)) {
             b = tag_linear_expression(b);
         }
-        
+
         expr = T::make(a, b);
     }
-    
+
     virtual void visit(const Mod *op) { visit_binary(op); }
-    
+
     // Break the expression into a piecewise function, if the expressions are
     // linear, we treat the piecewise behavior specially during codegen
-    
+
     // TODO:(abstephensg) Need to integrate with specialize_branched_loops branch
-    
+
     // Once this is done, Min and Max should call visit_binary_linear and the code
     // in setup_mesh will handle piecewise linear behavior introduced by these
     // expressions
     virtual void visit(const Min *op) { visit_binary(op); }
     virtual void visit(const Max *op) { visit_binary(op); }
-    
+
     virtual void visit(const EQ *op) { visit_binary(op); }
     virtual void visit(const NE *op) { visit_binary(op); }
     virtual void visit(const LT *op) { visit_binary(op); }
@@ -289,32 +289,32 @@ protected:
     virtual void visit(const GE *op) { visit_binary(op); }
     virtual void visit(const And *op) { visit_binary(op); }
     virtual void visit(const Or *op) { visit_binary(op); }
-    
+
     virtual void visit(const Not *op) {
         Expr a = mutate(op->a);
         unsigned int order_a = order;
-        
+
         if (order_a) {
             order = 2;
         }
-        
+
         expr = Not::make(a);
     }
-    
+
     virtual void visit(const Broadcast *op) {
         Expr a = mutate(op->value);
-        
+
         if (order == 1) {
             a = tag_linear_expression(a);
         }
-        
+
         if (order) {
             order = 2;
         }
-        
+
         expr = Broadcast::make(a, op->width);
     }
-    
+
     virtual void visit(const Select *op) {
 
         // If either the true expression or the false expression is non-linear
@@ -331,15 +331,15 @@ protected:
         // to the loop variables.
         Expr mutated_condition = mutate(op->condition);
         int condition_order = (order != 0) ? 2 : 0;
-        
+
         Expr mutated_true_value = mutate(op->true_value);
         int true_value_order = order;
 
         Expr mutated_false_value = mutate(op->false_value);
         int false_value_order = order;
-        
+
         order = std::max(std::max(condition_order, true_value_order), false_value_order);
-        
+
         if ((order > 1) && (condition_order == 1)) {
             mutated_condition = tag_linear_expression(mutated_condition);
         }
@@ -349,15 +349,15 @@ protected:
         if ((order > 1) && (false_value_order == 1)) {
             mutated_false_value = tag_linear_expression(mutated_false_value);
         }
-        
+
         expr = Select::make(mutated_condition, mutated_true_value, mutated_false_value);
     }
-    
+
 public:
     std::vector<std::string> loop_vars;
-    
+
     Scope<int> scope;
-    
+
     unsigned int order;
     bool found;
 
@@ -374,7 +374,7 @@ public:
 };
 
 Stmt find_linear_expressions(Stmt s) {
-    
+
     return FindLinearExpressions().mutate(s);
 }
 
@@ -384,7 +384,7 @@ class FindVaryingAttributeTags : public IRVisitor
 {
 public:
     FindVaryingAttributeTags(std::map<std::string, Expr>& varyings_) : varyings(varyings_) { }
-    
+
     using IRVisitor::visit;
 
     virtual void visit(const Call *op) {
@@ -452,13 +452,13 @@ Stmt replace_varying_attributes(Stmt s)
 class FindVaryingAttributeVars : public IRVisitor {
 public:
     using IRVisitor::visit;
-    
+
     virtual void visit(const Variable *op) {
         if (ends_with(op->name, ".varying")) {
             variables.insert(op->name);
         }
     }
-    
+
     std::set<std::string> variables;
 };
 
@@ -468,7 +468,7 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
 {
     FindVaryingAttributeVars find;
     loop_stmt.accept(&find);
-    
+
     std::vector<std::string> remove_list;
 
     for (std::map<std::string, Expr>::iterator i = varying.begin(); i != varying.end(); ++i) {
@@ -478,12 +478,12 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
             remove_list.push_back(name);
         }
     }
-    
+
     for (std::vector<std::string>::iterator name = remove_list.begin(); name != remove_list.end(); ++name) {
         varying.erase(*name);
     }
 }
-    
+
 // This visitor changes the type of variables tagged with .varying to float, and
 // then propagates the float expression up through the expression, casting where
 // necessary.
@@ -498,16 +498,16 @@ protected:
             expr = op;
         }
     }
-    
+
     Type float_type(Expr e) {
         return Float(e.type().bits, e.type().width);
     }
-    
+
     template<typename T>
     void visit_binary_op(const T *op) {
         Expr mutated_a = mutate(op->a);
         Expr mutated_b = mutate(op->b);
-        
+
         bool a_float = mutated_a.type().is_float();
         bool b_float = mutated_b.type().is_float();
 
@@ -523,7 +523,7 @@ protected:
 
         expr = T::make(mutated_a, mutated_b);
     }
-    
+
     virtual void visit(const Add *op) { visit_binary_op(op); }
     virtual void visit(const Sub *op) { visit_binary_op(op); }
     virtual void visit(const Mul *op) { visit_binary_op(op); }
@@ -539,11 +539,11 @@ protected:
     virtual void visit(const GE *op) { visit_binary_op(op); }
     virtual void visit(const And *op) { visit_binary_op(op); }
     virtual void visit(const Or *op) { visit_binary_op(op); }
-    
+
     virtual void visit(const Select *op)  {
         Expr mutated_true_value = mutate(op->true_value);
         Expr mutated_false_value = mutate(op->false_value);
-        
+
         bool t_float = mutated_true_value.type().is_float();
         bool f_float = mutated_false_value.type().is_float();
 
@@ -556,7 +556,7 @@ protected:
                 mutated_false_value = Cast::make(float_type(op->false_value), mutated_false_value);
             }
         }
-        
+
         expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
     }
 
@@ -623,7 +623,7 @@ protected:
     }
 public:
     CastVariablesToFloatAndOffset(const std::vector<std::string>& names_) : names(names_) { }
-    
+
     const std::vector<std::string>& names;
     Scope<Expr> scope;
 };
@@ -1202,10 +1202,10 @@ public:
             // subsequent tagged linear expressions. Run a pass to check for
             // these and remove them from the varying attribute list
             prune_varying_attributes(loop_stmt, varyings);
-            
+
             // At this point the varying attribute expressions have been removed from
             // loop_stmt- it only contains variables tagged with .varying
-            
+
             // The GPU will only interpolate floating point values so the varying
             // attribute expression must be converted to floating point.
             loop_stmt = CastVaryingVariablesToFloat().mutate(loop_stmt);
