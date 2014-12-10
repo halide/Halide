@@ -25,6 +25,8 @@ namespace Internal {
 class FindLinearExpressions : public IRMutator {
 protected:
     using IRMutator::visit;
+
+    bool in_glsl_loops;
     
     Expr tag_linear_expression(Expr e, const std::string &name = unique_name('a')) {
 
@@ -102,18 +104,27 @@ protected:
     }
     
     virtual void visit(const For *op) {
-        // Check if the loop variable is a GPU variable thread variable
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        bool old_in_glsl_loops = in_glsl_loops;
+        // Check if the loop variable is a GPU variable thread variable and for GLSL
+        if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == Device_GLSL) ||
+            (in_glsl_loops && op->device_api == Device_Parent)) {
             loop_vars.push_back(op->name);
+            in_glsl_loops = true;
         }
         
         Stmt mutated_body = mutate(op->body);
         
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == Device_GLSL) {
             loop_vars.pop_back();
         }
-        
-        stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, mutated_body);
+
+        in_glsl_loops = old_in_glsl_loops;
+
+        if (mutated_body.same_as(op->body)) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, op->min, op->extent, op->for_type, op->device_api, mutated_body);
+        }
     }
     
     virtual void visit(const Variable *op) {
@@ -359,7 +370,7 @@ public:
     // scalar slots are used by boilerplate code to pass pixel coordinates.
     const unsigned int max_expressions;
 
-    FindLinearExpressions() : total_found(0), max_expressions(62) {}
+    FindLinearExpressions() : in_glsl_loops(false), total_found(0), max_expressions(62) {}
 };
 
 Stmt find_linear_expressions(Stmt s) {
@@ -962,7 +973,7 @@ public:
     }
 
     virtual void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == Device_GLSL) {
             // Create a for-loop of integers iterating over the coordinates in
             // this dimension
 
@@ -1104,7 +1115,7 @@ public:
     using IRMutator::visit;
 
     virtual void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == Device_GLSL) {
 
             const For *loop1 = op;
             const For *loop0 = loop1->body.as<For>();
