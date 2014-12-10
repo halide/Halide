@@ -90,4 +90,14 @@
 #define NDEBUG
 #endif
 
+namespace Halide { namespace Internal {
+#if LLVM_VERSION >= 36
+typedef llvm::Metadata *LLVMMDNodeArgumentType;
+inline llvm::Metadata *value_as_metadata_type(llvm::Value *val) { return llvm::ValueAsMetadata::get(val); }
+#else
+typedef llvm::Value *LLVMMDNodeArgumentType;
+inline llvm::Value *value_as_metadata_type(llvm::Value *val) { return val; }
+#endif
+}}
+
 #endif
