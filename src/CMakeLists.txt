@@ -307,7 +307,8 @@ set(HEADER_FILES
   ObjectInstanceRegistry.h
   BlockFlattening.h
   LinearSolve.h
-  BranchVisitors.h)
+  BranchVisitors.h
+  SpecializeBranchedLoops.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -409,6 +410,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BlockFlattening.cpp
   LinearSolve.cpp
   BranchVisitors.cpp
+  SpecializeBranchedLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
