@@ -271,7 +271,13 @@ Partition::Partition(Partition p, Expr m, Expr n) :
     map<string, For::ForType> cached_dims;
     std::vector<Dim> &dims =  contents.ptr->schedule.dims();
     for (size_t i = 0; i < dims.size(); ++i) {
-        cached_dims[dims[i].var] = dims[i].for_type;
+        std::string name = base_name(dims[i].var);
+        // debug(0) << "\tCaching loop type of var: " << name << " type = "
+        //          << (dims[i].for_type == For::Serial? "serial" :
+        //             (dims[i].for_type == For::Parallel? "parallel" :
+        //             (dims[i].for_type == For::Vectorized? "vectorized" :
+        //              "unrolled"))) << "\n";
+        cached_dims[name] = dims[i].for_type;
         dims[i].for_type = For::Serial;
     }
 
@@ -284,8 +290,15 @@ Partition::Partition(Partition p, Expr m, Expr n) :
 
     // Restore the for_type value for each dim in the schedule.
     for (size_t i = 0; i < dims.size(); ++i) {
-        if (cached_dims.count(dims[i].var) > 0) {
-            dims[i].for_type = cached_dims[dims[i].var];
+        std::string name = base_name(dims[i].var);
+        // debug(0) << "\tAttempting to restore loop type for dim: " << name << "\n";
+        if (cached_dims.count(name) > 0) {
+            dims[i].for_type = cached_dims[name];
+            // debug(0) << "\tRestored cached loop type of var: " << name << " type = "
+            //          << (dims[i].for_type == For::Serial? "serial" :
+            //             (dims[i].for_type == For::Parallel? "parallel" :
+            //             (dims[i].for_type == For::Vectorized? "vectorized" :
+            //              "unrolled"))) << "\n";
         }
     }
 }
@@ -405,7 +418,12 @@ Partition Partition::partition(Expr m, Expr n) {
 
 Partition &Partition::vectorize() {
     // std::cout << "\tvectorizing variable: " << row_var().name() << "\n";
-    schedule().vectorize(row_var());
+    internal_assert(!is_root());
+    user_assert(is_const(parent().num_rows())) <<
+            "When vectorizing a partition level of a matrix, you must vectorize at a level " <<
+            "with a constant number of rows. You have attempted to vectorize, at level " << level() << ", "
+            "which has " << parent().num_rows() << " rows per block of the partition.\n";
+    schedule().vectorize(parent().row_var());
     return *this;
 }
 
@@ -1219,7 +1237,6 @@ Matrix operator*(Matrix A, Matrix B) {
     Var j = prod.col_var();
 
     RDom k(0, A.num_cols(), "k");
-    prod(i, j)  = undef(A.type());
     prod(i, j) += A(i, k) * B(k, j);
 
     const int vec_size  = 16 / A.type().bytes();

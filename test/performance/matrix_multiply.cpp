@@ -290,9 +290,9 @@ std::vector<std::string> split_string(const std::string &str, const std::string 
     return substrs;
 }
 
-const int num_default_sizes = 8;
+const int num_default_sizes = 7;
 const int default_sizes[] = {
-    16, 32, 64, 128, 256, 512, 1024, 2048
+    16, 32, 64, 128, 256, 512, 1024
 };
 
 void print_usage() {

@@ -459,16 +459,18 @@ $(FILTERS_DIR)/user_context_insanity.o $(FILTERS_DIR)/user_context_insanity.h: $
 	@-mkdir -p tmp
 	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context
 
-# matrix_multiply test using the internal matrix class.
-$(BIN_DIR)/generator_matrix_multiply: $(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_class.o
-
 # "matrix_multiply_func" is produced by using matrix_multiply with different generator args.
-$(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_func.h: test/generator/matrix_multiply_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f matrix_multiply_func target=host-no_asserts-no_bounds_query use_matrix_class=false
+$(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_func.h: $(FILTERS_DIR)/matrix_multiply.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_func target=$(HL_TARGET)-no_asserts-no_bounds_query use_matrix_class=false
 
 # "matrix_multiply_class" is produced by using matrix_multiply with different generator args.
-$(FILTERS_DIR)/matrix_multiply_class.o $(FILTERS_DIR)/matrix_multiply_class.h: test/generator/matrix_multiply_generator.cpp $(GENGEN_DEPS)
-	$(GENGEN) -c $(CXX) -l $(BIN_DIR)/libHalide.so -o $(FILTERS_DIR) -s $< -f matrix_multiply_class target=host-no_asserts-no_bounds_query use_matrix_class=true
+$(FILTERS_DIR)/matrix_multiply_class.o $(FILTERS_DIR)/matrix_multiply_class.h: $(FILTERS_DIR)/matrix_multiply.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_class target=$(HL_TARGET)-no_asserts-no_bounds_query use_matrix_class=true
+
+# matrix_multiply test using the internal matrix class.
+$(BIN_DIR)/generator_aot_matrix_multiply: $(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_class.o
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:

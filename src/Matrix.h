@@ -297,7 +297,8 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
     if (is_large) {
         Var i = row_var();
         Var j = col_var();
-        func(i, j) = Internal::buildMatrixDef(mat, i, j);
+        Matrix &A = *this;
+        A(i, j) = Internal::buildMatrixDef(mat, i, j);
     } else {
         coeffs.resize(m * n);
         for (int j = 0; j < n; ++j) {

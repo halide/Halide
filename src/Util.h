@@ -196,7 +196,7 @@ EXPORT bool ends_with(const std::string &str, const std::string &suffix);
 
 /** Replace all matches of the second string in the first string with the last string */
 EXPORT std::string replace_all(std::string &str, const std::string &find, const std::string &replace);
-    
+
 /** Return the final token of the name string using the given delimiter. */
 EXPORT std::string base_name(const std::string &name, char delim = '.');
 
