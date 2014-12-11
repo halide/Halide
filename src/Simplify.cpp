@@ -1,6 +1,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -2040,7 +2041,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") expr = std::floor(*f);
                 else if (op->name == "ceil_f32") expr = std::ceil(*f);
-#if __cplusplus > 199711L 
+#if __cplusplus > 199711L
                 else if (op->name == "round_f32") expr = std::nearbyint(*f);
 #endif
                 else if (op->name == "trunc_f32") {
@@ -2762,7 +2763,7 @@ void simplify_test() {
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
-#if __cplusplus > 199711L 
+#if __cplusplus > 199711L
     check(round(0.6f), 1.0f);
     check(round(-0.5f), 0.0f);
 #endif
