@@ -1,7 +1,6 @@
 #include "runtime_internal.h"
 #include "../buffer_t.h"
 #include "HalideRuntime.h"
-
 #include "mini_opengl.h"
 
 // This constant is used to indicate that the application will take
@@ -53,7 +52,9 @@ extern "C" int isdigit(int c);
     GLFUNC(PFNGLGETUNIFORMLOCATIONPROC, GetUniformLocation);            \
     GLFUNC(PFNGLUNIFORM1IVPROC, Uniform1iv);                            \
     GLFUNC(PFNGLUNIFORM2IVPROC, Uniform2iv);                            \
+    GLFUNC(PFNGLUNIFORM2IVPROC, Uniform4iv);                            \
     GLFUNC(PFNGLUNIFORM1FVPROC, Uniform1fv);                            \
+    GLFUNC(PFNGLUNIFORM1FVPROC, Uniform4fv);                            \
     GLFUNC(PFNGLGENFRAMEBUFFERSPROC, GenFramebuffers);                  \
     GLFUNC(PFNGLDELETEFRAMEBUFFERSPROC, DeleteFramebuffers);            \
     GLFUNC(PFNGLCHECKFRAMEBUFFERSTATUSPROC, CheckFramebufferStatus);    \
@@ -74,6 +75,7 @@ extern "C" int isdigit(int c);
 
 namespace Halide { namespace Runtime { namespace Internal {
 
+
 enum OpenGLProfile {
     OpenGL,
     OpenGLES
@@ -83,7 +85,8 @@ struct Argument {
     // The kind of data stored in an argument
     enum Kind {
         Invalid,
-        Var,                            // uniform variable
+        Uniform,                        // uniform variable
+        Varying,                        // varying attribute
         Inbuf,                          // input texture
         Outbuf                          // output texture
     };
@@ -134,7 +137,6 @@ struct GlobalState {
     bool have_texture_float;
 
     // Various objects shared by all filter kernels
-    GLuint vertex_shader_id;
     GLuint framebuffer_id;
     GLuint vertex_array_object;
     GLuint vertex_buffer;
@@ -158,22 +160,12 @@ WEAK GlobalState global_state;
 // A list of module-specific state. Each module corresponds to a single Halide filter
 WEAK ModuleState *state_list;
 
-WEAK const char *vertex_shader_src =
-    "attribute vec2 position;\n"
-    "varying vec2 pixcoord;\n"
-    "uniform ivec2 output_min;\n"
-    "uniform ivec2 output_extent;\n"
-    "void main() {\n"
-    "    gl_Position = vec4(position, 0.0, 1.0);\n"
-    "    vec2 texcoord = 0.5 * position + 0.5;\n"
-    "    pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n"
-    "}\n";
-
 WEAK const char *kernel_marker = "/// KERNEL ";
 WEAK const char *input_marker  = "/// IN_BUFFER ";
 WEAK const char *output_marker = "/// OUT_BUFFER ";
-WEAK const char *var_marker    = "/// VAR ";
-
+WEAK const char *uniform_marker    = "/// UNIFORM ";
+WEAK const char *varying_marker    = "/// VARYING ";
+    
 // ---------- Macros ----------
 
 // Convenience macro for accessing state of the OpenGL runtime
@@ -199,7 +191,7 @@ WEAK const char *var_marker    = "/// VAR ";
         GLenum err = global_state.GetError();                           \
         if (err != GL_NO_ERROR) {                                       \
             LOG_GLERROR(err);                                           \
-            error(user_context) << "OpenGL error";                      \
+            error(user_context) << __FILE__ << ":" << __LINE__ << "OpenGL error " << err; \
             return ERRORCODE;                                           \
         }} while (0)
 
@@ -234,9 +226,19 @@ WEAK void debug_buffer(void *user_context, buffer_t *buf) {
 
 WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
+
+    debug(user_context) << "SHADER SOURCE:\n"
+			<< source << "\n";
+
     GLuint shader = ST.CreateShader(type);
     CHECK_GLERROR(1);
-    ST.ShaderSource(shader, 1, (const GLchar **)&source, length);
+    if (*source == '\0') {
+        debug(user_context) << "Halide GLSL: passed shader source is empty, using default.\n";
+        const char *default_shader = "varying vec2 pixcoord;\n void main() { }";
+        ST.ShaderSource(shader, 1, (const GLchar **)&default_shader, NULL);
+    } else {
+        ST.ShaderSource(shader, 1, (const GLchar **)&source, length);
+    }
     CHECK_GLERROR(1);
     ST.CompileShader(shader);
     CHECK_GLERROR(1);
@@ -307,7 +309,6 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
 
     kernel->source = strndup(src, size);
     kernel->arguments = NULL;
-    kernel->shader_id = 0;
     kernel->program_id = 0;
 
     #ifdef DEBUG_RUNTIME
@@ -344,13 +345,24 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
         const char *args;
         if ((args = match_prefix(line, kernel_marker))) {
             // ignore
-        } else if ((args = match_prefix(line, var_marker))) {
-            if (Argument *arg = parse_argument(user_context, args, next_line - 1)) {
-                arg->kind = Argument::Var;
+        } else if ((args = match_prefix(line, uniform_marker))) {
+            if (Argument *arg =
+                parse_argument(user_context, args, next_line - 1)) {
+                arg->kind = Argument::Uniform;
                 arg->next = kernel->arguments;
                 kernel->arguments = arg;
             } else {
-                error(user_context) << "Invalid VAR marker";
+                halide_error(user_context, "Invalid VAR marker");
+                goto error;
+            }
+        } else if ((args = match_prefix(line, varying_marker))) {
+            if (Argument *arg =
+                parse_argument(user_context, args, next_line - 1)) {
+                arg->kind = Argument::Varying;
+                arg->next = kernel->arguments;
+                kernel->arguments = arg;
+            } else {
+                halide_error(user_context, "Invalid VARYING marker");
                 goto error;
             }
         } else if ((args = match_prefix(line, input_marker))) {
@@ -400,7 +412,6 @@ WEAK KernelInfo *create_kernel(void *user_context, const char *src, int size) {
 // shader and program.
 WEAK void delete_kernel(void *user_context, KernelInfo *kernel) {
     ST.DeleteProgram(kernel->program_id);
-    ST.DeleteShader(kernel->shader_id);
 
     Argument *arg = kernel->arguments;
     while (arg) {
@@ -426,7 +437,6 @@ WEAK void GlobalState::init() {
     profile = OpenGL;
     major_version = 2;
     minor_version = 0;
-    vertex_shader_id = 0;
     framebuffer_id = 0;
     vertex_array_object = vertex_buffer = element_buffer = 0;
     textures = NULL;
@@ -569,14 +579,6 @@ WEAK int halide_opengl_init(void *user_context) {
     ST.GenFramebuffers(1, &ST.framebuffer_id);
     CHECK_GLERROR(1);
 
-    // Initialize vertex shader.
-    ST.vertex_shader_id = make_shader(user_context, GL_VERTEX_SHADER,
-                                      vertex_shader_src, NULL);
-    if (ST.vertex_shader_id == 0) {
-        error(user_context) << "Failed to create vertex shader";
-        return 1;
-    }
-
     // Initialize vertex and element buffers.
     GLuint buf[2];
     ST.GenBuffers(2, buf);
@@ -605,9 +607,10 @@ WEAK int halide_opengl_init(void *user_context) {
 WEAK void halide_opengl_release(void *user_context) {
     if (!ST.initialized) return;
 
-    debug(user_context) << "halide_opengl_release\n";
+#ifdef DEBUG
+    halide_printf(user_context, "halide_opengl_release\n");
+#endif
 
-    ST.DeleteShader(ST.vertex_shader_id);
     ST.DeleteFramebuffers(1, &ST.framebuffer_id);
 
     ModuleState *mod = state_list;
@@ -877,16 +880,83 @@ WEAK int halide_opengl_init_kernels(void *user_context, void **state_ptr,
         module->kernel = kernel;
     }
 
-    if (kernel->program_id == 0) {
-        // Compile shader
-        kernel->shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
-                                        kernel->source, NULL);
 
+    if (kernel->program_id == 0) {
+
+        // Create the vertex shader the runtime will output boilerplate for the
+        // vertex shader based on a fixed program plus arguments obtained from
+        // the comment header passed in the fragment shader. Since there is a
+        // relatively small number of vertices (i.e. usually only four) per
+        // vertex expressions interpolated by varying attributes are evaluated
+        // by host code on the CPU and passed to the GPU as values in the
+        // vertex buffer.
+        enum { PrinterLength = 1024*256 };
+        Printer<StringStreamPrinter,PrinterLength> vertex_src(user_context);
+
+        // Count the number of varying attributes, this is 2 for the spatial
+        // x and y coordinates, plus the number of scalar varying attribute
+        // expressions pulled out of the fragment shader.
+        int num_varying_float = 2;
+
+        for (Argument* arg = kernel->arguments; arg; arg=arg->next) {
+            if (arg->kind == Argument::Varying)
+                ++num_varying_float;
+        }
+
+        int num_packed_varying_float = ((num_varying_float + 3) & ~0x3) / 4;
+
+        for (int i = 0; i != num_packed_varying_float; ++i) {
+            vertex_src << "attribute vec4 _varyingf" << i << "_attrib;\n";
+            vertex_src << "varying   vec4 _varyingf" << i << ";\n";
+        }
+        
+        vertex_src << "uniform ivec2 output_min;\n"
+                   << "uniform ivec2 output_extent;\n"
+                   << "void main() {\n"
+
+                   // Host codegen always passes the spatial vertex coordinates
+                   // in the first two elements of the _varyingf0_attrib
+                   << "    vec2 position = vec2(_varyingf0_attrib[0], _varyingf0_attrib[1]);\n"
+                   << "    gl_Position = vec4(position, 0.0, 1.0);\n"
+                   << "    vec2 texcoord = 0.5 * position + 0.5;\n"
+                   << "    vec2 pixcoord = texcoord * vec2(output_extent.xy) + vec2(output_min.xy);\n";
+
+        // Copy through all of the varying attributes
+        for (int i = 0; i != num_packed_varying_float; ++i) {
+            vertex_src << "    _varyingf" << i << " = _varyingf" << i << "_attrib;\n";
+        }
+
+        vertex_src << "    _varyingf0.xy = pixcoord;\n";
+
+        vertex_src << "}\n";
+
+        // Check to see if there was sufficient storage for the vertex program.
+        if (vertex_src.size() >= PrinterLength) {
+            error(user_context) << "Vertex shader source truncated";
+            return 1;
+        }
+        
+        // Initialize vertex shader.
+        GLuint vertex_shader_id = make_shader(user_context,
+                                              GL_VERTEX_SHADER, vertex_src.buf, NULL);
+        if (vertex_shader_id == 0) {
+            halide_error(user_context, "Failed to create vertex shader");
+            return 1;
+        }
+        
+        // Create the fragment shader
+        GLuint fragment_shader_id = make_shader(user_context, GL_FRAGMENT_SHADER,
+                                                kernel->source, NULL);
         // Link GLSL program
         GLuint program = ST.CreateProgram();
-        ST.AttachShader(program, ST.vertex_shader_id);
-        ST.AttachShader(program, kernel->shader_id);
+        ST.AttachShader(program, vertex_shader_id);
+        ST.AttachShader(program, fragment_shader_id);
         ST.LinkProgram(program);
+
+        // Release the individual shaders
+        ST.DeleteShader(vertex_shader_id);
+        ST.DeleteShader(fragment_shader_id);
+        
         GLint status;
         ST.GetProgramiv(program, GL_LINK_STATUS, &status);
         if (!status) {
@@ -1042,12 +1112,14 @@ WEAK int get_pixels(void *user_context, buffer_t *buf, GLint format, GLint type,
         return 1;
     }
     ST.ReadPixels(0, 0, buf->extent[0], buf->extent[1], format, type, dest);
+
     ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
     return 0;
 }
 
 // Copy image data from texture back to host memory.
 WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
+
     CHECK_INITIALIZED(1);
     if (!buf->dev_dirty) {
         return 0;
@@ -1096,6 +1168,7 @@ WEAK int halide_opengl_copy_to_host(void *user_context, buffer_t *buf) {
         }
 
         ST.PixelStorei(GL_PACK_ALIGNMENT, 1);
+
         if (int err = get_pixels(user_context, buf, format, type, tmp)) {
             halide_free(user_context, tmp);
             return err;
@@ -1129,7 +1202,14 @@ WEAK void set_float_param(void *user_context, const char *name,
                           GLint loc, GLfloat value) {
     ST.Uniform1fv(loc, 1, &value);
 }
-
+    
+class IndexSorter {
+public:
+    IndexSorter(float* values_) : values(values_) {  }
+    
+    bool operator()(int a, int b) { return values[a] < values[b]; }
+    float* values;
+};
 
 WEAK int halide_opengl_dev_run(
     void *user_context,
@@ -1139,7 +1219,11 @@ WEAK int halide_opengl_dev_run(
     int threadsX, int threadsY, int threadsZ,
     int shared_mem_bytes,
     size_t arg_sizes[],
-    void *args[]) {
+    void *args[],
+    int num_padded_attributes,
+    float* vertex_buffer,
+    int num_coords_dim0,
+    int num_coords_dim1) {
     CHECK_INITIALIZED(1);
 
     ModuleState *mod = (ModuleState *)state_ptr;
@@ -1157,21 +1241,72 @@ WEAK int halide_opengl_dev_run(
     ST.UseProgram(kernel->program_id);
     CHECK_GLERROR(1);
 
-    Argument *kernel_arg;
+    // TODO(abstephensg) it would be great to codegen these vec4 uniform buffers
+    // directly, instead of passing an array of arguments and then copying them
+    // out at runtime.
+
+    // Determine the number of float and int uniform parameters. This code
+    // follows the argument packing convention in CodeGen_GPU_Host and
+    // CodeGen_OpenGL_Dev
+    int num_uniform_floats = 0;
+    int num_uniform_ints = 0;
+
+    Argument *kernel_arg = kernel->arguments;
+    for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
+
+        // Check for a mismatch between the number of arguments declared in the
+        // fragment shader source header and the number passed to this function
+        if (!kernel_arg) {
+            error(user_context)
+            << "Too many arguments passed to halide_opengl_dev_run\n"
+            << "Argument " << i << ": size=" << i << " value=" << args[i];
+            return 1;
+        }
+
+        // Count the number of float and int uniform parameters.
+        if (kernel_arg->kind == Argument::Uniform) {
+            switch (kernel_arg->type) {
+                case Argument::Float:
+                // Integer parameters less than 32 bits wide are passed as
+                // normalized float values
+                case Argument::Int8:
+                case Argument::UInt8:
+                case Argument::Int16:
+                case Argument::UInt16:
+                    ++num_uniform_floats;
+                    break;
+                case Argument::Bool:
+                case Argument::Int32:
+                case Argument::UInt32:
+                    ++num_uniform_ints;
+                    break;
+                default:
+                    error(user_context) << "GLSL: Encountered invalid kernel argument type";
+                    return 1;
+            }
+        }
+    }
+
+    // Pad up to a multiple of four
+    int num_padded_uniform_floats = (num_uniform_floats + 0x3) & ~0x3;
+    int num_padded_uniform_ints   = (num_uniform_ints + 0x3) & ~0x3;
+
+    // Allocate storage for the packed arguments
+    float uniform_float[num_padded_uniform_floats];
+    int   uniform_int[num_padded_uniform_ints];
+
     bool bind_render_targets = true;
 
     // Copy input arguments to corresponding GLSL uniforms.
     GLint num_active_textures = 0;
+    int uniform_float_idx = 0;
+    int uniform_int_idx = 0;
+
     kernel_arg = kernel->arguments;
     for (int i = 0; args[i]; i++, kernel_arg = kernel_arg->next) {
-        if (!kernel_arg) {
-            error(user_context)
-                << "Too many arguments passed to halide_opengl_dev_run\n"
-                << "Argument " << i << ": size=" << i << " value=" << args[i];
-            return 1;
-        }
 
         if (kernel_arg->kind == Argument::Outbuf) {
+
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
             GLuint tex = *((GLuint *)args[i]);
@@ -1191,63 +1326,56 @@ WEAK int halide_opengl_dev_run(
             GLuint tex = *((GLuint *)args[i]);
             ST.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             ST.BindTexture(GL_TEXTURE_2D, tex);
+
+            // Textures not created by the Halide runtime might not have
+            // parameters set, or might have had parameters set differently 
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            ST.TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
             ST.Uniform1iv(loc, 1, &num_active_textures);
             num_active_textures++;
             // TODO: check maximum number of active textures
-        } else if (kernel_arg->kind == Argument::Var) {
-            GLint loc =
-                ST.GetUniformLocation(kernel->program_id, kernel_arg->name);
-            CHECK_GLERROR(1);
-            if (loc == -1) {
-                // Argument was probably optimized away by GLSL compiler.
-                continue;
-            }
+        } else if (kernel_arg->kind == Argument::Uniform) {
+
+            // Copy the uniform parameter into the packed scalar list
+            // corresponding to its type.
 
             // Note: small integers are represented as floats in GLSL.
             switch (kernel_arg->type) {
             case Argument::Float:
-                set_float_param(user_context, kernel_arg->name, loc, *(float*)args[i]);
+                uniform_float[uniform_float_idx++] = *(float*)args[i];
                 break;
-            case Argument::Bool: {
-                GLint value = *((bool*)args[i]) ? 1 : 0;
-                set_int_param(user_context, kernel_arg->name, loc, value);
+            case Argument::Bool:
+                uniform_int[uniform_int_idx++] = *((bool*)args[i]) ? 1 : 0;
                 break;
-            }
-            case Argument::Int8: {
-                GLfloat value = *((int8_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+            case Argument::Int8:
+                uniform_float[uniform_float_idx++] = *((int8_t*)args[i]);
                 break;
-            }
-            case Argument::UInt8: {
-                GLfloat value = *((uint8_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+            case Argument::UInt8:
+                uniform_float[uniform_float_idx++] = *((uint8_t*)args[i]);
                 break;
-            }
             case Argument::Int16: {
-                GLfloat value = *((int16_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+                uniform_float[uniform_float_idx++] = *((int16_t*)args[i]);
                 break;
             }
             case Argument::UInt16: {
-                GLfloat value = *((uint16_t*)args[i]);
-                set_float_param(user_context, kernel_arg->name, loc, value);
+                uniform_float[uniform_float_idx++] = *((uint16_t*)args[i]);
                 break;
             }
             case Argument::Int32: {
-                GLint value = *((int32_t*)args[i]);
-                set_int_param(user_context, kernel_arg->name, loc, value);
+                uniform_int[uniform_int_idx++] = *((int32_t*)args[i]);
                 break;
             }
             case Argument::UInt32: {
                 uint32_t value = *((uint32_t*)args[i]);
-                GLint signed_value;
                 if (value > 0x7fffffff) {
                     error(user_context)
                         << "GLSL: argument '" << kernel_arg->name << "' is too large for GLint";
                     return -1;
                 }
-                signed_value = static_cast<GLint>(value);
-                set_int_param(user_context, kernel_arg->name, loc, signed_value);
+                uniform_int[uniform_int_idx++] = static_cast<GLint>(value);
                 break;
             }
             case Argument::Void:
@@ -1256,9 +1384,44 @@ WEAK int halide_opengl_dev_run(
             }
         }
     }
+
     if (kernel_arg) {
-        error(user_context) << "Too few arguments passed to halide_opengl_dev_run";
+        halide_error(user_context, "Too few arguments passed to halide_opengl_dev_run");
         return 1;
+    }
+
+    // Set the packed uniform int parameters
+    for (int idx = 0; idx != num_padded_uniform_ints; idx += 4) {
+
+        // Produce the uniform parameter name without using the std library.
+        Printer<StringStreamPrinter,16> name(user_context);
+        name << "_uniformi" << (idx/4);
+
+        GLint loc = ST.GetUniformLocation(kernel->program_id, name.str());
+        CHECK_GLERROR(1);
+        if (loc == -1) {
+            // Argument was probably optimized away by GLSL compiler.
+            continue;
+        }
+
+        ST.Uniform4iv(loc,1,&uniform_int[idx]);
+    }
+
+    // Set the packed uniform float parameters
+    for (int idx = 0; idx != num_padded_uniform_floats; idx += 4) {
+
+        // Produce the uniform parameter name without using the std library.
+        Printer<StringStreamPrinter,16> name(user_context);
+        name << "_uniformf" << (idx/4);
+
+        GLint loc = ST.GetUniformLocation(kernel->program_id, name.str());
+        CHECK_GLERROR(1);
+        if (loc == -1) {
+            // Argument was probably optimized away by GLSL compiler.
+            continue;
+        }
+
+        ST.Uniform4fv(loc,1,&uniform_float[idx]);
     }
 
     // Prepare framebuffer for rendering to output textures.
@@ -1342,30 +1505,129 @@ WEAK int halide_opengl_dev_run(
     GLint loc = ST.GetUniformLocation(kernel->program_id, "output_extent");
     ST.Uniform2iv(loc, 1, output_extent);
     CHECK_GLERROR(1);
+    
     loc = ST.GetUniformLocation(kernel->program_id, "output_min");
     ST.Uniform2iv(loc, 1, output_min);
     CHECK_GLERROR(1);
 
+#if 0 // DEBUG_RUNTIME
+    debug(user_context) << "output_extent: " << output_extent[0] << "," << output_extent[1] << "\n";
+    debug(user_context) << "output_min: " << output_min[0] << "," << output_min[1] << "\n";
+#endif
+
+    // TODO(abestephensg): Sort coordinate dimensions when the linear solver is integrated
+    // Sort the coordinates
+
+    // Construct an element buffer using the sorted vertex order
+    int width = num_coords_dim0;
+    int height = num_coords_dim1;
+
+    int vertex_buffer_size = width*height*num_padded_attributes;
+
+    int element_buffer_size = (width-1)*(height-1)*6;
+    int element_buffer[element_buffer_size];
+    
+    int idx = 0;
+    for (int h=0;h!=(height-1);++h) {
+        for (int w=0;w!=(width-1);++w) {
+
+            // TODO(abestephensg): Use sorted coordinates when integrated
+            int v = w+h*width;
+            element_buffer[idx++] = v;
+            element_buffer[idx++] = v+1;
+            element_buffer[idx++] = v+width+1;
+            
+            element_buffer[idx++] = v+width+1;
+            element_buffer[idx++] = v+width;
+            element_buffer[idx++] = v;
+        }
+    }
+    
+
+#if 0 // DEBUG_RUNTIME
+    debug(user_context) << "Vertex buffer:";
+    for (int i=0;i!=vertex_buffer_size;++i) {
+        if (!(i%num_padded_attributes)) {
+	  debug(user_context) << "\n";
+        }
+        debug(user_context) << vertex_buffer[i] << " ";
+    }
+    debug(user_context) << "\n";
+    debug(user_context) << "\n";
+    
+    debug(user_context) << "Element buffer:";
+    for (int i=0;i!=element_buffer_size;++i) {
+        if (!(i%3)) {
+            debug(user_context) << "\n";
+        }        
+        debug(user_context) << element_buffer[i] << " ";
+    }
+    debug(user_context) << "\n";
+#endif 
+    
     // Setup viewport
     ST.Viewport(0, 0, output_extent[0], output_extent[1]);
 
-    // Execute shader by drawing a screen-filling quad
+    // Setup the vertex and element buffers
+    GLuint vertex_array_object = 0;
     if (ST.have_vertex_array_objects) {
-        ST.BindVertexArray(ST.vertex_array_object);
+        ST.GenVertexArrays(1,&vertex_array_object);
+        ST.BindVertexArray(vertex_array_object);
     }
-    GLint position = ST.GetAttribLocation(kernel->program_id, "position");
-    ST.EnableVertexAttribArray(position);
-    ST.BindBuffer(GL_ARRAY_BUFFER, ST.vertex_buffer);
-    ST.VertexAttribPointer(position, 2, GL_FLOAT, GL_FALSE, 0, NULL);
-    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ST.element_buffer);
-    ST.DrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_INT, NULL);
-    ST.DisableVertexAttribArray(position);
-    ST.BindBuffer(GL_ARRAY_BUFFER, 0);
-    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    if (ST.have_vertex_array_objects) {
-        ST.BindVertexArray(0);
-    }
+
+    GLuint vertex_buffer_id;
+    ST.GenBuffers(1,&vertex_buffer_id);
+    ST.BindBuffer(GL_ARRAY_BUFFER, vertex_buffer_id);
+    ST.BufferData(GL_ARRAY_BUFFER, sizeof(float)*vertex_buffer_size, vertex_buffer, GL_STATIC_DRAW);
     CHECK_GLERROR(1);
+    
+    GLuint element_buffer_id;
+    ST.GenBuffers(1,&element_buffer_id);
+    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_id);
+    ST.BufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(float)*element_buffer_size, element_buffer, GL_STATIC_DRAW);
+    CHECK_GLERROR(1);
+
+    // The num_padded_attributes argument is the number of vertex attributes,
+    // including the spatial x and y coordinates, padded up to a multiple of
+    // four so that the attributes may be packed into vec4 slots.
+    int num_packed_attributes = num_padded_attributes/4;
+
+    // Set up the per vertex attributes
+    GLint attrib_ids[num_packed_attributes];
+
+    for (int i=0;i!=num_packed_attributes;i++) {
+
+        // The attribute names can synthesized by the runtime based on the
+        // number of packed varying attributes
+        Printer<StringStreamPrinter> attribute_name(user_context);
+        attribute_name << "_varyingf" << i << "_attrib";
+
+        // TODO(abstephensg): Switch to glBindAttribLocation
+        GLint attrib_id = ST.GetAttribLocation(kernel->program_id, attribute_name.buf);
+        attrib_ids[i] = attrib_id;
+
+        // Check to see if the varying attribute was simplified out of the
+        // program by the GLSL compiler.
+        if (attrib_id == -1) {
+          continue;
+        }
+
+        ST.VertexAttribPointer(attrib_id, 4, GL_FLOAT, GL_FALSE /* Normalized */, sizeof(GLfloat)*num_padded_attributes, (void*)(i*sizeof(GLfloat)*4));
+        CHECK_GLERROR(1);
+        
+        ST.EnableVertexAttribArray(attrib_id);
+        CHECK_GLERROR(1);
+    }
+
+
+    // Draw the scene
+    ST.DrawElements(GL_TRIANGLES, element_buffer_size, GL_UNSIGNED_INT, NULL);
+    CHECK_GLERROR(1);
+    
+    for (int i=0;i!=num_packed_attributes;++i) {
+        if (attrib_ids[i] != -1)
+            ST.DisableVertexAttribArray(attrib_ids[i]);
+    }
 
     // Cleanup
     for (int i = 0; i < num_active_textures; i++) {
@@ -1376,6 +1638,17 @@ WEAK int halide_opengl_dev_run(
     if (bind_render_targets) {
         ST.BindFramebuffer(GL_FRAMEBUFFER, 0);
     }
+
+    ST.BindBuffer(GL_ARRAY_BUFFER, 0);
+    ST.BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+    if (ST.have_vertex_array_objects) {
+        ST.BindVertexArray(0);
+        ST.DeleteVertexArrays(1,&vertex_array_object);
+    }
+
+    ST.DeleteBuffers(1,&vertex_buffer_id);
+    ST.DeleteBuffers(1,&element_buffer_id);
 
     return 0;
 }
@@ -1431,18 +1704,26 @@ WEAK int halide_copy_to_dev(void *user_context, buffer_t *buf) {
 }
 
 WEAK int halide_dev_run(void *user_context,
-                        void *state_ptr,
-                        const char *entry_name,
-                        int blocksX, int blocksY, int blocksZ,
-                        int threadsX, int threadsY, int threadsZ,
-                        int shared_mem_bytes,
-                        size_t arg_sizes[], void *args[]) {
+                          void *state_ptr,
+                          const char *entry_name,
+                          int blocksX, int blocksY, int blocksZ,
+                          int threadsX, int threadsY, int threadsZ,
+                          int shared_mem_bytes,
+                          size_t arg_sizes[], void *args[],
+                          int num_padded_attributes,
+                          float* vertex_buffer,
+                          int num_coords_dim0,
+                          int num_coords_dim1) {
     return halide_opengl_dev_run(user_context, state_ptr,
                                  entry_name,
                                  blocksX, blocksY, blocksZ,
                                  threadsX, threadsY, threadsY,
                                  shared_mem_bytes,
-                                 arg_sizes, args);
+                                 arg_sizes, args,
+                                 num_padded_attributes,
+                                 vertex_buffer,
+                                 num_coords_dim0,
+                                 num_coords_dim1);
 }
 
 WEAK int halide_dev_sync(void *user_context) {
