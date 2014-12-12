@@ -978,10 +978,8 @@ private:
     }
 
     StmtOrExpr make_branch_content(const For *op, const vector<StmtOrExpr> &args) {
-        internal_assert(args[0].defined()) << "Branch for loop min undefined.\n";
-        internal_assert(args[1].defined()) << "Branch for loop extent undefined.\n";
         if (!args[2].defined()) {
-            return Evaluate::make(0);
+            return Stmt();
         }
 
         return For::make(op->name, args[0], args[1], op->for_type, args[2]);
