@@ -37,6 +37,7 @@ IntImm IntImm::small_int_cache[] = {make_immortal_int(-8),
 
 Expr Cast::make(Type t, Expr v) {
     internal_assert(v.defined()) << "Cast of undefined\n";
+    internal_assert(t.width == v.type().width) << "Cast between different widths\n";
 
     Cast *node = new Cast;
     node->type = t;

@@ -7,6 +7,7 @@
 #include "Deinterleave.h"
 #include "Substitute.h"
 #include "IROperator.h"
+#include "IRMatch.h"
 
 namespace Halide {
 namespace Internal {
@@ -140,28 +141,116 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const Call *op) {
-            vector<Expr> new_args(op->args.size());
-            bool changed = false;
 
-            // Mutate the args
-            int max_width = 0;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Expr old_arg = op->args[i];
-                Expr new_arg = mutate(old_arg);
-                if (!new_arg.same_as(old_arg)) changed = true;
-                new_args[i] = new_arg;
-                max_width = std::max(new_arg.type().width, max_width);
-            }
+            // The shuffle_vector intrinsic has a different argument passing
+            // convention than the rest of Halide. Instead of passing widened
+            // expressions, individual scalar expressions for each lane are
+            // passed as a variable number of arguments to the intrinisc.
+            if (op->name == Call::shuffle_vector &&
+                op->call_type == Call::Intrinsic) {
 
-            if (!changed) {
-                expr = op;
-            } else {
-                // Widen the args to have the same width as the max width found
-                for (size_t i = 0; i < new_args.size(); i++) {
-                    new_args[i] = widen(new_args[i], max_width);
+                int replacement_width = replacement.type().width;
+                int shuffle_width = op->type.width;
+
+                internal_assert(shuffle_width == op->args.size()-1);
+
+                // To widen successfully, the intrinisic must either produce a
+                // vector width result or a scalar result that we can broadcast.
+                if (shuffle_width == replacement_width) {
+                    // No mutation is necessary to produce a replacment width
+                    // result
+                    expr = op;
+
+                } else if (shuffle_width == 1) {
+
+                    // Otherwise, the shuffle produces a scalar result
+                    internal_assert(op->args[1].type().width == 1);
+                    Expr mutated_channel = mutate(op->args[1]);
+                    int mutated_width = mutated_channel.type().width;
+
+                    // Determine how to mutate the intrinsic. If the mutated
+                    // channel expression matches the for-loop variable
+                    // replacement exactly, and is the same width as the
+                    // existing vector expression, then we can remove the
+                    // shuffle_vector intrinisic and return the vector
+                    // expression it contains directly.
+                    if (expr_match(replacement,mutated_channel) &&
+                        (op->args[0].type().width == replacement_width)) {
+
+                        // TODO: The potential problem is that values of Lets
+                        // for variables within the expression may have been
+                        // widened already.
+
+                        // This is because the test in visit(const Let *) for
+                        // whether or not the value was vectorized is simply
+                        // whether or not the expression is a vector after it is
+                        // mutated.
+
+                        expr = op->args[0];
+
+                    } else if (mutated_width == replacement_width) {
+                        // Otherwise, if the mutated channel width matches the
+                        // vectorized width but the expression is not a simple
+                        // ramp across the whole width, then convert the channel
+                        // expression into shuffle_vector intrinsic arguments.
+                        vector<Expr> new_args(1+replacement_width);
+
+                        // Append the vector expression as the first argument
+                        new_args[0] = op->args[0];
+
+                        // Extract each channel of the mutated channel
+                        // expression, each is passed as a separate argument to
+                        // shuffle_vector
+                        for (int i = 0; i != replacement_width; ++i) {
+                            new_args[1+i] = extract_lane(mutated_channel, i);
+                        }
+
+                        expr = Call::make(op->type.vector_of(replacement_width),
+                                          op->name, new_args, op->call_type,
+                                          op->func, op->value_index, op->image,
+                                          op->param);
+
+                    } else {
+                        internal_assert(mutated_width == 1);
+                        // Otherwise this shuffle_vector is independent of the
+                        // dimension being vectorized, and the scalar result of
+                        // the operation should be broadcast, just like an
+                        // ordinary scalar expression.
+                        expr = widen(op, replacement_width);
+                    }
+
+                } else {
+                    // If the shuffle_vector result is not a scalar or the
+                    // correct width, there are no rules for how to widen it.
+                    internal_error << "Mismatched vector widths in VectorSubs for shuffle_vector\n";
                 }
-                expr = Call::make(op->type.vector_of(max_width), op->name, new_args,
-                                  op->call_type, op->func, op->value_index, op->image, op->param);
+
+            } else {
+                // Otherwise, widen the call by changing the width of all of its
+                // arguments and its return type
+                vector<Expr> new_args(op->args.size());
+                bool changed = false;
+
+                // Mutate the args
+                int max_width = 0;
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    Expr old_arg = op->args[i];
+                    Expr new_arg = mutate(old_arg);
+                    if (!new_arg.same_as(old_arg)) changed = true;
+                    new_args[i] = new_arg;
+                    max_width = std::max(new_arg.type().width, max_width);
+                }
+
+                if (!changed) {
+                    expr = op;
+                } else {
+                    // Widen the args to have the same width as the max width found
+                    for (size_t i = 0; i < new_args.size(); i++) {
+                        new_args[i] = widen(new_args[i], max_width);
+                    }
+                    expr = Call::make(op->type.vector_of(max_width), op->name, new_args,
+                                      op->call_type, op->func, op->value_index, op->image, op->param);
+                }
             }
         }
 

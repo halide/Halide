@@ -20,66 +20,6 @@ using std::map;
 
 namespace {
 
-// In the event that the Call::glsl_texture_load intrinsic was vectorized,
-// the individual coordinates may be codegen'ed as GLSL vecN types instead of
-// scalars. In this case we un-vectorize the expression for the arguments by
-// removing the broadcast added by vectorize_loops.
-class UnvectorizeIntrinsicArg : public IRMutator {
-public:
-    using IRMutator::visit;
-    
-    virtual void visit(const Cast *op) {
-        Type t = op->type;
-        t.width = 1;
-        expr = Cast::make(t, mutate(op->value));
-    }
-    virtual void visit(const Variable *op) {
-        Type t = op->type;
-        t.width = 1;
-        expr = Cast::make(t, Variable::make(op->type, op->name,
-                                           op->image, op->param,
-                                           op->reduction_domain));
-    }
-    virtual void visit(const Ramp *) {
-        // Only scalar expressions that have been widened to vector width
-        // may be unvectorized by this visitor. The Call::glsl_texture_load
-        // intrinsic coordinate parameters start off as scalars, it is an error
-        // if some other pass mutates them into a form other than a broadcast
-        // scalar.
-        internal_error << "Cannot unvectorize ramp for Call::glsl_texture_load"
-                       << "coordinate argument";
-    }
-    virtual void visit(const Broadcast *op) {
-        expr = mutate(op->value);
-    }
-    virtual void visit(const Call *op) {
-        if (op->name == Call::glsl_texture_load) {
-            // TODO: The problem here is that we vectorize the coordinate
-            // arguments to a Call::glsl_texture_load, as if it was a scalar
-            // function that returned a scalar value, however, the function has
-            // scalar arguments and returns a vector width value.
-            //
-            // In the dependent texture lookup case, we don't have a way in the
-            // IR to CSE'ify out the texture load and then use two channels
-            // from it as the scalar arguments to the dependent lookup.
-            internal_error << "Dependent texture loads are unsupported";
-        }
-
-        // TODO: The fix here is likely to not vectorize a call's arguments in a
-        // manner that subsequently cannot be codegen'ed and must be undone. In
-        // this case, for an arbitrary call, we can't determine if the call
-        // actually returns a vector width of data or if it is a scalar function
-        // that has been widened by VectorizeLoops
-        internal_error << "Cannot unvectorize argument in Call::glsl_texture_load";
-    }
-
-};
-    
-Expr unvectorize_intrinsic_arg(Expr e) {
-
-    UnvectorizeIntrinsicArg s;
-    return s.mutate(e);
-}
     
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
@@ -439,7 +379,9 @@ void CodeGen_GLSL::visit(const Call *op) {
     ostringstream rhs;
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::glsl_texture_load) {
-            internal_assert(op->args.size() == 5);
+            // This intrinsic takes four arguments
+            // glsl_texture_load(<tex name>, <buffer>, <x>, <y>)
+            internal_assert(op->args.size() == 4);
 
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
@@ -457,14 +399,12 @@ void CodeGen_GLSL::visit(const Call *op) {
             internal_assert((op->type.code == Type::UInt || op->type.code == Type::Float) &&
                             (op->type.width >= 1 && op->type.width <= 4));
 
-            // In the event that this intrinsic was vectorized, the individual
-            // coordinates may be GLSL vecN types instead of scalars. In this case
-            // we un-vectorize the expression with unvectorize_intrinsic_arg(...)
+            internal_assert(op->args[2].type().width == 1) << "glsl_texture_load argument 2 is not scalar";
+            internal_assert(op->args[3].type().width == 1) << "glsl_texture_load argument 3 is not scalar";
 
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                << print_expr(unvectorize_intrinsic_arg(op->args[2])) << ", "
-                << print_expr(unvectorize_intrinsic_arg(op->args[3])) << "))"
-                << get_vector_suffix(op->args[4]);
+                << print_expr(op->args[2]) << ", "
+                << print_expr(op->args[3]) << "))";
             if (op->type.is_uint())
                 rhs << " * " << op->type.imax() << ".0";
 
@@ -489,6 +429,58 @@ void CodeGen_GLSL::visit(const Call *op) {
             // Output the tagged expression.
             print_expr(op->args[1]);
             return;
+
+        } else if (op->name == Call::shuffle_vector) {
+            // The halide intrinisc shuffle_vector represents the llvm intrinisc
+            // shufflevector, however, for GLSL its use is limited to swizzling
+            // up to a four channel vec type.
+
+            int shuffle_width = op->type.width;
+            internal_assert(shuffle_width <= 4);
+
+            string expr = print_expr(op->args[0]);
+
+            // If all of the shuffle channel expressions are simple integer
+            // immediates, then we can easily replace them with a swizzle
+            // operator. This is a common case that occurs when a scalar
+            // shuffle vector expression is vectorized.
+            bool all_int = true;
+            for (int i = 0; i != shuffle_width && all_int; ++i) {
+                all_int = all_int && op->args[1+i].as<IntImm>() != NULL;
+            }
+
+            // Check if the shuffle maps to a canonical type like .r or .rgb
+            if (all_int) {
+
+                // Create a swizzle expression for the shuffle
+                static constexpr const char* channels = "rgba";
+                string swizzle;
+
+                for (int i = 0; i != shuffle_width && all_int; ++i) {
+                    int channel = op->args[1+i].as<IntImm>()->value;
+                    internal_assert(channel < 4) << "Shuffle of invalid channel";
+                    swizzle += channels[channel];
+                }
+
+                rhs << expr << "." << swizzle;
+
+            } else {
+
+                // Otherwise, create a result type variable and copy each channel to
+                // it individually.
+                string v = unique_name('_');
+                do_indent();
+                stream << print_type(op->type) << " " << v << ";\n";
+
+                for (int i = 0; i != shuffle_width; ++i) {
+                    do_indent();
+                    stream << v << get_vector_suffix(i) << " = "
+                    << expr << get_vector_suffix(op->args[1+i]) << ";\n";
+                }
+
+                id = v;
+                return;
+            }
 
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
@@ -861,24 +853,9 @@ void CodeGen_GLSL::test() {
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
-                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 4)),
+                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0)),
                             Call::Intrinsic);
-    Expr load2 = Call::make(Float(32, 2), Call::glsl_texture_load,
-                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 2)),
-                            Call::Intrinsic);
-    check(load2, "vec2 $ = texture2D($buf, vec2(0, 0)).rg;\n");
     check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
-
-    // Test combination of select and texture operations.
-    // TODO: The code below is correct but probably slower than necessary.
-    // Ideally, we could perform just one single texture operation.
-    check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
-                       Broadcast::make(1.f, 4),
-                       load4),
-          "float $ = texture2D($buf, vec2(0, 0))[0];\n"
-          "float $ = texture2D($buf, vec2(0, 0))[2];\n"
-          "float $ = texture2D($buf, vec2(0, 0))[3];\n"
-          "vec4 $ = vec4($, 1.0, $, $);\n");
 
     check(log(1.0f), "float $ = log(1.0);\n");
     check(exp(1.0f), "float $ = exp(1.0);\n");
