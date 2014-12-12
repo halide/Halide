@@ -240,6 +240,14 @@ bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     }
 }
 
+bool expr_match(Expr pattern, Expr expr) {
+    // This version of expr_match does not require the caller to pass a
+    // reference to a vector of matches
+
+    vector<Expr> unused;
+    return expr_match(pattern, expr, unused);
+}
+
 bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
