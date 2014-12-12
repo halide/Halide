@@ -234,6 +234,8 @@ public:
         queue<string> bounds_vars;
         for (int i = branches.size()-1; i >= 0; --i) {
             Branch &branch = branches[i];
+            if (!branch.content.defined()) continue;
+
             Expr branch_extent = branch.extent;
             Expr branch_min = branch.min;
             Expr branch_max = simplify(branch_min + branch_extent - 1);
@@ -976,6 +978,12 @@ private:
     }
 
     StmtOrExpr make_branch_content(const For *op, const vector<StmtOrExpr> &args) {
+        internal_assert(args[0].defined()) << "Branch for loop min undefined.\n";
+        internal_assert(args[1].defined()) << "Branch for loop extent undefined.\n";
+        if (!args[2].defined()) {
+            return Evaluate::make(0);
+        }
+
         return For::make(op->name, args[0], args[1], op->for_type, args[2]);
     }
 
