@@ -21,6 +21,7 @@
 #include "SlidingWindow.h"
 #include "StorageFolding.h"
 #include "RemoveTrivialForLoops.h"
+#include "RemoveTrivialAllocations.h"
 #include "Deinterleave.h"
 #include "DebugToFile.h"
 #include "EarlyFree.h"
@@ -1858,6 +1859,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
 
     debug(1) << "Specializing branched loops...\n";
     s = specialize_branched_loops(s);
+    s = remove_trivial_allocations(s);
     s = simplify(s);
     s = remove_trivial_for_loops(s);
     debug(2) << "Lowering after specializing branched loops:\n" << s << "\n\n";
