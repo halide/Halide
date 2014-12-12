@@ -191,6 +191,7 @@ int main(int argc, char **argv) {
       g(x, c) = select(c == 0, f(x), x*5);
       f.compute_at(g, c);
 
+      g.compile_to_lowered_stmt("conditional_alloc.stmt");
       Image<int> result = g.realize(100, 3);
       for (int c = 0; c < 3; c++) {
         for (int x = 0; x < 100; x++) {
