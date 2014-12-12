@@ -79,6 +79,12 @@ WITH_EIGEN = 1
 EIGEN_CXX_FLAGS = -DWITH_EIGEN -I$(EIGEN_DIR)
 endif
 
+ifdef BLAS_DIR
+WITH_BLAS = 1
+BLAS_CXX_FLAGS = -DWITH_BLAS -I$(BLAS_DIR)/include
+BLAS_LDFLAGS = -L$(BLAS_DIR)/lib -lblas
+endif
+
 NATIVE_CLIENT_CXX_FLAGS = $(if $(WITH_NATIVE_CLIENT), -DWITH_NATIVE_CLIENT=1, )
 NATIVE_CLIENT_LLVM_CONFIG_LIB = $(if $(WITH_NATIVE_CLIENT), nacltransforms, )
 
@@ -120,6 +126,7 @@ CXX_FLAGS += $(MIPS_CXX_FLAGS)
 CXX_FLAGS += $(INTROSPECTION_CXX_FLAGS)
 CXX_FLAGS += $(EXCEPTIONS_CXX_FLAGS)
 CXX_FLAGS += $(EIGEN_CXX_FLAGS)
+CXX_FLAGS += $(BLAS_CXX_FLAGS)
 
 LLVM_35_OR_OLDER = $(findstring $(LLVM_VERSION_TIMES_10), 32 33 34 35)
 ifneq ($(LLVM_35_OR_OLDER), )
@@ -175,6 +182,7 @@ endif
 
 TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -g -fno-omit-frame-pointer
 TEST_CXX_FLAGS += $(EIGEN_CXX_FLAGS)
+TEST_CXX_FLAGS += $(BLAS_CXX_FLAGS)
 ifeq ($(UNAME), Linux)
 TEST_CXX_FLAGS += -rdynamic
 ifneq ($(TEST_PTX), )
@@ -459,18 +467,29 @@ $(FILTERS_DIR)/user_context_insanity.o $(FILTERS_DIR)/user_context_insanity.h: $
 	@-mkdir -p tmp
 	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) target=$(HL_TARGET)-user_context
 
-# "matrix_multiply_func" is produced by using matrix_multiply with different generator args.
-$(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_func.h: $(FILTERS_DIR)/matrix_multiply.generator
+# "matrix_multiply_0" is produced by using matrix_multiply with different generator args.
+$(FILTERS_DIR)/matrix_multiply_0.o $(FILTERS_DIR)/matrix_multiply_0.h: $(FILTERS_DIR)/matrix_multiply.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_func target=$(HL_TARGET)-no_asserts-no_bounds_query use_matrix_class=false
+	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_0 target=$(HL_TARGET)-no_asserts-no_bounds_query algorithm=0
 
-# "matrix_multiply_class" is produced by using matrix_multiply with different generator args.
-$(FILTERS_DIR)/matrix_multiply_class.o $(FILTERS_DIR)/matrix_multiply_class.h: $(FILTERS_DIR)/matrix_multiply.generator
+# "matrix_multiply_1" is produced by using matrix_multiply with different generator args.
+$(FILTERS_DIR)/matrix_multiply_1.o $(FILTERS_DIR)/matrix_multiply_1.h: $(FILTERS_DIR)/matrix_multiply.generator
 	@-mkdir -p tmp
-	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_class target=$(HL_TARGET)-no_asserts-no_bounds_query use_matrix_class=true
+	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_1 target=$(HL_TARGET)-no_asserts-no_bounds_query algorithm=1
+
+# "matrix_multiply_2" is produced by using matrix_multiply with different generator args.
+$(FILTERS_DIR)/matrix_multiply_2.o $(FILTERS_DIR)/matrix_multiply_2.h: $(FILTERS_DIR)/matrix_multiply.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_2 target=$(HL_TARGET)-no_asserts-no_bounds_query algorithm=2
+
+# "matrix_multiply_3" is produced by using matrix_multiply with different generator args.
+$(FILTERS_DIR)/matrix_multiply_3.o $(FILTERS_DIR)/matrix_multiply_3.h: $(FILTERS_DIR)/matrix_multiply.generator
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -o ../$(FILTERS_DIR) -f matrix_multiply_3 target=$(HL_TARGET)-no_asserts-no_bounds_query algorithm=3
 
 # matrix_multiply test using the internal matrix class.
-$(BIN_DIR)/generator_aot_matrix_multiply: $(FILTERS_DIR)/matrix_multiply_func.o $(FILTERS_DIR)/matrix_multiply_class.o
+$(BIN_DIR)/generator_aot_matrix_multiply: test/generator/matrix_multiply_aottest.cpp $(FILTERS_DIR)/matrix_multiply_0.o $(FILTERS_DIR)/matrix_multiply_1.o $(FILTERS_DIR)/matrix_multiply_2.o $(FILTERS_DIR)/matrix_multiply_3.o
+	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread $(STATIC_TEST_LIBS) $(BLAS_LDFLAGS) -o $@
 
 # Some .generators have additional dependencies (usually due to define_extern usage).
 # These typically require two extra dependencies:

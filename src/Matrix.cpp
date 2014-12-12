@@ -427,7 +427,35 @@ Partition &Partition::vectorize() {
     return *this;
 }
 
-Partition &Partition::parallel() {
+Partition &Partition::unroll_rows() {
+    // std::cout << "\tunrolling row variable: " << row_var().name() << "\n";
+    internal_assert(!is_root());
+    user_assert(is_const(parent().num_rows())) <<
+            "When unrolling the rows of a partition level of a matrix, you must unroll at a level " <<
+            "with a constant number of rows. You have attempted to unroll, at level " << level() << ", "
+            "which has " << parent().num_rows() << " rows per block of the partition.\n";
+    schedule().unroll(parent().row_var());
+    return *this;
+}
+
+Partition &Partition::unroll_cols() {
+    // std::cout << "\tunrolling col variable: " << col_var().name() << "\n";
+    internal_assert(!is_root());
+    user_assert(is_const(parent().num_cols())) <<
+            "When unrolling the columns of a partition level of a matrix, you must unroll at a level " <<
+            "with a constant number of columns. You have attempted to unroll, at level " << level() << ", "
+            "which has " << parent().num_cols() << " columns per block of the partition.\n";
+    schedule().unroll(parent().col_var());
+    return *this;
+}
+
+Partition &Partition::parallel_rows() {
+    // std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
+    schedule().parallel(row_var());
+    return *this;
+}
+
+Partition &Partition::parallel_cols() {
     // std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
     schedule().parallel(col_var());
     return *this;
@@ -471,7 +499,8 @@ void Matrix::init(Expr num_rows = 0, Expr num_cols = 0) {
     }
 
     vec_level = -1;
-    par_level = -1;
+    row_loop_types.resize(1, For::Serial);
+    col_loop_types.resize(1, For::Serial);
 }
 
 void Matrix::define(Expr value) {
@@ -822,6 +851,11 @@ Matrix &Matrix::vectorize(int level) {
         vec_level = level;
     }
 
+    if ((int)row_loop_types.size() <= vec_level) {
+        row_loop_types.resize(level+1, For::Serial);
+    }
+    row_loop_types[vec_level] = For::Vectorized;
+
     if (vec_level < p.depth()) {
         p = p.get_level(vec_level);
 
@@ -837,22 +871,97 @@ Matrix &Matrix::vectorize(int level) {
     return *this;
 }
 
-Matrix &Matrix::parallel(int level) {
-    user_assert(par_level == -1) <<
-            "You may only schedule one level of a matrix partition with parallel, "
-            "you have already called parallelize on matrix " << name() << " at "
-            "level " << par_level << ".\n";
+Matrix &Matrix::unroll_rows(int level) {
+    // user_assert(par_level == -1) <<
+    //         "You may only schedule one level of a matrix partition with unroll, "
+    //         "you have already called unrollize on matrix " << name() << " at "
+    //         "level " << par_level << ".\n";
 
     Partition p = get_partition();
     if (level < 0) {
-        par_level = p.depth();
-    } else {
-        par_level = level;
+        level = p.depth();
     }
 
-    if (par_level < p.depth()) {
-        Partition p = p.get_level(par_level);
-        p.parallel();
+    if ((int)row_loop_types.size() <= level) {
+        row_loop_types.resize(level+1, For::Serial);
+    }
+    row_loop_types[level] = For::Unrolled;
+
+    if (level < p.depth()) {
+        Partition p = p.get_level(level);
+        p.unroll_rows();
+    }
+
+    return *this;
+}
+
+Matrix &Matrix::unroll_cols(int level) {
+    // user_assert(par_level == -1) <<
+    //         "You may only schedule one level of a matrix partition with unroll, "
+    //         "you have already called unrollize on matrix " << name() << " at "
+    //         "level " << par_level << ".\n";
+
+    Partition p = get_partition();
+    if (level < 0) {
+        level = p.depth();
+    }
+
+    if ((int)col_loop_types.size() <= level) {
+        col_loop_types.resize(level+1, For::Serial);
+    }
+    col_loop_types[level] = For::Unrolled;
+
+    if (level < p.depth()) {
+        Partition p = p.get_level(level);
+        p.unroll_cols();
+    }
+
+    return *this;
+}
+
+Matrix &Matrix::parallel_rows(int level) {
+    // user_assert(par_level == -1) <<
+    //         "You may only schedule one level of a matrix partition with parallel, "
+    //         "you have already called parallelize on matrix " << name() << " at "
+    //         "level " << par_level << ".\n";
+
+    Partition p = get_partition();
+    if (level < 0) {
+        level = p.depth();
+    }
+
+    if ((int)row_loop_types.size() <= level) {
+        row_loop_types.resize(level+1, For::Serial);
+    }
+    row_loop_types[level] = For::Parallel;
+
+    if (level < p.depth()) {
+        Partition p = p.get_level(level);
+        p.parallel_rows();
+    }
+
+    return *this;
+}
+
+Matrix &Matrix::parallel_cols(int level) {
+    // user_assert(par_level == -1) <<
+    //         "You may only schedule one level of a matrix partition with parallel, "
+    //         "you have already called parallelize on matrix " << name() << " at "
+    //         "level " << par_level << ".\n";
+
+    Partition p = get_partition();
+    if (level < 0) {
+        level = p.depth();
+    }
+
+    if ((int)col_loop_types.size() <= level) {
+        col_loop_types.resize(level+1, For::Serial);
+    }
+    col_loop_types[level] = For::Parallel;
+
+    if (level < p.depth()) {
+        Partition p = p.get_level(level);
+        p.parallel_cols();
     }
 
     return *this;
@@ -1236,18 +1345,27 @@ Matrix operator*(Matrix A, Matrix B) {
     Var i = prod.row_var();
     Var j = prod.col_var();
 
+    const int vec_size  = 32 / A.type().bytes();
+    const int tile_size = 4;
+    // const int block_size = vec_size * tile_size;
+
+    // RDom elem(0, block_size, 0, block_size, "b");
+    // RDom block(0, A.num_rows() / block_size, 0, B.num_rows() / block_size, "b");
     RDom k(0, A.num_cols(), "k");
+    prod(i, j)  = undef(Float(32));
     prod(i, j) += A(i, k) * B(k, j);
 
-    const int vec_size  = 16 / A.type().bytes();
-    const int tile_size = 4;
     Partition prod_part = prod.get_partition(1);
-    prod_part.partition(vec_size).vectorize()
-             .partition(tile_size)
-             .partition(tile_size).parallel();
+    prod_part.partition(vec_size).vectorize().unroll_cols()
+             .partition(tile_size).unroll_rows()//.unroll_cols()
+             .partition(2)//.unroll_rows().unroll_cols()
+             .parallel_cols();
 
-    A.compute_at_rows(prod_part.get_level(2));
-    B.compute_at_rows(prod_part.get_level(2));
+    A.compute_at_rows(prod_part.get_level(2))
+            .partition(vec_size, 1).vectorize();
+
+    B.compute_at_rows(prod_part.get_level(2))
+            .partition(vec_size, 1).vectorize();
 
     return prod;
 }

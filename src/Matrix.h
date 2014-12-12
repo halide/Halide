@@ -139,8 +139,12 @@ public:
 
     Partition partition(Expr n);
     Partition partition(Expr m, Expr n);
+
     Partition &vectorize();
-    Partition &parallel();
+    Partition &unroll_rows();
+    Partition &unroll_cols();
+    Partition &parallel_rows();
+    Partition &parallel_cols();
 };
 
 class Matrix {
@@ -170,8 +174,9 @@ class Matrix {
     /* Level of partitioning at which to vectorize operations. */
     int vec_level;
 
-    /* Level of partitioning at which to parallelize operations. */
-    int par_level;
+    /* Vectors storing the loop types for the rows and columns of each level of the partition. */
+    std::vector<Internal::For::ForType> row_loop_types;
+    std::vector<Internal::For::ForType> col_loop_types;
 
     /* Returns the offset into the expression vector for small matrices. */
     int small_offset(Expr row, Expr col) const;
@@ -226,7 +231,10 @@ public:
     EXPORT Matrix &partition(Expr size);
     EXPORT Matrix &partition(Expr row_size, Expr col_size);
     EXPORT Matrix &vectorize(int level = -1);
-    EXPORT Matrix &parallel(int level = -1);
+    EXPORT Matrix &unroll_rows(int level = -1);
+    EXPORT Matrix &unroll_cols(int level = -1);
+    EXPORT Matrix &parallel_rows(int level = -1);
+    EXPORT Matrix &parallel_cols(int level = -1);
 
     EXPORT Partition &get_partition(int update = 0);
     EXPORT const Partition &get_partition(int update = 0) const;
