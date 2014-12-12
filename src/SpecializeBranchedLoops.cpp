@@ -951,6 +951,8 @@ private:
     void visit(const LetStmt *op) {visit_let(op);}
 
     StmtOrExpr make_branch_content(const Pipeline *op, const vector<StmtOrExpr> &args) {
+        // If the produce stage is undefined, then assert that there is no update stage,
+        // and just return the consume stage.
         if (!args[0].defined()) {
             internal_assert(!args[1].defined());
             return args[2];
@@ -978,6 +980,7 @@ private:
     }
 
     StmtOrExpr make_branch_content(const For *op, const vector<StmtOrExpr> &args) {
+        // If the loop body is undefined, then just return an undefined Stmt.
         if (!args[2].defined()) {
             return Stmt();
         }
