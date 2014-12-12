@@ -234,6 +234,8 @@ public:
         queue<string> bounds_vars;
         for (int i = branches.size()-1; i >= 0; --i) {
             Branch &branch = branches[i];
+            if (!branch.content.defined()) continue;
+
             Expr branch_extent = branch.extent;
             Expr branch_min = branch.min;
             Expr branch_max = simplify(branch_min + branch_extent - 1);
@@ -949,6 +951,8 @@ private:
     void visit(const LetStmt *op) {visit_let(op);}
 
     StmtOrExpr make_branch_content(const Pipeline *op, const vector<StmtOrExpr> &args) {
+        // If the produce stage is undefined, then assert that there is no update stage,
+        // and just return the consume stage.
         if (!args[0].defined()) {
             internal_assert(!args[1].defined());
             return args[2];
@@ -976,6 +980,11 @@ private:
     }
 
     StmtOrExpr make_branch_content(const For *op, const vector<StmtOrExpr> &args) {
+        // If the loop body is undefined, then just return an undefined Stmt.
+        if (!args[2].defined()) {
+            return Stmt();
+        }
+
         return For::make(op->name, args[0], args[1], op->for_type, args[2]);
     }
 
