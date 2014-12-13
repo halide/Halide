@@ -152,7 +152,7 @@ class VectorizeLoops : public IRMutator {
                 int replacement_width = replacement.type().width;
                 int shuffle_width = op->type.width;
 
-                internal_assert(shuffle_width == op->args.size()-1);
+                internal_assert(shuffle_width == op->args.size() - 1);
 
                 // To widen successfully, the intrinisic must either produce a
                 // vector width result or a scalar result that we can broadcast.
@@ -197,7 +197,7 @@ class VectorizeLoops : public IRMutator {
                         // expression, each is passed as a separate argument to
                         // shuffle_vector
                         for (int i = 0; i != replacement_width; ++i) {
-                            new_args[1+i] = extract_lane(mutated_channel, i);
+                            new_args[1 + i] = extract_lane(mutated_channel, i);
                         }
 
                         expr = Call::make(op->type.vector_of(replacement_width),

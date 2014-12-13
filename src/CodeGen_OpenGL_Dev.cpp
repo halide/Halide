@@ -446,7 +446,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             // shuffle vector expression is vectorized.
             bool all_int = true;
             for (int i = 0; i != shuffle_width && all_int; ++i) {
-                all_int = all_int && op->args[1+i].as<IntImm>() != NULL;
+                all_int = all_int && (op->args[1 + i].as<IntImm>() != NULL);
             }
 
             // Check if the shuffle maps to a canonical type like .r or .rgb
@@ -457,7 +457,7 @@ void CodeGen_GLSL::visit(const Call *op) {
                 string swizzle;
 
                 for (int i = 0; i != shuffle_width && all_int; ++i) {
-                    int channel = op->args[1+i].as<IntImm>()->value;
+                    int channel = op->args[1 + i].as<IntImm>()->value;
                     internal_assert(channel < 4) << "Shuffle of invalid channel";
                     swizzle += channels[channel];
                 }
@@ -475,7 +475,7 @@ void CodeGen_GLSL::visit(const Call *op) {
                 for (int i = 0; i != shuffle_width; ++i) {
                     do_indent();
                     stream << v << get_vector_suffix(i) << " = "
-                    << expr << get_vector_suffix(op->args[1+i]) << ";\n";
+                    << expr << get_vector_suffix(op->args[1 + i]) << ";\n";
                 }
 
                 id = v;
