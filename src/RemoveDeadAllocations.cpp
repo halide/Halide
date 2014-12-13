@@ -1,4 +1,4 @@
-#include "RemoveTrivialAllocations.h"
+#include "RemoveDeadAllocations.h"
 #include "IRMutator.h"
 #include "IROperator.h"
 #include "Scope.h"
@@ -6,7 +6,7 @@
 namespace Halide {
 namespace Internal {
 
-class FindTrivialAllocations : public IRVisitor {
+class FindDeadAllocations : public IRVisitor {
 public:
     Scope<int> allocs;
 
@@ -20,7 +20,7 @@ private:
 
 };
 
-class RemoveTrivialAllocations : public IRMutator {
+class RemoveDeadAllocations : public IRMutator {
     using IRMutator::visit;
 
     Scope<int> allocs;
@@ -64,8 +64,17 @@ class RemoveTrivialAllocations : public IRMutator {
         if (allocs.contains(op->name)) {
             stmt = op->body;
             allocs.pop(op->name);
-        } else if (!body.same_as(op->body)) {
+        } else if (body.same_as(op->body)) {
+            stmt = op;
+        } else {
             stmt = Allocate::make(op->name, op->type, op->extents, op->condition, body);
+        }
+    }
+
+    void visit(const Free *op) {
+        if (allocs.contains(op->name)) {
+            // We have reached a Free Stmt without ever using this buffer, do nothing.
+            stmt = Stmt();
         } else {
             stmt = op;
         }
@@ -73,8 +82,8 @@ class RemoveTrivialAllocations : public IRMutator {
 };
 
 // Turn for loops of size one into let statements
-Stmt remove_trivial_allocations(Stmt s) {
-    return RemoveTrivialAllocations().mutate(s);
+Stmt remove_dead_allocations(Stmt s) {
+    return RemoveDeadAllocations().mutate(s);
 }
 
 
