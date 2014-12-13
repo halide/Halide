@@ -152,7 +152,7 @@ class VectorizeLoops : public IRMutator {
                 int replacement_width = replacement.type().width;
                 int shuffle_width = op->type.width;
 
-                internal_assert(shuffle_width == op->args.size() - 1);
+                internal_assert(shuffle_width == (int)op->args.size() - 1);
 
                 // To widen successfully, the intrinisic must either produce a
                 // vector width result or a scalar result that we can broadcast.
