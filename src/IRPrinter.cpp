@@ -183,7 +183,7 @@ void IRPrinter::visit(const Cast *op) {
 void IRPrinter::visit(const Variable *op) {
     // omit the type
     // stream << op->name << "." << op->type;
-    stream << op->name;
+    stream << "<" << op->type << "> " << op->name;
 }
 
 void IRPrinter::visit(const Add *op) {
@@ -355,7 +355,7 @@ void IRPrinter::visit(const Call *op) {
         }
     }
 
-    stream << op->name << "(";
+    stream << "<" << op->type << "> " << op->name << "(";
     for (size_t i = 0; i < op->args.size(); i++) {
         print(op->args[i]);
         if (i < op->args.size() - 1) {
@@ -366,9 +366,10 @@ void IRPrinter::visit(const Call *op) {
 }
 
 void IRPrinter::visit(const Let *op) {
+    stream << "<" << op->value.type() << "> ";
     stream << "(let " << op->name << " = ";
     print(op->value);
-    stream << " in ";
+    stream << " in\n";
     print(op->body);
     stream << ")";
 }
