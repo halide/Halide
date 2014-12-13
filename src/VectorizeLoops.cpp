@@ -19,6 +19,7 @@ class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {
         string var;
         Expr replacement;
+        string widening_suffix;
         Scope<Expr> scope;
         Scope<int> internal_allocations;
 
@@ -49,14 +50,13 @@ class VectorizeLoops : public IRMutator {
         }
 
         virtual void visit(const Variable *op) {
+            string widened_name = op->name + widening_suffix;
             if (op->name == var) {
                 expr = replacement;
-            } else if (scope.contains(op->name)) {
-                // The type of a var may have changed. E.g. if
-                // we're vectorizing across x we need to know the
-                // type of y has changed in the following example:
-                // let y = x + 1 in y*3
-                expr = Variable::make(scope.get(op->name).type(), op->name);
+            } else if (scope.contains(widened_name)) {
+                // If the variable appears in scope then we previously widened
+                // it and we use the new widened name for the variable.
+                expr = Variable::make(scope.get(widened_name).type(), widened_name);
             } else {
                 expr = op;
             }
@@ -177,15 +177,10 @@ class VectorizeLoops : public IRMutator {
                     if (expr_match(replacement,mutated_channel) &&
                         (op->args[0].type().width == replacement_width)) {
 
-                        // TODO: The potential problem is that values of Lets
-                        // for variables within the expression may have been
-                        // widened already.
-
-                        // This is because the test in visit(const Let *) for
-                        // whether or not the value was vectorized is simply
-                        // whether or not the expression is a vector after it is
-                        // mutated.
-
+                        // Note that we stop mutating at this expression. Any
+                        // unvectorized variables inside this argument may
+                        // continue to refer to scalar expressions in the
+                        // enclosing lets whose names have not changed.
                         expr = op->args[0];
 
                     } else if (mutated_width == replacement_width) {
@@ -255,40 +250,72 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const Let *op) {
-            Expr value = mutate(op->value);
-            if (value.type().is_vector()) {
-                scope.push(op->name, value);
+
+            // Vectorize the let value and check to see if it was vectorized by
+            // this mutator. The type of the expression might already be vector
+            // width.
+            Expr mutated_value = mutate(op->value);
+            bool was_vectorized = !op->value.type().is_vector() &&
+                                   mutated_value.type().is_vector();
+
+            // If the value was vectorized by this mutator, add a new name to
+            // the scope for the vectorized value expression.
+            std::string vectorized_name;
+            if (was_vectorized) {
+                vectorized_name = op->name + widening_suffix;
+                scope.push(vectorized_name, mutated_value);
             }
 
-            Expr body = mutate(op->body);
+            Expr mutated_body = mutate(op->body);
 
-            if (value.type().is_vector()) {
-                scope.pop(op->name);
+            if (was_vectorized) {
+                scope.pop(vectorized_name);
             }
 
-            if (value.same_as(op->value) && body.same_as(op->body)) {
+            // Check to see if the value and body were modified by this mutator
+            if (mutated_value.same_as(op->value) &&
+                mutated_body.same_as(op->body)) {
                 expr = op;
             } else {
-                expr = Let::make(op->name, value, body);
+                // Otherwise create a new Let containing the original value
+                // expression plus the widened expression 
+                expr = Let::make(op->name, op->value, mutated_body);
+
+                if (was_vectorized) {
+                    expr = Let::make(vectorized_name, mutated_value, expr);
+                }
             }
         }
 
         void visit(const LetStmt *op) {
-            Expr value = mutate(op->value);
-            if (value.type().is_vector()) {
-                scope.push(op->name, value);
+            Expr mutated_value = mutate(op->value);
+
+            // Check if the value was vectorized by this mutator.
+            bool was_vectorized = !op->value.type().is_vector() &&
+            mutated_value.type().is_vector();
+
+            std::string vectorized_name;
+
+            if (was_vectorized) {
+                vectorized_name = op->name + widening_suffix;
+                scope.push(vectorized_name, mutated_value);
             }
 
-            Stmt body = mutate(op->body);
+            Stmt mutated_body = mutate(op->body);
 
-            if (value.type().is_vector()) {
-                scope.pop(op->name);
+            if (was_vectorized) {
+                scope.pop(vectorized_name);
             }
 
-            if (value.same_as(op->value) && body.same_as(op->body)) {
+            if (mutated_value.same_as(op->value) &&
+                mutated_body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = LetStmt::make(op->name, value, body);
+                stmt = LetStmt::make(op->name, op->value, mutated_body);
+
+                if (was_vectorized) {
+                    stmt = LetStmt::make(vectorized_name, mutated_value, stmt);
+                }
             }
         }
 
@@ -502,6 +529,10 @@ class VectorizeLoops : public IRMutator {
     public:
         VectorSubs(string v, Expr r) : var(v), replacement(r),
                                        scalarized(false), scalar_lane(0) {
+
+            std::ostringstream oss;
+            oss << ".x" << replacement.type().width;
+            widening_suffix = oss.str();
         }
     };
 
