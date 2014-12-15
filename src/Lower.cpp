@@ -850,19 +850,23 @@ public:
     }
 };
 
-void realization_order_dfs(string current, map<string, set<string> > &graph, set<string> &visited, vector<string> &result) {
+void realization_order_dfs(string current, map<string, set<string> > &graph, set<string> &visited, set<string> &result_set, vector<string> &order) {
     set<string> &inputs = graph[current];
-
     visited.insert(current);
 
     for (set<string>::const_iterator i = inputs.begin();
         i != inputs.end(); ++i) {
 
-        if(visited.find(*i) == visited.end())
-            realization_order_dfs(*i, graph, visited, result);
+        if (visited.find(*i) == visited.end()) {
+            realization_order_dfs(*i, graph, visited, result_set, order);
+        } else if (*i != current) {
+            internal_assert(result_set.find(*i) != result_set.end())
+                << "Stuck in a loop computing a realization order. Perhaps this pipeline has a loop?\n";
+        }
     }
 
-    result.push_back(current);
+    result_set.insert(current);
+    order.push_back(current);
 }
 
 vector<string> realization_order(string output, const map<string, Function> &env, map<string, set<string> > &graph) {
@@ -878,12 +882,13 @@ vector<string> realization_order(string output, const map<string, Function> &env
         }
     }
 
-    vector<string> result;
+    vector<string> order;
+    set<string> result_set;
     set<string> visited;
 
-    realization_order_dfs(output, graph, visited, result);
+    realization_order_dfs(output, graph, visited, result_set, order);
 
-    return result;
+    return order;
 }
 
 Stmt create_initial_loop_nest(Function f, const Target &t) {
