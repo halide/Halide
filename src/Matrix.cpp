@@ -1341,33 +1341,73 @@ Matrix operator*(Matrix A, Matrix B) {
         }
     }
 
-    Matrix prod(A.num_rows(), B.num_cols(), A.type(), result_name);
-    Var i = prod.row_var();
-    Var j = prod.col_var();
+    const int  block_size = 32;
+    const int  vec_size = 8;
 
-    const int vec_size  = 32 / A.type().bytes();
-    const int tile_size = 4;
-    // const int block_size = vec_size * tile_size;
+    const Expr sum_size = A.num_cols();
+    const Expr proxy_size = ((sum_size + block_size - 1) / block_size) * block_size;
 
-    // RDom elem(0, block_size, 0, block_size, "b");
-    // RDom block(0, A.num_rows() / block_size, 0, B.num_rows() / block_size, "b");
-    RDom k(0, A.num_cols(), "k");
-    prod(i, j)  = undef(Float(32));
-    prod(i, j) += A(i, k) * B(k, j);
+    Var i = A.row_var();
+    Var j = A.col_var();
+    Var bi("bi"), bj("bj");
+    RDom k(0, proxy_size);
+    RVar ki;
 
-    Partition prod_part = prod.get_partition(1);
-    prod_part.partition(vec_size).vectorize().unroll_cols()
-             .partition(tile_size).unroll_rows()//.unroll_cols()
-             .partition(2)//.unroll_rows().unroll_cols()
-             .parallel_cols();
+    Func A_mat("A_mat");
+    A_mat(i, j) = select(i < prod_nrows,
+                  select(j < sum_size, A(i, j),
+                         select(i == j, 1.0f, 0.0f)),
+                         select(i == j, 1.0f, 0.0f));
 
-    A.compute_at_rows(prod_part.get_level(2))
-            .partition(vec_size, 1).vectorize();
+    Func B_mat("B_mat");
+    B_mat(i, j) = select(i < sum_size,
+                  select(j < prod_ncols, B(i, j),
+                         select(i == j, 1.0f, 0.0f)),
+                         select(i == j, 1.0f, 0.0f));
 
-    B.compute_at_rows(prod_part.get_level(2))
-            .partition(vec_size, 1).vectorize();
+    Func prod("prod");
+    prod(i, j) += A_mat(i, k) * B_mat(k, j);
 
-    return prod;
+    Matrix C(prod_nrows, prod_ncols, prod, result_name);
+    C.partition(block_size);
+
+    // prod.tile(i, j, bi, bj, block_size, block_size).parallel(j)
+    //     .vectorize(bi, vec_size).unroll(bi);
+
+    Partition base = C.get_partition().get_level(0);
+    Partition block = C.get_partition().get_level(1);
+    base.rename_row(block.row_var());
+    block.parallel_cols();
+    prod.compute_at(C, block.row_var())
+        .vectorize(i, vec_size).unroll(i);
+    prod.update(0)
+        .split(k, k, ki, block_size)
+        .reorder(i, j, ki, k)
+        .vectorize(i, vec_size).unroll(i);
+
+    A_mat.compute_at(prod, k).vectorize(i, vec_size).unroll(i);
+    B_mat.compute_at(prod, k).vectorize(i, vec_size).unroll(i);
+
+    // const int vec_size  = 32 / A.type().bytes();
+    // const int tile_size = 4;
+    // // const int block_size = vec_size * tile_size;
+
+    // RDom k(0, A.num_cols(), "k");
+    // prod(i, j) += A(i, k) * B(k, j);
+
+    // Partition prod_part = prod.get_partition(1);
+    // prod_part.partition(vec_size).vectorize().unroll_cols()
+    //          .partition(tile_size).unroll_rows()//.unroll_cols()
+    //          // .partition(2)//.unroll_rows().unroll_cols()
+    //          .parallel_cols();
+
+    // A.compute_at_rows(prod_part.get_level(2))
+    //         .partition(vec_size, 1).vectorize();
+
+    // B.compute_at_rows(prod_part.get_level(2))
+    //         .partition(vec_size, 1).vectorize();
+
+    return C;
 }
 
 

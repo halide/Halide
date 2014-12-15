@@ -11,7 +11,7 @@ class MatrixMultiply : public Generator<MatrixMultiply> {
     ImageParam B_in{ Float(32), 2, "B_in" };
 
     Func build() override {
-        Expr size = (A_in.width() / 32) * 32;
+        // Expr size = (A_in.width() / 32) * 32;
 
         if (algorithm == 0) {
             Matrix A(A_in, "A");
@@ -22,29 +22,57 @@ class MatrixMultiply : public Generator<MatrixMultiply> {
             return static_cast<Func>( C ).compute_root();
         } else if (algorithm == 1) {
             const int block_size = 32;
+            const int vec_size = natural_vector_size<float>();
 
-            Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yo"), yii("yii"), xii("xii");
-            Func C("C");
+            const Expr num_rows = A_in.width();
+            const Expr num_cols = B_in.height();
+            const Expr sum_size = A_in.height();
+            const Expr proxy_size = ((sum_size + block_size - 1) / block_size) * block_size;
 
-            RDom k(0, size);
+            Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yi"), yii("yii"), xii("xii"), task("task");
+            Func A("A"), B("B"), C("C"), prod("prod");
+
+            RDom k(0, proxy_size);
             RVar ki;
 
-            C(x, y) += A_in(k, y) * B_in(x, k);
+            A(x, y) = //A_in(x, y);
+                select(0 <= x && x < num_rows,
+                       select(0 <= y && y < sum_size, A_in(x, y),
+                              select(x == y, 1.0f, 0.0f)),
+                       select(x == y, 1.0f, 0.0f));
+            B(x, y) = //B_in(x, y);
+                select(0 <= x && x < sum_size,
+                       select(0 <= y && y < num_cols, B_in(x, y),
+                              select(x == y, 1.0f, 0.0f)),
+                       select(x == y, 1.0f, 0.0f));
+            prod(x, y) += select(k < sum_size, A(x, k) * B(k, y), 0.0f);
+            C(x, y) = prod(x, y);
 
-            C.vectorize(x, 8);
+            // A.bound(x, 0, num_rows).bound(y, 0, proxy_size);
+            // B.bound(x, 0, proxy_size).bound(y, 0, num_cols);
+            C.tile(x, y, xi, yi, block_size, block_size).parallel(y)
+                    .vectorize(xi, vec_size).unroll(xi);//.unroll(yi);
 
-            C.update(0)
-                    .split(x, x, xi, block_size).split(xi, xi, xii, 8)
-                    .split(y, y, yi, block_size).split(yi, yi, yii, 4)
-                    // .split(k, k, ki, block_size)
-                    .reorder(xii, yii, xi, yi, k, x, y)
-                    .parallel(y).vectorize(xii).unroll(xi).unroll(yii);
+            prod.compute_at(C, x);
+            prod.vectorize(x, vec_size).unroll(x);//.unroll(y);
+            prod.update(0)
+                    .split(k, k, ki, block_size)
+                    .reorder(x, y, ki, k)
+                    .vectorize(x, vec_size).unroll(x);//.unroll(y);
+                    // .parallel(y);
 
-            C.bound(x, 0, size).bound(y, 0, size);
+            A.compute_at(prod, k).vectorize(x, vec_size).unroll(x);//.unroll(y);
+            B.compute_at(prod, k).vectorize(x, vec_size).unroll(x);//.unroll(y);
+
+            C.bound(x, 0, num_rows).bound(y, 0, num_cols);
 
             return C;
         } else if (algorithm == 2) {
             const int block_size = 32;
+
+            const Expr num_rows = A_in.width();
+            const Expr num_cols = B_in.height();
+            const Expr size = (num_rows / block_size) * block_size;
 
             Var x("x"), xi("xi"), xo("xo"), y("y"), yo("yo"), yi("yi"), yii("yii"), xii("xii");
             Func A("A"), B("B"), C("C"), prod("prod");
@@ -57,7 +85,7 @@ class MatrixMultiply : public Generator<MatrixMultiply> {
                     * B(k % block_size, yi, k / block_size, y);
             C(x, y) = prod(x % block_size, y % block_size, x / block_size, y / block_size);
 
-            prod.vectorize(xi, 8).unroll(xi).unroll(yi);
+            // prod.vectorize(xi, 8).unroll(xi).unroll(yi);
             prod.update(0).tile(xi, yi, xii, yii, 8, 4)
                     .split(k, k, ki, block_size)
                     .reorder(xii, yii, ki, xi, yi, k, x, y)
@@ -74,6 +102,10 @@ class MatrixMultiply : public Generator<MatrixMultiply> {
 
             return C;
         } else {
+            const Expr num_rows = A_in.width();
+            const Expr num_cols = B_in.height();
+            const Expr size = num_rows;
+
             Func dot, C;
 
             Var ti("ti"), tj("tj"), tti("tti"), ttj("ttj");
