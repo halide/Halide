@@ -6,20 +6,6 @@
 namespace Halide {
 namespace Internal {
 
-class FindDeadAllocations : public IRVisitor {
-public:
-    Scope<int> allocs;
-
-private:
-    using IRVisitor::visit;
-
-    void visit(const Allocate *op) {
-        allocs.push(op->name, 1);
-        op->body.accept(this);
-    }
-
-};
-
 class RemoveDeadAllocations : public IRMutator {
     using IRMutator::visit;
 
