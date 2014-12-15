@@ -307,7 +307,8 @@ set(HEADER_FILES
   ObjectInstanceRegistry.h
   BlockFlattening.h
   LinearSolve.h
-  BranchVisitors.h)
+  BranchVisitors.h
+  SpecializeBranchedLoops.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -409,10 +410,19 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BlockFlattening.cpp
   LinearSolve.cpp
   BranchVisitors.cpp
+  SpecializeBranchedLoops.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
-target_link_libraries(Halide InitialModules ${LIBS})
+# CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
+# to target_link_libraries. This makes the CMake generation step take a very
+# long time. Instead, since we add the libs to the extra.LinkFileList passed to
+# Xcode below it is not necessary to pass them to target_link_libraries as well.
+if (XCODE)
+  target_link_libraries(Halide InitialModules)
+else()
+  target_link_libraries(Halide InitialModules ${LIBS})
+endif()
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
@@ -437,7 +447,7 @@ if (NOT HALIDE_SHARED_LIBRARY)
 
 if (XCODE)
 
-# Create a
+# Create a link file list
 set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
 
 # Determine the location of libInitialModules.a so we can include the path to it

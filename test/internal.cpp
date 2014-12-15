@@ -10,6 +10,7 @@
 #include "Deinterleave.h"
 #include "ModulusRemainder.h"
 #include "OneToOne.h"
+#include "SpecializeBranchedLoops.h"
 #include "CSE.h"
 #include "IREquality.h"
 
@@ -32,7 +33,9 @@ int main(int argc, const char **argv) {
     deinterleave_vector_test();
     modulus_remainder_test();
     is_one_to_one_test();
+    specialize_branched_loops_test();
     cse_test();
     simplify_test();
+
     return 0;
 }
