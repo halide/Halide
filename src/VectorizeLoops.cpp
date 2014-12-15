@@ -208,10 +208,8 @@ class VectorizeLoops : public IRMutator {
                     } else {
                         internal_assert(mutated_width == 1);
                         // Otherwise this shuffle_vector is independent of the
-                        // dimension being vectorized, and the scalar result of
-                        // the operation should be broadcast, just like an
-                        // ordinary scalar expression.
-                        expr = widen(op, replacement_width);
+                        // dimension being vectorized.
+                        expr = op;
                     }
 
                 } else {
@@ -531,8 +529,7 @@ class VectorizeLoops : public IRMutator {
                                        scalarized(false), scalar_lane(0) {
 
             std::ostringstream oss;
-            oss << ".x" << replacement.type().width;
-            widening_suffix = oss.str();
+            widening_suffix = ".x" + int_to_string(replacement.type().width);
         }
     };
 
