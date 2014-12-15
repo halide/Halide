@@ -74,7 +74,7 @@ class RemoveDeadAllocations : public IRMutator {
     void visit(const Free *op) {
         if (allocs.contains(op->name)) {
             // We have reached a Free Stmt without ever using this buffer, do nothing.
-            stmt = Stmt();
+            stmt = Evaluate::make(0);
         } else {
             stmt = op;
         }
