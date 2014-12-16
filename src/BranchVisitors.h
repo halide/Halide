@@ -111,13 +111,13 @@ EXPORT Stmt normalize_branch_conditions(Stmt stmt, const std::string& var,
                                         const Scope<Expr> &scope,
                                         const Scope<Interval> &bounds,
                                         const Scope<int> &free_vars,
-                                        const int branching_limit = 10);
+                                        const size_t branching_limit = 10);
 
 EXPORT Expr normalize_branch_conditions(Expr expr, const std::string& var,
                                         const Scope<Expr> &scope,
                                         const Scope<Interval> &bounds,
                                         const Scope<int> &free_vars,
-                                        const int branching_limit = 10);
+                                        const size_t branching_limit = 10);
 // @}
 
 }
