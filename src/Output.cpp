@@ -34,7 +34,7 @@ class LLVMOutput : public OutputBase {
 public:
     LLVMOutput(const std::string &bitcode_filename,
                  const std::string &llvm_assembly_filename,
-                 const std::string& object_filename,
+                 const std::string &object_filename,
                  const std::string &assembly_filename)
         : bitcode_filename(bitcode_filename),
           llvm_assembly_filename(llvm_assembly_filename),
