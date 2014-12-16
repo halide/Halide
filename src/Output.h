@@ -19,9 +19,9 @@ class LoweredFunc {
 public:
     Stmt body;
     std::string name;
+    Target target;
     std::vector<Argument> args;
     std::vector<Buffer> images;
-    Target target;
 };
 
 /** Interface for generating a compiler build result from a
@@ -77,6 +77,19 @@ public:
                        const std::string &assembly_filename);
     // @}
 
+    /** Create an Output describing Halide IR outputs. */
+    // @{
+    static Output stmt_html(const std::string &filename);
+    static Output stmt_text(const std::string &filename);
+    // @}
+
+    /** Create an Output describing C outputs. */
+    // @{
+    static Output c_header(const std::string &filename);
+    static Output c_source(const std::string &filename);
+    static Output c(const std::string &h_filename,
+                    const std::string &c_filename);
+    // @}
 };
 
 }
