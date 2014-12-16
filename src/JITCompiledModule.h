@@ -7,6 +7,7 @@
 
 #include "IntrusivePtr.h"
 #include "runtime/HalideRuntime.h"
+#include "Output.h"
 
 namespace llvm {
 class Module;
@@ -84,24 +85,10 @@ struct JITCompiledModule {
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
-    JITCompiledModule() :
-        function(NULL),
-        wrapped_function(NULL),
-        copy_to_host(NULL),
-        copy_to_dev(NULL),
-        free_dev_buffer(NULL),
-        set_error_handler(NULL),
-        set_custom_allocator(NULL),
-        set_custom_do_par_for(NULL),
-        set_custom_do_task(NULL),
-        set_custom_trace(NULL),
-        set_custom_print(NULL),
-        shutdown_thread_pool(NULL),
-        memoization_cache_set_size(NULL) {}
-
+    JITCompiledModule();
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */
-    void compile_module(CodeGen_LLVM *cg, llvm::Module *mod, const std::string &function_name);
+    JITCompiledModule(const LoweredFunc &lowered_func);
 
     /** Holds a cleanup routine and context parameter. */
     struct CleanupRoutine {

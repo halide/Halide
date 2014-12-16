@@ -14,6 +14,12 @@
 #include "Util.h"
 #include "LLVM_Runtime_Linker.h"
 
+#include "CodeGen_X86.h"
+#include "CodeGen_GPU_Host.h"
+#include "CodeGen_ARM.h"
+#include "CodeGen_MIPS.h"
+#include "CodeGen_PNaCl.h"
+
 namespace Halide {
 namespace Internal {
 
@@ -178,17 +184,48 @@ CodeGen_LLVM::CodeGen_LLVM(Target t) :
     initialize_llvm();
 }
 
-void CodeGen_LLVM::jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module,
-                           std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
-    // If the module contains a memoization cache cleanup function, run it when the module dies.
-    llvm::Function *fn = module->getFunction("halide_memoization_cache_cleanup");
-    if (fn) {
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_memoization_cache_release in module\n";
-        void (*cleanup_routine)(void *) =
-            reinterpret_bits<void (*)(void *)>(f);
-        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
+CodeGen_LLVM *CodeGen_LLVM::new_for_target(const Target &target) {
+    // The awkward mapping from targets to code generators
+    if (target.features_any_of(vec(Target::CUDA,
+                                   Target::OpenCL,
+                                   Target::OpenGL))) {
+#ifdef WITH_X86
+        if (target.arch == Target::X86) {
+            return new CodeGen_GPU_Host<CodeGen_X86>(target);
+        }
+#endif
+#if defined(WITH_ARM) || defined(WITH_AARCH64)
+        if (target.arch == Target::ARM) {
+            return new CodeGen_GPU_Host<CodeGen_ARM>(target);
+        }
+#endif
+#ifdef WITH_MIPS
+        if (target.arch == Target::MIPS) {
+            return new CodeGen_GPU_Host<CodeGen_MIPS>(target);
+        }
+#endif
+#ifdef WITH_NATIVE_CLIENT
+        if (target.arch == Target::PNaCl) {
+            return new CodeGen_GPU_Host<CodeGen_PNaCl>(target);
+        }
+#endif
+
+        user_error << "Invalid target architecture for GPU backend: "
+                   << target.to_string() << "\n";
+        return NULL;
+
+    } else if (target.arch == Target::X86) {
+        return new CodeGen_X86(target);
+    } else if (target.arch == Target::ARM) {
+        return new CodeGen_ARM(target);
+    } else if (target.arch == Target::MIPS) {
+        return new CodeGen_MIPS(target);
+    } else if (target.arch == Target::PNaCl) {
+        return new CodeGen_PNaCl(target);
     }
+    user_error << "Unknown target architecture: "
+               << target.to_string() << "\n";
+    return NULL;
 }
 
 void CodeGen_LLVM::initialize_llvm() {
@@ -419,8 +456,38 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     // Now verify the function is ok
     verifyFunction(*function);
 
-    // Now we need to make the wrapper function (useful for calling from jit)
-    string wrapper_name = name + "_jit_wrapper";
+    // Make a wrapper to call the function with an array of pointer
+    // args. This is useful for the JIT and other machine interfaces
+    // that will call the compiled function. This function has the
+    // following prototype in C:
+    //
+    //  int function_name_argv(void **args);
+    //
+    // It expects 'args' to be a pointer to N void* pointers, where N
+    // is the number of arguments to the pipeline. The pointers are
+    // casted to the type expected by the pipeline, and then the
+    // argument is loaded from that pointer, with the exception of
+    // buffer_t arguments, where the pointer is passed directly.
+    //
+    // If we have a pipeline defined like this (in C):
+    //
+    //  int function_name(buffer_t* arg1, int arg2, float arg3, buffer_t* out);
+    //
+    // A call to the argv function would look like this:
+    //
+    //  buffer_t arg1;
+    //  int arg2;
+    //  float arg3;
+    //  buffer_t out;
+    //  void **argv[] = {
+    //      &arg1,
+    //      &arg2,
+    //      &arg3,
+    //      &out,
+    //  };
+    //  int result = function_name_argv(argv);
+    //
+    string wrapper_name = function_name + "_argv";
     func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(*context, "entry", wrapper);
@@ -461,20 +528,6 @@ llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
-JITCompiledModule CodeGen_LLVM::compile_to_function_pointers() {
-    internal_assert(module) << "No module defined. Must call compile before calling compile_to_function_pointer.\n";
-
-    JITCompiledModule m;
-
-    m.compile_module(this, module, function_name);
-
-    // We now relinquish ownership of the module, and give it to the
-    // JITCompiledModule object that we're returning.
-    owns_module = false;
-
-    return m;
-}
-
 void CodeGen_LLVM::optimize_module() {
 
     debug(3) << "Optimizing module\n";
@@ -509,122 +562,6 @@ void CodeGen_LLVM::optimize_module() {
     if (debug::debug_level >= 2) {
         module->dump();
     }
-}
-
-void CodeGen_LLVM::compile_to_bitcode(const string &filename) {
-    internal_assert(module) << "No module defined. Must call compile before calling compile_to_bitcode.\n";
-
-    string error_string;
-#if LLVM_VERSION < 35
-    raw_fd_ostream out(filename.c_str(), error_string);
-#elif LLVM_VERSION == 35
-    raw_fd_ostream out(filename.c_str(), error_string, llvm::sys::fs::F_None);
-#else // llvm 3.6
-    std::error_code err;
-    raw_fd_ostream out(filename.c_str(), err, llvm::sys::fs::F_None);
-    if (err) error_string = err.message();
-#endif
-    internal_assert(error_string.empty())
-        << "Error opening output " << filename << ": " << error_string << "\n";
-
-    WriteBitcodeToFile(module, out);
-}
-
-void CodeGen_LLVM::compile_to_native(const string &filename, bool assembly) {
-    internal_assert(module) << "No module defined. Must call compile before calling compile_to_native\n";
-
-    // Get the target specific parser.
-    string error_string;
-    debug(1) << "Compiling to native code...\n";
-    debug(2) << "Target triple: " << module->getTargetTriple() << "\n";
-
-    const llvm::Target *target = TargetRegistry::lookupTarget(module->getTargetTriple(), error_string);
-    if (!target) {
-        cout << error_string << endl;
-        TargetRegistry::printRegisteredTargetsForVersion();
-    }
-    internal_assert(target) << "Could not create target\n";
-
-    debug(2) << "Selected target: " << target->getName() << "\n";
-
-    TargetOptions options;
-    options.LessPreciseFPMADOption = true;
-    options.NoFramePointerElim = false;
-    options.AllowFPOpFusion = FPOpFusion::Fast;
-    options.UnsafeFPMath = true;
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
-    options.UseSoftFloat = false;
-    options.FloatABIType =
-        use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
-    options.NoZerosInBSS = false;
-    options.GuaranteedTailCallOpt = false;
-    options.DisableTailCalls = false;
-    options.StackAlignmentOverride = 0;
-    options.TrapFuncName = "";
-    options.PositionIndependentExecutable = true;
-    options.UseInitArray = false;
-
-    TargetMachine *target_machine =
-        target->createTargetMachine(module->getTargetTriple(),
-                                    mcpu(), mattrs(),
-                                    options,
-                                    Reloc::PIC_,
-                                    CodeModel::Default,
-                                    CodeGenOpt::Aggressive);
-
-    internal_assert(target_machine) << "Could not allocate target machine!\n";
-
-    // Figure out where we are going to send the output.
-#if LLVM_VERSION < 35
-    raw_fd_ostream raw_out(filename.c_str(), error_string);
-#elif LLVM_VERSION == 35
-    raw_fd_ostream raw_out(filename.c_str(), error_string, llvm::sys::fs::F_None);
-#else // llvm 3.6
-    std::error_code err;
-    raw_fd_ostream raw_out(filename.c_str(), err, llvm::sys::fs::F_None);
-    if (err) error_string = err.message();
-#endif
-    internal_assert(error_string.empty())
-        << "Error opening output " << filename << ": " << error_string << "\n";
-
-    formatted_raw_ostream out(raw_out);
-
-    // Build up all of the passes that we want to do to the module.
-    PassManager pass_manager;
-
-    // Add an appropriate TargetLibraryInfo pass for the module's triple.
-    pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));
-
-    #if LLVM_VERSION < 33
-    pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
-                                             target_machine->getVectorTargetTransformInfo()));
-    #else
-    target_machine->addAnalysisPasses(pass_manager);
-    #endif
-
-    #if LLVM_VERSION < 35
-    DataLayout *layout = new DataLayout(module);
-    debug(2) << "Data layout: " << layout->getStringRepresentation();
-    pass_manager.add(layout);
-    #endif
-
-    // Make sure things marked as always-inline get inlined
-    pass_manager.add(createAlwaysInlinerPass());
-
-    // Override default to generate verbose assembly.
-    target_machine->setAsmVerbosityDefault(true);
-
-    // Ask the target to add backend passes as necessary.
-    TargetMachine::CodeGenFileType file_type =
-        assembly ? TargetMachine::CGFT_AssemblyFile :
-        TargetMachine::CGFT_ObjectFile;
-    target_machine->addPassesToEmitFile(pass_manager, out, file_type);
-
-    pass_manager.run(*module);
-
-    delete target_machine;
 }
 
 void CodeGen_LLVM::sym_push(const string &name, llvm::Value *value) {

@@ -55,18 +55,7 @@ public:
     CodeGen_LLVM(Target t);
     virtual ~CodeGen_LLVM();
 
-    /** Emit a compiled halide statement as llvm bitcode. Call this
-     * after calling compile. */
-    virtual void compile_to_bitcode(const std::string &filename);
-
-    /** Emit a compiled halide statement as either an object file, or
-     * as raw assembly, depending on the value of the second
-     * argument. Call this after calling compile. */
-    virtual void compile_to_native(const std::string &filename, bool assembly = false);
-
-    /** Compile to machine code stored in memory, and return some
-     * functions pointers into that machine code. */
-    JITCompiledModule compile_to_function_pointers();
+    static CodeGen_LLVM *new_for_target(const Target &target);
 
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
@@ -88,7 +77,7 @@ public:
      * gives the target a chance to inject calls to target-specific
      * module cleanup routines. */
     virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
-                              std::vector<JITCompiledModule::CleanupRoutine> *);
+                              std::vector<JITCompiledModule::CleanupRoutine> *) {}
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
@@ -99,6 +88,20 @@ public:
     virtual void compile(Stmt stmt, std::string name,
                          const std::vector<Argument> &args,
                          const std::vector<Buffer> &images_to_embed);
+
+    const Target &get_target() const { return target; }
+
+    llvm::Module *get_module() {
+        internal_assert(module) << "Module has not yet been built.\n";
+        return module;
+    }
+    llvm::Module *take_module() {
+        internal_assert(owns_module) << "Ownership of module has already been taken.\n";
+        owns_module = false;
+        return module;
+    }
+
+    llvm::Function *get_function() { return function; }
 
 protected:
 
