@@ -308,7 +308,8 @@ set(HEADER_FILES
   LinearSolve.h
   BranchVisitors.h
   LLVM_Runtime_Linker.h
-  CodeGen.h)
+  CodeGen.h
+  Output.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -411,6 +412,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BranchVisitors.cpp
   LLVM_Runtime_Linker.cpp
   CodeGen.cpp
+  Output.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
