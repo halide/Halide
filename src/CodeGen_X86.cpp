@@ -612,7 +612,7 @@ void CodeGen_X86::test() {
 
     Stmt s = Block::make(init, loop);
 
-    LoweredFunc func = { s, "test1", args, vector<Buffer>(), get_host_target() };
+    LoweredFunc func = { s, "test1", get_host_target(), args, vector<Buffer>() };
 
     debug(2) << "Compiling to function pointers \n";
     JITCompiledModule m(func);
