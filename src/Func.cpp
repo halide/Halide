@@ -2241,14 +2241,17 @@ void Func::compile_to(std::vector<Output> outputs, vector<Argument> args, const 
         args.push_back(output_buffers()[i]);
     }
 
-    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(target);
-    cg->compile(lowered, fn_name.empty() ? name() : fn_name, args, images_to_embed);
+    Internal::LoweredFunc lowered_func = {
+        lowered,
+        fn_name.empty() ? name() : fn_name,
+        args,
+        images_to_embed,
+        target
+    };
 
     for (std::vector<Output>::iterator i = outputs.begin(); i != outputs.end(); i++) {
-        i->generate(cg);
+        i->generate(lowered_func);
     }
-
-    delete cg;
 }
 
 void Func::compile_to(Output output, vector<Argument> args, const string &fn_name, const Target &target) {
@@ -2680,7 +2683,6 @@ void *Func::compile_jit(const Target &target) {
 
     Target t = target;
     t.set_feature(Target::JIT);
-    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(t);
 
     // Sanitise the name of the generated function
     string n = name();
@@ -2690,18 +2692,22 @@ void *Func::compile_jit(const Target &target) {
         }
     }
 
-    cg->compile(lowered, n, infer_args.arg_types, vector<Buffer>());
+    Internal::LoweredFunc lowered_func = {
+        lowered,
+        n,
+        infer_args.arg_types,
+        vector<Buffer>(),
+        t
+    };
 
     if (debug::debug_level >= 3) {
-        Output::assembly(name() + ".s").generate(cg);
-        Output::bitcode(name() + ".bc").generate(cg);
+        Output::assembly(name() + ".s").generate(lowered_func);
+        Output::bitcode(name() + ".bc").generate(lowered_func);
         ofstream stmt_debug((name() + ".stmt").c_str());
         stmt_debug << lowered;
     }
 
-    compiled_module = JITCompiledModule(cg, n);
-
-    delete cg;
+    compiled_module = JITCompiledModule(lowered_func);
 
     return compiled_module.function;
 }

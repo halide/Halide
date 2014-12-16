@@ -612,15 +612,10 @@ void CodeGen_X86::test() {
 
     Stmt s = Block::make(init, loop);
 
-    CodeGen_X86 cg(get_host_target());
-    cg.compile(s, "test1", args, vector<Buffer>());
-
-    //cg.compile_to_bitcode("test1.bc");
-    //cg.compile_to_native("test1.o", false);
-    //cg.compile_to_native("test1.s", true);
+    LoweredFunc func = { s, "test1", args, vector<Buffer>(), get_host_target() };
 
     debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule m(&cg, "test1");
+    JITCompiledModule m(func);
 
     typedef int (*fn_type)(::buffer_t *, float, int);
     fn_type fn = reinterpret_bits<fn_type>(m.function);
