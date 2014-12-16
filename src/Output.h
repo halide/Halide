@@ -25,7 +25,7 @@ public:
 };
 
 /** Interface for generating a compiler build result from a
- * CodeGen_LLVM instance. */
+ * LoweredFunc. */
 class OutputBase {
 public:
     mutable RefCount ref_count;
@@ -54,8 +54,8 @@ public:
     Output(const Internal::IntrusivePtr<Internal::OutputBase> &c) : contents(c) {}
     Output(const Output &c) : contents(c.contents) {}
 
-    /** Given some compiled LLVM, generate the compiler output
-     * represented by this Output. */
+    /** Given a LoweredFunc, generate the compiler output represented
+     * by this Output. */
     void generate(const Internal::LoweredFunc &func) {
         internal_assert(contents.ptr != NULL) << "Undefined Output.\n";
         return contents.ptr->generate(func);
@@ -83,7 +83,7 @@ public:
     static Output stmt_text(const std::string &filename);
     // @}
 
-    /** Create an Output describing C outputs. */
+    /** Create an Output describing C headers and source code. */
     // @{
     static Output c_header(const std::string &filename);
     static Output c_source(const std::string &filename);
