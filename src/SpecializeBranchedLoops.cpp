@@ -25,7 +25,7 @@ using std::vector;
 
 // A compile time variable that limits that maximum number of branches that we can generate
 // in this optimization pass. This prevents a combinatorial explosion of code generation.
-static const int branching_limit = 10;
+static const size_t branching_limit = 10;
 
 namespace {
 // A method used to test if we should pull out a min/extent expr
@@ -632,14 +632,14 @@ private:
     }
 
     bool visit_simple_cond(Expr cond, StmtOrExpr a, StmtOrExpr b) {
-        int num_defined = 0;
+        size_t num_defined = 0;
         if (a.defined()) ++num_defined;
         if (b.defined()) ++num_defined;
 
         // Bail out if this condition depends on more than just the current loop variable,
         // or we are going to branch too much.
         if (num_free_vars(cond, free_vars, scope) > 1 ||
-            static_cast<int>(branches.size()) > branching_limit - num_defined) {
+            branches.size() + num_defined > branching_limit) {
             return false;
         }
 
