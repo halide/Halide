@@ -8,10 +8,21 @@
  */
 
 #include "IntrusivePtr.h"
-#include "CodeGen_LLVM.h"
+#include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
+
+/** Describes a Func that has been lowered to imperitive Halide IR. */
+class LoweredFunc {
+public:
+    Stmt body;
+    std::string name;
+    std::vector<Argument> args;
+    std::vector<Buffer> images;
+    Target target;
+};
 
 /** Interface for generating a compiler build result from a
  * CodeGen_LLVM instance. */
@@ -22,7 +33,7 @@ public:
     virtual ~OutputBase() {}
 
     /** Generate the output(s) defined by this Output. */
-    virtual void generate(CodeGen_LLVM *codegen) = 0;
+    virtual void generate(const LoweredFunc &func) = 0;
 };
 
 template<>
@@ -45,16 +56,27 @@ public:
 
     /** Given some compiled LLVM, generate the compiler output
      * represented by this Output. */
-    void generate(Internal::CodeGen_LLVM *codegen) { contents.ptr->generate(codegen); }
+    void generate(const Internal::LoweredFunc &func) {
+        internal_assert(contents.ptr != NULL) << "Undefined Output.\n";
+        return contents.ptr->generate(func);
+    }
 
-    /** Create an Output describing LLVM bitcode. */
-    static Output bitcode(const std::string &filename);
-    /** Create an Output describing an object file. */
+    /** Create an Output describing native outputs. */
+    // @{
     static Output object(const std::string &filename);
-    /** Create an Output describing a text assembly listing. */
     static Output assembly(const std::string &filename);
-    /** Create an Output describing a text LLVM assembly listing. */
+    static Output native(const std::string &object_filename,
+                         const std::string &assembly_filename);
+    // @}
+
+    /** Create an Output describing LLVM outputs. */
+    // @{
+    static Output bitcode(const std::string &filename);
     static Output llvm_assembly(const std::string &filename);
+    static Output llvm(const std::string &bitcode_filename,
+                       const std::string &assembly_filename);
+    // @}
+
 };
 
 }

@@ -15,7 +15,10 @@ public:
     NativeOutput(const std::string& filename, bool assembly = false)
         : filename(filename), assembly(assembly) {}
 
-    void generate(CodeGen_LLVM *cg) {
+    void generate(const LoweredFunc &func) {
+        CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(func.target);
+        cg->compile(func.body, func.name, func.args, func.images);
+
         llvm::Module *module = cg->get_module();
 
         // Get the target specific parser.
@@ -110,6 +113,7 @@ public:
         pass_manager.run(*module);
 
         delete target_machine;
+        delete cg;
     }
 
 private:
@@ -122,7 +126,12 @@ public:
     BitcodeOutput(const std::string &filename, bool assembly)
         : filename(filename), assembly(assembly) {}
 
-    void generate(CodeGen_LLVM *codegen) {
+    void generate(const LoweredFunc &func) {
+        CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(func.target);
+        cg->compile(func.body, func.name, func.args, func.images);
+
+        llvm::Module *module = cg->get_module();
+
         string error_string;
 #if LLVM_VERSION < 35
         raw_fd_ostream out(filename.c_str(), error_string);
@@ -137,10 +146,12 @@ public:
             << "Error opening output " << filename << ": " << error_string << "\n";
 
         if (assembly) {
-            codegen->get_module()->print(out, NULL);
+            module->print(out, NULL);
         } else {
-            WriteBitcodeToFile(codegen->get_module(), out);
+            WriteBitcodeToFile(module, out);
         }
+
+        delete cg;
     }
 
 private:

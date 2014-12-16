@@ -43,6 +43,7 @@ public:
         // No need to delete the module - deleting the execution engine should take care of that.
     }
 
+    CodeGen_LLVM *codegen;
     ExecutionEngine *execution_engine;
     Module *module;
     LLVMContext *context;
@@ -135,7 +136,7 @@ JITCompiledModule::JITCompiledModule() :
     shutdown_thread_pool(NULL),
     memoization_cache_set_size(NULL) {}
 
-JITCompiledModule::JITCompiledModule(CodeGen_LLVM *cg, const std::string &function_name) :
+JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
     function(NULL),
     wrapped_function(NULL),
     copy_to_host(NULL),
@@ -149,6 +150,9 @@ JITCompiledModule::JITCompiledModule(CodeGen_LLVM *cg, const std::string &functi
     set_custom_print(NULL),
     shutdown_thread_pool(NULL),
     memoization_cache_set_size(NULL) {
+
+    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(func.target);
+    cg->compile(func.body, func.name, func.args, func.images);
     // Take ownership of the module in cg.
     llvm::Module *m = cg->take_module();
 
@@ -211,12 +215,12 @@ JITCompiledModule::JITCompiledModule(CodeGen_LLVM *cg, const std::string &functi
     // triggers compilation)
     debug(1) << "JIT compiling...\n";
 
-    hook_up_function_pointer(ee, m, function_name, true, &function);
+    hook_up_function_pointer(ee, m, func.name, true, &function);
 
     void *function_address = reinterpret_bits<void *>(function);
     debug(1) << "JIT compiled function pointer " << function_address << "\n";
 
-    hook_up_function_pointer(ee, m, function_name + "_argv", true, &wrapped_function);
+    hook_up_function_pointer(ee, m, func.name + "_argv", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
     hook_up_function_pointer(ee, m, "halide_copy_to_dev", false, &copy_to_dev);
     hook_up_function_pointer(ee, m, "halide_dev_free", false, &free_dev_buffer);
@@ -259,6 +263,8 @@ JITCompiledModule::JITCompiledModule(CodeGen_LLVM *cg, const std::string &functi
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     ee->runStaticConstructorsDestructors(false);
+
+    delete cg;
 }
 
 }

@@ -7,6 +7,7 @@
 
 #include "IntrusivePtr.h"
 #include "runtime/HalideRuntime.h"
+#include "Output.h"
 
 namespace llvm {
 class Module;
@@ -86,9 +87,8 @@ struct JITCompiledModule {
 
     JITCompiledModule();
     /** Take an llvm module and compile it. Populates the function
-     * pointer members above with the result. Takes ownership of the
-     * module in cg. */
-    JITCompiledModule(CodeGen_LLVM *cg, const std::string &function_name);
+     * pointer members above with the result. */
+    JITCompiledModule(const LoweredFunc &lowered_func);
 
     /** Holds a cleanup routine and context parameter. */
     struct CleanupRoutine {
