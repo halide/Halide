@@ -184,6 +184,37 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Skip stages introduces conditional allocations, check that we handle them correctly.
+    {
+      Func f, g;
+      f(x) = x*3;
+      g(x, c) = select(c == 0, f(x), x*5);
+      f.compute_at(g, c);
+
+      Image<int> result = g.realize(100, 3);
+      for (int c = 0; c < 3; c++) {
+        for (int x = 0; x < 100; x++) {
+          int correct = c == 0? x*3: x*5;
+          if (result(x, c) != correct) {
+            printf("conditional alloc result(%d, %d) = %d instead of %d\n",
+                   x, c, result(x, c), correct);
+          }
+        }
+      }
+    }
+
+    // Test that we can deal with undefined values.
+    {
+      Func result("result");
+
+      RDom rv(0, 50, 0, 50);
+
+      result(x, y) = 0;
+      result(rv.x, rv.y) = select(rv.y < 10, 100, undef<int>());
+
+      result.compile_jit();
+    }
+
     // Check for combinatorial explosion when there are lots of selects
     {
         Func f;
@@ -203,25 +234,6 @@ int main(int argc, char **argv) {
                 return -1;
             }
         }
-    }
-
-    // Skip stages introduces conditional allocations, check that we handle them correctly.
-    {
-      Func f, g;
-      f(x) = x*3;
-      g(x, c) = select(c == 0, f(x), x*5);
-      f.compute_at(g, c);
-
-      Image<int> result = g.realize(100, 3);
-      for (int c = 0; c < 3; c++) {
-        for (int x = 0; x < 100; x++) {
-          int correct = c == 0? x*3: x*5;
-          if (result(x, c) != correct) {
-            printf("conditional alloc result(%d, %d) = %d instead of %d\n",
-                   x, c, result(x, c), correct);
-          }
-        }
-      }
     }
 
     printf("Success!\n");

@@ -198,7 +198,7 @@ bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Sco
 // we mean converting the conditions to simple inequality constraints whenever possible.
 class NormalizeBranches : public IRMutator {
 public:
-    NormalizeBranches(const Scope<Expr> *s, const int limit = 10) :
+    NormalizeBranches(const Scope<Expr> *s, const size_t limit = 10) :
             branch_count(0), branching_limit(limit),
             in_if_cond(false), in_select_cond(false) {
         scope.set_containing_scope(s);
@@ -209,8 +209,8 @@ private:
 
     Scope<Expr> scope;
 
-    int branch_count;
-    const int branching_limit;
+    size_t branch_count;
+    const size_t branching_limit;
 
     bool in_if_cond;
     std::stack<Stmt> then_case;
@@ -232,6 +232,7 @@ private:
             stmt = IfThenElse::make(cond, mutate(then_case.top()), mutate(else_case.top()));
             then_case.pop();
             else_case.pop();
+            assert(branch_count > 0);
             --branch_count;
 
             if (!cond.same_as(op->condition)) {
@@ -255,6 +256,7 @@ private:
             in_select_cond = old_in_select_cond;
             true_value.pop();
             false_value.pop();
+            assert(branch_count > 0);
             --branch_count;
             if (!cond.same_as(op->condition)) {
                 expr = mutate(expr);
@@ -534,7 +536,7 @@ public:
 
 Stmt normalize_branch_conditions(Stmt stmt, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
-                                 const int branching_limit) {
+                                 const size_t branching_limit) {
   stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
   stmt = PruneBranches(var, &scope, &bounds, vars).mutate(stmt);
   stmt = simplify(stmt, true, bounds);
@@ -543,7 +545,7 @@ Stmt normalize_branch_conditions(Stmt stmt, const std::string& var, const Scope<
 
 Expr normalize_branch_conditions(Expr expr, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
-                                 const int branching_limit) {
+                                 const size_t branching_limit) {
   expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
   expr = PruneBranches(var, &scope, &bounds, vars).mutate(expr);
   expr = simplify(expr, true, bounds);
