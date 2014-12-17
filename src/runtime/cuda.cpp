@@ -624,21 +624,21 @@ WEAK int halide_cuda_device_sync(void *user_context, struct buffer_t *) {
     return 0;
 }
 
-WEAK int halide_dev_run(void *user_context,
-                        void *state_ptr,
-                        const char* entry_name,
-                        int blocksX, int blocksY, int blocksZ,
-                        int threadsX, int threadsY, int threadsZ,
-                        int shared_mem_bytes,
-                        size_t arg_sizes[],
-                        void* args[],
-                        int8_t arg_is_buffer[],
-                        int num_attributes,
-                        float* vertex_buffer,
-                        int num_coords_dim0,
-                        int num_coords_dim1) {
+WEAK int halide_cuda_run(void *user_context,
+                         void *state_ptr,
+                         const char* entry_name,
+                         int blocksX, int blocksY, int blocksZ,
+                         int threadsX, int threadsY, int threadsZ,
+                         int shared_mem_bytes,
+                         size_t arg_sizes[],
+                         void* args[],
+                         int8_t arg_is_buffer[],
+                         int num_attributes,
+                         float* vertex_buffer,
+                         int num_coords_dim0,
+                         int num_coords_dim1) {
 
-    debug(user_context) << "CUDA: halide_dev_run ("
+    debug(user_context) << "CUDA: halide_cuda_run ("
                         << "user_context: " << user_context << ", "
                         << "entry: " << entry_name << ", "
                         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
@@ -651,15 +651,19 @@ WEAK int halide_dev_run(void *user_context,
         return ctx.error;
     }
 
+    debug(user_context) << "Got context.\n";
+
     #ifdef DEBUG_RUNTIME
     uint64_t t_before = halide_current_time_ns(user_context);
     #endif
 
     halide_assert(user_context, state_ptr);
     CUmodule mod = ((module_state*)state_ptr)->module;
+    debug(user_context) << "Got module " << mod << "\n";
     halide_assert(user_context, mod);
     CUfunction f;
     err = cuModuleGetFunction(&f, mod, entry_name);
+    debug(user_context) << "Got function " << f << "\n";
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuModuleGetFunction failed: "
                             << get_error_name(err);
