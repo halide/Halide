@@ -334,19 +334,23 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     }
 
 
-    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        CodeGen_GPU_Dev *gpu_codegen = iter->second;
+    // Remember the entry block so we can branch to it upon init success.
+    BasicBlock *entry = &function->getEntryBlock();
 
+    for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
+        if (iter->first == Device_Default_GPU) {
+            continue;
+        }
+        CodeGen_GPU_Dev *gpu_codegen = iter->second;
         std::string api_unique_name = gpu_codegen->api_unique_name();
+        debug(2) << "Generating init_kernels for " << api_unique_name << "\n";
+
         std::vector<char> kernel_src = gpu_codegen->compile_to_src();
 
         Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_" + api_unique_name + "_kernel_src");
 
-        // Remember the entry block so we can branch to it upon init success.
-        BasicBlock *entry = &function->getEntryBlock();
-
         // Insert a new block to run initialization at the beginning of the function.
-        BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
+        BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels" + api_unique_name,
                                                          function, entry);
         builder->SetInsertPoint(init_kernels_bb);
         Value *user_context = get_user_context();
@@ -355,13 +359,15 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
         Value *init = module->getFunction(init_kernels_name);
         internal_assert(init) << "Could not find function " + init_kernels_name + " in initial module\n";
         Value *result = builder->CreateCall4(init, user_context,
-                                             get_module_state(),
+                                             get_module_state(api_unique_name),
                                              kernel_src_ptr, kernel_size);
         Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
         CodeGen_CPU::create_assertion(did_succeed, "Failure inside " + init_kernels_name);
 
-        // Upon success, jump to the original entry.
+        // Upon success, jump to the previous entry.
         builder->CreateBr(entry);
+        // Set the entry for the next init block to the init block just generated
+        entry = init_kernels_bb;
     }
 
     // Optimize the module
@@ -675,25 +681,27 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         builder->CreateStore(ConstantInt::get(i8, 0),
                              builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, num_args));
 
+        std::string api_unique_name = gpu_codegen->api_unique_name();
+
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
         Value *launch_args[] = {
             get_user_context(),
-            builder->CreateLoad(get_module_state()),
+            builder->CreateLoad(get_module_state(api_unique_name)),
             entry_name_str,
             codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
-            builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
-            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref"),
-            builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, 0, "gpu_arg_is_buffer_ref"),
+            builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref" + api_unique_name),
+            builder->CreateConstGEP2_32(gpu_arg_is_buffer_arr, 0, 0, "gpu_arg_is_buffer_ref" + api_unique_name),
             gpu_num_padded_attributes,
             gpu_vertex_buffer,
             gpu_num_coords_dim0,
             gpu_num_coords_dim1,
         };
-        std::string run_fn_name = "halide_" + gpu_codegen->api_unique_name() + "_run";
+        std::string run_fn_name = "halide_" + api_unique_name + "_run";
         llvm::Function *dev_run_fn = module->getFunction(run_fn_name);
         internal_assert(dev_run_fn) << "Could not find " << run_fn_name << " in module\n";
         Value *result = builder->CreateCall(dev_run_fn, launch_args);
@@ -705,8 +713,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 }
 
 template<typename CodeGen_CPU>
-Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
-    GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
+Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_unique_name) {
+    GlobalVariable *module_state = module->getGlobalVariable("module_state" + api_unique_name, true);
     if (!module_state)
     {
         // Create a global variable to hold the module state
@@ -714,7 +722,7 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
         module_state = new GlobalVariable(*module, void_ptr_type,
                                           false, GlobalVariable::PrivateLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
-                                          "module_state");
+                                          "module_state" + api_unique_name);
         debug(4) << "Created device module state global variable\n";
     }
     return module_state;

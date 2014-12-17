@@ -93,7 +93,7 @@ protected:
 
     static std::map<DeviceAPI, CodeGen_GPU_Dev *> make_devices(Target);
 
-    llvm::Value *get_module_state();
+    llvm::Value *get_module_state(const std::string &api_unique_name);
 
 private:
     /** Child code generator for device kernels. */

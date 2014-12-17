@@ -593,6 +593,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                        "halide_cuda_device_interface",
                        "halide_opencl_device_interface",
                        "halide_opengl_device_interface",
+                       "halide_cuda_run",
+                       "halide_opencl_run",
+                       "halide_opengl_run",
                        "__stack_chk_guard",
                        "__stack_chk_fail",
                        ""};
@@ -813,13 +816,15 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c) {
         } else {
             modules.push_back(get_initmod_cuda(c, bits_64, debug));
         }
-    } else if (t.has_feature(Target::OpenCL)) {
+    }
+    if (t.has_feature(Target::OpenCL)) {
         if (t.os == Target::Windows) {
             modules.push_back(get_initmod_windows_opencl(c, bits_64, debug));
         } else {
             modules.push_back(get_initmod_opencl(c, bits_64, debug));
         }
-    } else if (t.has_feature(Target::OpenGL)) {
+    }
+    if (t.has_feature(Target::OpenGL)) {
         modules.push_back(get_initmod_opengl(c, bits_64, debug));
         if (t.os == Target::Linux) {
             modules.push_back(get_initmod_linux_opengl_context(c, bits_64, debug));

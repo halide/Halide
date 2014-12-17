@@ -1727,6 +1727,41 @@ Stmt add_image_checks(Stmt s, Function f, const Target &t,
     return s;
 }
 
+class PropagateInheritedAttributes : public IRMutator {
+    using IRMutator::visit;
+
+    DeviceAPI for_device;
+
+    void visit(const For *op) {
+        DeviceAPI save_device = for_device;
+        Expr min = mutate(op->min);
+        Expr extent = mutate(op->extent);
+        Stmt body = mutate(op->body);
+        DeviceAPI result_device = (op->device_api == Device_Parent) ? for_device : op->device_api;
+
+        if (min.same_as(op->min) &&
+            extent.same_as(op->extent) &&
+            body.same_as(op->body) &&
+            result_device == op->device_api) {
+            stmt = op;
+        } else {
+            stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
+        }
+
+        for_device = save_device;
+    }
+
+public:
+    PropagateInheritedAttributes() : for_device(Device_Host) {
+    }
+};
+
+Stmt propagate_inherited_attributes(Stmt s) {
+    PropagateInheritedAttributes propagator;
+
+    return propagator.mutate(s);
+}
+
 Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes) {
     // Compute an environment
     map<string, Function> env = find_transitive_calls(f);
@@ -1885,6 +1920,16 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         s = setup_gpu_vertex_buffer(s);
         debug(2) << "Lowering after removing varying attributes:\n" << s << "\n\n";
     }
+
+    // This is envisioned as a catch all pass to propagate attributes
+    // which are inhereited from a parent node by a child node so
+    // every CodeGen backend does not have to keep track of these
+    // attributes as the IR tree is traversed. At present, only the
+    // GPU device attribute on For nodes is propagated (to contained
+    // For nodes which have their device set to Device_Parent).
+    debug(1) << "Propagating inherited attributes downward.\n";
+    s = propagate_inherited_attributes(s);
+    debug(1) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";
 
     s = simplify(s);
     debug(1) << "Lowering after final simplification:\n" << s << "\n\n";
