@@ -258,7 +258,8 @@ struct Stmt : public IRHandle {
 
 namespace Internal {
 
-/** Cast a node from one type to another */
+/** Cast a node from one type to another. Can't change vector
+ * widths. */
 struct Cast : public ExprNode<Cast> {
     Expr value;
 
@@ -448,8 +449,7 @@ struct LetStmt : public StmtNode<LetStmt> {
     EXPORT static Stmt make(std::string name, Expr value, Stmt body);
 };
 
-/** If the 'condition' is false, then bail out printing the
- * message to stderr */
+/** If the 'condition' is false, then bail out calling halide_error. */
 struct AssertStmt : public StmtNode<AssertStmt> {
     // if condition then val else error out with message
     Expr condition;
@@ -464,7 +464,7 @@ struct AssertStmt : public StmtNode<AssertStmt> {
  * three child statements happen in order. In the 'produce'
  * statement 'buffer' is write-only. In 'update' it is
  * read-write. In 'consume' it is read-only. The 'update' node is
- * often NULL. (check update.defined() to find out). None of this
+ * often undefined. (check update.defined() to find out). None of this
  * is actually enforced, the node is purely for informative
  * purposes to help out our analysis during lowering. */
 struct Pipeline : public StmtNode<Pipeline> {
@@ -522,7 +522,8 @@ struct Provide : public StmtNode<Provide> {
 /** Allocate a scratch area called with the given name, type, and
  * size. The buffer lives for at most the duration of the body
  * statement, within which it is freed. It is an error for an allocate
- * node not to contain a free node of the same buffer. */
+ * node not to contain a free node of the same buffer. Allocation only
+ * occurs if the condition evaluates to true. */
 struct Allocate : public StmtNode<Allocate> {
     std::string name;
     Type type;
@@ -557,7 +558,8 @@ typedef std::vector<Range> Region;
 /** Allocate a multi-dimensional buffer of the given type and
  * size. Create some scratch memory that will back the function 'name'
  * over the range specified in 'bounds'. The bounds are a vector of
- * (min, extent) pairs for each dimension. */
+ * (min, extent) pairs for each dimension. Allocation only occurs if
+ * the condition evaluates to true. */
 struct Realize : public StmtNode<Realize> {
     std::string name;
     std::vector<Type> types;
@@ -569,14 +571,14 @@ struct Realize : public StmtNode<Realize> {
 };
 
 /** A sequence of statements to be executed in-order. 'rest' may be
- * NULL. Used rest.defined() to find out. */
+ * undefined. Used rest.defined() to find out. */
 struct Block : public StmtNode<Block> {
     Stmt first, rest;
 
     EXPORT static Stmt make(Stmt first, Stmt rest);
 };
 
-/** An if-then-else block. 'else' may be NULL. */
+/** An if-then-else block. 'else' may be undefined. */
 struct IfThenElse : public StmtNode<IfThenElse> {
     Expr condition;
     Stmt then_case, else_case;

@@ -25,7 +25,7 @@ using std::vector;
 
 // A compile time variable that limits that maximum number of branches that we can generate
 // in this optimization pass. This prevents a combinatorial explosion of code generation.
-static const int branching_limit = 10;
+static const size_t branching_limit = 10;
 
 namespace {
 // A method used to test if we should pull out a min/extent expr
@@ -234,6 +234,8 @@ public:
         queue<string> bounds_vars;
         for (int i = branches.size()-1; i >= 0; --i) {
             Branch &branch = branches[i];
+            if (!branch.content.defined()) continue;
+
             Expr branch_extent = branch.extent;
             Expr branch_min = branch.min;
             Expr branch_max = simplify(branch_min + branch_extent - 1);
@@ -630,14 +632,14 @@ private:
     }
 
     bool visit_simple_cond(Expr cond, StmtOrExpr a, StmtOrExpr b) {
-        int num_defined = 0;
+        size_t num_defined = 0;
         if (a.defined()) ++num_defined;
         if (b.defined()) ++num_defined;
 
         // Bail out if this condition depends on more than just the current loop variable,
         // or we are going to branch too much.
         if (num_free_vars(cond, free_vars, scope) > 1 ||
-            static_cast<int>(branches.size()) > branching_limit - num_defined) {
+            branches.size() + num_defined > branching_limit) {
             return false;
         }
 
@@ -949,6 +951,8 @@ private:
     void visit(const LetStmt *op) {visit_let(op);}
 
     StmtOrExpr make_branch_content(const Pipeline *op, const vector<StmtOrExpr> &args) {
+        // If the produce stage is undefined, then assert that there is no update stage,
+        // and just return the consume stage.
         if (!args[0].defined()) {
             internal_assert(!args[1].defined());
             return args[2];
@@ -976,6 +980,11 @@ private:
     }
 
     StmtOrExpr make_branch_content(const For *op, const vector<StmtOrExpr> &args) {
+        // If the loop body is undefined, then just return an undefined Stmt.
+        if (!args[2].defined()) {
+            return Stmt();
+        }
+
         return For::make(op->name, args[0], args[1], op->for_type, op->device_api, args[2]);
     }
 
