@@ -127,7 +127,7 @@ private:
     void visit(const For *loop) {
         bool old_kernel_loop = inside_kernel_loop;
         if (loop->for_type == For::Parallel &&
-            CodeGen_GPU_Dev::is_gpu_block_var(loop->name)) {
+            loop->device_api == Device_GLSL) {
             inside_kernel_loop = true;
         }
         IRMutator::visit(loop);
