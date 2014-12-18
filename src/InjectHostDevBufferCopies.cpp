@@ -259,9 +259,6 @@ class InjectBufferCopies : public IRMutator {
             if (!buf.dev_touched && (device_wrote || device_read)) {
                 buf.dev_touched = true;
                 buf.device_first_touched = touching_device;
-                // This will arrange for a halide_device_malloc call, so mark the device current
-                buf.dev_current = true;
-                buf.current_device = touching_device;
             }
 
             if ((host_read || host_wrote) && !buf.host_current && (!buf.internal || buf.dev_touched)) {
@@ -277,8 +274,8 @@ class InjectBufferCopies : public IRMutator {
                 buf.dev_current = false;
                 debug(4) << "Invalidating dev_current\n";
             } else if ((device_read || device_wrote) &&
-                       (!buf.dev_current || (buf.current_device != touching_device)) /* &&
-                       (!buf.internal || buf.host_touched) */) { // TODO: figure out why this was here and if still necessary
+                       ((!buf.dev_current || (buf.current_device != touching_device)) ||
+                        (!buf.internal || buf.host_touched))) {
                 // Needs a copy-to-dev.
                 internal_assert(!host_read && !host_wrote);
                 direction = ToDevice;
