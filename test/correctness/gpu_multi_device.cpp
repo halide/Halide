@@ -27,7 +27,7 @@ struct MultiDevicePipeline {
         }
         if (jit_target.has_feature(Target::OpenGL)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().bound(c, 0, 3).glsl(x, y, c).vectorize(c);
+            stage[current_stage].compute_root().bound(c, 0, 3).reorder(c, x, y).glsl(x, y, c).vectorize(c);
             current_stage++;
         }
     }
@@ -36,13 +36,13 @@ struct MultiDevicePipeline {
         stage[current_stage - 1].realize(result);
     }
 
-  bool verify(const Image<int32_t> &result, size_t stages, const char * test_case) {
+    bool verify(const Image<int32_t> &result, size_t stages, const char * test_case) {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {
                     int correct = 42 + stages * 69;
                     if (result(i, j, k) != correct) {
-                      printf("result(%d, %d, %d) = %d instead of %d. (%s).\n", i, j, k, result(i, j, k), correct, test_case);
+                        printf("result(%d, %d, %d) = %d instead of %d. (%s).\n", i, j, k, result(i, j, k), correct, test_case);
                         return false;
                     }
                 }
