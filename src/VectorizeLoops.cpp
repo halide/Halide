@@ -8,6 +8,7 @@
 #include "Substitute.h"
 #include "IROperator.h"
 #include "IRMatch.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -156,14 +157,20 @@ class VectorizeLoops : public IRMutator {
 
                 // To widen successfully, the intrinisic must either produce a
                 // vector width result or a scalar result that we can broadcast.
-                if (shuffle_width == replacement_width) {
-                    // No mutation is necessary to produce a replacment width
-                    // result
-                    expr = op;
+                if (shuffle_width == 1) {
 
-                } else if (shuffle_width == 1) {
+                    // Check to see if the shuffled expression contains the
+                    // vectorized dimension variable. Since vectorization will
+                    // change the vectorized dimension loop to a single value
+                    // let, we need to eliminate any use of the vectorized
+                    // dimension variable inside the shuffled expression
+                    Expr shuffled_expr = op->args[0];
+                    if (expr_uses_var(shuffled_expr,var)) {
+                        shuffled_expr = scalarize(op);
+                    }
 
-                    // Otherwise, the shuffle produces a scalar result
+                    // Otherwise, the shuffle produces a scalar result and has
+                    // only one channel selector argument.
                     internal_assert(op->args[1].type().width == 1);
                     Expr mutated_channel = mutate(op->args[1]);
                     int mutated_width = mutated_channel.type().width;
@@ -175,13 +182,13 @@ class VectorizeLoops : public IRMutator {
                     // shuffle_vector intrinisic and return the vector
                     // expression it contains directly.
                     if (expr_match(replacement,mutated_channel) &&
-                        (op->args[0].type().width == replacement_width)) {
+                        (shuffled_expr.type().width == replacement_width)) {
 
                         // Note that we stop mutating at this expression. Any
                         // unvectorized variables inside this argument may
                         // continue to refer to scalar expressions in the
                         // enclosing lets whose names have not changed.
-                        expr = op->args[0];
+                        expr = shuffled_expr;
 
                     } else if (mutated_width == replacement_width) {
                         // Otherwise, if the mutated channel width matches the
@@ -191,7 +198,7 @@ class VectorizeLoops : public IRMutator {
                         vector<Expr> new_args(1+replacement_width);
 
                         // Append the vector expression as the first argument
-                        new_args[0] = op->args[0];
+                        new_args[0] = shuffled_expr;
 
                         // Extract each channel of the mutated channel
                         // expression, each is passed as a separate argument to
@@ -213,8 +220,8 @@ class VectorizeLoops : public IRMutator {
                     }
 
                 } else {
-                    // If the shuffle_vector result is not a scalar or the
-                    // correct width, there are no rules for how to widen it.
+                    // If the shuffle_vector result is not a scalar there are no
+                    // rules for how to widen it.
                     internal_error << "Mismatched vector widths in VectorSubs for shuffle_vector\n";
                 }
 
@@ -521,6 +528,52 @@ class VectorizeLoops : public IRMutator {
             replacement = old_replacement;
             scalarized = false;
 
+            return result;
+        }
+
+        Expr scalarize(Expr e) {
+            // This method returns a select tree that produces a vector width
+            // result expression
+
+            Expr result;
+
+            int width = replacement.type().width;
+            Expr old_replacement = replacement;
+            internal_assert(!scalarized);
+            scalarized = true;
+
+            for (int i = width - 1; i >= 0; --i) {
+                // Extract a single lane from the vectorized variable expression
+                // substituted in by this mutator
+                replacement = extract_lane(old_replacement, i);
+                scalar_lane = i;
+
+                Expr new_expr = e;
+
+                // Hide all the vector let values in scope with a scalar version
+                // in the appropriate lane.
+                for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
+                    string name = iter.name() + ".lane." + int_to_string(i);
+                    Expr lane = extract_lane(iter.value(), i);
+                    new_expr = substitute(iter.name(), Variable::make(lane.type(), name), new_expr);
+                    new_expr = Let::make(name, lane, new_expr);
+                }
+
+                // Replace uses of the vectorized variable with the extracted
+                // lane expression
+                new_expr = substitute(var, scalar_lane, new_expr);
+
+                if (i == width - 1) {
+                    result = Broadcast::make(new_expr,width);
+                } else {
+                    Expr cond = (old_replacement == Broadcast::make(scalar_lane, width));
+                    result = Select::make(cond, Broadcast::make(new_expr,width), result);
+                }
+            }
+
+            replacement = old_replacement;
+            scalarized = false;
+            
             return result;
         }
 
