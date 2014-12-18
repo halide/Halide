@@ -1725,15 +1725,16 @@ class PropagateInheritedAttributes : public IRMutator {
 
     void visit(const For *op) {
         DeviceAPI save_device = for_device;
+        for_device = (op->device_api == Device_Parent) ? for_device : op->device_api;
+
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
         Stmt body = mutate(op->body);
-        DeviceAPI result_device = (op->device_api == Device_Parent) ? for_device : op->device_api;
 
         if (min.same_as(op->min) &&
             extent.same_as(op->extent) &&
             body.same_as(op->body) &&
-            result_device == op->device_api) {
+            for_device == op->device_api) {
             stmt = op;
         } else {
             stmt = For::make(op->name, min, extent, op->for_type, for_device, body);
