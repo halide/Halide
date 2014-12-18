@@ -438,7 +438,7 @@ private:
             Stmt computed_bounds_let = LetStmt::make(computed_bounds_name, computed_bounds, cache_lookup);
 
             Stmt generate_key = Block::make(key_info.generate_key(cache_key_name), computed_bounds_let);
-            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), true, generate_key);
+            Stmt cache_key_alloc = Allocate::make(cache_key_name, UInt(8), vec(key_info.key_size()), const_true(), generate_key);
 
             stmt = cache_key_alloc;
         } else {

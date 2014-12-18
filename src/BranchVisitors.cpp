@@ -15,18 +15,25 @@ class BranchesLinearlyInVars : public IRVisitor {
 public:
     bool result;
 
-    BranchesLinearlyInVars(const Scope<int>& fv, const Scope<int> *bv, bool minmax) :
-            result(false), free_vars(fv), branch_on_minmax(minmax)
+    BranchesLinearlyInVars(const Scope<int>& fv, const Scope<int> &b, const Scope<int> *bv, bool minmax) :
+            result(false), free_vars(fv), branch_vars(b), branch_on_minmax(minmax)
     {
         bound_vars.set_containing_scope(bv);
     }
 
 private:
     const Scope<int> &free_vars;
+    const Scope<int> &branch_vars;
     bool branch_on_minmax;
     Scope<int> bound_vars;
 
     using IRVisitor::visit;
+
+    void visit(const Variable *op) {
+        if (branch_vars.contains(op->name)) {
+            result = branch_vars.get(op->name) > 0;
+        }
+    }
 
     void visit(const IfThenElse *op) {
         if (expr_is_linear_in_vars(op->condition, free_vars, bound_vars)) {
@@ -82,29 +89,31 @@ private:
 
 bool branches_linearly_in_var(Stmt stmt, const std::string &var, bool branch_on_minmax) {
     Scope<int> free_vars;
+    Scope<int> branch_vars;
     free_vars.push(var, 0);
 
-    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, NULL, branch_on_minmax);
     stmt.accept(&has_branches);
     return has_branches.result;
 }
 
 bool branches_linearly_in_var(Expr expr, const std::string &var, bool branch_on_minmax) {
     Scope<int> free_vars;
+    Scope<int> branch_vars;
     free_vars.push(var, 0);
 
-    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, NULL, branch_on_minmax);
     expr.accept(&has_branches);
     return has_branches.result;
 }
 
-
 bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<int> &bound_vars,
                               bool branch_on_minmax) {
     Scope<int> free_vars;
+    Scope<int> branch_vars;
     free_vars.push(var, 0);
 
-    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
     stmt.accept(&has_branches);
     return has_branches.result;
 }
@@ -112,36 +121,74 @@ bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<int
 bool branches_linearly_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars,
                               bool branch_on_minmax) {
     Scope<int> free_vars;
+    Scope<int> branch_vars;
     free_vars.push(var, 0);
 
-    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
     expr.accept(&has_branches);
     return has_branches.result;
 }
 
+bool branches_linearly_in_var(Stmt stmt, const std::string &var, const Scope<int> &bound_vars,
+                              const Scope<int> &branch_vars, bool branch_on_minmax) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
+    stmt.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_var(Expr expr, const std::string &var, const Scope<int> &bound_vars,
+                              const Scope<int> &branch_vars, bool branch_on_minmax) {
+    Scope<int> free_vars;
+    free_vars.push(var, 0);
+
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
+    expr.accept(&has_branches);
+    return has_branches.result;
+}
 
 bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, bool branch_on_minmax) {
-    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    Scope<int> branch_vars;
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, NULL, branch_on_minmax);
     stmt.accept(&has_branches);
     return has_branches.result;
 }
 
 bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, bool branch_on_minmax) {
-    BranchesLinearlyInVars has_branches(free_vars, NULL, branch_on_minmax);
+    Scope<int> branch_vars;
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, NULL, branch_on_minmax);
     expr.accept(&has_branches);
     return has_branches.result;
 }
 
 bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, const Scope<int> &bound_vars,
                                bool branch_on_minmax) {
-    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    Scope<int> branch_vars;
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
     stmt.accept(&has_branches);
     return has_branches.result;
 }
 
 bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars,
                                bool branch_on_minmax) {
-    BranchesLinearlyInVars has_branches(free_vars, &bound_vars, branch_on_minmax);
+    Scope<int> branch_vars;
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
+    expr.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_vars(Stmt stmt, const Scope<int> &free_vars, const Scope<int> &bound_vars,
+                               const Scope<int> &branch_vars, bool branch_on_minmax) {
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
+    stmt.accept(&has_branches);
+    return has_branches.result;
+}
+
+bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Scope<int> &bound_vars,
+                               const Scope<int> &branch_vars, bool branch_on_minmax) {
+    BranchesLinearlyInVars has_branches(free_vars, branch_vars, &bound_vars, branch_on_minmax);
     expr.accept(&has_branches);
     return has_branches.result;
 }
@@ -151,7 +198,7 @@ bool branches_linearly_in_vars(Expr expr, const Scope<int> &free_vars, const Sco
 // we mean converting the conditions to simple inequality constraints whenever possible.
 class NormalizeBranches : public IRMutator {
 public:
-    NormalizeBranches(const Scope<Expr> *s, const int limit = 10) :
+    NormalizeBranches(const Scope<Expr> *s, const size_t limit = 10) :
             branch_count(0), branching_limit(limit),
             in_if_cond(false), in_select_cond(false) {
         scope.set_containing_scope(s);
@@ -162,8 +209,8 @@ private:
 
     Scope<Expr> scope;
 
-    int branch_count;
-    const int branching_limit;
+    size_t branch_count;
+    const size_t branching_limit;
 
     bool in_if_cond;
     std::stack<Stmt> then_case;
@@ -185,6 +232,7 @@ private:
             stmt = IfThenElse::make(cond, mutate(then_case.top()), mutate(else_case.top()));
             then_case.pop();
             else_case.pop();
+            assert(branch_count > 0);
             --branch_count;
 
             if (!cond.same_as(op->condition)) {
@@ -208,6 +256,7 @@ private:
             in_select_cond = old_in_select_cond;
             true_value.pop();
             false_value.pop();
+            assert(branch_count > 0);
             --branch_count;
             if (!cond.same_as(op->condition)) {
                 expr = mutate(expr);
@@ -487,7 +536,7 @@ public:
 
 Stmt normalize_branch_conditions(Stmt stmt, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
-                                 const int branching_limit) {
+                                 const size_t branching_limit) {
   stmt = NormalizeBranches(&scope, branching_limit).mutate(stmt);
   stmt = PruneBranches(var, &scope, &bounds, vars).mutate(stmt);
   stmt = simplify(stmt, true, bounds);
@@ -496,7 +545,7 @@ Stmt normalize_branch_conditions(Stmt stmt, const std::string& var, const Scope<
 
 Expr normalize_branch_conditions(Expr expr, const std::string& var, const Scope<Expr> &scope,
                                  const Scope<Interval> &bounds, const Scope<int> &vars,
-                                 const int branching_limit) {
+                                 const size_t branching_limit) {
   expr = NormalizeBranches(&scope, branching_limit).mutate(expr);
   expr = PruneBranches(var, &scope, &bounds, vars).mutate(expr);
   expr = simplify(expr, true, bounds);
