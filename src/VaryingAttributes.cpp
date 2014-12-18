@@ -55,7 +55,7 @@ protected:
         if (op->name == Call::glsl_texture_load) {
             // Check if the texture coordinate arguments are linear wrt the GPU
             // loop variables
-            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load";
+            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load\n";
 
             // Iterate over the texture coordinate arguments
             for (int i = 2; i != 4; ++i) {
@@ -66,7 +66,7 @@ protected:
             }
         } else if (op->name == Call::glsl_texture_store) {
             // Check if the value expression is linear wrt the loop variables
-            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture load";
+            internal_assert(loop_vars.size() > 0) << "No GPU loop variables found at texture store\n";
 
             // The value is the 5th argument to the intrinsic
             new_args[5] = mutate(new_args[5]);
@@ -1215,7 +1215,7 @@ public:
             stmt = LetStmt::make("glsl.num_coords_dim0", dont_simplify(IntImm::make(coords[0].size())),
                    LetStmt::make("glsl.num_coords_dim1", dont_simplify(IntImm::make(coords[1].size())),
                    LetStmt::make("glsl.num_padded_attributes", dont_simplify(IntImm::make(num_padded_attributes)),
-                   Allocate::make(vs.vertex_buffer_name, Float(32), vec(Expr(vertex_buffer_size)), true,
+                   Allocate::make(vs.vertex_buffer_name, Float(32), vec(Expr(vertex_buffer_size)), const_true(),
                    Block::make(vertex_setup,
                    Block::make(loop_stmt,
                    Block::make(used_in_codegen(Int(32),"glsl.num_coords_dim0"),
