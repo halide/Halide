@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     {
         MultiDevicePipeline pipe1(const_input);
         if (pipe1.current_stage < 3) {
-            printf("One or fewer gpu target enabled. Skipping test.\n");
+            printf("One or fewer gpu targets enabled. Skipping test.\n");
             return 0;
         }
 
