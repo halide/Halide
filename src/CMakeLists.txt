@@ -79,7 +79,6 @@ set(RUNTIME_CPP
   ios_io
   android_clock
   linux_clock
-  nogpu
   opencl
   opengl
   gpu_device_selection
