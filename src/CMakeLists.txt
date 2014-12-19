@@ -1,4 +1,4 @@
-Badd_executable(build_halide_h ../tools/build_halide_h.cpp)
+add_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 
