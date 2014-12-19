@@ -338,6 +338,116 @@ void CodeGen_C::compile(const Module &module) {
     module.body.accept(this);
 }
 
+void CodeGen_C::visit(const FunctionDecl *op) {
+    // Don't put non-public functions in headers.
+    if (header && op->linkage != FunctionDecl::Public) {
+        return;
+    }
+
+    const std::vector<Argument> &args = op->args;
+
+    have_user_context = false;
+    for (size_t i = 0; i < args.size(); i++) {
+        // TODO: check that its type is void *?
+        have_user_context |= (args[i].name == "__user_context");
+    }
+
+    // Emit prototypes for any extern calls used.
+    if (!header) {
+        stream << "\n";
+        ExternCallPrototypes e(stream);
+        op->body.accept(&e);
+        stream << "\n";
+    }
+
+    // Emit the function prototype
+    if (op->linkage != FunctionDecl::Public) {
+        // If the function isn't public, mark it static.
+        stream << "static ";
+    }
+    stream << "HALIDE_EXTERN_C int " << op->name << "(";
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            stream << "buffer_t *"
+                   << print_name(args[i].name)
+                   << "_buffer";
+        } else {
+            stream << "const "
+                   << print_type(args[i].type)
+                   << " "
+                   << print_name(args[i].name);
+        }
+
+        if (i < args.size()-1) stream << ", ";
+    }
+
+    if (header) {
+        stream << ") HALIDE_FUNCTION_ATTRS;\n";
+    } else {
+        stream << ") HALIDE_FUNCTION_ATTRS {\n";
+
+        // Unpack the buffer_t's
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer) {
+                push_buffer(args[i].type, args[i].name);
+            }
+        }
+
+        // Emit the body
+        indent += 1;
+        print(op->body);
+        stream << "}\n";
+        indent -= 1;
+
+        // Done with the buffer_t's
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer) {
+                pop_buffer(args[i].name);
+            }
+        }
+    }
+}
+
+void CodeGen_C::visit(const BufferDecl *op) {
+    if (header) {
+        return;
+    }
+
+    Buffer buffer = op->buffer;
+    string name = print_name(buffer.name());
+    buffer_t b = *(buffer.raw_buffer());
+
+    // Figure out the offset of the last pixel.
+    size_t num_elems = 1;
+    for (int d = 0; b.extent[d]; d++) {
+        num_elems += b.stride[d] * (b.extent[d] - 1);
+    }
+
+    // Emit the data
+    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+    for (size_t i = 0; i < num_elems * b.elem_size; i++) {
+        if (i > 0) stream << ", ";
+        stream << (int)(b.host[i]);
+    }
+    stream << "};\n";
+
+    // Emit the buffer_t
+    user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
+    user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+    stream << "static buffer_t " << name << "_buffer = {"
+           << "0, " // dev
+           << "&" << name << "_data[0], " // host
+           << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
+           << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
+           << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
+           << b.elem_size << ", "
+           << "0, " // host_dirty
+           << "0};\n"; //dev_dirty
+
+    // Make a global pointer to it
+    stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
+}
+
 void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
     string name = print_name(buffer_name);
     string buf_name = name + "_buffer";
@@ -1167,116 +1277,6 @@ void CodeGen_C::visit(const Return *op) {
     string id = print_expr(op->value);
     do_indent();
     stream << "return " << id << ";\n";
-}
-
-void CodeGen_C::visit(const FunctionDecl *op) {
-    // Don't put non-public functions in headers.
-    if (header && op->linkage != FunctionDecl::Public) {
-        return;
-    }
-
-    const std::vector<Argument> &args = op->args;
-
-    have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
-        // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
-    }
-
-    // Emit prototypes for any extern calls used.
-    if (!header) {
-        stream << "\n";
-        ExternCallPrototypes e(stream);
-        op->body.accept(&e);
-        stream << "\n";
-    }
-
-    // Emit the function prototype
-    if (op->linkage != FunctionDecl::Public) {
-        // If the function isn't public, mark it static.
-        stream << "static ";
-    }
-    stream << "HALIDE_EXTERN_C int " << op->name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            stream << "buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
-        } else {
-            stream << "const "
-                   << print_type(args[i].type)
-                   << " "
-                   << print_name(args[i].name);
-        }
-
-        if (i < args.size()-1) stream << ", ";
-    }
-
-    if (header) {
-        stream << ") HALIDE_FUNCTION_ATTRS;\n";
-    } else {
-        stream << ") HALIDE_FUNCTION_ATTRS {\n";
-
-        // Unpack the buffer_t's
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer) {
-                push_buffer(args[i].type, args[i].name);
-            }
-        }
-
-        // Emit the body
-        indent += 1;
-        print(op->body);
-        stream << "}\n";
-        indent -= 1;
-
-        // Done with the buffer_t's
-        for (size_t i = 0; i < args.size(); i++) {
-            if (args[i].is_buffer) {
-                pop_buffer(args[i].name);
-            }
-        }
-    }
-}
-
-void CodeGen_C::visit(const BufferDecl *op) {
-    if (header) {
-        return;
-    }
-
-    Buffer buffer = op->buffer;
-    string name = print_name(buffer.name());
-    buffer_t b = *(buffer.raw_buffer());
-
-    // Figure out the offset of the last pixel.
-    size_t num_elems = 1;
-    for (int d = 0; b.extent[d]; d++) {
-        num_elems += b.stride[d] * (b.extent[d] - 1);
-    }
-
-    // Emit the data
-    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
-    for (size_t i = 0; i < num_elems * b.elem_size; i++) {
-        if (i > 0) stream << ", ";
-        stream << (int)(b.host[i]);
-    }
-    stream << "};\n";
-
-    // Emit the buffer_t
-    user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
-    user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
-    stream << "static buffer_t " << name << "_buffer = {"
-           << "0, " // dev
-           << "&" << name << "_data[0], " // host
-           << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
-           << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
-           << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
-           << b.elem_size << ", "
-           << "0, " // host_dirty
-           << "0};\n"; //dev_dirty
-
-    // Make a global pointer to it
-    stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
 }
 
 void CodeGen_C::test() {
