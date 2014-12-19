@@ -7,7 +7,7 @@
 #include "Deinterleave.h"
 #include "Substitute.h"
 #include "IROperator.h"
-#include "IRMatch.h"
+#include "IREquality.h"
 #include "ExprUsesVar.h"
 
 namespace Halide {
@@ -181,7 +181,7 @@ class VectorizeLoops : public IRMutator {
                     // existing vector expression, then we can remove the
                     // shuffle_vector intrinisic and return the vector
                     // expression it contains directly.
-                    if (expr_match(replacement,mutated_channel) &&
+                    if (equal(replacement,mutated_channel) &&
                         (shuffled_expr.type().width == replacement_width)) {
 
                         // Note that we stop mutating at this expression. Any
