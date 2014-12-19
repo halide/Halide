@@ -416,6 +416,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   CodeGen.cpp
   Output.cpp
   LLVM_Output.cpp
+  Module.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

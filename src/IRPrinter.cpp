@@ -43,8 +43,8 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    stream << "Target = " << m.get_target().to_string();
-    stream << m.body;
+    stream << "Target = " << m.target().to_string() << "\n";
+    stream << m.body();
     return stream;
 }
 
