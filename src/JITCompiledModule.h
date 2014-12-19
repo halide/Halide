@@ -84,9 +84,12 @@ struct JITCompiledModule {
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
+    /** Construct an empty JIT module. */
+    JITCompiledModule();
+
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */
-    JITCompiledModule(llvm::Module *module = NULL, const std::string &fn = "");
+    JITCompiledModule(const Module &module, const std::string &fn);
 
     /** Holds a cleanup routine and context parameter. */
     struct CleanupRoutine {

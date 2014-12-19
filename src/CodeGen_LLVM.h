@@ -34,7 +34,6 @@ class MDNode;
 #include "IRVisitor.h"
 #include "Module.h"
 #include "Scope.h"
-#include "JITCompiledModule.h"
 #include "ModulusRemainder.h"
 #include "Target.h"
 

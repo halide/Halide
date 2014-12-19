@@ -2706,7 +2706,7 @@ void *Func::compile_jit(const Target &target) {
         output_text(module, name() + ".stmt");
     }
 
-    compiled_module = JITCompiledModule(codegen_llvm(module), n);
+    compiled_module = JITCompiledModule(module, n);
 
     return compiled_module.function;
 }
