@@ -339,7 +339,7 @@ void CodeGen_C::compile(const Module &module) {
 }
 
 void CodeGen_C::visit(const FunctionDecl *op) {
-    // Don't put non-public functions in headers.
+    // Don't put non-external function declarations in headers.
     if (is_header && op->linkage != FunctionDecl::External) {
         return;
     }
@@ -409,6 +409,7 @@ void CodeGen_C::visit(const FunctionDecl *op) {
 }
 
 void CodeGen_C::visit(const BufferDecl *op) {
+    // Don't define buffers in headers.
     if (is_header) {
         return;
     }
