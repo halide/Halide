@@ -170,7 +170,8 @@ class VectorizeLoops : public IRMutator {
                     }
 
                     // Otherwise, the shuffle produces a scalar result and has
-                    // only one channel selector argument.
+                    // only one channel selector argument which must be scalar
+                    internal_assert(op->args.size() == 2);
                     internal_assert(op->args[1].type().width == 1);
                     Expr mutated_channel = mutate(op->args[1]);
                     int mutated_width = mutated_channel.type().width;
@@ -534,6 +535,9 @@ class VectorizeLoops : public IRMutator {
         Expr scalarize(Expr e) {
             // This method returns a select tree that produces a vector width
             // result expression
+
+            // TODO: Add an intrinisic to create a vector from a list of scalars
+            // instead of a select tree.
 
             Expr result;
 
