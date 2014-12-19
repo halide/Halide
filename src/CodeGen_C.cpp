@@ -340,7 +340,7 @@ void CodeGen_C::compile(const Module &module) {
 
 void CodeGen_C::visit(const FunctionDecl *op) {
     // Don't put non-public functions in headers.
-    if (header && op->linkage != FunctionDecl::Public) {
+    if (header && op->linkage != FunctionDecl::External) {
         return;
     }
 
@@ -361,7 +361,7 @@ void CodeGen_C::visit(const FunctionDecl *op) {
     }
 
     // Emit the function prototype
-    if (op->linkage != FunctionDecl::Public) {
+    if (op->linkage != FunctionDecl::External) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
@@ -1302,7 +1302,7 @@ void CodeGen_C::test() {
     s = Block::make(s, Return::make(0));
 
     Module m(get_host_target());
-    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::Public));
+    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::External));
 
     ostringstream source;
     CodeGen_C cg(source, false);

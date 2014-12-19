@@ -140,28 +140,10 @@ JITCompiledModule::JITCompiledModule(llvm::Module *m, const std::string &fn) :
     debug(2) << "Creating new execution engine\n";
     string error_string;
 
-    bool use_soft_float_abi = false;
     string mcpu;
     string mattrs;
-
     llvm::TargetOptions options;
-    options.LessPreciseFPMADOption = true;
-    options.NoFramePointerElim = false;
-    options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
-    options.UnsafeFPMath = true;
-    options.NoInfsFPMath = true;
-    options.NoNaNsFPMath = true;
-    options.HonorSignDependentRoundingFPMathOption = false;
-    options.UseSoftFloat = false;
-    options.FloatABIType =
-        use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    options.NoZerosInBSS = false;
-    options.GuaranteedTailCallOpt = false;
-    options.DisableTailCalls = false;
-    options.StackAlignmentOverride = 0;
-    options.TrapFuncName = "";
-    options.PositionIndependentExecutable = true;
-    options.UseInitArray = false;
+    get_target_options(m, options, mcpu, mattrs);
 
     #if LLVM_VERSION > 35
     llvm::EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));

@@ -1988,7 +1988,7 @@ struct ArgumentComparator {
 };
 }
 
-std::vector<Argument> Func::infer_arguments() const {
+vector<Argument> Func::infer_arguments() const {
     user_assert(defined()) << "Can't infer arguments for undefined Func.\n";
 
     InferArguments infer_args(name(), /*include_buffers*/ false);
@@ -2014,6 +2014,17 @@ void Func::lower(const Target &t) {
 }
 
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
+    // TODO: This is a bit of a wart. Right now, IR cannot directly
+    // reference BufferDecls because neither CodeGen_LLVM nor
+    // CodeGen_C can generate the correct buffer unpacking code.
+
+    // To work around this, we generate two functions. The private
+    // function is one where every buffer referenced is an argument,
+    // and the public function is a wrapper that calls the private
+    // function, passing the global buffers to the private
+    // function. This works because the public function does not
+    // attempt to directly access any of the fields of the buffer.
+
     string public_name = fn_name.empty() ? name() : fn_name;
     string private_name = "__" + public_name;
 
@@ -2034,14 +2045,14 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
 
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
-    std::vector<Argument> private_args = public_args;
+    vector<Argument> private_args = public_args;
     for (size_t i = 0; i < global_images.size(); i++) {
         Buffer buf = global_images[i];
         module.append(BufferDecl::make(buf));
         private_args.push_back(Argument(buf.name(), true, type_of<void*>()));
     }
 
-    module.append(FunctionDecl::make(private_name, private_args, private_body, FunctionDecl::Private));
+    module.append(FunctionDecl::make(private_name, private_args, private_body, FunctionDecl::Internal));
 
     // Generate a call to the private function, adding an arguments
     // for the global images.
@@ -2055,34 +2066,34 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
         }
     }
     Stmt public_body = Return::make(Call::make(Int(32), private_name, private_params, Call::Extern));
-    module.append(FunctionDecl::make(public_name, public_args, public_body, FunctionDecl::Public));
+    module.append(FunctionDecl::make(public_name, public_args, public_body, FunctionDecl::External));
 
     return module;
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
                               const Target &target) {
     output_bitcode(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_bitcode(filename, args, "", target);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args,
+void Func::compile_to_object(const string &filename, const vector<Argument> &args,
                              const string &fn_name, const Target &target) {
     output_object(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_object(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_object(filename, args, "", target);
 }
 
-void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
+void Func::compile_to_header(const string &filename, const vector<Argument> &args, const string &fn_name, const Target &target) {
     output_c_header(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_c(const string &filename, vector<Argument> args,
+void Func::compile_to_c(const string &filename, const vector<Argument> &args,
                         const string &fn_name, const Target &target) {
     output_c_source(compile_to_module(args, fn_name, target), filename);
 }
@@ -2129,7 +2140,7 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
     Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
 
     Module m(t);
-    m.append(FunctionDecl::make(name(), infer_arguments(), s, FunctionDecl::Public));
+    m.append(FunctionDecl::make(name(), infer_arguments(), s, FunctionDecl::External));
 
     if (fmt == HTML) {
         output_stmt_html(m, filename);
@@ -2208,8 +2219,11 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                        std::map<std::string, Expr>(), fmt, t);
 }
 
-void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
+void Func::compile_to_file(const string &filename_prefix, const vector<Argument> &args,
                            const Target &target) {
+    // Although it is possibly confusing, in order To preserve
+    // existing behavior, we need to pass filename_prefix as the new
+    // function name.
     Module m = compile_to_module(args, filename_prefix, target);
     output_c_header(m, filename_prefix + ".h");
     output_object(m, filename_prefix + ".o");
@@ -2244,12 +2258,12 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
     compile_to_file(filename_prefix, Internal::vec(a, b, c, d, e), target);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const string &fn_name,
                                const Target &target) {
     output_assembly(compile_to_module(args, fn_name, target), filename);
 }
 
-void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
+void Func::compile_to_assembly(const string &filename, const vector<Argument> &args, const Target &target) {
     compile_to_assembly(filename, args, "", target);
 }
 
@@ -2685,7 +2699,7 @@ void *Func::compile_jit(const Target &target) {
 
     // Make a module
     Module module(target.with_feature(Target::JIT));
-    module.append(FunctionDecl::make(n, infer_args.arg_types, lowered, FunctionDecl::Public));
+    module.append(FunctionDecl::make(n, infer_args.arg_types, lowered, FunctionDecl::External));
 
     if (debug::debug_level >= 3) {
         output_native(module, name() + ".bc", name() + ".s");

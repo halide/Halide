@@ -56,9 +56,6 @@ protected:
     /** Emit a statement */
     void print_stmt(Stmt);
 
-    /** Emit a decl */
-    void print_decl(Decl, bool define = true);
-
     /** Emit the C name for a halide type */
     virtual std::string print_type(Type);
 

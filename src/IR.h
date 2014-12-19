@@ -728,11 +728,10 @@ struct Variable : public ExprNode<Variable> {
 };
 
 /** Declaration of a function. */
-// TODO: Come up with a better name for this.
 struct FunctionDecl : public StmtNode<FunctionDecl> {
     enum LinkageType {
-        Public,
-        Private,
+        External,
+        Internal,
     };
 
     std::string name;
