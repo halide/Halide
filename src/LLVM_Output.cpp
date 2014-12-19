@@ -27,7 +27,36 @@ llvm::raw_fd_ostream *new_raw_fd_ostream(const std::string &filename) {
     return raw_out;
 }
 
+namespace {
+bool get_md_bool(llvm::Value *value, bool &result) {
+    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
+    if (c) {
+        result = !c->isZero();
+        return true;
+    }
+    return false;
+}
+
+bool get_md_string(llvm::Value *value, std::string &result) {
+    if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
+        result = "";
+        return true;
+    }
+    llvm::ConstantDataArray *c = llvm::cast<llvm::ConstantDataArray>(value);
+    if (c) {
+        result = c->getAsString();
+        return true;
+    }
+    return false;
+}
+}
+
 void get_target_options(const llvm::Module *module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
+    bool use_soft_float_abi = false;
+    get_md_bool(module->getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
+    get_md_string(module->getModuleFlag("halide_mcpu"), mcpu);
+    get_md_string(module->getModuleFlag("halide_mattrs"), mattrs);
+
     options = llvm::TargetOptions();
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
@@ -44,12 +73,8 @@ void get_target_options(const llvm::Module *module, llvm::TargetOptions &options
     options.TrapFuncName = "";
     options.PositionIndependentExecutable = true;
     options.UseInitArray = false;
-    // TODO: Get these from metadata in the llvm::Module
-    bool use_soft_float_abi = false;
     options.FloatABIType =
         use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
-    mcpu = "";
-    mattrs = "";
 }
 
 llvm::TargetMachine *get_target_machine(const llvm::Module *module) {

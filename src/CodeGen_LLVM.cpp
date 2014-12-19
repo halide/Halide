@@ -344,6 +344,11 @@ void CodeGen_LLVM::compile(const Module &input) {
     // Fix the target triple
     module = get_initial_module_for_target(target, context);
 
+    // Add some target specific info to the module as metadata.
+    module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
+
     llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
 
@@ -356,9 +361,8 @@ void CodeGen_LLVM::compile(const Module &input) {
     // Start the module off with a definition of a buffer_t
     define_buffer_t();
 
-    debug(1) << "Generating llvm bitcode...\n";
-
     // Generate the code for this module.
+    debug(1) << "Generating llvm bitcode...\n";
     input.body.accept(this);
 
     module->setModuleIdentifier("halide_module");
