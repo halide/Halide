@@ -26,8 +26,6 @@ public:
      * appropriate flags from Target */
     CodeGen_GPU_Host(Target);
 
-    virtual ~CodeGen_GPU_Host();
-
 protected:
     /** Declare members of the base class that must exist to help the
      * compiler do name lookup. Annoying but necessary, because the
@@ -69,20 +67,6 @@ protected:
     void visit(const FunctionDecl *);
     void visit(const BufferDecl *);
     // @}
-
-    /** Initialize the CodeGen_GPU_Host internal state to compile a fresh
-     * module. Also initializes the device specific module. */
-    virtual void init_module();
-
-    /** Finds and links in the CUDA runtime symbols prior to jitting */
-    void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
-
-    /** Reaches inside the module at sets it to use a single shared
-     * cuda context */
-    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
-                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
-
-    static bool lib_cuda_linked;
 
     static CodeGen_GPU_Dev *make_dev(Target);
 

@@ -242,14 +242,10 @@ void GPU_Host_Closure::visit(const For *loop) {
     Internal::Closure::visit(loop);
 }
 
-
-template<typename CodeGen_CPU>
-bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
-
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
     CodeGen_CPU(target),
-    cgdev(make_dev(target)) {
+    cgdev(NULL) {
 }
 
 template<typename CodeGen_CPU>
@@ -271,26 +267,29 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
 }
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
-    delete cgdev;
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::init_module() {
-    CodeGen_CPU::init_module();
-
-    // also set up the child codegenerator - this is set up once per
-    // PTX_Host::compile, and reused across multiple PTX_Dev::compile
-    // invocations for different kernels.
-    cgdev->init_module();
-}
-
-template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const FunctionDecl *op) {
 
+    internal_assert(cgdev == NULL) << "Internal device code generator already exists.\n";
+
+    // Set up a new device code generator for the kernels we find in this function.
+    cgdev = make_dev(target);
+    cgdev->init_module();
+
+    // Call the base implementation to create the function.
+    CodeGen_CPU::visit(op);
+
+    // Get the kernel source for any GPU loops we encountered in the function.
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
+    // Store the kernel source in the generated module.
     Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src_" + op->name);
+
+    delete cgdev;
+    cgdev = NULL;
+
+    // Now, insert a call to halide_init_kernels at the entry of the
+    // function we just generated, passing it a pointer to the kernel
+    // source.
 
     // Remember the entry block so we can branch to it upon init success.
     BasicBlock *entry = &function->getEntryBlock();
@@ -320,132 +319,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const BufferDecl *op) {
     global->setConstant(false);
 }
 
-/*
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module) {
-
-    // Make sure extern cuda calls inside the module point to the
-    // right things. If cuda is already linked in we should be
-    // fine. If not we need to tell llvm to load it.
-    if (target.has_feature(Target::CUDA) && !lib_cuda_linked) {
-        // First check if libCuda has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("cuInit")) {
-            debug(1) << "This program was linked to cuda already\n";
-        } else {
-            debug(1) << "Looking for cuda shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
-            }
-            user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
-        }
-        lib_cuda_linked = true;
-
-        // Now dig out cuCtxDestroy_v2 so that we can clean up the
-        // shared context at termination
-        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
-        internal_assert(ptr) << "Could not find cuCtxDestroy_v2 in cuda library\n";
-
-        cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
-
-    } else if (target.has_feature(Target::OpenCL)) {
-        // First check if libOpenCL has already been linked
-        // in. If so we shouldn't need to set any mappings.
-        if (have_symbol("clCreateContext")) {
-            debug(1) << "This program was linked to OpenCL already\n";
-        } else {
-            debug(1) << "Looking for OpenCL shared library...\n";
-            string error;
-            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
-            }
-            if (!error.empty()) {
-                error.clear();
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
-            }
-            user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
-        }
-
-        // Now dig out clReleaseContext/CommandQueue so that we can clean up the
-        // shared context at termination
-        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
-        internal_assert(ptr) << "Could not find clReleaseContext\n";
-
-        clReleaseContext = reinterpret_bits<int (GPU_LIB_CC *)(cl_context)>(ptr);
-
-        ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
-        internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
-
-        clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
-
-    } else if (target.has_feature(Target::OpenGL)) {
-        if (target.os == Target::Linux) {
-            if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
-                user_assert(error.empty()) << "Could not find libGL.so\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
-                user_assert(error.empty()) << "Could not find libX11.so\n";
-            }
-        } else if (target.os == Target::OSX) {
-            if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
-                debug(1) << "OpenGL support code already linked in...\n";
-            } else {
-                debug(1) << "Looking for OpenGL support code...\n";
-                string error;
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
-                user_assert(error.empty()) << "Could not find AGL.framework\n";
-                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
-                user_assert(error.empty()) << "Could not find OpenGL.framework\n";
-            }
-        } else {
-            internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
-        }
-    }
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module,
-                                                 vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
-    if (target.has_feature(Target::CUDA)) {
-        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
-        // CUDA behaves much better when you don't initialize >2 contexts.
-        llvm::Function *fn = module->getFunction("halide_set_cuda_context");
-        internal_assert(fn) << "Could not find halide_set_cuda_context in module\n";
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_set_cuda_context in module\n";
-        void (*set_cuda_context)(CUcontext *, volatile int *) =
-            reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
-        set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
-    } else if (target.has_feature(Target::OpenCL)) {
-        // Share the same cl_ctx, cl_q across all OpenCL modules.
-        llvm::Function *fn = module->getFunction("halide_set_cl_context");
-        internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_set_cl_context in module\n";
-        void (*set_cl_context)(cl_context *, cl_command_queue *, volatile int *) =
-            reinterpret_bits<void (*)(cl_context *, cl_command_queue *, volatile int *)>(f);
-        set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
-    }
-
-}
-*/
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {

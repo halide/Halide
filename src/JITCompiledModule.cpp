@@ -7,10 +7,195 @@
 #include "LLVM_Headers.h"
 #include "Debug.h"
 
+#ifdef _WIN32
+#define NOMINMAX
+#ifdef _WIN64
+#define GPU_LIB_CC
+#else
+#define GPU_LIB_CC __stdcall
+#endif
+#include <windows.h>
+static bool have_symbol(const char *s) {
+    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
+}
+#else
+#define GPU_LIB_CC
+#include <dlfcn.h>
+static bool have_symbol(const char *s) {
+    return dlsym(NULL, s) != NULL;
+}
+#endif
+
+using std::string;
+
 namespace Halide {
 namespace Internal {
 
-using std::string;
+namespace {
+
+extern "C" { typedef struct CUctx_st *CUcontext; }
+
+// A single global cuda context to share between jitted functions
+int (GPU_LIB_CC *cuCtxDestroy)(CUctx_st *) = 0;
+
+struct SharedCudaContext {
+    CUctx_st *ptr;
+    volatile int lock;
+
+    // Will be created on first use by a jitted kernel that uses it
+    SharedCudaContext() : ptr(0), lock(0) {
+    }
+
+    // Note that we never free the context, because static destructor
+    // order is unpredictable, and we can't free the context before
+    // all JITCompiledModules are freed. Users may be stashing Funcs
+    // or Images in globals, and these keep JITCompiledModules around.
+} cuda_ctx;
+
+extern "C" {
+    typedef struct cl_context_st *cl_context;
+    typedef struct cl_command_queue_st *cl_command_queue;
+}
+
+int (GPU_LIB_CC *clReleaseContext)(cl_context);
+int (GPU_LIB_CC *clReleaseCommandQueue)(cl_command_queue);
+
+// A single global OpenCL context and command queue to share between jitted functions.
+struct SharedOpenCLContext {
+    cl_context context;
+    cl_command_queue command_queue;
+    volatile int lock;
+
+    SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
+    }
+
+    // We never free the context, for the same reason as above.
+} cl_ctx;
+
+bool lib_cuda_linked = false;
+
+}
+
+void jit_init(llvm::ExecutionEngine *ee, llvm::Module *module, const Target &target) {
+
+    // Make sure extern cuda calls inside the module point to the
+    // right things. If cuda is already linked in we should be
+    // fine. If not we need to tell llvm to load it.
+    if (target.has_feature(Target::CUDA) && !lib_cuda_linked) {
+        // First check if libCuda has already been linked
+        // in. If so we shouldn't need to set any mappings.
+        if (have_symbol("cuInit")) {
+            debug(1) << "This program was linked to cuda already\n";
+        } else {
+            debug(1) << "Looking for cuda shared library...\n";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.so", &error);
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libcuda.dylib", &error);
+            }
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/Library/Frameworks/CUDA.framework/CUDA", &error);
+            }
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("nvcuda.dll", &error);
+            }
+            user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
+        }
+        lib_cuda_linked = true;
+
+        // Now dig out cuCtxDestroy_v2 so that we can clean up the
+        // shared context at termination
+        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
+        internal_assert(ptr) << "Could not find cuCtxDestroy_v2 in cuda library\n";
+
+        cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
+
+    } else if (target.has_feature(Target::OpenCL)) {
+        // First check if libOpenCL has already been linked
+        // in. If so we shouldn't need to set any mappings.
+        if (have_symbol("clCreateContext")) {
+            debug(1) << "This program was linked to OpenCL already\n";
+        } else {
+            debug(1) << "Looking for OpenCL shared library...\n";
+            string error;
+            llvm::sys::DynamicLibrary::LoadLibraryPermanently("libOpenCL.so", &error);
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenCL.framework/OpenCL", &error);
+            }
+            if (!error.empty()) {
+                error.clear();
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("opencl.dll", &error); // TODO: test on Windows
+            }
+            user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
+        }
+
+        // Now dig out clReleaseContext/CommandQueue so that we can clean up the
+        // shared context at termination
+        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
+        internal_assert(ptr) << "Could not find clReleaseContext\n";
+
+        clReleaseContext = reinterpret_bits<int (GPU_LIB_CC *)(cl_context)>(ptr);
+
+        ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
+        internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
+
+        clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
+
+    } else if (target.has_feature(Target::OpenGL)) {
+        if (target.os == Target::Linux) {
+            if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
+                debug(1) << "OpenGL support code already linked in...\n";
+            } else {
+                debug(1) << "Looking for OpenGL support code...\n";
+                string error;
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libGL.so.1", &error);
+                user_assert(error.empty()) << "Could not find libGL.so\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("libX11.so", &error);
+                user_assert(error.empty()) << "Could not find libX11.so\n";
+            }
+        } else if (target.os == Target::OSX) {
+            if (have_symbol("aglCreateContext") && have_symbol("glDeleteTextures")) {
+                debug(1) << "OpenGL support code already linked in...\n";
+            } else {
+                debug(1) << "Looking for OpenGL support code...\n";
+                string error;
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/AGL.framework/AGL", &error);
+                user_assert(error.empty()) << "Could not find AGL.framework\n";
+                llvm::sys::DynamicLibrary::LoadLibraryPermanently("/System/Library/Frameworks/OpenGL.framework/OpenGL", &error);
+                user_assert(error.empty()) << "Could not find OpenGL.framework\n";
+            }
+        } else {
+            internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
+        }
+    }
+}
+
+void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module, const Target &target) {
+    if (target.has_feature(Target::CUDA)) {
+        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
+        // CUDA behaves much better when you don't initialize >2 contexts.
+        llvm::Function *fn = module->getFunction("halide_set_cuda_context");
+        internal_assert(fn) << "Could not find halide_set_cuda_context in module\n";
+        void *f = ee->getPointerToFunction(fn);
+        internal_assert(f) << "Could not find compiled form of halide_set_cuda_context in module\n";
+        void (*set_cuda_context)(CUcontext *, volatile int *) =
+            reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
+        set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
+    } else if (target.has_feature(Target::OpenCL)) {
+        // Share the same cl_ctx, cl_q across all OpenCL modules.
+        llvm::Function *fn = module->getFunction("halide_set_cl_context");
+        internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
+        void *f = ee->getPointerToFunction(fn);
+        internal_assert(f) << "Could not find compiled form of halide_set_cl_context in module\n";
+        void (*set_cl_context)(cl_context *, cl_command_queue *, volatile int *) =
+            reinterpret_bits<void (*)(cl_context *, cl_command_queue *, volatile int *)>(f);
+        set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
+    }
+}
 
 // Wraps an execution engine. Takes ownership of the given module and
 // the memory for jit compiled code.
@@ -48,6 +233,8 @@ public:
 
     /** Do any target-specific module cleanup. */
     std::vector<JITCompiledModule::CleanupRoutine> cleanup_routines;
+
+    /** Any listeners we created. */
 
     /** Add a cleanup routine of the specified name from the module. */
     void add_cleanup_routine(const char *name) {
@@ -119,7 +306,23 @@ void hook_up_function_pointer(llvm::ExecutionEngine *ee, llvm::Module *mod, cons
 
 }  // namespace
 
-JITCompiledModule::JITCompiledModule(llvm::Module *m, const std::string &fn) :
+JITCompiledModule::JITCompiledModule() :
+    function(NULL),
+    wrapped_function(NULL),
+    copy_to_host(NULL),
+    copy_to_dev(NULL),
+    free_dev_buffer(NULL),
+    set_error_handler(NULL),
+    set_custom_allocator(NULL),
+    set_custom_do_par_for(NULL),
+    set_custom_do_task(NULL),
+    set_custom_trace(NULL),
+    set_custom_print(NULL),
+    shutdown_thread_pool(NULL),
+    memoization_cache_set_size(NULL) {
+}
+
+JITCompiledModule::JITCompiledModule(const Module &hm, const std::string &fn) :
     function(NULL),
     wrapped_function(NULL),
     copy_to_host(NULL),
@@ -134,7 +337,7 @@ JITCompiledModule::JITCompiledModule(llvm::Module *m, const std::string &fn) :
     shutdown_thread_pool(NULL),
     memoization_cache_set_size(NULL) {
 
-    if (!m) return;
+    llvm::Module *m = codegen_llvm(hm);
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
@@ -176,12 +379,17 @@ JITCompiledModule::JITCompiledModule(llvm::Module *m, const std::string &fn) :
 
     // Do any target-specific initialization
     std::vector<llvm::JITEventListener *> listeners;
-    //void CreateListeners(target, listeners);
+
+    if (hm.target().arch == Target::X86) {
+        listeners.push_back(llvm::JITEventListener::createIntelJITEventListener());
+    }
+    //listeners.push_back(llvm::createOProfileJITEventListener());
+
     for (size_t i = 0; i < listeners.size(); i++) {
         ee->RegisterJITEventListener(listeners[i]);
     }
 
-    //cg->jit_init(ee, m);
+    jit_init(ee, m, hm.target());
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
@@ -217,7 +425,8 @@ JITCompiledModule::JITCompiledModule(llvm::Module *m, const std::string &fn) :
         delete listeners[i];
     }
     listeners.clear();
-    //cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
+
+    jit_finalize(ee, m, hm.target());
 
     // Add some more target independent cleanup routines.
     module.ptr->add_cleanup_routine("halide_memoization_cache_cleanup");
