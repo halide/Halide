@@ -20,7 +20,7 @@ using std::map;
 
 namespace {
 
-    
+
 // Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
 Type map_type(const Type &type) {
@@ -113,7 +113,7 @@ string CodeGen_OpenGL_Dev::get_current_kernel_name() {
 void CodeGen_OpenGL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
 }
-    
+
 std::string CodeGen_OpenGL_Dev::print_gpu_name(const std::string &name) {
     return glc->print_name(name);
 }
@@ -219,17 +219,17 @@ void CodeGen_GLSL::visit(const Cast *op) {
         print_assignment(target_type, print_type(target_type) + "(" + print_expr(op->value) + ")");
     }
 }
-    
+
 void CodeGen_GLSL::visit(const Let *op) {
 
     if (op->name.find(".varying") != std::string::npos) {
-        
+
         // Skip let statements for varying attributes
         op->body.accept(this);
-        
+
         return;
     }
-    
+
     CodeGen_C::visit(op);
 }
 
@@ -453,7 +453,7 @@ void CodeGen_GLSL::visit(const Call *op) {
             if (all_int) {
 
                 // Create a swizzle expression for the shuffle
-                static constexpr const char* channels = "rgba";
+                static const char* channels = "rgba";
                 string swizzle;
 
                 for (int i = 0; i != shuffle_width && all_int; ++i) {
@@ -542,7 +542,7 @@ void CodeGen_GLSL::visit(const Call *op) {
 void CodeGen_GLSL::visit(const AssertStmt *) {
     internal_error << "GLSL: unexpected Assertion node encountered.\n";
 }
-    
+
 void CodeGen_GLSL::visit(const Ramp *op) {
     ostringstream rhs;
     rhs << print_type(op->type) << "(";
@@ -551,11 +551,11 @@ void CodeGen_GLSL::visit(const Ramp *op) {
         internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
 
     rhs << print_expr(op->base);
-    
+
     for (int i = 1; i < op->width; ++i) {
         rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
     }
-    
+
     rhs << ")";
     print_assignment(op->type, rhs.str());
 }
@@ -630,7 +630,7 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             ++num_uniform_ints;
         }
     }
-    
+
     // Compute the number of vec4's needed to pack the arguments
     num_varying_floats = (num_varying_floats + 3) / 4;
     num_uniform_floats = (num_uniform_floats + 3) / 4;
@@ -662,11 +662,11 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     for (int i = 0; i != num_varying_floats; ++i) {
         stream << "varying vec4 _varyingf" << i << ";\n";
     }
-    
+
     for (int i = 0; i != num_uniform_floats; ++i) {
         stream << "uniform vec4 _uniformf" << i << ";\n";
     }
-    
+
     for (int i = 0; i != num_uniform_ints; ++i) {
         stream << "uniform ivec4 _uniformi" << i << ";\n";
     }
