@@ -136,15 +136,6 @@ private:
         return "</a>";
     }
 
-    void print(Expr ir) {
-        ir.accept(this);
-    }
-
-    void print(Stmt ir) {
-        ir.accept(this);
-    }
-
-public:
     void visit(const IntImm *op){
         stream << open_span("IntImm Imm");
         stream << op->value;
@@ -549,6 +540,56 @@ public:
         stream << close_div();
     }
 
+    void visit(const Return *op) {
+        stream << open_div("Return");
+        stream << keyword("return");
+        print(op->value);
+        stream << close_div();
+    }
+
+    void visit(const FunctionDecl *op) {
+        scope.push(op->name, unique_id());
+        stream << open_div("Function");
+
+        int id = unique_id();
+        stream << open_expand_button(id);
+        stream << open_span("Matched");
+        stream << keyword("func");
+        stream << " (";
+        stream << close_span();
+        for (size_t i = 0; i < op->args.size(); i++) {
+            if (i > 0) {
+                stream << matched(",") << " ";
+            }
+            stream << var(op->args[i].name);
+        }
+        stream << matched(")");
+        stream << close_expand_button();
+        stream << " " << matched("{");
+        stream << open_div("FunctionBody Indent", id);
+        print(op->body);
+        stream << close_div();
+        stream << matched("}");
+
+        stream << close_div();
+        scope.pop(op->name);
+    }
+
+    void visit(const BufferDecl *op) {
+        stream << open_div("Buffer");
+        stream << keyword("buffer ") << var(op->buffer.name());
+        stream << close_div();
+    }
+
+public:
+    void print(Expr ir) {
+        ir.accept(this);
+    }
+
+    void print(Stmt ir) {
+        ir.accept(this);
+    }
+
     StmtToHtml(string filename) : id_count(0), context_stack(1, 0) {
         stream.open(filename.c_str());
         stream << "<head>";
@@ -561,8 +602,7 @@ public:
         stream << "</head>\n <body>\n";
     }
 
-    void generate(Stmt s){
-        print(s);
+    ~StmtToHtml() {
         stream << "<script>\n"
                << "$( '.Matched' ).each( function() {\n"
                << "    this.onmouseover = function() { $('.Matched[id^=' + this.id.split('-')[0] + '-]').addClass('Highlight'); }\n"
@@ -570,10 +610,7 @@ public:
                << "} );\n"
                << "</script>\n";
         stream << "</body>";
-        stream.close();
     }
-
-    ~StmtToHtml(){}
 };
 
 const std::string StmtToHtml::css = "\n \
@@ -616,7 +653,7 @@ function toggle(id) { \n \
 
 void print_to_html(string filename, Stmt s) {
     StmtToHtml sth(filename);
-    sth.generate(s);
+    sth.print(s);
 }
 
 }

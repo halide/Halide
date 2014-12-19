@@ -5,7 +5,7 @@
  * Defines a function to dump an HTML-formatted stmt to a file.
  */
 
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 namespace Internal {

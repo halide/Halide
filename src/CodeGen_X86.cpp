@@ -10,6 +10,7 @@
 #include "Param.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
+#include "LLVM_Output.h"
 
 #include "CodeGen.h"
 
@@ -21,8 +22,7 @@ using std::string;
 
 using namespace llvm;
 
-CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t),
-                                     jitEventListener(NULL) {
+CodeGen_X86::CodeGen_X86(Target t) : CodeGen_Posix(t) {
 
     #if !(WITH_X86)
     user_error << "x86 not enabled for this build of Halide.\n";
@@ -611,16 +611,18 @@ void CodeGen_X86::test() {
     loop = For::make("i", -1, 3, For::Parallel, loop);
 
     Stmt s = Block::make(init, loop);
+    s = Block::make(s, Return::make(0));
 
-    LoweredFunc func = { s, "test1", get_host_target(), args, vector<Buffer>() };
+    Module m(get_host_target());
+    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::Public));
 
     debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule m(func);
+    JITCompiledModule jit(output_llvm_module(m), "test1");
 
     typedef int (*fn_type)(::buffer_t *, float, int);
-    fn_type fn = reinterpret_bits<fn_type>(m.function);
+    fn_type fn = reinterpret_bits<fn_type>(jit.function);
 
-    debug(2) << "Function pointer lives at " << m.function << "\n";
+    debug(2) << "Function pointer lives at " << jit.function << "\n";
 
     int scratch_buf[64];
     int *scratch = &scratch_buf[0];
@@ -664,7 +666,7 @@ void CodeGen_X86::test() {
     float float_arg_val = 4.0f;
     int int_arg_val = 1;
     const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
-    m.wrapped_function(arg_array);
+    jit.wrapped_function(arg_array);
     internal_assert(scratch[0] == 0);
     internal_assert(scratch[1] == 3);
     internal_assert(scratch[2] == 3);
@@ -676,7 +678,7 @@ void CodeGen_X86::test() {
 
     std::cout << "CodeGen_X86 test passed" << std::endl;
 }
-
+/*
 string CodeGen_X86::mcpu() const {
     if (target.has_feature(Target::AVX)) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
@@ -709,22 +711,5 @@ string CodeGen_X86::mattrs() const {
 bool CodeGen_X86::use_soft_float_abi() const {
     return false;
 }
-
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
-{
-    jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
-    if (jitEventListener) {
-        ee->RegisterJITEventListener(jitEventListener);
-    }
-}
-
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *)
-{
-    if (jitEventListener) {
-        ee->UnregisterJITEventListener(jitEventListener);
-        delete jitEventListener;
-        jitEventListener = NULL;
-    }
-}
-
+*/
 }}

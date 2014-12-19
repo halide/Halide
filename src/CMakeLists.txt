@@ -1,4 +1,4 @@
-add_executable(build_halide_h ../tools/build_halide_h.cpp)
+Badd_executable(build_halide_h ../tools/build_halide_h.cpp)
 add_executable(bitcode2cpp ../tools/bitcode2cpp.cpp)
 
 
@@ -309,7 +309,9 @@ set(HEADER_FILES
   BranchVisitors.h
   LLVM_Runtime_Linker.h
   CodeGen.h
-  Output.h)
+  Output.h
+  LLVM_Output.h
+  Module.h)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/include")
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/include/" NATIVE_INCLUDE_PATH)
@@ -413,6 +415,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   LLVM_Runtime_Linker.cpp
   CodeGen.cpp
   Output.cpp
+  LLVM_Output.cpp
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 

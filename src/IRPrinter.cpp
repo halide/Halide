@@ -3,7 +3,7 @@
 
 #include "IRPrinter.h"
 #include "IROperator.h"
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -38,6 +38,16 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     } else {
         Internal::IRPrinter p(stream);
         p.print(ir);
+    }
+    return stream;
+}
+
+ostream &operator<<(ostream &stream, const Module &m) {
+    if (!m.body.defined()) {
+        stream << "(undefined)\n";
+    } else {
+        Internal::IRPrinter p(stream);
+        p.print(m.body);
     }
     return stream;
 }
@@ -101,6 +111,18 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
         break;
     case For::Vectorized:
         out << "vectorized";
+        break;
+    }
+    return out;
+}
+
+ostream &operator<<(ostream &out, const FunctionDecl::LinkageType &type) {
+    switch (type) {
+    case FunctionDecl::Private:
+        out << "private";
+        break;
+    case FunctionDecl::Public:
+        out << "public";
         break;
     }
     return out;
@@ -551,6 +573,36 @@ void IRPrinter::visit(const Evaluate *op) {
     do_indent();
     print(op->value);
     stream << "\n";
+}
+
+void IRPrinter::visit(const Return *op) {
+    do_indent();
+    stream << "return ";
+    print(op->value);
+    stream << "\n";
+}
+
+void IRPrinter::visit(const FunctionDecl *op) {
+    do_indent();
+    stream << op->linkage << " func " << op->name << " (";
+    for (size_t i = 0; i < op->args.size(); i++) {
+        stream << op->args[i].name;
+        if (i + 1 < op->args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    indent += 2;
+    print(op->body);
+    indent -= 2;
+    do_indent();
+    stream << "}\n\n";
+}
+
+void IRPrinter::visit(const BufferDecl *op) {
+    do_indent();
+    // TODO: Maybe print the contents of the buffer somehow?
+    stream << "buffer " << op->buffer.name() << " = {...}\n";
 }
 
 }}

@@ -66,17 +66,13 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
+    void visit(const FunctionDecl *);
+    void visit(const BufferDecl *);
     // @}
 
     /** Initialize the CodeGen_GPU_Host internal state to compile a fresh
      * module. Also initializes the device specific module. */
     virtual void init_module();
-
-    /** Extend the already generated LLVM IR for the host code with
-     * the device specific part of the host code. */
-    void compile_for_device(Stmt stmt, std::string name,
-                            const std::vector<Argument> &args,
-                            const std::vector<Buffer> &images_to_embed);
 
     /** Finds and links in the CUDA runtime symbols prior to jitting */
     void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
@@ -88,7 +84,7 @@ protected:
 
     static bool lib_cuda_linked;
 
-    static CodeGen_GPU_Dev* make_dev(Target);
+    static CodeGen_GPU_Dev *make_dev(Target);
 
     llvm::Value *get_module_state();
 

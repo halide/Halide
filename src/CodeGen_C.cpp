@@ -48,21 +48,21 @@ const string preamble =
     "#include <stdio.h>\n"
     "#include <stdint.h>\n"
     "\n"
-    "extern \"C\" void *halide_malloc(void *ctx, size_t);\n"
-    "extern \"C\" void halide_free(void *ctx, void *ptr);\n"
-    "extern \"C\" void *halide_print(void *ctx, const void *str);\n"
-    "extern \"C\" void *halide_error(void *ctx, const void *str);\n"
-    "extern \"C\" int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
-    "extern \"C\" int halide_start_clock(void *ctx);\n"
-    "extern \"C\" int64_t halide_current_time_ns(void *ctx);\n"
-    "extern \"C\" uint64_t halide_profiling_timer(void *ctx);\n"
+    "HALIDE_EXTERN_C void *halide_malloc(void *ctx, size_t);\n"
+    "HALIDE_EXTERN_C void halide_free(void *ctx, void *ptr);\n"
+    "HALIDE_EXTERN_C void *halide_print(void *ctx, const void *str);\n"
+    "HALIDE_EXTERN_C void *halide_error(void *ctx, const void *str);\n"
+    "HALIDE_EXTERN_C int halide_debug_to_file(void *ctx, const char *filename, void *data, int, int, int, int, int, int);\n"
+    "HALIDE_EXTERN_C int halide_start_clock(void *ctx);\n"
+    "HALIDE_EXTERN_C int64_t halide_current_time_ns(void *ctx);\n"
+    "HALIDE_EXTERN_C uint64_t halide_profiling_timer(void *ctx);\n"
     "\n"
 
     // TODO: this next chunk is copy-pasted from posix_math.cpp. A
     // better solution for the C runtime would be nice.
     "#ifdef _WIN32\n"
-    "extern \"C\" float roundf(float);\n"
-    "extern \"C\" double round(double);\n"
+    "HALIDE_EXTERN_C float roundf(float);\n"
+    "HALIDE_EXTERN_C double round(double);\n"
     "#else\n"
     "inline float asinh_f32(float x) {return asinhf(x);}\n"
     "inline float acosh_f32(float x) {return acoshf(x);}\n"
@@ -160,7 +160,6 @@ const string preamble =
     // for a detailed comparison of type-punning methods.
     "template<typename A, typename B> A reinterpret(B b) {A a; memcpy(&a, &b, sizeof(a)); return a;}\n"
     "\n"
-    + buffer_t_definition +
     "static bool halide_rewrite_buffer(buffer_t *b, int32_t elem_size,\n"
     "                           int32_t min0, int32_t extent0, int32_t stride0,\n"
     "                           int32_t min1, int32_t extent1, int32_t stride1,\n"
@@ -182,7 +181,38 @@ const string preamble =
     "}\n";
 }
 
-CodeGen_C::CodeGen_C(ostream &s) : IRPrinter(s), id("$$ BAD ID $$") {}
+CodeGen_C::CodeGen_C(ostream &s, bool header, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), header(header) {
+    if (header) {
+        // If it's a header, emit an include guard.
+        stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
+               << "#define HALIDE_" << print_name(guard) << '\n';
+    }
+
+    stream << "#ifdef __cplusplus\n";
+    stream << "#define HALIDE_EXTERN_C extern \"C\"\n";
+    stream << "#else\n";
+    stream << "#define HALIDE_EXTERN_C\n";
+    stream << "#endif\n";
+
+    if (!header) {
+        stream << preamble;
+    }
+
+    // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
+    // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
+    stream << "#ifndef HALIDE_FUNCTION_ATTRS\n";
+    stream << "#define HALIDE_FUNCTION_ATTRS\n";
+    stream << "#endif\n";
+
+    // Throw in a definition of a buffer_t
+    stream << buffer_t_definition;
+}
+
+CodeGen_C::~CodeGen_C() {
+    if (header) {
+        stream << "#endif\n";
+    }
+}
 
 namespace {
 string type_to_c_type(Type type) {
@@ -247,38 +277,6 @@ string CodeGen_C::print_name(const string &name) {
     return oss.str();
 }
 
-void CodeGen_C::compile_header(const string &name, const vector<Argument> &args) {
-    stream << "#ifndef HALIDE_" << name << '\n'
-           << "#define HALIDE_" << name << '\n';
-
-    // Throw in a definition of a buffer_t
-    stream << buffer_t_definition;
-
-    // Throw in a default (empty) definition of HALIDE_FUNCTION_ATTRS
-    // (some hosts may define this to e.g. __attribute__((warn_unused_result)))
-    stream << "#ifndef HALIDE_FUNCTION_ATTRS\n";
-    stream << "#define HALIDE_FUNCTION_ATTRS\n";
-    stream << "#endif\n";
-
-    // Now the function prototype
-    stream << "#ifdef __cplusplus\n";
-    stream << "extern \"C\"\n";
-    stream << "#endif\n";
-    stream << "int " << name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (i > 0) stream << ", ";
-        if (args[i].is_buffer) {
-            stream << "buffer_t *" << print_name(args[i].name);
-        } else {
-            stream << "const "
-                   << print_type(args[i].type)
-                   << " " << print_name(args[i].name);
-        }
-    }
-    stream << ") HALIDE_FUNCTION_ATTRS;\n";
-
-    stream << "#endif\n";
-}
 
 namespace {
 class ExternCallPrototypes : public IRGraphVisitor {
@@ -290,7 +288,7 @@ class ExternCallPrototypes : public IRGraphVisitor {
 
         if (op->call_type == Call::Extern) {
             if (!emitted.count(op->name)) {
-                stream << "extern \"C\" " << type_to_c_type(op->type)
+                stream << "HALIDE_EXTERN_C " << type_to_c_type(op->type)
                        << " " << op->name << "(";
                 if (function_takes_user_context(op->name)) {
                     stream << "void *";
@@ -336,99 +334,11 @@ public:
 };
 }
 
-void CodeGen_C::compile(Stmt s, string name,
-                        const vector<Argument> &args,
-                        const vector<Buffer> &images_to_embed) {
-    stream << preamble;
-
-    // Embed the constant images
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        Buffer buffer = images_to_embed[i];
-        string name = print_name(buffer.name());
-        buffer_t b = *(buffer.raw_buffer());
-
-        // Figure out the offset of the last pixel.
-        size_t num_elems = 1;
-        for (int d = 0; b.extent[d]; d++) {
-            num_elems += b.stride[d] * (b.extent[d] - 1);
-        }
-
-        // Emit the data
-        stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
-        for (size_t i = 0; i < num_elems * b.elem_size; i++) {
-            if (i > 0) stream << ", ";
-            stream << (int)(b.host[i]);
-        }
-        stream << "};\n";
-
-        // Emit the buffer_t
-        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
-        user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
-        stream << "static buffer_t " << name << "_buffer = {"
-               << "0, " // dev
-               << "&" << name << "_data[0], " // host
-               << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
-               << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
-               << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
-               << b.elem_size << ", "
-               << "0, " // host_dirty
-               << "0};\n"; //dev_dirty
-
-        // Make a global pointer to it
-        stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
-
-    }
-
-    have_user_context = false;
-    for (size_t i = 0; i < args.size(); i++) {
-        // TODO: check that its type is void *?
-        have_user_context |= (args[i].name == "__user_context");
-    }
-
-    // Emit prototypes for any extern calls used.
-    {
-        stream << "\n";
-        ExternCallPrototypes e(stream);
-        s.accept(&e);
-        stream << "\n";
-    }
-
-    // Emit the function prototype
-    stream << "extern \"C\" int " << name << "(";
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            stream << "buffer_t *"
-                   << print_name(args[i].name)
-                   << "_buffer";
-        } else {
-            stream << "const "
-                   << print_type(args[i].type)
-                   << " "
-                   << print_name(args[i].name);
-        }
-
-        if (i < args.size()-1) stream << ", ";
-    }
-
-    stream << ") {\n";
-
-    // Unpack the buffer_t's
-    for (size_t i = 0; i < args.size(); i++) {
-        if (args[i].is_buffer) {
-            unpack_buffer(args[i].type, args[i].name);
-        }
-    }
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        unpack_buffer(images_to_embed[i].type(), images_to_embed[i].name());
-    }
-    // Emit the body
-    print(s);
-
-    stream << "return 0;\n"
-           << "}\n";
+void CodeGen_C::compile(const Module &module) {
+    module.body.accept(this);
 }
 
-void CodeGen_C::unpack_buffer(Type t, const std::string &buffer_name) {
+void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
     string name = print_name(buffer_name);
     string buf_name = name + "_buffer";
     string type = print_type(t);
@@ -479,6 +389,10 @@ void CodeGen_C::unpack_buffer(Type t, const std::string &buffer_name) {
            << "_elem_size = "
            << buf_name
            << "->elem_size;\n";
+}
+
+void CodeGen_C::pop_buffer(const std::string &buffer_name) {
+    allocations.pop(buffer_name);
 }
 
 string CodeGen_C::print_expr(Expr e) {
@@ -1249,6 +1163,122 @@ void CodeGen_C::visit(const Evaluate *op) {
     stream << "(void)" << id << ";\n";
 }
 
+void CodeGen_C::visit(const Return *op) {
+    string id = print_expr(op->value);
+    do_indent();
+    stream << "return " << id << ";\n";
+}
+
+void CodeGen_C::visit(const FunctionDecl *op) {
+    // Don't put non-public functions in headers.
+    if (header && op->linkage != FunctionDecl::Public) {
+        return;
+    }
+
+    const std::vector<Argument> &args = op->args;
+
+    have_user_context = false;
+    for (size_t i = 0; i < args.size(); i++) {
+        // TODO: check that its type is void *?
+        have_user_context |= (args[i].name == "__user_context");
+    }
+
+    // Emit prototypes for any extern calls used.
+    if (!header) {
+        stream << "\n";
+        ExternCallPrototypes e(stream);
+        op->body.accept(&e);
+        stream << "\n";
+    }
+
+    // Emit the function prototype
+    if (op->linkage != FunctionDecl::Public) {
+        // If the function isn't public, mark it static.
+        stream << "static ";
+    }
+    stream << "HALIDE_EXTERN_C int " << op->name << "(";
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            stream << "buffer_t *"
+                   << print_name(args[i].name)
+                   << "_buffer";
+        } else {
+            stream << "const "
+                   << print_type(args[i].type)
+                   << " "
+                   << print_name(args[i].name);
+        }
+
+        if (i < args.size()-1) stream << ", ";
+    }
+
+    if (header) {
+        stream << ") HALIDE_FUNCTION_ATTRS;\n";
+    } else {
+        stream << ") HALIDE_FUNCTION_ATTRS {\n";
+
+        // Unpack the buffer_t's
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer) {
+                push_buffer(args[i].type, args[i].name);
+            }
+        }
+
+        // Emit the body
+        indent += 1;
+        print(op->body);
+        stream << "}\n";
+        indent -= 1;
+
+        // Done with the buffer_t's
+        for (size_t i = 0; i < args.size(); i++) {
+            if (args[i].is_buffer) {
+                pop_buffer(args[i].name);
+            }
+        }
+    }
+}
+
+void CodeGen_C::visit(const BufferDecl *op) {
+    if (header) {
+        return;
+    }
+
+    Buffer buffer = op->buffer;
+    string name = print_name(buffer.name());
+    buffer_t b = *(buffer.raw_buffer());
+
+    // Figure out the offset of the last pixel.
+    size_t num_elems = 1;
+    for (int d = 0; b.extent[d]; d++) {
+        num_elems += b.stride[d] * (b.extent[d] - 1);
+    }
+
+    // Emit the data
+    stream << "static uint8_t " << name << "_data[] __attribute__ ((aligned (32))) = {";
+    for (size_t i = 0; i < num_elems * b.elem_size; i++) {
+        if (i > 0) stream << ", ";
+        stream << (int)(b.host[i]);
+    }
+    stream << "};\n";
+
+    // Emit the buffer_t
+    user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
+    user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
+    stream << "static buffer_t " << name << "_buffer = {"
+           << "0, " // dev
+           << "&" << name << "_data[0], " // host
+           << "{" << b.extent[0] << ", " << b.extent[1] << ", " << b.extent[2] << ", " << b.extent[3] << "}, "
+           << "{" << b.stride[0] << ", " << b.stride[1] << ", " << b.stride[2] << ", " << b.stride[3] << "}, "
+           << "{" << b.min[0] << ", " << b.min[1] << ", " << b.min[2] << ", " << b.min[3] << "}, "
+           << b.elem_size << ", "
+           << "0, " // host_dirty
+           << "0};\n"; //dev_dirty
+
+    // Make a global pointer to it
+    stream << "static buffer_t *" << name << " = &" << name << "_buffer;\n";
+}
+
 void CodeGen_C::test() {
     Argument buffer_arg("buf", true, Int(32));
     Argument float_arg("alpha", false, Float(32));
@@ -1269,15 +1299,29 @@ void CodeGen_C::test() {
     s = Allocate::make("tmp.stack", Int(32), vec(Expr(127)), const_true(), s);
     s = Block::make(s, Free::make("tmp.heap"));
     s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
+    s = Block::make(s, Return::make(0));
+
+    Module m(get_host_target());
+    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::Public));
 
     ostringstream source;
-    CodeGen_C cg(source);
-    cg.compile(s, "test1", args, vector<Buffer>());
+    CodeGen_C cg(source, false);
+    cg.compile(m);
 
     string src = source.str();
-    string correct_source = preamble +
+    string correct_source =
+        "#ifdef __cplusplus\n"
+        "#define HALIDE_EXTERN_C extern \"C\"\n"
+        "#else\n"
+        "#define HALIDE_EXTERN_C\n"
+        "#endif\n"
+        + preamble +
+        "#ifndef HALIDE_FUNCTION_ATTRS\n"
+        "#define HALIDE_FUNCTION_ATTRS\n"
+        "#endif\n"
+        + buffer_t_definition +
         "\n\n"
-        "extern \"C\" int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) {\n"
+        "HALIDE_EXTERN_C int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
         "int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
         "const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
         "(void)_buf_host_and_dev_are_null;\n"
@@ -1306,42 +1350,42 @@ void CodeGen_C::test() {
         "const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
         "(void)_buf_stride_3;\n"
         "const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
-        "{\n"
-        " int64_t _0 = 43;\n"
-        " int64_t _1 = _0 * _beta;\n"
-        " if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         " {\n"
-        "  halide_error(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
-        "  return -1;\n"
-        " } // overflow test tmp.heap\n"
-        " int64_t _2 = _1;\n"
-        " int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
-        " {\n"
-        "  int32_t _tmp_stack[127];\n"
-        "  int32_t _3 = _beta + 1;\n"
-        "  int32_t _4;\n"
-        "  bool _5 = _3 < 1;\n"
-        "  if (_5)\n"
+        "  int64_t _0 = 43;\n"
+        "  int64_t _1 = _0 * _beta;\n"
+        "  if ((_1 > ((int64_t(1) << 31) - 1)) || ((_1 * sizeof(int32_t)) > ((int64_t(1) << 31) - 1)))\n"
         "  {\n"
-        "   char b0[1024];\n"
-        "   snprintf(b0, 1024, \"%lld%s\", (long long)(3), \"\\n\");\n"
-        "   void * _6 = b0;\n"
-        "   int32_t _7 = halide_print(__user_context_, _6);\n"
-        "   int32_t _8 = (_7, 3);\n"
-        "   _4 = _8;\n"
-        "  } // if _5\n"
-        "  else\n"
+        "   halide_error(__user_context_, \"32-bit signed overflow computing size of allocation tmp.heap\\n\");\n"
+        "   return -1;\n"
+        "  } // overflow test tmp.heap\n"
+        "  int64_t _2 = _1;\n"
+        "  int32_t *_tmp_heap = (int32_t *)halide_malloc(__user_context_, sizeof(int32_t)*_2);\n"
         "  {\n"
-        "   _4 = 3;\n"
-        "  } // if _5 else\n"
-        "  int32_t _9 = _4;\n"
-        "  bool _10 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
-        "  int32_t _11 = (int32_t)(_10 ? _9 : 2);\n"
-        "  _buf[_3] = _11;\n"
-        " } // alloc _tmp_stack\n"
-        " halide_free(__user_context_, _tmp_heap);\n"
-        "} // alloc _tmp_heap\n"
-        "return 0;\n"
+        "   int32_t _tmp_stack[127];\n"
+        "   int32_t _3 = _beta + 1;\n"
+        "   int32_t _4;\n"
+        "   bool _5 = _3 < 1;\n"
+        "   if (_5)\n"
+        "   {\n"
+        "    char b0[1024];\n"
+        "    snprintf(b0, 1024, \"%lld%s\", (long long)(3), \"\\n\");\n"
+        "    void * _6 = b0;\n"
+        "    int32_t _7 = halide_print(__user_context_, _6);\n"
+        "    int32_t _8 = (_7, 3);\n"
+        "    _4 = _8;\n"
+        "   } // if _5\n"
+        "   else\n"
+        "   {\n"
+        "    _4 = 3;\n"
+        "   } // if _5 else\n"
+        "   int32_t _9 = _4;\n"
+        "   bool _10 = _alpha > float_from_bits(1082130432 /* 4 */);\n"
+        "   int32_t _11 = (int32_t)(_10 ? _9 : 2);\n"
+        "   _buf[_3] = _11;\n"
+        "  } // alloc _tmp_stack\n"
+        "  halide_free(__user_context_, _tmp_heap);\n"
+        " } // alloc _tmp_heap\n"
+        " return 0;\n"
         "}\n";
     if (src != correct_source) {
         int diff = 0;

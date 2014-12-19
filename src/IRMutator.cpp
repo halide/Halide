@@ -313,5 +313,27 @@ void IRMutator::visit(const Evaluate *op) {
     }
 }
 
+void IRMutator::visit(const Return *op) {
+    Expr v = mutate(op->value);
+    if (v.same_as(op->value)) {
+        stmt = op;
+    } else {
+        stmt = Return::make(v);
+    }
+}
+
+void IRMutator::visit(const FunctionDecl *op) {
+    Stmt body = mutate(op->body);
+    if (body.same_as(op->body)) {
+        stmt = op;
+    } else {
+        stmt = FunctionDecl::make(op->name, op->args, op->body, op->linkage);
+    }
+}
+
+void IRMutator::visit(const BufferDecl *op) {
+    stmt = op;
+}
+
 }
 }

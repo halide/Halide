@@ -46,6 +46,8 @@ private:
     // Compare two things that already have a well-defined operator<
     template<typename T>
     CmpResult compare_scalar(T a, T b);
+    template<typename T>
+    CmpResult compare_vector(const std::vector<T> &a, const std::vector<T> &b);
 
     void visit(const IntImm *);
     void visit(const FloatImm *);
@@ -86,7 +88,9 @@ private:
     void visit(const Block *);
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
-
+    void visit(const Return *);
+    void visit(const FunctionDecl *);
+    void visit(const BufferDecl *);
 };
 
 template<typename T>
@@ -222,6 +226,18 @@ IRComparer::CmpResult IRComparer::compare_expr_vector(const vector<Expr> &a, con
     compare_scalar(a.size(), b.size());
     for (size_t i = 0; (i < a.size()) && result == Equal; i++) {
         compare_expr(a[i], b[i]);
+    }
+
+    return result;
+}
+
+template <typename T>
+IRComparer::CmpResult IRComparer::compare_vector(const vector<T> &a, const vector<T> &b) {
+    if (result != Equal) return result;
+
+    compare_scalar(a.size(), b.size());
+    for (size_t i = 0; (i < a.size()) && result == Equal; i++) {
+        compare_scalar(a[i], b[i]);
     }
 
     return result;
@@ -426,6 +442,25 @@ void IRComparer::visit(const Evaluate *op) {
     const Evaluate *s = stmt.as<Evaluate>();
 
     compare_expr(s->value, op->value);
+}
+
+void IRComparer::visit(const Return *op) {
+    const Return *s = stmt.as<Return>();
+
+    compare_expr(s->value, op->value);
+}
+
+void IRComparer::visit(const FunctionDecl *op) {
+    const FunctionDecl *d = stmt.as<FunctionDecl>();
+
+    compare_names(d->name, op->name);
+//    compare_vector(d->args, op->args);
+    compare_stmt(d->body, op->body);
+}
+
+void IRComparer::visit(const BufferDecl *op) {
+    const BufferDecl *d = stmt.as<BufferDecl>();
+    compare_names(d->buffer.name(), op->buffer.name());
 }
 
 } // namespace
