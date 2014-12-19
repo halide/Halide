@@ -327,7 +327,7 @@ void IRMutator::visit(const FunctionDecl *op) {
     if (body.same_as(op->body)) {
         stmt = op;
     } else {
-        stmt = FunctionDecl::make(op->name, op->args, op->body, op->linkage);
+        stmt = FunctionDecl::make(op->name, op->args, body, op->linkage);
     }
 }
 
