@@ -1187,7 +1187,10 @@ public:
             // filtered out without being mutated.
             vertex_setup = remove_varying_attributes(vertex_setup);
 
-            // Simplify the new host code.
+            // Simplify the new host code.  Workaround for #588
+            vertex_setup = simplify(vertex_setup);
+            vertex_setup = simplify(vertex_setup);
+            vertex_setup = simplify(vertex_setup);
             vertex_setup = simplify(vertex_setup);
 
             // Replace varying attribute intriniscs in the gpu scheduled loops
