@@ -80,7 +80,16 @@ public:
 
 protected:
 
+    /** What should be passed as -mcpu, -mattrs, and related for
+     * compilation. The architecture-specific code generator should
+     * define these. */
+    // @{
     virtual llvm::Triple get_target_triple() const = 0;
+    virtual std::string mcpu() const = 0;
+    virtual std::string mattrs() const = 0;
+    virtual bool use_soft_float_abi() const = 0;
+    // @}
+
 
     /** State needed by llvm for code generation, including the
      * current module, function, context, builder, and most recently

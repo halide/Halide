@@ -677,7 +677,7 @@ void CodeGen_X86::test() {
 
     std::cout << "CodeGen_X86 test passed" << std::endl;
 }
-/*
+
 string CodeGen_X86::mcpu() const {
     if (target.has_feature(Target::AVX)) return "corei7-avx";
     // We want SSE4.1 but not SSE4.2, hence "penryn" rather than "corei7"
@@ -710,5 +710,5 @@ string CodeGen_X86::mattrs() const {
 bool CodeGen_X86::use_soft_float_abi() const {
     return false;
 }
-*/
+
 }}
