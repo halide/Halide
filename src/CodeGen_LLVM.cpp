@@ -21,6 +21,15 @@
 #include "CodeGen_PNaCl.h"
 
 namespace Halide {
+
+llvm::Module *codegen_llvm(const Module &module) {
+    Internal::CodeGen_LLVM *cg = Internal::CodeGen_LLVM::new_for_target(module.get_target());
+    cg->compile(module);
+    llvm::Module *out = cg->take_module();
+    delete cg;
+    return out;
+}
+
 namespace Internal {
 
 using namespace llvm;
@@ -317,9 +326,7 @@ bool CodeGen_LLVM::llvm_AArch64_enabled = false;
 bool CodeGen_LLVM::llvm_NVPTX_enabled = false;
 bool CodeGen_LLVM::llvm_Mips_enabled = false;
 
-void CodeGen_LLVM::compile(Stmt stmt, string name,
-                      const vector<Argument> &args,
-                      const vector<Buffer> &images_to_embed) {
+void CodeGen_LLVM::compile(const Module &input) {
     init_module();
 
     // Fix the target triple
@@ -337,7 +344,27 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     // Start the module off with a definition of a buffer_t
     define_buffer_t();
 
-    // Now deduce the types of the arguments to our function
+    debug(1) << "Generating llvm bitcode...\n";
+
+    // Generate the code for this module.
+    input.body.accept(this);
+
+    module->setModuleIdentifier("halide_module");
+    debug(2) << module << "\n";
+
+    // Verify the module is ok
+    verifyModule(*module);
+    debug(2) << "Done generating llvm bitcode\n";
+
+    // Optimize
+    CodeGen_LLVM::optimize_module();
+}
+
+void CodeGen_LLVM::visit(const FunctionDecl *op) {
+    const std::string &name = op->name;
+    const std::vector<Argument> &args = op->args;
+
+    // Deduce the types of the arguments to our function
     vector<llvm::Type *> arg_types(args.size());
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
@@ -348,7 +375,6 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     }
 
     // Make our function
-    function_name = name;
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 
@@ -370,98 +396,38 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
              iter != function->arg_end();
              iter++) {
 
+            sym_push(args[i].name, iter);
             if (args[i].is_buffer) {
-                unpack_buffer(args[i].name, iter);
-            } else {
-                sym_push(args[i].name, iter);
+                push_buffer(args[i].name, iter);
             }
 
             i++;
         }
     }
 
-    // Embed the constant images as globals.
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        Buffer buffer = images_to_embed[i];
-        internal_assert(buffer.defined());
-        buffer_t b = *(buffer.raw_buffer());
-        user_assert(b.host)
-            << "Can't embed buffer " << buffer.name() << " because it has a null host pointer.\n";
+    debug(1) << "Generating llvm bitcode for function " << name << "...\n";
 
-        // Figure out the offset of the last pixel.
-        size_t num_elems = 1;
-        for (int d = 0; b.extent[d]; d++) {
-            num_elems += b.stride[d] * (b.extent[d] - 1);
-        }
-
-        vector<char> array;
-        array.insert(array.end(), b.host, b.host + num_elems * b.elem_size);
-
-        Constant *host = create_constant_binary_blob(array, buffer.name() + ".data");
-
-        // Embed the buffer_t and make it point to the data array.
-        vector<Constant *> fields;
-
-        llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
-
-        fields.push_back(ConstantInt::get(i64, 0)); // dev
-        fields.push_back(host);
-        fields.push_back(ConstantArray::get(i32_array, vec(
-                                            ConstantInt::get(i32, b.extent[0]),
-                                            ConstantInt::get(i32, b.extent[1]),
-                                            ConstantInt::get(i32, b.extent[2]),
-                                            ConstantInt::get(i32, b.extent[3]))));
-        fields.push_back(ConstantArray::get(i32_array, vec(
-                                            ConstantInt::get(i32, b.stride[0]),
-                                            ConstantInt::get(i32, b.stride[1]),
-                                            ConstantInt::get(i32, b.stride[2]),
-                                            ConstantInt::get(i32, b.stride[3]))));
-        fields.push_back(ConstantArray::get(i32_array, vec(
-                                            ConstantInt::get(i32, b.min[0]),
-                                            ConstantInt::get(i32, b.min[1]),
-                                            ConstantInt::get(i32, b.min[2]),
-                                            ConstantInt::get(i32, b.min[3]))));
-        fields.push_back(ConstantInt::get(i32, b.elem_size));
-        user_assert(!b.dev_dirty)
-            << "Can't embed Image \"" << buffer.name() << "\""
-            << " because it has a dirty device pointer\n";
-        fields.push_back(ConstantInt::get(i8, 1));
-        fields.push_back(ConstantInt::get(i8, 0));
-
-        Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
-
-        GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
-                                                    true, GlobalValue::PrivateLinkage,
-                                                    0, buffer.name() + ".buffer");
-        global->setInitializer(buffer_struct);
-
-        // Finally, dump it in the symbol table
-        Constant *zero = ConstantInt::get(i32, 0);
-        Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
-        unpack_buffer(buffer.name(), global_ptr);
-
-    }
-
-    debug(1) << "Generating llvm bitcode...\n";
     // Ok, we have a module, function, context, and a builder
     // pointing at a brand new basic block. We're good to go.
-    stmt.accept(this);
+    op->body.accept(this);
 
-    // Now we need to end the function
-    builder->CreateRet(ConstantInt::get(i32, 0));
-
-    module->setModuleIdentifier("halide_module_" + name);
-    debug(2) << module << "\n";
+    // Remove the arguments from the symbol table
+    for (size_t i = 0; i < args.size(); i++) {
+        sym_pop(args[i].name);
+        if (args[i].is_buffer) {
+            pop_buffer(args[i].name);
+        }
+    }
 
     // Now verify the function is ok
-    verifyFunction(*function);
+    llvm::verifyFunction(*function);
 
     // Make a wrapper to call the function with an array of pointer
     // args. This is useful for the JIT and other machine interfaces
     // that will call the compiled function. This function has the
     // following prototype in C:
     //
-    //  int function_name_argv(void **args);
+    //  int name_argv(void **args);
     //
     // It expects 'args' to be a pointer to N void* pointers, where N
     // is the number of arguments to the pipeline. The pointers are
@@ -471,7 +437,7 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     //
     // If we have a pipeline defined like this (in C):
     //
-    //  int function_name(buffer_t* arg1, int arg2, float arg3, buffer_t* out);
+    //  int name(buffer_t* arg1, int arg2, float arg3, buffer_t* out);
     //
     // A call to the argv function would look like this:
     //
@@ -485,9 +451,9 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     //      &arg3,
     //      &out,
     //  };
-    //  int result = function_name_argv(argv);
+    //  int result = name_argv(argv);
     //
-    string wrapper_name = function_name + "_argv";
+    string wrapper_name = name + "_argv";
     func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
     llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
     block = BasicBlock::Create(*context, "entry", wrapper);
@@ -512,16 +478,62 @@ void CodeGen_LLVM::compile(Stmt stmt, string name,
     debug(4) << "Creating call from wrapper to actual function\n";
     Value *result = builder->CreateCall(function, wrapper_args);
     builder->CreateRet(result);
-    verifyFunction(*wrapper);
+    llvm::verifyFunction(*wrapper);
+}
 
-    // Finally, verify the module is ok
-    verifyModule(*module);
-    debug(2) << "Done generating llvm bitcode\n";
+// Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
+template<typename It>
+std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
+    std::vector<llvm::Constant*> ret;
+    for (It i = begin; i != end; i++) {
+        ret.push_back(ConstantInt::get(t, *i));
+    }
+    return ret;
+}
 
-    compile_for_device(stmt, name, args,images_to_embed);
+void CodeGen_LLVM::visit(const BufferDecl *op) {
+    // Embed the buffer declaration as a global.
+    Buffer buffer = op->buffer;
+    internal_assert(buffer.defined());
 
-    // Optimize
-    CodeGen_LLVM::optimize_module();
+    buffer_t b = *(buffer.raw_buffer());
+    user_assert(b.host)
+        << "Can't embed buffer " << buffer.name() << " because it has a null host pointer.\n";
+    user_assert(!b.dev_dirty)
+        << "Can't embed Image \"" << buffer.name() << "\""
+        << " because it has a dirty device pointer\n";
+
+    // Figure out the offset of the last pixel.
+    size_t num_elems = 1;
+    for (int d = 0; b.extent[d]; d++) {
+        num_elems += b.stride[d] * (b.extent[d] - 1);
+    }
+    vector<char> array(b.host, b.host + num_elems * b.elem_size);
+
+    // Embed the buffer_t and make it point to the data array.
+    GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
+                                                true, GlobalValue::PrivateLinkage,
+                                                0, buffer.name() + ".buffer");
+    llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
+
+    Constant *fields[] = {
+        ConstantInt::get(i64, 0), // dev
+        create_constant_binary_blob(array, buffer.name() + ".data"), // host
+        ConstantArray::get(i32_array, get_constants(i32, b.extent, b.extent + 4)),
+        ConstantArray::get(i32_array, get_constants(i32, b.stride, b.stride + 4)),
+        ConstantArray::get(i32_array, get_constants(i32, b.min, b.min + 4)),
+        ConstantInt::get(i32, b.elem_size),
+        ConstantInt::get(i8, 1),
+        ConstantInt::get(i8, 0)
+    };
+    Constant *buffer_struct = ConstantStruct::get(buffer_t_type, fields);
+    global->setInitializer(buffer_struct);
+
+
+    // Finally, dump it in the symbol table
+    Constant *zero = ConstantInt::get(i32, 0);
+    Constant *global_ptr = ConstantExpr::getInBoundsGetElementPtr(global, vec(zero));
+    sym_push(buffer.name(), global_ptr);
 }
 
 llvm::Type *CodeGen_LLVM::llvm_type_of(Type t) {
@@ -550,14 +562,11 @@ void CodeGen_LLVM::optimize_module() {
 
     // Run optimization passes
     module_pass_manager.run(*module);
-    if (!function_name.empty()) {
-        llvm::Function *fn = module->getFunction(function_name);
-        internal_assert(fn) << "Could not find function " << function_name << " inside llvm module\n";
-
-        function_pass_manager.doInitialization();
-        function_pass_manager.run(*fn);
-        function_pass_manager.doFinalization();
+    function_pass_manager.doInitialization();
+    for (llvm::Module::iterator i = module->begin(); i != module->end(); i++) {
+        function_pass_manager.run(*i);
     }
+    function_pass_manager.doFinalization();
 
     if (debug::debug_level >= 2) {
         module->dump();
@@ -599,7 +608,7 @@ bool CodeGen_LLVM::sym_exists(const string &name) const {
 
 // Take an llvm Value representing a pointer to a buffer_t,
 // and populate the symbol table with its constituent parts
-void CodeGen_LLVM::unpack_buffer(string name, llvm::Value *buffer) {
+void CodeGen_LLVM::push_buffer(const string &name, llvm::Value *buffer) {
     Value *host_ptr = buffer_host(buffer);
     Value *dev_ptr = buffer_dev(buffer);
 
@@ -647,6 +656,28 @@ void CodeGen_LLVM::unpack_buffer(string name, llvm::Value *buffer) {
     sym_push(name + ".min.2", buffer_min(buffer, 2));
     sym_push(name + ".min.3", buffer_min(buffer, 3));
     sym_push(name + ".elem_size", buffer_elem_size(buffer));
+}
+
+void CodeGen_LLVM::pop_buffer(const string &name) {
+    sym_pop(name + ".buffer");
+    sym_pop(name + ".host");
+    sym_pop(name + ".dev");
+    sym_pop(name + ".host_and_dev_are_null");
+    sym_pop(name + ".host_dirty");
+    sym_pop(name + ".dev_dirty");
+    sym_pop(name + ".extent.0");
+    sym_pop(name + ".extent.1");
+    sym_pop(name + ".extent.2");
+    sym_pop(name + ".extent.3");
+    sym_pop(name + ".stride.0");
+    sym_pop(name + ".stride.1");
+    sym_pop(name + ".stride.2");
+    sym_pop(name + ".stride.3");
+    sym_pop(name + ".min.0");
+    sym_pop(name + ".min.1");
+    sym_pop(name + ".min.2");
+    sym_pop(name + ".min.3");
+    sym_pop(name + ".elem_size");
 }
 
 // Add a definition of buffer_t to the module if it isn't already there
@@ -2605,6 +2636,12 @@ void CodeGen_LLVM::visit(const Evaluate *op) {
 
     // Discard result
     value = NULL;
+}
+
+void CodeGen_LLVM::visit(const Return *op) {
+    llvm::Value *value = codegen(op->value);
+
+    builder->CreateRet(value);
 }
 
 Value *CodeGen_LLVM::create_alloca_at_entry(llvm::Type *t, int n, const string &name) {

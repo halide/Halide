@@ -13,6 +13,7 @@
 #include "IRVisitor.h"
 #include "Buffer.h"
 #include "Type.h"
+#include "Argument.h"
 #include "IntrusivePtr.h"
 #include "Util.h"
 
@@ -581,6 +582,11 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
+struct Return : public StmtNode<Return> {
+    Expr value;
+
+    EXPORT static Stmt make(Expr v);
+};
 }
 }
 // Now that we've defined an Expr and ForType, we can include the definition of a function
@@ -719,6 +725,35 @@ struct Variable : public ExprNode<Variable> {
     }
 
     EXPORT static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain);
+};
+
+/** Declaration of a function. */
+// TODO: Come up with a better name for this.
+struct FunctionDecl : public StmtNode<FunctionDecl> {
+    enum LinkageType {
+        Public,
+        Private,
+    };
+
+    std::string name;
+
+    /** Arguments referred to in the body of this function. */
+    std::vector<Argument> args;
+
+    /** Body of this function. */
+    Stmt body;
+
+    /** The linkage of this function. */
+    LinkageType linkage;
+
+    EXPORT static Stmt make(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
+};
+
+/** Declaration of a buffer. */
+struct BufferDecl : public StmtNode<BufferDecl> {
+    Buffer buffer;
+
+    EXPORT static Stmt make(Buffer buffer);
 };
 
 }

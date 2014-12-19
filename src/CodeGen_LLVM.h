@@ -32,8 +32,7 @@ class MDNode;
 #include <vector>
 
 #include "IRVisitor.h"
-#include "Argument.h"
-#include "IR.h"
+#include "Module.h"
 #include "Scope.h"
 #include "JITCompiledModule.h"
 #include "ModulusRemainder.h"
@@ -57,37 +56,13 @@ public:
 
     static CodeGen_LLVM *new_for_target(const Target &target);
 
-    /** What should be passed as -mcpu, -mattrs, and related for
-     * compilation. The architecture-specific code generator should
-     * define these. */
-    // @{
-    virtual std::string mcpu() const = 0;
-    virtual std::string mattrs() const = 0;
-    virtual bool use_soft_float_abi() const = 0;
-    // @}
-
-    /** Do any required target-specific things to the execution engine
-     * and the module prior to jitting. Called by JITCompiledModule
-     * just before it jits. Does nothing by default. */
-    virtual void jit_init(llvm::ExecutionEngine *, llvm::Module *) {}
-
-    /** Do any required target-specific things to the execution engine
-     * and the module after jitting. Called by JITCompiledModule just
-     * after it jits. Does nothing by default. The third argument
-     * gives the target a chance to inject calls to target-specific
-     * module cleanup routines. */
-    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
-                              std::vector<JITCompiledModule::CleanupRoutine> *) {}
-
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();
 
     /** Takes a halide statement and compiles it to an llvm module held
      * internally. Call this before calling compile_to_bitcode or
      * compile_to_native. */
-    virtual void compile(Stmt stmt, std::string name,
-                         const std::vector<Argument> &args,
-                         const std::vector<Buffer> &images_to_embed);
+    virtual void compile(const Module &module);
 
     const Target &get_target() const { return target; }
 
@@ -134,15 +109,6 @@ protected:
      * module. This allows reuse of one CodeGen_LLVM object to compiled
      * multiple related modules (e.g. multiple device kernels). */
     virtual void init_module();
-
-    /** Extend the already generated LLVM IR for the host code with
-     * the device specific part of the host code. Called by compile
-     * after doing the main host compilation but before optimizing the
-     * module.  Default implementation does nothing. */
-    virtual void compile_for_device(Stmt stmt, std::string name,
-                                    const std::vector<Argument> &args,
-                                    const std::vector<Buffer> &images_to_embed) {
-    }
 
     /** Run all of llvm's optimization passes on the module. */
     void optimize_module();
@@ -200,9 +166,6 @@ protected:
     Expr min_f32, max_f32, min_f64, max_f64;
     // @}
 
-    /** The name of the function being generated. */
-    std::string function_name;
-
     /** Emit code that evaluates an expression, and return the llvm
      * representation of the result of the expression. */
     llvm::Value *codegen(Expr);
@@ -216,7 +179,8 @@ protected:
     /** Take an llvm Value representing a pointer to a buffer_t,
      * and populate the symbol table with its constituent parts.
      */
-    void unpack_buffer(std::string name, llvm::Value *buffer);
+    void push_buffer(const std::string &name, llvm::Value *buffer);
+    void pop_buffer(const std::string &name);
 
     /** Add a definition of buffer_t to the module if it isn't already there. */
     void define_buffer_t();
@@ -316,6 +280,9 @@ protected:
     virtual void visit(const Block *);
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
+    virtual void visit(const Return *);
+    virtual void visit(const FunctionDecl *);
+    virtual void visit(const BufferDecl *);
     // @}
 
     /** Generate code for an allocate node. It has no default
@@ -372,6 +339,11 @@ private:
     std::map<std::string, llvm::Constant *> string_constants;
 };
 
-}}
+}
+
+/** Given a Halide module, generate an llvm::Module. */
+EXPORT llvm::Module *codegen_llvm(const Module &module);
+
+}
 
 #endif

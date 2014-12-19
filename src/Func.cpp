@@ -18,9 +18,10 @@
 #include "Image.h"
 #include "Param.h"
 #include "Debug.h"
-#include "Target.h"
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
+#include "CodeGen_LLVM.h"
+#include "Output.h"
 
 namespace Halide {
 
@@ -2012,9 +2013,56 @@ void Func::lower(const Target &t) {
     }
 }
 
+Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
+    string public_name = fn_name.empty() ? name() : fn_name;
+    string private_name = "__" + public_name;
+
+    lower(target);
+    Stmt private_body = lowered;
+
+    // Get all the arguments/global images referenced in this function.
+    vector<Argument> public_args = add_user_context_arg(args, target);
+
+    vector<Buffer> global_images;
+    validate_arguments(name(), public_args, private_body, global_images);
+    for (int i = 0; i < outputs(); i++) {
+        public_args.push_back(output_buffers()[i]);
+    }
+
+    // Create a module with all the global images in it.
+    Module module(target);
+
+    // Add all the global images to the module, and add the global
+    // images used to the private argument list.
+    std::vector<Argument> private_args = public_args;
+    for (size_t i = 0; i < global_images.size(); i++) {
+        Buffer buf = global_images[i];
+        module.append(BufferDecl::make(buf));
+        private_args.push_back(Argument(buf.name(), true, type_of<void*>()));
+    }
+
+    module.append(FunctionDecl::make(private_name, private_args, private_body, FunctionDecl::Private));
+
+    // Generate a call to the private function, adding an arguments
+    // for the global images.
+    vector<Expr> private_params;
+    for (size_t i = 0; i < private_args.size(); i++) {
+        const Argument &arg = private_args[i];
+        if (arg.is_buffer) {
+            private_params.push_back(Variable::make(type_of<void*>(), arg.name));
+        } else {
+            private_params.push_back(Variable::make(arg.type, arg.name));
+        }
+    }
+    Stmt public_body = Return::make(Call::make(Int(32), private_name, private_params, Call::Extern));
+    module.append(FunctionDecl::make(public_name, public_args, public_body, FunctionDecl::Public));
+
+    return module;
+}
+
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const string &fn_name,
                               const Target &target) {
-    compile_to(Output::bitcode(filename), args, fn_name, target);
+    output_bitcode(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_bitcode(const string &filename, vector<Argument> args, const Target &target) {
@@ -2023,7 +2071,7 @@ void Func::compile_to_bitcode(const string &filename, vector<Argument> args, con
 
 void Func::compile_to_object(const string &filename, vector<Argument> args,
                              const string &fn_name, const Target &target) {
-    compile_to(Output::object(filename), args, fn_name, target);
+    output_object(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_object(const string &filename, vector<Argument> args, const Target &target) {
@@ -2031,30 +2079,22 @@ void Func::compile_to_object(const string &filename, vector<Argument> args, cons
 }
 
 void Func::compile_to_header(const string &filename, vector<Argument> args, const string &fn_name, const Target &target) {
-    compile_to(Output::c_header(filename), args, fn_name, target);
+    output_c_header(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_c(const string &filename, vector<Argument> args,
                         const string &fn_name, const Target &target) {
-    compile_to(Output::c_source(filename), args, fn_name, target);
+    output_c_source(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
-    lower(target);
-
-    Internal::LoweredFunc lowered_func = {
-        lowered,
-        name(),
-        target
-    };
-
+    Module m = compile_to_module(infer_arguments(), "", target);
     if (fmt == HTML) {
-        Output::stmt_html(filename).generate(lowered_func);
+        output_stmt_html(m, filename);
     } else {
-        Output::stmt_text(filename).generate(lowered_func);
+        output_stmt_text(m, filename);
     }
 }
-
 
 void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                               Realization dst,
@@ -2083,20 +2123,18 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
                                               const std::map<std::string, Expr> &additional_replacements,
                                               StmtOutputFormat fmt,
                                               const Target &t) {
+
     lower(t);
 
     Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
 
-    Internal::LoweredFunc lowered_func = {
-        s,
-        name(),
-        t
-    };
+    Module m(t);
+    m.append(FunctionDecl::make(name(), infer_arguments(), s, FunctionDecl::Public));
 
     if (fmt == HTML) {
-        Output::stmt_html(filename).generate(lowered_func);
+        output_stmt_html(m, filename);
     } else {
-        Output::stmt_text(filename).generate(lowered_func);
+        output_stmt_text(m, filename);
     }
 }
 
@@ -2172,10 +2210,9 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
 
 void Func::compile_to_file(const string &filename_prefix, vector<Argument> args,
                            const Target &target) {
-    std::vector<Output> outputs;
-    outputs.push_back(Output::c_header(filename_prefix + ".h"));
-    outputs.push_back(Output::object(filename_prefix + ".o"));
-    compile_to(outputs, args, filename_prefix, target);
+    Module m = compile_to_module(args, filename_prefix, target);
+    output_c_header(m, filename_prefix + ".h");
+    output_object(m, filename_prefix + ".o");
 }
 
 void Func::compile_to_file(const string &filename_prefix, const Target &target) {
@@ -2209,42 +2246,11 @@ void Func::compile_to_file(const string &filename_prefix, Argument a, Argument b
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const string &fn_name,
                                const Target &target) {
-    compile_to(Output::assembly(filename), args, fn_name, target);
+    output_assembly(compile_to_module(args, fn_name, target), filename);
 }
 
 void Func::compile_to_assembly(const string &filename, vector<Argument> args, const Target &target) {
     compile_to_assembly(filename, args, "", target);
-}
-
-void Func::compile_to(std::vector<Output> outputs, vector<Argument> args, const string &fn_name, const Target &target) {
-    user_assert(defined()) << "Can't compile undefined Func.\n";
-
-    args = add_user_context_arg(args, target);
-
-    lower(target);
-
-    vector<Buffer> images_to_embed;
-    validate_arguments(name(), args, lowered, images_to_embed);
-
-    for (int i = 0; i < this->outputs(); i++) {
-        args.push_back(output_buffers()[i]);
-    }
-
-    Internal::LoweredFunc lowered_func = {
-        lowered,
-        fn_name.empty() ? name() : fn_name,
-        target,
-        args,
-        images_to_embed
-    };
-
-    for (std::vector<Output>::iterator i = outputs.begin(); i != outputs.end(); i++) {
-        i->generate(lowered_func);
-    }
-}
-
-void Func::compile_to(Output output, vector<Argument> args, const string &fn_name, const Target &target) {
-    compile_to(vec(output), args, fn_name, target);
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
@@ -2650,7 +2656,6 @@ void *Func::compile_jit(const Target &target) {
 
     arg_values = infer_args.arg_values;
 
-
     for (int i = 0; i < func.outputs(); i++) {
         string buffer_name = name();
         if (func.outputs() > 1) {
@@ -2670,9 +2675,6 @@ void *Func::compile_jit(const Target &target) {
                            << infer_args.arg_types[i].is_buffer << "\n";
     }
 
-    Target t = target;
-    t.set_feature(Target::JIT);
-
     // Sanitise the name of the generated function
     string n = name();
     for (size_t i = 0; i < n.size(); i++) {
@@ -2681,22 +2683,16 @@ void *Func::compile_jit(const Target &target) {
         }
     }
 
-    Internal::LoweredFunc lowered_func = {
-        lowered,
-        n,
-        t,
-        infer_args.arg_types,
-        vector<Buffer>()
-    };
+    // Make a module
+    Module module(target.with_feature(Target::JIT));
+    module.append(FunctionDecl::make(n, infer_args.arg_types, lowered, FunctionDecl::Public));
 
     if (debug::debug_level >= 3) {
-        Output::assembly(name() + ".s").generate(lowered_func);
-        Output::bitcode(name() + ".bc").generate(lowered_func);
-        ofstream stmt_debug((name() + ".stmt").c_str());
-        stmt_debug << lowered;
+        output_native(module, name() + ".bc", name() + ".s");
+        output_stmt_text(module, name() + ".stmt");
     }
 
-    compiled_module = JITCompiledModule(lowered_func);
+    compiled_module = JITCompiledModule(codegen_llvm(module), n);
 
     return compiled_module.function;
 }

@@ -12,8 +12,6 @@ namespace Internal {
 
 using std::string;
 
-using namespace llvm;
-
 // Wraps an execution engine. Takes ownership of the given module and
 // the memory for jit compiled code.
 class JITModuleHolder {
@@ -24,8 +22,7 @@ public:
         execution_engine(ee),
         module(m),
         context(&m->getContext()),
-        shutdown_thread_pool(stop_threads) {
-    }
+        shutdown_thread_pool(stop_threads) {}
 
     ~JITModuleHolder() {
         debug(2) << "Destroying JIT compiled module at " << this << "\n";
@@ -44,9 +41,9 @@ public:
     }
 
     CodeGen_LLVM *codegen;
-    ExecutionEngine *execution_engine;
-    Module *module;
-    LLVMContext *context;
+    llvm::ExecutionEngine *execution_engine;
+    llvm::Module *module;
+    llvm::LLVMContext *context;
     void (*shutdown_thread_pool)();
 
     /** Do any target-specific module cleanup. */
@@ -83,7 +80,8 @@ char *start, *end;
 // Retrieve a function pointer from an llvm module, possibly by
 // compiling it. Returns it by assigning to the last argument.
 template<typename FP>
-void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &name, bool must_succeed, FP *result) {
+void hook_up_function_pointer(llvm::ExecutionEngine *ee, llvm::Module *mod, const string &name,
+                              bool must_succeed, FP *result) {
 
     internal_assert(mod && ee);
 
@@ -121,22 +119,7 @@ void hook_up_function_pointer(ExecutionEngine *ee, Module *mod, const string &na
 
 }  // namespace
 
-JITCompiledModule::JITCompiledModule() :
-    function(NULL),
-    wrapped_function(NULL),
-    copy_to_host(NULL),
-    copy_to_dev(NULL),
-    free_dev_buffer(NULL),
-    set_error_handler(NULL),
-    set_custom_allocator(NULL),
-    set_custom_do_par_for(NULL),
-    set_custom_do_task(NULL),
-    set_custom_trace(NULL),
-    set_custom_print(NULL),
-    shutdown_thread_pool(NULL),
-    memoization_cache_set_size(NULL) {}
-
-JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
+JITCompiledModule::JITCompiledModule(llvm::Module *m, const std::string &fn) :
     function(NULL),
     wrapped_function(NULL),
     copy_to_host(NULL),
@@ -151,26 +134,27 @@ JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
     shutdown_thread_pool(NULL),
     memoization_cache_set_size(NULL) {
 
-    CodeGen_LLVM *cg = CodeGen_LLVM::new_for_target(func.target);
-    cg->compile(func.body, func.name, func.args, func.images);
-    // Take ownership of the module in cg.
-    llvm::Module *m = cg->take_module();
+    if (!m) return;
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     string error_string;
 
-    TargetOptions options;
+    bool use_soft_float_abi = false;
+    string mcpu;
+    string mattrs;
+
+    llvm::TargetOptions options;
     options.LessPreciseFPMADOption = true;
     options.NoFramePointerElim = false;
-    options.AllowFPOpFusion = FPOpFusion::Fast;
+    options.AllowFPOpFusion = llvm::FPOpFusion::Fast;
     options.UnsafeFPMath = true;
     options.NoInfsFPMath = true;
     options.NoNaNsFPMath = true;
     options.HonorSignDependentRoundingFPMathOption = false;
     options.UseSoftFloat = false;
     options.FloatABIType =
-        cg->use_soft_float_abi() ? FloatABI::Soft : FloatABI::Hard;
+        use_soft_float_abi ? llvm::FloatABI::Soft : llvm::FloatABI::Hard;
     options.NoZerosInBSS = false;
     options.GuaranteedTailCallOpt = false;
     options.DisableTailCalls = false;
@@ -180,27 +164,27 @@ JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
     options.UseInitArray = false;
 
     #if LLVM_VERSION > 35
-    EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));
+    llvm::EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));
     #else
-    EngineBuilder engine_builder(m);
+    llvm::EngineBuilder engine_builder(m);
     #endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
-    engine_builder.setEngineKind(EngineKind::JIT);
+    engine_builder.setEngineKind(llvm::EngineKind::JIT);
     #ifdef USE_MCJIT
     #if LLVM_VERSION < 36
     // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
-    JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
+    llvm::JITMemoryManager *memory_manager = llvm::JITMemoryManager::CreateDefaultMemManager();
     engine_builder.setJITMemoryManager(memory_manager);
     #endif
     #else
     engine_builder.setUseMCJIT(false);
     #endif
-    engine_builder.setOptLevel(CodeGenOpt::Aggressive);
-    engine_builder.setMCPU(cg->mcpu());
-    engine_builder.setMAttrs(vec<string>(cg->mattrs()));
-    ExecutionEngine *ee = engine_builder.create();
+    engine_builder.setOptLevel(llvm::CodeGenOpt::Aggressive);
+    engine_builder.setMCPU(mcpu);
+    engine_builder.setMAttrs(vec<string>(mattrs));
+    llvm::ExecutionEngine *ee = engine_builder.create();
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
@@ -209,18 +193,24 @@ JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
     #endif
 
     // Do any target-specific initialization
-    cg->jit_init(ee, m);
+    std::vector<llvm::JITEventListener *> listeners;
+    //void CreateListeners(target, listeners);
+    for (size_t i = 0; i < listeners.size(); i++) {
+        ee->RegisterJITEventListener(listeners[i]);
+    }
+
+    //cg->jit_init(ee, m);
 
     // Retrieve function pointers from the compiled module (which also
     // triggers compilation)
     debug(1) << "JIT compiling...\n";
 
-    hook_up_function_pointer(ee, m, func.name, true, &function);
+    hook_up_function_pointer(ee, m, fn, true, &function);
 
     void *function_address = reinterpret_bits<void *>(function);
     debug(1) << "JIT compiled function pointer " << function_address << "\n";
 
-    hook_up_function_pointer(ee, m, func.name + "_argv", true, &wrapped_function);
+    hook_up_function_pointer(ee, m, fn + "_argv", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
     hook_up_function_pointer(ee, m, "halide_copy_to_dev", false, &copy_to_dev);
     hook_up_function_pointer(ee, m, "halide_dev_free", false, &free_dev_buffer);
@@ -240,7 +230,12 @@ JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
     module = new JITModuleHolder(ee, m, shutdown_thread_pool);
 
     // Do any target-specific post-compilation module meddling
-    cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
+    for (size_t i = 0; i < listeners.size(); i++) {
+        ee->UnregisterJITEventListener(listeners[i]);
+        delete listeners[i];
+    }
+    listeners.clear();
+    //cg->jit_finalize(ee, m, &module.ptr->cleanup_routines);
 
     // Add some more target independent cleanup routines.
     module.ptr->add_cleanup_routine("halide_memoization_cache_cleanup");
@@ -263,8 +258,6 @@ JITCompiledModule::JITCompiledModule(const LoweredFunc &func) :
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     ee->runStaticConstructorsDestructors(false);
-
-    delete cg;
 }
 
 }

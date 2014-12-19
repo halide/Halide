@@ -16,7 +16,7 @@
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
-#include "Output.h"
+#include "Module.h"
 
 namespace Halide {
 
@@ -618,7 +618,7 @@ public:
     /** Write out an internal representation of lowered code as above
      * but simplified using the provided realization bounds and other
      * concrete parameter values. Can emit html or plain text. */
-    //@{
+    // @{
     EXPORT void compile_to_simplified_lowered_stmt(const std::string &filename,
                                                    Realization dst,
                                                    const std::map<std::string, Expr> &additional_replacements,
@@ -684,14 +684,13 @@ public:
                                                    int x_size,
                                                    StmtOutputFormat fmt = Text,
                                                    const Target &t = get_target_from_environment());
-
     // @}
 
     /** Compile to object file and header pair, with the given
      * arguments. Also names the C function to match the first
      * argument.
      */
-    //@{
+    // @{
     EXPORT void compile_to_file(const std::string &filename_prefix, std::vector<Argument> args,
                                 const Target &target = get_target_from_environment());
     EXPORT void compile_to_file(const std::string &filename_prefix,
@@ -708,10 +707,11 @@ public:
                                 const Target &target = get_target_from_environment());
     // @}
 
-    EXPORT void compile_to(std::vector<Output> outputs, std::vector<Argument> args, const std::string &fn_name = "",
-                           const Target &target = get_target_from_environment());
-    EXPORT void compile_to(Output output, std::vector<Argument> args, const std::string &fn_name = "",
-                           const Target &target = get_target_from_environment());
+    /** Store an internal representation of lowered code as a self
+     * contained Module suitable for further compilation. */
+    // @{
+    EXPORT Module compile_to_module(const std::vector<Argument> &args, const std::string &fn_name = "",
+                                    const Target &target = get_target_from_environment());
 
     /** Eagerly jit compile the function to machine code. This
      * normally happens on the first call to realize. If you're

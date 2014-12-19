@@ -45,7 +45,6 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     }
 
     // Make our function
-    function_name = name;
     FunctionType *func_t = FunctionType::get(void_t, arg_types, false);
     function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
 

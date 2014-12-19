@@ -7,7 +7,7 @@
 
 #include "IntrusivePtr.h"
 #include "runtime/HalideRuntime.h"
-#include "Output.h"
+#include "LLVM_Output.h"
 
 namespace llvm {
 class Module;
@@ -17,7 +17,6 @@ namespace Halide {
 namespace Internal {
 
 class JITModuleHolder;
-class CodeGen_LLVM;
 
 /** Function pointers into a compiled halide module. These function
  * pointers are meaningless once the last copy of a JITCompiledModule
@@ -85,10 +84,9 @@ struct JITCompiledModule {
     // The JIT Module Allocator holds onto the memory storing the functions above.
     IntrusivePtr<JITModuleHolder> module;
 
-    JITCompiledModule();
     /** Take an llvm module and compile it. Populates the function
      * pointer members above with the result. */
-    JITCompiledModule(const LoweredFunc &lowered_func);
+    JITCompiledModule(llvm::Module *module = NULL, const std::string &fn = "");
 
     /** Holds a cleanup routine and context parameter. */
     struct CleanupRoutine {

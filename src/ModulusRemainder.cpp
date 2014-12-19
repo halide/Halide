@@ -58,6 +58,9 @@ public:
     void visit(const IfThenElse *);
     void visit(const Free *);
     void visit(const Evaluate *);
+    void visit(const Return *);
+    void visit(const FunctionDecl *);
+    void visit(const BufferDecl *);
 };
 
 ModulusRemainder modulus_remainder(Expr e) {
@@ -409,6 +412,17 @@ void ComputeModulusRemainder::visit(const Evaluate *) {
     internal_assert(false) << "modulus_remainder of statement\n";
 }
 
+void ComputeModulusRemainder::visit(const Return *) {
+    internal_assert(false) << "modulus_remainder of statement\n";
+}
+
+void ComputeModulusRemainder::visit(const FunctionDecl *) {
+    internal_assert(false) << "modulus_remainder of decl\n";
+}
+
+void ComputeModulusRemainder::visit(const BufferDecl *) {
+    internal_assert(false) << "modulus_remainder of decl\n";
+}
 
 }
 }

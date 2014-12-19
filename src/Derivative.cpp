@@ -372,6 +372,18 @@ class Monotonic : public IRVisitor {
     void visit(const Evaluate *op) {
         internal_error << "Monotonic of statement\n";
     }
+
+    void visit(const Return *op) {
+        internal_error << "Monotonic of statement\n";
+    }
+
+    void visit(const FunctionDecl *op) {
+        internal_error << "Monotonic of decl\n";
+    }
+
+    void visit(const BufferDecl *op) {
+        internal_error << "Monotonic of decl\n";
+    }
 public:
     MonotonicResult result;
 

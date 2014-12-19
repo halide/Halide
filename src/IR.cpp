@@ -467,6 +467,14 @@ Stmt Evaluate::make(Expr v) {
     return node;
 }
 
+Stmt Return::make(Expr v) {
+    internal_assert(v.defined()) << "Return of undefined\n";
+
+    Return *node = new Return;
+    node->value = v;
+    return node;
+}
+
 Expr Call::make(Type type, std::string name, const std::vector<Expr> &args, CallType call_type,
                 Function func, int value_index,
                 Buffer image, Parameter param) {
@@ -512,6 +520,22 @@ Expr Variable::make(Type type, std::string name, Buffer image, Parameter param, 
     return node;
 }
 
+Stmt FunctionDecl::make(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage) {
+    internal_assert(!name.empty());
+    FunctionDecl *node = new FunctionDecl;
+    node->name = name;
+    node->args = args;
+    node->body = body;
+    node->linkage = linkage;
+    return node;
+}
+
+Stmt BufferDecl::make(Buffer buffer) {
+    BufferDecl *node = new BufferDecl;
+    node->buffer = buffer;
+    return node;
+}
+
 template<> EXPORT IRNodeType ExprNode<IntImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<FloatImm>::_type_info = {};
 template<> EXPORT IRNodeType ExprNode<StringImm>::_type_info = {};
@@ -551,6 +575,9 @@ template<> EXPORT IRNodeType StmtNode<Realize>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Block>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<IfThenElse>::_type_info = {};
 template<> EXPORT IRNodeType StmtNode<Evaluate>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<Return>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<FunctionDecl>::_type_info = {};
+template<> EXPORT IRNodeType StmtNode<BufferDecl>::_type_info = {};
 
 using std::string;
 const string Call::debug_to_file = "debug_to_file";

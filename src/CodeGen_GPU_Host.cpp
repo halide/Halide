@@ -286,19 +286,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::init_module() {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
-                                                       const vector<Argument> &args,
-                                                       const vector<Buffer> &images_to_embed) {
-    // Unset constant flag for embedded image global variables
-    for (size_t i = 0; i < images_to_embed.size(); i++) {
-        string name = images_to_embed[i].name();
-        GlobalVariable *global = module->getNamedGlobal(name + ".buffer");
-        global->setConstant(false);
-    }
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const FunctionDecl *op) {
 
     std::vector<char> kernel_src = cgdev->compile_to_src();
 
-    Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src");
+    Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src_" + op->name);
 
     // Remember the entry block so we can branch to it upon init success.
     BasicBlock *entry = &function->getEntryBlock();
@@ -321,6 +313,14 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile_for_device(Stmt stmt, string name,
     builder->CreateBr(entry);
 }
 
+template<typename CodeGen_CPU>
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const BufferDecl *op) {
+    // Unset constant flag for embedded image global variables
+    GlobalVariable *global = module->getNamedGlobal(op->buffer.name() + ".buffer");
+    global->setConstant(false);
+}
+
+/*
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module) {
 
@@ -445,7 +445,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *mo
     }
 
 }
-
+*/
 template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
