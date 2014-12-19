@@ -2041,7 +2041,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     }
 
     // Create a module with all the global images in it.
-    Module module(target);
+    Module module(public_name, target);
 
     // Add all the global images to the module, and add the global
     // images used to the private argument list.
@@ -2101,9 +2101,9 @@ void Func::compile_to_c(const string &filename, const vector<Argument> &args,
 void Func::compile_to_lowered_stmt(const string &filename, StmtOutputFormat fmt, const Target &target) {
     Module m = compile_to_module(infer_arguments(), "", target);
     if (fmt == HTML) {
-        output_stmt_html(m, filename);
+        output_html(m, filename);
     } else {
-        output_stmt_text(m, filename);
+        output_text(m, filename);
     }
 }
 
@@ -2139,13 +2139,13 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
 
     Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
 
-    Module m(t);
+    Module m(name(), t);
     m.append(FunctionDecl::make(name(), infer_arguments(), s, FunctionDecl::External));
 
     if (fmt == HTML) {
-        output_stmt_html(m, filename);
+        output_html(m, filename);
     } else {
-        output_stmt_text(m, filename);
+        output_text(m, filename);
     }
 }
 
@@ -2698,12 +2698,12 @@ void *Func::compile_jit(const Target &target) {
     }
 
     // Make a module
-    Module module(target.with_feature(Target::JIT));
+    Module module(name(), target.with_feature(Target::JIT));
     module.append(FunctionDecl::make(n, infer_args.arg_types, lowered, FunctionDecl::External));
 
     if (debug::debug_level >= 3) {
         output_native(module, name() + ".bc", name() + ".s");
-        output_stmt_text(module, name() + ".stmt");
+        output_text(module, name() + ".stmt");
     }
 
     compiled_module = JITCompiledModule(codegen_llvm(module), n);

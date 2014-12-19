@@ -335,7 +335,7 @@ public:
 }
 
 void CodeGen_C::compile(const Module &module) {
-    module.body.accept(this);
+    module.body().accept(this);
 }
 
 void CodeGen_C::visit(const FunctionDecl *op) {
@@ -1312,7 +1312,7 @@ void CodeGen_C::test() {
     s = Allocate::make("tmp.heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), s);
     s = Block::make(s, Return::make(0));
 
-    Module m(get_host_target());
+    Module m("", get_host_target());
     m.append(FunctionDecl::make("test1", args, s, FunctionDecl::External));
 
     ostringstream source;

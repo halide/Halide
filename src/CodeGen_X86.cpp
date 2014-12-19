@@ -612,7 +612,7 @@ void CodeGen_X86::test() {
     Stmt s = Block::make(init, loop);
     s = Block::make(s, Return::make(0));
 
-    Module m(get_host_target());
+    Module m("", get_host_target());
     m.append(FunctionDecl::make("test1", args, s, FunctionDecl::External));
 
     debug(2) << "Compiling to function pointers \n";

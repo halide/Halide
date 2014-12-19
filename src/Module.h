@@ -11,26 +11,32 @@
 
 namespace Halide {
 
-/** A halide module. This represents a collection of top level Decl
- * objects describing Func and Buffer objects. */
+/** A halide module. This represents IR containing declarations of
+ * functions and buffers. */
 class Module {
-    Target target;
+    std::string name_;
+    Target target_;
+    Internal::Stmt body_;
 
 public:
-    Module(const Target &target) : target(target) {}
+    EXPORT Module(const std::string &name, const Target &target) : name_(name), target_(target) {}
 
-    const Target &get_target() const { return target; }
+    /** Get the target this module has been lowered for. */
+    EXPORT const Target &target() const { return target_; }
 
-    Internal::Stmt body;
+    /** The name of this module. This is used as the default filename
+     * for output operations. */
+    EXPORT const std::string &name() const { return name_; }
 
-    void append(Internal::Stmt decl) {
-        if (body.defined()) {
-            body = Internal::Block::make(body, decl);
-        } else {
-            body = decl;
-        }
-    }
+    /** The definitions contained in this module. */
+    EXPORT Internal::Stmt body() const { return body_; }
+
+    /** Add some IR to the module. */
+    EXPORT void append(Internal::Stmt stmt);
 };
+
+/** Link a set of modules together into one module. */
+EXPORT Module link_modules(const std::string &name, const std::vector<Module> &modules);
 
 }
 
