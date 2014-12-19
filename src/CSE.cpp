@@ -99,6 +99,7 @@ public:
             map<Expr, int, ExprCompare>::iterator iter = shallow_numbering.find(e);
             if (iter != shallow_numbering.end()) {
                 number = iter->second;
+                internal_assert(entries[number].expr.type() == e.type());
                 return entries[number].expr;
             }
         }
@@ -107,6 +108,7 @@ public:
         if (const Variable *var = e.as<Variable>()) {
             if (let_substitutions.contains(var->name)) {
                 number = let_substitutions.get(var->name);
+                internal_assert(entries[number].expr.type() == e.type());
                 return entries[number].expr;
             }
         }
@@ -116,6 +118,7 @@ public:
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[e] = number;
+            internal_assert(entries[number].expr.type() == e.type());
             return entries[number].expr;
         }
 
@@ -129,6 +132,7 @@ public:
         if (iter != numbering.end()) {
             number = iter->second;
             shallow_numbering[old_e] = number;
+            internal_assert(entries[number].expr.type() == old_e.type());
             return entries[number].expr;
         }
 
@@ -138,6 +142,7 @@ public:
         numbering[with_cache(e)] = number;
         shallow_numbering[e] = number;
         entries.push_back(entry);
+        internal_assert(e.type() == old_e.type());
         return e;
     }
 
