@@ -8,8 +8,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-add_compile_options("-Wall -Werror -Wno-unused-function -Wcast-qual -fno-rtti -Woverloaded-virtual")
-
 set(LLVM_BIN "llvm3.2/bin/Debug/"
   CACHE PATH "Path to LLVM bin directory")
 set(LLVM_LIB "llvm3.2/lib/Debug/"
