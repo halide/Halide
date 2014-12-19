@@ -21,26 +21,19 @@ string shared_mem_name = "__shared";
 }
 
 class InjectThreadBarriers : public IRMutator {
-    bool in_non_glsl_gpu;
     bool in_threads;
 
     using IRMutator::visit;
 
     void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
         bool old_in_threads = in_threads;
-
-	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
-
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name) && in_non_glsl_gpu) {
+        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             in_threads = true;
         }
 
         IRMutator::visit(op);
 
         in_threads = old_in_threads;
-	in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
 
     Stmt barrier() {
@@ -77,12 +70,11 @@ class InjectThreadBarriers : public IRMutator {
     }
 
 public:
-    InjectThreadBarriers() : in_non_glsl_gpu(false), in_threads(false) {}
+    InjectThreadBarriers() : in_threads(false) {}
 };
 
 
 class ExtractBlockSize : public IRVisitor {
-    bool in_non_glsl_gpu;
     Expr block_extent[4];
 
     Scope<Interval> scope;
@@ -99,16 +91,11 @@ class ExtractBlockSize : public IRVisitor {
     }
 
     void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
-
-  	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
-
         Interval ie = bounds_of_expr_in_scope(op->extent, scope);
         Interval im = bounds_of_expr_in_scope(op->min, scope);
 
         for (int i = 0; i < 4; i++) {
-            if (ends_with(op->name, thread_names[i]) && in_non_glsl_gpu) {
+            if (ends_with(op->name, thread_names[i])) {
                 found_for(i, ie.max);
             }
         }
@@ -116,8 +103,6 @@ class ExtractBlockSize : public IRVisitor {
         scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
         IRVisitor::visit(op);
         scope.pop(op->name);
-
-	in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
 
     void visit(const LetStmt *op) {
@@ -128,8 +113,6 @@ class ExtractBlockSize : public IRVisitor {
     }
 
 public:
-    ExtractBlockSize() : in_non_glsl_gpu(false) { }
-
     int dimensions() const {
         for (int i = 0; i < 4; i++) {
             if (!block_extent[i].defined()) {
@@ -155,8 +138,6 @@ public:
 };
 
 class NormalizeDimensionality : public IRMutator {
-    bool in_non_glsl_gpu;
-
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
@@ -213,12 +194,7 @@ class NormalizeDimensionality : public IRMutator {
     }
 
     void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
-
-	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
-
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name) && in_non_glsl_gpu) {
+        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             depth++;
             if (depth > max_depth) {
                 max_depth = depth;
@@ -228,28 +204,20 @@ class NormalizeDimensionality : public IRMutator {
         } else {
             IRMutator::visit(op);
         }
-	in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
 
 public:
     NormalizeDimensionality(const ExtractBlockSize &e, DeviceAPI device_api)
-      : in_non_glsl_gpu(false), block_size(e), device_api(device_api), depth(0), max_depth(0) {}
+      : block_size(e), device_api(device_api), depth(0), max_depth(0) {}
 };
 
 class ReplaceForWithIf : public IRMutator {
-    bool in_non_glsl_gpu;
-
     using IRMutator::visit;
 
     const ExtractBlockSize &block_size;
 
     void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
-
-	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
-
-        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name) && in_non_glsl_gpu) {
+        if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             int dim;
             for (dim = 0; dim < 4; dim++) {
                 if (ends_with(op->name, thread_names[dim])) {
@@ -274,16 +242,13 @@ class ReplaceForWithIf : public IRMutator {
         } else {
             IRMutator::visit(op);
         }
-	old_in_non_glsl_gpu = in_non_glsl_gpu;
     }
 
 public:
-    ReplaceForWithIf(const ExtractBlockSize &e) : in_non_glsl_gpu(false), block_size(e) {}
+    ReplaceForWithIf(const ExtractBlockSize &e) : block_size(e) {}
 };
 
 class ExtractSharedAllocations : public IRMutator {
-    bool in_non_glsl_gpu;
-
     using IRMutator::visit;
 
     struct SharedAllocation {
@@ -300,11 +265,6 @@ class ExtractSharedAllocations : public IRMutator {
     bool in_threads;
 
     void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
-
-	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
-
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
             bool old = in_threads;
             in_threads = true;
@@ -318,7 +278,6 @@ class ExtractSharedAllocations : public IRMutator {
             IRMutator::visit(op);
             scope.pop(op->name);
         }
-	in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
 
     void visit(const Allocate *op) {
@@ -437,21 +396,21 @@ public:
         return s;
     }
 
-    ExtractSharedAllocations() : in_non_glsl_gpu(false), in_threads(false) {}
+    ExtractSharedAllocations() : in_threads(false) {}
 };
 
 class FuseGPUThreadLoops : public IRMutator {
-    bool in_non_glsl_gpu;
     using IRMutator::visit;
 
     Scope<Interval> scope;
 
     void visit(const For *op) {
-        bool old_in_non_glsl_gpu = in_non_glsl_gpu;
+         if (op->device_api == Device_GLSL) {
+            stmt = op;
+            return;
+        }
 
-	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
-        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name) && in_non_glsl_gpu))
+        user_assert(!(CodeGen_GPU_Dev::is_gpu_thread_var(op->name))) 
             << "Loops over GPU thread variable: \"" << op->name
             << "\" is outside of any loop over a GPU block variable. "
             << "This schedule is malformed. There must be a GPU block "
@@ -459,14 +418,14 @@ class FuseGPUThreadLoops : public IRMutator {
             << "thread variables.\n";
 
         bool should_pop = false;
-        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name) && in_non_glsl_gpu) {
+        if (CodeGen_GPU_Dev::is_gpu_block_var(op->name)) {
             Interval im = bounds_of_expr_in_scope(op->min, scope);
             Interval ie = bounds_of_expr_in_scope(op->extent, scope);
             scope.push(op->name, Interval(im.min, im.max + ie.max - 1));
             should_pop = true;
         }
 
-        if (ends_with(op->name, ".__block_id_x") && in_non_glsl_gpu) {
+        if (ends_with(op->name, ".__block_id_x")) {
 
             Stmt body = op->body;
 
@@ -525,11 +484,7 @@ class FuseGPUThreadLoops : public IRMutator {
         if (should_pop) {
             scope.pop(op->name);
         }
-	in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
-
-public:
-    FuseGPUThreadLoops() : in_non_glsl_gpu(false) { }
 };
 
 class ZeroGPULoopMins : public IRMutator {
@@ -539,8 +494,8 @@ class ZeroGPULoopMins : public IRMutator {
     void visit(const For *op) {
         bool old_in_non_glsl_gpu = in_non_glsl_gpu;
 
-	in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-	  (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
+        in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
+          (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
 
         IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {
@@ -551,7 +506,7 @@ class ZeroGPULoopMins : public IRMutator {
             stmt = For::make(op->name, 0, op->extent, op->for_type, op->device_api, body);
         }
 
-	in_non_glsl_gpu = old_in_non_glsl_gpu;
+        in_non_glsl_gpu = old_in_non_glsl_gpu;
     }
 
 public:
