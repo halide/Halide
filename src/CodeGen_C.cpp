@@ -181,8 +181,8 @@ const string preamble =
     "}\n";
 }
 
-CodeGen_C::CodeGen_C(ostream &s, bool header, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), header(header) {
-    if (header) {
+CodeGen_C::CodeGen_C(ostream &s, bool is_header, const std::string &guard) : IRPrinter(s), id("$$ BAD ID $$"), is_header(is_header) {
+    if (is_header) {
         // If it's a header, emit an include guard.
         stream << "#ifndef HALIDE_" << print_name(guard) << '\n'
                << "#define HALIDE_" << print_name(guard) << '\n';
@@ -194,7 +194,7 @@ CodeGen_C::CodeGen_C(ostream &s, bool header, const std::string &guard) : IRPrin
     stream << "#define HALIDE_EXTERN_C\n";
     stream << "#endif\n";
 
-    if (!header) {
+    if (!is_header) {
         stream << preamble;
     }
 
@@ -209,7 +209,7 @@ CodeGen_C::CodeGen_C(ostream &s, bool header, const std::string &guard) : IRPrin
 }
 
 CodeGen_C::~CodeGen_C() {
-    if (header) {
+    if (is_header) {
         stream << "#endif\n";
     }
 }
@@ -340,7 +340,7 @@ void CodeGen_C::compile(const Module &module) {
 
 void CodeGen_C::visit(const FunctionDecl *op) {
     // Don't put non-public functions in headers.
-    if (header && op->linkage != FunctionDecl::External) {
+    if (is_header && op->linkage != FunctionDecl::External) {
         return;
     }
 
@@ -353,7 +353,7 @@ void CodeGen_C::visit(const FunctionDecl *op) {
     }
 
     // Emit prototypes for any extern calls used.
-    if (!header) {
+    if (!is_header) {
         stream << "\n";
         ExternCallPrototypes e(stream);
         op->body.accept(&e);
@@ -381,10 +381,11 @@ void CodeGen_C::visit(const FunctionDecl *op) {
         if (i < args.size()-1) stream << ", ";
     }
 
-    if (header) {
+    if (is_header) {
         stream << ") HALIDE_FUNCTION_ATTRS;\n";
     } else {
         stream << ") HALIDE_FUNCTION_ATTRS {\n";
+        indent += 1;
 
         // Unpack the buffer_t's
         for (size_t i = 0; i < args.size(); i++) {
@@ -392,14 +393,13 @@ void CodeGen_C::visit(const FunctionDecl *op) {
                 push_buffer(args[i].type, args[i].name);
             }
         }
-
         // Emit the body
-        indent += 1;
         print(op->body);
-        stream << "}\n";
-        indent -= 1;
 
-        // Done with the buffer_t's
+        indent -= 1;
+        stream << "}\n";
+
+        // Done with the buffer_t's, pop the associated symbols.
         for (size_t i = 0; i < args.size(); i++) {
             if (args[i].is_buffer) {
                 pop_buffer(args[i].name);
@@ -409,7 +409,7 @@ void CodeGen_C::visit(const FunctionDecl *op) {
 }
 
 void CodeGen_C::visit(const BufferDecl *op) {
-    if (header) {
+    if (is_header) {
         return;
     }
 
@@ -452,6 +452,7 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
     string name = print_name(buffer_name);
     string buf_name = name + "_buffer";
     string type = print_type(t);
+    do_indent();
     stream << type
            << " *"
            << name
@@ -462,38 +463,47 @@ void CodeGen_C::push_buffer(Type t, const std::string &buffer_name) {
            << "->host);\n";
     allocations.push(buffer_name, t);
 
+    do_indent();
     stream << "const bool "
            << name
            << "_host_and_dev_are_null = ("
            << buf_name << "->host == NULL) && ("
            << buf_name << "->dev == 0);\n";
+    do_indent();
     stream << "(void)" << name << "_host_and_dev_are_null;\n";
 
     for (int j = 0; j < 4; j++) {
+        do_indent();
         stream << "const int32_t "
                << name
                << "_min_" << j << " = "
                << buf_name
                << "->min[" << j << "];\n";
         // emit a void cast to suppress "unused variable" warnings
+        do_indent();
         stream << "(void)" << name << "_min_" << j << ";\n";
     }
     for (int j = 0; j < 4; j++) {
+        do_indent();
         stream << "const int32_t "
                << name
                << "_extent_" << j << " = "
                << buf_name
                << "->extent[" << j << "];\n";
+        do_indent();
         stream << "(void)" << name << "_extent_" << j << ";\n";
     }
     for (int j = 0; j < 4; j++) {
+        do_indent();
         stream << "const int32_t "
                << name
                << "_stride_" << j << " = "
                << buf_name
                << "->stride[" << j << "];\n";
+        do_indent();
         stream << "(void)" << name << "_stride_" << j << ";\n";
     }
+    do_indent();
     stream << "const int32_t "
            << name
            << "_elem_size = "
@@ -1322,34 +1332,34 @@ void CodeGen_C::test() {
         + buffer_t_definition +
         "\n\n"
         "HALIDE_EXTERN_C int test1(buffer_t *_buf_buffer, const float _alpha, const int32_t _beta, const void * __user_context) HALIDE_FUNCTION_ATTRS {\n"
-        "int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
-        "const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
-        "(void)_buf_host_and_dev_are_null;\n"
-        "const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
-        "(void)_buf_min_0;\n"
-        "const int32_t _buf_min_1 = _buf_buffer->min[1];\n"
-        "(void)_buf_min_1;\n"
-        "const int32_t _buf_min_2 = _buf_buffer->min[2];\n"
-        "(void)_buf_min_2;\n"
-        "const int32_t _buf_min_3 = _buf_buffer->min[3];\n"
-        "(void)_buf_min_3;\n"
-        "const int32_t _buf_extent_0 = _buf_buffer->extent[0];\n"
-        "(void)_buf_extent_0;\n"
-        "const int32_t _buf_extent_1 = _buf_buffer->extent[1];\n"
-        "(void)_buf_extent_1;\n"
-        "const int32_t _buf_extent_2 = _buf_buffer->extent[2];\n"
-        "(void)_buf_extent_2;\n"
-        "const int32_t _buf_extent_3 = _buf_buffer->extent[3];\n"
-        "(void)_buf_extent_3;\n"
-        "const int32_t _buf_stride_0 = _buf_buffer->stride[0];\n"
-        "(void)_buf_stride_0;\n"
-        "const int32_t _buf_stride_1 = _buf_buffer->stride[1];\n"
-        "(void)_buf_stride_1;\n"
-        "const int32_t _buf_stride_2 = _buf_buffer->stride[2];\n"
-        "(void)_buf_stride_2;\n"
-        "const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
-        "(void)_buf_stride_3;\n"
-        "const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
+        " int32_t *_buf = (int32_t *)(_buf_buffer->host);\n"
+        " const bool _buf_host_and_dev_are_null = (_buf_buffer->host == NULL) && (_buf_buffer->dev == 0);\n"
+        " (void)_buf_host_and_dev_are_null;\n"
+        " const int32_t _buf_min_0 = _buf_buffer->min[0];\n"
+        " (void)_buf_min_0;\n"
+        " const int32_t _buf_min_1 = _buf_buffer->min[1];\n"
+        " (void)_buf_min_1;\n"
+        " const int32_t _buf_min_2 = _buf_buffer->min[2];\n"
+        " (void)_buf_min_2;\n"
+        " const int32_t _buf_min_3 = _buf_buffer->min[3];\n"
+        " (void)_buf_min_3;\n"
+        " const int32_t _buf_extent_0 = _buf_buffer->extent[0];\n"
+        " (void)_buf_extent_0;\n"
+        " const int32_t _buf_extent_1 = _buf_buffer->extent[1];\n"
+        " (void)_buf_extent_1;\n"
+        " const int32_t _buf_extent_2 = _buf_buffer->extent[2];\n"
+        " (void)_buf_extent_2;\n"
+        " const int32_t _buf_extent_3 = _buf_buffer->extent[3];\n"
+        " (void)_buf_extent_3;\n"
+        " const int32_t _buf_stride_0 = _buf_buffer->stride[0];\n"
+        " (void)_buf_stride_0;\n"
+        " const int32_t _buf_stride_1 = _buf_buffer->stride[1];\n"
+        " (void)_buf_stride_1;\n"
+        " const int32_t _buf_stride_2 = _buf_buffer->stride[2];\n"
+        " (void)_buf_stride_2;\n"
+        " const int32_t _buf_stride_3 = _buf_buffer->stride[3];\n"
+        " (void)_buf_stride_3;\n"
+        " const int32_t _buf_elem_size = _buf_buffer->elem_size;\n"
         " {\n"
         "  int64_t _0 = 43;\n"
         "  int64_t _1 = _0 * _beta;\n"

@@ -30,7 +30,7 @@ class CodeGen_C : public IRPrinter {
 public:
     /** Initialize a C code generator pointing at a particular output
      * stream (e.g. a file, or std::cout) */
-    CodeGen_C(std::ostream &dest, bool header = false, const std::string &name = "");
+    CodeGen_C(std::ostream &dest, bool is_header = false, const std::string &name = "");
     ~CodeGen_C();
 
     /** Emit the declarations contained in the module as C code. */
@@ -44,7 +44,7 @@ protected:
 
     /** Controls whether this instance is generating declarations or
      * definitions. */
-    bool header;
+    bool is_header;
 
     /** A cache of generated values in scope */
     std::map<std::string, std::string> cache;
