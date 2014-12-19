@@ -44,7 +44,7 @@ bool get_md_string(llvm::Value *value, std::string &result) {
     }
     llvm::ConstantDataArray *c = llvm::cast<llvm::ConstantDataArray>(value);
     if (c) {
-        result = c->getAsString();
+        result = c->getAsCString();
         return true;
     }
     return false;
