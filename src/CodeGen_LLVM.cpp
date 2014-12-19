@@ -102,6 +102,18 @@ using std::stack;
 #define InitializeMipsAsmPrinter()   InitializeAsmPrinter(Mips)
 #endif
 
+namespace {
+
+// Get the LLVM linkage corresponding to a Halide linkage type.
+llvm::GlobalValue::LinkageTypes llvm_linkage(FunctionDecl::LinkageType t) {
+    switch (t) {
+    case FunctionDecl::External: return llvm::GlobalValue::ExternalLinkage;
+    default: return llvm::GlobalValue::PrivateLinkage;
+    }
+}
+
+}
+
 CodeGen_LLVM::CodeGen_LLVM(Target t) :
     module(NULL), owns_module(false),
     function(NULL), context(NULL),
@@ -376,7 +388,7 @@ void CodeGen_LLVM::visit(const FunctionDecl *op) {
 
     // Make our function
     FunctionType *func_t = FunctionType::get(i32, arg_types, false);
-    function = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
+    function = llvm::Function::Create(func_t, llvm_linkage(op->linkage), name, module);
 
     // Mark the buffer args as no alias
     for (size_t i = 0; i < args.size(); i++) {
@@ -455,7 +467,7 @@ void CodeGen_LLVM::visit(const FunctionDecl *op) {
     //
     string wrapper_name = name + "_argv";
     func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
-    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, wrapper_name, module);
+    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm_linkage(op->linkage), wrapper_name, module);
     block = BasicBlock::Create(*context, "entry", wrapper);
     builder->SetInsertPoint(block);
 

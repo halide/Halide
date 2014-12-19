@@ -10,7 +10,6 @@
 #include "Param.h"
 #include "IntegerDivisionTable.h"
 #include "LLVM_Headers.h"
-#include "LLVM_Output.h"
 
 #include "CodeGen.h"
 
@@ -614,10 +613,10 @@ void CodeGen_X86::test() {
     s = Block::make(s, Return::make(0));
 
     Module m(get_host_target());
-    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::Public));
+    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::External));
 
     debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule jit(output_llvm_module(m), "test1");
+    JITCompiledModule jit(codegen_llvm(m), "test1");
 
     typedef int (*fn_type)(::buffer_t *, float, int);
     fn_type fn = reinterpret_bits<fn_type>(jit.function);

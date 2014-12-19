@@ -43,12 +43,8 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 }
 
 ostream &operator<<(ostream &stream, const Module &m) {
-    if (!m.body.defined()) {
-        stream << "(undefined)\n";
-    } else {
-        Internal::IRPrinter p(stream);
-        p.print(m.body);
-    }
+    stream << "Target = " << m.get_target().to_string();
+    stream << m.body;
     return stream;
 }
 
@@ -118,11 +114,11 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
 
 ostream &operator<<(ostream &out, const FunctionDecl::LinkageType &type) {
     switch (type) {
-    case FunctionDecl::Private:
-        out << "private";
+    case FunctionDecl::External:
+        out << "external";
         break;
-    case FunctionDecl::Public:
-        out << "public";
+    case FunctionDecl::Internal:
+        out << "internal";
         break;
     }
     return out;
@@ -601,7 +597,8 @@ void IRPrinter::visit(const FunctionDecl *op) {
 
 void IRPrinter::visit(const BufferDecl *op) {
     do_indent();
-    // TODO: Maybe print the contents of the buffer somehow?
+    // TODO: Maybe print the contents of the buffer somehow? I'm
+    // worried about these being huge.
     stream << "buffer " << op->buffer.name() << " = {...}\n";
 }
 
