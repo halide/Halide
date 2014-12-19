@@ -76,8 +76,6 @@ public:
         return module;
     }
 
-    llvm::Function *get_function() { return function; }
-
 protected:
 
     /** What should be passed as -mcpu, -mattrs, and related for
