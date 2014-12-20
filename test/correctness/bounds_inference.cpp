@@ -15,9 +15,9 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        f.gpu_tile(x, y, 16, 16, Device_Default_GPU);
-        g.gpu_tile(x, 128, Device_Default_GPU);
-        h.gpu_tile(x, 128, Device_Default_GPU);
+        f.gpu_tile(x, y, 16, 16);
+        g.gpu_tile(x, 128);
+        h.gpu_tile(x, 128);
     }
 
     Image<int> out = f.realize(32, 32, target);
