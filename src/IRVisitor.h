@@ -126,7 +126,7 @@ protected:
     // @}
 
     /** The nodes visited so far */
-    std::set<const void *> visited;
+    std::set<const IRNode *> visited;
 
 public:
 
