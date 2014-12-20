@@ -106,6 +106,11 @@ namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
 llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
+    // TODO(dsharlet): For some reason, marking internal functions as
+    // private linkage on OSX is causing some of the static tests to
+    // fail. Figure out why so we can remove this.
+    return llvm::GlobalValue::ExternalLinkage;
+
     switch (t) {
     case LoweredFunc::External: return llvm::GlobalValue::ExternalLinkage;
     default: return llvm::GlobalValue::PrivateLinkage;
