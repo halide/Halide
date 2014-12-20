@@ -24,10 +24,8 @@ namespace Internal {
 struct Stmt;
 EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 
-struct FunctionDecl;
-struct BufferDecl;
-EXPORT std::ostream &operator << (std::ostream &, const FunctionDecl &);
-EXPORT std::ostream &operator << (std::ostream &, const BufferDecl &);
+struct LoweredFunc;
+EXPORT std::ostream &operator << (std::ostream &, const LoweredFunc &);
 
 /** For optional debugging during codegen, use the debug class as
  * follows:

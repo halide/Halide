@@ -42,6 +42,10 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
     return stream;
 }
 
+ostream &operator << (ostream &stream, const Buffer &buffer) {
+    return stream << "buffer " << buffer.name() << " = {...}\n";
+}
+
 ostream &operator<<(ostream &stream, const Module &m) {
     stream << "Target = " << m.target().to_string() << "\n";
     for (size_t i = 0; i < m.buffers.size(); i++) {
@@ -128,7 +132,7 @@ ostream &operator<<(ostream &stream, const Stmt &ir) {
 }
 
 
-std::ostream &operator << (std::ostream &stream, const FunctionDecl &function) {
+ostream &operator << (ostream &stream, const LoweredFunc &function) {
     stream << function.linkage << " func " << function.name << " (";
     for (size_t i = 0; i < function.args.size(); i++) {
         stream << function.args[i].name;
@@ -142,16 +146,13 @@ std::ostream &operator << (std::ostream &stream, const FunctionDecl &function) {
     return stream;
 }
 
-std::ostream &operator << (std::ostream &stream, const BufferDecl &buffer) {
-    return stream << "buffer " << buffer.buffer.name() << " = {...}\n";
-}
 
-std::ostream &operator<<(std::ostream &out, const FunctionDecl::LinkageType &type) {
+std::ostream &operator<<(std::ostream &out, const LoweredFunc::LinkageType &type) {
     switch (type) {
-    case FunctionDecl::External:
+    case LoweredFunc::External:
         out << "external";
         break;
-    case FunctionDecl::Internal:
+    case LoweredFunc::Internal:
         out << "internal";
         break;
     }

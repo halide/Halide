@@ -2015,7 +2015,7 @@ void Func::lower(const Target &t) {
 
 Module Func::compile_to_module(const vector<Argument> &args, const std::string &fn_name, const Target &target) {
     // TODO: This is a bit of a wart. Right now, IR cannot directly
-    // reference BufferDecls because neither CodeGen_LLVM nor
+    // reference Buffers because neither CodeGen_LLVM nor
     // CodeGen_C can generate the correct buffer unpacking code.
 
     // To work around this, we generate two functions. The private
@@ -2048,11 +2048,11 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     vector<Argument> private_args = public_args;
     for (size_t i = 0; i < global_images.size(); i++) {
         Buffer buf = global_images[i];
-        module.append(BufferDecl(buf));
+        module.append(buf);
         private_args.push_back(Argument(buf.name(), true, type_of<void*>()));
     }
 
-    module.append(FunctionDecl(private_name, private_args, private_body, FunctionDecl::Internal));
+    module.append(LoweredFunc(private_name, private_args, private_body, LoweredFunc::Internal));
 
     // Generate a call to the private function, adding an arguments
     // for the global images.
@@ -2066,7 +2066,7 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
         }
     }
     Stmt public_body = Return::make(Call::make(Int(32), private_name, private_params, Call::Extern));
-    module.append(FunctionDecl(public_name, public_args, public_body, FunctionDecl::External));
+    module.append(LoweredFunc(public_name, public_args, public_body, LoweredFunc::External));
 
     return module;
 }
@@ -2140,7 +2140,7 @@ void Func::compile_to_simplified_lowered_stmt(const std::string &filename,
     Stmt s = human_readable_stmt(function(), lowered, dst, additional_replacements);
 
     Module m(name(), t);
-    m.append(FunctionDecl(name(), infer_arguments(), s, FunctionDecl::External));
+    m.append(LoweredFunc(name(), infer_arguments(), s, LoweredFunc::External));
 
     if (fmt == HTML) {
         output_html(m, filename);
@@ -2699,7 +2699,7 @@ void *Func::compile_jit(const Target &target) {
 
     // Make a module
     Module module(name(), target.with_feature(Target::JIT));
-    module.append(FunctionDecl(n, infer_args.arg_types, lowered, FunctionDecl::External));
+    module.append(LoweredFunc(n, infer_args.arg_types, lowered, LoweredFunc::External));
 
     if (debug::debug_level >= 3) {
         output_native(module, name() + ".bc", name() + ".s");
