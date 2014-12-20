@@ -44,7 +44,12 @@ ostream &operator<<(ostream &stream, const Expr &ir) {
 
 ostream &operator<<(ostream &stream, const Module &m) {
     stream << "Target = " << m.target().to_string() << "\n";
-    stream << m.body();
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        stream << m.buffers[i] << "\n";
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        stream << m.functions[i] << "\n";
+    }
     return stream;
 }
 
@@ -112,7 +117,36 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     return out;
 }
 
-ostream &operator<<(ostream &out, const FunctionDecl::LinkageType &type) {
+ostream &operator<<(ostream &stream, const Stmt &ir) {
+    if (!ir.defined()) {
+        stream << "(undefined)\n";
+    } else {
+        Internal::IRPrinter p(stream);
+        p.print(ir);
+    }
+    return stream;
+}
+
+
+std::ostream &operator << (std::ostream &stream, const FunctionDecl &function) {
+    stream << function.linkage << " func " << function.name << " (";
+    for (size_t i = 0; i < function.args.size(); i++) {
+        stream << function.args[i].name;
+        if (i + 1 < function.args.size()) {
+            stream << ", ";
+        }
+    }
+    stream << ") {\n";
+    stream << function.body;
+    stream << "}\n\n";
+    return stream;
+}
+
+std::ostream &operator << (std::ostream &stream, const BufferDecl &buffer) {
+    return stream << "buffer " << buffer.buffer.name() << " = {...}\n";
+}
+
+std::ostream &operator<<(std::ostream &out, const FunctionDecl::LinkageType &type) {
     switch (type) {
     case FunctionDecl::External:
         out << "external";
@@ -122,16 +156,6 @@ ostream &operator<<(ostream &out, const FunctionDecl::LinkageType &type) {
         break;
     }
     return out;
-}
-
-ostream &operator<<(ostream &stream, const Stmt &ir) {
-    if (!ir.defined()) {
-        stream << "(undefined)\n";
-    } else {
-        Internal::IRPrinter p(stream);
-        p.print(ir);
-    }
-    return stream;
 }
 
 IRPrinter::IRPrinter(ostream &s) : stream(s), indent(0) {
@@ -576,30 +600,6 @@ void IRPrinter::visit(const Return *op) {
     stream << "return ";
     print(op->value);
     stream << "\n";
-}
-
-void IRPrinter::visit(const FunctionDecl *op) {
-    do_indent();
-    stream << op->linkage << " func " << op->name << " (";
-    for (size_t i = 0; i < op->args.size(); i++) {
-        stream << op->args[i].name;
-        if (i + 1 < op->args.size()) {
-            stream << ", ";
-        }
-    }
-    stream << ") {\n";
-    indent += 2;
-    print(op->body);
-    indent -= 2;
-    do_indent();
-    stream << "}\n\n";
-}
-
-void IRPrinter::visit(const BufferDecl *op) {
-    do_indent();
-    // TODO: Maybe print the contents of the buffer somehow? I'm
-    // worried about these being huge.
-    stream << "buffer " << op->buffer.name() << " = {...}\n";
 }
 
 }}

@@ -3,11 +3,9 @@
 
 #include <ostream>
 
-#include "IR.h"
+#include "Module.h"
 
 namespace Halide {
-
-class Module;
 
 /** \file
  * This header file defines operators that let you dump a Halide
@@ -43,9 +41,6 @@ EXPORT std::ostream &operator<<(std::ostream &stream, const Stmt &);
 /** Emit a halide for loop type (vectorized, serial, etc) in a human
  * readable form */
 std::ostream &operator<<(std::ostream &stream, const For::ForType &);
-
-/** Emit a halide function linkage in a human readable form. */
-std::ostream &operator<<(std::ostream &stream, const FunctionDecl::LinkageType &);
 
 /** An IRVisitor that emits IR to the given output stream in a human
  * readable form. Can be subclassed if you want to modify the way in
@@ -116,9 +111,6 @@ protected:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Return *);
-    void visit(const FunctionDecl *);
-    void visit(const BufferDecl *);
-
 };
 }
 }

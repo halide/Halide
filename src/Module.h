@@ -3,20 +3,59 @@
 
 /** \file
  *
- * Defines Func - the front-end handle on a halide function, and related classes.
+ * Defines Module, an IR container that fully describes a Halide program.
  */
+
+#include <iostream>
 
 #include "IR.h"
 #include "Target.h"
 
 namespace Halide {
 
+namespace Internal {
+
+/** Declaration of a function. Function declarations provide a
+ * concrete mapping between parameters used in the function body and
+ * their declarations in the argument list. */
+struct FunctionDecl {
+    std::string name;
+
+    /** Arguments referred to in the body of this function. */
+    std::vector<Argument> args;
+
+    /** Body of this function. */
+    Stmt body;
+
+    /** Type of linkage a function can have. */
+    enum LinkageType {
+        External, ///< Visible externally.
+        Internal, ///< Not visible externally, similar to 'static' linkage in C.
+    };
+
+    /** The linkage of this function. */
+    LinkageType linkage;
+
+    FunctionDecl(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
+        : name(name), args(args), body(body), linkage(linkage) {}
+};
+
+/** Declaration of a buffer. Buffer declarations describe Buffer
+ * objects embedded in a module. */
+struct BufferDecl {
+    /** Buffer defined in this declaration. */
+    Buffer buffer;
+
+    BufferDecl(Buffer b) : buffer(b) {}
+};
+
+}
+
 /** A halide module. This represents IR containing declarations of
  * functions and buffers. */
 class Module {
     std::string name_;
     Target target_;
-    Internal::Stmt body_;
 
 public:
     EXPORT Module(const std::string &name, const Target &target) : name_(name), target_(target) {}
@@ -28,11 +67,22 @@ public:
      * for output operations. */
     EXPORT const std::string &name() const { return name_; }
 
-    /** The definitions contained in this module. */
-    EXPORT Internal::Stmt body() const { return body_; }
+    /** The declarations contained in this module. */
+    // @{
+    std::vector<Internal::BufferDecl> buffers;
+    std::vector<Internal::FunctionDecl> functions;
+    // @}
 
-    /** Add some IR to the module. */
-    EXPORT void append(Internal::Stmt stmt);
+    /** Add a declaration to this module. */
+    // @{
+    void append(const Internal::BufferDecl &buffer) {
+        buffers.push_back(buffer);
+    }
+
+    void append(const Internal::FunctionDecl &function) {
+        functions.push_back(function);
+    }
+    // @}
 };
 
 /** Link a set of modules together into one module. */

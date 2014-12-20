@@ -322,18 +322,5 @@ void IRMutator::visit(const Return *op) {
     }
 }
 
-void IRMutator::visit(const FunctionDecl *op) {
-    Stmt body = mutate(op->body);
-    if (body.same_as(op->body)) {
-        stmt = op;
-    } else {
-        stmt = FunctionDecl::make(op->name, op->args, body, op->linkage);
-    }
-}
-
-void IRMutator::visit(const BufferDecl *op) {
-    stmt = op;
-}
-
 }
 }
