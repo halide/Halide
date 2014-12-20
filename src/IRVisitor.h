@@ -59,8 +59,6 @@ struct Block;
 struct IfThenElse;
 struct Evaluate;
 struct Return;
-struct FunctionDecl;
-struct BufferDecl;
 
 class Function;
 
@@ -111,8 +109,6 @@ public:
     EXPORT virtual void visit(const IfThenElse *);
     EXPORT virtual void visit(const Evaluate *);
     EXPORT virtual void visit(const Return *);
-    EXPORT virtual void visit(const FunctionDecl *);
-    EXPORT virtual void visit(const BufferDecl *);
 };
 
 /** A base class for algorithms that walk recursively over the IR
@@ -130,7 +126,7 @@ protected:
     // @}
 
     /** The nodes visited so far */
-    std::set<const IRNode *> visited;
+    std::set<const void *> visited;
 
 public:
 
@@ -177,8 +173,6 @@ public:
     EXPORT virtual void visit(const IfThenElse *);
     EXPORT virtual void visit(const Evaluate *);
     EXPORT virtual void visit(const Return *);
-    EXPORT virtual void visit(const FunctionDecl *);
-    EXPORT virtual void visit(const BufferDecl *);
     // @}
 };
 

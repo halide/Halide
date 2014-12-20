@@ -727,37 +727,6 @@ struct Variable : public ExprNode<Variable> {
     EXPORT static Expr make(Type type, std::string name, Buffer image, Parameter param, ReductionDomain reduction_domain);
 };
 
-/** Declaration of a function. Function declarations provide a
- * concrete mapping between parameters used in the function body and
- * their declarations in the argument list. */
-struct FunctionDecl : public StmtNode<FunctionDecl> {
-    std::string name;
-
-    /** Arguments referred to in the body of this function. */
-    std::vector<Argument> args;
-
-    /** Body of this function. */
-    Stmt body;
-
-    /** Type of linkage a function can have. */
-    enum LinkageType {
-        External, ///< Visible externally.
-        Internal, ///< Not visible externally, similar to 'static' linkage in C.
-    };
-
-    /** The linkage of this function. */
-    LinkageType linkage;
-
-    EXPORT static Stmt make(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage);
-};
-
-/** Declaration of a buffer. */
-struct BufferDecl : public StmtNode<BufferDecl> {
-    Buffer buffer;
-
-    EXPORT static Stmt make(Buffer buffer);
-};
-
 }
 }
 

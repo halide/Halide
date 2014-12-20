@@ -365,7 +365,12 @@ void CodeGen_LLVM::compile(const Module &input) {
 
     // Generate the code for this module.
     debug(1) << "Generating llvm bitcode...\n";
-    input.body().accept(this);
+    for (size_t i = 0; i < input.buffers.size(); i++) {
+        visit(&input.buffers[i]);
+    }
+    for (size_t i = 0; i < input.functions.size(); i++) {
+        visit(&input.functions[i]);
+    }
 
     debug(2) << module << "\n";
 

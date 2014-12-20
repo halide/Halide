@@ -67,7 +67,7 @@ void output_llvm(const Module &module,
 void output_html(const Module &module, std::string filename) {
     if (filename.empty()) filename = module.name() + ".html";
 
-    Internal::print_to_html(filename, module.body());
+    Internal::print_to_html(filename, module);
 }
 
 void output_text(const Module &module, std::string filename) {

@@ -1,4 +1,4 @@
-#include <sstream>
+
 #include <iostream>
 #include <limits>
 
@@ -334,8 +334,13 @@ public:
 };
 }
 
-void CodeGen_C::compile(const Module &module) {
-    module.body().accept(this);
+void CodeGen_C::compile(const Module &input) {
+    for (size_t i = 0; i < input.buffers.size(); i++) {
+        visit(&input.buffers[i]);
+    }
+    for (size_t i = 0; i < input.functions.size(); i++) {
+        visit(&input.functions[i]);
+    }
 }
 
 void CodeGen_C::visit(const FunctionDecl *op) {
@@ -1313,7 +1318,7 @@ void CodeGen_C::test() {
     s = Block::make(s, Return::make(0));
 
     Module m("", get_host_target());
-    m.append(FunctionDecl::make("test1", args, s, FunctionDecl::External));
+    m.append(FunctionDecl("test1", args, s, FunctionDecl::External));
 
     ostringstream source;
     CodeGen_C cg(source, false);

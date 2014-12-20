@@ -547,8 +547,17 @@ private:
         stream << close_div();
     }
 
-    void visit(const FunctionDecl *op) {
-        scope.push(op->name, unique_id());
+public:
+    void print(Expr ir) {
+        ir.accept(this);
+    }
+
+    void print(Stmt ir) {
+        ir.accept(this);
+    }
+
+    void print(const FunctionDecl &op) {
+        scope.push(op.name, unique_id());
         stream << open_div("Function");
 
         int id = unique_id();
@@ -557,37 +566,28 @@ private:
         stream << keyword("func");
         stream << " (";
         stream << close_span();
-        for (size_t i = 0; i < op->args.size(); i++) {
+        for (size_t i = 0; i < op.args.size(); i++) {
             if (i > 0) {
                 stream << matched(",") << " ";
             }
-            stream << var(op->args[i].name);
+            stream << var(op.args[i].name);
         }
         stream << matched(")");
         stream << close_expand_button();
         stream << " " << matched("{");
         stream << open_div("FunctionBody Indent", id);
-        print(op->body);
+        print(op.body);
         stream << close_div();
         stream << matched("}");
 
         stream << close_div();
-        scope.pop(op->name);
+        scope.pop(op.name);
     }
 
-    void visit(const BufferDecl *op) {
+    void print(const BufferDecl &op) {
         stream << open_div("Buffer");
-        stream << keyword("buffer ") << var(op->buffer.name());
+        stream << keyword("buffer ") << var(op.buffer.name());
         stream << close_div();
-    }
-
-public:
-    void print(Expr ir) {
-        ir.accept(this);
-    }
-
-    void print(Stmt ir) {
-        ir.accept(this);
     }
 
     StmtToHtml(string filename) : id_count(0), context_stack(1, 0) {
@@ -654,6 +654,16 @@ function toggle(id) { \n \
 void print_to_html(string filename, Stmt s) {
     StmtToHtml sth(filename);
     sth.print(s);
+}
+
+void print_to_html(string filename, const Module &m) {
+    StmtToHtml sth(filename);
+    for (size_t i = 0; i < m.buffers.size(); i++) {
+        sth.print(m.buffers[i]);
+    }
+    for (size_t i = 0; i < m.functions.size(); i++) {
+        sth.print(m.functions[i]);
+    }
 }
 
 }
