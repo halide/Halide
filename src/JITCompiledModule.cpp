@@ -4,6 +4,7 @@
 #include "buffer_t.h"
 #include "JITCompiledModule.h"
 #include "CodeGen_LLVM.h"
+#include "CodeGen_Internal.h"
 #include "LLVM_Headers.h"
 #include "Debug.h"
 
@@ -304,6 +305,44 @@ void hook_up_function_pointer(llvm::ExecutionEngine *ee, llvm::Module *mod, cons
     #endif
 }
 
+// Make a wrapper to call the function with an array of pointer
+// args. This is easier for the JIT to call than a funtion with an
+// unknown (at compile time) argument list.
+void add_jit_wrapper(llvm::Module *m, const LoweredFunc &fn, const std::string &name) {
+    llvm::Type *buffer_t_type = m->getTypeByName("struct.buffer_t");
+    llvm::Type *i8 = llvm::Type::getInt8Ty(m->getContext());
+    llvm::Type *i32 = llvm::Type::getInt32Ty(m->getContext());
+
+    llvm::Function *function = m->getFunction(fn.name);
+
+    llvm::FunctionType *func_t = llvm::FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
+    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm::GlobalValue::ExternalLinkage, name, m);
+    llvm::BasicBlock *block = llvm::BasicBlock::Create(m->getContext(), "entry", wrapper);
+    llvm::IRBuilder<> builder(m->getContext());
+    builder.SetInsertPoint(block);
+
+    llvm::Value *arg_array = wrapper->arg_begin();
+
+    std::vector<llvm::Value *> wrapper_args(fn.args.size());
+    for (size_t i = 0; i < fn.args.size(); i++) {
+        // Get the address of the nth argument
+        llvm::Value *ptr = builder.CreateConstGEP1_32(arg_array, (int)i);
+        ptr = builder.CreateLoad(ptr);
+        if (fn.args[i].is_buffer) {
+            // Cast the argument to a buffer_t *
+            wrapper_args[i] = builder.CreatePointerCast(ptr, buffer_t_type->getPointerTo());
+        } else {
+            // Cast to the appropriate type and load
+            ptr = builder.CreatePointerCast(ptr, llvm_type_of(&m->getContext(), fn.args[i].type)->getPointerTo());
+            wrapper_args[i] = builder.CreateLoad(ptr);
+        }
+    }
+    debug(4) << "Creating call from wrapper to actual function\n";
+    llvm::Value *result = builder.CreateCall(function, wrapper_args);
+    builder.CreateRet(result);
+    llvm::verifyFunction(*wrapper);
+}
+
 }  // namespace
 
 JITCompiledModule::JITCompiledModule() :
@@ -322,7 +361,7 @@ JITCompiledModule::JITCompiledModule() :
     memoization_cache_set_size(NULL) {
 }
 
-JITCompiledModule::JITCompiledModule(const Module &hm, const std::string &fn) :
+JITCompiledModule::JITCompiledModule(const Module &hm, const LoweredFunc &fn) :
     function(NULL),
     wrapped_function(NULL),
     copy_to_host(NULL),
@@ -338,6 +377,9 @@ JITCompiledModule::JITCompiledModule(const Module &hm, const std::string &fn) :
     memoization_cache_set_size(NULL) {
 
     llvm::Module *m = codegen_llvm(hm);
+
+    // Add a function that we actually will call.
+    add_jit_wrapper(m, fn, fn.name + "_jit_wrapper");
 
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
@@ -395,12 +437,12 @@ JITCompiledModule::JITCompiledModule(const Module &hm, const std::string &fn) :
     // triggers compilation)
     debug(1) << "JIT compiling...\n";
 
-    hook_up_function_pointer(ee, m, fn, true, &function);
+    hook_up_function_pointer(ee, m, fn.name, true, &function);
 
     void *function_address = reinterpret_bits<void *>(function);
     debug(1) << "JIT compiled function pointer " << function_address << "\n";
 
-    hook_up_function_pointer(ee, m, fn + "_argv", true, &wrapped_function);
+    hook_up_function_pointer(ee, m, fn.name + "_jit_wrapper", true, &wrapped_function);
     hook_up_function_pointer(ee, m, "halide_copy_to_host", false, &copy_to_host);
     hook_up_function_pointer(ee, m, "halide_copy_to_dev", false, &copy_to_dev);
     hook_up_function_pointer(ee, m, "halide_dev_free", false, &free_dev_buffer);

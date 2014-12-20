@@ -614,10 +614,11 @@ void CodeGen_X86::test() {
     s = Block::make(s, Return::make(0));
 
     Module m("", get_host_target());
-    m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
+    LoweredFunc test1("test1", args, s, LoweredFunc::External);
+    m.append(test1);
 
     debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule jit(m, "test1");
+    JITCompiledModule jit(m, test1);
 
     typedef int (*fn_type)(::buffer_t *, float, int);
     fn_type fn = reinterpret_bits<fn_type>(jit.function);

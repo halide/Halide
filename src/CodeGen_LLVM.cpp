@@ -443,64 +443,6 @@ void CodeGen_LLVM::visit(const LoweredFunc *op) {
 
     // Now verify the function is ok
     llvm::verifyFunction(*function);
-
-    // Make a wrapper to call the function with an array of pointer
-    // args. This is useful for the JIT and other machine interfaces
-    // that will call the compiled function. This function has the
-    // following prototype in C:
-    //
-    //  int name_argv(void **args);
-    //
-    // It expects 'args' to be a pointer to N void* pointers, where N
-    // is the number of arguments to the pipeline. The pointers are
-    // casted to the type expected by the pipeline, and then the
-    // argument is loaded from that pointer, with the exception of
-    // buffer_t arguments, where the pointer is passed directly.
-    //
-    // If we have a pipeline defined like this (in C):
-    //
-    //  int name(buffer_t* arg1, int arg2, float arg3, buffer_t* out);
-    //
-    // A call to the argv function would look like this:
-    //
-    //  buffer_t arg1;
-    //  int arg2;
-    //  float arg3;
-    //  buffer_t out;
-    //  void **argv[] = {
-    //      &arg1,
-    //      &arg2,
-    //      &arg3,
-    //      &out,
-    //  };
-    //  int result = name_argv(argv);
-    //
-    string wrapper_name = name + "_argv";
-    func_t = FunctionType::get(i32, vec<llvm::Type *>(i8->getPointerTo()->getPointerTo()), false);
-    llvm::Function *wrapper = llvm::Function::Create(func_t, llvm_linkage(op->linkage), wrapper_name, module);
-    block = BasicBlock::Create(*context, "entry", wrapper);
-    builder->SetInsertPoint(block);
-
-    Value *arg_array = wrapper->arg_begin();
-
-    vector<Value *> wrapper_args(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        // Get the address of the nth argument
-        Value *ptr = builder->CreateConstGEP1_32(arg_array, (int)i);
-        ptr = builder->CreateLoad(ptr);
-        if (args[i].is_buffer) {
-            // Cast the argument to a buffer_t *
-            wrapper_args[i] = builder->CreatePointerCast(ptr, buffer_t_type->getPointerTo());
-        } else {
-            // Cast to the appropriate type and load
-            ptr = builder->CreatePointerCast(ptr, arg_types[i]->getPointerTo());
-            wrapper_args[i] = builder->CreateLoad(ptr);
-        }
-    }
-    debug(4) << "Creating call from wrapper to actual function\n";
-    Value *result = builder->CreateCall(function, wrapper_args);
-    builder->CreateRet(result);
-    llvm::verifyFunction(*wrapper);
 }
 
 // Given a range of iterators of constant ints, get a corresponding vector of llvm::Constant.
