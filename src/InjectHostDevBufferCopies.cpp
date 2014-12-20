@@ -364,7 +364,7 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->name == Call::glsl_texture_load && op->call_type == Call::Intrinsic) {
             // counts as a device read
-            internal_assert(device_api != Device_Host);
+            internal_assert(device_api == Device_GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
@@ -374,7 +374,7 @@ class InjectBufferCopies : public IRMutator {
             IRMutator::visit(op);
         } else if (op->name == Call::glsl_texture_store && op->call_type == Call::Intrinsic) {
             // counts as a device store
-            internal_assert(device_api != Device_Host);
+            internal_assert(device_api == Device_GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
