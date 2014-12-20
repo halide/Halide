@@ -614,7 +614,7 @@ void CodeGen_X86::test() {
     s = Block::make(s, Return::make(0));
 
     Module m("", get_host_target());
-    m.append(FunctionDecl("test1", args, s, FunctionDecl::External));
+    m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
 
     debug(2) << "Compiling to function pointers \n";
     JITCompiledModule jit(m, "test1");

@@ -9,16 +9,17 @@
 #include <iostream>
 
 #include "IR.h"
+#include "Buffer.h"
 #include "Target.h"
 
 namespace Halide {
 
 namespace Internal {
 
-/** Declaration of a function. Function declarations provide a
- * concrete mapping between parameters used in the function body and
- * their declarations in the argument list. */
-struct FunctionDecl {
+/** Definition of a lowered funciton. This object provides a concrete
+ * mapping between parameters used in the function body and their
+ * declarations in the argument list. */
+struct LoweredFunc {
     std::string name;
 
     /** Arguments referred to in the body of this function. */
@@ -36,23 +37,14 @@ struct FunctionDecl {
     /** The linkage of this function. */
     LinkageType linkage;
 
-    FunctionDecl(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
+    LoweredFunc(const std::string &name, const std::vector<Argument> &args, Stmt body, LinkageType linkage)
         : name(name), args(args), body(body), linkage(linkage) {}
-};
-
-/** Declaration of a buffer. Buffer declarations describe Buffer
- * objects embedded in a module. */
-struct BufferDecl {
-    /** Buffer defined in this declaration. */
-    Buffer buffer;
-
-    BufferDecl(Buffer b) : buffer(b) {}
 };
 
 }
 
-/** A halide module. This represents IR containing declarations of
- * functions and buffers. */
+/** A halide module. This represents IR containing lowered function
+ * definitions and buffers. */
 class Module {
     std::string name_;
     Target target_;
@@ -69,17 +61,16 @@ public:
 
     /** The declarations contained in this module. */
     // @{
-    std::vector<Internal::BufferDecl> buffers;
-    std::vector<Internal::FunctionDecl> functions;
+    std::vector<Buffer> buffers;
+    std::vector<Internal::LoweredFunc> functions;
     // @}
 
     /** Add a declaration to this module. */
     // @{
-    void append(const Internal::BufferDecl &buffer) {
+    void append(const Buffer &buffer) {
         buffers.push_back(buffer);
     }
-
-    void append(const Internal::FunctionDecl &function) {
+    void append(const Internal::LoweredFunc &function) {
         functions.push_back(function);
     }
     // @}

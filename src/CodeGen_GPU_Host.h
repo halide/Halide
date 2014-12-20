@@ -64,8 +64,8 @@ protected:
     /** Nodes for which we need to override default behavior for the GPU runtime */
     // @{
     void visit(const For *);
-    void visit(const FunctionDecl *);
-    void visit(const BufferDecl *);
+    void visit(const LoweredFunc *);
+    void visit(const Buffer *);
     // @}
 
     static CodeGen_GPU_Dev *make_dev(Target);

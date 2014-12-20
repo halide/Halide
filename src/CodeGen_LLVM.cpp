@@ -105,9 +105,9 @@ using std::stack;
 namespace {
 
 // Get the LLVM linkage corresponding to a Halide linkage type.
-llvm::GlobalValue::LinkageTypes llvm_linkage(FunctionDecl::LinkageType t) {
+llvm::GlobalValue::LinkageTypes llvm_linkage(LoweredFunc::LinkageType t) {
     switch (t) {
-    case FunctionDecl::External: return llvm::GlobalValue::ExternalLinkage;
+    case LoweredFunc::External: return llvm::GlobalValue::ExternalLinkage;
     default: return llvm::GlobalValue::PrivateLinkage;
     }
 }
@@ -382,7 +382,7 @@ void CodeGen_LLVM::compile(const Module &input) {
     CodeGen_LLVM::optimize_module();
 }
 
-void CodeGen_LLVM::visit(const FunctionDecl *op) {
+void CodeGen_LLVM::visit(const LoweredFunc *op) {
     const std::string &name = op->name;
     const std::vector<Argument> &args = op->args;
 
@@ -513,9 +513,9 @@ std::vector<llvm::Constant*> get_constants(llvm::Type *t, It begin, It end) {
     return ret;
 }
 
-void CodeGen_LLVM::visit(const BufferDecl *op) {
+void CodeGen_LLVM::visit(const Buffer *op) {
     // Embed the buffer declaration as a global.
-    Buffer buffer = op->buffer;
+    Buffer buffer = *op;
     internal_assert(buffer.defined());
 
     buffer_t b = *(buffer.raw_buffer());

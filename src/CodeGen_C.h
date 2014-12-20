@@ -128,8 +128,8 @@ protected:
     void visit(const IfThenElse *);
     void visit(const Evaluate *);
     void visit(const Return *);
-    void visit(const FunctionDecl *);
-    void visit(const BufferDecl *);
+    void visit(const LoweredFunc *);
+    void visit(const Buffer *);
 
     void visit_binop(Type t, Expr a, Expr b, const char *op);
 };

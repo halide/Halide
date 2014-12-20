@@ -556,7 +556,7 @@ public:
         ir.accept(this);
     }
 
-    void print(const FunctionDecl &op) {
+    void print(const LoweredFunc &op) {
         scope.push(op.name, unique_id());
         stream << open_div("Function");
 
@@ -584,9 +584,9 @@ public:
         scope.pop(op.name);
     }
 
-    void print(const BufferDecl &op) {
+    void print(const Buffer &op) {
         stream << open_div("Buffer");
-        stream << keyword("buffer ") << var(op.buffer.name());
+        stream << keyword("buffer ") << var(op.name());
         stream << close_div();
     }
 

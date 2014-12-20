@@ -287,8 +287,12 @@ protected:
     virtual void visit(const IfThenElse *);
     virtual void visit(const Evaluate *);
     virtual void visit(const Return *);
-    virtual void visit(const FunctionDecl *);
-    virtual void visit(const BufferDecl *);
+    // @}
+
+    /** A few more visitors for non-IR nodes. */
+    // @{
+    virtual void visit(const LoweredFunc *);
+    virtual void visit(const Buffer *);
     // @}
 
     /** Generate code for an allocate node. It has no default

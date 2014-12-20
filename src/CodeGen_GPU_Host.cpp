@@ -267,7 +267,7 @@ CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const FunctionDecl *op) {
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
 
     internal_assert(cgdev == NULL) << "Internal device code generator already exists.\n";
 
@@ -313,9 +313,9 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const FunctionDecl *op) {
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const BufferDecl *op) {
+void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Buffer *op) {
     // Unset constant flag for embedded image global variables
-    GlobalVariable *global = module->getNamedGlobal(op->buffer.name() + ".buffer");
+    GlobalVariable *global = module->getNamedGlobal(op->name() + ".buffer");
     global->setConstant(false);
 }
 

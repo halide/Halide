@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <limits>
 
@@ -343,9 +342,9 @@ void CodeGen_C::compile(const Module &input) {
     }
 }
 
-void CodeGen_C::visit(const FunctionDecl *op) {
+void CodeGen_C::visit(const LoweredFunc *op) {
     // Don't put non-external function declarations in headers.
-    if (is_header && op->linkage != FunctionDecl::External) {
+    if (is_header && op->linkage != LoweredFunc::External) {
         return;
     }
 
@@ -366,7 +365,7 @@ void CodeGen_C::visit(const FunctionDecl *op) {
     }
 
     // Emit the function prototype
-    if (op->linkage != FunctionDecl::External) {
+    if (op->linkage != LoweredFunc::External) {
         // If the function isn't public, mark it static.
         stream << "static ";
     }
@@ -413,13 +412,13 @@ void CodeGen_C::visit(const FunctionDecl *op) {
     }
 }
 
-void CodeGen_C::visit(const BufferDecl *op) {
+void CodeGen_C::visit(const Buffer *op) {
     // Don't define buffers in headers.
     if (is_header) {
         return;
     }
 
-    Buffer buffer = op->buffer;
+    Buffer buffer = *op;
     string name = print_name(buffer.name());
     buffer_t b = *(buffer.raw_buffer());
 
@@ -1318,7 +1317,7 @@ void CodeGen_C::test() {
     s = Block::make(s, Return::make(0));
 
     Module m("", get_host_target());
-    m.append(FunctionDecl("test1", args, s, FunctionDecl::External));
+    m.append(LoweredFunc("test1", args, s, LoweredFunc::External));
 
     ostringstream source;
     CodeGen_C cg(source, false);
