@@ -20,8 +20,8 @@ int main(int argc, char **argv) {
         f(x, y) = Tuple(f(x, y)[1]*2, f(x, y)[0]*2);
         // now equals ((x - y)*2, (x + y)*2)
 
-        f.gpu_tile(x, y, 16, 16, Device_Default_GPU);
-        f.update().gpu_tile(x, y, 16, 16, Device_Default_GPU);
+        f.gpu_tile(x, y, 16, 16);
+        f.update().gpu_tile(x, y, 16, 16);
 
         Realization result = f.realize(1024, 1024);
 
@@ -53,10 +53,10 @@ int main(int argc, char **argv) {
         }
 
         // Schedule the pure step and the odd update steps on the gpu
-        f.gpu_tile(x, y, 16, 16, Device_Default_GPU);
+        f.gpu_tile(x, y, 16, 16);
         for (int i = 0; i < 10; i ++) {
 	    if (i & 1) {
-		f.update(i).gpu_tile(x, y, 16, 16, Device_Default_GPU);
+		f.update(i).gpu_tile(x, y, 16, 16);
 	    } else {
 		f.update(i);
 	    }
@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
         // Schedule the even update steps on the gpu
         for (int i = 0; i < 10; i ++) {
             if (i & 1) {
-                f.update(i).gpu_tile(x, y, 16, 16, Device_Default_GPU);
+                f.update(i).gpu_tile(x, y, 16, 16);
             } else {
                 f.update(i);
             }
@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
             if (i & 1) {
                 f.update(i);
             } else {
-                f.update(i).gpu_tile(x, y, 16, 16, Device_Default_GPU);
+                f.update(i).gpu_tile(x, y, 16, 16);
             }
         }
 

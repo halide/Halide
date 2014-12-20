@@ -22,8 +22,8 @@ int main(int argc, char **argv) {
 
     Target target = get_jit_target_from_environment();
     if (target.has_gpu_feature()) {
-        f.compute_root().gpu_tile(x, y, 16, 16, Device_Default_GPU);
-        g.compute_root().gpu_tile(x, y, 16, 16, Device_Default_GPU);
+        f.compute_root().gpu_tile(x, y, 16, 16);
+        g.compute_root().gpu_tile(x, y, 16, 16);
     }
 
     printf("Realizing function...\n");
