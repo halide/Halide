@@ -2699,14 +2699,15 @@ void *Func::compile_jit(const Target &target) {
 
     // Make a module
     Module module(name(), target.with_feature(Target::JIT));
-    module.append(LoweredFunc(n, infer_args.arg_types, lowered, LoweredFunc::External));
+    LoweredFunc lfn(n, infer_args.arg_types, lowered, LoweredFunc::External);
+    module.append(lfn);
 
     if (debug::debug_level >= 3) {
         output_native(module, name() + ".bc", name() + ".s");
         output_text(module, name() + ".stmt");
     }
 
-    compiled_module = JITCompiledModule(module, n);
+    compiled_module = JITCompiledModule(module, lfn);
 
     return compiled_module.function;
 }

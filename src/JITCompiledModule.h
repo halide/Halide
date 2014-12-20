@@ -87,9 +87,9 @@ struct JITCompiledModule {
     /** Construct an empty JIT module. */
     JITCompiledModule();
 
-    /** Take an llvm module and compile it. Populates the function
-     * pointer members above with the result. */
-    JITCompiledModule(const Module &module, const std::string &fn);
+    /** Take a Module and compile it. Populates the function pointer
+     * members above for the specified function. */
+    JITCompiledModule(const Module &module, const LoweredFunc &fn);
 
     /** Holds a cleanup routine and context parameter. */
     struct CleanupRoutine {
