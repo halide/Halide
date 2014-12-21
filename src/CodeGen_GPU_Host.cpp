@@ -172,8 +172,7 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
-    CodeGen_CPU(target),
-    cgdev(NULL) {
+    CodeGen_CPU(target), module_state(NULL), cgdev(NULL) {
 }
 
 template<typename CodeGen_CPU>
@@ -188,38 +187,44 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
     // Call the base implementation to create the function.
     CodeGen_CPU::visit(op);
 
-    // Get the kernel source for any GPU loops we encountered in the function.
-    std::vector<char> kernel_src = cgdev->compile_to_src();
+    // If the module state has been created, the function created some kernels.
+    if (module_state != NULL) {
+        // Get the kernel source for any GPU loops we encountered in the function.
+        std::vector<char> kernel_src = cgdev->compile_to_src();
 
-    // Store the kernel source in the generated module.
-    Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src_" + op->name);
+        // Store the kernel source in the generated module.
+        Value *kernel_src_ptr = CodeGen_CPU::create_constant_binary_blob(kernel_src, "halide_kernel_src_" + op->name);
+        Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
+
+        // Now, insert a call to halide_init_kernels at the entry of the
+        // function we just generated, passing it a pointer to the kernel
+        // source.
+
+        // Remember the entry block so we can branch to it upon init success.
+        BasicBlock *entry = &function->getEntryBlock();
+
+        // Insert a new block to run initialization at the beginning of the function.
+        BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
+                                                         function, entry);
+        builder->SetInsertPoint(init_kernels_bb);
+        Value *user_context = get_user_context();
+        Value *init = module->getFunction("halide_init_kernels");
+        internal_assert(init) << "Could not find function halide_init_kernels in initial module\n";
+        Value *result = builder->CreateCall4(init, user_context,
+                                             module_state,
+                                             kernel_src_ptr, kernel_size);
+        Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
+        CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_init_kernels");
+
+        // Upon success, jump to the original entry.
+        builder->CreateBr(entry);
+
+        // We're done with this module state object.
+        module_state = NULL;
+    }
 
     delete cgdev;
     cgdev = NULL;
-
-    // Now, insert a call to halide_init_kernels at the entry of the
-    // function we just generated, passing it a pointer to the kernel
-    // source.
-
-    // Remember the entry block so we can branch to it upon init success.
-    BasicBlock *entry = &function->getEntryBlock();
-
-    // Insert a new block to run initialization at the beginning of the function.
-    BasicBlock *init_kernels_bb = BasicBlock::Create(*context, "init_kernels",
-                                                     function, entry);
-    builder->SetInsertPoint(init_kernels_bb);
-    Value *user_context = get_user_context();
-    Value *kernel_size = ConstantInt::get(i32, kernel_src.size());
-    Value *init = module->getFunction("halide_init_kernels");
-    internal_assert(init) << "Could not find function halide_init_kernels in initial module\n";
-    Value *result = builder->CreateCall4(init, user_context,
-                                         get_module_state(),
-                                         kernel_src_ptr, kernel_size);
-    Value *did_succeed = builder->CreateICmpEQ(result, ConstantInt::get(i32, 0));
-    CodeGen_CPU::create_assertion(did_succeed, "Failure inside halide_init_kernels");
-
-    // Upon success, jump to the original entry.
-    builder->CreateBr(entry);
 }
 
 template<typename CodeGen_CPU>
@@ -320,12 +325,23 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         builder->CreateStore(ConstantInt::get(target_size_t_type, 0),
                              builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, num_args));
 
+        // Create a global variable to hold the module state if it
+        // doesn't already exist.
+        if (module_state == NULL) {
+            PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
+            module_state = new GlobalVariable(*module, void_ptr_type,
+                                              false, GlobalVariable::PrivateLinkage,
+                                              ConstantPointerNull::get(void_ptr_type),
+                                              "module_state");
+            debug(4) << "Created device module state global variable\n";
+        }
+
         // TODO: only three dimensions can be passed to
         // cuLaunchKernel. How should we handle blkid[3]?
         internal_assert(is_one(bounds.num_threads[3]) && is_one(bounds.num_blocks[3]));
         Value *launch_args[] = {
             get_user_context(),
-            builder->CreateLoad(get_module_state()),
+            builder->CreateLoad(module_state),
             entry_name_str,
             codegen(bounds.num_blocks[0]), codegen(bounds.num_blocks[1]), codegen(bounds.num_blocks[2]),
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
@@ -342,23 +358,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         CodeGen_CPU::visit(loop);
     }
 }
-
-template<typename CodeGen_CPU>
-Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
-    GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
-    if (!module_state)
-    {
-        // Create a global variable to hold the module state
-        PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
-        module_state = new GlobalVariable(*module, void_ptr_type,
-                                          false, GlobalVariable::PrivateLinkage,
-                                          ConstantPointerNull::get(void_ptr_type),
-                                          "module_state");
-        debug(4) << "Created device module state global variable\n";
-    }
-    return module_state;
-}
-
 
 // Force template instantiation for x86 and arm.
 #ifdef WITH_X86
