@@ -12,72 +12,14 @@
 #include "Bounds.h"
 #include "Simplify.h"
 
-#ifdef _WIN32
-#define NOMINMAX
-#ifdef _WIN64
-#define GPU_LIB_CC
-#else
-#define GPU_LIB_CC __stdcall
-#endif
-#include <windows.h>
-static bool have_symbol(const char *s) {
-    return GetProcAddress(GetModuleHandle(NULL), s) != NULL;
-}
-#else
-#define GPU_LIB_CC
-#include <dlfcn.h>
-static bool have_symbol(const char *s) {
-    return dlsym(NULL, s) != NULL;
-}
-#endif
-
-namespace Halide {
-namespace Internal {
-
-extern "C" { typedef struct CUctx_st *CUcontext; }
-
-// A single global cuda context to share between jitted functions
-int (GPU_LIB_CC *cuCtxDestroy)(CUctx_st *) = 0;
-
-struct SharedCudaContext {
-    CUctx_st *ptr;
-    volatile int lock;
-
-    // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0), lock(0) {
-    }
-
-    // Note that we never free the context, because static destructor
-    // order is unpredictable, and we can't free the context before
-    // all JITCompiledModules are freed. Users may be stashing Funcs
-    // or Images in globals, and these keep JITCompiledModules around.
-} cuda_ctx;
-
-extern "C" {
-    typedef struct cl_context_st *cl_context;
-    typedef struct cl_command_queue_st *cl_command_queue;
-}
-
-int (GPU_LIB_CC *clReleaseContext)(cl_context);
-int (GPU_LIB_CC *clReleaseCommandQueue)(cl_command_queue);
-
-// A single global OpenCL context and command queue to share between jitted functions.
-struct SharedOpenCLContext {
-    cl_context context;
-    cl_command_queue command_queue;
-    volatile int lock;
-
-    SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
-    }
-
-    // We never free the context, for the same reason as above.
-} cl_ctx;
-
 using std::vector;
 using std::string;
 using std::map;
 
 using namespace llvm;
+
+namespace Halide {
+namespace Internal {
 
 // Sniff the contents of a kernel to extracts the bounds of all the
 // thread indices (so we know how many threads to launch), and the
