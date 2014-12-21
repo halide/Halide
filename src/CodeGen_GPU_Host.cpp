@@ -1,9 +1,7 @@
 #include <sstream>
 
 #include "CodeGen_GPU_Host.h"
-#include "CodeGen_PTX_Dev.h"
-#include "CodeGen_OpenCL_Dev.h"
-#include "CodeGen_OpenGL_Dev.h"
+#include "CodeGen_GPU_Dev.h"
 #include "IROperator.h"
 #include "IRPrinter.h"
 #include "Debug.h"
@@ -179,30 +177,12 @@ CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
 }
 
 template<typename CodeGen_CPU>
-CodeGen_GPU_Dev* CodeGen_GPU_Host<CodeGen_CPU>::make_dev(Target t)
-{
-    if (t.has_feature(Target::CUDA)) {
-        debug(1) << "Constructing CUDA device codegen\n";
-        return new CodeGen_PTX_Dev(t);
-    } else if (t.has_feature(Target::OpenCL)) {
-        debug(1) << "Constructing OpenCL device codegen\n";
-        return new CodeGen_OpenCL_Dev(t);
-    } else if (t.has_feature(Target::OpenGL)) {
-        debug(1) << "Constructing OpenGL device codegen\n";
-        return new CodeGen_OpenGL_Dev(t);
-    } else {
-        internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
-        return NULL;
-    }
-}
-
-template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
 
     internal_assert(cgdev == NULL) << "Internal device code generator already exists.\n";
 
     // Set up a new device code generator for the kernels we find in this function.
-    cgdev = make_dev(target);
+    cgdev = CodeGen_GPU_Dev::new_for_target(target);
     cgdev->init_module();
 
     // Call the base implementation to create the function.
@@ -240,13 +220,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const LoweredFunc *op) {
 
     // Upon success, jump to the original entry.
     builder->CreateBr(entry);
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::visit(const Buffer *op) {
-    // Unset constant flag for embedded image global variables
-    GlobalVariable *global = module->getNamedGlobal(op->name() + ".buffer");
-    global->setConstant(false);
 }
 
 template<typename CodeGen_CPU>

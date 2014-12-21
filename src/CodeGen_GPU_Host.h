@@ -65,10 +65,7 @@ protected:
     // @{
     void visit(const For *);
     void visit(const LoweredFunc *);
-    void visit(const Buffer *);
     // @}
-
-    static CodeGen_GPU_Dev *make_dev(Target);
 
     llvm::Value *get_module_state();
 

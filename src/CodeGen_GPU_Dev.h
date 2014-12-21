@@ -6,6 +6,7 @@
  */
 
 #include "IR.h"
+#include "Target.h"
 
 namespace Halide {
 namespace Internal {
@@ -26,6 +27,9 @@ struct GPU_Argument : public Argument {
 /** A code generator that emits GPU code from a given Halide stmt. */
 struct CodeGen_GPU_Dev {
     virtual ~CodeGen_GPU_Dev();
+
+    /** Create a new GPU code generator for the given target. */
+    static CodeGen_GPU_Dev *new_for_target(Target);
 
     /** Compile a GPU kernel into the module. This may be called many times
      * with different kernels, which will all be accumulated into a single

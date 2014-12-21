@@ -481,7 +481,7 @@ void CodeGen_LLVM::visit(const Buffer *op) {
 
     // Embed the buffer_t and make it point to the data array.
     GlobalVariable *global = new GlobalVariable(*module, buffer_t_type,
-                                                true, GlobalValue::PrivateLinkage,
+                                                false, GlobalValue::PrivateLinkage,
                                                 0, buffer.name() + ".buffer");
     llvm::ArrayType *i32_array = ArrayType::get(i32, 4);
 
