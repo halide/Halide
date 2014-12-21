@@ -67,9 +67,11 @@ protected:
     void visit(const LoweredFunc *);
     // @}
 
-    llvm::Value *get_module_state();
-
 private:
+    /** The global module state for the GPU runtime for the current
+     * function being generated. */
+    llvm::Value *module_state;
+
     /** Child code generator for device kernels. */
     CodeGen_GPU_Dev *cgdev;
 };
