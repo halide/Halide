@@ -102,7 +102,7 @@ private:
 
 class GPU_Host_Closure : public Halide::Internal::Closure {
 public:
-    GPU_Host_Closure(Stmt s, const std::string &lv, bool skip_gpu_loops=false) : skip_gpu_loops(skip_gpu_loops) {
+    GPU_Host_Closure(Stmt s, const std::string &lv) {
         ignore.push(lv, 0);
         s.accept(this);
     }
@@ -111,8 +111,6 @@ public:
 
 protected:
     using Internal::Closure::visit;
-
-    void visit(const For *op);
 
     void visit(const Call *op) {
         if (op->call_type == Call::Intrinsic &&
@@ -151,8 +149,6 @@ protected:
             Internal::Closure::visit(op);
         }
     }
-
-    bool skip_gpu_loops;
 };
 
 vector<GPU_Argument> GPU_Host_Closure::arguments() {
@@ -175,14 +171,6 @@ vector<GPU_Argument> GPU_Host_Closure::arguments() {
     return res;
 }
 
-
-void GPU_Host_Closure::visit(const For *loop) {
-    if (skip_gpu_loops &&
-        CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
-        return;
-    }
-    Internal::Closure::visit(loop);
-}
 
 template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::CodeGen_GPU_Host(Target target) :
