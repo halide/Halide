@@ -106,15 +106,15 @@ protected:
     virtual void visit(const For *op) {
         bool old_in_glsl_loops = in_glsl_loops;
         // Check if the loop variable is a GPU variable thread variable and for GLSL
-        if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == Device_GLSL) ||
-            (in_glsl_loops && op->device_api == Device_Parent)) {
+        if ((CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) ||
+            (in_glsl_loops && op->device_api == DeviceAPI::Parent)) {
             loop_vars.push_back(op->name);
             in_glsl_loops = true;
         }
 
         Stmt mutated_body = mutate(op->body);
 
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == Device_GLSL) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name)  && op->device_api == DeviceAPI::GLSL) {
             loop_vars.pop_back();
         }
 
@@ -973,7 +973,7 @@ public:
     }
 
     virtual void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == Device_GLSL) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) {
             // Create a for-loop of integers iterating over the coordinates in
             // this dimension
 
@@ -1049,7 +1049,7 @@ public:
             // Add a let statement for the for-loop name variable
             Stmt loop_var = LetStmt::make(op->name, coord_expr, mutated_body);
 
-            stmt = For::make(name, 0, (int)dim.size(), For::ForType::Serial, Device_Parent, loop_var);
+            stmt = For::make(name, 0, (int)dim.size(), For::ForType::Serial, DeviceAPI::Parent, loop_var);
 
         } else {
             IRFilter::visit(op);
@@ -1115,7 +1115,7 @@ public:
     using IRMutator::visit;
 
     virtual void visit(const For *op) {
-        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == Device_GLSL) {
+        if (CodeGen_GPU_Dev::is_gpu_var(op->name) && op->device_api == DeviceAPI::GLSL) {
 
             const For *loop1 = op;
             const For *loop0 = loop1->body.as<For>();

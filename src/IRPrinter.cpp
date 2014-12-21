@@ -54,11 +54,11 @@ void IRPrinter::test() {
     internal_assert(expr_source.str() == "((x + 3)*((y/2) + 17))");
 
     Stmt store = Store::make("buf", (x * 17) / (x - 3), y - 1);
-    Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, Device_Host, store);
+    Stmt for_loop = For::make("x", -2, y + 2, For::Parallel, DeviceAPI::Host, store);
     vector<Expr> args(1); args[0] = x % 3;
     Expr call = Call::make(i32, "buf", args, Call::Extern);
     Stmt store2 = Store::make("out", call + 1, x);
-    Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , Device_Host, store2);
+    Stmt for_loop2 = For::make("x", 0, y, For::Vectorized , DeviceAPI::Host, store2);
     Stmt pipeline = Pipeline::make("buf", for_loop, Stmt(), for_loop2);
     Stmt assertion = AssertStmt::make(y > 3, vec<Expr>(Expr("y is greater than "), 3));
     Stmt block = Block::make(assertion, pipeline);
@@ -108,21 +108,21 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
 
 ostream &operator<<(ostream &out, const DeviceAPI &device_api) {
     switch (device_api) {
-    case Device_Host:
+    case DeviceAPI::Host:
         break;
-    case Device_Parent:
+    case DeviceAPI::Parent:
         out << "<Parent>";
         break;
-    case Device_Default_GPU:
+    case DeviceAPI::Default_GPU:
         out << "<Default_GPU>";
         break;
-    case Device_CUDA:
+    case DeviceAPI::CUDA:
         out << "<CUDA>";
         break;
-    case Device_OpenCL:
+    case DeviceAPI::OpenCL:
         out << "<OpenCL>";
         break;
-    case Device_GLSL:
+    case DeviceAPI::GLSL:
         out << "<GLSL>";
         break;
     }

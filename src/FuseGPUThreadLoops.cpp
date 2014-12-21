@@ -405,7 +405,7 @@ class FuseGPUThreadLoops : public IRMutator {
     Scope<Interval> scope;
 
     void visit(const For *op) {
-         if (op->device_api == Device_GLSL) {
+         if (op->device_api == DeviceAPI::GLSL) {
             stmt = op;
             return;
         }
@@ -494,8 +494,8 @@ class ZeroGPULoopMins : public IRMutator {
     void visit(const For *op) {
         bool old_in_non_glsl_gpu = in_non_glsl_gpu;
 
-        in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == Device_Parent) ||
-          (op->device_api == Device_CUDA) || (op->device_api == Device_OpenCL);
+        in_non_glsl_gpu = (in_non_glsl_gpu && op->device_api == DeviceAPI::Parent) ||
+          (op->device_api == DeviceAPI::CUDA) || (op->device_api == DeviceAPI::OpenCL);
 
         IRMutator::visit(op);
         if (CodeGen_GPU_Dev::is_gpu_var(op->name) && !is_zero(op->min)) {

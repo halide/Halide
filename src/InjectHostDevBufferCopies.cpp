@@ -16,11 +16,11 @@ using std::set;
 using std::pair;
 
 DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
-    if (device_api == Device_Default_GPU) {
+    if (device_api == DeviceAPI::Default_GPU) {
         if (target.has_feature(Target::OpenCL)) {
-            return Device_OpenCL;
+            return DeviceAPI::OpenCL;
         } else if (target.has_feature(Target::CUDA)) {
-            return Device_CUDA;
+            return DeviceAPI::CUDA;
         } else {
             user_error << "Schedule uses Default_GPU without a valid GPU (OpenCL or CUDA) specified in target.\n";
         }
@@ -31,7 +31,7 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
 static bool different_device_api(DeviceAPI device_api, DeviceAPI stmt_api, const Target &target) {
     device_api = fixup_device_api(device_api, target);
     stmt_api = fixup_device_api(stmt_api, target);
-    return (stmt_api != Device_Parent) && (device_api != stmt_api);
+    return (stmt_api != DeviceAPI::Parent) && (device_api != stmt_api);
 }
 
 // If a buffer never makes it outside of Halide (i.e. if it is not
@@ -47,7 +47,7 @@ class FindBuffersToTrack : public IRVisitor {
     using IRVisitor::visit;
 
     void visit(const Allocate *op) {
-        debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << device_api << "\n";
+        debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << static_cast<int>(device_api) << "\n";
         internal_assert(internal.find(op->name) == internal.end()) << "Duplicate Allocate node in FindBuffersToTrack.\n";
         internal[op->name] = device_api;
         IRVisitor::visit(op);
@@ -55,7 +55,8 @@ class FindBuffersToTrack : public IRVisitor {
 
     void visit(const For *op) {
       if (different_device_api(device_api, op->device_api, target)) {
-            debug(2) << "Buffers to track: switching from " << device_api << " to " << op->device_api << " for loop " << op->name << "\n";
+            debug(2) << "Buffers to track: switching from " << static_cast<int>(device_api) <<
+                " to " << static_cast<int>(op->device_api) << " for loop " << op->name << "\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
             IRVisitor::visit(op);
@@ -102,7 +103,7 @@ class FindBuffersToTrack : public IRVisitor {
 
 public:
     set<string> buffers_to_track;
-    FindBuffersToTrack(const Target &t) : target(t), device_api(Device_Host) {}
+    FindBuffersToTrack(const Target &t) : target(t), device_api(DeviceAPI::Host) {}
 };
 
 
@@ -132,8 +133,8 @@ class InjectBufferCopies : public IRMutator {
                        host_current(false),
                        dev_current(false),
                        internal(false),
-                       device_first_touched(Device_Parent), // Meaningless initial value
-                       current_device(Device_Host) {}
+                       device_first_touched(DeviceAPI::Parent), // Meaningless initial value
+                       current_device(DeviceAPI::Host) {}
     };
 
     map<string, BufferInfo> state;
@@ -145,17 +146,17 @@ class InjectBufferCopies : public IRMutator {
     Expr make_device_interface_call(DeviceAPI device_api) {
         std::string interface_name;
         switch (device_api) {
-          case Device_CUDA:
+          case DeviceAPI::CUDA:
             interface_name = "halide_cuda_device_interface";
             break;
-          case Device_OpenCL:
+          case DeviceAPI::OpenCL:
             interface_name = "halide_opencl_device_interface";
             break;
-          case Device_GLSL:
+          case DeviceAPI::GLSL:
             interface_name = "halide_opengl_device_interface";
             break;
           default:
-            internal_error << "Bad DeviceAPI in make_dev_malloc " << device_api << "\n";
+            internal_error << "Bad DeviceAPI in make_dev_malloc " << static_cast<int>(device_api) << "\n";
             break;
         }
         std::vector<Expr> no_args;
@@ -197,7 +198,7 @@ class InjectBufferCopies : public IRMutator {
     // a dev read to host or dev.
     Stmt do_copies(Stmt s) {
         // Cannot do any sort of buffer copying in device code yet.
-        if (device_api != Device_Host) {
+        if (device_api != DeviceAPI::Host) {
             return s;
         }
 
@@ -215,15 +216,16 @@ class InjectBufferCopies : public IRMutator {
             debug(4) << "do_copies for " << iter->first << "\n"
                      << "Host current: " << buf.host_current << " Device current: " << buf.dev_current << "\n"
                      << "Host touched: " << buf.host_touched << " Device touched: " << buf.dev_touched << "\n"
-                     << "Internal: " << buf.internal << " Device touching first: " << buf.device_first_touched << "\n"
-                     << "Current device: " << buf.current_device << "\n";
+                     << "Internal: " << buf.internal << " Device touching first: "
+                     << static_cast<int>(buf.device_first_touched) << "\n"
+                     << "Current device: " << static_cast<int>(buf.current_device) << "\n";
             DeviceAPI touching_device;
             bool host_read = false;
             size_t non_host_devices_reading_count = 0;
             DeviceAPI reading_device;
             for (std::set<DeviceAPI>::const_iterator dev = buf.devices_reading.begin(); dev != buf.devices_reading.end(); dev++) {
-                debug(4) << "Device " << *dev << " read buffer\n";
-                if (*dev != Device_Host) {
+                debug(4) << "Device " << static_cast<int>(*dev) << " read buffer\n";
+                if (*dev != DeviceAPI::Host) {
                     non_host_devices_reading_count++;
                     reading_device = *dev;
                     touching_device = *dev;
@@ -235,8 +237,8 @@ class InjectBufferCopies : public IRMutator {
             size_t non_host_devices_writing_count = 0;
             DeviceAPI writing_device;
             for (std::set<DeviceAPI>::const_iterator dev = buf.devices_writing.begin(); dev != buf.devices_writing.end(); dev++) {
-                debug(4) << "Device " << *dev << " wrote buffer\n";
-                if (*dev != Device_Host) {
+                debug(4) << "Device " << static_cast<int>(*dev) << " wrote buffer\n";
+                if (*dev != DeviceAPI::Host) {
                     non_host_devices_writing_count++;
                     writing_device = *dev;
                     touching_device = *dev;
@@ -334,7 +336,7 @@ class InjectBufferCopies : public IRMutator {
             return;
         }
 
-        debug(4) << "Device " << device_api << " writes buffer " << op->name << "\n";
+        debug(4) << "Device " << static_cast<int>(device_api) << " writes buffer " << op->name << "\n";
         state[op->name].devices_writing.insert(device_api);
     }
 
@@ -345,7 +347,7 @@ class InjectBufferCopies : public IRMutator {
             return;
         }
 
-        debug(4) << "Device " << device_api << " reads buffer " << op->name << "\n";
+        debug(4) << "Device " << static_cast<int>(device_api) << " reads buffer " << op->name << "\n";
         state[op->name].devices_reading.insert(device_api);
     }
 
@@ -364,23 +366,23 @@ class InjectBufferCopies : public IRMutator {
             }
         } else if (op->name == Call::glsl_texture_load && op->call_type == Call::Intrinsic) {
             // counts as a device read
-            internal_assert(device_api == Device_GLSL);
+            internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
             debug(4) << "Adding GLSL read via glsl_texture_load for " << buffer_var->name << "\n";
-            state[buf_name].devices_reading.insert(Device_GLSL);
+            state[buf_name].devices_reading.insert(DeviceAPI::GLSL);
             IRMutator::visit(op);
         } else if (op->name == Call::glsl_texture_store && op->call_type == Call::Intrinsic) {
             // counts as a device store
-            internal_assert(device_api == Device_GLSL);
+            internal_assert(device_api == DeviceAPI::GLSL);
             internal_assert(op->args.size() >= 2);
             const Variable *buffer_var = op->args[1].as<Variable>();
             internal_assert(buffer_var && ends_with(buffer_var->name, ".buffer"));
             string buf_name = buffer_var->name.substr(0, buffer_var->name.size() - 7);
             debug(4) << "Adding GLSL write via glsl_texture_load for " << buffer_var->name << "\n";
-            state[buf_name].devices_writing.insert(Device_GLSL);
+            state[buf_name].devices_writing.insert(DeviceAPI::GLSL);
             IRMutator::visit(op);
         } else {
             IRMutator::visit(op);
@@ -388,7 +390,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Pipeline *op) {
-        if (device_api != Device_Host) {
+        if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
         }
@@ -435,7 +437,8 @@ class InjectBufferCopies : public IRMutator {
                     // on the right device and that the host dirty bit is false so the device
                     // can write. (Which will involve copying to the device if host was dirty
                     // for the passed in buffer.)
-                    debug(4) << "Injecting device copy for output " << buf_name << " on " << iter->second.current_device << "\n";
+                    debug(4) << "Injecting device copy for output " << buf_name << " on " <<
+                        static_cast<int>(iter->second.current_device) << "\n";
                     stmt = Block::make(make_buffer_copy(ToDevice, buf_name, iter->second.current_device), stmt);
                 }
             }
@@ -460,7 +463,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Allocate *op) {
-        if (device_api != Device_Host ||
+        if (device_api != DeviceAPI::Host ||
             !should_track(op->name)) {
             IRMutator::visit(op);
             return;
@@ -484,7 +487,7 @@ class InjectBufferCopies : public IRMutator {
 
     void visit(const LetStmt *op) {
         IRMutator::visit(op);
-        if (device_api != Device_Host) {
+        if (device_api != DeviceAPI::Host) {
             return;
         }
 
@@ -498,7 +501,8 @@ class InjectBufferCopies : public IRMutator {
             }
             if (state[buf_name].dev_touched) {
                 // Inject a dev_malloc
-                debug(4) << "Injecting device malloc for " << buf_name << " on " << state[buf_name].device_first_touched << "\n";
+                debug(4) << "Injecting device malloc for " << buf_name << " on " <<
+                    static_cast<int>(state[buf_name].device_first_touched) << "\n";
                 Stmt dev_malloc = make_dev_malloc(buf_name, state[buf_name].device_first_touched);
                 Stmt body = Block::make(dev_malloc, op->body);
 
@@ -518,7 +522,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const IfThenElse *op) {
-        if (device_api != Device_Host) {
+        if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
         }
@@ -569,7 +573,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
     void visit(const Block *op) {
-        if (device_api != Device_Host) {
+        if (device_api != DeviceAPI::Host) {
             IRMutator::visit(op);
             return;
         }
@@ -591,7 +595,8 @@ class InjectBufferCopies : public IRMutator {
         loop_level = op->name;
 
         if (different_device_api(device_api, op->device_api, target)) {
-            debug(4) << "Switching from device_api " << device_api << " to op->device_api " << op->device_api << " in for loop " << op->name <<"\n";
+            debug(4) << "Switching from device_api " << static_cast<int>(device_api) << " to op->device_api " <<
+                static_cast<int>(op->device_api) << " in for loop " << op->name <<"\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
             IRMutator::visit(op);
@@ -603,7 +608,7 @@ class InjectBufferCopies : public IRMutator {
     }
 
 public:
-    InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(Device_Host) {}
+    InjectBufferCopies(const set<string> &i, const Target &t) : loop_level(""), buffers_to_track(i), target(t), device_api(DeviceAPI::Host) {}
 
 };
 

@@ -599,7 +599,7 @@ void CodeGen_X86::test() {
 
     // We'll clear out the initial buffer except for the first and
     // last two elements using dense unaligned vectors
-    Stmt init = For::make("i", 0, 3, For::Serial, Device_Host,
+    Stmt init = For::make("i", 0, 3, For::Serial, DeviceAPI::Host,
                           Store::make("buf",
                                       Ramp::make(i*4+2, 1, 4),
                                       Ramp::make(i*4+2, 1, 4)));
@@ -611,7 +611,7 @@ void CodeGen_X86::test() {
 
     // Then multiply the even terms by 17 using sparse vectors
     init = Block::make(init,
-                       For::make("i", 0, 2, For::Serial, Device_Host,
+                       For::make("i", 0, 2, For::Serial, DeviceAPI::Host,
                                  Store::make("buf",
                                              Mul::make(Broadcast::make(17, 4),
                                                        Load::make(Int(32, 4), "buf",
@@ -629,7 +629,7 @@ void CodeGen_X86::test() {
     // Do some local allocations within the loop
     loop = Allocate::make("tmp_stack", Int(32), vec(Expr(127)), const_true(), Block::make(loop, Free::make("tmp_stack")));
     loop = Allocate::make("tmp_heap", Int(32), vec(Expr(43), Expr(beta)), const_true(), Block::make(loop, Free::make("tmp_heap")));
-    loop = For::make("i", -1, 3, For::Parallel, Device_Host, loop);
+    loop = For::make("i", -1, 3, For::Parallel, DeviceAPI::Host, loop);
 
     Stmt s = Block::make(init, loop);
 

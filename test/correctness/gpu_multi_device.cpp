@@ -17,12 +17,12 @@ struct MultiDevicePipeline {
         Target jit_target(get_jit_target_from_environment());
         if (jit_target.has_feature(Target::OpenCL)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, Device_CUDA);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::CUDA);
             current_stage++;
         }
         if (jit_target.has_feature(Target::CUDA)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, Device_OpenCL);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::OpenCL);
             current_stage++;
         }
         if (jit_target.has_feature(Target::OpenGL)) {

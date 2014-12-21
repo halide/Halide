@@ -260,27 +260,27 @@ std::map<DeviceAPI, CodeGen_GPU_Dev *> CodeGen_GPU_Host<CodeGen_CPU>::make_devic
 
     // For the default GPU, OpenCL is preferred, CUDA next, and OpenGL last.
     // The code is in reverse order to allow later tests to override earlier ones.
-    DeviceAPI default_api = Device_Default_GPU;
+    DeviceAPI default_api = DeviceAPI::Default_GPU;
     if (t.has_feature(Target::OpenGL)) {
         debug(1) << "Constructing OpenGL device codegen\n";
-        result[Device_GLSL] = new CodeGen_OpenGL_Dev(t);
-        default_api = Device_GLSL;
+        result[DeviceAPI::GLSL] = new CodeGen_OpenGL_Dev(t);
+        default_api = DeviceAPI::GLSL;
     }
     if (t.has_feature(Target::CUDA)) {
         debug(1) << "Constructing CUDA device codegen\n";
-        result[Device_CUDA] = new CodeGen_PTX_Dev(t);
-        default_api = Device_CUDA;
+        result[DeviceAPI::CUDA] = new CodeGen_PTX_Dev(t);
+        default_api = DeviceAPI::CUDA;
     }
     if (t.has_feature(Target::OpenCL)) {
         debug(1) << "Constructing OpenCL device codegen\n";
-        result[Device_OpenCL] = new CodeGen_OpenCL_Dev(t);
-        default_api = Device_OpenCL;
+        result[DeviceAPI::OpenCL] = new CodeGen_OpenCL_Dev(t);
+        default_api = DeviceAPI::OpenCL;
     }
 
     if (result.empty()) {
         internal_error << "Requested unknown GPU target: " << t.to_string() << "\n";
     } else {
-        result[Device_Default_GPU] = result[default_api];
+        result[DeviceAPI::Default_GPU] = result[default_api];
     }
     return result;
 }
@@ -289,7 +289,7 @@ template<typename CodeGen_CPU>
 CodeGen_GPU_Host<CodeGen_CPU>::~CodeGen_GPU_Host() {
     std::map<DeviceAPI, CodeGen_GPU_Dev *>::iterator iter;
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        if (iter->first != Device_Default_GPU) {
+        if (iter->first != DeviceAPI::Default_GPU) {
             delete iter->second;
         }
     }
@@ -338,7 +338,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
     BasicBlock *entry = &function->getEntryBlock();
 
     for (iter = cgdev.begin(); iter != cgdev.end(); iter++) {
-        if (iter->first == Device_Default_GPU) {
+        if (iter->first == DeviceAPI::Default_GPU) {
             continue;
         }
         CodeGen_GPU_Dev *gpu_codegen = iter->second;
@@ -544,7 +544,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim0 = zero_int32;
         Value *gpu_num_coords_dim1 = zero_int32;
 
-        if (loop->device_api == Device_GLSL) {
+        if (loop->device_api == DeviceAPI::GLSL) {
             
             // GL draw calls that invoke the GLSL shader are issued for pairs of
             // for-loops over spatial x and y dimensions. For each for-loop we create

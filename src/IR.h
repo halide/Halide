@@ -18,14 +18,28 @@
 
 namespace Halide {
 
-enum DeviceAPI {
-    Device_Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
-    Device_Host,
-    Device_Default_GPU,
-    Device_CUDA,
-    Device_OpenCL,
-    Device_GLSL
+#if __cplusplus > 199711L // C++11 strongly typed enum
+enum class DeviceAPI {
+#else
+struct DeviceAPI {
+enum Values {
+#endif
+
+    Parent, /// Used to denote for loops that inherit their device from where they are used, generally the default
+    Host,
+    Default_GPU,
+    CUDA,
+    OpenCL,
+    GLSL
 };
+
+#if __cplusplus <= 199711L // Make references to the enum in declarations compile.
+    int val;
+    DeviceAPI() : val(Parent) { }
+    DeviceAPI(int val) : val(val) { }
+    operator int() const { return val; }
+};
+#endif
 
 namespace Internal {
 
