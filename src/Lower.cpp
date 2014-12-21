@@ -1123,7 +1123,7 @@ Stmt schedule_functions(Stmt s, const vector<string> &order,
 
     // Inject a loop over root to give us a scheduling point
     string root_var = LoopLevel::root().func + "." + LoopLevel::root().var;
-    s = For::make(root_var, 0, 1, For::Serial, Device_Host, s);
+    s = For::make(root_var, 0, 1, For::Serial, DeviceAPI::Host, s);
 
     for (size_t i = order.size(); i > 0; i--) {
         Function f = env.find(order[i-1])->second;
@@ -1725,7 +1725,7 @@ class PropagateInheritedAttributes : public IRMutator {
 
     void visit(const For *op) {
         DeviceAPI save_device = for_device;
-        for_device = (op->device_api == Device_Parent) ? for_device : op->device_api;
+        for_device = (op->device_api == DeviceAPI::Parent) ? for_device : op->device_api;
 
         Expr min = mutate(op->min);
         Expr extent = mutate(op->extent);
@@ -1744,7 +1744,7 @@ class PropagateInheritedAttributes : public IRMutator {
     }
 
 public:
-    PropagateInheritedAttributes() : for_device(Device_Host) {
+    PropagateInheritedAttributes() : for_device(DeviceAPI::Host) {
     }
 };
 
@@ -1919,7 +1919,7 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     // every CodeGen backend does not have to keep track of these
     // attributes as the IR tree is traversed. At present, only the
     // GPU device attribute on For nodes is propagated (to contained
-    // For nodes which have their device set to Device_Parent).
+    // For nodes which have their device set to DeviceAPI::Parent).
     debug(1) << "Propagating inherited attributes downward.\n";
     s = propagate_inherited_attributes(s);
     debug(1) << "Lowering after propagating inherited attributes:\n" << s << "\n\n";

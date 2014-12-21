@@ -452,7 +452,7 @@ void Stage::set_dim_device_api(VarOrRVar var, DeviceAPI device_api) {
         user_error << "In schedule for " << stage_name
                    << ", could not find dimension "
                    << var.name()
-                   << " to set to device API " << device_api
+                   << " to set to device API " << static_cast<int>(device_api)
                    << " in vars for function\n"
                    << dump_argument_list();
     }
@@ -1293,7 +1293,7 @@ Func &Func::glsl(Var x, Var y, Var c) {
 
     // TODO: Set appropriate constraints if this is the output buffer?
 
-    Stage(func.schedule(), name()).gpu_blocks(x, y, Device_GLSL);
+    Stage(func.schedule(), name()).gpu_blocks(x, y, DeviceAPI::GLSL);
 
     bool constant_bounds = false;
     Schedule &sched = func.schedule();
