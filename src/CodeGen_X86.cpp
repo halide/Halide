@@ -81,7 +81,9 @@ llvm::Triple CodeGen_X86::get_target_triple() const {
         user_error << "This version of Halide was compiled without nacl support.\n";
         #endif
     } else if (target.os == Target::IOS) {
-        user_error << "Can't use IOS on x86.\n";
+        // X86 on iOS for the simulator
+        triple.setVendor(llvm::Triple::Apple);
+        triple.setOS(llvm::Triple::IOS);
     }
 
     return triple;

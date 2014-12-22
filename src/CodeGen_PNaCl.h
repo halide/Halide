@@ -41,6 +41,8 @@ public:
 
 protected:
 
+    llvm::Triple get_target_triple() const;
+
     using CodeGen_Posix::visit;
 
     std::string mcpu() const;

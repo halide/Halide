@@ -129,7 +129,7 @@ int main(int argc, char **argv) {
 
         // The opposite of splitting is 'fusing'. Fusing two variables
         // merges the two loops into a single for loop over the
-        // product of the extents. Fusing is less important that
+        // product of the extents. Fusing is less important than
         // splitting, but it also sees use (as we'll see later in this
         // lesson). Like splitting, fusing by itself doesn't change
         // the order of evaluation.

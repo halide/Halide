@@ -106,12 +106,7 @@ string simt_intrinsic(const string &name) {
 
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
-    int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " >> " << bits;
-        print_assignment(op->type, oss.str());
-    } else if (op->type.is_int()) {
+    if (op->type.is_int()) {
         print_expr(Call::make(op->type, "sdiv_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "/");
@@ -119,12 +114,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Div *op) {
 }
 
 void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::visit(const Mod *op) {
-    int bits;
-    if (is_const_power_of_two(op->b, &bits)) {
-        ostringstream oss;
-        oss << print_expr(op->a) << " & " << ((1 << bits)-1);
-        print_assignment(op->type, oss.str());
-    } else if (op->type.is_int()) {
+    if (op->type.is_int()) {
         print_expr(Call::make(op->type, "smod_" + print_type(op->type), vec(op->a, op->b), Call::Extern));
     } else {
         visit_binop(op->type, op->a, op->b, "%");
@@ -462,6 +452,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             stream << " " << get_memory_space(args[i].name) << " ";
+            if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
             allocations.push(args[i].name, args[i].type);
@@ -629,6 +620,10 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 
 void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
+}
+    
+std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
+    return name;
 }
 
 }}

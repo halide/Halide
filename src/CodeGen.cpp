@@ -373,6 +373,11 @@ void CodeGen::optimize_module() {
     FunctionPassManager function_pass_manager(module);
     PassManager module_pass_manager;
 
+    #if LLVM_VERSION >= 36
+    internal_assert(module->getDataLayout()) << "Optimizing module with no data layout, probably will crash in LLVM.\n";
+    module_pass_manager.add(new DataLayoutPass());
+    #endif
+
     // Make sure things marked as always-inline get inlined
     module_pass_manager.add(createAlwaysInlinerPass());
 
@@ -1131,8 +1136,9 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr ind
 
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
-    tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa));
+    MDNode *tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, "Halide buffer")));
+    tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, buffer), tbaa));
+
     // We also add metadata for constant indices to allow loads and
     // stores to the same buffer to get reordered.
     if (constant_index) {
@@ -1141,7 +1147,7 @@ void CodeGen::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Expr ind
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
-            tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, level.str()), tbaa));
+            tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, level.str()), tbaa));
         }
     }
 
