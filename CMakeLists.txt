@@ -1,6 +1,6 @@
 
 project(Halide)
-cmake_minimum_required(VERSION 2.8.7)
+cmake_minimum_required(VERSION 2.8.12)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -67,6 +67,7 @@ message(${CLANG})
 option(TARGET_NATIVE_CLIENT "Include Native Client" ON)
 option(TARGET_X86 "Include x86 target" ON)
 option(TARGET_ARM "Include ARM target" ON)
+option(TARGET_AARCH64 "Include AARCH64 (arm64) target" ON)
 option(TARGET_PTX "Include PTX target" ON)
 option(TARGET_OPENCL "Include OpenCL-C target" ON)
 option(TARGET_OPENGL "Include OpenGL/GLSL target" ON)
