@@ -1,6 +1,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <stdio.h>
 
 #include "Simplify.h"
@@ -1914,6 +1915,20 @@ private:
             } else {
                 expr = a >> b;
             }
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::bitwise_and) {
+            Expr a = mutate(op->args[0]), b = mutate(op->args[1]);
+            int ib = 0;
+            int bits;
+
+            if (const_castint(b, &ib) &&
+                ((ib < b.type().imax()) && (ib < std::numeric_limits<int>::max()) &&
+                 is_const_power_of_two(ib + 1, &bits))) {
+                  expr = Mod::make(a, ib + 1);
+            } else  if (a.same_as(op->args[0]) && b.same_as(op->args[1])) {
+                expr = op;
+            } else {
+                expr = a & b;
+            }
         } else if (op->call_type == Call::Intrinsic &&
                    op->name == Call::abs) {
             // Constant evaluate abs(x).
@@ -2026,7 +2041,7 @@ private:
             if (const float *f = as_const_float(arg)) {
                 if (op->name == "floor_f32") expr = std::floor(*f);
                 else if (op->name == "ceil_f32") expr = std::ceil(*f);
-#if __cplusplus > 199711L 
+#if __cplusplus > 199711L
                 else if (op->name == "round_f32") expr = std::nearbyint(*f);
 #endif
                 else if (op->name == "trunc_f32") {
@@ -2748,7 +2763,7 @@ void simplify_test() {
 
     check(floor(0.98f), 0.0f);
     check(ceil(0.98f), 1.0f);
-#if __cplusplus > 199711L 
+#if __cplusplus > 199711L
     check(round(0.6f), 1.0f);
     check(round(-0.5f), 0.0f);
 #endif

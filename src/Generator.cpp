@@ -256,20 +256,24 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 
     std::vector<Halide::Argument> inputs = get_filter_arguments();
     std::string base_path = output_dir + "/" + (file_base_name.empty() ? function_name : file_base_name);
-    if (options.emit_o) {
-        func.compile_to_object(base_path + ".o", inputs, function_name, target);
+    if (options.emit_o || options.emit_assembly || options.emit_bitcode) {
+        Outputs output_files;
+        if (options.emit_o) {
+            output_files.object_name = base_path + ".o";
+        }
+        if (options.emit_assembly) {
+            output_files.assembly_name = base_path + ".s";
+        }
+        if (options.emit_bitcode) {
+            output_files.bitcode_name = base_path + ".bc";
+        }
+        func.compile_to(output_files, inputs, function_name, target);
     }
     if (options.emit_h) {
         func.compile_to_header(base_path + ".h", inputs, function_name, target);
     }
     if (options.emit_cpp) {
         func.compile_to_c(base_path + ".cpp", inputs, function_name, target);
-    }
-    if (options.emit_assembly) {
-        func.compile_to_assembly(base_path + ".s", inputs, function_name, target);
-    }
-    if (options.emit_bitcode) {
-        func.compile_to_bitcode(base_path + ".bc", inputs, function_name, target);
     }
     if (options.emit_stmt) {
         func.compile_to_lowered_stmt(base_path + ".stmt", Halide::Text, target);

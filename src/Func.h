@@ -354,6 +354,30 @@ struct ErrorBuffer;
 class IRMutator;
 }
 
+
+struct Outputs {
+    std::string object_name;
+    std::string assembly_name;
+    std::string bitcode_name;
+
+    Outputs object(const std::string &object_name) {
+        Outputs updated = *this;
+        updated.object_name = object_name;
+        return updated;
+    }
+    Outputs assembly(const std::string &assembly_name) {
+        Outputs updated = *this;
+        updated.assembly_name = assembly_name;
+        return updated;
+    }
+    Outputs bitcode(const std::string &bitcode_name) {
+        Outputs updated = *this;
+        updated.bitcode_name = bitcode_name;
+        return updated;
+    }
+};
+
+
 /** A halide function. This class represents one stage in a Halide
  * pipeline, and is the unit by which we schedule things. By default
  * they are aggressively inlined, so you are encouraged to make lots
@@ -443,8 +467,7 @@ class Func {
     /** The user context that's used when jitting. This is not settable
      * by user code, but is reserved for internal use.
      * Note that this is an Internal::Parameter (rather than a Param<void*>)
-     * because Param is forbidden from using the name "__user_context"
-     * (to flush out deprecated usages), but Internal::Parameter is not. */
+     * so that we can exclude it from the ObjectInstanceRegistry. */
     Internal::Parameter jit_user_context;
 
     struct CustomLoweringPass {
@@ -705,6 +728,17 @@ public:
                                 const Target &target = get_target_from_environment());
     EXPORT void compile_to_file(const std::string &filename_prefix, Argument a, Argument b, Argument c, Argument d, Argument e,
                                 const Target &target = get_target_from_environment());
+    // @}
+
+    /** Compile and generate multiple target files with single call.
+     * Deduces target files based on filenames specified in
+     * output_files struct.
+     */
+    //@{
+    EXPORT void compile_to(const Outputs &output_files,
+                           std::vector<Argument> args,
+                           const std::string &fn_name,
+                           const Target &target = get_target_from_environment());
     // @}
 
     /** Eagerly jit compile the function to machine code. This

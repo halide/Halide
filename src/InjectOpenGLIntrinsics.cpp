@@ -54,13 +54,18 @@ private:
             name = name + '.' + int_to_string(call->value_index);
         }
 
-        user_assert(call->args.size() == 3) << "GLSL loads require three coordinates.\n";
+        // Check to see if we are reading from a one or two dimension function
+        // and pad to three dimensions.
+        vector<Expr> call_args = call->args;
+        while (call_args.size() < 3) {
+            call_args.push_back(IntImm::make(0));
+        }
 
         // Create glsl_texture_load(name, name.buffer, x, y, c) intrinsic.
         vector<Expr> args(5);
         args[0] = call->name;
         args[1] = Variable::make(Handle(), call->name + ".buffer");
-        for (size_t i = 0; i < call->args.size(); i++) {
+        for (size_t i = 0; i < call_args.size(); i++) {
             string d = int_to_string(i);
             string min_name = name + ".min." + d;
             string min_name_constrained = min_name + ".constrained";
@@ -88,18 +93,33 @@ private:
                     min = Expr(0);
                 }
             }
-
+            
+            // Inject intrinsics into the call argument
+            Expr arg = mutate(call_args[i]);
+            
             if (i < 2) {
                 // Convert spatial coordinates x,y into texture coordinates by normalization.
-                args[i + 2] = (Cast::make(Float(32), call->args[i] - min) + 0.5f) / extent;
+                args[i + 2] = (Cast::make(Float(32), arg - min) + 0.5f) / extent;
             } else {
-                args[i + 2] = call->args[i] - min;
+                args[i + 2] = arg - min;
             }
         }
 
-        expr = Call::make(call->type, Call::glsl_texture_load,
-                          args, Call::Intrinsic,
-                          Function(), 0, call->image, call->param);
+        // This intrinsic represents the GLSL texture2D function, and that
+        // function returns a vec4 result.
+        Type load_type = call->type;
+        load_type.width = 4;
+
+        Expr load_call = Call::make(load_type, Call::glsl_texture_load,
+                                    vector<Expr>(&args[0],&args[4]),
+                                    Call::Intrinsic,
+                                    Function(), 0, call->image, call->param);
+
+        // Add a shuffle_vector intrinsic to swizzle a single channel scalar out
+        // of the vec4 loaded by glsl_texture_load. This may be widened to the
+        // size of the Halide function color dimension during vectorization.
+        expr = Call::make(call->type, Call::shuffle_vector,
+                          vec(load_call, args[4]), Call::Intrinsic);
     }
 
     void visit(const LetStmt *let) {

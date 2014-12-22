@@ -63,7 +63,7 @@ int atoi(const char *);
 int strcmp(const char* s, const char* t);
 int strncmp(const char* s, const char* t, size_t n);
 size_t strlen(const char* s);
-char *strchr(const char* s, char c);
+const char *strchr(const char* s, int c);
 void* memcpy(void* s1, const void* s2, size_t n);
 int memcmp(const void* s1, const void* s2, size_t n);
 void *memset(void *s, int val, size_t n);
@@ -109,14 +109,14 @@ enum PrinterType {BasicPrinter = 0,
 // Then remember the print only happens when the debug object leaves
 // scope, which may print at a confusing time.
 
-template<int type>
+template<int type, uint64_t length = 1024>
 class Printer {
 public:
-    char buf[1024];
+    char buf[length];
     char *dst, *end;
     void *user_context;
 
-    Printer(void *ctx) : dst(buf), end(buf + 1023), user_context(ctx) {
+    Printer(void *ctx) : dst(buf), end(buf + (length-1)), user_context(ctx) {
         *end = 0;
     }
 
@@ -163,6 +163,11 @@ public:
     // Use it like a stringstream.
     const char *str() {
         return buf;
+    }
+
+    // Returns the number of characters in the buffer
+    uint64_t size() const {
+        return (uint64_t)(end-dst);
     }
 
     ~Printer() {

@@ -33,8 +33,6 @@ private:
 
     // These nodes are considered to introduce non-linearities.
     void visit(const Mod *op) {result = Linearity::NonLinear;}
-    void visit(const Min *op) {result = Linearity::NonLinear;}
-    void visit(const Max *op) {result = Linearity::NonLinear;}
     void visit(const Select *op) {result = Linearity::NonLinear;}
     void visit(const Call *op) {result = Linearity::NonLinear;}
     void visit(const Load *op) {result = Linearity::NonLinear;}
@@ -61,6 +59,8 @@ private:
 
     void visit(const Add *op) {visit_binary_op(op);}
     void visit(const Sub *op) {visit_binary_op(op);}
+    void visit(const Min *op) {visit_binary_op(op);}
+    void visit(const Max *op) {visit_binary_op(op);}
     void visit(const EQ *op)  {visit_binary_op(op);}
     void visit(const NE *op)  {visit_binary_op(op);}
     void visit(const LT *op)  {visit_binary_op(op);}
@@ -392,7 +392,7 @@ bool collect_linear_terms(Expr e, std::vector<Term> &terms,
 
 
 class SolveForLinearVariable : public IRMutator {
-  public:
+public:
     const Scope<int> &free_vars;
     std::string var_name;
     Scope<Expr> scope;
@@ -402,7 +402,8 @@ class SolveForLinearVariable : public IRMutator {
             free_vars(vars), var_name(var), solved(false) {
         scope.set_containing_scope(s);
     }
-  private:
+
+private:
     using IRVisitor::visit;
 
     int find_var(const std::vector<Term>& terms) {
@@ -415,6 +416,9 @@ class SolveForLinearVariable : public IRMutator {
     }
 
     /* We don't deal with these nodes. */
+    void visit(const And *op) {solved = false;}
+    void visit(const Or *op)  {solved = false;}
+    void visit(const Not *op) {solved = false;}
     void visit(const Add *op) {solved = false;}
     void visit(const Sub *op) {solved = false;}
     void visit(const Mul *op) {solved = false;}
