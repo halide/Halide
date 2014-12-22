@@ -582,6 +582,8 @@ struct Evaluate : public StmtNode<Evaluate> {
     EXPORT static Stmt make(Expr v);
 };
 
+/** Returns an expression from a function. This statement is only
+ * valid in the body of a LoweredFunc. */
 struct Return : public StmtNode<Return> {
     Expr value;
 
