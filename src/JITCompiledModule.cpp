@@ -235,8 +235,6 @@ public:
     /** Do any target-specific module cleanup. */
     std::vector<JITCompiledModule::CleanupRoutine> cleanup_routines;
 
-    /** Any listeners we created. */
-
     /** Add a cleanup routine of the specified name from the module. */
     void add_cleanup_routine(const char *name) {
         // If the module contains the function, run it when the module dies.
