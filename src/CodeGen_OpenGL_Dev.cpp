@@ -5,6 +5,7 @@
 #include "Debug.h"
 #include "Deinterleave.h"
 #include "Simplify.h"
+#include "VaryingAttributes.h"
 #include <iomanip>
 #include <map>
 #include <limits>
@@ -19,18 +20,8 @@ using std::map;
 
 namespace {
 
-std::string replace_all(std::string &str,
-                        const std::string &find,
-                        const std::string &replace) {
-    size_t pos = 0;
-    while ((pos = str.find(find, pos)) != std::string::npos) {
-        str.replace(pos, find.length(), replace);
-        pos += replace.length();
-    }
-    return str;
-}
 
-// Maps Halide types to appropriate GLSL types or emits error if no equivalent
+// Maps Halide types to appropriate GLSL types or emit error if no equivalent
 // type is available.
 Type map_type(const Type &type) {
     Type result = type;
@@ -121,6 +112,10 @@ string CodeGen_OpenGL_Dev::get_current_kernel_name() {
 
 void CodeGen_OpenGL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
+}
+
+std::string CodeGen_OpenGL_Dev::print_gpu_name(const std::string &name) {
+    return glc->print_name(name);
 }
 
 //
@@ -225,6 +220,19 @@ void CodeGen_GLSL::visit(const Cast *op) {
     }
 }
 
+void CodeGen_GLSL::visit(const Let *op) {
+
+    if (op->name.find(".varying") != std::string::npos) {
+
+        // Skip let statements for varying attributes
+        op->body.accept(this);
+
+        return;
+    }
+
+    CodeGen_C::visit(op);
+}
+
 void CodeGen_GLSL::visit(const For *loop) {
     if (ends_with(loop->name, ".__block_id_x") ||
         ends_with(loop->name, ".__block_id_y")) {
@@ -232,9 +240,9 @@ void CodeGen_GLSL::visit(const For *loop) {
 
         string idx;
         if (ends_with(loop->name, ".__block_id_x")) {
-            idx = "int(pixcoord.x)";
+            idx = "int(_varyingf0[0])";
         } else if (ends_with(loop->name, ".__block_id_y")) {
-            idx = "int(pixcoord.y)";
+            idx = "int(_varyingf0[1])";
         }
         do_indent();
         stream << print_type(Int(32)) << " " << print_name(loop->name) << " = " << idx << ";\n";
@@ -340,25 +348,19 @@ void CodeGen_GLSL::visit(const Mod *op) {
 std::string CodeGen_GLSL::get_vector_suffix(Expr e) {
     std::vector<Expr> matches;
     Expr w = Variable::make(Int(32), "*");
+
     // The vectorize pass will insert a ramp in the color dimension argument.
     if (expr_match(Ramp::make(w, 1, 4), e, matches)) {
         // No suffix is needed when accessing a full RGBA vector.
+        return "";
     } else if (expr_match(Ramp::make(w, 1, 3), e, matches)) {
         return ".rgb";
     } else if (expr_match(Ramp::make(w, 1, 2), e, matches)) {
         return ".rg";
-    } else if (const IntImm *idx = e.as<IntImm>()) {
-        // If the color dimension is not vectorized, e.g. it is unrolled, then
-        // then we access each channel individually.
-        int i = idx->value;
-        internal_assert(0 <= i && i <= 3) <<  "GLSL: color index must be between 0 and 3.\n";
-        char suffix[] = "rgba";
-        return std::string(".") + suffix[i];
     } else {
-        user_error << "GLSL: color index '" << e << "' must be constant.\n"
-                   << "Call .bound() or .set_bounds() to specify the range of the color index.\n";
+        // GLSL 1.0 Section 5.5 supports subscript based vector indexing
+        return std::string("[") + ((e.type()!=Int(32)) ? "(int)" : "") + print_expr(e) + "]";
     }
-    return "";
 }
 
 void CodeGen_GLSL::visit(const Load *) {
@@ -377,20 +379,18 @@ void CodeGen_GLSL::visit(const Call *op) {
     ostringstream rhs;
     if (op->call_type == Call::Intrinsic) {
         if (op->name == Call::glsl_texture_load) {
-            internal_assert(op->args.size() == 5);
-
-            // Keep track of whether or not the intrinsic was vectorized
-            int width = 1;
+            // This intrinsic takes four arguments
+            // glsl_texture_load(<tex name>, <buffer>, <x>, <y>)
+            internal_assert(op->args.size() == 4);
 
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
             internal_assert(op->args[0].as<StringImm>() ||
                             (op->args[0].as<Broadcast>() && op->args[0].as<Broadcast>()->value.as<StringImm>()));
 
-            const StringImm* string_imm = op->args[0].as<StringImm>();
+            const StringImm *string_imm = op->args[0].as<StringImm>();
             if (!string_imm) {
                 string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
-                width = op->args[0].as<Broadcast>()->width;
             }
 
             // Determine the halide buffer associated with this load
@@ -399,14 +399,12 @@ void CodeGen_GLSL::visit(const Call *op) {
             internal_assert((op->type.code == Type::UInt || op->type.code == Type::Float) &&
                             (op->type.width >= 1 && op->type.width <= 4));
 
-            // In the event that this intrinsic was vectorized, the individual
-            // coordinates may be GLSL vecN types instead of scalars. In this case
-            // we use only the first element
+            internal_assert(op->args[2].type().width == 1) << "glsl_texture_load argument 2 is not scalar";
+            internal_assert(op->args[3].type().width == 1) << "glsl_texture_load argument 3 is not scalar";
 
             rhs << "texture2D(" << print_name(buffername) << ", vec2("
-                << print_expr((width > 1) ? op->args[2].as<Broadcast>()->value :  op->args[2]) << ", "
-                << print_expr((width > 1) ? op->args[3].as<Broadcast>()->value :  op->args[3]) << "))"
-                << get_vector_suffix(op->args[4]);
+                << print_expr(op->args[2]) << ", "
+                << print_expr(op->args[3]) << "))";
             if (op->type.is_uint())
                 rhs << " * " << op->type.imax() << ".0";
 
@@ -423,6 +421,67 @@ void CodeGen_GLSL::visit(const Call *op) {
             // no return value.
             id = "";
             return;
+        } else if (op->name == Call::glsl_varying) {
+            // Varying attributes should be substituted out by this point in
+            // codegen.
+            debug(2) << "Found skipped varying attribute: " << op->args[0] << "\n";
+
+            // Output the tagged expression.
+            print_expr(op->args[1]);
+            return;
+
+        } else if (op->name == Call::shuffle_vector) {
+            // The halide intrinisc shuffle_vector represents the llvm intrinisc
+            // shufflevector, however, for GLSL its use is limited to swizzling
+            // up to a four channel vec type.
+
+            int shuffle_width = op->type.width;
+            internal_assert(shuffle_width <= 4);
+
+            string expr = print_expr(op->args[0]);
+
+            // If all of the shuffle channel expressions are simple integer
+            // immediates, then we can easily replace them with a swizzle
+            // operator. This is a common case that occurs when a scalar
+            // shuffle vector expression is vectorized.
+            bool all_int = true;
+            for (int i = 0; i != shuffle_width && all_int; ++i) {
+                all_int = all_int && (op->args[1 + i].as<IntImm>() != NULL);
+            }
+
+            // Check if the shuffle maps to a canonical type like .r or .rgb
+            if (all_int) {
+
+                // Create a swizzle expression for the shuffle
+                static const char* channels = "rgba";
+                string swizzle;
+
+                for (int i = 0; i != shuffle_width && all_int; ++i) {
+                    int channel = op->args[1 + i].as<IntImm>()->value;
+                    internal_assert(channel < 4) << "Shuffle of invalid channel";
+                    swizzle += channels[channel];
+                }
+
+                rhs << expr << "." << swizzle;
+
+            } else {
+
+                // Otherwise, create a result type variable and copy each channel to
+                // it individually.
+                string v = unique_name('_');
+                do_indent();
+                stream << print_type(op->type) << " " << v << ";\n";
+
+                for (int i = 0; i != shuffle_width; ++i) {
+                    do_indent();
+                    stream << v << get_vector_suffix(i) << " = "
+                    << expr << get_vector_suffix(op->args[1 + i]) << ";\n";
+                }
+
+                id = v;
+                return;
+            }
+
         } else if (op->name == Call::lerp) {
             // Implement lerp using GLSL's mix() function, which always uses
             // floating point arithmetic.
@@ -484,21 +543,54 @@ void CodeGen_GLSL::visit(const AssertStmt *) {
     internal_error << "GLSL: unexpected Assertion node encountered.\n";
 }
 
+void CodeGen_GLSL::visit(const Ramp *op) {
+    ostringstream rhs;
+    rhs << print_type(op->type) << "(";
+
+    if (op->width > 4)
+        internal_error << "GLSL: ramp width " << op->width << " is not supported\n";
+
+    rhs << print_expr(op->base);
+
+    for (int i = 1; i < op->width; ++i) {
+        rhs << ", " << print_expr(Add::make(op->base, Mul::make(i, op->stride)));
+    }
+
+    rhs << ")";
+    print_assignment(op->type, rhs.str());
+}
+
 void CodeGen_GLSL::visit(const Broadcast *op) {
     ostringstream rhs;
-    rhs << "vec" << op->width << "(" << print_expr(op->value) << ")";
+    rhs << print_type(op->type) << "(" << print_expr(op->value) << ")";
     print_assignment(op->type, rhs.str());
 }
 
 void CodeGen_GLSL::compile(Stmt stmt, string name,
                            const vector<GPU_Argument> &args,
                            const Target &target) {
+
+    // This function produces fragment shader source for the halide statement.
+    // The corresponding vertex shader will be generated by the halide opengl
+    // runtime based on the arguments passed in comments below. Host codegen
+    // outputs expressions that are evaluated at runtime to produce vertex data
+    // and varying attribute values at the vertices.
+
     // Emit special header that declares the kernel name and its arguments.
     // There is currently no standard way of passing information from the code
     // generator to the runtime, and the information Halide passes to the
     // runtime are fairly limited.  We use these special comments to know the
     // data types of arguments and whether textures are used for input or
     // output.
+
+    // Keep track of the number of uniform and varying attributes
+    int num_uniform_floats = 0;
+    int num_uniform_ints = 0;
+
+    // The spatial x and y coordinates are always passed in the first two
+    // varying float attribute slots
+    int num_varying_floats = 2;
+
     ostringstream header;
     header << "/// KERNEL " << name << "\n";
     for (size_t i = 0; i < args.size(); i++) {
@@ -519,12 +611,30 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
             }
             header << "/// " << (args[i].read ? "IN_BUFFER " : "OUT_BUFFER ")
                    << type_name << " " << print_name(args[i].name) << "\n";
-        } else {
-            header << "/// VAR "
-                   << CodeGen_C::print_type(args[i].type) << " "
-                   << print_name(args[i].name) << "\n";
+        } else if (ends_with(args[i].name, ".varying")) {
+            header << "/// VARYING "
+            // GLSL requires that varying attributes are float. Integer
+            // expressions for vertex attributes are cast to float during
+            // host codegen
+            << "float " << print_name(args[i].name) << " varyingf" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+            ++num_varying_floats;
+        } else if (args[i].type.is_float()) {
+            header << "/// UNIFORM "
+            << CodeGen_C::print_type(args[i].type) << " "
+            << print_name(args[i].name) << " uniformf" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+            ++num_uniform_floats;
+        } else if (args[i].type.is_int()) {
+            header << "/// UNIFORM "
+            << CodeGen_C::print_type(args[i].type) << " "
+            << print_name(args[i].name) << " uniformi" << args[i].packed_index/4 << "[" << args[i].packed_index%4 << "]\n";
+            ++num_uniform_ints;
         }
     }
+
+    // Compute the number of vec4's needed to pack the arguments
+    num_varying_floats = (num_varying_floats + 3) / 4;
+    num_uniform_floats = (num_uniform_floats + 3) / 4;
+    num_uniform_ints   = (num_uniform_ints + 3) / 4;
 
     stream << header.str();
 
@@ -546,17 +656,48 @@ void CodeGen_GLSL::compile(Stmt stmt, string name,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer && args[i].read) {
             stream << "uniform sampler2D " << print_name(args[i].name) << ";\n";
-        } else if (!args[i].is_buffer) {
-            stream << "uniform "
-                   << print_type(args[i].type) << " "
-                   << print_name(args[i].name) << ";\n";
         }
     }
-    // Add pixel position from vertex shader
-    stream << "varying vec2 pixcoord;\n";
+
+    for (int i = 0; i != num_varying_floats; ++i) {
+        stream << "varying vec4 _varyingf" << i << ";\n";
+    }
+
+    for (int i = 0; i != num_uniform_floats; ++i) {
+        stream << "uniform vec4 _uniformf" << i << ";\n";
+    }
+
+    for (int i = 0; i != num_uniform_ints; ++i) {
+        stream << "uniform ivec4 _uniformi" << i << ";\n";
+    }
 
     stream << "void main() {\n";
     indent += 2;
+
+    // Unpack the uniform and varying parameters
+    for (size_t i = 0; i < args.size(); i++) {
+        if (args[i].is_buffer) {
+            continue;
+        } else if (ends_with(args[i].name, ".varying")) {
+            do_indent();
+            stream << "float " << print_name(args[i].name)
+                   << " = _varyingf" << args[i].packed_index/4
+                   << "[" << args[i].packed_index%4 << "];\n";
+        } else if (args[i].type.is_float()) {
+            do_indent();
+            stream << print_type(args[i].type) << " "
+                   << print_name(args[i].name)
+                   << " = _uniformf" << args[i].packed_index/4
+                   << "[" << args[i].packed_index%4 << "];\n";
+        } else if (args[i].type.is_int()) {
+            do_indent();
+            stream << print_type(args[i].type) << " "
+                   << print_name(args[i].name)
+                   << " = _uniformi" << args[i].packed_index/4
+                   << "[" << args[i].packed_index%4 << "];\n";
+        }
+    }
+
     print(stmt);
     indent -= 2;
     stream << "}\n";
@@ -712,24 +853,9 @@ void CodeGen_GLSL::test() {
 
     // Test codegen for texture loads
     Expr load4 = Call::make(Float(32, 4), Call::glsl_texture_load,
-                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 4)),
+                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0)),
                             Call::Intrinsic);
-    Expr load2 = Call::make(Float(32, 2), Call::glsl_texture_load,
-                            vec(Expr("buf"), Expr(0), Expr(0), Expr(0), Ramp::make(0, 1, 2)),
-                            Call::Intrinsic);
-    check(load2, "vec2 $ = texture2D($buf, vec2(0, 0)).rg;\n");
     check(load4, "vec4 $ = texture2D($buf, vec2(0, 0));\n");
-
-    // Test combination of select and texture operations.
-    // TODO: The code below is correct but probably slower than necessary.
-    // Ideally, we could perform just one single texture operation.
-    check(Select::make(EQ::make(Ramp::make(-1, 1, 4), Broadcast::make(0, 4)),
-                       Broadcast::make(1.f, 4),
-                       load4),
-          "float $ = texture2D($buf, vec2(0, 0)).r;\n"
-          "float $ = texture2D($buf, vec2(0, 0)).b;\n"
-          "float $ = texture2D($buf, vec2(0, 0)).a;\n"
-          "vec4 $ = vec4($, 1.0, $, $);\n");
 
     check(log(1.0f), "float $ = log(1.0);\n");
     check(exp(1.0f), "float $ = exp(1.0);\n");

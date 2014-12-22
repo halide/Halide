@@ -6,7 +6,8 @@ $(LIB_HALIDE): ../.. ../../src
 	$(MAKE) -C ../../ $(LIB_HALIDE)
 
 bilateral_grid: bilateral_grid.cpp $(LIB_HALIDE)
-	$(CXX) $(CPPFLAGS) bilateral_grid.cpp -g -I ../../include/ ../../$(LIB_HALIDE) -o bilateral_grid -lpthread -ldl -lz $(LDFLAGS)
+	$(CXX) $(CPPFLAGS) bilateral_grid.cpp -g -I ../../include/ ../../$(LIB_HALIDE) -o bilateral_grid -lpthread -ldl -lz $(LDFLAGS) \
+	$(LLVM_SHARED_LIBS)
 
 bilateral_grid.o: bilateral_grid
 	./bilateral_grid 8

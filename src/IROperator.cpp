@@ -92,7 +92,7 @@ bool is_const_power_of_two(Expr e, int *bits) {
     if (c) return is_const_power_of_two(c->value, bits);
 
     const IntImm *int_imm = e.as<IntImm>();
-    if (int_imm) {
+    if (int_imm && ((int_imm->value & (int_imm->value - 1)) == 0)) {
         int bit_count = 0;
         int tmp;
         for (tmp = 1; tmp < int_imm->value; tmp *= 2) {

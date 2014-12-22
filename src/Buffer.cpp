@@ -187,7 +187,7 @@ bool Buffer::device_dirty() const {
 
 void Buffer::set_device_dirty(bool dirty) {
     user_assert(defined()) << "Buffer is undefined\n";
-    contents.ptr->buf.host_dirty = dirty;
+    contents.ptr->buf.dev_dirty = dirty;
 }
 
 int Buffer::dimensions() const {

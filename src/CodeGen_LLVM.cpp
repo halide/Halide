@@ -1245,8 +1245,8 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
-    tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa));
+    MDNode *tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, "Halide buffer")));
+    tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, buffer), tbaa));
     // We also add metadata for constant indices to allow loads and
     // stores to the same buffer to get reordered.
     if (constant_index) {
@@ -1255,7 +1255,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
-            tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, level.str()), tbaa));
+            tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, level.str()), tbaa));
         }
     }
 
