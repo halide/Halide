@@ -2670,6 +2670,41 @@ Value *CodeGen::slice_vector(Value *vec, int start, int size) {
         return vec;
     }
 
+    // If start, size, and vec_lanes share a common factor, do a
+    // reinterpret cast to a wider type (up to 64-bit) before
+    // slicing. This shouldn't be helpful, but it seems to result in
+    // better codegen by llvm.
+    int bits = vec->getType()->getScalarSizeInBits();
+    int factor = gcd(gcd(start, size), vec_lanes);
+    llvm::Type *wider_type = NULL;
+    if ((bits == 8 && factor % 8 == 0) ||
+        (bits == 16 && factor % 4 == 0) ||
+        (bits == 32 && factor % 2 == 0)) {
+        factor = 64 / bits;
+        wider_type = VectorType::get(i64, vec_lanes / factor);
+    } else if ((bits == 8 && factor % 8 == 0) ||
+               (bits == 16 && factor % 4 == 0)) {
+        factor = 32 / bits;
+        wider_type = VectorType::get(i32, vec_lanes / factor);
+    } else if (bits == 8 && factor % 2 == 0) {
+        factor = 16 / bits;
+        wider_type = VectorType::get(i16, vec_lanes / factor);
+    }
+    if (wider_type) {
+        debug(0) << "\n\n\nstart: " << start << " size: " << size << " vec_lanes: " << vec_lanes << "\n";
+        vec->dump();
+        wider_type->dump();
+        Value *wider = builder->CreateBitCast(vec, wider_type);
+        wider->dump();
+        Value *slice = slice_vector(wider, start / factor, size / factor);
+        slice->dump();
+        llvm::Type *scalar_type = vec->getType()->getVectorElementType();
+        scalar_type->dump();
+        llvm::Type *result_type = VectorType::get(scalar_type, size);
+        result_type->dump();
+        return builder->CreateBitCast(slice, result_type);
+    }
+
     vector<Constant *> indices(size);
     for (int i = 0; i < size; i++) {
         int idx = start + i;
