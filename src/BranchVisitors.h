@@ -21,6 +21,8 @@ namespace Internal {
  * [bound_vars] should contain entries for each bound variable that may appear in [stmt]
  * or [expr], and have its value set the linearity of the expression it is bound to,
  * which can be computed from the [expr_linearity] function defined in LinearSolve.h.
+ * The second optional scope [branch_vars], should have a non-zero entry for each variable
+ * that has previously been detected to branch in the given variable(s).
  */
 // @(
 EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
@@ -33,8 +35,18 @@ EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
                                      const Scope<int> &bound_vars,
                                      bool branch_on_minmax = false);
 
+EXPORT bool branches_linearly_in_var(Stmt stmt, const std::string &var,
+                                     const Scope<int> &bound_vars,
+                                     const Scope<int> &branch_vars,
+                                     bool branch_on_minmax = false);
+
 EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
                                      const Scope<int> &bound_vars,
+                                     bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_var(Expr expr, const std::string &var,
+                                     const Scope<int> &bound_vars,
+                                     const Scope<int> &branch_vars,
                                      bool branch_on_minmax = false);
 
 EXPORT bool branches_linearly_in_vars(Stmt stmt,
@@ -53,6 +65,18 @@ EXPORT bool branches_linearly_in_vars(Stmt stmt,
 EXPORT bool branches_linearly_in_vars(Expr expr,
                                       const Scope<int> &free_vars,
                                       const Scope<int> &bound_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Stmt stmt,
+                                      const Scope<int> &free_vars,
+                                      const Scope<int> &bound_vars,
+                                      const Scope<int> &branch_vars,
+                                      bool branch_on_minmax = false);
+
+EXPORT bool branches_linearly_in_vars(Expr expr,
+                                      const Scope<int> &free_vars,
+                                      const Scope<int> &bound_vars,
+                                      const Scope<int> &branch_vars,
                                       bool branch_on_minmax = false);
 // @}
 
@@ -87,13 +111,13 @@ EXPORT Stmt normalize_branch_conditions(Stmt stmt, const std::string& var,
                                         const Scope<Expr> &scope,
                                         const Scope<Interval> &bounds,
                                         const Scope<int> &free_vars,
-                                        const int branching_limit = 10);
+                                        const size_t branching_limit = 10);
 
 EXPORT Expr normalize_branch_conditions(Expr expr, const std::string& var,
                                         const Scope<Expr> &scope,
                                         const Scope<Interval> &bounds,
                                         const Scope<int> &free_vars,
-                                        const int branching_limit = 10);
+                                        const size_t branching_limit = 10);
 // @}
 
 }

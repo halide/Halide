@@ -452,6 +452,7 @@ void CodeGen_OpenCL_Dev::CodeGen_OpenCL_C::add_kernel(Stmt s,
     for (size_t i = 0; i < args.size(); i++) {
         if (args[i].is_buffer) {
             stream << " " << get_memory_space(args[i].name) << " ";
+            if (!args[i].write) stream << "const ";
             stream << print_type(args[i].type) << " *"
                    << print_name(args[i].name);
             allocations.push(args[i].name, args[i].type);
@@ -619,6 +620,10 @@ string CodeGen_OpenCL_Dev::get_current_kernel_name() {
 
 void CodeGen_OpenCL_Dev::dump() {
     std::cerr << src_stream.str() << std::endl;
+}
+    
+std::string CodeGen_OpenCL_Dev::print_gpu_name(const std::string &name) {
+    return name;
 }
 
 }}

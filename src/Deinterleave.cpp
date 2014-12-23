@@ -287,6 +287,16 @@ private:
                 args.push_back(op->args[idx]);
             }
             expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
+        } else if (op->name == Call::glsl_texture_load &&
+                   op->call_type == Call::Intrinsic) {
+            // glsl_texture_load returns a <uint x 4> result. Deinterleave by
+            // wrapping the call in a shuffle_vector
+            std::vector<Expr> args;
+            args.push_back(op);
+            for (int i = 0; i < new_width; i++) {
+                args.push_back(i*lane_stride + starting_lane);
+            }
+            expr = Call::make(t, Call::shuffle_vector, args, Call::Intrinsic);
         } else {
 
             // Vector calls are always parallel across the lanes, so we
