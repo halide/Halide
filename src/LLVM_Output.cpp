@@ -27,9 +27,15 @@ llvm::raw_fd_ostream *new_raw_fd_ostream(const std::string &filename) {
     return raw_out;
 }
 
-namespace {
-bool get_md_bool(llvm::Value *value, bool &result) {
+namespace Internal {
+
+bool get_md_bool(LLVMMDNodeArgumentType value, bool &result) {
+#if LLVM_VERSION < 36
     llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(value);
+#else
+    llvm::ConstantAsMetadata *cam = llvm::cast<llvm::ConstantAsMetadata>(value);
+    llvm::ConstantInt *c = llvm::cast<llvm::ConstantInt>(cam->getValue());
+#endif
     if (c) {
         result = !c->isZero();
         return true;
@@ -37,7 +43,8 @@ bool get_md_bool(llvm::Value *value, bool &result) {
     return false;
 }
 
-bool get_md_string(llvm::Value *value, std::string &result) {
+bool get_md_string(LLVMMDNodeArgumentType value, std::string &result) {
+#if LLVM_VERSION < 36
     if (llvm::dyn_cast<llvm::ConstantAggregateZero>(value)) {
         result = "";
         return true;
@@ -47,15 +54,23 @@ bool get_md_string(llvm::Value *value, std::string &result) {
         result = c->getAsCString();
         return true;
     }
+#else
+    llvm::MDString *c = llvm::dyn_cast<llvm::MDString>(value);
+    if (c) {
+        result = c->getString();
+        return true;
+    }
+#endif
     return false;
 }
+
 }
 
 void get_target_options(const llvm::Module *module, llvm::TargetOptions &options, std::string &mcpu, std::string &mattrs) {
     bool use_soft_float_abi = false;
-    get_md_bool(module->getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
-    get_md_string(module->getModuleFlag("halide_mcpu"), mcpu);
-    get_md_string(module->getModuleFlag("halide_mattrs"), mattrs);
+    Internal::get_md_bool(module->getModuleFlag("halide_use_soft_float_abi"), use_soft_float_abi);
+    Internal::get_md_string(module->getModuleFlag("halide_mcpu"), mcpu);
+    Internal::get_md_string(module->getModuleFlag("halide_mattrs"), mattrs);
 
     options = llvm::TargetOptions();
     options.LessPreciseFPMADOption = true;

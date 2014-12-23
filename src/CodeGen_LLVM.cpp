@@ -353,8 +353,13 @@ void CodeGen_LLVM::compile(const Module &input) {
 
     // Add some target specific info to the module as metadata.
     module->addModuleFlag(llvm::Module::Warning, "halide_use_soft_float_abi", use_soft_float_abi() ? 1 : 0);
+    #if LLVM_VERSION < 36
     module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", ConstantDataArray::getString(*context, mcpu()));
     module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", ConstantDataArray::getString(*context, mattrs()));
+    #else
+    module->addModuleFlag(llvm::Module::Warning, "halide_mcpu", MDString::get(*context, mcpu()));
+    module->addModuleFlag(llvm::Module::Warning, "halide_mattrs", MDString::get(*context, mattrs()));
+    #endif
 
     llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
@@ -1182,8 +1187,8 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
     // Add type-based-alias-analysis metadata to the pointer, so that
     // loads and stores to different buffers can get reordered.
-    MDNode *tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, "Halide buffer")));
-    tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, buffer), tbaa));
+    MDNode *tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, "Halide buffer")));
+    tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, buffer), tbaa));
     // We also add metadata for constant indices to allow loads and
     // stores to the same buffer to get reordered.
     if (constant_index) {
@@ -1192,7 +1197,7 @@ void CodeGen_LLVM::add_tbaa_metadata(llvm::Instruction *inst, string buffer, Exp
 
             std::stringstream level;
             level << buffer << ".width" << w << ".base" << b;
-            tbaa = MDNode::get(*context, vec<Value *>(MDString::get(*context, level.str()), tbaa));
+            tbaa = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(MDString::get(*context, level.str()), tbaa));
         }
     }
 

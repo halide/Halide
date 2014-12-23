@@ -102,9 +102,10 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function.
-    MDNode *mdNode = MDNode::get(*context, vec<Value *>(function,
-                                                        MDString::get(*context, "kernel"),
-                                                        ConstantInt::get(i32, 1)));
+    MDNode *mdNode = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(value_as_metadata_type(function),
+                                                                       MDString::get(*context, "kernel"),
+                                                                       value_as_metadata_type(ConstantInt::get(i32, 1))));
+
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(mdNode);
 
 
@@ -417,6 +418,10 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 
 void CodeGen_PTX_Dev::dump() {
     module->dump();
+}
+    
+std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
+    return name;
 }
 
 }}

@@ -267,7 +267,6 @@ set(HEADER_FILES
   Scope.h
   Simplify.h
   SlidingWindow.h
-  StmtCompiler.h
   StorageFlattening.h
   StorageFolding.h
   Substitute.h
@@ -275,6 +274,7 @@ set(HEADER_FILES
   Tracing.h
   UnrollLoops.h
   Var.h
+  VaryingAttributes.h
   VectorizeLoops.h
   CodeGen_Posix.h
   CodeGen_ARM.h
@@ -307,6 +307,8 @@ set(HEADER_FILES
   BlockFlattening.h
   LinearSolve.h
   BranchVisitors.h
+  SpecializeBranchedLoops.h
+  RemoveDeadAllocations.h
   LLVM_Runtime_Linker.h
   CodeGen.h
   Output.h
@@ -366,7 +368,6 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   UnrollLoops.cpp
   BoundsInference.cpp
   IRMatch.cpp
-  StmtCompiler.cpp
   IntegerDivisionTable.cpp
   SlidingWindow.cpp
   StorageFolding.cpp
@@ -390,6 +391,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Inline.cpp
   Qualify.cpp
   UnifyDuplicateLets.cpp
+  VaryingAttributes.cpp
   ExprUsesVar.cpp
   Introspection.cpp
   Buffer.cpp
@@ -412,6 +414,8 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   BlockFlattening.cpp
   LinearSolve.cpp
   BranchVisitors.cpp
+  SpecializeBranchedLoops.cpp
+  RemoveDeadAllocations.cpp
   LLVM_Runtime_Linker.cpp
   CodeGen.cpp
   Output.cpp
@@ -420,7 +424,15 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   "${CMAKE_BINARY_DIR}/include/Halide.h"
   ${HEADER_FILES})
 
-target_link_libraries(Halide InitialModules ${LIBS})
+# CMake's Xcode generator will run otool on all of the ${LIBS} if we pass them
+# to target_link_libraries. This makes the CMake generation step take a very
+# long time. Instead, since we add the libs to the extra.LinkFileList passed to
+# Xcode below it is not necessary to pass them to target_link_libraries as well.
+if (XCODE)
+  target_link_libraries(Halide InitialModules)
+else()
+  target_link_libraries(Halide InitialModules ${LIBS})
+endif()
 
 if (NOT WIN32)
   if (${LLVM_VERSION} GREATER 34)
@@ -445,7 +457,7 @@ if (NOT HALIDE_SHARED_LIBRARY)
 
 if (XCODE)
 
-# Create a
+# Create a link file list
 set(EXTRA_LINKFILELIST "${PROJECT_BINARY_DIR}/${PROJECT_NAME}.build/extra.LinkFileList")
 
 # Determine the location of libInitialModules.a so we can include the path to it

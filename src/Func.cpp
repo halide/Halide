@@ -3,7 +3,7 @@
 #include <string.h>
 #include <fstream>
 
-#ifdef WIN32
+#ifdef _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -21,6 +21,7 @@
 #include "IREquality.h"
 #include "HumanReadableStmt.h"
 #include "CodeGen_LLVM.h"
+#include "LLVM_Headers.h"
 #include "Output.h"
 
 namespace Halide {
@@ -38,7 +39,8 @@ using namespace Internal;
 namespace {
 
 Internal::Parameter make_user_context() {
-    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context", /*is_explicit_name*/ true);
+    return Internal::Parameter(type_of<void*>(), false, 0, "__user_context",
+        /*is_explicit_name*/ true, /*register_instance*/ false);
 }
 
 vector<Argument> add_user_context_arg(vector<Argument> args, const Target& target) {
@@ -2071,6 +2073,28 @@ Module Func::compile_to_module(const vector<Argument> &args, const std::string &
     return module;
 }
 
+
+void Func::compile_to(const Outputs &output_files, vector<Argument> args,
+                      const string &fn_name, const Target &target) {
+    user_assert(defined()) << "Can't compile undefined Func.\n";
+
+    Module m = compile_to_module(args, fn_name, target);
+
+    llvm::Module *llvm_module = output_llvm_module(m);
+
+    if (!output_files.object_name.empty()) {
+        output_object(llvm_module, output_files.object_name);
+    }
+    if (!output_files.assembly_name.empty()) {
+        output_assembly(llvm_module, output_files.assembly_name);
+    }
+    if (!output_files.bitcode_name.empty()) {
+        output_bitcode(llvm_module, output_files.bitcode_name);
+    }
+
+    delete llvm_module;
+}
+
 void Func::compile_to_bitcode(const string &filename, const vector<Argument> &args, const string &fn_name,
                               const Target &target) {
     output_bitcode(compile_to_module(args, fn_name, target), filename);
@@ -2355,7 +2379,7 @@ struct ErrorBuffer {
         }
 
         // Atomically claim some space in the buffer
-#ifdef WIN32
+#ifdef _MSC_VER
         int old_end = _InterlockedExchangeAdd((volatile long *)(&end), len);
 #else
         int old_end = __sync_fetch_and_add(&end, len);
