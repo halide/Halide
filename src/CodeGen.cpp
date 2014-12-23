@@ -2691,17 +2691,10 @@ Value *CodeGen::slice_vector(Value *vec, int start, int size) {
         wider_type = VectorType::get(i16, vec_lanes / factor);
     }
     if (wider_type) {
-        debug(0) << "\n\n\nstart: " << start << " size: " << size << " vec_lanes: " << vec_lanes << "\n";
-        vec->dump();
-        wider_type->dump();
         Value *wider = builder->CreateBitCast(vec, wider_type);
-        wider->dump();
         Value *slice = slice_vector(wider, start / factor, size / factor);
-        slice->dump();
         llvm::Type *scalar_type = vec->getType()->getVectorElementType();
-        scalar_type->dump();
         llvm::Type *result_type = VectorType::get(scalar_type, size);
-        result_type->dump();
         return builder->CreateBitCast(slice, result_type);
     }
 
