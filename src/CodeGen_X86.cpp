@@ -555,19 +555,51 @@ void CodeGen_X86::visit(const NE *op) {
 }
 
 void CodeGen_X86::visit(const Select *op) {
-    // LLVM doesn't correctly use pblendvb for u8 vectors that aren't width 16.
+
+    // LLVM doesn't correctly use pblendvb for u8 vectors that aren't
+    // width 16, so we peephole optimize them to intrinsics.
+    struct Pattern {
+        string intrin;
+        Expr pattern;
+    };
+
+    static Pattern patterns[] = {
+        {"pblendvb_ult_i8x16", select(wild_u8x0 < wild_u8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_ult_i8x16", select(wild_u8x0 < wild_u8x0, wild_u8x0, wild_u8x0)},
+        {"pblendvb_slt_i8x16", select(wild_i8x0 < wild_i8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_slt_i8x16", select(wild_i8x0 < wild_i8x0, wild_u8x0, wild_u8x0)},
+        {"pblendvb_ule_i8x16", select(wild_u8x0 <= wild_u8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_ule_i8x16", select(wild_u8x0 <= wild_u8x0, wild_u8x0, wild_u8x0)},
+        {"pblendvb_sle_i8x16", select(wild_i8x0 <= wild_i8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_sle_i8x16", select(wild_i8x0 <= wild_i8x0, wild_u8x0, wild_u8x0)},
+        {"pblendvb_ne_i8x16", select(wild_u8x0 != wild_u8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_ne_i8x16", select(wild_u8x0 != wild_u8x0, wild_u8x0, wild_u8x0)},
+        {"pblendvb_ne_i8x16", select(wild_i8x0 != wild_i8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_ne_i8x16", select(wild_i8x0 != wild_i8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_eq_i8x16", select(wild_u8x0 == wild_u8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_eq_i8x16", select(wild_u8x0 == wild_u8x0, wild_u8x0, wild_u8x0)},
+        {"pblendvb_eq_i8x16", select(wild_i8x0 == wild_i8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_eq_i8x16", select(wild_i8x0 == wild_i8x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_i8x16", select(wild_u1x0, wild_i8x0, wild_i8x0)},
+        {"pblendvb_i8x16", select(wild_u1x0, wild_u8x0, wild_u8x0)}
+    };
+
+
     if (target.has_feature(Target::SSE41) &&
         op->condition.type().is_vector() &&
         op->type.bits == 8 &&
         op->type.width != 16) {
-        Value *condition = codegen(op->condition);
-        Value *true_value = codegen(op->true_value);
-        Value *false_value = codegen(op->false_value);
-        value = call_intrin(llvm_type_of(op->type), 16, "pblendvb_i8x16",
-                            vec<Value *>(condition, true_value, false_value));
-    } else {
-        CodeGen::visit(op);
+
+        vector<Expr> matches;
+        for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {
+            if (expr_match(patterns[i].pattern, op, matches)) {
+                value = call_intrin(op->type, 16, patterns[i].intrin, matches);
+                return;
+            }
+        }
     }
+
+    CodeGen_Posix::visit(op);
 
 }
 
@@ -575,7 +607,7 @@ void CodeGen_X86::visit(const Cast *op) {
 
     if (!op->type.is_vector()) {
         // We only have peephole optimizations for vectors in here.
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
         return;
     }
 

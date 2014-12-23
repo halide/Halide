@@ -347,9 +347,9 @@ void check_sse_all() {
         //check("cvtps2pd", 4, f64(f32_1));
         //check("cvtpd2ps", 4, f32(f64_1));
 
-        check("paddq", 2*w, i64_1 + i64_2);
-        check("psubq", 2*w, i64_1 - i64_2);
-        check("pmuludq", 2*w, u64_1 * u64_2);
+        check("paddq", w, i64_1 + i64_2);
+        check("psubq", w, i64_1 - i64_2);
+        check("pmuludq", w, u64_1 * u64_2);
 
         check("packssdw", 4*w, i16(clamp(i32_1, min_i16, max_i16)));
         check("packsswb", 8*w, i8(clamp(i16_1, min_i8, max_i8)));
@@ -385,6 +385,7 @@ void check_sse_all() {
 
     // llvm doesn't distinguish between signed and unsigned multiplies
     //check("pmuldq", 4, i64(i32_1) * i64(i32_2));
+
     if (use_sse41) {
         for (int w = 2; w <= 4; w++) {
             check("pmuludq", 2*w, u64(u32_1) * u64(u32_2));
@@ -393,6 +394,8 @@ void check_sse_all() {
             check("blendvps", 2*w, select(f32_1 > 0.7f, f32_1, f32_2));
             check("blendvpd", w, select(f64_1 > cast<double>(0.7f), f64_1, f64_2));
             check("pblendvb", 8*w, select(u8_1 > 7, u8_1, u8_2));
+            check("pblendvb", 8*w, select(u8_1 == 7, u8_1, u8_2));
+            check("pblendvb", 8*w, select(u8_1 <= 7, i8_1, i8_2));
 
             check("pmaxsb", 8*w, max(i8_1, i8_2));
             check("pminsb", 8*w, min(i8_1, i8_2));
