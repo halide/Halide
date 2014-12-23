@@ -41,6 +41,11 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
     f64x4(NULL),
 
     // Wildcards for pattern matching
+    wild_u1x16(Variable::make(UInt(1, 16), "*")),
+    wild_u1x8(Variable::make(UInt(1, 8), "*")),
+    wild_u1x4(Variable::make(UInt(1, 4), "*")),
+    wild_u1x2(Variable::make(UInt(1, 2), "*")),
+
     wild_i8x8(Variable::make(Int(8, 8), "*")),
     wild_i16x4(Variable::make(Int(16, 4), "*")),
     wild_i32x2(Variable::make(Int(32, 2), "*")),
@@ -77,6 +82,7 @@ CodeGen_Posix::CodeGen_Posix(Target t) :
     wild_f32x8(Variable::make(Float(32, 8), "*")),
     wild_f64x4(Variable::make(Float(64, 4), "*")),
 
+    wild_u1x0(Variable::make(UInt(1, 0), "*")),
     wild_i8x0(Variable::make(Int(8, 0), "*")),
     wild_u8x0(Variable::make(UInt(8, 0), "*")),
     wild_i16x0(Variable::make(Int(16, 0), "*")),
