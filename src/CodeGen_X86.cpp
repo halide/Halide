@@ -554,6 +554,23 @@ void CodeGen_X86::visit(const NE *op) {
     codegen(!(op->a == op->b));
 }
 
+void CodeGen_X86::visit(const Select *op) {
+    // LLVM doesn't correctly use pblendvb for u8 vectors that aren't width 16.
+    if (target.has_feature(Target::SSE41) &&
+        op->condition.type().is_vector() &&
+        op->type.bits == 8 &&
+        op->type.width != 16) {
+        Value *condition = codegen(op->condition);
+        Value *true_value = codegen(op->true_value);
+        Value *false_value = codegen(op->false_value);
+        value = call_intrin(llvm_type_of(op->type), 16, "pblendvb_i8x16",
+                            vec<Value *>(condition, true_value, false_value));
+    } else {
+        CodeGen::visit(op);
+    }
+
+}
+
 void CodeGen_X86::visit(const Cast *op) {
 
     if (!op->type.is_vector()) {
