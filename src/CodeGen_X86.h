@@ -63,6 +63,7 @@ protected:
     void visit(const GE *);
     void visit(const EQ *);
     void visit(const NE *);
+    void visit(const Select *);
     // @}
 
     std::string mcpu() const;

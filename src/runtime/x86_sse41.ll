@@ -7,6 +7,11 @@ define weak_odr <8 x i16>  @packusdwx8(<8 x i32> %arg) nounwind alwaysinline {
   ret <8 x i16> %3
 }
 
+define weak_odr <16 x i8> @pblendvb_i8x16(<16 x i1> %c, <16 x i8> %t, <16 x i8> %f) nounwind alwaysinline {
+  %1 = select <16 x i1> %c, <16 x i8> %t, <16 x i8> %f
+  ret <16 x i8> %1
+}
+
 define weak_odr <4 x float> @floor_f32x4(<4 x float> %x) nounwind uwtable readnone optsize inlinehint alwaysinline {
   %1 = tail call <4 x float> @llvm.x86.sse41.round.ps(<4 x float> %x, i32 1)
   ret <4 x float> %1
@@ -71,4 +76,3 @@ define weak_odr <4 x i32> @abs_i32x4(<4 x i32> %x) nounwind uwtable readnone alw
 }
 
 declare <4 x i32> @llvm.x86.ssse3.pabs.d.128(<4 x i32>) nounwind readnone
-
