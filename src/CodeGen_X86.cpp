@@ -303,7 +303,7 @@ void CodeGen_X86::visit(const GT *op) {
     int bits = t.width * t.bits;
     if (t.width == 1 || bits % 128 == 0) {
         // LLVM is fine for native vector widths or scalars
-        CodeGen::visit(op);
+        CodeGen_Posix::visit(op);
     } else {
         // Non-native vector widths get legalized poorly by llvm. We
         // split it up ourselves.
@@ -388,24 +388,24 @@ void CodeGen_X86::visit(const Select *op) {
     };
 
     static Pattern patterns[] = {
-        {"pblendvb_ult_i8x16", select(wild_u8x0 < wild_u8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_ult_i8x16", select(wild_u8x0 < wild_u8x0, wild_u8x0, wild_u8x0)},
-        {"pblendvb_slt_i8x16", select(wild_i8x0 < wild_i8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_slt_i8x16", select(wild_i8x0 < wild_i8x0, wild_u8x0, wild_u8x0)},
-        {"pblendvb_ule_i8x16", select(wild_u8x0 <= wild_u8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_ule_i8x16", select(wild_u8x0 <= wild_u8x0, wild_u8x0, wild_u8x0)},
-        {"pblendvb_sle_i8x16", select(wild_i8x0 <= wild_i8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_sle_i8x16", select(wild_i8x0 <= wild_i8x0, wild_u8x0, wild_u8x0)},
-        {"pblendvb_ne_i8x16", select(wild_u8x0 != wild_u8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_ne_i8x16", select(wild_u8x0 != wild_u8x0, wild_u8x0, wild_u8x0)},
-        {"pblendvb_ne_i8x16", select(wild_i8x0 != wild_i8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_ne_i8x16", select(wild_i8x0 != wild_i8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_eq_i8x16", select(wild_u8x0 == wild_u8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_eq_i8x16", select(wild_u8x0 == wild_u8x0, wild_u8x0, wild_u8x0)},
-        {"pblendvb_eq_i8x16", select(wild_i8x0 == wild_i8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_eq_i8x16", select(wild_i8x0 == wild_i8x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_i8x16", select(wild_u1x0, wild_i8x0, wild_i8x0)},
-        {"pblendvb_i8x16", select(wild_u1x0, wild_u8x0, wild_u8x0)}
+        {"pblendvb_ult_i8x16", select(wild_u8x_ < wild_u8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_ult_i8x16", select(wild_u8x_ < wild_u8x_, wild_u8x_, wild_u8x_)},
+        {"pblendvb_slt_i8x16", select(wild_i8x_ < wild_i8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_slt_i8x16", select(wild_i8x_ < wild_i8x_, wild_u8x_, wild_u8x_)},
+        {"pblendvb_ule_i8x16", select(wild_u8x_ <= wild_u8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_ule_i8x16", select(wild_u8x_ <= wild_u8x_, wild_u8x_, wild_u8x_)},
+        {"pblendvb_sle_i8x16", select(wild_i8x_ <= wild_i8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_sle_i8x16", select(wild_i8x_ <= wild_i8x_, wild_u8x_, wild_u8x_)},
+        {"pblendvb_ne_i8x16", select(wild_u8x_ != wild_u8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_ne_i8x16", select(wild_u8x_ != wild_u8x_, wild_u8x_, wild_u8x_)},
+        {"pblendvb_ne_i8x16", select(wild_i8x_ != wild_i8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_ne_i8x16", select(wild_i8x_ != wild_i8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_eq_i8x16", select(wild_u8x_ == wild_u8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_eq_i8x16", select(wild_u8x_ == wild_u8x_, wild_u8x_, wild_u8x_)},
+        {"pblendvb_eq_i8x16", select(wild_i8x_ == wild_i8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_eq_i8x16", select(wild_i8x_ == wild_i8x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_i8x16", select(wild_u1x_, wild_i8x_, wild_i8x_)},
+        {"pblendvb_i8x16", select(wild_u1x_, wild_u8x_, wild_u8x_)}
     };
 
 
@@ -447,37 +447,37 @@ void CodeGen_X86::visit(const Cast *op) {
 
     static Pattern patterns[] = {
         {false, true, Int(8, 16), "llvm.x86.sse2.padds.b",
-         _i8(clamp(wild_i16x0 + wild_i16x0, -128, 127))},
+         _i8(clamp(wild_i16x_ + wild_i16x_, -128, 127))},
         {false, true, Int(8, 16), "llvm.x86.sse2.psubs.b",
-         _i8(clamp(wild_i16x0 - wild_i16x0, -128, 127))},
+         _i8(clamp(wild_i16x_ - wild_i16x_, -128, 127))},
         {false, true, UInt(8, 16), "llvm.x86.sse2.paddus.b",
-         _u8(min(wild_u16x0 + wild_u16x0, 255))},
+         _u8(min(wild_u16x_ + wild_u16x_, 255))},
         {false, true, UInt(8, 16), "llvm.x86.sse2.psubus.b",
-         _u8(max(wild_i16x0 - wild_i16x0, 0))},
+         _u8(max(wild_i16x_ - wild_i16x_, 0))},
         {false, true, Int(16, 8), "llvm.x86.sse2.padds.w",
-         _i16(clamp(wild_i32x0 + wild_i32x0, -32768, 32767))},
+         _i16(clamp(wild_i32x_ + wild_i32x_, -32768, 32767))},
         {false, true, Int(16, 8), "llvm.x86.sse2.psubs.w",
-         _i16(clamp(wild_i32x0 - wild_i32x0, -32768, 32767))},
+         _i16(clamp(wild_i32x_ - wild_i32x_, -32768, 32767))},
         {false, true, UInt(16, 8), "llvm.x86.sse2.paddus.w",
-         _u16(min(wild_u32x0 + wild_u32x0, 65535))},
+         _u16(min(wild_u32x_ + wild_u32x_, 65535))},
         {false, true, UInt(16, 8), "llvm.x86.sse2.psubus.w",
-         _u16(max(wild_i32x0 - wild_i32x0, 0))},
+         _u16(max(wild_i32x_ - wild_i32x_, 0))},
         {false, true, Int(16, 8), "llvm.x86.sse2.pmulh.w",
-         _i16((wild_i32x0 * wild_i32x0) / 65536)},
+         _i16((wild_i32x_ * wild_i32x_) / 65536)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.pmulhu.w",
-         _u16((wild_u32x0 * wild_u32x0) / 65536)},
+         _u16((wild_u32x_ * wild_u32x_) / 65536)},
         {false, true, UInt(8, 16), "llvm.x86.sse2.pavg.b",
-         _u8(((wild_u16x0 + wild_u16x0) + 1) / 2)},
+         _u8(((wild_u16x_ + wild_u16x_) + 1) / 2)},
         {false, true, UInt(16, 8), "llvm.x86.sse2.pavg.w",
-         _u16(((wild_u32x0 + wild_u32x0) + 1) / 2)},
+         _u16(((wild_u32x_ + wild_u32x_) + 1) / 2)},
         {false, false, Int(16, 8), "packssdwx8",
-         _i16(clamp(wild_i32x0, -32768, 32767))},
+         _i16(clamp(wild_i32x_, -32768, 32767))},
         {false, false, Int(8, 16), "packsswbx16",
-         _i8(clamp(wild_i16x0, -128, 127))},
+         _i8(clamp(wild_i16x_, -128, 127))},
         {false, false, UInt(8, 16), "packuswbx16",
-         _u8(clamp(wild_i16x0, 0, 255))},
+         _u8(clamp(wild_i16x_, 0, 255))},
         {true, false, UInt(16, 8), "packusdwx8",
-         _u16(clamp(wild_i32x0, 0, 65535))}
+         _u16(clamp(wild_i32x_, 0, 65535))}
     };
 
     for (size_t i = 0; i < sizeof(patterns)/sizeof(patterns[0]); i++) {

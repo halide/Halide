@@ -45,9 +45,9 @@ protected:
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
 
     // Wildcards for a varying number of lanes.
-    Expr wild_u1x0, wild_i8x0, wild_u8x0, wild_i16x0, wild_u16x0;
-    Expr wild_i32x0, wild_u32x0, wild_i64x0, wild_u64x0;
-    Expr wild_f32x0, wild_f64x0;
+    Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
+    Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
+    Expr wild_f32x_, wild_f64x_;
 
     // Bounds of each type.
     Expr min_i8, max_i8, max_u8;
