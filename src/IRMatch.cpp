@@ -233,8 +233,8 @@ public:
 
 bool expr_match(Expr pattern, Expr expr, vector<Expr> &matches) {
     matches.clear();
-    if (!pattern.defined() && !pattern.defined()) return true;
-    if (!pattern.defined() || !pattern.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) return true;
+    if (!pattern.defined() || !expr.defined()) return false;
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
@@ -250,8 +250,8 @@ bool expr_match(Expr pattern, Expr expr, map<string, Expr> &matches) {
     // Explicitly don't clear matches. This allows usages to pre-match
     // some variables.
 
-    if (!pattern.defined() && !pattern.defined()) return true;
-    if (!pattern.defined() || !pattern.defined()) return false;
+    if (!pattern.defined() && !expr.defined()) return true;
+    if (!pattern.defined() || !expr.defined()) return false;
 
     IRMatch eq(expr, matches);
     pattern.accept(&eq);
