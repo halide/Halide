@@ -1771,6 +1771,9 @@ private:
 
         Stmt then_case = mutate(op->then_case);
         Stmt else_case = mutate(op->else_case);
+        // Remember the statements before substitution.
+        Stmt then_nosubs = then_case;
+        Stmt else_nosubs = else_case;
 
         // Mine the condition for useful constraints to apply (eg var == value && bool_param).
         std::vector<Expr> stack;
@@ -1779,21 +1782,6 @@ private:
         while (!stack.empty()) {
             Expr next = stack.back();
             stack.pop_back();
-            if (const And *a = next.as<And>()) {
-                if (!or_chain) {
-                    stack.push_back(a->b);
-                    stack.push_back(a->a);
-                    and_chain = true;
-                }
-                continue;
-            } else if (const Or *o = next.as<Or>()) {
-                if (!and_chain) {
-                    stack.push_back(o->b);
-                    stack.push_back(o->a);
-                    or_chain = true;
-                }
-                continue;
-            }
 
             if (!or_chain) {
                 then_case = substitute(next, const_true(), then_case);
@@ -1802,35 +1790,54 @@ private:
                 else_case = substitute(next, const_false(), else_case);
             }
 
-            const EQ *eq = next.as<EQ>();
-            const NE *ne = next.as<NE>();
-            const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
-
-            if (eq && var) {
+            if (const And *a = next.as<And>()) {
                 if (!or_chain) {
-                    then_case = substitute(var->name, eq->b, then_case);
+                    stack.push_back(a->b);
+                    stack.push_back(a->a);
+                    and_chain = true;
                 }
-                if (!and_chain && eq->b.type().is_bool()) {
-                    else_case = substitute(var->name, !eq->b, then_case);
-                }
-            } else if (var) {
-                if (!or_chain) {
-                    then_case = substitute(var->name, const_true(), then_case);
-                }
+            } else if (const Or *o = next.as<Or>()) {
                 if (!and_chain) {
-                    else_case = substitute(var->name, const_false(), else_case);
+                    stack.push_back(o->b);
+                    stack.push_back(o->a);
+                    or_chain = true;
                 }
-            } else if (eq && is_const(eq->b) && !or_chain) {
-                // some_expr = const
-                then_case = substitute(eq->a, eq->b, then_case);
-            } else if (ne && is_const(ne->b) && !and_chain) {
-                // some_expr != const
-                else_case = substitute(ne->a, ne->b, else_case);
+            } else {
+                const EQ *eq = next.as<EQ>();
+                const NE *ne = next.as<NE>();
+                const Variable *var = eq ? eq->a.as<Variable>() : next.as<Variable>();
+
+                if (eq && var) {
+                    if (!or_chain) {
+                        then_case = substitute(var->name, eq->b, then_case);
+                    }
+                    if (!and_chain && eq->b.type().is_bool()) {
+                        else_case = substitute(var->name, !eq->b, then_case);
+                    }
+                } else if (var) {
+                    if (!or_chain) {
+                        then_case = substitute(var->name, const_true(), then_case);
+                    }
+                    if (!and_chain) {
+                        else_case = substitute(var->name, const_false(), else_case);
+                    }
+                } else if (eq && is_const(eq->b) && !or_chain) {
+                    // some_expr = const
+                    then_case = substitute(eq->a, eq->b, then_case);
+                } else if (ne && is_const(ne->b) && !and_chain) {
+                    // some_expr != const
+                    else_case = substitute(ne->a, ne->b, else_case);
+                }
             }
         }
 
-        then_case = mutate(then_case);
-        else_case = mutate(else_case);
+        // If substitutions have been made, simplify again.
+        if (!then_case.same_as(then_nosubs)) {
+            then_case = mutate(then_case);
+        }
+        if (!else_case.same_as(else_nosubs)) {
+            else_case = mutate(else_case);
+        }
 
         if (condition.same_as(op->condition) &&
             then_case.same_as(op->then_case) &&
