@@ -41,12 +41,6 @@ protected:
 
     llvm::Triple get_target_triple() const;
 
-    /** Generate a call to an sse or avx intrinsic */
-    // @{
-    llvm::Value *call_intrin(Type t, int w, const std::string &name, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, int w, const std::string &name, std::vector<llvm::Value *>);
-    // @}
-
     using CodeGen_Posix::visit;
 
     /** Nodes for which we want to emit specific sse/avx intrinsics */

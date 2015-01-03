@@ -568,6 +568,7 @@ const string Call::bitwise_or = "bitwise_or";
 const string Call::shift_left = "shift_left";
 const string Call::shift_right = "shift_right";
 const string Call::abs = "abs";
+const string Call::absd = "absd";
 const string Call::lerp = "lerp";
 const string Call::random = "random";
 const string Call::rewrite_buffer = "rewrite_buffer";

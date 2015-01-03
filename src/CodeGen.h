@@ -316,12 +316,29 @@ protected:
      * guarantee their alignment) */
     std::set<std::string> might_be_misaligned;
 
+    /** The user_context argument. May be a constant null if the
+     * function is being compiled without a user context. */
     llvm::Value *get_user_context() const;
 
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
     llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+
+    /** Generate a call to a vector intrinsic or runtime inlined
+     * function. The arguments are sliced up into vectors of the width
+     * given by 'intrin_vector_width', the intrinsic is called on each
+     * piece, then the results (if any) are concatenated back together
+     * into the original type 't'. For the version that takes an
+     * llvm::Type *, the type may be void, so the vector width of the
+     * arguments must be specified explicitly as
+     * 'called_vector_width'. */
+    // @{
+    llvm::Value *call_intrin(Type t, int intrin_vector_width,
+                             const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_vector_width,
+                             const std::string &name, std::vector<llvm::Value *>);
+    // @}
 
     /** Take a slice of lanes out of an llvm vector. Pads with undefs
      * if you ask for more lanes than the vector has. */
