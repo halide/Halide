@@ -1,4 +1,4 @@
-declare <8 x i16> @llvm.x86.sse41.packusdw(<4 x i32>, <4 x i32>)
+declare <8 x i16> @llvm.x86.sse41.packusdw(<4 x i32>, <4 x i32>) nounwind readnone
 
 define weak_odr <8 x i16>  @packusdwx8(<8 x i32> %arg) nounwind alwaysinline {
   %1 = shufflevector <8 x i32> %arg, <8 x i32> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>

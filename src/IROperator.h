@@ -389,6 +389,31 @@ inline Expr abs(Expr a) {
                                 vec(a), Internal::Call::Intrinsic);
 }
 
+/** Return the absolute difference between two values. Vectorizes
+ * cleanly. Returns an unsigned value of the same bit width. There are
+ * various ways to write this yourself, but they contain numerous
+ * gotchas and don't always compile to good code, so use this
+ * instead. */
+inline Expr absd(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "absd of undefined Expr\n";
+    Internal::match_types(a, b);
+    Type t = a.type();
+
+    if (t.is_float()) {
+        // Floats can just use abs.
+        return abs(a - b);
+    }
+
+    if (t.is_int()) {
+        // The argument may be signed, but the return type is unsigned.
+        t.code = Type::UInt;
+    }
+
+    return Internal::Call::make(t, Internal::Call::absd,
+                                vec(a, b),
+                                Internal::Call::Intrinsic);
+}
+
 /** Returns an expression similar to the ternary operator in C, except
  * that it always evaluates all arguments. If the first argument is
  * true, then return the second, else return the third. Typically

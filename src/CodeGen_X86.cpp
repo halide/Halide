@@ -149,56 +149,6 @@ Expr _f64(Expr e) {
     return cast(Float(64, e.type().width), e);
 }
 
-Value *CodeGen_X86::call_intrin(Type result_type, int vector_width, const string &name, vector<Expr> args) {
-    vector<Value *> arg_values(args.size());
-    for (size_t i = 0; i < args.size(); i++) {
-        arg_values[i] = codegen(args[i]);
-    }
-
-    return call_intrin(llvm_type_of(result_type), vector_width, name, arg_values);
-}
-
-Value *CodeGen_X86::call_intrin(llvm::Type *result_type, int vector_width, const string &name, vector<Value *> arg_values) {
-    int result_vector_width = (int)result_type->getVectorNumElements();
-    if (vector_width != result_vector_width) {
-        // Cut up each arg into appropriately-sized pieces, call the
-        // intrinsic on each, then splice together the results.
-        vector<Value *> results;
-        for (int start = 0; start < result_vector_width; start += vector_width) {
-            vector<Value *> args;
-            for (size_t i = 0; i < arg_values.size(); i++) {
-                args.push_back(slice_vector(arg_values[i], start, vector_width));
-            }
-
-            llvm::Type *result_slice_type =
-                llvm::VectorType::get(result_type->getScalarType(), vector_width);
-
-            results.push_back(call_intrin(result_slice_type, vector_width, name, args));
-        }
-        Value *result = concat_vectors(results);
-        return slice_vector(result, 0, result_vector_width);
-    }
-
-    vector<llvm::Type *> arg_types(arg_values.size());
-    for (size_t i = 0; i < arg_values.size(); i++) {
-        arg_types[i] = arg_values[i]->getType();
-    }
-
-    llvm::Function *fn = module->getFunction(name);
-
-    if (!fn) {
-        llvm::Type *intrinsic_result_type = VectorType::get(result_type->getScalarType(), vector_width);
-        FunctionType *func_t = FunctionType::get(intrinsic_result_type, arg_types, false);
-        fn = llvm::Function::Create(func_t, llvm::Function::ExternalLinkage, name, module);
-        fn->setCallingConv(CallingConv::C);
-    }
-
-    CallInst *call = builder->CreateCall(fn, arg_values);
-    call->setDoesNotAccessMemory();
-    call->setDoesNotThrow();
-
-    return call;
-}
 
 namespace {
 
