@@ -115,3 +115,6 @@ binaries.withType(NativeExecutableBinary) { binary ->
     println "done with archs"
 }
 
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.2'
+}

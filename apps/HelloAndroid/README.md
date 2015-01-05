@@ -30,3 +30,17 @@ make sure the bin directory is on one's PATH.
 If everything is setup correctly, running the build.sh script in this
 directory, with the current directory set to here, whould build the
 HelloAndroid apk and install it on a connected Android device.
+
+Gradle
+===
+To use Gradle create local.properties file in this folder with sdk.dir and
+ndk.dir variables defined like so:
+```
+sdk.dir=~/Downloads/android-sdk
+ndk.dir=~/Downloads/android-ndk
+```
+After that run ```gradlew build``` which will produce .apk file ready for
+deployment to the Android device.
+
+On Linux/Mac you can use ```build-gradle.sh``` to build, deploy and run
+this sample application
