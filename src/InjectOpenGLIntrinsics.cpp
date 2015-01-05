@@ -105,9 +105,21 @@ private:
             }
         }
 
-        expr = Call::make(call->type, Call::glsl_texture_load,
-                          args, Call::Intrinsic,
-                          Function(), 0, call->image, call->param);
+        // This intrinsic represents the GLSL texture2D function, and that
+        // function returns a vec4 result.
+        Type load_type = call->type;
+        load_type.width = 4;
+
+        Expr load_call = Call::make(load_type, Call::glsl_texture_load,
+                                    vector<Expr>(&args[0],&args[4]),
+                                    Call::Intrinsic,
+                                    Function(), 0, call->image, call->param);
+
+        // Add a shuffle_vector intrinsic to swizzle a single channel scalar out
+        // of the vec4 loaded by glsl_texture_load. This may be widened to the
+        // size of the Halide function color dimension during vectorization.
+        expr = Call::make(call->type, Call::shuffle_vector,
+                          vec(load_call, args[4]), Call::Intrinsic);
     }
 
     void visit(const LetStmt *let) {

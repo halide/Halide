@@ -138,9 +138,9 @@ print-%:
 
 ifeq ($(USE_LLVM_SHARED_LIB), )
 LLVM_STATIC_LIBS = -L $(LLVM_LIBDIR) $(shell $(LLVM_CONFIG) --libs bitwriter bitreader linker ipo mcjit $(LLVM_OLD_JIT_COMPONENT) $(X86_LLVM_CONFIG_LIB) $(ARM_LLVM_CONFIG_LIB) $(OPENCL_LLVM_CONFIG_LIB) $(NATIVE_CLIENT_LLVM_CONFIG_LIB) $(PTX_LLVM_CONFIG_LIB) $(AARCH64_LLVM_CONFIG_LIB) $(MIPS_LLVM_CONFIG_LIB))
-LLVM_SHARED_LIBS = 
-else 
-LLVM_STATIC_LIBS = 
+LLVM_SHARED_LIBS =
+else
+LLVM_STATIC_LIBS =
 LLVM_SHARED_LIBS = -L $(LLVM_LIBDIR) -lLLVM-$(LLVM_FULL_VERSION)
 endif
 
@@ -240,10 +240,196 @@ DISTRIB_DIR=distrib
 endif
 
 FILTERS_DIR = $(BUILD_DIR)/filters
-SOURCE_FILES = CodeGen.cpp CodeGen_Internal.cpp CodeGen_X86.cpp CodeGen_GPU_Host.cpp CodeGen_PTX_Dev.cpp CodeGen_OpenCL_Dev.cpp CodeGen_GPU_Dev.cpp CodeGen_Posix.cpp CodeGen_ARM.cpp IR.cpp IRMutator.cpp IRPrinter.cpp IRVisitor.cpp FindCalls.cpp CodeGen_C.cpp Substitute.cpp ModulusRemainder.cpp Bounds.cpp Derivative.cpp OneToOne.cpp Func.cpp Simplify.cpp IREquality.cpp Util.cpp Function.cpp IROperator.cpp Lower.cpp Debug.cpp Parameter.cpp Reduction.cpp RDom.cpp Profiling.cpp Tracing.cpp StorageFlattening.cpp VectorizeLoops.cpp UnrollLoops.cpp BoundsInference.cpp IRMatch.cpp StmtCompiler.cpp IntegerDivisionTable.cpp SlidingWindow.cpp StorageFolding.cpp InlineReductions.cpp RemoveTrivialForLoops.cpp Deinterleave.cpp DebugToFile.cpp Type.cpp JITCompiledModule.cpp EarlyFree.cpp UniquifyVariableNames.cpp CSE.cpp Tuple.cpp Lerp.cpp Target.cpp SkipStages.cpp SpecializeClampedRamps.cpp RemoveUndef.cpp FastIntegerDivide.cpp AllocationBoundsInference.cpp Inline.cpp Qualify.cpp UnifyDuplicateLets.cpp CodeGen_PNaCl.cpp ExprUsesVar.cpp Random.cpp Introspection.cpp Buffer.cpp Param.cpp Image.cpp Error.cpp CodeGen_OpenGL_Dev.cpp InjectOpenGLIntrinsics.cpp Schedule.cpp FuseGPUThreadLoops.cpp InjectHostDevBufferCopies.cpp ParallelRVar.cpp BoundaryConditions.cpp Memoization.cpp HumanReadableStmt.cpp StmtToHtml.cpp CodeGen_MIPS.cpp ObjectInstanceRegistry.cpp Generator.cpp BlockFlattening.cpp LinearSolve.cpp BranchVisitors.cpp VaryingAttributes.cpp SpecializeBranchedLoops.cpp Matrix.cpp
+SOURCE_FILES = \
+  AllocationBoundsInference.cpp \
+  BlockFlattening.cpp \
+  BoundaryConditions.cpp \
+  Bounds.cpp \
+  BoundsInference.cpp \
+  BranchVisitors.cpp \
+  Buffer.cpp \
+  CodeGen_ARM.cpp \
+  CodeGen_C.cpp \
+  CodeGen.cpp \
+  CodeGen_GPU_Dev.cpp \
+  CodeGen_GPU_Host.cpp \
+  CodeGen_Internal.cpp \
+  CodeGen_MIPS.cpp \
+  CodeGen_OpenCL_Dev.cpp \
+  CodeGen_OpenGL_Dev.cpp \
+  CodeGen_PNaCl.cpp \
+  CodeGen_Posix.cpp \
+  CodeGen_PTX_Dev.cpp \
+  CodeGen_X86.cpp \
+  CSE.cpp \
+  Debug.cpp \
+  DebugToFile.cpp \
+  Deinterleave.cpp \
+  Derivative.cpp \
+  EarlyFree.cpp \
+  Error.cpp \
+  ExprUsesVar.cpp \
+  FastIntegerDivide.cpp \
+  FindCalls.cpp \
+  Func.cpp \
+  Function.cpp \
+  FuseGPUThreadLoops.cpp \
+  Generator.cpp \
+  HumanReadableStmt.cpp \
+  Image.cpp \
+  InjectHostDevBufferCopies.cpp \
+  InjectOpenGLIntrinsics.cpp \
+  Inline.cpp \
+  InlineReductions.cpp \
+  IntegerDivisionTable.cpp \
+  Introspection.cpp \
+  IR.cpp \
+  IREquality.cpp \
+  IRMatch.cpp \
+  IRMutator.cpp \
+  IROperator.cpp \
+  IRPrinter.cpp \
+  IRVisitor.cpp \
+  JITCompiledModule.cpp \
+  Lerp.cpp \
+  LinearSolve.cpp \
+  Lower.cpp \
+  Matrix.cpp \
+  Memoization.cpp \
+  ModulusRemainder.cpp \
+  ObjectInstanceRegistry.cpp \
+  OneToOne.cpp \
+  ParallelRVar.cpp \
+  Param.cpp \
+  Parameter.cpp \
+  Profiling.cpp \
+  Qualify.cpp \
+  Random.cpp \
+  RDom.cpp \
+  Reduction.cpp \
+  RemoveDeadAllocations.cpp \
+  RemoveTrivialForLoops.cpp \
+  RemoveUndef.cpp \
+  Schedule.cpp \
+  Simplify.cpp \
+  SkipStages.cpp \
+  SlidingWindow.cpp \
+  SpecializeBranchedLoops.cpp \
+  SpecializeClampedRamps.cpp \
+  StmtCompiler.cpp \
+  StmtToHtml.cpp \
+  StorageFlattening.cpp \
+  StorageFolding.cpp \
+  Substitute.cpp \
+  Target.cpp \
+  Tracing.cpp \
+  Tuple.cpp \
+  Type.cpp \
+  UnifyDuplicateLets.cpp \
+  UniquifyVariableNames.cpp \
+  UnrollLoops.cpp \
+  Util.cpp \
+  VaryingAttributes.cpp \
+  VectorizeLoops.cpp
 
 # The externally-visible header files that go into making Halide.h. Don't include anything here that includes llvm headers.
-HEADER_FILES = Introspection.h Util.h Type.h Argument.h Bounds.h BoundsInference.h Buffer.h buffer_t.h CodeGen_C.h CodeGen.h CodeGen_X86.h CodeGen_GPU_Host.h CodeGen_PTX_Dev.h CodeGen_OpenCL_Dev.h CodeGen_GPU_Dev.h Deinterleave.h Derivative.h OneToOne.h Extern.h Func.h Function.h Image.h InlineReductions.h IntegerDivisionTable.h IntrusivePtr.h IREquality.h IR.h IRMatch.h IRMutator.h IROperator.h IRPrinter.h IRVisitor.h FindCalls.h JITCompiledModule.h Lambda.h Debug.h Lower.h MainPage.h ModulusRemainder.h Parameter.h Param.h RDom.h Reduction.h RemoveTrivialForLoops.h Schedule.h Scope.h Simplify.h SlidingWindow.h StmtCompiler.h StorageFlattening.h StorageFolding.h Substitute.h Profiling.h Tracing.h UnrollLoops.h Var.h VectorizeLoops.h CodeGen_Posix.h CodeGen_ARM.h DebugToFile.h EarlyFree.h UniquifyVariableNames.h CSE.h Tuple.h Lerp.h Target.h SkipStages.h SpecializeClampedRamps.h RemoveUndef.h FastIntegerDivide.h AllocationBoundsInference.h Inline.h Qualify.h UnifyDuplicateLets.h CodeGen_PNaCl.h ExprUsesVar.h Random.h Error.h CodeGen_OpenGL_Dev.h InjectOpenGLIntrinsics.h FuseGPUThreadLoops.h InjectHostDevBufferCopies.h ParallelRVar.h BoundaryConditions.h Memoization.h HumanReadableStmt.h  StmtToHtml.h CodeGen_MIPS.h Generator.h ObjectInstanceRegistry.h BlockFlattening.h LinearSolve.h BranchVisitors.h SpecializeBranchedLoops.h Matrix.h
+HEADER_FILES = \
+  AllocationBoundsInference.h \
+  Argument.h \
+  BlockFlattening.h \
+  BoundaryConditions.h \
+  Bounds.h \
+  BoundsInference.h \
+  BranchVisitors.h \
+  Buffer.h \
+  buffer_t.h \
+  CodeGen_ARM.h \
+  CodeGen_C.h \
+  CodeGen_GPU_Dev.h \
+  CodeGen_GPU_Host.h \
+  CodeGen.h \
+  CodeGen_MIPS.h \
+  CodeGen_OpenCL_Dev.h \
+  CodeGen_OpenGL_Dev.h \
+  CodeGen_PNaCl.h \
+  CodeGen_Posix.h \
+  CodeGen_PTX_Dev.h \
+  CodeGen_X86.h \
+  CSE.h \
+  Debug.h \
+  DebugToFile.h \
+  Deinterleave.h \
+  Derivative.h \
+  EarlyFree.h \
+  Error.h \
+  ExprUsesVar.h \
+  Extern.h \
+  FastIntegerDivide.h \
+  FindCalls.h \
+  Func.h \
+  Function.h \
+  FuseGPUThreadLoops.h \
+  Generator.h \
+  HumanReadableStmt.h \
+  Image.h \
+  InjectHostDevBufferCopies.h \
+  InjectOpenGLIntrinsics.h \
+  Inline.h \
+  InlineReductions.h \
+  IntegerDivisionTable.h \
+  Introspection.h \
+  IntrusivePtr.h \
+  IREquality.h \
+  IR.h \
+  IRMatch.h \
+  IRMutator.h \
+  IROperator.h \
+  IRPrinter.h \
+  IRVisitor.h \
+  JITCompiledModule.h \
+  Lambda.h \
+  Lerp.h \
+  LinearSolve.h \
+  Lower.h \
+  MainPage.h \
+  Matrix.x \
+  Memoization.h \
+  ModulusRemainder.h \
+  ObjectInstanceRegistry.h \
+  OneToOne.h \
+  ParallelRVar.h \
+  Parameter.h \
+  Param.h \
+  Profiling.h \
+  Qualify.h \
+  Random.h \
+  RDom.h \
+  Reduction.h \
+  RemoveDeadAllocations.h \
+  RemoveTrivialForLoops.h \
+  RemoveUndef.h \
+  Schedule.h \
+  Scope.h \
+  Simplify.h \
+  SkipStages.h \
+  SlidingWindow.h \
+  SpecializeBranchedLoops.h \
+  SpecializeClampedRamps.h \
+  StmtCompiler.h \
+  StmtToHtml.h \
+  StorageFlattening.h \
+  StorageFolding.h \
+  Substitute.h \
+  Target.h \
+  Tracing.h \
+  Tuple.h \
+  Type.h \
+  UnifyDuplicateLets.h \
+  UniquifyVariableNames.h \
+  UnrollLoops.h \
+  Util.h \
+  Var.h \
+  VectorizeLoops.h
 
 OBJECTS = $(SOURCE_FILES:%.cpp=$(BUILD_DIR)/%.o)
 HEADERS = $(HEADER_FILES:%.h=src/%.h)
@@ -715,4 +901,3 @@ $(BIN_DIR)/HalideProf: util/HalideProf.cpp
 
 $(BIN_DIR)/HalideTrace: util/HalideTrace.cpp
 	$(CXX) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -o $@
-
