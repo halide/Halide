@@ -1070,8 +1070,8 @@ void CodeGen_ARM::visit(const Store *op) {
             slice_args[0] = ptr; // Set the pointer argument
 
             // Take a slice of each arg
-            for (int i = 1; i < num_vecs + 1; i++) {
-                slice_args[i] = slice_vector(slice_args[i], i, intrin_type.width);
+            for (int j = 1; j < num_vecs + 1; j++) {
+                slice_args[j] = slice_vector(slice_args[j], i, intrin_type.width);
             }
 
             CallInst *store = builder->CreateCall(fn, slice_args);
