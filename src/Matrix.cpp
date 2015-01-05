@@ -324,6 +324,8 @@ int Partition::depth() {
 Partition Partition::get_level(int n) {
     int lvl = level();
 
+    std::cout << "\tgetting partition level " << n << ". current level = " << lvl << "\n";
+
     IntrusivePtr<PartitionContents> p = contents;
     while (p.defined() && n < lvl) {
         p = p.ptr->prev;
@@ -334,6 +336,8 @@ Partition Partition::get_level(int n) {
         p = p.ptr->next;
         ++lvl;
     }
+
+    std::cout << "\tresult contents @ " << p.ptr << "\n";
 
     return Partition(p);
 }
@@ -355,42 +359,42 @@ Stage Partition::schedule() {
 }
 
 Partition Partition::parent() {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't get parent\n";
     IntrusivePtr<PartitionContents> prev_contents = contents.ptr->prev;
     internal_assert(prev_contents.defined());
     return Partition(prev_contents);
 }
 
 Partition Partition::child() {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't get child\n";
     IntrusivePtr<PartitionContents> next_contents = contents.ptr->next;
     internal_assert(next_contents.defined());
     return Partition(next_contents);
 }
 
 bool Partition::is_root() const {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't check root status\n";
     IntrusivePtr<PartitionContents> prev_contents = contents.ptr->prev;
     return !prev_contents.defined();
 }
 
 Expr Partition::num_rows() const {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't check number of rows\n";
     return contents.ptr->par_rows;
 }
 
 Expr Partition::num_cols() const {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't check number of columns\n";
     return contents.ptr->par_cols;
 }
 
 Var Partition::row_var() const {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't get row var\n";
     return contents.ptr->bi;
 }
 
 Var Partition::col_var() const {
-    internal_assert(contents.defined());
+    internal_assert(contents.defined()) << "Can't get column var\n";
     return contents.ptr->bj;
 }
 
@@ -450,13 +454,13 @@ Partition &Partition::unroll_cols() {
 }
 
 Partition &Partition::parallel_rows() {
-    // std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
+    std::cout << "\tparallelizing variable: " << row_var().name() << "\n";
     schedule().parallel(row_var());
     return *this;
 }
 
 Partition &Partition::parallel_cols() {
-    // std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
+    std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
     schedule().parallel(col_var());
     return *this;
 }
@@ -888,7 +892,7 @@ Matrix &Matrix::unroll_rows(int level) {
     row_loop_types[level] = For::Unrolled;
 
     if (level < p.depth()) {
-        Partition p = p.get_level(level);
+        p = p.get_level(level);
         p.unroll_rows();
     }
 
@@ -912,7 +916,7 @@ Matrix &Matrix::unroll_cols(int level) {
     col_loop_types[level] = For::Unrolled;
 
     if (level < p.depth()) {
-        Partition p = p.get_level(level);
+        p = p.get_level(level);
         p.unroll_cols();
     }
 
@@ -927,7 +931,7 @@ Matrix &Matrix::parallel_rows(int level) {
 
     Partition p = get_partition();
     if (level < 0) {
-        level = p.depth();
+        level = p.depth()-1;
     }
 
     if ((int)row_loop_types.size() <= level) {
@@ -936,7 +940,7 @@ Matrix &Matrix::parallel_rows(int level) {
     row_loop_types[level] = For::Parallel;
 
     if (level < p.depth()) {
-        Partition p = p.get_level(level);
+        p = p.get_level(level);
         p.parallel_rows();
     }
 
@@ -951,7 +955,7 @@ Matrix &Matrix::parallel_cols(int level) {
 
     Partition p = get_partition();
     if (level < 0) {
-        level = p.depth();
+        level = p.depth()-1;
     }
 
     if ((int)col_loop_types.size() <= level) {
@@ -960,7 +964,7 @@ Matrix &Matrix::parallel_cols(int level) {
     col_loop_types[level] = For::Parallel;
 
     if (level < p.depth()) {
-        Partition p = p.get_level(level);
+        p = p.get_level(level);
         p.parallel_cols();
     }
 
@@ -1341,17 +1345,21 @@ Matrix operator*(Matrix A, Matrix B) {
         }
     }
 
-    const int  block_size = 32;
     const int  vec_size = 8;
+    const int  l1_size = 2;
+    const int  l2_size = 2;
+    // const int  tile_size = 4;
+    const int  block_size = 32;
 
     const Expr sum_size = A.num_cols();
     const Expr proxy_size = ((sum_size + block_size - 1) / block_size) * block_size;
 
     Var i = A.row_var();
     Var j = A.col_var();
+#if 1
     Var bi("bi"), bj("bj");
     RDom k(0, proxy_size);
-    RVar ki;
+    RVar ki, kii;
 
     Func A_mat("A_mat");
     A_mat(i, j) = select(i < prod_nrows,
@@ -1369,20 +1377,26 @@ Matrix operator*(Matrix A, Matrix B) {
     prod(i, j) += A_mat(i, k) * B_mat(k, j);
 
     Matrix C(prod_nrows, prod_ncols, prod, result_name);
-    C.partition(block_size);
+    C.partition(vec_size).vectorize()
+     .partition(l1_size)
+     .partition(l2_size).parallel_cols();
 
     // prod.tile(i, j, bi, bj, block_size, block_size).parallel(j)
     //     .vectorize(bi, vec_size).unroll(bi);
 
     Partition base = C.get_partition().get_level(0);
-    Partition block = C.get_partition().get_level(1);
-    base.rename_row(block.row_var());
-    block.parallel_cols();
-    prod.compute_at(C, block.row_var())
+    Partition vecs = C.get_partition().get_level(1);
+    Partition l1 = C.get_partition().get_level(2);
+    Partition l2 = C.get_partition().get_level(3);
+    base.rename_row(l2.row_var());
+    vecs.rename_row(l2.row_var());
+    l1.rename_row(l2.row_var());
+    prod.compute_at(C, l2.row_var())
         .vectorize(i, vec_size).unroll(i);
     prod.update(0)
         .split(k, k, ki, block_size)
-        .reorder(i, j, ki, k)
+        .split(ki, ki, kii, l2_size)
+        .reorder(kii, i, j, ki, k)
         .vectorize(i, vec_size).unroll(i);
 
     A_mat.compute_at(prod, k).vectorize(i, vec_size).unroll(i);
@@ -1391,22 +1405,28 @@ Matrix operator*(Matrix A, Matrix B) {
     // const int vec_size  = 32 / A.type().bytes();
     // const int tile_size = 4;
     // // const int block_size = vec_size * tile_size;
+#else
+    Matrix prod(prod_nrows, prod_ncols, A.type(), "prod");
+    Matrix C(prod_nrows, prod_ncols, A.type(), result_name);
 
-    // RDom k(0, A.num_cols(), "k");
-    // prod(i, j) += A(i, k) * B(k, j);
+    RDom k(0, A.num_cols(), "k");
+    prod(i, j) += A(i, k) * B(k, j);
+    C(i, j) = prod(i, j);
 
-    // Partition prod_part = prod.get_partition(1);
-    // prod_part.partition(vec_size).vectorize().unroll_cols()
-    //          .partition(tile_size).unroll_rows()//.unroll_cols()
-    //          // .partition(2)//.unroll_rows().unroll_cols()
-    //          .parallel_cols();
+    C.partition(block_size)/*.partition(4)*/.parallel_rows();
+    prod.compute_at_rows(C.get_partition().get_level(1))
+        .partition(vec_size).vectorize();
 
-    // A.compute_at_rows(prod_part.get_level(2))
-    //         .partition(vec_size, 1).vectorize();
+    Partition prod_part = prod.get_partition(1);
+    prod_part.partition(vec_size).vectorize()//.unroll_cols()
+             .partition(tile_size);//.unroll_rows();
 
-    // B.compute_at_rows(prod_part.get_level(2))
-    //         .partition(vec_size, 1).vectorize();
+    A.compute_at_rows(prod_part.get_level(2))
+            .partition(vec_size, 1).vectorize();
 
+    B.compute_at_rows(prod_part.get_level(2))
+            .partition(vec_size, 1).vectorize();
+#endif
     return C;
 }
 
