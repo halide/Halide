@@ -716,6 +716,7 @@ void CodeGen_ARM::visit(const Div *op) {
         Value *mult_wide = builder->CreateIntCast(mult, wider, false);
         Value *wide_val = builder->CreateMul(flipped_wide, mult_wide);
         // Do the shift (add 8 or 16 to narrow back down)
+        #if LLVM_VERSION < 35
         if (op->type.bits == 32 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
             val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", vec<Value *>(wide_val, shift_amount));
@@ -725,7 +726,9 @@ void CodeGen_ARM::visit(const Div *op) {
         } else if (op->type.bits == 8 && op->type.is_vector() && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
             val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", vec<Value *>(wide_val, shift_amount));
-        } else {
+        } else
+        #endif
+        {
             Constant *shift_amount = ConstantInt::get(wider, (shift + op->type.bits));
             val = builder->CreateLShr(wide_val, shift_amount);
             val = builder->CreateIntCast(val, narrower, true);
@@ -768,6 +771,7 @@ void CodeGen_ARM::visit(const Div *op) {
         val = builder->CreateMul(val, mult);
 
         // Narrow
+        #if LLVM_VERSION < 35
         if (op->type.bits == 32 && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -32);
             val = call_intrin(narrower, 2, "llvm.arm.neon.vshiftn.v2i32", vec<Value *>(val, shift_amount));
@@ -777,7 +781,9 @@ void CodeGen_ARM::visit(const Div *op) {
         } else if (op->type == UInt(8, 8) && shift == 0) {
             Constant *shift_amount = ConstantInt::get(wider, -8);
             val = call_intrin(narrower, 8, "llvm.arm.neon.vshiftn.v8i8", vec<Value *>(val, shift_amount));
-        } else {
+        } else
+        #endif
+        {
             int shift_bits = op->type.bits;
             // For method 1, we can do the final shift here too.
             if (method == 1) {
