@@ -392,7 +392,7 @@ HEADER_FILES = \
   LinearSolve.h \
   Lower.h \
   MainPage.h \
-  Matrix.x \
+  Matrix.h \
   Memoization.h \
   ModulusRemainder.h \
   ObjectInstanceRegistry.h \

@@ -324,7 +324,7 @@ int Partition::depth() {
 Partition Partition::get_level(int n) {
     int lvl = level();
 
-    std::cout << "\tgetting partition level " << n << ". current level = " << lvl << "\n";
+    // std::cout << "\tgetting partition level " << n << ". current level = " << lvl << "\n";
 
     IntrusivePtr<PartitionContents> p = contents;
     while (p.defined() && n < lvl) {
@@ -337,7 +337,7 @@ Partition Partition::get_level(int n) {
         ++lvl;
     }
 
-    std::cout << "\tresult contents @ " << p.ptr << "\n";
+    // std::cout << "\tresult contents @ " << p.ptr << "\n";
 
     return Partition(p);
 }
@@ -454,13 +454,13 @@ Partition &Partition::unroll_cols() {
 }
 
 Partition &Partition::parallel_rows() {
-    std::cout << "\tparallelizing variable: " << row_var().name() << "\n";
+    // std::cout << "\tparallelizing variable: " << row_var().name() << "\n";
     schedule().parallel(row_var());
     return *this;
 }
 
 Partition &Partition::parallel_cols() {
-    std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
+    // std::cout << "\tparallelizing variable: " << col_var().name() << "\n";
     schedule().parallel(col_var());
     return *this;
 }
@@ -1378,8 +1378,8 @@ Matrix operator*(Matrix A, Matrix B) {
 
     Matrix C(prod_nrows, prod_ncols, prod, result_name);
     C.partition(vec_size).vectorize()
-     .partition(l1_size)
-     .partition(l2_size).parallel_cols();
+        .partition(l1_size)
+        .partition(l2_size).parallel_cols();
 
     // prod.tile(i, j, bi, bj, block_size, block_size).parallel(j)
     //     .vectorize(bi, vec_size).unroll(bi);
@@ -1395,8 +1395,8 @@ Matrix operator*(Matrix A, Matrix B) {
         .vectorize(i, vec_size).unroll(i);
     prod.update(0)
         .split(k, k, ki, block_size)
-        .split(ki, ki, kii, l2_size)
-        .reorder(kii, i, j, ki, k)
+        // .split(ki, ki, kii, l2_size)
+        .reorder(i, ki, j, k)
         .vectorize(i, vec_size).unroll(i);
 
     A_mat.compute_at(prod, k).vectorize(i, vec_size).unroll(i);

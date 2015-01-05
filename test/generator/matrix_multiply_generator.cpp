@@ -12,7 +12,6 @@ class MatrixMultiply : public Generator<MatrixMultiply> {
 
     Func build() override {
         // Expr size = (A_in.width() / 32) * 32;
-
         if (algorithm == 0) {
             Matrix A(A_in, "A");
             Matrix B(B_in, "B");
