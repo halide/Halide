@@ -1694,7 +1694,7 @@ void CodeGen::visit(const Call *op) {
             llvm::Function * builtin_abs =
                 find_vector_runtime_function(name, op->type.width).first;
 
-            if (builtin_abs) {
+            if (t.is_vector() && builtin_abs) {
                 codegen(Call::make(op->type, name, op->args, Call::Extern));
             } else {
                 // Generate select(x >= 0, x, -x) instead
@@ -1733,7 +1733,7 @@ void CodeGen::visit(const Call *op) {
             llvm::Function *builtin_absd =
                 find_vector_runtime_function(name, op->type.width).first;
 
-            if (builtin_absd) {
+            if (t.is_vector() && builtin_absd) {
                 codegen(Call::make(op->type, name, op->args, Call::Extern));
             } else {
                 // Use a select instead
