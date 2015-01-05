@@ -36,8 +36,8 @@ Gradle
 To use Gradle create local.properties file in this folder with sdk.dir and
 ndk.dir variables defined like so:
 ```
-sdk.dir=~/Downloads/android-sdk
-ndk.dir=~/Downloads/android-ndk
+sdk.dir=/Users/joe/Downloads/android-sdk
+ndk.dir=/Users/joe/Downloads/android-ndk
 ```
 After that run ```gradlew build``` which will produce .apk file ready for
 deployment to the Android device.
