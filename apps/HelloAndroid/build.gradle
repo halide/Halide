@@ -93,7 +93,8 @@ binaries.withType(NativeExecutableBinary) { binary ->
                 def proc = [linkTask.outputFile].execute(
                     [
                         "HL_TARGET=$hl_target",
-                        "DYLD_LIBRARY_PATH=${projectDir}/../../bin"],
+                        "DYLD_LIBRARY_PATH=${projectDir}/../../bin",
+                        "LD_LIBRARY_PATH=${projectDir}/../../bin"],
                     destDir)
                 proc.waitFor()
                 if (proc.exitValue() != 0) {
