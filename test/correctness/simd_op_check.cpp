@@ -797,9 +797,12 @@ void check_neon_all() {
         check("vld1.8",  8*w, in_u8(x+y));
         check("vld1.16", 4*w, in_i16(x+y));
         check("vld1.16", 4*w, in_u16(x+y));
-        check("vld1.32", 2*w, in_i32(x+y));
-        check("vld1.32", 2*w, in_u32(x+y));
-        check("vld1.32", 2*w, in_f32(x+y));
+        if (w > 1) {
+            // When w == 1, llvm emits vldr instead
+            check("vld1.32", 2*w, in_i32(x+y));
+            check("vld1.32", 2*w, in_u32(x+y));
+            check("vld1.32", 2*w, in_f32(x+y));
+        }
 
         // VLD2     X       -       Load Two-Element Structures
         check("vld2.32", 4*w, in_i32(x*2) + in_i32(x*2+1));
@@ -858,7 +861,10 @@ void check_neon_all() {
         check("vmla.i16", 4*w, u16_1 + u16_2*u16_3);
         check("vmla.i32", 2*w, i32_1 + i32_2*i32_3);
         check("vmla.i32", 2*w, u32_1 + u32_2*u32_3);
-        check("vmla.f32", 2*w, f32_1 + f32_2*f32_3);
+        if (w == 1 || w == 2) {
+            // Older llvms don't always fuse this at non-native widths
+            check("vmla.f32", 2*w, f32_1 + f32_2*f32_3);
+        }
 
         // VMLS     I, F    F, D    Multiply Subtract
         check("vmls.i8",  8*w, i8_1 - i8_2*i8_3);
@@ -867,7 +873,10 @@ void check_neon_all() {
         check("vmls.i16", 4*w, u16_1 - u16_2*u16_3);
         check("vmls.i32", 2*w, i32_1 - i32_2*i32_3);
         check("vmls.i32", 2*w, u32_1 - u32_2*u32_3);
-        check("vmls.f32", 2*w, f32_1 - f32_2*f32_3);
+        if (w == 1 || w == 2) {
+            // Older llvms don't always fuse this at non-native widths
+            check("vmls.f32", 2*w, f32_1 - f32_2*f32_3);
+        }
 
         // VMLAL    I       -       Multiply Accumulate Long
         check("vmlal.s8",  8*w, i16_1 + i16(i8_2)*i8_3);
