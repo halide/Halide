@@ -1,0 +1,117 @@
+repositories {
+    jcenter()
+}
+
+buildscript {
+    repositories {
+        jcenter()
+
+        mavenCentral()
+        maven {
+            url 'https://github.com/igordmn/mvn-repo/raw/master/releases'
+        }
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:1.0.0'
+        classpath 'com.dmi.gradle:android-ndk-classic:0.2.0'
+    }
+
+}
+apply plugin: 'cpp'
+
+sources {
+    halide_generator {
+        cpp(CppSourceSet) {
+            source {
+                srcDirs "jni/"
+                include "halide.cpp"
+            }
+        }
+    }
+}
+
+executables {
+    halide_generator {
+        binaries.all {
+            cppCompiler.args "-I","${projectDir}/../../include"
+            linker.args "-lHalide", "-L", "${projectDir}/../../bin"
+        }
+    }
+}
+
+apply plugin: 'com.android.application'
+apply plugin: 'android-ndk-classic'
+
+android {
+    sourceSets.main {
+        java.srcDirs = ["src/"]
+        jni.srcDirs = ["jni/"]
+        manifest.srcFile "AndroidManifest.xml"
+        res.srcDirs = ["res/"]
+    }
+
+    compileSdkVersion 21
+    buildToolsVersion "21.1.2"
+
+    defaultConfig {
+        applicationId "com.example.hellohalide"
+        minSdkVersion 15
+        targetSdkVersion 21
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+binaries.withType(NativeExecutableBinary) { binary ->
+    def jnis = "${projectDir}/jni"
+    def halideRoot = "${projectDir}/../../"
+    def linkTask = binary.tasks.link
+    println "linktask output file is " + linkTask.outputFile
+    Map<String, String> archs = [
+        "arm-32-android": "armeabi",
+        "arm-32-android-armv7s": "armeabi-v7a",
+        "x86-64-android-sse41": "x86_64",
+        "x86-32-android": "x86"]
+
+    archs.each {
+        arch -> println "creating task for " + arch.key + "->" + arch.value
+        def hl_target = arch.key
+        def android_abi = arch.value
+        def task_name = "generate_halide_binary_${binary.name.capitalize()}_${android_abi}"
+        def destDir = new File(jnis, "/halide_generated_${android_abi}")
+        def generateHalideTask = task(task_name) {
+            dependsOn linkTask
+            doFirst {
+                println "Executing " + linkTask.outputFile + "..."
+                destDir.mkdirs()
+                def proc = [linkTask.outputFile].execute(
+                    [
+                        "HL_TARGET=$hl_target",
+                        "DYLD_LIBRARY_PATH=${projectDir}/../../bin"],
+                    destDir)
+                proc.waitFor()
+                if (proc.exitValue() != 0) {
+                    println "return code: ${proc.exitValue()}"
+                    println "stderr: ${proc.err.text}"
+                    println "stdout: ${proc.in.text}"
+                }
+            }
+        }
+        binary.builtBy generateHalideTask
+        project.tasks.each {
+            if(it.name.endsWith("NdkClassic")) {
+                it.inputs.dir destDir
+                it.dependsOn generateHalideTask
+                println "Updated $it.name"
+            }
+        }
+    }
+    println "done with archs"
+}
+
