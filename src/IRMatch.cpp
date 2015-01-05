@@ -64,7 +64,7 @@ public:
     bool types_match(Type pattern_type, Type expr_type) {
         bool bits_matches  = (pattern_type.bits  == -1) || (pattern_type.bits  == expr_type.bits);
         bool width_matches = (pattern_type.width == -1) || (pattern_type.width == expr_type.width);
-        bool code_matches  = (pattern_type.code  == -1) || (pattern_type.code  == expr_type.code);
+        bool code_matches  = (pattern_type.code  == expr_type.code);
         return bits_matches && width_matches && code_matches;
     }
 
