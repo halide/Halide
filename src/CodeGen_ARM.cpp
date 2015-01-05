@@ -1171,13 +1171,13 @@ void CodeGen_ARM::visit(const Load *op) {
         if (offset) {
             base = simplify(base - offset);
             mod_rem.remainder -= offset;
-            if (mod_rem.remainder < 0) {
-                mod_rem.remainder += mod_rem.modulus;
-            }
+            mod_rem.remainder = mod_imp(mod_rem.remainder, mod_rem.modulus);
         }
 
         int alignment = op->type.bytes();
         alignment *= gcd(gcd(mod_rem.modulus, mod_rem.remainder), 16);
+        internal_assert(alignment > 0);
+
         Value *align = ConstantInt::get(i32, alignment);
 
         Value *ptr = codegen_buffer_pointer(op->name, op->type.element_of(), base);
