@@ -464,7 +464,6 @@ DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
-DECLARE_CPP_INITMOD(shared_jit_types)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -744,7 +743,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     }
 
     if (module_type != ModuleJITShared) {
-        modules.push_back(get_initmod_shared_jit_types(c, bits_64, debug));
         // Math intrinsics vary slightly across platforms
         if (t.os == Target::Windows && t.bits == 32) {
             modules.push_back(get_initmod_win32_math_ll(c));
