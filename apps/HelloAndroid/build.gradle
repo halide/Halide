@@ -56,7 +56,7 @@ android {
     defaultConfig {
         applicationId "com.example.hellohalide"
         minSdkVersion 15
-        targetSdkVersion 21
+        targetSdkVersion 17
         versionCode 1
         versionName "1.0"
     }
@@ -76,9 +76,11 @@ binaries.withType(NativeExecutableBinary) { binary ->
     Map<String, String> archs = [
         "arm-32-android": "armeabi",
         "arm-32-android-armv7s": "armeabi-v7a",
+        "arm-64-android": "arm64-v8a",
+        "mips-32-android": "mips",
         "x86-64-android-sse41": "x86_64",
-        "x86-32-android": "x86"]
-
+        "x86-32-android": "x86",
+        ]
     archs.each {
         arch -> println "creating task for " + arch.key + "->" + arch.value
         def hl_target = arch.key

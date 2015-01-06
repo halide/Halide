@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-android update project -p . --target android-21
+android update project -p . --target android-17
 cd jni
 c++ halide.cpp -L ../../../bin -lHalide -I ../../../include -ldl -lpthread -lz
 
