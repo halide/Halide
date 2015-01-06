@@ -8,6 +8,7 @@
 #include "Deinterleave.h"
 #include "Simplify.h"
 #include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "CodeGen_Internal.h"
 #include "Lerp.h"
 #include "Util.h"
@@ -100,14 +101,16 @@ CodeGen::CodeGen(Target t) :
 
 void CodeGen::jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *module,
                            std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
-    // If the module contains a memoization cache cleanup function, run it when the module dies.
-    llvm::Function *fn = module->getFunction("halide_memoization_cache_cleanup");
-    if (fn) {
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_memoization_cache_release in module\n";
-        void (*cleanup_routine)(void *) =
-            reinterpret_bits<void (*)(void *)>(f);
-        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
+    if (cleanup_routines) {
+        // If the module contains a memoization cache cleanup function, run it when the module dies.
+        llvm::Function *fn = module->getFunction("halide_memoization_cache_cleanup");
+        if (fn) {
+            void *f = ee->getPointerToFunction(fn);
+            internal_assert(f) << "Could not find compiled form of halide_memoization_cache_release in module\n";
+            void (*cleanup_routine)(void *) =
+                reinterpret_bits<void (*)(void *)>(f);
+            cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
+        }
     }
 }
 
@@ -352,15 +355,16 @@ llvm::Type *CodeGen::llvm_type_of(Type t) {
     return Internal::llvm_type_of(context, t);
 }
 
-JITCompiledModule CodeGen::compile_to_function_pointers() {
+JITModule CodeGen::compile_to_function_pointers() {
     internal_assert(module) << "No module defined. Must call compile before calling compile_to_function_pointer.\n";
 
-    JITCompiledModule m;
+    JITModule m;
 
-    m.compile_module(this, module, function_name);
+    JITModule shared_runtime = JITSharedRuntime::Get(this);
+    m.compile_module(this, module, function_name, vec(shared_runtime), std::vector<std::string>());
 
     // We now relinquish ownership of the module, and give it to the
-    // JITCompiledModule object that we're returning.
+    // JITModule object that we're returning.
     owns_module = false;
 
     return m;

@@ -48,10 +48,11 @@ struct SharedCudaContext {
     SharedCudaContext() : ptr(0), lock(0) {
     }
 
+    // TODO: Fix this comment when it is no longer true.
     // Note that we never free the context, because static destructor
     // order is unpredictable, and we can't free the context before
-    // all JITCompiledModules are freed. Users may be stashing Funcs
-    // or Images in globals, and these keep JITCompiledModules around.
+    // all JITModules are freed. Users may be stashing Funcs
+    // or Images in globals, and these keep JITModules around.
 } cuda_ctx;
 
 extern "C" {

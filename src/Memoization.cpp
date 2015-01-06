@@ -448,7 +448,7 @@ private:
 };
 
 Stmt inject_memoization(Stmt s, const std::map<std::string, Function> &env,
-			const std::string &name) {
+                        const std::string &name) {
     InjectMemoization injector(env, name);
 
     return injector.mutate(s);
