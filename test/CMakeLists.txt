@@ -67,7 +67,7 @@ if (WITH_TEST_STATIC)
     if (WIN32)
     add_custom_command(OUTPUT "${STATIC_LIB}"
       DEPENDS "${GENERATOR}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/Release/${GENERATOR}${CMAKE_EXECUTABLE_SUFFIX}"
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${BUILD_TYPE}/${GENERATOR}${CMAKE_EXECUTABLE_SUFFIX}"
       COMMAND "lib.exe" "/OUT:${STATIC_LIB}" "${SCRATCH_DIR}/*.o"
       WORKING_DIRECTORY "${SCRATCH_DIR}"
       )
@@ -111,7 +111,7 @@ function(add_generator_dependency target scratch_dir gen_target gen_name func_na
     # TODO(srj): this has not yet been tested on Windows.
     add_custom_command(OUTPUT "${FILTER_LIB}" "${FILTER_HDR}"
       DEPENDS "${gen_target}"
-      COMMAND "${CMAKE_BINARY_DIR}/bin/Release/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
+      COMMAND "${CMAKE_BINARY_DIR}/bin/${BUILD_TYPE}/${gen_target}${CMAKE_EXECUTABLE_SUFFIX}" "-g" "${gen_name}" "-f" "${func_name}" "-o" "${scratch_dir}" ${ARGN}
       COMMAND "lib.exe" "/OUT:${FILTER_LIB}" "${scratch_dir}\\${func_name}.o"
       WORKING_DIRECTORY "${scratch_dir}"
       )

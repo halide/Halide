@@ -368,7 +368,6 @@ private:
         branch.extent = curr_extent.top();
         branch.content = content;
         branches.push_back(branch);
-        // debug(0) << "Added " << branch << "\n";
 
         return true;
     }
@@ -551,6 +550,10 @@ private:
                         new_args.push_back(args[first]);
                         new_args.back().push_back(branch.content);
 
+                        if (new_args.size() > branching_limit) {
+                            goto fail;
+                        }
+
                         // Case: Intermediate intervals...
                         for (size_t k = first+1; k < last; ++k) {
                             new_branch_points.push_back(branch_points[k]);
@@ -616,6 +619,7 @@ private:
                     for (size_t j = 0; j < i; ++j) {
                         branches.pop_back();
                     }
+                    pop_bounds();
                     goto fail;
                 }
 
