@@ -18,6 +18,8 @@
 
 #ifdef USE_MCJIT
 #include <llvm/ExecutionEngine/MCJIT.h>
+// TODO: Does this need to be conditionalized to LLVM 3.6?
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
 #else
 #include <llvm/ExecutionEngine/JIT.h>
 #endif

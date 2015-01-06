@@ -228,7 +228,7 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
 
     debug(user_context) << "SHADER SOURCE:\n"
-			<< source << "\n";
+                        << source << "\n";
 
     GLuint shader = ST.CreateShader(type);
     CHECK_GLERROR(1);
@@ -1548,7 +1548,7 @@ WEAK int halide_opengl_dev_run(
     debug(user_context) << "Vertex buffer:";
     for (int i=0;i!=vertex_buffer_size;++i) {
         if (!(i%num_padded_attributes)) {
-	  debug(user_context) << "\n";
+          debug(user_context) << "\n";
         }
         debug(user_context) << vertex_buffer[i] << " ";
     }

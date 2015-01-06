@@ -12,7 +12,7 @@
 #include "Param.h"
 #include "Argument.h"
 #include "RDom.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "Image.h"
 #include "Target.h"
 #include "Tuple.h"
@@ -410,7 +410,7 @@ class Func {
 
     /** A JIT-compiled version of this function that we save so that
      * we don't have to rejit every time we want to evaluated it. */
-    Internal::JITCompiledModule compiled_module;
+    Internal::JITModule compiled_module;
 
     /** Invalidate the cached lowered stmt and compiled module. */
     void invalidate_cache();
@@ -835,7 +835,7 @@ public:
      * If you are statically compiling, you can also just define your
      * own versions of the tracing functions (see HalideRuntime.h),
      * and they will clobber Halide's versions. */
-    EXPORT void set_custom_trace(Internal::JITCompiledModule::TraceFn);
+    EXPORT void set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *));
 
     /** Set the function called to print messages from the runtime.
      * If you are compiling statically, you can also just define your

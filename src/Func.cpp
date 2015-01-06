@@ -1389,7 +1389,7 @@ Stage Func::update(int idx) {
 
 void Func::invalidate_cache() {
     lowered = Stmt();
-    compiled_module = JITCompiledModule();
+    compiled_module = JITModule();
 }
 
 Func::operator Stage() const {
@@ -2260,53 +2260,74 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
     error_handler = handler;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.set_error_handler) {
         compiled_module.set_error_handler(handler);
     }
+#endif
 }
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
     custom_malloc = cust_malloc;
     custom_free = cust_free;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.set_custom_allocator) {
         compiled_module.set_custom_allocator(cust_malloc, cust_free);
     }
+#endif
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
     custom_do_par_for = cust_do_par_for;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.set_custom_do_par_for) {
         compiled_module.set_custom_do_par_for(cust_do_par_for);
     }
+#endif
 }
 
 void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
     custom_do_task = cust_do_task;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.set_custom_do_task) {
         compiled_module.set_custom_do_task(cust_do_task);
     }
+#endif
 }
 
-void Func::set_custom_trace(Internal::JITCompiledModule::TraceFn t) {
-    custom_trace = t;
+void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
+    custom_trace = trace_fn;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.set_custom_trace) {
         compiled_module.set_custom_trace(t);
     }
+#endif
 }
 
 void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     custom_print = cust_print;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.set_custom_print) {
         compiled_module.set_custom_print(custom_print);
     }
+#endif
 }
 
 void Func::memoization_cache_set_size(uint64_t size) {
     cache_size = size;
+    // TODO: Figure this out
+#if 0
     if (compiled_module.memoization_cache_set_size) {
         compiled_module.memoization_cache_set_size(size);
     }
+#endif
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
@@ -2387,17 +2408,20 @@ bool Func::prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf) {
     memset(buf->buf, 0, Internal::ErrorBuffer::MaxBufSize);
     buf->end = 0;
     buf->next_error_handler = has_custom_error_handler ? error_handler : NULL;
+    // TODO: Figure this out
+#if 0
     compiled_module.set_error_handler(Internal::ErrorBuffer::handler);
+#endif
     jit_user_context.set_scalar(buf);
     return has_custom_error_handler;
 }
 
 void Func::realize(Realization dst, const Target &target) {
-    if (!compiled_module.wrapped_function) {
+    if (!compiled_module.jit_wrapper_function()) {
         compile_jit(target);
     }
 
-    internal_assert(compiled_module.wrapped_function);
+    internal_assert(compiled_module.jit_wrapper_function());
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2417,6 +2441,8 @@ void Func::realize(Realization dst, const Target &target) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
+    // TODO: Figure this out.
+#if 0
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
     compiled_module.set_custom_allocator(custom_malloc, custom_free);
@@ -2425,6 +2451,7 @@ void Func::realize(Realization dst, const Target &target) {
     compiled_module.set_custom_trace(custom_trace);
     compiled_module.set_custom_print(custom_print);
     compiled_module.memoization_cache_set_size(cache_size);
+#endif
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2459,12 +2486,15 @@ void Func::realize(Realization dst, const Target &target) {
     bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
 
     Internal::debug(2) << "Calling jitted function\n";
-    int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+    int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
+    // TODO: Remove after Buffer is sorted out.
+#if 0
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
     }
+#endif
 
     if (exit_status && !has_custom_error_handler) {
         // Only report the errors if no custom error handler was installed
@@ -2477,12 +2507,11 @@ void Func::infer_input_bounds(Buffer dst) {
 }
 
 void Func::infer_input_bounds(Realization dst) {
-    if (!compiled_module.wrapped_function) {
+    if (!compiled_module.jit_wrapper_function()) {
         compile_jit();
     }
 
-    internal_assert(compiled_module.wrapped_function);
-
+    internal_assert(compiled_module.jit_wrapper_function());
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2502,6 +2531,7 @@ void Func::infer_input_bounds(Realization dst) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
+#if 0
     // In case these have changed since the last realization
     compiled_module.set_error_handler(error_handler);
     compiled_module.set_custom_allocator(custom_malloc, custom_free);
@@ -2510,6 +2540,7 @@ void Func::infer_input_bounds(Realization dst) {
     compiled_module.set_custom_trace(custom_trace);
     compiled_module.set_custom_print(custom_print);
     compiled_module.memoization_cache_set_size(cache_size);
+#endif
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2567,7 +2598,7 @@ void Func::infer_input_bounds(Realization dst) {
             old_buffer[j] = *tracked_buffers[j];
         }
         Internal::debug(2) << "Calling jitted function\n";
-        int exit_status = compiled_module.wrapped_function(&(arg_values[0]));
+        int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
 
         if (exit_status && !has_custom_error_handler) {
             // Only report the errors if no custom error handler was installed
@@ -2640,9 +2671,12 @@ void Func::infer_input_bounds(Realization dst) {
         }
     }
 
+    // TODO: Remove after Buffer is sorted out.
+#if 0
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
     }
+#endif
 }
 
 void *Func::compile_jit(const Target &target) {
@@ -2704,7 +2738,7 @@ void *Func::compile_jit(const Target &target) {
 
     compiled_module = cg.compile_to_function_pointers();
 
-    return compiled_module.function;
+    return compiled_module.main_function();
 }
 
 void Func::test() {
