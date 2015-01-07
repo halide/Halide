@@ -473,16 +473,54 @@ void prune_varying_attributes(Stmt loop_stmt, std::map<std::string, Expr>& varyi
     }
 }
 
-// This visitor changes the type of variables tagged with .varying to float, and
-// then propagates the float expression up through the expression, casting where
-// necessary.
-class CastVaryingVariablesToFloat : public IRMutator {
+// This visitor changes the type of variables tagged with .varying to float,
+// since GLSL will only interpolate floats. In the case that the type of the
+// varying attribute was integer, the interpolated float value is snapped to the
+// integer grid and cast to the integer type. This case occurs with coordinate
+// expressions where the integer loop variables are manipulated without being
+// converted to floating point. In other cases, like an affine transformation of
+// image coordinates, the loop variables are cast to floating point within the
+// interpolated expression.
+class CastVaryingVariables : public IRMutator {
 protected:
     using IRMutator::visit;
 
     virtual void visit(const Variable *op) {
         if ((ends_with(op->name, ".varying")) && (op->type != Float(32))) {
-            expr = Variable::make(Float(32), op->name);
+            // The incoming variable will be float type because GLSL only
+            // interpolates floats
+            Expr v = Variable::make(Float(32), op->name);
+
+            // If the varying attribute expression that this variable replaced
+            // was integer type, snap the interpolated floating point variable
+            // back to the integer grid.
+            expr = Cast::make(op->type, floor(v + 0.5f));
+        } else {
+            // Otherwise, the variable keeps its float type.
+            expr = op;
+        }
+    }
+};
+
+// This visitor casts the named variables to float, and then propagates the
+// float type through the expression. The variable is offset by 0.5f
+class CastVariablesToFloatAndOffset : public IRMutator {
+protected:
+    using IRMutator::visit;
+
+    virtual void visit(const Variable *op) {
+
+        // Check to see if the variable matches a loop variable name
+        if (std::find(names.begin(), names.end(), op->name) != names.end()) {
+            // This case is used by integer type loop variables. They are cast
+            // to float and offset.
+            expr = Sub::make(Cast::make(float_type(op), op), 0.5f);
+
+        } else if (scope.contains(op->name) && (op->type != scope.get(op->name).type())) {
+            // Otherwise, check to see if it is defined by a modified let
+            // expression and if so, change the type of the variable to match
+            // the modified expression
+            expr = Variable::make(scope.get(op->name).type(), op->name);
         } else {
             expr = op;
         }
@@ -547,34 +585,6 @@ protected:
         }
 
         expr = Select::make(op->condition, mutated_true_value, mutated_false_value);
-    }
-
-    virtual void visit(const Let *op) { IRMutator::visit(op); };
-    virtual void visit(const LetStmt *op) { IRMutator::visit(op); }
-};
-
-// This visitor casts the named variables to float, and then propagates the
-// float type through the expression. The variable is offset by 0.5f
-class CastVariablesToFloatAndOffset : public CastVaryingVariablesToFloat {
-protected:
-    using CastVaryingVariablesToFloat::visit;
-
-    virtual void visit(const Variable *op) {
-
-        // Check to see if the variable matches a loop variable name
-        if (std::find(names.begin(), names.end(), op->name) != names.end()) {
-            // This case is used by integer type loop variables. They are cast
-            // to float and offset.
-            expr = Sub::make(Cast::make(float_type(op), op), 0.5f);
-
-        } else if (scope.contains(op->name) && (op->type != scope.get(op->name).type())) {
-            // Otherwise, check to see if it is defined by a modified let
-            // expression and if so, change the type of the variable to match
-            // the modified expression
-            expr = Variable::make(scope.get(op->name).type(), op->name);
-        } else {
-            expr = op;
-        }
     }
 
     virtual void visit(const Let *op) {
@@ -1199,8 +1209,10 @@ public:
             // loop_stmt- it only contains variables tagged with .varying
 
             // The GPU will only interpolate floating point values so the varying
-            // attribute expression must be converted to floating point.
-            loop_stmt = CastVaryingVariablesToFloat().mutate(loop_stmt);
+            // attribute variables must be converted to floating point. If the
+            // original varying expression was integer, casts are inserts to
+            // snap the value back to the integer grid.
+            loop_stmt = CastVaryingVariables().mutate(loop_stmt);
 
             // Insert two new for-loops for vertex buffer generation on the host
             // before the two GPU scheduled for-loops
