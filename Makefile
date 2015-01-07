@@ -150,9 +150,6 @@ OPENGL_LDFLAGS = -framework OpenGL -framework AGL
 endif
 endif
 
-# Remove some non-llvm libs that llvm-config has helpfully included
-LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_STATIC_LIBS))
-
 ifneq ($(WITH_PTX), )
 ifneq (,$(findstring ptx,$(HL_TARGET)))
 TEST_PTX = 1
@@ -426,15 +423,32 @@ INITIAL_MODULES = $(RUNTIME_CPP_COMPONENTS:%=$(BUILD_DIR)/initmod.%_32.o) $(RUNT
 .PHONY: all
 all: $(BIN_DIR)/libHalide.a $(BIN_DIR)/libHalide.so include/Halide.h include/HalideRuntime.h test_internal
 
+ifeq ($(USE_LLVM_SHARED_LIB), )
+$(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
+	# Determine the relevant object files from llvm with a dummy
+	# compilation. Passing -t to the linker gets it to list which
+	# object files in which archives it uses to resolve
+	# symbols. We only care about the libLLVM ones.
+	@rm -rf $(BUILD_DIR)/llvm_objects
+	@mkdir -p $(BUILD_DIR)/llvm_objects
+	$(CXX) -o /dev/null $(OBJECTS) -Wl,-t -Wl,-unresolved-symbols=ignore-all $(LLVM_STATIC_LIBS) | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
+	# Extract the necessary object files from the llvm archives.
+	cd $(BUILD_DIR)/llvm_objects; xargs -L1 ar x < list
+	# Archive together all the halide and llvm object files
+	@-mkdir -p $(BIN_DIR)
+	@rm -f $(BIN_DIR)/libHalide.a
+	ar q $(BIN_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES) $(BUILD_DIR)/llvm_objects/*.o
+	ranlib $(BIN_DIR)/libHalide.a
+else
 $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	@-mkdir -p $(BIN_DIR)
-	$(LD) -r -o $(BUILD_DIR)/Halide.o $(OBJECTS) $(INITIAL_MODULES) $(LIBS)
-	rm -f $(BIN_DIR)/libHalide.a
-	ar q $(BIN_DIR)/libHalide.a $(BUILD_DIR)/Halide.o
+	@rm -f $(BIN_DIR)/libHalide.a
+	ar q $(BIN_DIR)/libHalide.a $(OBJECTS) $(INITIAL_MODULES)
 	ranlib $(BIN_DIR)/libHalide.a
+endif
 
 $(BIN_DIR)/libHalide.so: $(BIN_DIR)/libHalide.a
-	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
+	$(CXX) $(BUILD_BIT_SIZE) -shared $(OBJECTS) $(INITIAL_MODULES) $(LLVM_STATIC_LIBS) $(LLVM_LDFLAGS) $(LLVM_SHARED_LIBS) -ldl -lz -lpthread -o $(BIN_DIR)/libHalide.so
 
 include/Halide.h: $(HEADERS) src/HalideFooter.h $(BIN_DIR)/build_halide_h
 	mkdir -p include
