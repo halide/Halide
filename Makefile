@@ -431,9 +431,10 @@ $(BIN_DIR)/libHalide.a: $(OBJECTS) $(INITIAL_MODULES)
 	# symbols. We only care about the libLLVM ones.
 	@rm -rf $(BUILD_DIR)/llvm_objects
 	@mkdir -p $(BUILD_DIR)/llvm_objects
-	$(CXX) -o /dev/null $(OBJECTS) -Wl,-t -Wl,-unresolved-symbols=ignore-all $(LLVM_STATIC_LIBS) | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
+	echo "int main(int, char **) {return 0;}" > $(BUILD_DIR)/empty_main.cpp
+	$(CXX) -o /dev/null $(BUILD_DIR)/empty_main.cpp $(OBJECTS) $(INITIAL_MODULES) -Wl,-t $(LLVM_STATIC_LIBS) -ldl -lz -lpthread | grep libLLVM | sed "s/[()]/ /g" > $(BUILD_DIR)/llvm_objects/list
 	# Extract the necessary object files from the llvm archives.
-	cd $(BUILD_DIR)/llvm_objects; xargs -L1 ar x < list
+	cd $(BUILD_DIR)/llvm_objects; xargs -n2 ar x < list
 	# Archive together all the halide and llvm object files
 	@-mkdir -p $(BIN_DIR)
 	@rm -f $(BIN_DIR)/libHalide.a
