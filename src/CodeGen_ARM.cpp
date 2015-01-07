@@ -1171,7 +1171,9 @@ void CodeGen_ARM::visit(const Load *op) {
         if (offset) {
             base = simplify(base - offset);
             mod_rem.remainder -= offset;
-            mod_rem.remainder = mod_imp(mod_rem.remainder, mod_rem.modulus);
+            if (mod_rem.modulus) {
+                mod_rem.remainder = mod_imp(mod_rem.remainder, mod_rem.modulus);
+            }
         }
 
         int alignment = op->type.bytes();
