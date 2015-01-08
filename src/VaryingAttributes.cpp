@@ -514,7 +514,7 @@ protected:
         if (std::find(names.begin(), names.end(), op->name) != names.end()) {
             // This case is used by integer type loop variables. They are cast
             // to float and offset.
-            expr = Sub::make(Cast::make(float_type(op), op), 0.5f);
+            expr = Expr(op) - 0.5f;
 
         } else if (scope.contains(op->name) && (op->type != scope.get(op->name).type())) {
             // Otherwise, check to see if it is defined by a modified let
