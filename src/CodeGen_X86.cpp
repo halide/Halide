@@ -260,6 +260,9 @@ void CodeGen_X86::visit(const GT *op) {
         Value *a = codegen(op->a), *b = codegen(op->b);
 
         int slice_size = 128 / t.bits;
+        if (target.has_feature(Target::AVX) && bits > 128) {
+            slice_size = 256 / t.bits;
+        }
 
         vector<Value *> result;
         for (int i = 0; i < op->type.width; i += slice_size) {
@@ -293,6 +296,9 @@ void CodeGen_X86::visit(const EQ *op) {
         Value *a = codegen(op->a), *b = codegen(op->b);
 
         int slice_size = 128 / t.bits;
+        if (target.has_feature(Target::AVX) && bits > 128) {
+            slice_size = 256 / t.bits;
+        }
 
         vector<Value *> result;
         for (int i = 0; i < op->type.width; i += slice_size) {

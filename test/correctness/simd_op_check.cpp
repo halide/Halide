@@ -293,20 +293,25 @@ void check_sse_all() {
         check("pmulhuw", 4*w, u16((u32(u16_1) * u32(u16_2))>>16));
         check("pmulhuw", 4*w, u16_1 / 15);
 
+
+        check("cmpeqps", 2*w, select(f32_1 == f32_2, 1.0f, 2.0f));
+        check("cmpltps", 2*w, select(f32_1 < f32_2, 1.0f, 2.0f));
+
+        // These get normalized to not of eq, and not of lt with the args flipped
+        //check("cmpneqps", 2*w, cast<int32_t>(f32_1 != f32_2));
+        //check("cmpleps", 2*w, cast<int32_t>(f32_1 <= f32_2));
+
     }
 
-
+    // These guys get normalized to the integer versions for widths other than 128-bits
     // check("andnps", 4, bool_1 & (~bool_2));
     check("andps", 4, bool_1 & bool_2);
     check("orps", 4, bool_1 | bool_2);
     check("xorps", 4, bool_1 ^ bool_2);
 
-    check("cmpeqps", 4, select(f32_1 == f32_2, 1.0f, 2.0f));
-    //check("cmpneqps", 4, select(f32_1 != f32_2, 1.0f, 2.0f));
-    //check("cmpleps", 4, select(f32_1 <= f32_2, 1.0f, 2.0f));
-    check("cmpltps", 4, select(f32_1 < f32_2, 1.0f, 2.0f));
 
-    // These ones are not necessary, because we just flip the args and use the above two
+
+    // These ones are not necessary, because we just flip the args and cmpltps or cmpleps
     //check("cmpnleps", 4, select(f32_1 > f32_2, 1.0f, 2.0f));
     //check("cmpnltps", 4, select(f32_1 >= f32_2, 1.0f, 2.0f));
 
