@@ -1772,6 +1772,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = allocation_bounds_inference(s, env, func_bounds);
     debug(2) << "Lowering after allocation bounds inference:\n" << s << '\n';
 
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
+
     // This uniquifies the variable names, so we're good to simplify
     // after this point. This lets later passes assume syntactic
     // equivalence means semantic equivalence.
@@ -1804,10 +1808,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     debug(1) << "Performing storage flattening...\n";
     s = storage_flattening(s, order.back(), env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
-
-    debug(1) << "Removing code that depends on undef values...\n";
-    s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";

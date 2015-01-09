@@ -12,9 +12,9 @@
 namespace Halide {
 
 namespace Internal {
-/** Is the expression either an IntImm, a FloatImm, or a Cast of the
- * same, or a Ramp or Broadcast of the same. Doesn't do any constant
- * folding. */
+/** Is the expression either an IntImm, a FloatImm, a StringImm, or a
+ * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
+ * any constant folding. */
 EXPORT bool is_const(Expr e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
@@ -60,6 +60,10 @@ EXPORT bool is_one(Expr e);
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
 EXPORT bool is_two(Expr e);
+
+/** Is the statement a no-op (which we represent as either an
+ * undefined Stmt, or as an Evaluate node of a constant) */
+EXPORT bool is_no_op(Stmt s);
 
 /** Given an integer value, cast it into a designated integer type
  * and return the bits as int. Unsigned types are returned as bits in the int
