@@ -1805,6 +1805,10 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
     s = storage_flattening(s, order.back(), env);
     debug(2) << "Lowering after storage flattening:\n" << s << "\n\n";
 
+    debug(1) << "Removing code that depends on undef values...\n";
+    s = remove_undef(s);
+    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
+
     if (t.has_gpu_feature() || t.has_feature(Target::OpenGL)) {
         debug(1) << "Injecting host <-> dev buffer copies...\n";
         s = inject_host_dev_buffer_copies(s);
@@ -1816,10 +1820,6 @@ Stmt lower(Function f, const Target &t, const vector<IRMutator *> &custom_passes
         s = fuse_gpu_thread_loops(s);
         debug(2) << "Lowering after injecting per-block gpu synchronization:\n" << s << "\n\n";
     }
-
-    debug(1) << "Removing code that depends on undef values...\n";
-    s = remove_undef(s);
-    debug(2) << "Lowering after removing code that depends on undef values:\n" << s << "\n\n";
 
     debug(1) << "Simplifying...\n";
     s = simplify(s);
