@@ -74,6 +74,12 @@ bool is_const(Expr e, int value) {
     return false;
 }
 
+bool is_no_op(Stmt s) {
+    if (!s.defined()) return true;
+    const Evaluate *e = s.as<Evaluate>();
+    return e && is_const(e->value);
+}
+
 const int * as_const_int(Expr e) {
     const IntImm *i = e.as<IntImm>();
     return i ? &(i->value) : NULL;
