@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
     }
 
     Benchmarks<float> ("Eigen::sgemv", 1000).run(argv[1], std::stoi(argv[2]));
-    Benchmarks<double>("Eigen::sgemv", 1000).run(argv[1], std::stoi(argv[2]));
+    Benchmarks<double>("Eigen::dgemv", 1000).run(argv[1], std::stoi(argv[2]));
 
     return 0;
 }

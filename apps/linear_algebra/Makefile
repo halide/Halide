@@ -1,7 +1,7 @@
 include ../support/Makefile.inc
 
 EIGEN_DIR ?= /usr/include/eigen3
-CXXFLAGS += -g -Wall -std=c++11
+CXXFLAGS += -O3 -fopenmp -Wall -std=c++11
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
 
@@ -23,7 +23,8 @@ KERNELS = \
 	dgemv_trans
 
 BENCHMARKS = \
-	benchmarks/eigen_benchmarks
+	benchmarks/eigen_benchmarks \
+	benchmarks/halide_benchmarks
 
 LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_STATIC_LIBS)) \
 	../../$(LIB_HALIDE)
@@ -48,14 +49,16 @@ $(LIBHALIDE_BLAS): src/halide_blas.o $(KERNEL_OBJECTS)
 	ranlib $(LIBHALIDE_BLAS)
 
 src/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
-	echo "Kernel headers: " $(KERNEL_HEADERS)
 	$(CXX) $(CXXFLAGS) -c -o $(@) -I ../../include/ -I ../support -I$(KERNEL_DIR) $(<)
 
-run_benchmarks:
-	benchmarks/eigen_benchmarks gemv 1024
+run_benchmarks: $(BENCHMARKS)
+	benchmarks/eigen_benchmarks  axpy 8196
+	benchmarks/halide_benchmarks axpy 8196
+	benchmarks/eigen_benchmarks  gemv 1024
+	benchmarks/halide_benchmarks gemv 1024
 
 benchmarks/%: benchmarks/%.cpp $(LIBHALIDE_BLAS)
-	$(CXX) $(CXXFLAGS) -o $(@) -I ../../include/ -I ../support -I$(EIGEN_DIR) $(<) $(LIBHALIDE_BLAS) -lpthread -ldl -lz $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(EIGEN_DIR) -Isrc -I$(KERNEL_DIR) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) -lpthread -ldl -lz $(LLVM_LDFLAGS)
 
 $(KERNEL_DIR):
 	@mkdir -p $(KERNEL_DIR)
