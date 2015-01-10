@@ -3,6 +3,7 @@
 
 #include <cmath>
 
+#include "HalideRuntime.h"
 #include "halide_scopy_impl.h"
 #include "halide_dcopy_impl.h"
 #include "halide_sscal_impl.h"

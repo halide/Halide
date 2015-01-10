@@ -1,6 +1,7 @@
-#include <assert.h>
 #include <string.h>
 #include "halide_blas.h"
+
+#define assert(cond) halide_assert(0,cond)
 
 namespace {
 
