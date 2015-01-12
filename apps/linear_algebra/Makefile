@@ -1,6 +1,7 @@
 include ../support/Makefile.inc
 
 EIGEN_DIR ?= /usr/include/eigen3
+CBLAS_DIR ?= /usr
 CXXFLAGS += -O3 -fopenmp -Wall -std=c++11
 HL_TARGET ?= host
 LIBHALIDE_BLAS = src/libhalide_blas.a
@@ -23,6 +24,7 @@ KERNELS = \
 	dgemv_trans
 
 BENCHMARKS = \
+	benchmarks/cblas_benchmarks \
 	benchmarks/eigen_benchmarks \
 	benchmarks/halide_benchmarks
 
@@ -52,18 +54,38 @@ src/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
 	$(CXX) $(CXXFLAGS) -c -o $(@) -I ../../include/ -I ../support -I$(KERNEL_DIR) $(<)
 
 run_benchmarks: $(BENCHMARKS)
-	benchmarks/eigen_benchmarks  axpy 8196
-	benchmarks/halide_benchmarks axpy 8196
-	benchmarks/eigen_benchmarks  gemv 1024
-	benchmarks/halide_benchmarks gemv 1024
+	@echo "      Benchmark    Size             Runtime          Data throughput"
+	@echo "===================================================================="
+	@benchmarks/cblas_benchmarks  copy 8196
+	@benchmarks/eigen_benchmarks  copy 8196
+	@benchmarks/halide_benchmarks copy 8196
 
-benchmarks/%: benchmarks/%.cpp $(LIBHALIDE_BLAS)
-	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(EIGEN_DIR) -Isrc -I$(KERNEL_DIR) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) -lpthread -ldl -lz $(LLVM_LDFLAGS)
+	@benchmarks/cblas_benchmarks  scal 8196
+	@benchmarks/eigen_benchmarks  scal 8196
+	@benchmarks/halide_benchmarks scal 8196
 
-$(KERNEL_DIR):
+	@benchmarks/cblas_benchmarks  axpy 8196
+	@benchmarks/eigen_benchmarks  axpy 8196
+	@benchmarks/halide_benchmarks axpy 8196
+
+	@benchmarks/cblas_benchmarks  dot  8196
+	@benchmarks/eigen_benchmarks  dot  8196
+	@benchmarks/halide_benchmarks dot  8196
+
+	@benchmarks/cblas_benchmarks  asum 8196
+	@benchmarks/eigen_benchmarks  asum 8196
+	@benchmarks/halide_benchmarks asum 8196
+
+	@benchmarks/cblas_benchmarks  gemv 1024
+	@benchmarks/eigen_benchmarks  gemv 1024
+	@benchmarks/halide_benchmarks gemv 1024
+
+benchmarks/%: benchmarks/%.cpp benchmarks/clock.h $(LIBHALIDE_BLAS)
+	$(CXX) $(CXXFLAGS) -o $(@) -I../../include/ -I../support -I$(EIGEN_DIR) -I$(CBLAS_DIR)/include \
+	-Isrc -I$(KERNEL_DIR) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) -L$(CBLAS_DIR)/lib -lblas $(LLVM_LDFLAGS)
+
+$(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENGEN_DEPS) #$(KERNEL_DIR)
 	@mkdir -p $(KERNEL_DIR)
-
-$(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENGEN_DEPS) $(KERNEL_DIR)
 	$(CXX) -std=c++11 -fno-rtti -I../../include $(<) ../../tools/GenGen.cpp ../../$(LIB_HALIDE) $(LLVM_LDFLAGS) -o $@
 
 $(KERNEL_DIR)/halide_scopy_impl.o $(KERNEL_DIR)/halide_scopy_impl.h: $(KERNEL_DIR)/blas_l1.generator

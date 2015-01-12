@@ -5,6 +5,22 @@
 
 namespace {
 
+void init_scalar_buffer(const float *x, buffer_t *buff) {
+  memset((void*)buff, 0, sizeof(buffer_t));
+  buff->host = (uint8_t*)const_cast<float*>(x);
+  buff->extent[0] = 1;
+  buff->stride[0] = 1;
+  buff->elem_size = sizeof(float);
+}
+
+void init_scalar_buffer(const double *x, buffer_t *buff) {
+  memset((void*)buff, 0, sizeof(buffer_t));
+  buff->host = (uint8_t*)const_cast<double*>(x);
+  buff->extent[0] = 1;
+  buff->stride[0] = 1;
+  buff->elem_size = sizeof(double);
+}
+
 void init_vector_buffer(const int N, const float *x, const int incx, buffer_t *buff) {
   memset((void*)buff, 0, sizeof(buffer_t));
   buff->host = (uint8_t*)const_cast<float*>(x);
@@ -113,7 +129,7 @@ float hblas_sdot(const int N, const float *x, const int incx,
   buffer_t buff_x, buff_y, buff_dot;
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
-  init_vector_buffer(1, &result, 1, &buff_dot);
+  init_scalar_buffer(&result, &buff_dot);
   assert(0 == halide_sdot(&buff_x, &buff_y, &buff_dot));
   return result;
 }
@@ -124,7 +140,7 @@ double hblas_ddot(const int N, const double *x, const int incx,
   buffer_t buff_x, buff_y, buff_dot;
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
-  init_vector_buffer(1, &result, 1, &buff_dot);
+  init_scalar_buffer(&result, &buff_dot);
   assert(0 == halide_ddot(&buff_x, &buff_y, &buff_dot));
   return result;
 }
@@ -137,7 +153,7 @@ float hblas_snrm2(const int N, const float *x, const int incx) {
   float result;
   buffer_t buff_x, buff_nrm;
   init_vector_buffer(N, x, incx, &buff_x);
-  init_vector_buffer(1, &result, 1, &buff_nrm);
+  init_scalar_buffer(&result, &buff_nrm);
   assert(0 == halide_sdot(&buff_x, &buff_x, &buff_nrm));
   return std::sqrt(result);
 }
@@ -146,7 +162,7 @@ double hblas_dnrm2(const int N, const double *x, const int incx) {
   double result;
   buffer_t buff_x, buff_nrm;
   init_vector_buffer(N, x, incx, &buff_x);
-  init_vector_buffer(1, &result, 1, &buff_nrm);
+  init_scalar_buffer(&result, &buff_nrm);
   assert(0 == halide_ddot(&buff_x, &buff_x, &buff_nrm));
   return std::sqrt(result);
 }
@@ -159,7 +175,7 @@ float hblas_sasum(const int N, const float *x, const int incx) {
   float result;
   buffer_t buff_x, buff_sum;
   init_vector_buffer(N, x, incx, &buff_x);
-  init_vector_buffer(1, &result, 1, &buff_sum);
+  init_scalar_buffer(&result, &buff_sum);
   assert(0 == halide_sasum(&buff_x, &buff_sum));
   return result;
 }
@@ -168,7 +184,7 @@ double hblas_dasum(const int N, const double *x, const int incx) {
   double result;
   buffer_t buff_x, buff_sum;
   init_vector_buffer(N, x, incx, &buff_x);
-  init_vector_buffer(1, &result, 1, &buff_sum);
+  init_scalar_buffer(&result, &buff_sum);
   assert(0 == halide_dasum(&buff_x, &buff_sum));
   return result;
 }
@@ -181,7 +197,7 @@ void hblas_sgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
                  const float a, const float *A, const int lda,
                  const float *x, const int incx, const float b,
                  float *y, const int incy) {
-  bool t;
+  bool t = false;
   switch (trans) {
     case HblasNoTrans:
       t = false; break;
@@ -207,7 +223,7 @@ void hblas_dgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
                  const double a, const double *A, const int lda,
                  const double *x, const int incx, const double b,
                  double *y, const int incy) {
-  bool t;
+  bool t = false;
   switch (trans) {
     case HblasNoTrans:
       t = false; break;

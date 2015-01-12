@@ -27,3 +27,16 @@ double current_time() {
     }
 }
 #endif
+
+std::string items_per_second(int N, double elapsed) {
+  double ips = N * 1000 / elapsed;
+  if (ips >= 1e9) {
+    return std::to_string(ips / 1e9) + " G(items/s)";
+  } else if (ips >= 1e6) {
+    return std::to_string(ips / 1e6) + " M(items/s)";
+  } else if (ips >= 1e3) {
+    return std::to_string(ips / 1e3) + " k(items/s)";
+  }
+
+  return std::to_string(ips) + "(items/s)";
+}

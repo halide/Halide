@@ -14,8 +14,8 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <cblas.h>
 #include "Halide.h"
-#include "halide_blas.h"
 #include "clock.h"
 
 #define L1Benchmark(benchmark, code)                                    \
@@ -64,8 +64,8 @@
 template<class T>
 struct BenchmarksBase {
     typedef T Scalar;
-    typedef Halide::Buffer Vector;
-    typedef Halide::Buffer Matrix;
+    typedef std::vector<T> Vector;
+    typedef std::vector<T> Matrix;
 
     std::random_device rand_dev;
     std::default_random_engine rand_eng{rand_dev()};
@@ -79,8 +79,8 @@ struct BenchmarksBase {
     }
 
     Vector *randomVector(int N) {
-        Vector *buff = new Vector(Halide::type_of<T>(), N);
-        Scalar *x = (Scalar*)buff->host_ptr();
+        Vector *buff = new Vector(N);
+        Vector &x = *buff;
         for (int i=0; i<N; ++i) {
             x[i] = randomScalar();
         }
@@ -88,8 +88,8 @@ struct BenchmarksBase {
     }
 
     Matrix *randomMatrix(int N) {
-        Matrix *buff = new Matrix(Halide::type_of<T>(), N, N);
-        Scalar *A = (Scalar*)buff->host_ptr();
+        Matrix *buff = new Matrix(N * N);
+        Matrix &A = *buff;
         for (int i=0; i<N*N; ++i) {
             A[i] = randomScalar();
         }
@@ -126,48 +126,48 @@ struct BenchmarksBase {
 
 struct BenchmarksFloat : public BenchmarksBase<float> {
     BenchmarksFloat(std::string n, int iters) :
-            BenchmarksBase(n, iters),
-            result(Halide::Float(32), 1)
+            BenchmarksBase(n, iters)
     {}
 
-    Halide::Buffer result;
+    Scalar result;
 
-    L1Benchmark(copy, halide_scopy(x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(scal, halide_sscal(alpha, x->raw_buffer()))
-    L1Benchmark(axpy, halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(dot,  halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
-    L1Benchmark(asum, halide_sasum(x->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(copy, cblas_scopy(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(scal, cblas_sscal(N, alpha, &(x->front()), 1))
+    L1Benchmark(axpy, cblas_saxpy(N, alpha, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(dot,  result = cblas_sdot(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(asum, result = cblas_sasum(N, &(x->front()), 1))
 
-    L2Benchmark(gemv, halide_sgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
-                                   beta, y->raw_buffer()))
+    L2Benchmark(gemv, cblas_sgemv(CblasColMajor, CblasNoTrans, N, N,
+                                  alpha, &(A->front()), N, &(x->front()), 1,
+                                  beta, &(y->front()), 1))
 };
 
 struct BenchmarksDouble : public BenchmarksBase<double> {
     BenchmarksDouble(std::string n, int iters) :
-            BenchmarksBase(n, iters),
-            result(Halide::Float(64), 1)
+            BenchmarksBase(n, iters)
     {}
 
-    Halide::Buffer result;
+    Scalar result;
 
-    L1Benchmark(copy, halide_scopy(x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(scal, halide_sscal(alpha, x->raw_buffer()))
-    L1Benchmark(axpy, halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(dot,  halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
-    L1Benchmark(asum, halide_sasum(x->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(copy, cblas_dcopy(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(scal, cblas_dscal(N, alpha, &(x->front()), 1))
+    L1Benchmark(axpy, cblas_daxpy(N, alpha, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(dot,  result = cblas_ddot(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(asum, result = cblas_dasum(N, &(x->front()), 1))
 
-    L2Benchmark(gemv, halide_dgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
-                                   beta, y->raw_buffer()))
+    L2Benchmark(gemv, cblas_dgemv(CblasColMajor, CblasNoTrans, N, N,
+                                  alpha, &(A->front()), N, &(x->front()), 1,
+                                  beta, &(y->front()), 1))
 };
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
-        std::cout << "USAGE: halide_benchmarks <subroutine> <size>\n";
+        std::cout << "USAGE: cblas_benchmarks <subroutine> <size>\n";
         return 0;
     }
 
-    BenchmarksFloat ("Halide", 1000).run(argv[1], std::stoi(argv[2]));
-    BenchmarksDouble("Halide", 1000).run(argv[1], std::stoi(argv[2]));
+    BenchmarksFloat ("Cblas", 1000).run(argv[1], std::stoi(argv[2]));
+    BenchmarksDouble("Cblas", 1000).run(argv[1], std::stoi(argv[2]));
 
     return 0;
 }
