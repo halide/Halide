@@ -109,5 +109,14 @@ define weak_odr <4 x float> @fast_inverse_sqrt_f32x4(<4 x float> %x) nounwind uw
   ret <4 x float> %approx
 }
 
+define weak_odr <4 x float> @min_f32x4(<4 x float> %a, <4 x float> %b) nounwind uwtable readnone alwaysinline {
+  %c = fcmp olt <4 x float> %a, %b
+  %result = select <4 x i1> %c, <4 x float> %a, <4 x float> %b
+  ret <4 x float> %result
+}
 
-
+define weak_odr <4 x float> @max_f32x4(<4 x float> %a, <4 x float> %b) nounwind uwtable readnone alwaysinline {
+  %c = fcmp olt <4 x float> %a, %b
+  %result = select <4 x i1> %c, <4 x float> %b, <4 x float> %a
+  ret <4 x float> %result
+}
