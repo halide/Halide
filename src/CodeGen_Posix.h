@@ -33,6 +33,7 @@ protected:
     /** Some wildcard variables used for peephole optimizations in
      * subclasses */
     // @{
+    Expr wild_u1x16, wild_u1x8, wild_u1x4, wild_u1x2; // bools
     Expr wild_i8x8, wild_i16x4, wild_i32x2; // 64-bit signed ints
     Expr wild_u8x8, wild_u16x4, wild_u32x2; // 64-bit unsigned ints
     Expr wild_i8x16, wild_i16x8, wild_i32x4, wild_i64x2; // 128-bit signed ints
@@ -42,6 +43,13 @@ protected:
     Expr wild_f32x2; // 64-bit floats
     Expr wild_f32x4, wild_f64x2; // 128-bit floats
     Expr wild_f32x8, wild_f64x4; // 256-bit floats
+
+    // Wildcards for a varying number of lanes.
+    Expr wild_u1x_, wild_i8x_, wild_u8x_, wild_i16x_, wild_u16x_;
+    Expr wild_i32x_, wild_u32x_, wild_i64x_, wild_u64x_;
+    Expr wild_f32x_, wild_f64x_;
+
+    // Bounds of each type.
     Expr min_i8, max_i8, max_u8;
     Expr min_i16, max_i16, max_u16;
     Expr min_i32, max_i32, max_u32;

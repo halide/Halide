@@ -165,7 +165,6 @@ void Closure::unpack_struct(Scope<Value *> &dst,
 }
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-
     if (t.width == 1) {
         if (t.is_float()) {
             switch (t.bits) {
