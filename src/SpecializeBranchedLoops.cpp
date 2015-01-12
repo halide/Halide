@@ -310,8 +310,6 @@ private:
     stack<Expr> curr_min;
     stack<Expr> curr_extent;
 
-    using IRVisitor::visit;
-
     friend std::ostream &operator<<(std::ostream &out, const Branch &b) {
         out << "branch(" << b.min << ", " << b.extent << "): {";
         if (b.content.is_stmt()) out << "\n";
@@ -1019,6 +1017,32 @@ private:
         collect(op->index, index_branches);
 
         merge_child_branches(op, vec(value_branches, index_branches));
+    }
+
+    void visit(const Realize *op) {
+        internal_error << "specialize_branched_loops encountered a Realize node\n";
+    }
+
+    void visit(const Provide *op) {
+        internal_error << "specialize_branched_loops encountered a Provide node\n";
+    }
+
+    void visit(const Free *op) {
+        add_branch(Stmt(op));
+    }
+
+    StmtOrExpr make_branch_content(const AssertStmt *op, const vector<StmtOrExpr> &args) {
+        return AssertStmt::make(args[0], args[1]);
+    }
+
+    void visit(const AssertStmt *op) {
+        vector<Branch> condition_branches;
+        collect(op->condition, condition_branches);
+
+        vector<Branch> message_branches;
+        collect(op->message, message_branches);
+
+        merge_child_branches(op, vec(condition_branches, message_branches));
     }
 
     StmtOrExpr make_branch_content(const Allocate *op, const vector<StmtOrExpr> &args) {
