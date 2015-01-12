@@ -16,6 +16,48 @@
 #include <Eigen/Eigen>
 #include "clock.h"
 
+#define L1Benchmark(benchmark, code)                                    \
+    void bench_##benchmark(int N) {                                     \
+        Scalar alpha = randomScalar();                                  \
+        Vector x = randomVector(N);                                     \
+        Vector y = randomVector(N);                                     \
+                                                                        \
+        double start = current_time();                                  \
+        for (int i = 0; i < num_iters; ++i) {                           \
+            code;                                                       \
+        }                                                               \
+        double end = current_time();                                    \
+        double elapsed = end - start;                                   \
+                                                                        \
+        std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << std::to_string(N)                  \
+                  << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
+                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::endl;                                         \
+    }                                                                   \
+
+#define L2Benchmark(benchmark, code)                                    \
+    void bench_##benchmark(int N) {                                     \
+        Scalar alpha = randomScalar();                                  \
+        Scalar beta = randomScalar();                                   \
+        Vector x = randomVector(N);                                     \
+        Vector y = randomVector(N);                                     \
+        Matrix A = randomMatrix(N);                                     \
+                                                                        \
+        double start = current_time();                                  \
+        for (int i = 0; i < num_iters; ++i) {                           \
+            code;                                                       \
+        }                                                               \
+        double end = current_time();                                    \
+        double elapsed = end - start;                                   \
+                                                                        \
+        std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << std::to_string(N)                  \
+                  << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
+                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::endl;                                         \
+    }                                                                   \
+
 template<class T>
 struct Benchmarks {
     typedef T Scalar;
@@ -45,30 +87,30 @@ struct Benchmarks {
     {}
 
     void run(std::string benchmark, int size) {
-        if (benchmark == "gemv") {
+        if (benchmark == "copy") {
+            bench_copy(size);
+        } else if (benchmark == "scal") {
+            bench_scal(size);
+        } else if (benchmark == "axpy") {
+            bench_axpy(size);
+        } else if (benchmark == "dot") {
+            bench_dot(size);
+        } else if (benchmark == "asum") {
+            bench_asum(size);
+        } else if (benchmark == "gemv") {
             bench_gemv(size);
         }
     }
 
-    void bench_gemv(int N) {
-        Scalar alpha = randomScalar();
-        Scalar beta = randomScalar();
-        Vector x = randomVector(N);
-        Vector y = randomVector(N);
-        Matrix A = randomMatrix(N);
+    Scalar result;
 
-        double start = current_time();
-        for (int i = 0; i < num_iters; ++i) {
-            y = alpha * A * x + beta * y;
-        }
-        double end = current_time();
-        double elapsed = end - start;
+    L1Benchmark(copy, y = x);
+    L1Benchmark(scal, x = alpha * x);
+    L1Benchmark(axpy, y = alpha * x + y);
+    L1Benchmark(dot,  result = x.dot(y));
+    L1Benchmark(asum, result = x.array().abs().sum());
 
-        std::cout << std::setw(10) << name + ":"
-                  << std::setw(25) << std::to_string(elapsed) + "(ms)"
-                  << std::setw(25) << std::to_string(N * 1000 / elapsed) + "(items/s)"
-                  << std::endl;
-    }
+    L2Benchmark(gemv, y = alpha * A * x + beta * y);
 
   private:
     std::string name;
@@ -81,8 +123,8 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    Benchmarks<float> ("Eigen::sgemv", 1000).run(argv[1], std::stoi(argv[2]));
-    Benchmarks<double>("Eigen::dgemv", 1000).run(argv[1], std::stoi(argv[2]));
+    Benchmarks<float> ("Eigen", 1000).run(argv[1], std::stoi(argv[2]));
+    Benchmarks<double>("Eigen", 1000).run(argv[1], std::stoi(argv[2]));
 
     return 0;
 }
