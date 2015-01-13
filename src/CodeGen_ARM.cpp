@@ -1006,7 +1006,7 @@ void CodeGen_ARM::visit(const Store *op) {
 
     // Interleaving store instructions only exist for certain types.
     bool type_ok_for_vst = false;
-    Type intrin_type;
+    Type intrin_type = Handle();
     if (call && !call->args.empty()) {
         Type t = call->args[0].type();
         intrin_type = t;
