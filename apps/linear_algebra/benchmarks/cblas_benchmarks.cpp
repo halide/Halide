@@ -18,7 +18,7 @@
 #include "Halide.h"
 #include "clock.h"
 
-#define L1Benchmark(benchmark, code)                                    \
+#define L1Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = randomScalar();                                  \
         std::unique_ptr<Vector> x(randomVector(N));                     \
@@ -32,13 +32,14 @@
         double elapsed = end - start;                                   \
                                                                         \
         std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << type                               \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << items_per_second(N, elapsed)      \
                   << std::endl;                                         \
     }                                                                   \
 
-#define L2Benchmark(benchmark, code)                                    \
+#define L2Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = randomScalar();                                  \
         Scalar beta = randomScalar();                                   \
@@ -54,9 +55,10 @@
         double elapsed = end - start;                                   \
                                                                         \
         std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << type                               \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << items_per_second(N, elapsed)      \
                   << std::endl;                                         \
     }                                                                   \
 
@@ -131,15 +133,20 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 
     Scalar result;
 
-    L1Benchmark(copy, cblas_scopy(N, &(x->front()), 1, &(y->front()), 1))
-    L1Benchmark(scal, cblas_sscal(N, alpha, &(x->front()), 1))
-    L1Benchmark(axpy, cblas_saxpy(N, alpha, &(x->front()), 1, &(y->front()), 1))
-    L1Benchmark(dot,  result = cblas_sdot(N, &(x->front()), 1, &(y->front()), 1))
-    L1Benchmark(asum, result = cblas_sasum(N, &(x->front()), 1))
+    L1Benchmark(copy, "float", cblas_scopy(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(scal, "float", cblas_sscal(N, alpha, &(x->front()), 1))
+    L1Benchmark(axpy, "float", cblas_saxpy(N, alpha, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(dot,  "float", result = cblas_sdot(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(asum, "float", result = cblas_sasum(N, &(x->front()), 1))
 
-    L2Benchmark(gemv, cblas_sgemv(CblasColMajor, CblasNoTrans, N, N,
-                                  alpha, &(A->front()), N, &(x->front()), 1,
-                                  beta, &(y->front()), 1))
+    // L2Benchmark(gemv, "float", cblas_sgemv(CblasColMajor, CblasNoTrans, N, N,
+    //                                        alpha, &(A->front()), N, &(x->front()), 1,
+    //                                        beta, &(y->front()), 1))
+
+    L2Benchmark(gemv, "float", cblas_sgemv(CblasColMajor, CblasTrans, N, N,
+                                           alpha, &(A->front()), N, &(x->front()), 1,
+                                           beta, &(y->front()), 1))
+
 };
 
 struct BenchmarksDouble : public BenchmarksBase<double> {
@@ -149,15 +156,19 @@ struct BenchmarksDouble : public BenchmarksBase<double> {
 
     Scalar result;
 
-    L1Benchmark(copy, cblas_dcopy(N, &(x->front()), 1, &(y->front()), 1))
-    L1Benchmark(scal, cblas_dscal(N, alpha, &(x->front()), 1))
-    L1Benchmark(axpy, cblas_daxpy(N, alpha, &(x->front()), 1, &(y->front()), 1))
-    L1Benchmark(dot,  result = cblas_ddot(N, &(x->front()), 1, &(y->front()), 1))
-    L1Benchmark(asum, result = cblas_dasum(N, &(x->front()), 1))
+    L1Benchmark(copy, "double", cblas_dcopy(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(scal, "double", cblas_dscal(N, alpha, &(x->front()), 1))
+    L1Benchmark(axpy, "double", cblas_daxpy(N, alpha, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(dot,  "double", result = cblas_ddot(N, &(x->front()), 1, &(y->front()), 1))
+    L1Benchmark(asum, "double", result = cblas_dasum(N, &(x->front()), 1))
 
-    L2Benchmark(gemv, cblas_dgemv(CblasColMajor, CblasNoTrans, N, N,
-                                  alpha, &(A->front()), N, &(x->front()), 1,
-                                  beta, &(y->front()), 1))
+    // L2Benchmark(gemv, "double", cblas_dgemv(CblasColMajor, CblasNoTrans, N, N,
+    //                                         alpha, &(A->front()), N, &(x->front()), 1,
+    //                                         beta, &(y->front()), 1))
+
+    L2Benchmark(gemv, "double", cblas_dgemv(CblasColMajor, CblasTrans, N, N,
+                                            alpha, &(A->front()), N, &(x->front()), 1,
+                                            beta, &(y->front()), 1))
 };
 
 int main(int argc, char* argv[]) {

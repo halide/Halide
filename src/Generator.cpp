@@ -48,10 +48,10 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] -e EMIT_OPTIONS "
                           "target=target-string [generator_arg=value [...]]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" } };
+    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" }, { "-e", "" } };
     std::map<std::string, std::string> generator_args;
 
     for (int i = 1; i < argc; ++i) {
@@ -115,6 +115,26 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
+    GeneratorBase::EmitOptions emit_options;
+    std::string emit_flag = flags_info["-e"];
+    while (emit_flag != "") {
+      size_t pos = emit_flag.find(",");
+      std::string opt = emit_flag.substr(0, pos);
+      if (opt == "assembly") {
+        emit_options.emit_assembly = true;
+      } else if (opt == "bitcode") {
+        emit_options.emit_bitcode = true;
+      } else if (opt == "stmt") {
+        emit_options.emit_stmt = true;
+      } else if (opt == "html") {
+        emit_options.emit_stmt_html = true;
+      }
+      if (pos == std::string::npos) {
+        emit_flag = "";
+      } else {
+        emit_flag = emit_flag.substr(pos+1);
+      }
+    }
 
     std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
     if (gen == nullptr) {
@@ -122,7 +142,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name);
+    gen->emit_filter(output_dir, function_name, function_name, emit_options);
     return 0;
 }
 

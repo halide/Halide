@@ -18,8 +18,8 @@
 #include "halide_blas.h"
 #include "clock.h"
 
-#define L1Benchmark(benchmark, code)                                    \
-    virtual void bench_##benchmark(int N) {                             \
+#define L1Benchmark(benchmark, type, code)                               \
+  virtual void bench_##benchmark(int N) {                               \
         Scalar alpha = randomScalar();                                  \
         std::unique_ptr<Vector> x(randomVector(N));                     \
         std::unique_ptr<Vector> y(randomVector(N));                     \
@@ -32,13 +32,14 @@
         double elapsed = end - start;                                   \
                                                                         \
         std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << type                               \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << items_per_second(N, elapsed)      \
                   << std::endl;                                         \
     }                                                                   \
 
-#define L2Benchmark(benchmark, code)                                    \
+#define L2Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
         Scalar alpha = randomScalar();                                  \
         Scalar beta = randomScalar();                                   \
@@ -54,9 +55,10 @@
         double elapsed = end - start;                                   \
                                                                         \
         std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << type                               \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << items_per_second(N, elapsed)      \
                   << std::endl;                                         \
     }                                                                   \
 
@@ -132,14 +134,17 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 
     Halide::Buffer result;
 
-    L1Benchmark(copy, halide_scopy(x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(scal, halide_sscal(alpha, x->raw_buffer()))
-    L1Benchmark(axpy, halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(dot,  halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
-    L1Benchmark(asum, halide_sasum(x->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(copy, "float", halide_scopy(x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(scal, "float", halide_sscal(alpha, x->raw_buffer()))
+    L1Benchmark(axpy, "float", halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(dot,  "float", halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(asum, "float", halide_sasum(x->raw_buffer(), result.raw_buffer()))
 
-    L2Benchmark(gemv, halide_sgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
-                                   beta, y->raw_buffer()))
+    // L2Benchmark(gemv, "float", halide_sgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
+    //                                beta, y->raw_buffer()))
+
+    L2Benchmark(gemv, "float", halide_sgemv(true, alpha, A->raw_buffer(), x->raw_buffer(),
+                                            beta, y->raw_buffer()))
 };
 
 struct BenchmarksDouble : public BenchmarksBase<double> {
@@ -150,14 +155,17 @@ struct BenchmarksDouble : public BenchmarksBase<double> {
 
     Halide::Buffer result;
 
-    L1Benchmark(copy, halide_scopy(x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(scal, halide_sscal(alpha, x->raw_buffer()))
-    L1Benchmark(axpy, halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(dot,  halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
-    L1Benchmark(asum, halide_sasum(x->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(copy, "double", halide_dcopy(x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(scal, "double", halide_dscal(alpha, x->raw_buffer()))
+    L1Benchmark(axpy, "double", halide_daxpy(alpha, x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(dot,  "double", halide_ddot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(asum, "double", halide_dasum(x->raw_buffer(), result.raw_buffer()))
 
-    L2Benchmark(gemv, halide_dgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
-                                   beta, y->raw_buffer()))
+    // L2Benchmark(gemv, "double", halide_dgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
+    //                                          beta, y->raw_buffer()))
+
+    L2Benchmark(gemv, "double", halide_dgemv(true, alpha, A->raw_buffer(), x->raw_buffer(),
+                                             beta, y->raw_buffer()))
 };
 
 int main(int argc, char* argv[]) {
