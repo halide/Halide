@@ -38,7 +38,7 @@ EXPORT void test_compilation_unit(bool (*test)(), void (*calib)());
 
 // This code verifies that introspection is working before relying on
 // it. The definitions must appear in Halide.h, but they should not
-// appear in libHalide itself. They're defined as weak so that clients
+// appear in libHalide itself. They're defined as static so that clients
 // can include Halide.h multiple times without link errors.
 #ifndef COMPILING_HALIDE
 

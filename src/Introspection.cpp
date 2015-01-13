@@ -1643,6 +1643,9 @@ private:
                 }
             }
 
+            // The first source file index for this compilation unit.
+            int source_files_base = source_files.size();
+
             while (off < end_header_off) {
                 const char *name = e.getCStr(&off);
                 if (name && name[0]) {
@@ -1703,41 +1706,41 @@ private:
                     // Extended opcodes
                     uint32_t ext_offset = off;
                     uint64_t len = e.getULEB128(&off);
-                uint32_t arg_size = len - (off - ext_offset);
-                uint8_t sub_opcode = e.getU8(&off);
-                switch (sub_opcode) {
-                case 1: // end_sequence
-                {
-                    state.end_sequence = true;
-                    state.append_row(source_lines);
-                    state = initial_state;
-                    break;
-                }
-                case 2: // set_address
-                {
-                    state.address = e.getAddress(&off);
-                    break;
-                }
-                case 3: // define_file
-                {
-                    const char *name = e.getCStr(&off);
-                    uint64_t dir_index = e.getULEB128(&off);
-                    uint64_t mod_time = e.getULEB128(&off);
-                    uint64_t length = e.getULEB128(&off);
-                    (void)mod_time;
-                    (void)length;
-                    assert(dir_index < include_dirs.size());
-                    source_files.push_back(include_dirs[dir_index] + "/" + name);
-                    break;
-                }
-                case 4: // set_discriminator
-                {
-                    state.discriminator = e.getULEB128(&off);
-                    break;
-                }
-                default: // Some unknown thing. Skip it.
-                    off += arg_size;
-                }
+                    uint32_t arg_size = len - (off - ext_offset);
+                    uint8_t sub_opcode = e.getU8(&off);
+                    switch (sub_opcode) {
+                    case 1: // end_sequence
+                    {
+                        state.end_sequence = true;
+                        state.append_row(source_lines);
+                        state = initial_state;
+                        break;
+                    }
+                    case 2: // set_address
+                    {
+                        state.address = e.getAddress(&off);
+                        break;
+                    }
+                    case 3: // define_file
+                    {
+                        const char *name = e.getCStr(&off);
+                        uint64_t dir_index = e.getULEB128(&off);
+                        uint64_t mod_time = e.getULEB128(&off);
+                        uint64_t length = e.getULEB128(&off);
+                        (void)mod_time;
+                        (void)length;
+                        assert(dir_index < include_dirs.size());
+                        source_files.push_back(include_dirs[dir_index] + "/" + name);
+                        break;
+                    }
+                    case 4: // set_discriminator
+                    {
+                        state.discriminator = e.getULEB128(&off);
+                        break;
+                    }
+                    default: // Some unknown thing. Skip it.
+                        off += arg_size;
+                    }
                 } else if (opcode < opcode_base) {
                     // A standard opcode
                     switch (opcode) {
@@ -1764,7 +1767,7 @@ private:
                     }
                     case 4: // set_file
                     {
-                        state.file = e.getULEB128(&off) - 1;
+                        state.file = e.getULEB128(&off) - 1 + source_files_base;
                         break;
                     }
                     case 5: // set_column
