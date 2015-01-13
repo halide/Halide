@@ -46,26 +46,35 @@ class GEMVGenerator :
     const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
 
     Var i("i"), j("j");
-    Func Ax("Ax"), result("result");
+    Func result("result");
     if (transpose_) {
-      RDom k(0, x_.width()/vec_size);
-      Ax(i, j) += A_(k*vec_size + j, i) * x_(k*vec_size + j);
+      const Expr proxy_size = (A_.width() + vec_size - 1) / vec_size;
+      RDom k(0, proxy_size, "k");
+      Func Ax("Ax");
+      Ax(j, i) += a_ * A_(k*vec_size + j, i) * x_(k*vec_size + j);
 
       RDom sum_lanes(0, vec_size);
-      result(i) = a_ * sum(Ax(i, sum_lanes)) + b_ * y_(i);
+      result(i)  = b_ * y_(i);
+      result(i) += Ax(sum_lanes, i);
 
-      Ax.compute_at(result, i);
       if (vectorize_) {
-        Ax.vectorize(j);
-        result.vectorize(i, natural_vector_size(type_of<T>()));
+        Var ii("ii");
+        result.vectorize(i, vec_size);
+        result.update(0).vectorize(i, vec_size).unroll(sum_lanes);
+
+        Ax.compute_at(result, i).vectorize(j).unroll(i);
+        Ax.update(0)
+            .reorder(i, j, k)
+            .unroll(i)
+            .vectorize(j);
       }
 
       A_.set_min(0, 0).set_min(1, 0);
       x_.set_bounds(0, 0, A_.width());
       y_.set_bounds(0, 0, A_.height());
+      result.output_buffer().set_bounds(0, 0, A_.height());
     } else {
-      const Expr proxy_size = (A_.height() / 4) * 4;
-
+      const Expr proxy_size = ((A_.height() + 3) / 4) * 4;
       RDom k(0, proxy_size);
       result(i)  = b_ * y_(i);
       result(i) += select(k < A_.height(), a_ * A_(i, k) * x_(k), cast<T>(0));
@@ -77,26 +86,27 @@ class GEMVGenerator :
         const Expr work_size = max(block_size_ / N, 1);
         if (vectorize_) {
           result.vectorize(i, vec_size);
-          result.update(0).specialize(M / work_size >= 4)
+          result.update(1).specialize(M / work_size >= 4)
               .split(i, ii, i, work_size)
               .reorder(i, k , ii)
               .parallel(ii)
               .vectorize(i, vec_size);
         } else {
-          result.update(0).specialize(M / work_size >= 4)
+          result.update(1).specialize(M / work_size >= 4)
               .split(i, ii, i, work_size)
               .reorder(i, k , ii)
               .parallel(ii);
         }
       } else {
         if (vectorize_) {
-        Var ii("ii");
+          Var ii("ii");
+          RVar ki("ki");
           result.vectorize(i, vec_size);
           result.update(0)
-              .split(i, ii, i, vec_size)
-              .reorder(i, k, ii)
-              .unroll(k, 4)
-              .vectorize(i);
+              .split(i, i, ii, vec_size)
+              .split(k, k, ki, 4)
+              .reorder(ii, ki, i, k)
+              .unroll(ki).vectorize(ii);
         }
       }
 

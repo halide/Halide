@@ -16,7 +16,7 @@
 #include <Eigen/Eigen>
 #include "clock.h"
 
-#define L1Benchmark(benchmark, code)                                    \
+#define L1Benchmark(benchmark, type, code)                              \
     void bench_##benchmark(int N) {                                     \
         Scalar alpha = randomScalar();                                  \
         Vector x = randomVector(N);                                     \
@@ -30,13 +30,14 @@
         double elapsed = end - start;                                   \
                                                                         \
         std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << type                               \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << items_per_second(N, elapsed)      \
                   << std::endl;                                         \
     }                                                                   \
 
-#define L2Benchmark(benchmark, code)                                    \
+#define L2Benchmark(benchmark, type, code)                              \
     void bench_##benchmark(int N) {                                     \
         Scalar alpha = randomScalar();                                  \
         Scalar beta = randomScalar();                                   \
@@ -52,11 +53,21 @@
         double elapsed = end - start;                                   \
                                                                         \
         std::cout << std::setw(15) << name + "::" + #benchmark          \
+                  << std::setw(8) << type                               \
                   << std::setw(8) << std::to_string(N)                  \
                   << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(25) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << items_per_second(N, elapsed)      \
                   << std::endl;                                         \
     }                                                                   \
+
+template<class T>
+std::string type_name();
+
+template<>
+std::string type_name<float>() {return "float";}
+
+template<>
+std::string type_name<double>() {return "double";}
 
 template<class T>
 struct Benchmarks {
@@ -104,13 +115,14 @@ struct Benchmarks {
 
     Scalar result;
 
-    L1Benchmark(copy, y = x);
-    L1Benchmark(scal, x = alpha * x);
-    L1Benchmark(axpy, y = alpha * x + y);
-    L1Benchmark(dot,  result = x.dot(y));
-    L1Benchmark(asum, result = x.array().abs().sum());
+    L1Benchmark(copy, type_name<T>(), y = x);
+    L1Benchmark(scal, type_name<T>(), x = alpha * x);
+    L1Benchmark(axpy, type_name<T>(), y = alpha * x + y);
+    L1Benchmark(dot,  type_name<T>(), result = x.dot(y));
+    L1Benchmark(asum, type_name<T>(), result = x.array().abs().sum());
 
-    L2Benchmark(gemv, y = alpha * A * x + beta * y);
+    // L2Benchmark(gemv, type_name<T>(), y = alpha * A * x + beta * y);
+    L2Benchmark(gemv, type_name<T>(), y = alpha * A.transpose() * x + beta * y);
 
   private:
     std::string name;
