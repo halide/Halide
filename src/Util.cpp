@@ -107,7 +107,6 @@ string make_entity_name(void *stack_ptr, const string &type, char prefix) {
         // Maybe we're in a generator. Try again replacing any
         // "Halide::" with "Halide::NamesInterface::"
         string qualified_type = "Halide::NamesInterface::" + type.substr(8, type.size()-8);
-        debug(0) << qualified_type << "\n";
         name = get_variable_name(stack_ptr, qualified_type);
     }
 
