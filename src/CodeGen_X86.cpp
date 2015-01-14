@@ -645,6 +645,12 @@ void CodeGen_X86::visit(const Min *op) {
         } else {
             value = call_intrin(op->type, 4, "min_f32x4", vec(op->a, op->b));
         }
+    } else if (op->type.element_of() == Float(64)) {
+        if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
+            value = call_intrin(op->type, 4, "min_f64x4", vec(op->a, op->b));
+        } else {
+            value = call_intrin(op->type, 2, "min_f64x2", vec(op->a, op->b));
+        }
     } else {
         CodeGen::visit(op);
     }
@@ -674,6 +680,12 @@ void CodeGen_X86::visit(const Max *op) {
             value = call_intrin(op->type, 8, "max_f32x8", vec(op->a, op->b));
         } else {
             value = call_intrin(op->type, 4, "max_f32x4", vec(op->a, op->b));
+        }
+    } else if (op->type.element_of() == Float(64)) {
+        if (op->type.width % 4 == 0 && target.has_feature(Target::AVX)) {
+            value = call_intrin(op->type, 4, "max_f64x4", vec(op->a, op->b));
+        } else {
+            value = call_intrin(op->type, 2, "max_f64x2", vec(op->a, op->b));
         }
     } else {
         CodeGen::visit(op);
