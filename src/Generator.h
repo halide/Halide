@@ -284,7 +284,7 @@ private:
         std::istringstream iss(s);
         T t;
         iss >> t;
-        user_assert(!iss.fail()) << "Unable to parse integer: " << s;
+        user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse integer: " << s;
         return t;
     }
     template <typename T2 = T,
@@ -302,7 +302,7 @@ private:
         std::istringstream iss(s);
         T t;
         iss >> t;
-        user_assert(!iss.fail()) << "Unable to parse float: " << s;
+        user_assert(!iss.fail() && iss.get() == EOF) << "Unable to parse float: " << s;
         return t;
     }
     template <typename T2 = T,
