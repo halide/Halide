@@ -22,6 +22,8 @@ namespace Halide {
 namespace Internal {
 namespace Introspection {
 
+// All of this only works with DWARF debug info on linux and OS X. For
+// other platforms, WITH_INTROSPECTION should be off.
 #ifdef __APPLE__
 extern "C" void _NSGetExecutablePath(char *, int32_t *);
 void get_program_name(char *name, int32_t size) {
@@ -313,7 +315,8 @@ public:
         // Find the index of the first global variable with this address
         int idx = find_global_variable(global_pointer);
 
-        if (idx == -1) {
+        if (idx < 0) {
+            // No matching global variable found.
             return "";
         }
 
@@ -407,7 +410,7 @@ public:
             // object tracker), but that's beyond the scope of what
             // we're trying to do here. Besides, predicting the
             // addresses of their children-of-children might follow a
-            // danging pointer.
+            // dangling pointer.
             if (parent.type->type == TypeInfo::Pointer ||
                 parent.type->type == TypeInfo::Reference) continue;
 
