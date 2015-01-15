@@ -7,7 +7,7 @@
 # 'make test_apps' checks some of the apps build and run (but does not check their output)
 # 'make time_compilation_tests' records the compile time for each test module into a csv file.
 #     For correctness and performance tests this include halide build time and run time. For
-#     the tests in test/static/ and test/generator/ this times only the halide build time.
+#     the tests in test/generator/ this times only the halide build time.
 
 SHELL = bash
 CXX ?= g++
@@ -187,11 +187,6 @@ endif
 ifneq ($(TEST_PTX), )
 TEST_CXX_FLAGS += -DTEST_PTX
 endif
-
-# Note that we don't include -g in the static test flags. OS X's
-# dsymutil can't seem to generate a dSYM folder from the binaries that
-# trunk llvm produces.
-STATIC_TEST_CXX_FLAGS ?= $(BUILD_BIT_SIZE) -fno-omit-frame-pointer
 
 # Compiling the tutorials requires libpng
 LIBPNG_LIBS_DEFAULT = $(shell libpng-config --ldflags)
@@ -516,7 +511,6 @@ clean:
 .SECONDARY:
 
 CORRECTNESS_TESTS = $(shell ls test/correctness/*.cpp)
-STATIC_TESTS = $(shell ls test/static/*_generate.cpp)
 PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
@@ -525,14 +519,11 @@ GENERATORS := $(shell ls test/generator/*_generator.cpp)
 GENERATOR_EXTERNAL_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
 
-STATIC_TEST_CXX ?= $(CXX)
-
 LD_PATH_SETUP = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../$(BIN_DIR)
 LD_PATH_SETUP2 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../$(BIN_DIR)
 LD_PATH_SETUP3 = DYLD_LIBRARY_PATH=${DYLD_LIBRARY_PATH}:../../../$(BIN_DIR) LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:../../../$(BIN_DIR)
 
 test_correctness: $(CORRECTNESS_TESTS:test/correctness/%.cpp=test_%)
-test_static: $(STATIC_TESTS:test/static/%_generate.cpp=static_%)
 test_performance: $(PERFORMANCE_TESTS:test/performance/%.cpp=performance_%)
 test_errors: $(ERROR_TESTS:test/error/%.cpp=error_%)
 test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
@@ -552,7 +543,7 @@ else
 test_generators: ;
 endif
 
-ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_static test_warnings
+ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_warnings
 
 ifneq ($(CXX11),)
 ALL_TESTS += test_generators
@@ -561,7 +552,6 @@ endif
 # These targets perform timings of each test. For most tests this includes Halide JIT compile times, and run times.
 # For static and generator tests they time the compile time only. The times are recorded in CSV files.
 time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TESTS:test/correctness/%.cpp=time_compilation_test_%)
-time_compilation_static: init_time_compilation_static $(STATIC_TESTS:test/static/%_generate.cpp=time_compilation_static_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
 ifneq ($(CXX11),)
@@ -581,8 +571,7 @@ run_tests: $(ALL_TESTS)
 build_tests: $(CORRECTNESS_TESTS:test/correctness/%.cpp=$(BIN_DIR)/test_%) \
 	$(PERFORMANCE_TESTS:test/performance/%.cpp=$(BIN_DIR)/performance_%) \
 	$(ERROR_TESTS:test/error/%.cpp=$(BIN_DIR)/error_%) \
-	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%) \
-	$(STATIC_TESTS:test/static/%_generate.cpp=$(BIN_DIR)/static_%_generate) \
+	$(WARNING_TESTS:test/error/%.cpp=$(BIN_DIR)/warning_%)
 
 time_compilation_tests: time_compilation_correctness time_compilation_performance time_compilation_static time_compilation_generators
 
@@ -604,16 +593,10 @@ $(BIN_DIR)/warning_%: test/warning/%.cpp $(BIN_DIR)/libHalide.so include/Halide.
 $(BIN_DIR)/opengl_%: test/opengl/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -Isrc -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
 
-$(BIN_DIR)/static_%_generate: test/static/%_generate.cpp $(BIN_DIR)/libHalide.so include/Halide.h
-	$(CXX) $(TEST_CXX_FLAGS) $(OPTIMIZE) $< -Iinclude -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
-
 tmp/static/%/%.o: $(BIN_DIR)/static_%_generate
 	@-mkdir -p tmp/static/$*
 	cd tmp/static/$*; $(LD_PATH_SETUP3) ../../../$<
 	@-echo
-
-$(BIN_DIR)/static_%_test: test/static/%_test.cpp $(BIN_DIR)/static_%_generate tmp/static/%/%.o include/HalideRuntime.h
-	$(STATIC_TEST_CXX) $(STATIC_TEST_CXX_FLAGS) $(OPTIMIZE) -I tmp/static/$* -I apps/support -I src/runtime tmp/static/$*/*.o $< -lpthread $(STATIC_TEST_LIBS) -o $@
 
 # TODO(srj): this doesn't auto-delete, why not?
 .INTERMEDIATE: $(FILTERS_DIR)/%.generator
@@ -714,11 +697,6 @@ $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 test_%: $(BIN_DIR)/test_%
 	@-mkdir -p tmp
 	cd tmp ; $(LD_PATH_SETUP) ../$<
-	@-echo
-
-static_%: $(BIN_DIR)/static_%_test
-	@-mkdir -p tmp
-	cd tmp ; $(LD_PATH_SETUP) $(STATIC_TEST_RUNNER) ../$<
 	@-echo
 
 valgrind_%: $(BIN_DIR)/test_%
