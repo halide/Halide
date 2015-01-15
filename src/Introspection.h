@@ -17,11 +17,20 @@
 namespace Halide {
 namespace Internal {
 
+namespace Introspection {
 /** Get the name of a stack variable from its address. The stack
  * variable must be in a compilation unit compiled with -g to
  * work. The expected type helps distinguish between variables at the
  * same address, e.g a class instance vs its first member. */
 EXPORT std::string get_variable_name(const void *, const std::string &expected_type);
+
+/** Register an untyped heap object. Derive type information from an
+ * introspectable pointer to a pointer to a global object of the same
+ * type. Not thread-safe. */
+EXPORT void register_heap_object(const void *obj, size_t size, const void *helper);
+
+/** Deregister a heap object. Not thread-safe. */
+EXPORT void deregister_heap_object(const void *obj, size_t size);
 
 /** Get the source location in the call stack, skipping over calls in
  * the Halide namespace. */
@@ -31,6 +40,7 @@ EXPORT std::string get_source_location();
 // the code below. It tests if this functionality works for the given
 // compilation unit, and disables it if not.
 EXPORT void test_compilation_unit(bool (*test)(), void (*calib)());
+}
 
 }
 }
@@ -48,8 +58,8 @@ static bool check_introspection(const void *var, const std::string &type,
                                 const std::string &correct_name,
                                 const std::string &correct_file, int line) {
     std::string correct_loc = correct_file + ":" + int_to_string(line);
-    std::string loc = get_source_location();
-    std::string name = get_variable_name(var, type);
+    std::string loc = Introspection::get_source_location();
+    std::string name = Introspection::get_variable_name(var, type);
     return name == correct_name && loc == correct_loc;
 }
 }
@@ -107,7 +117,7 @@ static bool test() {
 namespace {
 struct TestCompilationUnit {
     TestCompilationUnit() {
-        Halide::Internal::test_compilation_unit(&test, &offset_marker);
+        Halide::Internal::Introspection::test_compilation_unit(&test, &offset_marker);
     }
 };
 }
