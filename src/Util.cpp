@@ -101,14 +101,7 @@ string base_name(const string &name, char delim) {
 }
 
 string make_entity_name(void *stack_ptr, const string &type, char prefix) {
-    string name = get_variable_name(stack_ptr, type);
-
-    if (name.empty() && starts_with(type, "Halide::")) {
-        // Maybe we're in a generator. Try again replacing any
-        // "Halide::" with "Halide::NamesInterface::"
-        string qualified_type = "Halide::NamesInterface::" + type.substr(8, type.size()-8);
-        name = get_variable_name(stack_ptr, qualified_type);
-    }
+    string name = Introspection::get_variable_name(stack_ptr, type);
 
     if (name.empty()) {
         return unique_name(prefix);
