@@ -23,7 +23,6 @@ LLVM_AS = $(LLVM_BINDIR)/llvm-as
 LLVM_NM = $(LLVM_BINDIR)/llvm-nm
 LLVM_CXX_FLAGS = $(filter-out -O% -g -fomit-frame-pointer -Wcovered-switch-default, $(shell $(LLVM_CONFIG) --cxxflags))
 OPTIMIZE ?= -O3
-CXX11 ?=
 # This can be set to -m32 to get a 32-bit build of Halide on a 64-bit system.
 # (Normally this can be done via pointing to a compiler that defaults to 32-bits,
 #  but that is difficult in some testing situations because it requires having
@@ -59,17 +58,10 @@ ifneq ($(LLVM_VERSION), 3.2)
 WITH_PTX ?= $(findstring nvptx, $(LLVM_COMPONENTS))
 endif
 
-# turn on c++11 for llvm 3.5
-ifeq ($(LLVM_VERSION_TIMES_10), 35)
-CXX11 = true
-endif
+# turn on c++11 for llvm 3.5+
+CXX11 ?= $(findstring $(LLVM_VERSION_TIMES_10), 35 36 37 38 39 40)
 
-# turn on c++11 for llvm 3.6
-ifeq ($(LLVM_VERSION_TIMES_10), 36)
-CXX11 = true
-endif
-
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 LLVM_CXX_FLAGS += -std=c++11
 TEST_CXX_FLAGS += -std=c++11
 endif
@@ -546,7 +538,7 @@ test_warnings: $(WARNING_TESTS:test/warning/%.cpp=warning_%)
 test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
 else
 test_generators: ;
@@ -554,7 +546,7 @@ endif
 
 ALL_TESTS = test_internal test_correctness test_errors test_tutorials test_static test_warnings
 
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 ALL_TESTS += test_generators
 endif
 
@@ -564,7 +556,7 @@ time_compilation_correctness: init_time_compilation_correctness $(CORRECTNESS_TE
 time_compilation_static: init_time_compilation_static $(STATIC_TESTS:test/static/%_generate.cpp=time_compilation_static_%)
 time_compilation_performance: init_time_compilation_performance $(PERFORMANCE_TESTS:test/performance/%.cpp=time_compilation_performance_%)
 time_compilation_opengl: init_time_compilation_opengl $(OPENGL_TESTS:test/opengl/%.cpp=time_compilation_opengl_%)
-ifeq ($(CXX11),true)
+ifneq ($(CXX11),)
 time_compilation_generators: init_time_compilation_generator $(GENERATOR_TESTS:test/generator/%_aottest.cpp=time_compilation_generator_%)
 else
 time_compilation_generators: ;
