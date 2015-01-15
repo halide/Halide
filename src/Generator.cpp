@@ -48,14 +48,15 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-test] [-help] "
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-test] [-help] [-list] "
                           "[target=target-string] [generator_arg=value [...]]\n";
 
     std::map<std::string, std::string> flags_info = {{ "-f", "" },
                                                      { "-g", "" },
                                                      { "-o", "" }};
     std::map<std::string, bool> bool_flags_info = {{ "-test", false },
-                                                   { "-help", false }};
+                                                   { "-help", false },
+                                                   { "-list", false }};
     std::map<std::string, std::string> generator_args = {{ "target", "host" }};
 
     for (int i = 1; i < argc; ++i) {
@@ -94,6 +95,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
 
     bool run_test = bool_flags_info["-test"];
     bool print_help = bool_flags_info["-help"];
+    bool list_generators = bool_flags_info["-list"];
+
+    std::string output_dir = flags_info["-o"];
+    bool emit_output = !output_dir.empty();
+
+    std::string generator_name = flags_info["-g"];
+    std::string function_name = flags_info["-f"];
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
     if (generator_names.size() == 0) {
@@ -102,7 +110,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
-    std::string generator_name = flags_info["-g"];
+    if (list_generators) {
+        for (auto name : generator_names) {
+            cerr << name << "\n";
+        }
+        return 0;
+    }
+
     if (generator_name.empty()) {
         // If -g isn't specified, but there's only one generator registered, just use that one.
         if (generator_names.size() != 1) {
@@ -115,14 +129,13 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         }
         generator_name = generator_names[0];
     }
-    std::string function_name = flags_info["-f"];
+
     if (function_name.empty()) {
         // If -f isn't specified, assume function name = generator name.
         function_name = generator_name;
     }
 
-    std::string output_dir = flags_info["-o"];
-    if (output_dir.empty() && !run_test && !print_help) {
+    if (!emit_output && !run_test && !print_help) {
         cerr << "At least one of -o, -test, or -help must be specified.\n";
         cerr << kUsage;
         return 1;
@@ -146,6 +159,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             cerr << "Test failed\n";
             // Don't bother emitting the filter if the test fails.
             return 1;
+        } else {
+            cerr << "Test passed\n";
         }
     }
 
@@ -185,7 +200,7 @@ void GeneratorRegistry::unregister_factory(const std::string &name) {
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     internal_assert(registry.factories.find(name) != registry.factories.end())
-        << "Generator not found: " << name;
+        << "Generator not found: " << name << "\n";
     registry.factories.erase(name);
 }
 
@@ -195,7 +210,7 @@ std::unique_ptr<GeneratorBase> GeneratorRegistry::create(const std::string &name
     GeneratorRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     auto it = registry.factories.find(name);
-    user_assert(it != registry.factories.end()) << "Generator not found: " << name;
+    user_assert(it != registry.factories.end()) << "Generator not found: " << name << "\n";
     return it->second->create(params);
 }
 
