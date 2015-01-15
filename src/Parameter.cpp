@@ -62,7 +62,7 @@ Parameter::Parameter(Type t, bool is_buffer, int d) :
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     // Note that is_registered is always true here; this is just using a parallel code structure for clarity.
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     }
 }
 
@@ -70,13 +70,13 @@ Parameter::Parameter(Type t, bool is_buffer, int d, const std::string &name, boo
     contents(new ParameterContents(t, is_buffer, d, name, is_explicit_name, register_instance)) {
     internal_assert(is_buffer || d == 0) << "Scalar parameters should be zero-dimensional";
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     }
 }
 
 Parameter::Parameter(const Parameter& that) : contents(that.contents) {
     if (contents.defined() && contents.ptr->is_registered) {
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     }
 }
 
@@ -88,7 +88,7 @@ Parameter& Parameter::operator=(const Parameter& that) {
         // This can happen if you do:
         // Parameter p; // undefined
         // p = make_interesting_parameter();
-        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this);
+        ObjectInstanceRegistry::register_instance(this, 0, ObjectInstanceRegistry::FilterParam, this, NULL);
     } else if (!should_be_registered && was_registered) {
         // This can happen if you do:
         // Parameter p = make_interesting_parameter();
