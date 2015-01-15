@@ -57,39 +57,18 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
 }  // namespace
 
 Func::Func(const string &name) : func(unique_name(name)),
-                                 error_handler(NULL),
-                                 custom_malloc(NULL),
-                                 custom_free(NULL),
-                                 custom_do_par_for(NULL),
-                                 custom_do_task(NULL),
-                                 custom_trace(NULL),
-                                 custom_print(NULL),
                                  cache_size(0),
                                  random_seed(0),
                                  jit_user_context(make_user_context()) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
-               error_handler(NULL),
-               custom_malloc(NULL),
-               custom_free(NULL),
-               custom_do_par_for(NULL),
-               custom_do_task(NULL),
-               custom_trace(NULL),
-               custom_print(NULL),
                cache_size(0),
                random_seed(0),
                jit_user_context(make_user_context()) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
-                     error_handler(NULL),
-                     custom_malloc(NULL),
-                     custom_free(NULL),
-                     custom_do_par_for(NULL),
-                     custom_do_task(NULL),
-                     custom_trace(NULL),
-                     custom_print(NULL),
                      cache_size(0),
                      random_seed(0),
                      jit_user_context(make_user_context()) {
@@ -97,13 +76,6 @@ Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
 }
 
 Func::Func(Function f) : func(f),
-                         error_handler(NULL),
-                         custom_malloc(NULL),
-                         custom_free(NULL),
-                         custom_do_par_for(NULL),
-                         custom_do_task(NULL),
-                         custom_trace(NULL),
-                         custom_print(NULL),
                          cache_size(0),
                          random_seed(0),
                          jit_user_context(make_user_context()) {
@@ -2259,70 +2231,35 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
-    error_handler = handler;
-    // TODO: Figure this out
-#if 0
-    if (compiled_module.set_error_handler) {
-        compiled_module.set_error_handler(handler);
-    }
-#endif
+      debug(0) << "Setting Error handler\n";
+    jit_handlers.custom_error = handler;
 }
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
-    custom_malloc = cust_malloc;
-    custom_free = cust_free;
-    // TODO: Figure this out
-#if 0
-    if (compiled_module.set_custom_allocator) {
-        compiled_module.set_custom_allocator(cust_malloc, cust_free);
-    }
-#endif
+    jit_handlers.custom_allocator.custom_malloc = cust_malloc;
+    jit_handlers.custom_allocator.custom_free = cust_free;
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
-    custom_do_par_for = cust_do_par_for;
-    // TODO: Figure this out
-#if 0
-    if (compiled_module.set_custom_do_par_for) {
-        compiled_module.set_custom_do_par_for(cust_do_par_for);
-    }
-#endif
+    jit_handlers.custom_do_par_for = cust_do_par_for;
 }
 
 void Func::set_custom_do_task(int (*cust_do_task)(void *, int (*)(void *, int, uint8_t *), int, uint8_t *)) {
-    custom_do_task = cust_do_task;
-    // TODO: Figure this out
-#if 0
-    if (compiled_module.set_custom_do_task) {
-        compiled_module.set_custom_do_task(cust_do_task);
-    }
-#endif
+    jit_handlers.custom_do_task = cust_do_task;
 }
 
 void Func::set_custom_trace(int (*trace_fn)(void *, const halide_trace_event *)) {
-    custom_trace = trace_fn;
-    // TODO: Figure this out
-#if 0
-    if (compiled_module.set_custom_trace) {
-        compiled_module.set_custom_trace(t);
-    }
-#endif
+    jit_handlers.custom_trace = trace_fn;
 }
 
 void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
-    custom_print = cust_print;
-    // TODO: Figure this out
-#if 0
-    if (compiled_module.set_custom_print) {
-        compiled_module.set_custom_print(custom_print);
-    }
-#endif
+    jit_handlers.custom_print = cust_print;
 }
 
 void Func::memoization_cache_set_size(uint64_t size) {
-    cache_size = size;
     // TODO: Figure this out
+    cache_size = size;
 #if 0
     if (compiled_module.memoization_cache_set_size) {
         compiled_module.memoization_cache_set_size(size);
@@ -2357,6 +2294,11 @@ struct ErrorBuffer {
     char buf[MaxBufSize];
     int end;
     void (*next_error_handler)(void *user_context, const char *);
+
+    ErrorBuffer() {
+        end = 0;
+        buf[0] = '\0';
+    }
 
     void concat(const char *message) {
         size_t len = strlen(message);
@@ -2403,19 +2345,6 @@ struct ErrorBuffer {
 
 }  // namespace Internal
 
-bool Func::prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf) {
-    bool has_custom_error_handler = (error_handler != &Internal::ErrorBuffer::handler && error_handler != NULL);
-    memset(buf->buf, 0, Internal::ErrorBuffer::MaxBufSize);
-    buf->end = 0;
-    buf->next_error_handler = has_custom_error_handler ? error_handler : NULL;
-    // TODO: Figure this out
-#if 0
-    compiled_module.set_error_handler(Internal::ErrorBuffer::handler);
-#endif
-    jit_user_context.set_scalar(buf);
-    return has_custom_error_handler;
-}
-
 void Func::realize(Realization dst, const Target &target) {
     if (!compiled_module.jit_wrapper_function()) {
         compile_jit(target);
@@ -2441,15 +2370,21 @@ void Func::realize(Realization dst, const Target &target) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
+    // TODO: encapsulate and fix naming
+    ErrorBuffer buf;
+    // TODO: Either remove this or figure out how to make the user providing context to JIT can work.
+    void *user_context = NULL;
+    JITHandlers local_handlers = jit_handlers;
+    if (local_handlers.custom_error == NULL) {
+        local_handlers.custom_error = Internal::ErrorBuffer::handler;
+        user_context = &buf;
+    }
+    JITUserContext jit_context;
+    JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
+    jit_user_context.set_scalar(&jit_context);
+
     // TODO: Figure this out.
 #if 0
-    // In case these have changed since the last realization
-    compiled_module.set_error_handler(error_handler);
-    compiled_module.set_custom_allocator(custom_malloc, custom_free);
-    compiled_module.set_custom_do_par_for(custom_do_par_for);
-    compiled_module.set_custom_do_task(custom_do_task);
-    compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_custom_print(custom_print);
     compiled_module.memoization_cache_set_size(cache_size);
 #endif
 
@@ -2475,28 +2410,24 @@ void Func::realize(Realization dst, const Target &target) {
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+      Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void **)arg_values[i] << ")\n";
         internal_assert(arg_values[i])
             << "An argument to a jitted function is null\n";
     }
 
     // Always add a custom error handler to capture any error messages.
     // (If there is a user-set error handler, it will be called as well.)
-    ErrorBuffer buf;
-    bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
 
     Internal::debug(2) << "Calling jitted function\n";
     int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
     Internal::debug(2) << "Back from jitted function. Exit status was " << exit_status << "\n";
 
     // TODO: Remove after Buffer is sorted out.
-#if 0
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
     }
-#endif
 
-    if (exit_status && !has_custom_error_handler) {
+    if (exit_status && *buf.str() != '\0') {
         // Only report the errors if no custom error handler was installed
         halide_runtime_error << buf.str();
     }
@@ -2512,6 +2443,19 @@ void Func::infer_input_bounds(Realization dst) {
     }
 
     internal_assert(compiled_module.jit_wrapper_function());
+
+    // TODO: encapsulate and fix naming
+    ErrorBuffer buf;
+    // TODO: Either remove this or figure out how to make the user providing context to JIT can work.
+    void *user_context = NULL;
+    JITHandlers local_handlers = jit_handlers;
+    if (local_handlers.custom_error == NULL) {
+        local_handlers.custom_error = Internal::ErrorBuffer::handler;
+        user_context = &buf;
+    }
+    JITUserContext jit_context;
+    JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
+    jit_user_context.set_scalar(&jit_context);
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2531,14 +2475,7 @@ void Func::infer_input_bounds(Realization dst) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
-#if 0
-    // In case these have changed since the last realization
-    compiled_module.set_error_handler(error_handler);
-    compiled_module.set_custom_allocator(custom_malloc, custom_free);
-    compiled_module.set_custom_do_par_for(custom_do_par_for);
-    compiled_module.set_custom_do_task(custom_do_task);
-    compiled_module.set_custom_trace(custom_trace);
-    compiled_module.set_custom_print(custom_print);
+#if 0 // Figure this out.
     compiled_module.memoization_cache_set_size(cache_size);
 #endif
 
@@ -2568,7 +2505,7 @@ void Func::infer_input_bounds(Realization dst) {
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << "\n";
+      Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void **)arg_values[i] << ")\n";
         internal_assert(arg_values[i]) << "An argument to a jitted function is null.\n";
     }
 
@@ -2587,11 +2524,6 @@ void Func::infer_input_bounds(Realization dst) {
     const int max_iters = 16;
     int iter = 0;
 
-    // Always add a custom error handler to capture any error messages.
-    // (If there is a user-set error handler, it will be called as well.)
-    ErrorBuffer buf;
-    bool has_custom_error_handler = prepare_to_catch_runtime_errors(&buf);
-
     for (iter = 0; iter < max_iters; iter++) {
         // Make a copy of the buffers we expect to be mutated
         for (size_t j = 0; j < tracked_buffers.size(); j++) {
@@ -2600,7 +2532,7 @@ void Func::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Calling jitted function\n";
         int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
 
-        if (exit_status && !has_custom_error_handler) {
+        if (exit_status && *buf.str() != '\0') {
             // Only report the errors if no custom error handler was installed
             halide_runtime_error << buf.str();
         }
@@ -2672,15 +2604,17 @@ void Func::infer_input_bounds(Realization dst) {
     }
 
     // TODO: Remove after Buffer is sorted out.
-#if 0
     for (size_t i = 0; i < dst.size(); i++) {
         dst[i].set_source_module(compiled_module);
     }
-#endif
 }
 
-void *Func::compile_jit(const Target &target) {
+void *Func::compile_jit(const Target &target_arg) {
     user_assert(defined()) << "Can't jit-compile undefined Func.\n";
+
+    Target target(target_arg);
+    target.set_feature(Target::JIT);
+    target.set_feature(Target::UserContext);
 
     lower(target);
 
@@ -2715,9 +2649,7 @@ void *Func::compile_jit(const Target &target) {
                            << infer_args.arg_types[i].is_buffer << "\n";
     }
 
-    Target t = target;
-    t.set_feature(Target::JIT);
-    StmtCompiler cg(t);
+    StmtCompiler cg(target);
 
     // Sanitise the name of the generated function
     string n = name();

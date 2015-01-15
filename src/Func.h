@@ -415,36 +415,7 @@ class Func {
     /** Invalidate the cached lowered stmt and compiled module. */
     void invalidate_cache();
 
-    /** The current error handler used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    void (*error_handler)(void *user_context, const char *);
-
-    /** The current custom allocator used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    // @{
-    void *(*custom_malloc)(void *user_context, size_t);
-    void (*custom_free)(void *user_context, void *ptr);
-    // @}
-
-    /** The current custom parallel task launcher and handler for
-     * realizing this function. May be NULL. */
-    // @{
-    int (*custom_do_par_for)(void *user_context,
-                             int (*)(void *, int, uint8_t *),
-                             int, int, uint8_t *);
-    int (*custom_do_task)(void *user_context, int (*)(void *, int, uint8_t *),
-                          int, uint8_t *);
-    // @}
-
-    /** The current custom tracing function. May be NULL. */
-    // @{
-    int32_t (*custom_trace)(void *, const halide_trace_event *);
-
-    // @}
-
-    /** The current print function used for realizing this
-     * function. May be NULL. Only relevant when jitting. */
-    void (*custom_print)(void *user_context, const char *);
+    Halide::Internal::JITHandlers jit_handlers;
 
     uint64_t cache_size;
 
@@ -477,10 +448,6 @@ class Func {
 
     /** A set of custom passes to use when lowering this Func. */
     std::vector<CustomLoweringPass> custom_lowering_passes;
-
-    /** Some infrastructure that helps Funcs catch and handle runtime
-     * errors in JIT-compiled code. */
-    bool prepare_to_catch_runtime_errors(Internal::ErrorBuffer *buf);
 
 public:
 

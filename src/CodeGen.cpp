@@ -360,7 +360,7 @@ JITModule CodeGen::compile_to_function_pointers() {
 
     JITModule m;
 
-    JITModule shared_runtime = JITSharedRuntime::Get(this);
+    JITModule shared_runtime = JITSharedRuntime::get(this, target);
     m.compile_module(this, module, function_name, vec(shared_runtime), std::vector<std::string>());
 
     // We now relinquish ownership of the module, and give it to the

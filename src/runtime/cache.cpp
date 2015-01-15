@@ -157,7 +157,11 @@ struct CacheEntry {
     ~CacheEntry() {
         halide_free(user_context, key);
         for (int32_t i = 0; i < tuple_count; i++) {
+// TODO: Fix this. Probably when merging with the gpu_api_naming branch.
+// Currently I doubt caching on the GPU is ever used anyway.
+#if 0
           halide_dev_free(user_context, &buffer(i));
+#endif
           halide_free(user_context, buffer(i).host);
         }
     }

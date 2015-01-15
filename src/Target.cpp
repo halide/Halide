@@ -148,11 +148,13 @@ Target get_target_from_environment() {
 
 Target get_jit_target_from_environment() {
     Target host = get_host_target();
+    host.set_feature(Target::JIT);
     string target = get_env("HL_JIT_TARGET");
     if (target.empty()) {
         return host;
     } else {
         Target t = parse_target_string(target);
+        t.set_feature(Target::JIT);
         user_assert(t.os == host.os && t.arch == host.arch && t.bits == host.bits)
             << "HL_JIT_TARGET must match the host OS, architecture, and bit width.\n"
             << "HL_JIT_TARGET was " << target << ". "
@@ -464,6 +466,8 @@ DECLARE_CPP_INITMOD(gpu_device_selection)
 DECLARE_CPP_INITMOD(cache)
 DECLARE_CPP_INITMOD(nacl_host_cpu_count)
 DECLARE_CPP_INITMOD(to_string)
+DECLARE_CPP_INITMOD(module_jit_ref_count)
+DECLARE_CPP_INITMOD(module_aot_ref_count)
 
 #ifdef WITH_ARM
 DECLARE_LL_INITMOD(arm)
@@ -558,8 +562,25 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
     llvm::Module *module = modules[0];
 
+    // Enumerate the global variables.
+    for (llvm::Module::global_iterator iter = module->global_begin(); iter != module->global_end(); iter++) {
+      if (llvm::GlobalValue *gv = llvm::dyn_cast<llvm::GlobalValue>(iter)) {
+          if (gv->hasWeakLinkage() && Internal::starts_with(gv->getName(), "halide_")) {
+                llvm::GlobalValue::LinkageTypes t = gv->getLinkage();
+                if (t == llvm::GlobalValue::WeakAnyLinkage) {
+                    gv->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
+                } else if (t == llvm::GlobalValue::WeakODRLinkage) {
+                    gv->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
+                }
+            }
+        }
+    }
+
+    // Enumerate the functions.
     for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
         llvm::Function *f = (llvm::Function *)(iter);
+        //      Halide::Internal::debug(0) << "Found function: " << (std::string)f->getName() << "\n";
+
         bool can_strip = true;
         for (size_t i = 0; !retain[i].empty(); i++) {
             if (f->getName() == retain[i]) {
@@ -578,7 +599,6 @@ void link_modules(std::vector<llvm::Module *> &modules) {
                 f->setLinkage(llvm::GlobalValue::LinkOnceODRLinkage);
             }
         }
-
     }
 
     // Now remove the force-usage global that prevented clang from
@@ -677,18 +697,27 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
 }
 
 /** Create an llvm module containing the support code for a given target. */
-llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime) {
+  llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
     enum InitialModuleType {
         ModuleAOT,
         ModuleJITShared,
-        ModuleJITInlined
+        ModuleJITInlined,
+        ModuleGPU,
     } module_type;
 
     if (t.has_feature(Target::JIT)) {
-        module_type = for_shared_jit_runtime ? ModuleJITShared : ModuleJITInlined;
+        if (just_gpu) {
+            module_type = ModuleGPU;
+        } else if (for_shared_jit_runtime) {
+            module_type = ModuleJITShared;
+        } else {
+            module_type = ModuleJITInlined;
+        }
     } else {
         module_type = ModuleAOT;
     }
+
+    //    Halide::Internal::debug(0) << "Getting initial module type " << (int)module_type << "\n";
 
     internal_assert(t.bits == 32 || t.bits == 64);
     // NaCl always uses the 32-bit runtime modules, because pointers
@@ -708,88 +737,99 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
 
     vector<llvm::Module *> modules;
 
-    if (module_type != ModuleJITInlined) {
-        // OS-dependent modules
-        if (t.os == Target::Linux) {
-            modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-            modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
-        } else if (t.os == Target::OSX) {
-            modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-            modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
-        } else if (t.os == Target::Android) {
-            modules.push_back(get_initmod_android_clock(c, bits_64, debug));
-            modules.push_back(get_initmod_android_io(c, bits_64, debug));
-            modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
-        } else if (t.os == Target::Windows) {
-            modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
-            modules.push_back(get_initmod_windows_io(c, bits_64, debug));
-            modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
-        } else if (t.os == Target::IOS) {
-            modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
-            modules.push_back(get_initmod_ios_io(c, bits_64, debug));
-            modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
-        } else if (t.os == Target::NaCl) {
-            modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_io(c, bits_64, debug));
-            modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
-            modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
-            // TODO: How does this fit into the module types set?
-            modules.push_back(get_initmod_ssp(c, bits_64, debug));
-        }
-    }
-
-    if (module_type != ModuleJITShared) {
-        // Math intrinsics vary slightly across platforms
-        if (t.os == Target::Windows && t.bits == 32) {
-            modules.push_back(get_initmod_win32_math_ll(c));
-        } else if (t.arch == Target::PNaCl) {
-            modules.push_back(get_initmod_pnacl_math_ll(c));
-        } else {
-            modules.push_back(get_initmod_posix_math_ll(c));
-        }
-    }
-
-    if (module_type != ModuleJITInlined) {
-        // These modules are always used
-        modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
-        modules.push_back(get_initmod_posix_math(c, bits_64, debug));
-        modules.push_back(get_initmod_tracing(c, bits_64, debug));
-        modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
-        modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
-        modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
-        modules.push_back(get_initmod_posix_print(c, bits_64, debug));
-        modules.push_back(get_initmod_cache(c, bits_64, debug));
-        modules.push_back(get_initmod_to_string(c, bits_64, debug));
-    }
-
-    if (module_type != ModuleJITShared) {
-        // These modules are optional
-        if (t.arch == Target::X86) {
-            modules.push_back(get_initmod_x86_ll(c));
-        }
-        if (t.arch == Target::ARM) {
-            if (t.bits == 64) {
-              modules.push_back(get_initmod_aarch64_ll(c));
-            } else {
-              modules.push_back(get_initmod_arm_ll(c));
+    if (module_type != ModuleGPU) {
+        if (module_type != ModuleJITInlined) {
+            // OS-dependent modules
+            if (t.os == Target::Linux) {
+                modules.push_back(get_initmod_linux_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_linux_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::OSX) {
+                modules.push_back(get_initmod_osx_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::Android) {
+                modules.push_back(get_initmod_android_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_android_io(c, bits_64, debug));
+                modules.push_back(get_initmod_android_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::Windows) {
+                modules.push_back(get_initmod_windows_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_windows_io(c, bits_64, debug));
+                modules.push_back(get_initmod_windows_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::IOS) {
+                modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_ios_io(c, bits_64, debug));
+                modules.push_back(get_initmod_gcd_thread_pool(c, bits_64, debug));
+            } else if (t.os == Target::NaCl) {
+                modules.push_back(get_initmod_posix_clock(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_io(c, bits_64, debug));
+                modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
+                modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
+                // TODO: How does this fit into the module types set?
+                modules.push_back(get_initmod_ssp(c, bits_64, debug));
             }
         }
-        if (t.arch == Target::MIPS) {
-            modules.push_back(get_initmod_mips_ll(c));
+
+        if (module_type != ModuleJITShared) {
+            // The first module for inline only case has to be C/C++ compiled otherwise the
+            // datalayout is not properly setup.
+            modules.push_back(get_initmod_posix_math(c, bits_64, debug));
+            // Math intrinsics vary slightly across platforms
+            if (t.os == Target::Windows && t.bits == 32) {
+                modules.push_back(get_initmod_win32_math_ll(c));
+            } else if (t.arch == Target::PNaCl) {
+                modules.push_back(get_initmod_pnacl_math_ll(c));
+            } else {
+                modules.push_back(get_initmod_posix_math_ll(c));
+            }
         }
-        if (t.has_feature(Target::SSE41)) {
-            modules.push_back(get_initmod_x86_sse41_ll(c));
+
+        if (module_type != ModuleJITInlined) {
+            // These modules are always used and shared
+            modules.push_back(get_initmod_gpu_device_selection(c, bits_64, debug));
+            modules.push_back(get_initmod_tracing(c, bits_64, debug));
+            modules.push_back(get_initmod_write_debug_image(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_allocator(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_error_handler(c, bits_64, debug));
+            modules.push_back(get_initmod_posix_print(c, bits_64, debug));
+            modules.push_back(get_initmod_cache(c, bits_64, debug));
+            modules.push_back(get_initmod_to_string(c, bits_64, debug));
         }
-        if (t.has_feature(Target::AVX)) {
-            modules.push_back(get_initmod_x86_avx_ll(c));
+
+        if (module_type != ModuleJITShared) {
+            // These modules are optional
+            if (t.arch == Target::X86) {
+                modules.push_back(get_initmod_x86_ll(c));
+            }
+            if (t.arch == Target::ARM) {
+                if (t.bits == 64) {
+                  modules.push_back(get_initmod_aarch64_ll(c));
+                } else {
+                  modules.push_back(get_initmod_arm_ll(c));
+                }
+            }
+            if (t.arch == Target::MIPS) {
+                modules.push_back(get_initmod_mips_ll(c));
+            }
+            if (t.has_feature(Target::SSE41)) {
+                modules.push_back(get_initmod_x86_sse41_ll(c));
+            }
+            if (t.has_feature(Target::AVX)) {
+                modules.push_back(get_initmod_x86_avx_ll(c));
+            }
         }
     }
 
-    if (module_type != ModuleJITInlined) {
+    if (module_type == ModuleJITShared || module_type == ModuleGPU) {
+        modules.push_back(get_initmod_module_jit_ref_count(c, bits_64, debug));
+    } else if (module_type == ModuleAOT) {
+        modules.push_back(get_initmod_module_aot_ref_count(c, bits_64, debug));
+    }
+
+    if (module_type == ModuleAOT || module_type == ModuleGPU) {
+      //      Halide::Internal::debug(0) << "Module type GPU\n";
         if (t.has_feature(Target::CUDA)) {
             if (t.os == Target::Windows) {
                 modules.push_back(get_initmod_windows_cuda(c, bits_64, debug));

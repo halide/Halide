@@ -848,6 +848,9 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
     }
 
     free(texinfo);
+
+    halide_release_jit_module();
+
     return 0;
 }
 
@@ -1093,6 +1096,9 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     }
     ST.BindTexture(GL_TEXTURE_2D, 0);
     buf->host_dirty = false;
+
+    halide_use_jit_module();
+
     return 0;
 }
 

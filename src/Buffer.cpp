@@ -1,7 +1,7 @@
 #include "Buffer.h"
 #include "Debug.h"
 #include "Error.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 
 namespace Halide {
 namespace Internal {
@@ -38,7 +38,7 @@ struct BufferContents {
      * was generated on the gpu and hasn't been copied back yet, only
      * the module knows how to do that, so we'd better keep the module
      * alive. */
-    JITCompiledModule source_module;
+    JITModule source_module;
 
     BufferContents(Type t, int x_size, int y_size, int z_size, int w_size,
                    uint8_t* data, const std::string &n) :
@@ -106,11 +106,8 @@ EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
-    // Free any device-side allocation
-    if (p->source_module.free_dev_buffer) {
-        int error = p->source_module.free_dev_buffer(NULL, const_cast<buffer_t *>(&p->buf));
-        user_assert(!error) << "Failed to free device buffer\n";
-    }
+    int error = p->source_module.dev_free(const_cast<buffer_t *>(&p->buf));
+    user_assert(!error) << "Failed to free device buffer\n";
     free(p->allocation);
 
     delete p;
@@ -244,43 +241,26 @@ Buffer::operator Argument() const {
     return Argument(name(), true, type());
 }
 
-void Buffer::set_source_module(const Internal::JITCompiledModule &module) {
+void Buffer::set_source_module(const Internal::JITModule &module) {
     user_assert(defined()) << "Buffer is undefined\n";
     contents.ptr->source_module = module;
 }
 
-const Internal::JITCompiledModule &Buffer::source_module() {
+const Internal::JITModule &Buffer::source_module() {
     user_assert(defined()) << "Buffer is undefined\n";
     return contents.ptr->source_module;
 }
 
 int Buffer::copy_to_host() {
-    int (*copy_to_host)(void *, buffer_t *) =
-        contents.ptr->source_module.copy_to_host;
-    if (copy_to_host) {
-        /* The user context is always NULL when jitting, so it's safe to
-         * pass NULL here. */
-        return copy_to_host(NULL, raw_buffer());
-    }
-    return 0;
+    return source_module().copy_to_host(raw_buffer());
 }
 
 int Buffer::copy_to_dev() {
-    int (*copy_to_dev)(void *, buffer_t *) =
-        contents.ptr->source_module.copy_to_dev;
-    if (copy_to_dev) {
-        return copy_to_dev(NULL, raw_buffer());
-    }
-    return 0;
+    return source_module().copy_to_dev(raw_buffer());
 }
 
 int Buffer::free_dev_buffer() {
-    int (*free_dev_buffer)(void *, buffer_t *) =
-        contents.ptr->source_module.free_dev_buffer;
-    if (free_dev_buffer) {
-        return free_dev_buffer(NULL, raw_buffer());
-    }
-    return 0;
+    return source_module().dev_free(raw_buffer());
 }
 
 

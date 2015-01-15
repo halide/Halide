@@ -14,128 +14,140 @@ using std::string;
 
 using namespace llvm;
 
-llvm::Type *copy_llvm_type_to_context(LLVMContext &context, llvm::Type *from_type) {
+llvm::Type *copy_llvm_type_to_module(Module *to_module, llvm::Type *from_type) {
+    LLVMContext &context(to_module->getContext());
     if (&from_type->getContext() == &context) {
         return from_type;
     }
 
     switch (from_type->getTypeID()) {
-        case llvm::Type::VoidTyID:
-            return llvm::Type::getVoidTy(context);
-            break;
-        case llvm::Type::HalfTyID:
-            return llvm::Type::getHalfTy(context);
-            break;
-        case llvm::Type::FloatTyID:
-            return llvm::Type::getFloatTy(context);
-            break;
-        case llvm::Type::DoubleTyID:
-            return llvm::Type::getDoubleTy(context);
-            break;
-        case llvm::Type::X86_FP80TyID:
-            return llvm::Type::getX86_FP80Ty(context);
-            break;
-        case llvm::Type::FP128TyID:
-            return llvm::Type::getFP128Ty(context);
-            break;
-        case llvm::Type::PPC_FP128TyID:
-            return llvm::Type::getPPC_FP128Ty(context);
-            break;
-        case llvm::Type::LabelTyID:
-            return llvm::Type::getLabelTy(context);
-            break;
-        case llvm::Type::MetadataTyID:
-            return llvm::Type::getMetadataTy(context);
-            break;
-        case llvm::Type::X86_MMXTyID:
-            return llvm::Type::getX86_MMXTy(context);
-            break;
-        case llvm::Type::IntegerTyID:
-            return llvm::Type::getIntNTy(context, from_type->getIntegerBitWidth());
-            break;
-        case llvm::Type::FunctionTyID:
-            {
-                FunctionType *f = cast<FunctionType>(from_type);
-                llvm::Type *return_type = copy_llvm_type_to_context(context, f->getReturnType());
-                std::vector<llvm::Type *> arg_types;
-                for (size_t i = 0; i < f->getNumParams(); i++) {
-                    arg_types.push_back(copy_llvm_type_to_context(context, f->getParamType(i)));
+    case llvm::Type::VoidTyID:
+        return llvm::Type::getVoidTy(context);
+        break;
+    case llvm::Type::HalfTyID:
+        return llvm::Type::getHalfTy(context);
+        break;
+    case llvm::Type::FloatTyID:
+        return llvm::Type::getFloatTy(context);
+        break;
+    case llvm::Type::DoubleTyID:
+        return llvm::Type::getDoubleTy(context);
+        break;
+    case llvm::Type::X86_FP80TyID:
+        return llvm::Type::getX86_FP80Ty(context);
+        break;
+    case llvm::Type::FP128TyID:
+        return llvm::Type::getFP128Ty(context);
+        break;
+    case llvm::Type::PPC_FP128TyID:
+        return llvm::Type::getPPC_FP128Ty(context);
+        break;
+    case llvm::Type::LabelTyID:
+        return llvm::Type::getLabelTy(context);
+        break;
+    case llvm::Type::MetadataTyID:
+        return llvm::Type::getMetadataTy(context);
+        break;
+    case llvm::Type::X86_MMXTyID:
+        return llvm::Type::getX86_MMXTy(context);
+        break;
+    case llvm::Type::IntegerTyID:
+        return llvm::Type::getIntNTy(context, from_type->getIntegerBitWidth());
+        break;
+    case llvm::Type::FunctionTyID: {
+        FunctionType *f = cast<FunctionType>(from_type);
+        llvm::Type *return_type = copy_llvm_type_to_module(to_module, f->getReturnType());
+        std::vector<llvm::Type *> arg_types;
+        for (size_t i = 0; i < f->getNumParams(); i++) {
+            arg_types.push_back(copy_llvm_type_to_module(to_module, f->getParamType(i)));
+        }
+        return FunctionType::get(return_type, arg_types, f->isVarArg());
+    } break;
+    case llvm::Type::StructTyID: {
+        StructType *result;
+        StructType *s = cast<StructType>(from_type);
+        std::vector<llvm::Type *> element_types;
+        for (size_t i = 0; i < s->getNumElements(); i++) {
+            element_types.push_back(copy_llvm_type_to_module(to_module, s->getElementType(i)));
+        }
+        if (s->isLiteral()) {
+            result = StructType::get(context, element_types, s->isPacked());
+        } else {
+            result = to_module->getTypeByName(s->getName());
+            if (result == NULL) {
+                result = StructType::create(context, s->getName());
+                if (!element_types.empty()) {
+                    result->setBody(element_types, s->isPacked());
                 }
-                return FunctionType::get(return_type, arg_types, f->isVarArg());
-           }
-           break;
-        case llvm::Type::StructTyID:
-            {
-                StructType *s = cast<StructType>(from_type);
-                std::vector<llvm::Type *> element_types;
-                for (size_t i = 0; i < s->getNumElements(); i++) {
-                    element_types.push_back(copy_llvm_type_to_context(context, s->getElementType(i)));
-                }
-                if (s->isLiteral()) {
-                    return StructType::get(context, element_types, s->isPacked());
-                } else if (element_types.empty()) {
-                    return StructType::create(context, s->getName());
-                } else {
-                    return StructType::create(context, element_types, s->getName(), s->isPacked());
+            } else {
+                if (result->isOpaque() &&
+                    !element_types.empty()) {
+                    result->setBody(element_types, s->isPacked());
                 }
             }
-            break;
-        case llvm::Type::ArrayTyID:
-            {
-                ArrayType *a = cast<ArrayType>(from_type);
-                return ArrayType::get(copy_llvm_type_to_context(context, a->getElementType()), a->getNumElements());
-            }
-            break;
-        case llvm::Type::PointerTyID:
-            {
-                PointerType *p = cast<PointerType>(from_type);
-                return PointerType::get(copy_llvm_type_to_context(context, p->getElementType()), p->getAddressSpace());
-            }
-            break;
-        case llvm::Type::VectorTyID:
-            {
-                VectorType *v = cast<VectorType>(from_type);
-                return VectorType::get(copy_llvm_type_to_context(context, v->getElementType()), v->getNumElements());
-            }
-            break;
+        }
+        return result;
+    } break;
+    case llvm::Type::ArrayTyID: {
+        ArrayType *a = cast<ArrayType>(from_type);
+        return ArrayType::get(copy_llvm_type_to_module(to_module, a->getElementType()), a->getNumElements());
+    } break;
+    case llvm::Type::PointerTyID: {
+        PointerType *p = cast<PointerType>(from_type);
+        return PointerType::get(copy_llvm_type_to_module(to_module, p->getElementType()), p->getAddressSpace());
+    } break;
+    case llvm::Type::VectorTyID: {
+        VectorType *v = cast<VectorType>(from_type);
+        return VectorType::get(copy_llvm_type_to_module(to_module, v->getElementType()), v->getNumElements());
+    } break;
     }
     internal_error << "Unhandled LLVM type\n";
     return NULL;
 }
 
 // TODO: Figure out if shutdown_thread_pool was necessary and whether it can be a destructor or a CleanupRoutine?
+#define DO_CLEANUPS 0
+
 // TODO: Interface for cleanup routines?
 // TODO: CleanupRoutines interface with CodeGen
 class JITModuleContents {
 public:
     mutable RefCount ref_count;
 
-    std::map<std::string, JITModule::Symbol> exports;
+#if DO_CLEANUPS
+    struct CleanupRoutine {
+        void (*fn)(void *);
+        void *context;
 
-  // Just construct a module with symbols to import into other modules.
-  JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports) :
-        exports(exports),
-        execution_engine(NULL),
-        module(NULL),
-        context(NULL),
-        main_function(NULL),
-        jit_wrapper_function(NULL) {
+        CleanupRoutine() : fn(NULL), context(NULL) {}
+        CleanupRoutine(void (*fn)(void *), void *context) : fn(fn), context(context) {}
+    };
+#endif
+
+    // Just construct a module with symbols to import into other modules.
+    JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports) : exports(exports),
+                                                                                 execution_engine(NULL),
+                                                                                 module(NULL),
+                                                                                 context(NULL),
+                                                                                 main_function(NULL),
+                                                                                 jit_wrapper_function(NULL) {
     }
 
-  JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
-                    llvm::ExecutionEngine *ee, llvm::Module *m,
-                    void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) :
-        exports(exports),
-        execution_engine(ee),
-        module(m),
-        context(&m->getContext()),
-        main_function(main_function),
-        jit_wrapper_function(jit_wrapper_function) {
+    JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports,
+                      const std::map<std::string, void *> &runtime_internal_exports,
+                      llvm::ExecutionEngine *ee, llvm::Module *m, const std::vector<JITModule> &dependencies,
+                      void *main_function = NULL, int (*jit_wrapper_function)(const void **) = NULL) : exports(exports),
+                                                                                                       runtime_internal_exports(runtime_internal_exports),
+                                                                                                       execution_engine(ee),
+                                                                                                       module(m),
+                                                                                                       dependencies(dependencies),
+                                                                                                       context(&m->getContext()),
+                                                                                                       main_function(main_function),
+                                                                                                       jit_wrapper_function(jit_wrapper_function) {
     }
 
     ~JITModuleContents() {
-        debug(2) << "Destroying JIT compiled module at " << this << "\n";
-#if 0
+#if DO_CLEANUPS
         for (size_t i = 0; i < cleanup_routines.size(); i++) {
             void *ptr = reinterpret_bits<void *>(cleanup_routines[i].fn);
             debug(2) << "  Calling cleanup routine [" << ptr << "]("
@@ -143,6 +155,7 @@ public:
             cleanup_routines[i].fn(cleanup_routines[i].context);
         }
 #endif
+
         if (execution_engine != NULL) {
             execution_engine->runStaticConstructorsDestructors(true);
             delete execution_engine;
@@ -151,23 +164,27 @@ public:
         }
     }
 
+    std::map<std::string, JITModule::Symbol> exports;
+    std::map<std::string, void *> runtime_internal_exports;
+
     ExecutionEngine *execution_engine;
     Module *module;
+    std::vector<JITModule> dependencies;
     LLVMContext *context;
     void *main_function;
     int (*jit_wrapper_function)(const void **);
 
-#if 0
-    /** Do any target-specific module cleanup. */
-    std::vector<JITModule::CleanupRoutine> cleanup_routines;
+    std::string name;
+#if DO_CLEANUPS
+    std::vector<CleanupRoutine> cleanup_routines;
 #endif
 };
 
-template<>
-EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) {return f->ref_count;}
+template <>
+EXPORT RefCount &ref_count<JITModuleContents>(const JITModuleContents *f) { return f->ref_count; }
 
-template<>
-EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) {delete f;}
+template <>
+EXPORT void destroy<JITModuleContents>(const JITModuleContents *f) { delete f; }
 
 namespace {
 
@@ -179,36 +196,40 @@ char *start, *end;
 
 // Retrieve a function pointer from an llvm module, possibly by
 // compiling it. Returns it by assigning to the last argument.
-JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, Module *mod, const string &name) {
+JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, Module *mod, const string &name, bool optional = false) {
     internal_assert(mod && ee);
 
     debug(2) << "Retrieving " << name << " from module\n";
     llvm::Function *fn = mod->getFunction(name);
     if (!fn) {
+        if (optional) {
+            return JITModule::Symbol();
+        }
         internal_error << "Could not find function " << name << " in module\n";
     }
 
     debug(2) << "JIT Compiling " << name << "\n";
     void *f = ee->getPointerToFunction(fn);
     if (!f) {
+        if (optional) {
+            return JITModule::Symbol();
+        }
         internal_error << "Compiling " << name << " returned NULL\n";
     }
 
-    JITModule::Symbol symbol;
-    symbol.address = f;
-    symbol.llvm_type = fn->getFunctionType();
+    JITModule::Symbol symbol(f, fn->getFunctionType());
 
     debug(2) << "Function " << name << " is at " << f << "\n";
 
-    #ifdef __arm__
+#ifdef __arm__
     if (start == NULL) {
         start = (char *)f;
         end = (char *)f;
     } else {
         start = std::min(start, (char *)f);
-        end = std::max(end, (char *)f+32);
+        end = std::max(end, (char *)f + 32);
     }
-    #endif
+#endif
 
     return symbol;
 }
@@ -216,24 +237,23 @@ JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, Module *mod, con
 // TODO: Does this need to be conditionalized to llvm 3.6?
 class HalideJITMemoryManager : public SectionMemoryManager {
     std::vector<JITModule> dependencies;
+
 public:
-    HalideJITMemoryManager(const std::vector<JITModule> &dependencies) : dependencies(dependencies) { }
+    HalideJITMemoryManager(const std::vector<JITModule> &dependencies) : dependencies(dependencies) {}
 
     virtual uint64_t getSymbolAddress(const std::string &Name) {
         for (size_t i = 0; i < dependencies.size(); i++) {
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = dependencies[i].Exports().find(Name);
-            if (iter == dependencies[i].Exports().end() && starts_with(Name, "_")) {
-                iter =  dependencies[i].Exports().find(Name.substr(1));
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = dependencies[i].exports().find(Name);
+            if (iter == dependencies[i].exports().end() && starts_with(Name, "_")) {
+                iter = dependencies[i].exports().find(Name.substr(1));
             }
-            if (iter != dependencies[i].Exports().end()) {
-                debug(0) << "getSymbolAddress found symbol " << Name << "in dependencies as " << iter->first << "\n";
+            if (iter != dependencies[i].exports().end()) {
                 return (uint64_t)iter->second.address;
             }
         }
         return SectionMemoryManager::getSymbolAddress(Name);
     }
 };
-
 }
 
 void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
@@ -263,26 +283,26 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     options.PositionIndependentExecutable = true;
     options.UseInitArray = false;
 
-    #if LLVM_VERSION > 35
+#if LLVM_VERSION > 35
     EngineBuilder engine_builder((std::unique_ptr<llvm::Module>(m)));
-    #else
+#else
     EngineBuilder engine_builder(m);
-    #endif
+#endif
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
-    #ifdef USE_MCJIT
-    #if LLVM_VERSION < 36
+#ifdef USE_MCJIT
+#if LLVM_VERSION < 36
     // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
     JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
     engine_builder.setJITMemoryManager(memory_manager);
-    #else
+#else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-    #endif
-    #else
+#endif
+#else
     engine_builder.setUseMCJIT(false);
-    #endif
+#endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(cg->mcpu());
     engine_builder.setMAttrs(vec<string>(cg->mattrs()));
@@ -290,9 +310,9 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     if (!ee) std::cerr << error_string << "\n";
     internal_assert(ee) << "Couldn't create execution engine\n";
 
-    #ifdef __arm__
+#ifdef __arm__
     start = end = NULL;
-    #endif
+#endif
 
     // Do any target-specific initialization
     cg->jit_init(ee, m);
@@ -300,22 +320,25 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     // Add exported symbols for all dependencies.
     std::set<std::string> provided_symbols;
     for (size_t i = 0; i < dependencies.size(); i++) {
-        const std::map<std::string, Symbol> &dep_exports(dependencies[i].Exports());
+        const std::map<std::string, Symbol> &dep_exports(dependencies[i].exports());
         std::map<std::string, Symbol>::const_iterator iter;
         for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
             const std::string &name(iter->first);
             const Symbol &s(iter->second);
             if (provided_symbols.find(iter->first) == provided_symbols.end()) {
-              debug(0) << "Adding mapping for " << name << "\n";
                 GlobalValue *gv;
                 if (s.llvm_type->isFunctionTy()) {
+#if 0
                     if (!starts_with(name, "_")) {
-                        gv = (llvm::Function *)m->getOrInsertFunction("_" + name, (FunctionType *)copy_llvm_type_to_context(m->getContext(), s.llvm_type));
+                        gv = dyn_cast<GlobalValue>(m->getOrInsertFunction("_" + name, (FunctionType *)copy_llvm_type_to_module(m, s.llvm_type)));
                         ee->addGlobalMapping(gv, s.address);
                     }
-                    gv = (llvm::Function *)m->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_context(m->getContext(), s.llvm_type));
+#endif
+                    llvm::Type *copied_type = copy_llvm_type_to_module(m, s.llvm_type);
+                    Constant *cv = m->getOrInsertFunction(name, cast<FunctionType>(copied_type));
+                    gv = cast<GlobalValue>(cv);
                 } else {
-                    gv = (GlobalValue *)m->getOrInsertGlobal(name, copy_llvm_type_to_context(m->getContext(), s.llvm_type));
+                    gv = dyn_cast<GlobalValue>(m->getOrInsertGlobal(name, copy_llvm_type_to_module(m, s.llvm_type)));
                 }
                 ee->addGlobalMapping(gv, s.address);
                 provided_symbols.insert(name);
@@ -337,23 +360,45 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         main_fn = temp.address;
         exports[function_name + "_jit_wrapper"] = temp = compile_and_get_function(ee, m, function_name + "_jit_wrapper");
         wrapper_fn = (int (*)(const void **))temp.address;
-
     }
 
     for (size_t i = 0; i < requested_exports.size(); i++) {
         exports[requested_exports[i]] = compile_and_get_function(ee, m, requested_exports[i]);
     }
 
+    const char *runtime_internal_names[] = {
+        "halide_dev_malloc",
+        "halide_dev_free",
+        "halide_copy_to_dev",
+        "halide_copy_to_host",
+        "halide_set_custom_print",
+        "halide_set_error_handler",
+        "halide_set_custom_allocator",
+        "halide_set_custom_trace",
+        "halide_set_custom_do_par_for",
+        "halide_set_custom_do_task",
+    };
+
+    std::map<std::string, void *> runtime_internal_exports;
+    for (size_t i = 0;
+         i < sizeof(runtime_internal_names) / sizeof(runtime_internal_names[0]); i++) {
+        void *address = compile_and_get_function(ee, m, runtime_internal_names[i], true).address;
+        if (address) {
+            runtime_internal_exports[runtime_internal_names[i]] = address;
+        }
+    }
+
     debug(2) << "Finalizing object\n";
     ee->finalizeObject();
 
     // Stash the various objects that need to stay alive behind a reference-counted pointer.
-    jit_module = new JITModuleContents(exports, ee, m, main_fn, wrapper_fn);
+    jit_module = new JITModuleContents(exports, runtime_internal_exports, ee, m, dependencies, main_fn, wrapper_fn);
+    jit_module.ptr->name = function_name;
 
     // Do any target-specific post-compilation module meddling
-    cg->jit_finalize(ee, m, /* &jit_module.ptr->cleanup_routines */ NULL); // TODO: fix this
+    cg->jit_finalize(ee, m, /* &jit_module.ptr->cleanup_routines */ NULL);  // TODO: fix this
 
-    #ifdef __arm__
+#ifdef __arm__
     // Flush each function from the dcache so that it gets pulled into
     // the icache correctly.
 
@@ -366,31 +411,27 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     debug(2) << "Flushing cache from " << (void *)start
              << " to " << (void *)end << "\n";
     __builtin___clear_cache(start, end);
-    #endif
+#endif
 
     // TODO: I don't think this is necessary, we shouldn't have any static constructors
     ee->runStaticConstructorsDestructors(false);
-
 }
 
-const std::map<std::string, JITModule::Symbol> &JITModule::Exports() const {
+const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module.ptr->exports;
 }
 
 void JITModule::make_externs(llvm::Module *module) {
-    const std::map<std::string, Symbol> &dep_exports(Exports());
+    const std::map<std::string, Symbol> &dep_exports(exports());
     std::map<std::string, Symbol>::const_iterator iter;
     for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
         const std::string &name(iter->first);
         const Symbol &s(iter->second);
-        //      debug(0) << "Export " << name << " has type " << s.llvm_type->getTypeID() << "\n";
         GlobalValue *gv;
         if (s.llvm_type->isFunctionTy()) {
-          //      debug(0) << "Defining extern function " << name << "\n";
-            gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_context(module->getContext(), s.llvm_type));
+            gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_module(module, s.llvm_type));
         } else {
-          //      debug(0) << "Defining extern variable " << name << "\n";
-            gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_context(module->getContext(), s.llvm_type));
+            gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
         }
     }
 }
@@ -409,45 +450,305 @@ int (*JITModule::jit_wrapper_function() const)(const void **) {
     return (int (*)(const void **))jit_module.ptr->jit_wrapper_function;
 }
 
-bool JITSharedRuntime::inited = false;
-llvm::LLVMContext *host_shared_jit_llvm_context = NULL;
-JITModule JITSharedRuntime::host_shared_jit_runtime;
+int JITModule::copy_to_dev(struct buffer_t *buf) const {
+    if (jit_module.defined()) {
+        std::map<std::string, void *>::const_iterator f =
+            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_dev");
+        if (f != jit_module.ptr->runtime_internal_exports.end()) {
+            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+        }
+    }
+    return 0;
+}
 
-JITModule &JITSharedRuntime::Get(CodeGen *cg) {
-    // TODO: Thread safety
-    if (!inited) {
-        host_shared_jit_llvm_context = new LLVMContext();
-        llvm::Module *shared_runtime = get_initial_module_for_target(get_jit_target_from_environment(),
-                                                                     host_shared_jit_llvm_context, true);
+int JITModule::copy_to_host(struct buffer_t *buf) const {
+    if (jit_module.defined()) {
+        std::map<std::string, void *>::const_iterator f =
+            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_host");
+        if (f != jit_module.ptr->runtime_internal_exports.end()) {
+            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+        }
+    }
+    return 0;
+}
+
+int JITModule::dev_free(struct buffer_t *buf) const {
+    if (jit_module.defined()) {
+        std::map<std::string, void *>::const_iterator f =
+            jit_module.ptr->runtime_internal_exports.find("halide_dev_free");
+        if (f != jit_module.ptr->runtime_internal_exports.end()) {
+            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+        }
+    }
+    return 0;
+}
+
+namespace {
+
+JITHandlers runtime_internal_handlers;
+JITHandlers default_handlers;
+JITHandlers active_handlers;
+
+void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
+    if (addins.custom_print) {
+        base.custom_print = addins.custom_print;
+    }
+    if (addins.custom_allocator.custom_malloc && addins.custom_allocator.custom_free) {
+        base.custom_allocator = addins.custom_allocator;
+    }
+    if (addins.custom_do_task) {
+        base.custom_do_task = addins.custom_do_task;
+    }
+    if (addins.custom_do_par_for) {
+        base.custom_do_par_for = addins.custom_do_par_for;
+    }
+    if (addins.custom_error) {
+        base.custom_error = addins.custom_error;
+    }
+    if (addins.custom_trace) {
+        base.custom_trace = addins.custom_trace;
+    }
+}
+
+void print_handler(void *context, const char *msg) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        (*jit_user_context->handlers.custom_print)(context, msg);
+    } else {
+        return (*active_handlers.custom_print)(context, msg);
+    }
+}
+
+void *malloc_handler(void *context, size_t x) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        return (*jit_user_context->handlers.custom_allocator.custom_malloc)(context, x);
+    } else {
+        return (*active_handlers.custom_allocator.custom_malloc)(context, x);
+    }
+}
+
+void free_handler(void *context, void *ptr) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        (*jit_user_context->handlers.custom_allocator.custom_free)(context, ptr);
+    } else {
+        (*active_handlers.custom_allocator.custom_free)(context, ptr);
+    }
+}
+
+int do_task_handler(void *context, halide_task f, int idx,
+                    uint8_t *closure) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        return (*jit_user_context->handlers.custom_do_task)(context, f, idx, closure);
+    } else {
+        return (*active_handlers.custom_do_task)(context, f, idx, closure);
+    }
+}
+
+int do_par_for_handler(void *context, halide_task f,
+                       int min, int size, uint8_t *closure) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        return (*jit_user_context->handlers.custom_do_par_for)(context, f, min, size, closure);
+    } else {
+        return (*active_handlers.custom_do_par_for)(context, f, min, size, closure);
+    }
+}
+
+void error_handler_handler(void *context, const char *msg) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        (*jit_user_context->handlers.custom_error)(context, msg);
+    } else {
+        (*active_handlers.custom_error)(context, msg);
+    }
+}
+
+int32_t trace_handler(void *context, const halide_trace_event *e) {
+    if (context) {
+        JITUserContext *jit_user_context = (JITUserContext *)context;
+
+        return (*jit_user_context->handlers.custom_trace)(context, e);
+    } else {
+        return (*active_handlers.custom_trace)(context, e);
+    }
+}
+
+template <typename function_t>
+function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
+    std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
+    internal_assert(iter != exports.end());
+    function_t (*hook_setter)(function_t) = (function_t (*)(function_t))iter->second.address;
+
+    return (*hook_setter)(hook);
+}
+}
+
+static void adjust_module_ref_count(void *arg, int32_t count) {
+    JITModuleContents *module = (JITModuleContents *)arg;
+
+    debug(2) << "Adjusting refcount for module " << module->name << " by " << count << "\n";
+
+    if (count > 0) {
+        module->ref_count.increment();
+    } else {
+        module->ref_count.decrement();
+    }
+}
+
+namespace {
+
+enum RuntimeKind {
+    MainShared,
+    CUDA,
+    OpenCL,
+    OpenGL,
+    NoGPU,
+    MaxRuntimeKind,
+};
+
+struct CachedRuntime {
+    bool inited = false;
+    JITModule jit_runtime;
+} cached_runtimes[MaxRuntimeKind];
+
+#if DO_CLEANUPS
+void thread_pool_shutdown_trampoline(void *context) {
+    ((void (*)())context)();
+}
+
+void release_trampoline(void *context) {
+    ((void (*)(void *))context)(NULL);
+}
+#endif
+
+JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, JITModule *dep_chain) {
+    if (!cached_runtimes[runtime_kind].inited) {
+        LLVMContext *llvm_context = new LLVMContext();
+
+        llvm::Module *shared_runtime = get_initial_module_for_target(target,
+                                                                     llvm_context, true, runtime_kind != MainShared);
 
         std::set<std::string> halide_exports_unique;
-
-        // Enumerate the global variables.
-        for (Module::const_global_iterator iter = shared_runtime->global_begin(); iter != shared_runtime->global_end(); iter++) {
-            if (const GlobalValue *gv = dyn_cast<GlobalValue>(iter)) {
-                if (gv->hasWeakLinkage() && starts_with(gv->getName(), "halide_")) {
-                  //              debug(0) << "Found global " << (std::string)gv->getName() << " with type " << gv->getType()->getTypeID() << "\n";
-                    halide_exports_unique.insert(gv->getName());
-                }
-            }
-        }
 
         // Enumerate the functions.
         for (Module::const_iterator iter = shared_runtime->begin(); iter != shared_runtime->end(); iter++) {
             const llvm::Function *gv = cast<llvm::Function>(iter);
             if (gv->hasWeakLinkage() && starts_with(gv->getName(), "halide_")) {
-                debug(0) << "Found function " << (std::string)gv->getName() << " with type " << gv->getType()->getTypeID() << " function type is " << gv->getFunctionType()->getTypeID() << "\n";
                 halide_exports_unique.insert(gv->getName());
             }
         }
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
-        host_shared_jit_runtime.compile_module(cg, shared_runtime, "", std::vector<JITModule>(), halide_exports);
 
-        inited = true;
+        std::vector<JITModule> deps;
+        if (dep_chain != NULL) {
+            deps.push_back(*dep_chain);
+        }
+        cached_runtimes[runtime_kind].jit_runtime.compile_module(cg, shared_runtime, "", deps, halide_exports);
+
+        if (runtime_kind == MainShared) {
+            runtime_internal_handlers.custom_print = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_print", print_handler);
+            JITCustomAllocator custom_allocator(malloc_handler, free_handler);
+            runtime_internal_handlers.custom_allocator = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_allocator", custom_allocator);
+            runtime_internal_handlers.custom_do_task = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_do_task", do_task_handler);
+            runtime_internal_handlers.custom_do_par_for = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+            runtime_internal_handlers.custom_error = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_error_handler", error_handler_handler);
+            runtime_internal_handlers.custom_trace = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_trace", trace_handler);
+
+            active_handlers = runtime_internal_handlers;
+            merge_handlers(active_handlers, default_handlers);
+
+#if DO_CLEANUPS
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = cached_runtimes[runtime_kind].jit_runtime.exports().find("halide_shutdown_thread_pool");
+            if (iter != cached_runtimes[runtime_kind].jit_runtime.exports().end() &&
+                iter->second.address != NULL) {
+                JITModuleContents::CleanupRoutine shutdown = { thread_pool_shutdown_trampoline, iter->second.address };
+                cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->cleanup_routines.push_back(shutdown);
+            }
+#endif
+
+            cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "MainShared";
+        } else if (dep_chain != NULL) {
+            // Insert deps exports into this module so consumers will
+            // get all the symbols. There should never be duplicates,
+            // but if there are, the value from this module, not
+            // dep_chain should be used.
+            cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->exports.insert(dep_chain->exports().begin(), dep_chain->exports().end());
+            cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "GPU";
+
+#if DO_CLEANUPS
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = cached_runtimes[runtime_kind].jit_runtime.exports().find("halide_release");
+            if (iter != cached_runtimes[runtime_kind].jit_runtime.exports().end() &&
+                iter->second.address != NULL) {
+                JITModuleContents::CleanupRoutine shutdown = { release_trampoline, iter->second.address };
+                cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->cleanup_routines.push_back(shutdown);
+            }
+#endif
+        }
+
+        uint64_t arg_addr = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
+        internal_assert(arg_addr != 0);
+        *((void **)arg_addr) = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr;
+
+        uint64_t fun_addr = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
+        internal_assert(fun_addr != 0);
+        *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
+
+        cached_runtimes[runtime_kind].inited = true;
     }
-    return host_shared_jit_runtime;
+    return cached_runtimes[runtime_kind].jit_runtime;
+}
 }
 
+JITModule &JITSharedRuntime::get(CodeGen *cg, const Target &target) {
+    // TODO: Thread safety
+    JITModule &result = make_module(cg, target, MainShared, NULL);
+
+    if (target.has_feature(Target::OpenCL)) {
+        result = make_module(cg, target, OpenCL, &result);
+    } else if (target.has_feature(Target::CUDA)) {
+        result = make_module(cg, target, CUDA, &result);
+    } else if (target.has_feature(Target::OpenGL)) {
+        result = make_module(cg, target, OpenGL, &result);
+    } else {
+        result = make_module(cg, target, NoGPU, &result);
+    }
+    return result;
+}
+
+// TODO: Either remove user_context argument figure out how to make
+// caller provided user context work with JIT. (At present, this
+// cacscaded handler calls cannot work with the right context as
+// JITModule needs its context to be passed in case the called handler
+// calls anotehr callback wich is not overriden by the caller.)
+void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
+                                             void *user_context, const JITHandlers &handlers) {
+    jit_user_context.handlers = active_handlers;
+    jit_user_context.user_context = user_context;
+    merge_handlers(jit_user_context.handlers, handlers);
+}
+
+void JITSharedRuntime::ReleaseAll() {
+    for (int i = MaxRuntimeKind; i > 0; i--) {
+        cached_runtimes[(RuntimeKind)(i - 1)].jit_runtime.jit_module = NULL;
+    }
+}
+
+JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) {
+    JITHandlers result = default_handlers;
+    default_handlers = handlers;
+    active_handlers = runtime_internal_handlers;
+    merge_handlers(active_handlers, default_handlers);
+    return result;
+}
 }
 }

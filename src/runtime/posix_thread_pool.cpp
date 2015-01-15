@@ -11,6 +11,8 @@
 // we need our own portable once implementation. For now, threadpool
 // only works on platforms where PTHREAD_MUTEX_INITIALIZER is zero.
 
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+
 extern "C" {
 
 extern long sysconf(int);
@@ -49,14 +51,15 @@ extern int pthread_mutex_destroy(pthread_mutex_t *mutex);
 extern char *getenv(const char *);
 extern int atoi(const char *);
 
+extern int halide_host_cpu_count();
+
+WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+                        uint8_t *closure);
+
 } // extern "C"
 
 namespace Halide { namespace Runtime { namespace Internal {
 
-typedef int (*halide_task)(void *user_context, int, uint8_t *);
-
-WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *);
-WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
 WEAK int halide_num_threads;
 WEAK bool halide_thread_pool_initialized = false;
 
@@ -95,86 +98,11 @@ struct halide_work_queue_t {
 };
 WEAK halide_work_queue_t halide_work_queue;
 
-}}} // namespace Halide::Runtime::Internal
-
-extern "C" {
-
-WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
-    pthread_mutex_destroy(mutex);
-    memset(mutex_arg, 0, sizeof(halide_mutex));
-}
-
-WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
-    pthread_mutex_lock(mutex);
-}
-
-WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
-    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
-    pthread_mutex_unlock(mutex);
-}
-
-
-WEAK void halide_shutdown_thread_pool() {
-    if (!halide_thread_pool_initialized) return;
-
-    // Wake everyone up and tell them the party's over and it's time
-    // to go home
-    pthread_mutex_lock(&halide_work_queue.mutex);
-    halide_work_queue.shutdown = true;
-    pthread_cond_broadcast(&halide_work_queue.state_change);
-    pthread_mutex_unlock(&halide_work_queue.mutex);
-
-    // Wait until they leave
-    for (int i = 0; i < halide_num_threads-1; i++) {
-        //fprintf(stderr, "Waiting for thread %d to exit\n", i);
-        void *retval;
-        pthread_join(halide_work_queue.threads[i], &retval);
-    }
-
-    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
-    // Tidy up
-    pthread_mutex_destroy(&halide_work_queue.mutex);
-    // Reinitialize in case we call another do_par_for
-    pthread_mutex_init(&halide_work_queue.mutex, NULL);
-    pthread_cond_destroy(&halide_work_queue.state_change);
-    halide_thread_pool_initialized = false;
-}
-
-WEAK void halide_set_num_threads(int n) {
-    if (halide_num_threads == n) {
-        return;
-    }
-
-    if (halide_thread_pool_initialized) {
-        halide_shutdown_thread_pool();
-    }
-
-    halide_num_threads = n;
-}
-
-WEAK void halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)) {
-    halide_custom_do_task = f;
-}
-
-
-WEAK void halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)) {
-    halide_custom_do_par_for = f;
-}
-
-WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+WEAK int default_do_task(void *user_context, halide_task f, int idx,
                         uint8_t *closure) {
-    if (halide_custom_do_task) {
-        return (*halide_custom_do_task)(user_context, f, idx, closure);
-    } else {
-        return f(user_context, idx, closure);
-    }
+    return f(user_context, idx, closure);
 }
 
-} // extern "C"
-
-namespace Halide { namespace Runtime { namespace Internal {
 WEAK void *halide_worker_thread(void *void_arg) {
     work *owned_job = (work *)void_arg;
 
@@ -236,17 +164,9 @@ WEAK void *halide_worker_thread(void *void_arg) {
     pthread_mutex_unlock(&halide_work_queue.mutex);
     return NULL;
 }
-}}} // namespace Halide::Runtime::Internal
 
-extern "C" {
-extern int halide_host_cpu_count();
-
-WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
-                           int min, int size, uint8_t *closure) {
-    if (halide_custom_do_par_for) {
-        return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
-    }
-
+WEAK int default_do_par_for(void *user_context, halide_task f,
+                            int min, int size, uint8_t *closure) {
     // Grab the lock. If it hasn't been initialized yet, then the
     // field will be zero-initialized because it's a static
     // global. pthreads helpfully interprets zero-valued mutex objects
@@ -308,6 +228,100 @@ WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
     // Return zero if the job succeeded, otherwise return the exit
     // status of one of the failing jobs (whichever one failed last).
     return job.exit_status;
+}
+
+WEAK int (*halide_custom_do_task)(void *user_context, halide_task, int, uint8_t *) = default_do_task;
+WEAK int (*halide_custom_do_par_for)(void *, halide_task, int, int, uint8_t *) = default_do_par_for;
+
+}}} // namespace Halide::Runtime::Internal
+
+extern "C" {
+
+WEAK void halide_mutex_cleanup(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_destroy(mutex);
+    memset(mutex_arg, 0, sizeof(halide_mutex));
+}
+
+WEAK void halide_mutex_lock(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_lock(mutex);
+}
+
+WEAK void halide_mutex_unlock(halide_mutex *mutex_arg) {
+    pthread_mutex_t *mutex = (pthread_mutex_t *)mutex_arg;
+    pthread_mutex_unlock(mutex);
+}
+
+
+WEAK void halide_shutdown_thread_pool() {
+    if (!halide_thread_pool_initialized) return;
+
+    // Wake everyone up and tell them the party's over and it's time
+    // to go home
+    pthread_mutex_lock(&halide_work_queue.mutex);
+    halide_work_queue.shutdown = true;
+    pthread_cond_broadcast(&halide_work_queue.state_change);
+    pthread_mutex_unlock(&halide_work_queue.mutex);
+
+    // Wait until they leave
+    for (int i = 0; i < halide_num_threads-1; i++) {
+        //fprintf(stderr, "Waiting for thread %d to exit\n", i);
+        void *retval;
+        pthread_join(halide_work_queue.threads[i], &retval);
+    }
+
+    //fprintf(stderr, "All threads have quit. Destroying mutex and condition variable.\n");
+    // Tidy up
+    pthread_mutex_destroy(&halide_work_queue.mutex);
+    // Reinitialize in case we call another do_par_for
+    pthread_mutex_init(&halide_work_queue.mutex, NULL);
+    pthread_cond_destroy(&halide_work_queue.state_change);
+    halide_thread_pool_initialized = false;
+}
+
+namespace {
+__attribute__((destructor))
+void halide_posix_thread_pool_cleanup() {
+    halide_shutdown_thread_pool();
+}
+}
+
+WEAK void halide_set_num_threads(int n) {
+    if (halide_num_threads == n) {
+        return;
+    }
+
+    if (halide_thread_pool_initialized) {
+        halide_shutdown_thread_pool();
+    }
+
+    halide_num_threads = n;
+}
+
+WEAK int (*halide_set_custom_do_task(int (*f)(void *, halide_task, int, uint8_t *)))
+          (void *, halide_task, int, uint8_t *) {
+    int (*result)(void *, halide_task, int, uint8_t *) = halide_custom_do_task;
+    halide_custom_do_task = f;
+    return result;
+}
+
+
+WEAK int (*halide_set_custom_do_par_for(int (*f)(void *, halide_task, int, int, uint8_t *)))
+          (void *, halide_task, int, int, uint8_t *) {
+    int (*result)(void *, halide_task, int, int, uint8_t *) = halide_custom_do_par_for;
+    halide_custom_do_par_for = f;
+    return result;
+}
+
+WEAK int halide_do_task(void *user_context, halide_task f, int idx,
+                        uint8_t *closure) {
+    return (*halide_custom_do_task)(user_context, f, idx, closure);
+}
+
+WEAK int halide_do_par_for(void *user_context, int (*f)(void *, int, uint8_t *),
+                           int min, int size, uint8_t *closure) {
+  return (*halide_custom_do_par_for)(user_context, f, min, size, closure);
 }
 
 } // extern "C"
