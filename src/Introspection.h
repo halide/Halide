@@ -38,7 +38,7 @@ EXPORT void deregister_heap_object(const void *obj, size_t size);
  */
 template<typename T>
 const void *get_introspection_helper() {
-    static T *introspection_helper = nullptr;
+    static T *introspection_helper = NULL;
     return &introspection_helper;
 }
 
