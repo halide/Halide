@@ -32,6 +32,16 @@ EXPORT void register_heap_object(const void *obj, size_t size, const void *helpe
 /** Deregister a heap object. Not thread-safe. */
 EXPORT void deregister_heap_object(const void *obj, size_t size);
 
+/** Return the address of a global with type T *. Call this to
+ * generate something to pass as the last argument to
+ * register_heap_object.
+ */
+template<typename T>
+const void *get_introspection_helper() {
+    static T *introspection_helper = nullptr;
+    return &introspection_helper;
+}
+
 /** Get the source location in the call stack, skipping over calls in
  * the Halide namespace. */
 EXPORT std::string get_source_location();
