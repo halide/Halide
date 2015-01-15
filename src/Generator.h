@@ -93,6 +93,7 @@
 
 #include "Func.h"
 #include "ObjectInstanceRegistry.h"
+#include "Introspection.h"
 #include "Target.h"
 
 namespace Halide {
@@ -410,7 +411,7 @@ public:
 
     // This is a bit of a stopgap: we need info that isn't in Argument,
     // but there's probably a better way than surfacing Internal::Parameter.
-    std::vector<Internal::Parameter> get_filter_parameters();
+    EXPORT std::vector<Internal::Parameter> get_filter_parameters();
 
     /** Given a data type, return an estimate of the "natural" vector size
      * for that data type when compiling for the current target. */
@@ -434,7 +435,7 @@ public:
                             const std::string &file_base_name = "", const EmitOptions &options = EmitOptions());
 
 protected:
-    EXPORT GeneratorBase(size_t size);
+    EXPORT GeneratorBase(size_t size, const void *introspection_helper);
 
 private:
     const size_t size;
@@ -496,7 +497,9 @@ template <class T> class RegisterGenerator;
 
 template <class T> class Generator : public Internal::GeneratorBase {
 public:
-    Generator() : Internal::GeneratorBase(sizeof(T)) {}
+    Generator() :
+        Internal::GeneratorBase(sizeof(T),
+                                Internal::Introspection::get_introspection_helper<T>()) {}
 private:
     friend class RegisterGenerator<T>;
     // Must wrap the static member in a static method to avoid static-member
@@ -508,6 +511,8 @@ private:
     const std::string &generator_name() const override final {
         return *generator_name_storage();
     }
+
+
 };
 
 template <class T> class RegisterGenerator {
