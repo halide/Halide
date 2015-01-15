@@ -99,7 +99,7 @@ void CodeGen_X86::compile(Stmt stmt, string name,
     module = get_initial_module_for_target(target, context);
 
     if (target.has_feature(Target::JIT)) {
-        JITModule shared_runtime = JITSharedRuntime::Get(this);
+        JITModule shared_runtime = JITSharedRuntime::get(this, target);
 
         shared_runtime.make_externs(module);
     }

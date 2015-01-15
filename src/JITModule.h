@@ -16,77 +16,10 @@ class Type;
 }
 
 namespace Halide {
+
+struct Target;
+
 namespace Internal {
-
-#if 0
-struct JITHooks {
-    /** A slightly more type-safe wrapper around the raw halide
-     * module. Takes it arguments as an array of pointers that
-     * correspond to the arguments to \ref function */
-    int (*wrapped_function)(const void **);
-
-    /** JITed helpers to interact with device-mapped buffer_t
-     * objects. These pointers may be NULL if not compiling for a
-     * gpu-like target. */
-    // @{
-    int (*copy_to_host)(void *user_context, struct buffer_t*);
-    int (*copy_to_dev)(void *user_context, struct buffer_t*);
-    int (*free_dev_buffer)(void *user_context, struct buffer_t*);
-    // @}
-
-    /** The type of a halide runtime error handler function */
-    typedef void (*ErrorHandler)(void *user_context, const char *);
-
-    /** Set the runtime error handler for this module */
-    void (*set_error_handler)(ErrorHandler);
-
-    /** Set a custom malloc and free for this module to use. See
-     * \ref Func::set_custom_allocator */
-    void (*set_custom_allocator)(void *(*malloc)(void *user_context, size_t),
-                                 void (*free)(void *user_context, void *ptr));
-
-    /** Set a custom parallel for loop launcher. See
-     * \ref Func::set_custom_do_par_for */
-    typedef int (*HalideTask)(void *user_context, int, uint8_t *);
-    void (*set_custom_do_par_for)(int (*custom_do_par_for)(void *user_context, HalideTask,
-                                                           int, int, uint8_t *));
-
-    /** Set a custom do parallel task. See
-     * \ref Func::set_custom_do_task */
-    void (*set_custom_do_task)(int (*custom_do_task)(void *user_context, HalideTask,
-                                                     int, uint8_t *));
-
-    /** Set a custom trace function. See \ref Func::set_custom_trace. */
-    typedef int (*TraceFn)(void *, const halide_trace_event *);
-    void (*set_custom_trace)(TraceFn);
-
-    /** Set a custom print function for this module. See
-     * \ref Func::set_custom_print. */
-    void (*set_custom_print)(void (*custom_print)(void *, const char *));
-
-    /** Shutdown the thread pool maintained by this JIT module. This
-     * is also done automatically when the last reference to this
-     * module is destroyed. */
-    void (*shutdown_thread_pool)();
-
-    /** Set the maximum number of bytes occupied by the cache for compute_cached. */
-    void (*memoization_cache_set_size)(uint64_t size);
-
-    JITHooks() :
-        wrapped_function(NULL),
-        copy_to_host(NULL),
-        copy_to_dev(NULL),
-        free_dev_buffer(NULL),
-        set_error_handler(NULL),
-        set_custom_allocator(NULL),
-        set_custom_do_par_for(NULL),
-        set_custom_do_task(NULL),
-        set_custom_trace(NULL),
-        set_custom_print(NULL),
-        shutdown_thread_pool(NULL),
-        memoization_cache_set_size(NULL) {}
-};
-#endif
 
 class JITModuleContents;
 class CodeGen;
@@ -108,12 +41,14 @@ struct JITModule {
     struct Symbol {
         void *address;
         llvm::Type *llvm_type;
+        Symbol() : address(NULL), llvm_type(NULL) {}
+        Symbol(void *address, llvm::Type *llvm_type) : address(address), llvm_type(llvm_type) {}
     };
 
-    JITModule() { }
+    JITModule() {}
     JITModule(const std::map<std::string, Symbol> &exports);
 
-    const std::map<std::string, Symbol> &Exports() const;
+    const std::map<std::string, Symbol> &exports() const;
 
     /** A pointer to the raw halide function. It's true type depends
      * on the Argument vector passed to CodeGen::compile. Image
@@ -141,16 +76,49 @@ struct JITModule {
 
     /** Make extern declarations fo rall exports of this JITModule in another llvm::Module */
     void make_externs(llvm::Module *mod);
+
+    /** Encapsulate device (GPU) and buffer interactions. */
+    int copy_to_dev(struct buffer_t *buf) const;
+    int copy_to_host(struct buffer_t *buf) const;
+    int dev_free(struct buffer_t *buf) const;
+};
+
+typedef int (*halide_task)(void *user_context, int, uint8_t *);
+
+struct JITCustomAllocator {
+    void *(*custom_malloc)(void *, size_t);
+    void (*custom_free)(void *, void *);
+    JITCustomAllocator() : custom_malloc(NULL), custom_free(NULL) {}
+    JITCustomAllocator(void *(*custom_malloc)(void *, size_t),
+                       void (*custom_free)(void *, void *)) : custom_malloc(custom_malloc), custom_free(custom_free) {
+    }
+};
+
+struct JITHandlers {
+    void (*custom_print)(void *, const char *);
+    JITCustomAllocator custom_allocator;
+    int (*custom_do_task)(void *, halide_task, int, uint8_t *);
+    int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
+    void (*custom_error)(void *, const char *);
+    int32_t (*custom_trace)(void *, const halide_trace_event *);
+    JITHandlers() : custom_print(NULL), custom_do_task(NULL), custom_do_par_for(NULL),
+                    custom_error(NULL), custom_trace(NULL) {
+    }
+};
+
+struct JITUserContext {
+    void *user_context;
+    JITHandlers handlers;
 };
 
 class JITSharedRuntime {
-    static bool inited;
-    static JITModule host_shared_jit_runtime;
 public:
     // Note only the first CodeGen passed in here is used. The same shared runtime is used for all JIT.
-    static JITModule &Get(CodeGen *cg);
+    static JITModule &get(CodeGen *cg, const Target &target);
+    static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
+    static JITHandlers set_default_handlers(const JITHandlers &handlers);
+    static void release_all();
 };
-
 }
 }
 
