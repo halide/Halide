@@ -402,6 +402,9 @@ public:
             }
         }
 
+        // Note that this loop pushes elements onto the vector it's
+        // iterating over as it goes - that's what makes the
+        // enumeration recursive.
         for (size_t i = 0; i < heap_object.members.size(); i++) {
             HeapObject::Member parent = heap_object.members[i];
 
