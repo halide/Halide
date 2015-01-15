@@ -2249,10 +2249,10 @@ std::string get_source_location() {
     return "";
 }
 
-void register_heap_object(const void *obj, const void *helper) {
+void register_heap_object(const void *obj, size_t size, const void *helper) {
 }
 
-void deregister_heap_object(const void *obj, const void *helper) {
+void deregister_heap_object(const void *obj, size_t size) {
 }
 
 void test_compilation_unit(bool (*test)(), void (*calib)()) {
