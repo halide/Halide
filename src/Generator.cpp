@@ -48,11 +48,15 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR]  "
-                          "target=target-string [generator_arg=value [...]]\n";
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-test] [-help] "
+                          "[target=target-string] [generator_arg=value [...]]\n";
 
-    std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" } };
-    std::map<std::string, std::string> generator_args;
+    std::map<std::string, std::string> flags_info = {{ "-f", "" },
+                                                     { "-g", "" },
+                                                     { "-o", "" }};
+    std::map<std::string, bool> bool_flags_info = {{ "-test", false },
+                                                   { "-help", false }};
+    std::map<std::string, std::string> generator_args = {{ "target", "host" }};
 
     for (int i = 1; i < argc; ++i) {
         if (argv[i][0] != '-') {
@@ -64,20 +68,32 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
             generator_args[v[0]] = v[1];
             continue;
         }
-        auto it = flags_info.find(argv[i]);
-        if (it != flags_info.end()) {
-            if (i + 1 >= argc) {
-                cerr << kUsage;
-                return 1;
+        {
+            auto it = flags_info.find(argv[i]);
+            if (it != flags_info.end()) {
+                if (i + 1 >= argc) {
+                    cerr << kUsage;
+                    return 1;
+                }
+                it->second = argv[i + 1];
+                ++i;
+                continue;
             }
-            it->second = argv[i + 1];
-            ++i;
-            continue;
+        }
+        {
+            auto it = bool_flags_info.find(argv[i]);
+            if (it != bool_flags_info.end()) {
+                it->second = true;
+                continue;
+            }
         }
         cerr << "Unknown flag: " << argv[i] << "\n";
         cerr << kUsage;
         return 1;
     }
+
+    bool run_test = bool_flags_info["-test"];
+    bool print_help = bool_flags_info["-help"];
 
     std::vector<std::string> generator_names = GeneratorRegistry::enumerate();
     if (generator_names.size() == 0) {
@@ -104,14 +120,10 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         // If -f isn't specified, assume function name = generator name.
         function_name = generator_name;
     }
+
     std::string output_dir = flags_info["-o"];
-    if (output_dir.empty()) {
-        cerr << "-o must always be specified.\n";
-        cerr << kUsage;
-        return 1;
-    }
-    if (generator_args.find("target") == generator_args.end()) {
-        cerr << "Target missing\n";
+    if (output_dir.empty() && !run_test && !print_help) {
+        cerr << "At least one of -o, -test, or -help must be specified.\n";
         cerr << kUsage;
         return 1;
     }
@@ -122,7 +134,23 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         cerr << kUsage;
         return 1;
     }
-    gen->emit_filter(output_dir, function_name);
+
+    if (print_help) {
+        gen->help(cerr);
+    }
+
+    if (run_test) {
+        if (!gen->test()) {
+            cerr << "Test failed\n";
+            // Don't bother emitting the filter if the test fails.
+            return 1;
+        }
+    }
+
+    if (!output_dir.empty()) {
+        gen->emit_filter(output_dir, function_name);
+    }
+
     return 0;
 }
 
@@ -243,6 +271,47 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
         user_assert(param != generator_params.end())
             << "Generator has no GeneratorParam named: " << key;
         param->second->from_string(value);
+    }
+}
+
+void GeneratorBase::help(std::ostream &out) {
+    build_params();
+    out << "\nGenerator parameters:\n";
+    for (auto key_value : generator_params) {
+        const GeneratorParamBase *param = key_value.second;
+        out << "  " << param->name  << " == " << param->to_string() << "\n";
+    }
+    out << "\nFilter parameters:\n";
+    for (auto key_value : filter_params) {
+        const Internal::Parameter *param = key_value.second;
+        if (param->is_buffer()) {
+            out << "  ImageParam " << param->name() << "(" << param->type() << ", " << param->dimensions() << ")\n";
+
+            for (int i = 0; i < param->dimensions(); i++) {
+                Expr c = param->min_constraint(i);
+                if (c.defined()) {
+                    out << "    min[" << i << "] == " << c << "\n";
+                }
+                c = param->extent_constraint(i);
+                if (c.defined()) {
+                    out << "    extent[" << i << "] == " << c << "\n";
+                }
+                c = param->stride_constraint(i);
+                if (c.defined()) {
+                    out << "    stride[" << i << "] == " << c << "\n";
+                }
+            }
+        } else {
+            out << "  Param<" << param->type() << "> " << param->name() << "\n";
+            Expr min = param->get_min_value();
+            if (min.defined()) {
+                out << "    minimum value: " << min << "\n";
+            }
+            Expr max = param->get_max_value();
+            if (max.defined()) {
+                out << "    maximum value: " << max << "\n";
+            }
+        }
     }
 }
 
