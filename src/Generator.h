@@ -386,9 +386,11 @@ public:
      * probably broken. */
     virtual bool test() {return false;}
 
-    /** Print out help test describing how to use this generator. By
-     * default prints out the params and generator params. */
-    EXPORT virtual void help(std::ostream &out);
+    /** Print out help test describing how to use this generator. */
+    virtual void help(std::ostream &out) {}
+
+    /** Prints out a description of the params and generator params. */
+    EXPORT void print_params(std::ostream &out);
 
     /** Return a Func that calls a previously-generated instance of this Generator.
      * This is (essentially) a smart wrapper around define_extern(), but uses the

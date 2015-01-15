@@ -136,7 +136,9 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
 
     if (print_help) {
+        cerr << "Generator: " << generator_name << "\n";
         gen->help(cerr);
+        gen->print_params(cerr);
     }
 
     if (run_test) {
@@ -274,7 +276,7 @@ void GeneratorBase::set_generator_param_values(const GeneratorParamValues &param
     }
 }
 
-void GeneratorBase::help(std::ostream &out) {
+void GeneratorBase::print_params(std::ostream &out) {
     build_params();
     out << "\nGenerator parameters:\n";
     for (auto key_value : generator_params) {
