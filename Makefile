@@ -521,7 +521,8 @@ PERFORMANCE_TESTS = $(shell ls test/performance/*.cpp)
 ERROR_TESTS = $(shell ls test/error/*.cpp)
 WARNING_TESTS = $(shell ls test/warning/*.cpp)
 OPENGL_TESTS := $(shell ls test/opengl/*.cpp)
-GENERATOR_TESTS := $(shell ls test/generator/*test.cpp)
+GENERATORS := $(shell ls test/generator/*_generator.cpp)
+GENERATOR_EXTERNAL_TESTS := $(shell ls test/generator/*test.cpp)
 TUTORIALS = $(filter-out %_generate.cpp, $(shell ls tutorial/*.cpp))
 
 STATIC_TEST_CXX ?= $(CXX)
@@ -539,7 +540,14 @@ test_tutorials: $(TUTORIALS:tutorial/%.cpp=tutorial_%)
 test_valgrind: $(CORRECTNESS_TESTS:test/correctness/%.cpp=valgrind_%)
 test_opengl: $(OPENGL_TESTS:test/opengl/%.cpp=opengl_%)
 ifneq ($(CXX11),)
-test_generators: $(GENERATOR_TESTS:test/generator/%_aottest.cpp=generator_aot_%) $(GENERATOR_TESTS:test/generator/%_jittest.cpp=generator_jit_%)
+# There are three types of tests for generators:
+# 1) Externally-written aot-based tests
+# 2) Externally-written JIT-based tests
+# 3) The generator's internal JIT-based tests
+test_generators:  \
+  $(GENERATOR_EXTERNAL_TESTS:test/generator/%_aottest.cpp=generator_aot_%)  \
+  $(GENERATOR_EXTERNAL_TESTS:test/generator/%_jittest.cpp=generator_jit_%)  \
+  $(GENERATORS:test/generator/%_generator.cpp=test_generator_%)
 else
 test_generators: ;
 endif
@@ -676,9 +684,20 @@ $(FILTERS_DIR)/nested_externs.h: $(FILTERS_DIR)/nested_externs.o
 $(BIN_DIR)/generator_aot_%: test/generator/%_aottest.cpp $(FILTERS_DIR)/%.o $(FILTERS_DIR)/%.h include/HalideRuntime.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -lpthread $(STATIC_TEST_LIBS) -o $@
 
-# By default, %_jittest.cpp depends on libHalide.
+# By default, %_jittest.cpp depends on libHalide. These are external tests that use the JIT.
 $(BIN_DIR)/generator_jit_%: test/generator/%_jittest.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	$(CXX) $(TEST_CXX_FLAGS) $(filter-out %.h %.so,$^) -Iinclude -I$(FILTERS_DIR) -I apps/support -I src/runtime -L$(BIN_DIR) -lHalide $(LLVM_LDFLAGS) -lpthread -ldl -lz -o $@
+
+# Run the generator's internal JIT-based tests
+test_generator_%: $(FILTERS_DIR)/%.generator
+	@mkdir -p $(FILTERS_DIR)
+	@-mkdir -p tmp
+	cd tmp; $(LD_PATH_SETUP) ../$< -g $(notdir $*) -test target=$(HL_JIT_TARGET)
+
+# nested externs doesn't actually contain a generator named
+# "nested_externs", and has no internal tests in any case.
+test_generator_nested_externs:
+	@echo "Skipping"
 
 $(BIN_DIR)/tutorial_%: tutorial/%.cpp $(BIN_DIR)/libHalide.so include/Halide.h
 	@ if [[ $@ == *_run ]]; then \

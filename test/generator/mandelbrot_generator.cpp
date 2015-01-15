@@ -48,6 +48,10 @@ public:
     Param<int> w{"w"};
     Param<int> h{"h"};
 
+    void help(std::ostream &out) override {
+        out << "Despite its name, this tests prints out a Julia set\n";
+    }
+
     Func build() override {
         Var x, y, z;
 
@@ -74,6 +78,12 @@ public:
 
         return count;
     }
+
+    bool test() override {
+        // Not really tested...
+        return true;
+    }
+
 private:
     // Declared as a member variable to verify that Funcs-as-members won't cause
     // spurious "Invalid Param name: __user_context" errors (Issue #561)

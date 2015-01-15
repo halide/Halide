@@ -7,6 +7,10 @@ public:
     GeneratorParam<bool> is_interleaved{ "is_interleaved", false };
     ImageParam input{ Int(32), 3, "input" };
 
+    void help(std::ostream &out) override {
+        out << "This test a generator that calls another generator as extern by name\n";
+    }
+
     Func build() override {
         // This is the outermost pipeline, so input width and height
         // are meaningful. If you want to be able to call this outer
@@ -51,6 +55,11 @@ public:
         }
 
         return brighter2;
+    }
+
+    bool test() override {
+        // This is an AOT-only test
+        return true;
     }
 };
 Halide::RegisterGenerator<TiledBlur> register_my_gen{"tiled_blur"};

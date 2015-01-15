@@ -4,6 +4,10 @@ namespace {
 
 class GpuObjectLifetime : public Halide::Generator<GpuObjectLifetime> {
 public:
+    void help(std::ostream &out) override {
+        out << "This tests that GPU buffers are acquired and released at appropriate times.\n";
+    }
+
     Func build() override {
         Var x;
 
@@ -18,6 +22,11 @@ public:
         target.set_feature(Target::Debug);
         return f;
     }
+
+    bool test() {
+        // This is an AOT-only test.
+        return true;
+    };
 };
 
 Halide::RegisterGenerator<GpuObjectLifetime> register_my_gen{"gpu_object_lifetime"};

@@ -91,6 +91,10 @@ class NestedExternsRoot : public Generator<NestedExternsRoot> {
 public:
     Param<float> value {"value", 1.0f};
 
+    void help(std::ostream &out) {
+        out << "This tests passing buffers with non-standard layouts through to extern stages\n";
+    }
+
     Func build() override {
         Func extern_stage_1 = NestedExternsInner().call_extern({value});
         extern_stage_1.reorder_storage(extern_stage_1.args()[2],

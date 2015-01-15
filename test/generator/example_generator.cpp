@@ -72,9 +72,18 @@ public:
     // 1.0 so that invocations that don't set it explicitly use a predictable value.
     Param<float> runtime_factor{ "runtime_factor", 1.0 };
 
+    // The help() method of a generator should print out a description
+    // of what the Generator is. This is triggered by the -help option
+    // when compiling this file along with GenGen.cpp
+    void help(std::ostream &out) override {
+        out << "This is an example generator!\n";
+    }
+
+    // The build() method of a generator defines the actual pipeline
+    // and returns the output Func.
     Func build() override {
-        Var x, y, c;
         Func f("f"), g("g");
+        Var x, y, c;
 
         f(x, y) = max(x, y);
         g(x, y, c) = cast(output_type, f(x, y) * c * compiletime_factor * runtime_factor);
@@ -87,6 +96,45 @@ public:
         g.vectorize(x, natural_vector_size(output_type));
 
         return g;
+    }
+
+    // Your should put correctness and performance tests for a
+    // generator into the test() method. This is triggered by the
+    // -test option when compiling this file along with GenGen.cpp
+    bool test() override {
+        // Generator params must be set before calling build.
+        compiletime_factor.set(2.5f);
+        output_type.set(Int(32));
+
+        // Build the pipeline.
+        Func g = build();
+
+        // Set the runtime parameters.
+        runtime_factor.set(2.0f);
+
+        // Run it.
+        Image<int> out = g.realize(10, 10, 3);
+
+        // Check the output is as expected. Often it's useful to do
+        // the checking using Halide too.
+
+        // Define the correct output for these params:
+        Var x, y, c;
+        Func correct;
+        correct(x, y, c) = max(x, y) * c * 5;
+
+        // Compute the maximum absolute error:
+        RDom r(out);
+        uint32_t error =
+            Halide::evaluate<uint32_t>(maximum(abs(out(r.x, r.y, r.z) -
+                                                   correct(r.x, r.y, r.z))));
+        if (error != 0) {
+            // Test failed.
+            std::cerr << "Error = " << error << "\n";
+            return false;
+        } else {
+            return true;
+        }
     }
 };
 
