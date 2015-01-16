@@ -382,21 +382,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
 }
 
 template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module,
-                                                 vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
-    // If the module contains a halide_release function, run it when the module dies.
-    llvm::Function *fn = module->getFunction("halide_release");
-    if (fn && cleanup_routines != NULL) {
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_release in module\n";
-        void (*cleanup_routine)(void *) =
-            reinterpret_bits<void (*)(void *)>(f);
-        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
-    }
-    CodeGen_CPU::jit_finalize(ee, module, cleanup_routines);
-}
-
-template<typename CodeGen_CPU>
 void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
     if (CodeGen_GPU_Dev::is_gpu_var(loop->name)) {
         // We're in the loop over innermost thread dimension

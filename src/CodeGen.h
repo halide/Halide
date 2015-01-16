@@ -35,7 +35,6 @@ class MDNode;
 #include "Argument.h"
 #include "IR.h"
 #include "Scope.h"
-#include "JITCompiledModule.h"
 #include "JITModule.h"
 #include "ModulusRemainder.h"
 #include "Target.h"
@@ -97,11 +96,8 @@ public:
 
     /** Do any required target-specific things to the execution engine
      * and the module after jitting. Called by JITModule just
-     * after it jits. Does nothing by default. The third argument
-     * gives the target a chance to inject calls to target-specific
-     * module cleanup routines. */
-    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
-                              std::vector<JITCompiledModule::CleanupRoutine> *);
+     * after it jits. Does nothing by default. */
+    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();

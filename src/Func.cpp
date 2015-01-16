@@ -2258,13 +2258,11 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
 }
 
 void Func::memoization_cache_set_size(uint64_t size) {
-    // TODO: Figure this out
+    // TODO: Either the cache implementation needs to be extended to
+    // have separate sizing per Func, which is likely not a good idea,
+    // or we need to move to a single global size setter and remove
+    // the per Func version here.
     cache_size = size;
-#if 0
-    if (compiled_module.memoization_cache_set_size) {
-        compiled_module.memoization_cache_set_size(size);
-    }
-#endif
 }
 
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
@@ -2293,11 +2291,9 @@ struct ErrorBuffer {
     enum { MaxBufSize = 4096 };
     char buf[MaxBufSize];
     int end;
-    void (*next_error_handler)(void *user_context, const char *);
 
     ErrorBuffer() {
         end = 0;
-        buf[0] = '\0';
     }
 
     void concat(const char *message) {
@@ -2328,18 +2324,50 @@ struct ErrorBuffer {
         }
     }
 
-    const char *str() const {
-        return buf;
+    std::string str() const {
+        return std::string(buf, end);
     }
 
     static void handler(void *ctx, const char *message) {
         if (ctx) {
-            ErrorBuffer *buf = (ErrorBuffer *)ctx;
+            JITUserContext *ctx1 = (JITUserContext *)ctx;
+            ErrorBuffer *buf = (ErrorBuffer *)ctx1->user_context;
             buf->concat(message);
-            if (buf->next_error_handler) {
-                buf->next_error_handler(ctx, message);
+        }
+    }
+};
+
+struct JITFuncCallContext {
+    ErrorBuffer error_buffer;
+    JITUserContext jit_context;
+    Internal::Parameter &user_context_param;
+
+    JITFuncCallContext(const JITHandlers &handlers, Internal::Parameter &user_context_param)
+        : user_context_param(user_context_param) {
+        void *user_context = NULL;
+        JITHandlers local_handlers = handlers;
+        if (local_handlers.custom_error == NULL) {
+            local_handlers.custom_error = Internal::ErrorBuffer::handler;
+            user_context = &error_buffer;
+        }
+        JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
+        user_context_param.set_scalar(&jit_context);
+    }
+
+    void report_if_error(int exit_status) {
+        if (exit_status) {
+            std::string output = error_buffer.str();
+            if (!output.empty()) {
+                // Only report the errors if no custom error handler was installed
+                halide_runtime_error << error_buffer.str();
+                error_buffer.end = 0;
             }
         }
+    }
+
+    void finalize(int exit_status) {
+        report_if_error(exit_status);
+        user_context_param.set_scalar((void *)NULL); // Don't leave param hanging with pointer to stack.
     }
 };
 
@@ -2370,18 +2398,7 @@ void Func::realize(Realization dst, const Target &target) {
             << "\" has type " << func.output_types()[i] << ".\n";
     }
 
-    // TODO: encapsulate and fix naming
-    ErrorBuffer buf;
-    // TODO: Either remove this or figure out how to make the user providing context to JIT can work.
-    void *user_context = NULL;
-    JITHandlers local_handlers = jit_handlers;
-    if (local_handlers.custom_error == NULL) {
-        local_handlers.custom_error = Internal::ErrorBuffer::handler;
-        user_context = &buf;
-    }
-    JITUserContext jit_context;
-    JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
-    jit_user_context.set_scalar(&jit_context);
+    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
     // TODO: Figure this out.
 #if 0
@@ -2427,10 +2444,7 @@ void Func::realize(Realization dst, const Target &target) {
         dst[i].set_source_module(compiled_module);
     }
 
-    if (exit_status && *buf.str() != '\0') {
-        // Only report the errors if no custom error handler was installed
-        halide_runtime_error << buf.str();
-    }
+    jit_context.finalize(exit_status);
 }
 
 void Func::infer_input_bounds(Buffer dst) {
@@ -2444,18 +2458,7 @@ void Func::infer_input_bounds(Realization dst) {
 
     internal_assert(compiled_module.jit_wrapper_function());
 
-    // TODO: encapsulate and fix naming
-    ErrorBuffer buf;
-    // TODO: Either remove this or figure out how to make the user providing context to JIT can work.
-    void *user_context = NULL;
-    JITHandlers local_handlers = jit_handlers;
-    if (local_handlers.custom_error == NULL) {
-        local_handlers.custom_error = Internal::ErrorBuffer::handler;
-        user_context = &buf;
-    }
-    JITUserContext jit_context;
-    JITSharedRuntime::init_jit_user_context(jit_context, user_context, local_handlers);
-    jit_user_context.set_scalar(&jit_context);
+    JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
     // Check the type and dimensionality of the buffer
     for (size_t i = 0; i < dst.size(); i++) {
@@ -2532,10 +2535,7 @@ void Func::infer_input_bounds(Realization dst) {
         Internal::debug(2) << "Calling jitted function\n";
         int exit_status = compiled_module.jit_wrapper_function()(&(arg_values[0]));
 
-        if (exit_status && *buf.str() != '\0') {
-            // Only report the errors if no custom error handler was installed
-            halide_runtime_error << buf.str();
-        }
+        jit_context.report_if_error(exit_status);
 
         Internal::debug(2) << "Back from jitted function\n";
         bool changed = false;
@@ -2550,6 +2550,9 @@ void Func::infer_input_bounds(Realization dst) {
             break;
         }
     }
+
+    jit_context.finalize(0);
+
     user_assert(iter < max_iters)
         << "Inferring input bounds on Func \"" << name() << "\""
         << " didn't converge after " << max_iters

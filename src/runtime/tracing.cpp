@@ -224,4 +224,11 @@ WEAK int halide_shutdown_trace() {
     }
 }
 
+namespace {
+__attribute__((destructor))
+void halide_trace_cleanup() {
+    halide_shutdown_trace();
+}
+}
+
 }

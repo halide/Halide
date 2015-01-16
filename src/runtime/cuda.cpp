@@ -413,6 +413,13 @@ WEAK void halide_release(void *user_context) {
     halide_release_cuda_context(user_context);
 }
 
+namespace {
+__attribute__((destructor))
+void halide_cuda_cleanup() {
+    halide_release(NULL);
+}
+}
+
 WEAK int halide_dev_malloc(void *user_context, struct buffer_t *buf) {
     debug(user_context)
         << "CUDA: halide_dev_malloc (user_context: " << user_context

@@ -105,24 +105,9 @@ llvm::Type *copy_llvm_type_to_module(Module *to_module, llvm::Type *from_type) {
     return NULL;
 }
 
-// TODO: Figure out if shutdown_thread_pool was necessary and whether it can be a destructor or a CleanupRoutine?
-#define DO_CLEANUPS 0
-
-// TODO: Interface for cleanup routines?
-// TODO: CleanupRoutines interface with CodeGen
 class JITModuleContents {
 public:
     mutable RefCount ref_count;
-
-#if DO_CLEANUPS
-    struct CleanupRoutine {
-        void (*fn)(void *);
-        void *context;
-
-        CleanupRoutine() : fn(NULL), context(NULL) {}
-        CleanupRoutine(void (*fn)(void *), void *context) : fn(fn), context(context) {}
-    };
-#endif
 
     // Just construct a module with symbols to import into other modules.
     JITModuleContents(const std::map<std::string, JITModule::Symbol> &exports) : exports(exports),
@@ -147,15 +132,6 @@ public:
     }
 
     ~JITModuleContents() {
-#if DO_CLEANUPS
-        for (size_t i = 0; i < cleanup_routines.size(); i++) {
-            void *ptr = reinterpret_bits<void *>(cleanup_routines[i].fn);
-            debug(2) << "  Calling cleanup routine [" << ptr << "]("
-                     << cleanup_routines[i].context << ")\n";
-            cleanup_routines[i].fn(cleanup_routines[i].context);
-        }
-#endif
-
         if (execution_engine != NULL) {
             execution_engine->runStaticConstructorsDestructors(true);
             delete execution_engine;
@@ -175,9 +151,6 @@ public:
     int (*jit_wrapper_function)(const void **);
 
     std::string name;
-#if DO_CLEANUPS
-    std::vector<CleanupRoutine> cleanup_routines;
-#endif
 };
 
 template <>
@@ -396,7 +369,7 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     jit_module.ptr->name = function_name;
 
     // Do any target-specific post-compilation module meddling
-    cg->jit_finalize(ee, m, /* &jit_module.ptr->cleanup_routines */ NULL);  // TODO: fix this
+    cg->jit_finalize(ee, m);
 
 #ifdef __arm__
     // Flush each function from the dcache so that it gets pulled into
@@ -620,16 +593,6 @@ struct CachedRuntime {
     JITModule jit_runtime;
 } cached_runtimes[MaxRuntimeKind];
 
-#if DO_CLEANUPS
-void thread_pool_shutdown_trampoline(void *context) {
-    ((void (*)())context)();
-}
-
-void release_trampoline(void *context) {
-    ((void (*)(void *))context)(NULL);
-}
-#endif
-
 JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, JITModule *dep_chain) {
     if (!cached_runtimes[runtime_kind].inited) {
         LLVMContext *llvm_context = new LLVMContext();
@@ -667,15 +630,6 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
-#if DO_CLEANUPS
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = cached_runtimes[runtime_kind].jit_runtime.exports().find("halide_shutdown_thread_pool");
-            if (iter != cached_runtimes[runtime_kind].jit_runtime.exports().end() &&
-                iter->second.address != NULL) {
-                JITModuleContents::CleanupRoutine shutdown = { thread_pool_shutdown_trampoline, iter->second.address };
-                cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->cleanup_routines.push_back(shutdown);
-            }
-#endif
-
             cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "MainShared";
         } else if (dep_chain != NULL) {
             // Insert deps exports into this module so consumers will
@@ -684,15 +638,6 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             // dep_chain should be used.
             cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->exports.insert(dep_chain->exports().begin(), dep_chain->exports().end());
             cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "GPU";
-
-#if DO_CLEANUPS
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = cached_runtimes[runtime_kind].jit_runtime.exports().find("halide_release");
-            if (iter != cached_runtimes[runtime_kind].jit_runtime.exports().end() &&
-                iter->second.address != NULL) {
-                JITModuleContents::CleanupRoutine shutdown = { release_trampoline, iter->second.address };
-                cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->cleanup_routines.push_back(shutdown);
-            }
-#endif
         }
 
         uint64_t arg_addr = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
@@ -707,7 +652,8 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
     }
     return cached_runtimes[runtime_kind].jit_runtime;
 }
-}
+
+}  // anonymous namespace
 
 JITModule &JITSharedRuntime::get(CodeGen *cg, const Target &target) {
     // TODO: Thread safety
@@ -737,7 +683,7 @@ void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
     merge_handlers(jit_user_context.handlers, handlers);
 }
 
-void JITSharedRuntime::ReleaseAll() {
+void JITSharedRuntime::release_all() {
     for (int i = MaxRuntimeKind; i > 0; i--) {
         cached_runtimes[(RuntimeKind)(i - 1)].jit_runtime.jit_module = NULL;
     }
