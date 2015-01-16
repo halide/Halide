@@ -45,6 +45,30 @@ void my_free(void *ctx, void *ptr) {
     free(ptr);
 }
 
+// Custom lowering pass to count the number of IfThenElse statements found inside
+// pipelines.
+int if_then_else_count = 0;
+class CountIfThenElse : public Internal::IRMutator {
+    int pipelines;
+
+public:
+    CountIfThenElse() : pipelines(0) {}
+
+    void visit(const Internal::Pipeline *op) {
+        // Only count ifs found inside a pipeline.
+        pipelines++;
+        IRMutator::visit(op);
+        pipelines--;
+    }
+    void visit(const Internal::IfThenElse *op) {
+        if (pipelines > 0) {
+            if_then_else_count++;
+        }
+        Internal::IRMutator::visit(op);
+    }
+    using Internal::IRMutator::visit;
+};
+
 int main(int argc, char **argv) {
     {
         Param<bool> param;
@@ -355,6 +379,61 @@ int main(int argc, char **argv) {
         // Shouldn't throw a bounds error:
         im.set(input);
         out.realize(output);
+    }
+
+    {
+        // Check specializations of stages nested in other stages simplify appropriately.
+        ImageParam im(Int(32), 2);
+        Param<bool> cond1, cond2;
+        Func f, out;
+        Var x, y;
+        f(x, y) = im(x, y);
+        out(x, y) = f(x, y);
+
+        f.compute_at(out, x).specialize(cond1 && cond2).vectorize(x, 4);
+        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
+
+        if_then_else_count = 0;
+        out.add_custom_lowering_pass(new CountIfThenElse());
+
+        Image<int> input(3, 3), output(3, 3);
+        // Shouldn't throw a bounds error:
+        im.set(input);
+        out.realize(output);
+
+        if (if_then_else_count != 1) {
+            printf("Found other than 1 IfThenElse stmts.\n");
+            return -1;
+        }
+    }
+
+    {
+        // Check specializations of stages nested in other stages simplify appropriately.
+        ImageParam im(Int(32), 2);
+        Param<bool> cond1, cond2;
+        Func f, out;
+        Var x, y;
+        f(x, y) = im(x, y);
+        out(x, y) = f(x, y);
+
+        f.compute_at(out, x).specialize(cond1).vectorize(x, 4);
+        out.compute_root().specialize(cond1 && cond2).vectorize(x, 4);
+
+        if_then_else_count = 0;
+        out.add_custom_lowering_pass(new CountIfThenElse());
+
+        Image<int> input(3, 3), output(3, 3);
+        // Shouldn't throw a bounds error:
+        im.set(input);
+        out.realize(output);
+
+        // There should have been 2 Ifs: The outer cond1 && cond2, and
+        // the condition in the true case should have been simplified
+        // away. The If in the false branch cannot be simplified.
+        if (if_then_else_count != 2) {
+            printf("Found other than 2 IfThenElse stmts.\n");
+            return -1;
+        }
     }
 
     printf("Success!\n");

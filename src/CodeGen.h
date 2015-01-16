@@ -85,6 +85,11 @@ public:
     virtual bool use_soft_float_abi() const = 0;
     // @}
 
+    // What's the natural vector bit-width to use for loads, stores, etc.
+    // @{
+    virtual int native_vector_bits() const = 0;
+    // @}
+
     /** Do any required target-specific things to the execution engine
      * and the module prior to jitting. Called by JITModule
      * just before it jits. Does nothing by default. */
@@ -312,12 +317,54 @@ protected:
      * guarantee their alignment) */
     std::set<std::string> might_be_misaligned;
 
+    /** The user_context argument. May be a constant null if the
+     * function is being compiled without a user context. */
     llvm::Value *get_user_context() const;
 
     /** Implementation of the intrinsic call to
      * interleave_vectors. This implementation allows for interleaving
      * an arbitrary number of vectors.*/
-    llvm::Value *interleave_vectors(Type, const std::vector<Expr>&);
+    llvm::Value *interleave_vectors(Type, const std::vector<Expr> &);
+
+    /** Generate a call to a vector intrinsic or runtime inlined
+     * function. The arguments are sliced up into vectors of the width
+     * given by 'intrin_vector_width', the intrinsic is called on each
+     * piece, then the results (if any) are concatenated back together
+     * into the original type 't'. For the version that takes an
+     * llvm::Type *, the type may be void, so the vector width of the
+     * arguments must be specified explicitly as
+     * 'called_vector_width'. */
+    // @{
+    llvm::Value *call_intrin(Type t, int intrin_vector_width,
+                             const std::string &name, std::vector<Expr>);
+    llvm::Value *call_intrin(llvm::Type *t, int intrin_vector_width,
+                             const std::string &name, std::vector<llvm::Value *>);
+    // @}
+
+    /** Take a slice of lanes out of an llvm vector. Pads with undefs
+     * if you ask for more lanes than the vector has. */
+    llvm::Value *slice_vector(llvm::Value *vec, int start, int extent);
+
+    /** Concatenate a bunch of llvm vectors. Must be of the same type. */
+    llvm::Value *concat_vectors(const std::vector<llvm::Value *> &);
+
+    /** Go looking for a vector version of a runtime function. Will
+     * return the best match. Matches in the following order:
+     *
+     * 1) The requested vector width.
+     *
+     * 2) The width which is the smallest power of two
+     * greater than or equal to the vector width.
+     *
+     * 3) All the factors of 2) greater than one, in decreasing order.
+     *
+     * 4) The smallest power of two not yet tried.
+     *
+     * So for a 5-wide vector, it tries: 5, 8, 4, 2, 16.
+     *
+     * If there's no match, returns (NULL, 0).
+     */
+    std::pair<llvm::Function *, int> find_vector_runtime_function(const std::string &name, int width);
 
 private:
 

@@ -840,7 +840,7 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__thread_id_y", tx.is_rvar));
+    rename(ty, VarOrRVar("__thread_id_y", ty.is_rvar));
     return *this;
 }
 
@@ -849,8 +849,8 @@ Stage &Stage::gpu_threads(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gp
     parallel(ty);
     parallel(tz);
     rename(tx, VarOrRVar("__thread_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__thread_id_y", tx.is_rvar));
-    rename(tz, VarOrRVar("__thread_id_z", tx.is_rvar));
+    rename(ty, VarOrRVar("__thread_id_y", ty.is_rvar));
+    rename(tz, VarOrRVar("__thread_id_z", tz.is_rvar));
     return *this;
 }
 
@@ -864,7 +864,7 @@ Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, GPUAPI /* gpu_api */) {
     parallel(tx);
     parallel(ty);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__block_id_y", tx.is_rvar));
+    rename(ty, VarOrRVar("__block_id_y", ty.is_rvar));
     return *this;
 }
 
@@ -873,8 +873,8 @@ Stage &Stage::gpu_blocks(VarOrRVar tx, VarOrRVar ty, VarOrRVar tz, GPUAPI /* gpu
     parallel(ty);
     parallel(tz);
     rename(tx, VarOrRVar("__block_id_x", tx.is_rvar));
-    rename(ty, VarOrRVar("__block_id_y", tx.is_rvar));
-    rename(tz, VarOrRVar("__block_id_z", tx.is_rvar));
+    rename(ty, VarOrRVar("__block_id_y", ty.is_rvar));
+    rename(tz, VarOrRVar("__block_id_z", tz.is_rvar));
     return *this;
 }
 
