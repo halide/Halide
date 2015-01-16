@@ -109,32 +109,28 @@ public:
         // Build the pipeline.
         Func g = build();
 
-        // Set the runtime parameters.
+        // Set the runtime params. These can be set before or after
+        // calling build.
         runtime_factor.set(2.0f);
 
         // Run it.
         Image<int> out = g.realize(10, 10, 3);
 
-        // Check the output is as expected. Often it's useful to do
-        // the checking using Halide too.
-
-        // Define the correct output for these params:
-        Var x, y, c;
-        Func correct;
-        correct(x, y, c) = max(x, y) * c * 5;
-
-        // Compute the maximum absolute error:
-        RDom r(out);
-        uint32_t error =
-            Halide::evaluate<uint32_t>(maximum(abs(out(r.x, r.y, r.z) -
-                                                   correct(r.x, r.y, r.z))));
-        if (error != 0) {
-            // Test failed.
-            std::cerr << "Error = " << error << "\n";
-            return false;
-        } else {
-            return true;
+        // Check the output is as expected:
+        for (int c = 0; c < out.channels(); c++) {
+            for (int y = 0; y < out.height(); y++) {
+                for (int x = 0; x < out.width(); x++) {
+                    int correct = std::max(x, y) * c * 5;
+                    if (correct != out(x, y, c)) {
+                        printf("out(%d, %d, %d) = %d instead of %d\n",
+                               x, y, c, out(x, y, c), correct);
+                        return false;
+                    }
+                }
+            }
         }
+
+        return true;
     }
 };
 
