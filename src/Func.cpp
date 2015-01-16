@@ -2410,7 +2410,7 @@ void Func::realize(Realization dst, const Target &target) {
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-      Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void **)arg_values[i] << ")\n";
+        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
         internal_assert(arg_values[i])
             << "An argument to a jitted function is null\n";
     }
@@ -2487,7 +2487,7 @@ void Func::infer_input_bounds(Realization dst) {
     }
 
     for (size_t i = 0; i < arg_values.size(); i++) {
-      Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void **)arg_values[i] << ")\n";
+        Internal::debug(2) << "Arg " << i << " = " << arg_values[i] << " (" << *(void * const *)arg_values[i] << ")\n";
         internal_assert(arg_values[i]) << "An argument to a jitted function is null.\n";
     }
 
