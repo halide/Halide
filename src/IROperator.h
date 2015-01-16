@@ -12,9 +12,9 @@
 namespace Halide {
 
 namespace Internal {
-/** Is the expression either an IntImm, a FloatImm, or a Cast of the
- * same, or a Ramp or Broadcast of the same. Doesn't do any constant
- * folding. */
+/** Is the expression either an IntImm, a FloatImm, a StringImm, or a
+ * Cast of the same, or a Ramp or Broadcast of the same. Doesn't do
+ * any constant folding. */
 EXPORT bool is_const(Expr e);
 
 /** Is the expression an IntImm, FloatImm of a particular value, or a
@@ -60,6 +60,10 @@ EXPORT bool is_one(Expr e);
 /** Is the expression a const (as defined by is_const), and also equal
  * to two (in all lanes, if a vector expression) */
 EXPORT bool is_two(Expr e);
+
+/** Is the statement a no-op (which we represent as either an
+ * undefined Stmt, or as an Evaluate node of a constant) */
+EXPORT bool is_no_op(Stmt s);
 
 /** Given an integer value, cast it into a designated integer type
  * and return the bits as int. Unsigned types are returned as bits in the int
@@ -387,6 +391,31 @@ inline Expr abs(Expr a) {
     }
     return Internal::Call::make(t, Internal::Call::abs,
                                 vec(a), Internal::Call::Intrinsic);
+}
+
+/** Return the absolute difference between two values. Vectorizes
+ * cleanly. Returns an unsigned value of the same bit width. There are
+ * various ways to write this yourself, but they contain numerous
+ * gotchas and don't always compile to good code, so use this
+ * instead. */
+inline Expr absd(Expr a, Expr b) {
+    user_assert(a.defined() && b.defined()) << "absd of undefined Expr\n";
+    Internal::match_types(a, b);
+    Type t = a.type();
+
+    if (t.is_float()) {
+        // Floats can just use abs.
+        return abs(a - b);
+    }
+
+    if (t.is_int()) {
+        // The argument may be signed, but the return type is unsigned.
+        t.code = Type::UInt;
+    }
+
+    return Internal::Call::make(t, Internal::Call::absd,
+                                vec(a, b),
+                                Internal::Call::Intrinsic);
 }
 
 /** Returns an expression similar to the ternary operator in C, except

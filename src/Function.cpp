@@ -429,7 +429,6 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality) {
 
-    string source_loc = get_source_location();
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func with a pure definition cannot have an extern definition.\n";

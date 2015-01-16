@@ -82,11 +82,6 @@ else
     export LLVMS="release-3.5 trunk release-3.4 pnacl"
 fi
 
-
-# We also need the nacl sdk. For now we assume the existence under ~/nacl_sdk
-export NATIVE_CLIENT_X86_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_x86_glibc/x86_64-nacl/include/
-export NATIVE_CLIENT_ARM_INCLUDE=~/nacl_sdk/pepper_26/toolchain/linux_arm_newlib/include/
-
 # link testing/reports/head to the current head
 rm -rf testing/reports/head/*
 rm -rf testing/reports/head
@@ -98,23 +93,23 @@ for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
         LLVM_REPO=http://git.chromium.org/native_client/pnacl-llvm.git
         CLANG_REPO=http://git.chromium.org/native_client/pnacl-clang.git
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == trunk ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/trunk
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/trunk
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.3 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_33
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_33
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.4 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_34
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_34
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     elif [[ "$LLVM" == release-3.5 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
-        LLVM_TARGETS="X86;ARM;AArch64;NVPTX"
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     fi
 
     # Check out llvm if necessary
