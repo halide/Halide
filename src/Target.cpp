@@ -702,7 +702,7 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
         ModuleAOT,
         ModuleJITShared,
         ModuleJITInlined,
-        ModuleGPU,
+        ModuleGPU
     } module_type;
 
     if (t.has_feature(Target::JIT)) {

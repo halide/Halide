@@ -100,9 +100,12 @@ llvm::Type *copy_llvm_type_to_module(Module *to_module, llvm::Type *from_type) {
         VectorType *v = cast<VectorType>(from_type);
         return VectorType::get(copy_llvm_type_to_module(to_module, v->getElementType()), v->getNumElements());
     } break;
+    default: {
+        internal_error << "Unhandled LLVM type\n";
+        return NULL;
     }
-    internal_error << "Unhandled LLVM type\n";
-    return NULL;
+    }
+
 }
 
 class JITModuleContents {
@@ -268,8 +271,10 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
 #if LLVM_VERSION < 36
     // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
-    JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
-    engine_builder.setJITMemoryManager(memory_manager);
+    //JITMemoryManager *memory_manager = JITMemoryManager::CreateDefaultMemManager();
+    //engine_builder.setJITMemoryManager(memory_manager);
+    HalideJITMemoryManager *memory_manager = new HalideJITMemoryManager(dependencies);
+    engine_builder.setMCJITMemoryManager(memory_manager);
 #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
 #endif
@@ -313,7 +318,8 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
                 } else {
                     gv = dyn_cast<GlobalValue>(m->getOrInsertGlobal(name, copy_llvm_type_to_module(m, s.llvm_type)));
                 }
-                ee->addGlobalMapping(gv, s.address);
+                //ee->addGlobalMapping(gv, s.address);
+                (void)gv;
                 provided_symbols.insert(name);
             }
         }
@@ -601,13 +607,13 @@ enum RuntimeKind {
     OpenCL,
     OpenGL,
     NoGPU,
-    MaxRuntimeKind,
+    MaxRuntimeKind
 };
 
 struct CachedRuntime {
-    bool inited = false;
+    bool inited;
     JITModule jit_runtime;
-} cached_runtimes[MaxRuntimeKind];
+} cached_runtimes[MaxRuntimeKind] = {0};
 
 JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
     if (!cached_runtimes[runtime_kind].inited) {
