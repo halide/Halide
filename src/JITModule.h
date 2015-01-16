@@ -27,17 +27,6 @@ class CodeGen;
 struct JITModule {
     IntrusivePtr<JITModuleContents> jit_module;
 
-#if 0
-    /** Holds a cleanup routine and context parameter. */
-    struct CleanupRoutine {
-        void (*fn)(void *);
-        void *context;
-
-        CleanupRoutine() : fn(NULL), context(NULL) {}
-        CleanupRoutine(void (*fn)(void *), void *context) : fn(fn), context(context) {}
-    };
-#endif
-
     struct Symbol {
         void *address;
         llvm::Type *llvm_type;

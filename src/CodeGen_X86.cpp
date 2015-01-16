@@ -879,7 +879,7 @@ void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
     }
 }
 
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *)
+void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *)
 {
     if (jitEventListener) {
         ee->UnregisterJITEventListener(jitEventListener);

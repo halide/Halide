@@ -1693,6 +1693,13 @@ WEAK void halide_release(void *user_context) {
     halide_opengl_release(user_context);
 }
 
+namespace {
+__attribute__((destructor))
+void halide_opengl_cleanup() {
+    halide_release(NULL);
+}
+}
+
 WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     return halide_opengl_dev_malloc(user_context, buf);
 }

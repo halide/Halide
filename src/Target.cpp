@@ -767,7 +767,6 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
                 modules.push_back(get_initmod_posix_io(c, bits_64, debug));
                 modules.push_back(get_initmod_nacl_host_cpu_count(c, bits_64, debug));
                 modules.push_back(get_initmod_posix_thread_pool(c, bits_64, debug));
-                // TODO: How does this fit into the module types set?
                 modules.push_back(get_initmod_ssp(c, bits_64, debug));
             }
         }
