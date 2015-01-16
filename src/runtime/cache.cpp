@@ -418,7 +418,7 @@ WEAK void halide_memoization_cache_store(void *user_context, const uint8_t *cach
     prune_cache();
 
     void *entry_storage = halide_malloc(NULL, sizeof(CacheEntry) + sizeof(buffer_t) * (tuple_count - 1));
-    
+
     CacheEntry *new_entry = (CacheEntry *)entry_storage;
     new_entry->init(cache_key, size, h, *computed_bounds, tuple_count, tuple_buffers);
 
@@ -462,7 +462,7 @@ WEAK void halide_memoization_cache_cleanup() {
 namespace {
 
 __attribute__((destructor))
-void halide_cache_cleanup() {
+WEAK void halide_cache_cleanup() {
     halide_memoization_cache_cleanup();
 }
 
