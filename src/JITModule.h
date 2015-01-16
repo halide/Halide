@@ -63,8 +63,8 @@ struct JITModule {
                         const std::vector<JITModule> &dependencies,
                         const std::vector<std::string> &requested_exports);
 
-    /** Make extern declarations fo rall exports of this JITModule in another llvm::Module */
-    void make_externs(llvm::Module *mod);
+    /** Make extern declarations fo rall exports of a set of JITModules in another llvm::Module */
+    static void make_externs(const std::vector<JITModule> &deps, llvm::Module *mod);
 
     /** Encapsulate device (GPU) and buffer interactions. */
     int copy_to_dev(struct buffer_t *buf) const;
@@ -103,7 +103,7 @@ struct JITUserContext {
 class JITSharedRuntime {
 public:
     // Note only the first CodeGen passed in here is used. The same shared runtime is used for all JIT.
-    static JITModule &get(CodeGen *cg, const Target &target);
+    static std::vector<JITModule> get(CodeGen *cg, const Target &target);
     static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
     static JITHandlers set_default_handlers(const JITHandlers &handlers);
     static void release_all();

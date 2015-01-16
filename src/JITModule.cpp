@@ -169,6 +169,7 @@ char *start, *end;
 
 // Retrieve a function pointer from an llvm module, possibly by
 // compiling it. Returns it by assigning to the last argument.
+
 JITModule::Symbol compile_and_get_function(ExecutionEngine *ee, Module *mod, const string &name, bool optional = false) {
     internal_assert(mod && ee);
 
@@ -214,17 +215,17 @@ class HalideJITMemoryManager : public SectionMemoryManager {
 public:
     HalideJITMemoryManager(const std::vector<JITModule> &dependencies) : dependencies(dependencies) {}
 
-    virtual uint64_t getSymbolAddress(const std::string &Name) {
+    virtual uint64_t getSymbolAddress(const std::string &name) {
         for (size_t i = 0; i < dependencies.size(); i++) {
-            std::map<std::string, JITModule::Symbol>::const_iterator iter = dependencies[i].exports().find(Name);
-            if (iter == dependencies[i].exports().end() && starts_with(Name, "_")) {
-                iter = dependencies[i].exports().find(Name.substr(1));
+            std::map<std::string, JITModule::Symbol>::const_iterator iter = dependencies[i].exports().find(name);
+            if (iter == dependencies[i].exports().end() && starts_with(name, "_")) {
+                iter = dependencies[i].exports().find(name.substr(1));
             }
             if (iter != dependencies[i].exports().end()) {
                 return (uint64_t)iter->second.address;
             }
         }
-        return SectionMemoryManager::getSymbolAddress(Name);
+        return SectionMemoryManager::getSymbolAddress(name);
     }
 };
 }
@@ -232,7 +233,6 @@ public:
 void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
-
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
     string error_string;
@@ -394,17 +394,19 @@ const std::map<std::string, JITModule::Symbol> &JITModule::exports() const {
     return jit_module.ptr->exports;
 }
 
-void JITModule::make_externs(llvm::Module *module) {
-    const std::map<std::string, Symbol> &dep_exports(exports());
-    std::map<std::string, Symbol>::const_iterator iter;
-    for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
-        const std::string &name(iter->first);
-        const Symbol &s(iter->second);
-        GlobalValue *gv;
-        if (s.llvm_type->isFunctionTy()) {
-            gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_module(module, s.llvm_type));
-        } else {
-            gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
+void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *module) {
+    for (size_t i = 0; i < deps.size(); i++) {
+        const std::map<std::string, Symbol> &dep_exports(deps[i].exports());
+        std::map<std::string, Symbol>::const_iterator iter;
+        for (iter = dep_exports.begin(); iter != dep_exports.end(); iter++) {
+            const std::string &name(iter->first);
+            const Symbol &s(iter->second);
+            GlobalValue *gv;
+            if (s.llvm_type->isFunctionTy()) {
+                gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_module(module, s.llvm_type));
+            } else {
+                gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
+            }
         }
     }
 }
@@ -593,7 +595,7 @@ struct CachedRuntime {
     JITModule jit_runtime;
 } cached_runtimes[MaxRuntimeKind];
 
-JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, JITModule *dep_chain) {
+  JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
     if (!cached_runtimes[runtime_kind].inited) {
         LLVMContext *llvm_context = new LLVMContext();
 
@@ -612,10 +614,6 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        std::vector<JITModule> deps;
-        if (dep_chain != NULL) {
-            deps.push_back(*dep_chain);
-        }
         cached_runtimes[runtime_kind].jit_runtime.compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
@@ -631,12 +629,7 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             merge_handlers(active_handlers, default_handlers);
 
             cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "MainShared";
-        } else if (dep_chain != NULL) {
-            // Insert deps exports into this module so consumers will
-            // get all the symbols. There should never be duplicates,
-            // but if there are, the value from this module, not
-            // dep_chain should be used.
-            cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->exports.insert(dep_chain->exports().begin(), dep_chain->exports().end());
+        } else {
             cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "GPU";
         }
 
@@ -655,19 +648,23 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
 }  // anonymous namespace
 
-JITModule &JITSharedRuntime::get(CodeGen *cg, const Target &target) {
+std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) {
     // TODO: Thread safety
-    JITModule &result = make_module(cg, target, MainShared, NULL);
+    std::vector<JITModule> result;
 
+    result.push_back(make_module(cg, target, MainShared, result));
+
+    JITModule gpu_runtime;
     if (target.has_feature(Target::OpenCL)) {
-        result = make_module(cg, target, OpenCL, &result);
+        gpu_runtime = make_module(cg, target, OpenCL, result);
     } else if (target.has_feature(Target::CUDA)) {
-        result = make_module(cg, target, CUDA, &result);
+        gpu_runtime = make_module(cg, target, CUDA, result);
     } else if (target.has_feature(Target::OpenGL)) {
-        result = make_module(cg, target, OpenGL, &result);
+        gpu_runtime = make_module(cg, target, OpenGL, result);
     } else {
-        result = make_module(cg, target, NoGPU, &result);
+        gpu_runtime = make_module(cg, target, NoGPU, result);
     }
+    result.push_back(gpu_runtime);
     return result;
 }
 
