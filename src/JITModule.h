@@ -70,6 +70,7 @@ struct JITModule {
     int copy_to_dev(struct buffer_t *buf) const;
     int copy_to_host(struct buffer_t *buf) const;
     int dev_free(struct buffer_t *buf) const;
+    void memoization_cache_set_size(int64_t size) const;
 };
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
@@ -106,6 +107,13 @@ public:
     static std::vector<JITModule> get(CodeGen *cg, const Target &target);
     static void init_jit_user_context(JITUserContext &jit_user_context, void *user_context, const JITHandlers &handlers);
     static JITHandlers set_default_handlers(const JITHandlers &handlers);
+
+    /** Set the maximum number of bytes used by memoization caching.
+     * If you are compiling statically, you should include HalideRuntime.h
+     * and call halide_memoization_cache_set_size() instead.
+     */
+    static void memoization_cache_set_size(int64_t size);
+   
     static void release_all();
 };
 }

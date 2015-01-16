@@ -57,26 +57,22 @@ vector<Argument> add_user_context_arg(vector<Argument> args, const Target& targe
 }  // namespace
 
 Func::Func(const string &name) : func(unique_name(name)),
-                                 cache_size(0),
                                  random_seed(0),
                                  jit_user_context(make_user_context()) {
 }
 
 Func::Func() : func(make_entity_name(this, "Halide::Func", 'f')),
-               cache_size(0),
                random_seed(0),
                jit_user_context(make_user_context()) {
 }
 
 Func::Func(Expr e) : func(make_entity_name(this, "Halide::Func", 'f')),
-                     cache_size(0),
                      random_seed(0),
                      jit_user_context(make_user_context()) {
     (*this)(_) = e;
 }
 
 Func::Func(Function f) : func(f),
-                         cache_size(0),
                          random_seed(0),
                          jit_user_context(make_user_context()) {
 }
@@ -2257,14 +2253,6 @@ void Func::set_custom_print(void (*cust_print)(void *, const char *)) {
     jit_handlers.custom_print = cust_print;
 }
 
-void Func::memoization_cache_set_size(uint64_t size) {
-    // TODO: Either the cache implementation needs to be extended to
-    // have separate sizing per Func, which is likely not a good idea,
-    // or we need to move to a single global size setter and remove
-    // the per Func version here.
-    cache_size = size;
-}
-
 void Func::add_custom_lowering_pass(IRMutator *pass, void (*deleter)(IRMutator *)) {
     invalidate_cache();
     CustomLoweringPass p = {pass, deleter};
@@ -2400,11 +2388,6 @@ void Func::realize(Realization dst, const Target &target) {
 
     JITFuncCallContext jit_context(jit_handlers, jit_user_context);
 
-    // TODO: Figure this out.
-#if 0
-    compiled_module.memoization_cache_set_size(cache_size);
-#endif
-
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {
         arg_values[arg_values.size()-dst.size()+i] = dst[i].raw_buffer();
@@ -2477,10 +2460,6 @@ void Func::infer_input_bounds(Realization dst) {
             << ", but Func \"" << name()
             << "\" has type " << func.output_types()[i] << ".\n";
     }
-
-#if 0 // Figure this out.
-    compiled_module.memoization_cache_set_size(cache_size);
-#endif
 
     // Update the address of the buffers we're realizing into
     for (size_t i = 0; i < dst.size(); i++) {

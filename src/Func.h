@@ -417,8 +417,6 @@ class Func {
 
     Halide::Internal::JITHandlers jit_handlers;
 
-    uint64_t cache_size;
-
     /** The random seed to use for realizations of this function. */
     uint32_t random_seed;
 
@@ -813,12 +811,6 @@ public:
      * This will clobber Halide's version.
      */
     EXPORT void set_custom_print(void (*handler)(void *, const char *));
-
-    /** Set the maximum number of bytes used by memoization caching.
-     * If you are compiling statically, you should include HalideRuntime.h
-     * and call halide_memoization_cache_set_size() instead.
-     */
-    EXPORT void memoization_cache_set_size(uint64_t size);
 
     /** Add a custom pass to be used during lowering. It is run after
      * all other lowering passes. Can be used to verify properties of

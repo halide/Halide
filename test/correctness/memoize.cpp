@@ -401,7 +401,7 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
@@ -416,6 +416,9 @@ int main(int argc, char **argv) {
         }
         // TODO work out an assertion on call count here.
         fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
@@ -435,7 +438,7 @@ int main(int argc, char **argv) {
 
         Func g;
         g(x, y) = f(x, y) + f(x - 1, y) + f(x + 1, y);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
 
         for (int v = 0; v < 1000; v++) {
             int r = rand() % 256;
@@ -473,6 +476,9 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr, "Call count is %d.\n", call_count_with_arg);
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
@@ -497,7 +503,7 @@ int main(int argc, char **argv) {
         g.parallel(y, 16);
 
         val.set(23.0f);
-        g.memoization_cache_set_size(1000000);
+        Internal::JITSharedRuntime::memoization_cache_set_size(1000000);
         Image<uint8_t> out = g.realize(128, 128);
 
         for (int32_t i = 0; i < 128; i++) {
@@ -510,6 +516,9 @@ int main(int argc, char **argv) {
         for (int i = 0; i < 8; i++) {
           fprintf(stderr, "Call count for thread %d is %d.\n", i, call_count_with_arg_parallel[i]);
         }
+
+        // Return cache size to default.
+        Internal::JITSharedRuntime::memoization_cache_set_size(0);
     }
 
     {
