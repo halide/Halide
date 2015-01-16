@@ -44,7 +44,7 @@ void CodeGen_PNaCl::compile(Stmt stmt, string name,
     if (target.has_feature(Target::JIT)) {
         JITModule shared_runtime = JITSharedRuntime::get(this);
 
-        shared_runtime.make_externs(module);
+        JITModule::make_externs(shared_runtime, module);
     }
 
     llvm::Triple triple = get_target_triple();

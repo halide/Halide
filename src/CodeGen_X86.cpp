@@ -100,9 +100,9 @@ void CodeGen_X86::compile(Stmt stmt, string name,
     module = get_initial_module_for_target(target, context);
 
     if (target.has_feature(Target::JIT)) {
-        JITModule shared_runtime = JITSharedRuntime::get(this, target);
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
 
-        shared_runtime.make_externs(module);
+        JITModule::make_externs(shared_runtime, module);
     }
 
     llvm::Triple triple = get_target_triple();
