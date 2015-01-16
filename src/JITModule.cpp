@@ -350,6 +350,7 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         "halide_set_custom_trace",
         "halide_set_custom_do_par_for",
         "halide_set_custom_do_task",
+        "halide_memoization_cache_set_size",
     };
 
     std::map<std::string, void *> runtime_internal_exports;
@@ -458,11 +459,22 @@ int JITModule::dev_free(struct buffer_t *buf) const {
     return 0;
 }
 
+void JITModule::memoization_cache_set_size(int64_t size) const {
+    if (jit_module.defined()) {
+        std::map<std::string, void *>::const_iterator f =
+            jit_module.ptr->runtime_internal_exports.find("halide_memoization_cache_set_size");
+        if (f != jit_module.ptr->runtime_internal_exports.end()) {
+          return ((void (*)(int64_t))f->second)(size);
+        }
+    }
+}
+
 namespace {
 
 JITHandlers runtime_internal_handlers;
 JITHandlers default_handlers;
 JITHandlers active_handlers;
+int64_t default_cache_size;
 
 void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_print) {
@@ -595,7 +607,7 @@ struct CachedRuntime {
     JITModule jit_runtime;
 } cached_runtimes[MaxRuntimeKind];
 
-  JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
+JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
     if (!cached_runtimes[runtime_kind].inited) {
         LLVMContext *llvm_context = new LLVMContext();
 
@@ -627,6 +639,10 @@ struct CachedRuntime {
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
+
+            if (default_cache_size != 0) {
+                cached_runtimes[MainShared].jit_runtime.memoization_cache_set_size(default_cache_size);
+            }
 
             cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "MainShared";
         } else {
@@ -693,5 +709,15 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
     merge_handlers(active_handlers, default_handlers);
     return result;
 }
+
+void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
+    if (size != default_cache_size &&
+        cached_runtimes[MainShared].inited) {
+        default_cache_size = size;
+        cached_runtimes[MainShared].jit_runtime.memoization_cache_set_size(size);
+    }
+}
+
+
 }
 }
