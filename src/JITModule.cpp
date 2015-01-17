@@ -418,8 +418,7 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
             } else {
                 gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
             }
-            // TODO: Zalman, what is gv for?
-            (void)gv;
+            gv->setLinkage(GlobalValue::ExternalWeakLinkage);
         }
     }
 }
