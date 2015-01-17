@@ -1695,7 +1695,7 @@ WEAK void halide_release(void *user_context) {
 
 namespace {
 __attribute__((destructor))
-void halide_opengl_cleanup() {
+WEAK void halide_opengl_cleanup() {
     halide_release(NULL);
 }
 }
