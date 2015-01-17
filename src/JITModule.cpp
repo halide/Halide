@@ -618,7 +618,7 @@ enum RuntimeKind {
     MaxRuntimeKind
 };
 
-JITModule shared_runtimes[MaxRuntimeKind] = {0};
+JITModule shared_runtimes[MaxRuntimeKind];
 
 JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
     if (!shared_runtimes[runtime_kind].jit_module.defined()) {
