@@ -566,7 +566,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     for (llvm::Module::global_iterator iter = module->global_begin(); iter != module->global_end(); iter++) {
         if (llvm::GlobalValue *gv = llvm::dyn_cast<llvm::GlobalValue>(iter)) {
             if (Internal::starts_with(gv->getName(), "halide_")) {
-                internal_assert(gv->hasExternalLinkage() || gv->mayBeOverridden());
+                internal_assert(gv->hasExternalLinkage() || gv->mayBeOverridden() || gv->isDeclaration());
                 llvm::GlobalValue::LinkageTypes t = gv->getLinkage();
                 if (t == llvm::GlobalValue::WeakAnyLinkage) {
                     gv->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
@@ -580,7 +580,6 @@ void link_modules(std::vector<llvm::Module *> &modules) {
     // Enumerate the functions.
     for (llvm::Module::iterator iter = module->begin(); iter != module->end(); iter++) {
         llvm::Function *f = (llvm::Function *)(iter);
-        //      Halide::Internal::debug(0) << "Found function: " << (std::string)f->getName() << "\n";
 
         bool can_strip = true;
         for (size_t i = 0; !retain[i].empty(); i++) {
@@ -590,7 +589,7 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         }
 
         bool is_halide_extern_c_sym = Internal::starts_with(f->getName(), "halide_");
-        internal_assert(!is_halide_extern_c_sym || f->mayBeOverridden());
+        internal_assert(!is_halide_extern_c_sym || f->mayBeOverridden() || f->isDeclaration());
         can_strip = can_strip && !(is_halide_extern_c_sym && f->mayBeOverridden());
 
         if (can_strip) {
