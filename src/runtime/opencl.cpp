@@ -583,7 +583,7 @@ WEAK void halide_release(void *user_context) {
 
 namespace {
 __attribute__((destructor))
-void halide_opencl_cleanup() {
+WEAK void halide_opencl_cleanup() {
     halide_release(NULL);
 }
 }

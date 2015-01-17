@@ -564,8 +564,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
 
     // Enumerate the global variables.
     for (llvm::Module::global_iterator iter = module->global_begin(); iter != module->global_end(); iter++) {
-      if (llvm::GlobalValue *gv = llvm::dyn_cast<llvm::GlobalValue>(iter)) {
-          if (gv->hasWeakLinkage() && Internal::starts_with(gv->getName(), "halide_")) {
+        if (llvm::GlobalValue *gv = llvm::dyn_cast<llvm::GlobalValue>(iter)) {
+            if (Internal::starts_with(gv->getName(), "halide_")) {
+                internal_assert(gv->hasExternalLinkage() || gv->mayBeOverridden());
                 llvm::GlobalValue::LinkageTypes t = gv->getLinkage();
                 if (t == llvm::GlobalValue::WeakAnyLinkage) {
                     gv->setLinkage(llvm::GlobalValue::LinkOnceAnyLinkage);
@@ -588,8 +589,9 @@ void link_modules(std::vector<llvm::Module *> &modules) {
             }
         }
 
-        can_strip = can_strip &&
-                   !(Internal::starts_with(f->getName(), "halide_") && f->hasWeakLinkage());
+        bool is_halide_extern_c_sym = Internal::starts_with(f->getName(), "halide_");
+        internal_assert(!is_halide_extern_c_sym || f->mayBeOverridden());
+        can_strip = can_strip && !(is_halide_extern_c_sym && f->mayBeOverridden());
 
         if (can_strip) {
             llvm::GlobalValue::LinkageTypes t = f->getLinkage();

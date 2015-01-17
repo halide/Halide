@@ -1,6 +1,10 @@
 #include <string>
 #include <stdint.h>
 
+#if __cplusplus > 199711L || _MSC_VER >= 1800
+#include <mutex>
+#endif
+
 #include "buffer_t.h"
 #include "JITModule.h"
 #include "CodeGen.h"
@@ -593,6 +597,10 @@ static void adjust_module_ref_count(void *arg, int32_t count) {
 
 namespace {
 
+#if __cplusplus > 199711L || _MSC_VER >= 1800
+std::mutex shared_runtimes_mutex;
+#endif
+
 enum RuntimeKind {
     MainShared,
     CUDA,
@@ -602,13 +610,10 @@ enum RuntimeKind {
     MaxRuntimeKind,
 };
 
-struct CachedRuntime {
-    bool inited = false;
-    JITModule jit_runtime;
-} cached_runtimes[MaxRuntimeKind];
+JITModule shared_runtimes[MaxRuntimeKind];
 
 JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_kind, const std::vector<JITModule> &deps) {
-    if (!cached_runtimes[runtime_kind].inited) {
+    if (!shared_runtimes[runtime_kind].jit_module.defined()) {
         LLVMContext *llvm_context = new LLVMContext();
 
         llvm::Module *shared_runtime = get_initial_module_for_target(target,
@@ -626,45 +631,47 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
         std::vector<std::string> halide_exports(halide_exports_unique.begin(), halide_exports_unique.end());
 
-        cached_runtimes[runtime_kind].jit_runtime.compile_module(cg, shared_runtime, "", deps, halide_exports);
+        shared_runtimes[runtime_kind].compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
-            runtime_internal_handlers.custom_print = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_print", print_handler);
+            runtime_internal_handlers.custom_print = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
             JITCustomAllocator custom_allocator(malloc_handler, free_handler);
-            runtime_internal_handlers.custom_allocator = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_allocator", custom_allocator);
-            runtime_internal_handlers.custom_do_task = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_do_task", do_task_handler);
-            runtime_internal_handlers.custom_do_par_for = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_do_par_for", do_par_for_handler);
-            runtime_internal_handlers.custom_error = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_error_handler", error_handler_handler);
-            runtime_internal_handlers.custom_trace = hook_function(cached_runtimes[MainShared].jit_runtime.exports(), "halide_set_custom_trace", trace_handler);
+            runtime_internal_handlers.custom_allocator = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_allocator", custom_allocator);
+            runtime_internal_handlers.custom_do_task = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
+            runtime_internal_handlers.custom_do_par_for = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+            runtime_internal_handlers.custom_error = hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
+            runtime_internal_handlers.custom_trace = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
 
             if (default_cache_size != 0) {
-                cached_runtimes[MainShared].jit_runtime.memoization_cache_set_size(default_cache_size);
+                shared_runtimes[MainShared].memoization_cache_set_size(default_cache_size);
             }
 
-            cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "MainShared";
+            shared_runtimes[runtime_kind].jit_module.ptr->name = "MainShared";
         } else {
-            cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->name = "GPU";
+            shared_runtimes[runtime_kind].jit_module.ptr->name = "GPU";
         }
 
-        uint64_t arg_addr = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
+        uint64_t arg_addr = shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
         internal_assert(arg_addr != 0);
-        *((void **)arg_addr) = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr;
+        *((void **)arg_addr) = shared_runtimes[runtime_kind].jit_module.ptr;
 
-        uint64_t fun_addr = cached_runtimes[runtime_kind].jit_runtime.jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
+        uint64_t fun_addr = shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_adjust_ref_count");
         internal_assert(fun_addr != 0);
         *(void (**)(void *arg, int32_t count))fun_addr = &adjust_module_ref_count;
-
-        cached_runtimes[runtime_kind].inited = true;
     }
-    return cached_runtimes[runtime_kind].jit_runtime;
+    return shared_runtimes[runtime_kind];
 }
 
 }  // anonymous namespace
 
 std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) {
+    #if __cplusplus > 199711L || _MSC_VER >= 1800
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    #endif
+
     // TODO: Thread safety
     std::vector<JITModule> result;
 
@@ -697,8 +704,12 @@ void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
 }
 
 void JITSharedRuntime::release_all() {
+    #if __cplusplus > 199711L || _MSC_VER >= 1800
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    #endif
+
     for (int i = MaxRuntimeKind; i > 0; i--) {
-        cached_runtimes[(RuntimeKind)(i - 1)].jit_runtime.jit_module = NULL;
+        shared_runtimes[(RuntimeKind)(i - 1)].jit_module = NULL;
     }
 }
 
@@ -711,10 +722,14 @@ JITHandlers JITSharedRuntime::set_default_handlers(const JITHandlers &handlers) 
 }
 
 void JITSharedRuntime::memoization_cache_set_size(int64_t size) {
+    #if __cplusplus > 199711L || _MSC_VER >= 1800
+    std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
+    #endif
+
     if (size != default_cache_size &&
-        cached_runtimes[MainShared].inited) {
+        shared_runtimes[MainShared].jit_module.defined()) {
         default_cache_size = size;
-        cached_runtimes[MainShared].jit_runtime.memoization_cache_set_size(size);
+        shared_runtimes[MainShared].memoization_cache_set_size(size);
     }
 }
 

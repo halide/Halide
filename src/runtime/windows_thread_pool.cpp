@@ -310,7 +310,7 @@ WEAK void halide_shutdown_thread_pool() {
 
 namespace {
 __attribute__((destructor))
-void halide_posix_thread_pool_cleanup() {
+WEAK void halide_posix_thread_pool_cleanup() {
     halide_shutdown_thread_pool();
 }
 }
