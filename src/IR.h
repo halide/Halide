@@ -41,6 +41,29 @@ enum Values {
 };
 #endif
 
+inline const char *device_api_to_string(const DeviceAPI &device_api) {
+    switch (device_api) {
+    case DeviceAPI::Host:
+        break;
+    case DeviceAPI::Parent:
+        return "<Parent>";
+        break;
+    case DeviceAPI::Default_GPU:
+        return "<Default_GPU>";
+        break;
+    case DeviceAPI::CUDA:
+        return "<CUDA>";
+        break;
+    case DeviceAPI::OpenCL:
+        return "<OpenCL>";
+        break;
+    case DeviceAPI::GLSL:
+        return "<GLSL>";
+        break;
+    }
+    return "<Unrecognized DeviceAPI>";
+}
+
 namespace Internal {
 
 /** A class representing a type of IR node (e.g. Add, or Mul, or
