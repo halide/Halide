@@ -83,3 +83,27 @@ define weak_odr <8 x float> @fast_inverse_sqrt_f32x8(<8 x float> %x) nounwind uw
   %approx = tail call <8 x float> @llvm.x86.avx.rsqrt.ps.256(<8 x float> %x);
   ret <8 x float> %approx
 }
+
+define weak_odr <8 x float> @min_f32x8(<8 x float> %a, <8 x float> %b) nounwind uwtable readnone alwaysinline {
+  %c = fcmp olt <8 x float> %a, %b
+  %result = select <8 x i1> %c, <8 x float> %a, <8 x float> %b
+  ret <8 x float> %result
+}
+
+define weak_odr <8 x float> @max_f32x8(<8 x float> %a, <8 x float> %b) nounwind uwtable readnone alwaysinline {
+  %c = fcmp olt <8 x float> %a, %b
+  %result = select <8 x i1> %c, <8 x float> %b, <8 x float> %a
+  ret <8 x float> %result
+}
+
+define weak_odr <4 x double> @min_f64x4(<4 x double> %a, <4 x double> %b) nounwind uwtable readnone alwaysinline {
+  %c = fcmp olt <4 x double> %a, %b
+  %result = select <4 x i1> %c, <4 x double> %a, <4 x double> %b
+  ret <4 x double> %result
+}
+
+define weak_odr <4 x double> @max_f64x4(<4 x double> %a, <4 x double> %b) nounwind uwtable readnone alwaysinline {
+  %c = fcmp olt <4 x double> %a, %b
+  %result = select <4 x i1> %c, <4 x double> %b, <4 x double> %a
+  ret <4 x double> %result
+}

@@ -25,6 +25,8 @@ class InjectThreadBarriers : public IRMutator {
 
     using IRMutator::visit;
 
+    Stmt barrier;
+
     void visit(const For *op) {
         bool old_in_threads = in_threads;
         if (CodeGen_GPU_Dev::is_gpu_thread_var(op->name)) {
@@ -36,19 +38,19 @@ class InjectThreadBarriers : public IRMutator {
         in_threads = old_in_threads;
     }
 
-    Stmt barrier() {
-        return Evaluate::make(Call::make(Int(32), "halide_gpu_thread_barrier", vector<Expr>(), Call::Extern));
-    }
-
     void visit(const Pipeline *op) {
         if (!in_threads) {
             Stmt produce = mutate(op->produce);
-            produce = Block::make(produce, barrier());
+            if (!is_no_op(produce)) {
+                produce = Block::make(produce, barrier);
+            }
 
             Stmt update;
             if (op->update.defined()) {
                 update = mutate(op->update);
-                update = Block::make(update, barrier());
+                if (!is_no_op(update)) {
+                    update = Block::make(update, barrier);
+                }
             }
 
             Stmt consume = mutate(op->consume);
@@ -63,14 +65,18 @@ class InjectThreadBarriers : public IRMutator {
         if (!in_threads && op->rest.defined()) {
             Stmt first = mutate(op->first);
             Stmt rest = mutate(op->rest);
-            stmt = Block::make(Block::make(first, barrier()), rest);
+            stmt = Block::make(Block::make(first, barrier), rest);
         } else {
             IRMutator::visit(op);
         }
     }
 
 public:
-    InjectThreadBarriers() : in_threads(false) {}
+    InjectThreadBarriers() : in_threads(false) {
+        barrier =
+            Evaluate::make(Call::make(Int(32), "halide_gpu_thread_barrier",
+                                      vector<Expr>(), Call::Extern));
+    }
 };
 
 
@@ -152,6 +158,9 @@ class NormalizeDimensionality : public IRMutator {
         }
         max_depth = 0;
         s = mutate(s);
+        if (is_no_op(s)) {
+            return s;
+        }
         while (max_depth < block_size.dimensions()) {
             string name = thread_names[max_depth];
             s = For::make("." + name, 0, 1, For::Parallel, device_api, s);
