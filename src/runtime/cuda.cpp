@@ -28,15 +28,19 @@ using namespace Halide::Runtime::Internal::Cuda;
 
 extern "C" {
 
-extern int64_t halide_current_time_ns(void *user_context);
 extern void *malloc(size_t);
+
+#ifdef DEBUG_RUNTIME
+extern int halide_start_clock(void *user_context);
+extern int64_t halide_current_time_ns(void *user_context);
+#endif
 
 WEAK void halide_cuda_set_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
     cuda_context_ptr = ctx_ptr;
     Halide::Runtime::Internal::Cuda::lock_ptr = lock_ptr;
 }
 
-// The default implementation of halide_acquire_cl_context uses the global
+// The default implementation of halide_acquire_cuda_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
@@ -91,8 +95,11 @@ public:
 
     // Constructor sets 'error' if any occurs.
     Context(void *user_context) : user_context(user_context),
-                                      context(NULL),
-                                      error(CUDA_SUCCESS) {
+                                  context(NULL),
+                                  error(CUDA_SUCCESS) {
+#ifdef DEBUG_RUNTIME
+        halide_start_clock(user_context);
+#endif
         error = halide_cuda_acquire_context(user_context, &context);
         halide_assert(user_context, context != NULL);
         if (error != 0) {
