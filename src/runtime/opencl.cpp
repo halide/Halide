@@ -183,7 +183,7 @@ WEAK bool validate_device_pointer(void *user_context, buffer_t* buf, size_t size
         return true;
     }
 
-    cl_mem dev_ptr = (cl_mem)get_device_handle(buf->dev);
+    cl_mem dev_ptr = (cl_mem)halide_get_device_handle(buf->dev);
 
     size_t real_size;
     cl_int result = clGetMemObjectInfo(dev_ptr, CL_MEM_SIZE, sizeof(size_t), &real_size, NULL);
@@ -404,7 +404,6 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 extern "C" {
 
 WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
-
     // halide_opencl_device_free, at present, can be exposed to clients and they
     // should be allowed to call halide_opencl_device_free on any buffer_t
     // including ones that have never been used with a GPU.
@@ -412,7 +411,7 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
       return 0;
     }
 
-    cl_mem dev_ptr = (cl_mem)get_device_handle(buf->dev);
+    cl_mem dev_ptr = (cl_mem)halide_get_device_handle(buf->dev);
 
     debug(user_context)
         << "CL: halide_opencl_device_free (user_context: " << user_context
@@ -432,7 +431,7 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
     cl_int result = clReleaseMemObject((cl_mem)dev_ptr);
     // If clReleaseMemObject fails, it is unlikely to succeed in a later call, so
     // we just end our reference to it regardless.
-    delete_device_wrapper(buf->dev);
+    halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     if (result != CL_SUCCESS) {
         error(user_context) << "CL: clReleaseMemObject failed: "
@@ -444,6 +443,8 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_release_jit_module();
 
     return 0;
 }
@@ -678,7 +679,7 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     } else {
         debug(user_context) << (void *)dev_ptr << "\n";
     }
-    buf->dev = new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
+    buf->dev = halide_new_device_wrapper((uint64_t)dev_ptr, &opencl_device_interface);
     if (buf->dev == 0) {
         error(user_context) << "CL: out of memory allocating device wrapper.\n";
         clReleaseMemObject(dev_ptr);
@@ -693,6 +694,8 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_use_jit_module();
 
     return CL_SUCCESS;
 }
@@ -947,7 +950,7 @@ WEAK int halide_opencl_run(void *user_context,
         uint64_t opencl_handle;
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            opencl_handle = get_device_handle(*(uint64_t *)this_arg);
+            opencl_handle = halide_get_device_handle(*(uint64_t *)this_arg);
             debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
             this_arg = &opencl_handle;
         }
@@ -1009,13 +1012,13 @@ WEAK int halide_opencl_wrap_cl_mem(void *user_context, struct buffer_t *buf, uin
     if (buf->dev != 0) {
         return -2;
     }
-    buf->dev = new_device_wrapper(mem, &opencl_device_interface);
+    buf->dev = halide_new_device_wrapper(mem, &opencl_device_interface);
     if (buf->dev == 0) {
         return -1;
     }
 #if DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
-        delete_device_wrapper(buf->dev);
+        halide_delete_device_wrapper(buf->dev);
         buf->dev = 0;
         return -3;
     }
@@ -1027,9 +1030,9 @@ WEAK uintptr_t halide_opencl_detach_cl_mem(void *user_context, struct buffer_t *
     if (buf->dev == NULL) {
         return 0;
     }
-    halide_assert(user_context, get_device_interface(buf->dev) == &opencl_device_interface);
-    uint64_t mem = get_device_handle(buf->dev);
-    delete_device_wrapper(buf->dev);
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opencl_device_interface);
+    uint64_t mem = halide_get_device_handle(buf->dev);
+    halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     return (uintptr_t)mem;
 }
@@ -1038,13 +1041,20 @@ WEAK uintptr_t halide_opencl_get_cl_mem(void *user_context, struct buffer_t *buf
     if (buf->dev == NULL) {
         return 0;
     }
-    halide_assert(user_context, get_device_interface(buf->dev) == &opencl_device_interface);
-    uint64_t mem = get_device_handle(buf->dev);
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opencl_device_interface);
+    uint64_t mem = halide_get_device_handle(buf->dev);
     return (uintptr_t)mem;
 }
 
 WEAK const struct halide_device_interface *halide_opencl_device_interface() {
     return &opencl_device_interface;
+}
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_opencl_cleanup() {
+    halide_opencl_device_release(NULL);
+}
 }
 
 } // extern "C" linkage

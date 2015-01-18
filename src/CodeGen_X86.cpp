@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "CodeGen_X86.h"
+#include "JITModule.h"
 #include "IROperator.h"
 #include "buffer_t.h"
 #include "IRMatch.h"
@@ -97,6 +98,12 @@ void CodeGen_X86::compile(Stmt stmt, string name,
 
     // Fix the target triple
     module = get_initial_module_for_target(target, context);
+
+    if (target.has_feature(Target::JIT)) {
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
+
+        JITModule::make_externs(shared_runtime, module);
+    }
 
     llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
@@ -759,12 +766,14 @@ void CodeGen_X86::test() {
     //cg.compile_to_native("test1.s", true);
 
     debug(2) << "Compiling to function pointers \n";
-    JITCompiledModule m = cg.compile_to_function_pointers();
+    JITModule m = cg.compile_to_function_pointers();
 
+    internal_assert(m.main_function() != NULL);
+    internal_assert(m.jit_wrapper_function() != NULL);
     typedef int (*fn_type)(::buffer_t *, float, int);
-    fn_type fn = reinterpret_bits<fn_type>(m.function);
+    fn_type fn = reinterpret_bits<fn_type>(m.main_function());
 
-    debug(2) << "Function pointer lives at " << m.function << "\n";
+    debug(2) << "Function pointer lives at " << m.main_function() << " wrapper at " << (void *)m.jit_wrapper_function() << "\n";
 
     int scratch_buf[64];
     int *scratch = &scratch_buf[0];
@@ -808,7 +817,7 @@ void CodeGen_X86::test() {
     float float_arg_val = 4.0f;
     int int_arg_val = 1;
     const void *arg_array[] = {&buf, &float_arg_val, &int_arg_val};
-    m.wrapped_function(arg_array);
+    m.jit_wrapper_function()(arg_array);
     internal_assert(scratch[0] == 0);
     internal_assert(scratch[1] == 3);
     internal_assert(scratch[2] == 3);
@@ -870,7 +879,7 @@ void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
     }
 }
 
-void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *)
+void CodeGen_X86::jit_finalize(llvm::ExecutionEngine * ee, llvm::Module *)
 {
     if (jitEventListener) {
         ee->UnregisterJITEventListener(jitEventListener);

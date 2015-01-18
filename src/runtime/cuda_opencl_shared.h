@@ -55,7 +55,7 @@ WEAK device_copy make_host_to_device_copy(const buffer_t *buf) {
     // Make a copy job representing copying the first pixel only.
     device_copy c;
     c.src = (uint64_t)buf->host;
-    c.dst = get_device_handle(buf->dev);
+    c.dst = halide_get_device_handle(buf->dev);
     c.chunk_size = buf->elem_size;
     for (int i = 0; i < MAX_COPY_DIMS; i++) {
         c.extent[i] = 1;

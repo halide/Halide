@@ -202,6 +202,9 @@ typedef Printer<BasicPrinter> debug;
 typedef SinkPrinter debug;
 #endif
 
+extern WEAK void halide_use_jit_module();
+extern WEAK void halide_release_jit_module();
+
 }}}
 
 using namespace Halide::Runtime::Internal;
