@@ -40,7 +40,7 @@ struct MultiDevicePipeline {
         for (int i = 0; i < 100; i++) {
             for (int j = 0; j < 100; j++) {
                 for (int k = 0; k < 3; k++) {
-                    int correct = 42 + stages * 69;
+                  int correct = (uint8_t)(42 + stages * 69);
                     if (result(i, j, k) != correct) {
                         printf("result(%d, %d, %d) = %d instead of %d. (%s).\n", i, j, k, result(i, j, k), correct, test_case);
                         return false;
