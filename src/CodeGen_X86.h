@@ -35,7 +35,7 @@ public:
     static void test();
 
     void jit_init(llvm::ExecutionEngine *, llvm::Module *);
-    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *);
+    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
 
 protected:
 

@@ -268,7 +268,7 @@ WEAK bool validate_device_pointer(void *user_context, buffer_t* buf, size_t size
     if (buf->dev == 0)
         return true;
 
-    CUdeviceptr dev_ptr = (CUdeviceptr)get_device_handle(buf->dev);
+    CUdeviceptr dev_ptr = (CUdeviceptr)halide_get_device_handle(buf->dev);
 
     CUcontext ctx;
     CUresult result = cuPointerGetAttribute(&ctx, CU_POINTER_ATTRIBUTE_CONTEXT, dev_ptr);
@@ -342,7 +342,7 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
         return 0;
     }
 
-    CUdeviceptr dev_ptr = (CUdeviceptr)get_device_handle(buf->dev);
+    CUdeviceptr dev_ptr = (CUdeviceptr)halide_get_device_handle(buf->dev);
 
     debug(user_context)
         <<  "CUDA: halide_cuda_device_free (user_context: " << user_context
@@ -362,7 +362,7 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
     CUresult err = cuMemFree(dev_ptr);
     // If cuMemFree fails, it isn't likely to succeed later, so just drop
     // the reference.
-    delete_device_wrapper(buf->dev);
+    halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     if (err != CUDA_SUCCESS) {
         error(user_context) << "CUDA: cuMemFree failed: "
@@ -374,6 +374,8 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_release_jit_module();
 
     return 0;
 }
@@ -473,7 +475,7 @@ WEAK int halide_cuda_device_malloc(void *user_context, buffer_t *buf) {
         debug(user_context) << (void *)p << "\n";
     }
     halide_assert(user_context, p);
-    buf->dev = new_device_wrapper((uint64_t)p, &cuda_device_interface);
+    buf->dev = halide_new_device_wrapper((uint64_t)p, &cuda_device_interface);
     if (buf->dev == 0) {
         error(user_context) << "CUDA: out of memory allocating device wrapper.\n";
         cuMemFree(p);
@@ -484,6 +486,8 @@ WEAK int halide_cuda_device_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_use_jit_module();
 
     return 0;
 }
@@ -686,7 +690,7 @@ WEAK int halide_cuda_run(void *user_context,
     for (size_t i = 0; i <= num_args; i++) { // Get NULL at end.
         if (arg_is_buffer[i]) {
             halide_assert(user_context, arg_sizes[i] == sizeof(uint64_t));
-            dev_handles[i] = get_device_handle(*(uint64_t *)args[i]);
+            dev_handles[i] = halide_get_device_handle(*(uint64_t *)args[i]);
             translated_args[i] = &(dev_handles[i]);
             debug(user_context) << "    halide_cuda_run translated arg" << i
                                 << " [" << (*((void **)translated_args[i])) << " ...]\n";
@@ -728,13 +732,13 @@ WEAK int halide_cuda_wrap_device_ptr(void *user_context, struct buffer_t *buf, u
     if (buf->dev != 0) {
         return -2;
     }
-    buf->dev = new_device_wrapper(device_ptr, &cuda_device_interface);
+    buf->dev = halide_new_device_wrapper(device_ptr, &cuda_device_interface);
     if (buf->dev == 0) {
         return -1;
     }
 #if DEBUG_RUNTIME
     if (!validate_device_pointer(user_context, buf)) {
-        delete_device_wrapper(buf->dev);
+        halide_delete_device_wrapper(buf->dev);
         buf->dev = 0;
         return -3;
     }
@@ -746,9 +750,9 @@ WEAK uintptr_t halide_cuda_detach_device_ptr(void *user_context, struct buffer_t
     if (buf->dev == NULL) {
         return 0;
     }
-    halide_assert(user_context, get_device_interface(buf->dev) == &cuda_device_interface);
-    uint64_t dev_ptr = get_device_handle(buf->dev);
-    delete_device_wrapper(buf->dev);
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &cuda_device_interface);
+    uint64_t dev_ptr = halide_get_device_handle(buf->dev);
+    halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     return (uintptr_t)dev_ptr;
 }
@@ -757,13 +761,20 @@ WEAK uintptr_t halide_cuda_get_device_ptr(void *user_context, struct buffer_t *b
     if (buf->dev == NULL) {
         return 0;
     }
-    halide_assert(user_context, get_device_interface(buf->dev) == &cuda_device_interface);
-    uint64_t dev_ptr = get_device_handle(buf->dev);
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &cuda_device_interface);
+    uint64_t dev_ptr = halide_get_device_handle(buf->dev);
     return (uintptr_t)dev_ptr;
 }
 
 WEAK const halide_device_interface *halide_cuda_device_interface() {
     return &cuda_device_interface;
+}
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_cuda_cleanup() {
+    halide_cuda_device_release(NULL);
+}
 }
 
 } // extern "C" linkage

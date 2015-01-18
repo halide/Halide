@@ -84,11 +84,6 @@ protected:
     /** Finds and links in the necessary runtime symbols prior to jitting */
     void jit_init(llvm::ExecutionEngine *ee, llvm::Module *mod);
 
-    /** Reaches inside the module at sets it to use a single shared
-     * cuda context */
-    void jit_finalize(llvm::ExecutionEngine *ee, llvm::Module *mod,
-                      std::vector<JITCompiledModule::CleanupRoutine> *cleanup_routines);
-
     static bool lib_cuda_linked;
 
     static std::map<DeviceAPI, CodeGen_GPU_Dev *> make_devices(Target);

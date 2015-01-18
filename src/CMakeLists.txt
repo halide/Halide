@@ -254,7 +254,7 @@ set(HEADER_FILES
   IRVisitor.h
   InjectOpenGLIntrinsics.h
   InjectHostDevBufferCopies.h
-  JITCompiledModule.h
+  JITModule.h
   Lambda.h
   Debug.h
   Lower.h
@@ -378,7 +378,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Deinterleave.cpp
   DebugToFile.cpp
   Type.cpp
-  JITCompiledModule.cpp
+  JITModule.cpp
   EarlyFree.cpp
   UniquifyVariableNames.cpp
   CSE.cpp

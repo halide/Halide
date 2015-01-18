@@ -35,7 +35,7 @@ class MDNode;
 #include "Argument.h"
 #include "IR.h"
 #include "Scope.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "ModulusRemainder.h"
 #include "Target.h"
 
@@ -73,7 +73,7 @@ public:
 
     /** Compile to machine code stored in memory, and return some
      * functions pointers into that machine code. */
-    JITCompiledModule compile_to_function_pointers();
+    JITModule compile_to_function_pointers();
 
     /** What should be passed as -mcpu, -mattrs, and related for
      * compilation. The architecture-specific code generator should
@@ -90,17 +90,14 @@ public:
     // @}
 
     /** Do any required target-specific things to the execution engine
-     * and the module prior to jitting. Called by JITCompiledModule
+     * and the module prior to jitting. Called by JITModule
      * just before it jits. Does nothing by default. */
     virtual void jit_init(llvm::ExecutionEngine *, llvm::Module *) {}
 
     /** Do any required target-specific things to the execution engine
-     * and the module after jitting. Called by JITCompiledModule just
-     * after it jits. Does nothing by default. The third argument
-     * gives the target a chance to inject calls to target-specific
-     * module cleanup routines. */
-    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *,
-                              std::vector<JITCompiledModule::CleanupRoutine> *);
+     * and the module after jitting. Called by JITModule just
+     * after it jits. Does nothing by default. */
+    virtual void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
 
     /** Initialize internal llvm state for the enabled targets. */
     static void initialize_llvm();

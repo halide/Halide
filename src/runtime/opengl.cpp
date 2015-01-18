@@ -230,7 +230,7 @@ WEAK GLuint get_texture_id(buffer_t *buf) {
     if (buf->dev == 0) {
         return 0;
     } else {
-        return get_device_handle(buf->dev) & 0xffffffff;
+        return halide_get_device_handle(buf->dev) & 0xffffffff;
     }
 }
 
@@ -846,7 +846,7 @@ WEAK int halide_opengl_device_malloc(void *user_context, buffer_t *buf) {
             return 1;
         }
 
-        buf->dev = new_device_wrapper(tex, &opengl_device_interface);
+        buf->dev = halide_new_device_wrapper(tex, &opengl_device_interface);
         if (buf->dev == 0) {
             error(user_context) << "OpenGL: out of memory allocating device wrapper.\n";
             global_state.DeleteTextures(1, &tex);
@@ -915,11 +915,14 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
         if (global_state.CheckAndReportError(user_context, "halide_opengl_device_free DeleteTextures")) {
             return 1;
         }
-        delete_device_wrapper(buf->dev);
+        halide_delete_device_wrapper(buf->dev);
         buf->dev = 0;
     }
 
     free(texinfo);
+
+    halide_release_jit_module();
+
     return 0;
 }
 
@@ -1163,10 +1166,13 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
 
         halide_free(user_context, tmp);
     }
+
     global_state.BindTexture(GL_TEXTURE_2D, 0);
     if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
         return 1;
     }
+
+    halide_use_jit_module();
 
     return 0;
 }
@@ -1384,7 +1390,7 @@ WEAK int halide_opengl_run(void *user_context,
             halide_assert(user_context, is_buffer[i] && "OpenGL Outbuf argument is not a buffer.")
             // Check if the output buffer will be bound by the client instead of
             // the Halide runtime
-            GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
+            GLuint tex = *((GLuint *)halide_get_device_handle((uint64_t)args[i]));
             if (tex == (GLuint)HALIDE_OPENGL_CLIENT_BOUND) {
                 bind_render_targets = false;
             }
@@ -1401,7 +1407,7 @@ WEAK int halide_opengl_run(void *user_context,
                 error(user_context) << "No sampler defined for input texture.";
                 return 1;
             }
-            GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
+            GLuint tex = *((GLuint *)halide_get_device_handle((uint64_t)args[i]));
             global_state.ActiveTexture(GL_TEXTURE0 + num_active_textures);
             global_state.BindTexture(GL_TEXTURE_2D, tex);
             global_state.Uniform1iv(loc, 1, &num_active_textures);
@@ -1530,7 +1536,7 @@ WEAK int halide_opengl_run(void *user_context,
             return 1;
         }
 
-        GLuint tex = *((GLuint *)get_device_handle((uint64_t)args[i]));
+        GLuint tex = *((GLuint *)halide_get_device_handle((uint64_t)args[i]));
 
         // Check to see if the object name is actually a FBO
         if (bind_render_targets) {
@@ -1919,7 +1925,7 @@ WEAK int halide_opengl_wrap_texture(void *user_context, struct buffer_t *buf, ui
     if (buf->dev != 0) {
         return -2;
     }
-    buf->dev = new_device_wrapper(texture_id, &opengl_device_interface);
+    buf->dev = halide_new_device_wrapper(texture_id, &opengl_device_interface);
     if (buf->dev == 0) {
         return -1;
     }
@@ -1930,9 +1936,9 @@ WEAK uintptr_t halide_opengl_detach_texture(void *user_context, struct buffer_t 
     if (buf->dev == NULL) {
         return 0;
     }
-    halide_assert(user_context, get_device_interface(buf->dev) == &opengl_device_interface);
-    uint64_t texture_id = get_device_handle(buf->dev);
-    delete_device_wrapper(buf->dev);
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
+    uint64_t texture_id = halide_get_device_handle(buf->dev);
+    halide_delete_device_wrapper(buf->dev);
     buf->dev = 0;
     return (uintptr_t)texture_id;
 }
@@ -1941,8 +1947,8 @@ WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *bu
     if (buf->dev == NULL) {
         return 0;
     }
-    halide_assert(user_context, get_device_interface(buf->dev) == &opengl_device_interface);
-    uint64_t texture_id = get_device_handle(buf->dev);
+    halide_assert(user_context, halide_get_device_interface(buf->dev) == &opengl_device_interface);
+    uint64_t texture_id = halide_get_device_handle(buf->dev);
     return (uintptr_t)texture_id;
 }
 
@@ -1952,6 +1958,13 @@ WEAK uintptr_t halide_opengl_get_texture(void *user_context, struct buffer_t *bu
 // backed by an FBO already bound by the application.
 WEAK uint64_t halide_opengl_output_client_bound() {
     return HALIDE_OPENGL_CLIENT_BOUND;
+}
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_opengl_cleanup() {
+    halide_opengl_device_release(NULL);
+}
 }
 
 } // extern "C"
@@ -1966,6 +1979,6 @@ WEAK halide_device_interface opengl_device_interface = {
     halide_opengl_device_release,
     halide_opengl_copy_to_host,
     halide_opengl_copy_to_device,
-  };
+};
 
 }}}} // namespace Halide::Runtime::Internal::OpenGL
