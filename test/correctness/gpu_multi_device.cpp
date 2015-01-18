@@ -17,12 +17,12 @@ struct MultiDevicePipeline {
         Target jit_target(get_jit_target_from_environment());
         if (jit_target.has_feature(Target::OpenCL)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::CUDA);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::OpenCL);
             current_stage++;
         }
         if (jit_target.has_feature(Target::CUDA)) {
             stage[current_stage](x, y, c) = stage[current_stage - 1](x, y, c) + 69;
-            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::OpenCL);
+            stage[current_stage].compute_root().reorder(c, x, y).gpu_tile(x, y, 32, 32, DeviceAPI::CUDA);
             current_stage++;
         }
         if (jit_target.has_feature(Target::OpenGL)) {
@@ -88,10 +88,6 @@ int main(int argc, char **argv) {
         pipe3.run(output3);
 
         pipe3.verify(output3, pipe2.current_stage + pipe3.current_stage - 2, "chained buffers");
-        // Force the device allocation associated with the ImageParam to be freed
-        // otherwise the destructor will attempt to free it after the code in the runtime
-        // is gone because the Func is already freed.
-        gpu_buffer.get().free_dev_buffer();
     }
 
     printf("Success!\n");

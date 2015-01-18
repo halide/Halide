@@ -204,7 +204,6 @@ void GPU_Host_Closure::visit(const For *loop) {
     Internal::Closure::visit(loop);
 }
 
-
 template<typename CodeGen_CPU>
 bool CodeGen_GPU_Host<CodeGen_CPU>::lib_cuda_linked = false;
 
@@ -511,6 +510,8 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         }
 
         CodeGen_GPU_Dev *gpu_codegen = cgdev[loop->device_api];
+        user_assert(gpu_codegen != NULL) << "Loop is scheduled on device " << device_api_to_string(loop->device_api) <<
+            " which does not appear in target " << target.to_string() << "\n";
         gpu_codegen->add_kernel(loop, kernel_name, closure_args);
 
         // get the actual name of the generated kernel for this loop

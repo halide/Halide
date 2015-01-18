@@ -106,26 +106,8 @@ ostream &operator<<(ostream &out, const For::ForType &type) {
     return out;
 }
 
-ostream &operator<<(ostream &out, const DeviceAPI &device_api) {
-    switch (device_api) {
-    case DeviceAPI::Host:
-        break;
-    case DeviceAPI::Parent:
-        out << "<Parent>";
-        break;
-    case DeviceAPI::Default_GPU:
-        out << "<Default_GPU>";
-        break;
-    case DeviceAPI::CUDA:
-        out << "<CUDA>";
-        break;
-    case DeviceAPI::OpenCL:
-        out << "<OpenCL>";
-        break;
-    case DeviceAPI::GLSL:
-        out << "<GLSL>";
-        break;
-    }
+inline ostream &operator<<(ostream &out, const DeviceAPI &device_api) {
+    out << device_api_to_string(device_api);
     return out;
 }
 
