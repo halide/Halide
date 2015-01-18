@@ -998,7 +998,7 @@ WEAK int halide_opencl_run(void *user_context,
         return err;
     }
 
-    debug(user_context) << "    clReleaseKernel " << (void *)f << "\n";
+    debug(user_context) << "    Releasing kernel " << (void *)f << "\n";
     clReleaseKernel(f);
     debug(user_context) << "    clReleaseKernel finished" << (void *)f << "\n";
 

@@ -106,7 +106,7 @@ EXPORT RefCount &ref_count<BufferContents>(const BufferContents *p) {
 
 template<>
 EXPORT void destroy<BufferContents>(const BufferContents *p) {
-    int error = p->source_module.dev_free(const_cast<buffer_t *>(&p->buf));
+    int error = p->source_module.device_free(const_cast<buffer_t *>(&p->buf));
     user_assert(!error) << "Failed to free device buffer\n";
     free(p->allocation);
 
@@ -255,12 +255,12 @@ int Buffer::copy_to_host() {
     return source_module().copy_to_host(raw_buffer());
 }
 
-int Buffer::copy_to_dev() {
-    return source_module().copy_to_dev(raw_buffer());
+int Buffer::copy_to_device() {
+    return source_module().copy_to_device(raw_buffer());
 }
 
 int Buffer::free_dev_buffer() {
-    return source_module().dev_free(raw_buffer());
+    return source_module().device_free(raw_buffer());
 }
 
 

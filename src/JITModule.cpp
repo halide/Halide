@@ -350,9 +350,9 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     }
 
     const char *runtime_internal_names[] = {
-        "halide_dev_malloc",
-        "halide_dev_free",
-        "halide_copy_to_dev",
+        "halide_device_malloc",
+        "halide_device_free",
+        "halide_copy_to_device",
         "halide_copy_to_host",
         "halide_set_custom_print",
         "halide_set_error_handler",
@@ -437,10 +437,10 @@ int (*JITModule::jit_wrapper_function() const)(const void **) {
     return (int (*)(const void **))jit_module.ptr->jit_wrapper_function;
 }
 
-int JITModule::copy_to_dev(struct buffer_t *buf) const {
+int JITModule::copy_to_device(struct buffer_t *buf) const {
     if (jit_module.defined()) {
         std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_dev");
+            jit_module.ptr->runtime_internal_exports.find("halide_copy_to_device");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
             return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
         }
@@ -459,10 +459,10 @@ int JITModule::copy_to_host(struct buffer_t *buf) const {
     return 0;
 }
 
-int JITModule::dev_free(struct buffer_t *buf) const {
+int JITModule::device_free(struct buffer_t *buf) const {
     if (jit_module.defined()) {
         std::map<std::string, void *>::const_iterator f =
-            jit_module.ptr->runtime_internal_exports.find("halide_dev_free");
+            jit_module.ptr->runtime_internal_exports.find("halide_device_free");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
             return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
         }
@@ -622,10 +622,10 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
     if (!shared_runtimes[runtime_kind].jit_module.defined()) {
         LLVMContext *llvm_context = new LLVMContext();
 
-	Target one_gpu(target);
-	one_gpu.set_feature(Target::OpenCL, runtime_kind == OpenCL);
-	one_gpu.set_feature(Target::CUDA, runtime_kind == CUDA);
-	one_gpu.set_feature(Target::OpenGL, runtime_kind == OpenGL);
+        Target one_gpu(target);
+        one_gpu.set_feature(Target::OpenCL, runtime_kind == OpenCL);
+        one_gpu.set_feature(Target::CUDA, runtime_kind == CUDA);
+        one_gpu.set_feature(Target::OpenGL, runtime_kind == OpenGL);
         llvm::Module *shared_runtime = get_initial_module_for_target(one_gpu,
                                                                      llvm_context, true, runtime_kind != MainShared);
 

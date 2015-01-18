@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
     // Explicitly copy data to the GPU.
     input.set_host_dirty();
-    input.copy_to_dev();
+    input.copy_to_device();
 
     Image<int> output(W, H);
 
