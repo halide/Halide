@@ -590,7 +590,6 @@ void link_modules(std::vector<llvm::Module *> &modules) {
         }
 
         bool is_halide_extern_c_sym = Internal::starts_with(f->getName(), "halide_");
-        if (!(!is_halide_extern_c_sym || f->isWeakForLinker() || f->isDeclaration())) f->dump();
         internal_assert(!is_halide_extern_c_sym || f->isWeakForLinker() || f->isDeclaration()) <<
             " for function " << (std::string)f->getName() << "\n";
         can_strip = can_strip && !(is_halide_extern_c_sym && f->mayBeOverridden());
