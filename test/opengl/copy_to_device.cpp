@@ -4,8 +4,8 @@
 
 using namespace Halide;
 
-// Test that internal allocations work correctly with copy_to_dev. This
-// requires that suitable buffer_t objects are created internally.
+// Test that internal allocations work correctly with copy_to_device.
+// This requires that suitable buffer_t objects are created internally.
 int main() {
 
     // This test must be run with an OpenGL target
@@ -29,7 +29,7 @@ int main() {
     h(x, y, c) = input(x, y, c);
     h.compute_root();  // force internal allocation of h
 
-    // access h from shader to trigger copy_to_dev operation
+    // access h from shader to trigger copy_to_device operation
     g(x, y, c) = h(x, y, c);
     g.bound(c, 0, 3);
     g.glsl(x, y, c);

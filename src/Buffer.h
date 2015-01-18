@@ -133,7 +133,7 @@ public:
      * host_dirty bit so that Halide can manage the copy lazily for
      * you. Casting the Buffer to an Image sets the dirty bit for
      * you. */
-    EXPORT int copy_to_dev();
+    EXPORT int copy_to_device();
 
     /** If this buffer was created by a jit-compiled realization on a
      * device-aware target (e.g. PTX), then free the device-side
