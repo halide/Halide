@@ -40,24 +40,13 @@ class AXPYGenerator :
   }
 
   void Schedule(Func result, Expr width) {
-    const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
-
     Var i("i"), o("o");
-    if (vectorize_) {
-      result.vectorize(i, vec_size);
-    }
-
-    if (parallel_) {
-      Expr factor = block_size_ / vec_size;
-      result.specialize(width >= 4 * block_size_).split(i, o, i, factor).parallel(o);
-    }
-
-    result.bound(i, 0, width);
-    result.output_buffer().set_bounds(0, 0, width);
   }
 
   Func build() {
     SetupTarget();
+
+    const int vec_size = vectorize_? natural_vector_size(type_of<T>()): 1;
 
     bool scale_x = scale_x_;
     bool add_to_y = add_to_y_;
@@ -72,7 +61,22 @@ class AXPYGenerator :
       result(i) = x_(i);
     }
 
-    Schedule(result, x_.width());
+    if (vectorize_) {
+      Var ii("ii");
+      result
+          .specialize(x_.width() >= vec_size).vectorize(i, vec_size)
+          .specialize(x_.width() >= 4 * vec_size).unroll(i, 4);
+    }
+
+    if (parallel_) {
+      Var ii("ii");
+      Expr factor = block_size_ / vec_size;
+      result.specialize(x_.width() >= 4 * block_size_).split(i, i, ii, factor).parallel(i);
+    }
+
+    result.bound(i, 0, x_.width());
+    result.output_buffer().set_bounds(0, 0, x_.width());
+
     x_.set_min(0, 0);
     y_.set_bounds(0, 0, x_.width());
 

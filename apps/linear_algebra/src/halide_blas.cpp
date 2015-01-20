@@ -245,6 +245,87 @@ void hblas_dgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
   assert(0 == halide_dgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
 
+void hblas_sgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+                 const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
+                 const int K, const float alpha, const float *A,
+                 const int lda, const float *B, const int ldb,
+                 const float beta, float *C, const int ldc) {
+  bool tA = false, tB = false;
+  switch (TransA) {
+    case HblasNoTrans:
+      tA = false; break;
+    case HblasConjTrans:
+    case HblasTrans:
+      tA = true; break;
+  };
+
+  switch (TransB) {
+    case HblasNoTrans:
+      tB = false; break;
+    case HblasConjTrans:
+    case HblasTrans:
+      tB = true; break;
+  };
+
+  buffer_t buff_A, buff_B, buff_C;
+  if (!tA) {
+    init_matrix_buffer(M, K, A, lda, &buff_A);
+  } else {
+    init_matrix_buffer(K, M, A, lda, &buff_A);
+  }
+
+  if (!tB) {
+    init_matrix_buffer(K, N, B, ldb, &buff_B);
+  } else {
+    init_matrix_buffer(N, K, B, ldb, &buff_B);
+  }
+
+  init_matrix_buffer(M, N, C, ldc, &buff_C);
+
+  assert(0 == halide_sgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
+}
+
+void hblas_dgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+                 const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
+                 const int K, const double alpha, const double *A,
+                 const int lda, const double *B, const int ldb,
+                 const double beta, double *C, const int ldc) {
+  bool tA = false, tB = false;
+  switch (TransA) {
+    case HblasNoTrans:
+      tA = false; break;
+    case HblasConjTrans:
+    case HblasTrans:
+      tA = true; break;
+  };
+
+  switch (TransB) {
+    case HblasNoTrans:
+      tB = false; break;
+    case HblasConjTrans:
+    case HblasTrans:
+      tB = true; break;
+  };
+
+  buffer_t buff_A, buff_B, buff_C;
+  if (!tA) {
+    init_matrix_buffer(M, K, A, lda, &buff_A);
+  } else {
+    init_matrix_buffer(K, M, A, lda, &buff_A);
+  }
+
+  if (!tB) {
+    init_matrix_buffer(K, N, B, ldb, &buff_B);
+  } else {
+    init_matrix_buffer(N, K, B, ldb, &buff_B);
+  }
+
+  init_matrix_buffer(M, N, C, ldc, &buff_C);
+
+  assert(0 == halide_dgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
+}
+
+
 #ifdef __cplusplus
 }
 #endif

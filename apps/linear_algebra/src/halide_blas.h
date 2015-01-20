@@ -18,6 +18,8 @@
 #include "halide_dgemv_notrans.h"
 #include "halide_sgemv_trans.h"
 #include "halide_dgemv_trans.h"
+#include "halide_sgemm_notrans.h"
+#include "halide_dgemm_notrans.h"
 
 inline int halide_scopy(buffer_t *x, buffer_t *y) {
   return halide_scopy_impl(0, x, nullptr, y);
@@ -57,6 +59,30 @@ inline int halide_dgemv(bool trans, double a, buffer_t *A, buffer_t *x, double b
   } else {
     return halide_dgemv_notrans(a, A, x, b, y, y);
   }
+}
+
+inline int halide_sgemm(bool transA, bool transB, float a, buffer_t *A, buffer_t *B, float b, buffer_t *C) {
+  if (!transA && !transB) {
+    return halide_sgemm_notrans(a, A, B, b, C, C);
+  } else if (transA) {
+    // return halide_sgemv_trans_A(a, A, B, b, C, C);
+  } else if (transB) {
+    // return halide_sgemv_trans_B(a, A, B, b, C, C);
+  } else {
+    // return halide_sgemv_trans_AB(a, A, B, b, C, C);
+  }
+  return -1;
+}
+
+inline int halide_dgemm(bool transA, bool transB, double a, buffer_t *A, buffer_t *B, double b, buffer_t *C) {
+  if (!transA && !transB) {
+    return halide_dgemm_notrans(a, A, B, b, C, C);
+  } else if (transA) {
+    // return halide_dgemv_trans_A(a, A, B, b, C, C);
+  } else {
+    // return halide_dgemv_trans_AB(a, A, B, b, C, C);
+  }
+  return -1;
 }
 
 enum HBLAS_ORDER {HblasRowMajor=101, HblasColMajor=102};
@@ -170,6 +196,27 @@ void hblas_dgemv(/*const enum HBLAS_ORDER order,*/
                  const double alpha, const double *A, const int lda,
                  const double *X, const int incX, const double beta,
                  double *Y, const int incY);
+
+/*
+ * ===========================================================================
+ * Prototypes for level 3 BLAS
+ * ===========================================================================
+ */
+
+/*
+ * Routines with standard 4 prefixes (S, D, C, Z)
+ */
+void hblas_sgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+                 const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
+                 const int K, const float alpha, const float *A,
+                 const int lda, const float *B, const int ldb,
+                 const float beta, float *C, const int ldc);
+
+void hblas_dgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+                 const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
+                 const int K, const double alpha, const double *A,
+                 const int lda, const double *B, const int ldb,
+                 const double beta, double *C, const int ldc);
 
 #ifdef __cplusplus
 }

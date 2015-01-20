@@ -29,11 +29,11 @@
         double end = current_time();                                    \
         double elapsed = end - start;                                   \
                                                                         \
-        std::cout << std::setw(15) << name + "::" + #benchmark          \
-                  << std::setw(8) << type                               \
+        std::cout << std::setw(8) << name                               \
+                  << std::setw(15) << type + #benchmark                 \
                   << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(20) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << std::to_string(elapsed)           \
+                  << std::setw(20) << 1000 * N / elapsed                \
                   << std::endl;                                         \
     }                                                                   \
 
@@ -52,11 +52,34 @@
         double end = current_time();                                    \
         double elapsed = end - start;                                   \
                                                                         \
-        std::cout << std::setw(15) << name + "::" + #benchmark          \
-                  << std::setw(8) << type                               \
+        std::cout << std::setw(8) << name                               \
+                  << std::setw(15) << type + #benchmark                 \
                   << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(20) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << std::to_string(elapsed)           \
+                  << std::setw(20) << 1000 * N / elapsed                \
+                  << std::endl;                                         \
+    }                                                                   \
+
+#define L3Benchmark(benchmark, type, code)                              \
+    void bench_##benchmark(int N) {                                     \
+        Scalar alpha = randomScalar();                                  \
+        Scalar beta = randomScalar();                                   \
+        Matrix A = randomMatrix(N);                                     \
+        Matrix B = randomMatrix(N);                                     \
+        Matrix C = randomMatrix(N);                                     \
+                                                                        \
+        double start = current_time();                                  \
+        for (int i = 0; i < num_iters; ++i) {                           \
+            code;                                                       \
+        }                                                               \
+        double end = current_time();                                    \
+        double elapsed = end - start;                                   \
+                                                                        \
+        std::cout << std::setw(8) << name                               \
+                  << std::setw(15) << type + #benchmark                 \
+                  << std::setw(8) << std::to_string(N)                  \
+                  << std::setw(20) << std::to_string(elapsed)           \
+                  << std::setw(20) << 1000 * N / elapsed                \
                   << std::endl;                                         \
     }                                                                   \
 
@@ -64,10 +87,10 @@ template<class T>
 std::string type_name();
 
 template<>
-std::string type_name<float>() {return "float";}
+std::string type_name<float>() {return "s";}
 
 template<>
-std::string type_name<double>() {return "double";}
+std::string type_name<double>() {return "d";}
 
 template<class T>
 struct Benchmarks {
@@ -108,8 +131,18 @@ struct Benchmarks {
             bench_dot(size);
         } else if (benchmark == "asum") {
             bench_asum(size);
-        } else if (benchmark == "gemv") {
-            bench_gemv(size);
+        } else if (benchmark == "gemv_notrans") {
+            bench_gemv_notrans(size);
+        } else if (benchmark == "gemv_trans") {
+            bench_gemv_trans(size);
+        } else if (benchmark == "gemm_notrans") {
+            bench_gemm_notrans(size);
+        } else if (benchmark == "gemm_transA") {
+            bench_gemm_transA(size);
+        } else if (benchmark == "gemm_transB") {
+            bench_gemm_transB(size);
+        } else if (benchmark == "gemm_transAB") {
+            bench_gemm_transAB(size);
         }
     }
 
@@ -121,8 +154,13 @@ struct Benchmarks {
     L1Benchmark(dot,  type_name<T>(), result = x.dot(y));
     L1Benchmark(asum, type_name<T>(), result = x.array().abs().sum());
 
-    // L2Benchmark(gemv, type_name<T>(), y = alpha * A * x + beta * y);
-    L2Benchmark(gemv, type_name<T>(), y = alpha * A.transpose() * x + beta * y);
+    L2Benchmark(gemv_notrans, type_name<T>(), y = alpha * A * x + beta * y);
+    L2Benchmark(gemv_trans,   type_name<T>(), y = alpha * A.transpose() * x + beta * y);
+
+    L3Benchmark(gemm_notrans, type_name<T>(), C = alpha * A * B + beta * C);
+    L3Benchmark(gemm_transA, type_name<T>(), C = alpha * A.transpose() * B + beta * C);
+    L3Benchmark(gemm_transB, type_name<T>(), C = alpha * A * B.transpose() + beta * C);
+    L3Benchmark(gemm_transAB, type_name<T>(), C = alpha * A.transpose() * B.transpose() + beta * C);
 
   private:
     std::string name;
@@ -135,8 +173,16 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    Benchmarks<float> ("Eigen", 1000).run(argv[1], std::stoi(argv[2]));
-    Benchmarks<double>("Eigen", 1000).run(argv[1], std::stoi(argv[2]));
+    std::string subroutine = argv[1];
+    char type = subroutine[0];
+    int  size = std::stoi(argv[2]);
+
+    subroutine = subroutine.substr(1);
+    if (type == 's') {
+        Benchmarks<float> ("Eigen", 1000).run(subroutine, size);
+    } else if (type == 'd') {
+        Benchmarks<double>("Eigen", 1000).run(subroutine, size);
+    }
 
     return 0;
 }
