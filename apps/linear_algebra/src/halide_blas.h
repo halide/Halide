@@ -185,13 +185,13 @@ void hblas_dscal(const int N, const double alpha, double *X, const int incX);
 /*
  * Routines with standard 4 prefixes (S, D, C, Z)
  */
-void hblas_sgemv(/*const enum HBLAS_ORDER order,*/
+void hblas_sgemv(const enum HBLAS_ORDER order,
                  const enum HBLAS_TRANSPOSE TransA, const int M, const int N,
                  const float alpha, const float *A, const int lda,
                  const float *X, const int incX, const float beta,
                  float *Y, const int incY);
 
-void hblas_dgemv(/*const enum HBLAS_ORDER order,*/
+void hblas_dgemv(const enum HBLAS_ORDER order,
                  const enum HBLAS_TRANSPOSE TransA, const int M, const int N,
                  const double alpha, const double *A, const int lda,
                  const double *X, const int incX, const double beta,
@@ -206,13 +206,13 @@ void hblas_dgemv(/*const enum HBLAS_ORDER order,*/
 /*
  * Routines with standard 4 prefixes (S, D, C, Z)
  */
-void hblas_sgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
                  const int K, const float alpha, const float *A,
                  const int lda, const float *B, const int ldb,
                  const float beta, float *C, const int ldc);
 
-void hblas_dgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
                  const int K, const double alpha, const double *A,
                  const int lda, const double *B, const int ldb,

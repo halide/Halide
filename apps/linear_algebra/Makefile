@@ -45,6 +45,9 @@ LIBS = $(filter-out -lrt -lz -lpthread -ldl , $(LLVM_STATIC_LIBS)) \
 all: $(BENCHMARKS)
 	make run_benchmarks
 
+test: tests/test_halide_blas
+	tests/test_halide_blas
+
 clean:
 	rm -rf $(KERNEL_DIR)
 	rm -rf src/*.o
@@ -62,6 +65,11 @@ $(LIBHALIDE_BLAS): src/halide_blas.o $(KERNEL_OBJECTS)
 
 src/halide_blas.o: src/halide_blas.cpp src/halide_blas.h $(KERNEL_HEADERS)
 	$(CXX) $(CXXFLAGS) -c -o $(@) -I ../../include/ -I ../support -I$(KERNEL_DIR) $(<)
+
+
+tests/test_halide_blas: tests/test_halide_blas.cpp $(LIBHALIDE_BLAS)
+	$(CXX) $(CXXFLAGS) -Wno-unused-variable -o $(@) -I../../include/ -I../support -Isrc -I$(KERNEL_DIR) \
+	$(CBLAS_FLAGS) $(<) $(LIBHALIDE_BLAS) ../../$(LIB_HALIDE) $(CBLAS_LIBS) $(LLVM_LDFLAGS)
 
 L1_BENCHMARK_SIZES = 16 64 256 1024 4096 16384
 L2_BENCHMARK_SIZES = 8 32 128 512 1024

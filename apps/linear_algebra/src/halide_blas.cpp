@@ -193,7 +193,7 @@ double hblas_dasum(const int N, const double *x, const int incx) {
 // gemv //
 //////////
 
-void hblas_sgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
+void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans, const int M, const int N,
                  const float a, const float *A, const int lda,
                  const float *x, const int incx, const float b,
                  float *y, const int incy) {
@@ -219,7 +219,7 @@ void hblas_sgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
   assert(0 == halide_sgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
 
-void hblas_dgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
+void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans, const int M, const int N,
                  const double a, const double *A, const int lda,
                  const double *x, const int incx, const double b,
                  double *y, const int incy) {
@@ -245,7 +245,7 @@ void hblas_dgemv(const enum HBLAS_TRANSPOSE trans, const int M, const int N,
   assert(0 == halide_dgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
 
-void hblas_sgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
                  const int K, const float alpha, const float *A,
                  const int lda, const float *B, const int ldb,
@@ -285,7 +285,7 @@ void hblas_sgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE Tr
   assert(0 == halide_sgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
 }
 
-void hblas_dgemm(/*const enum HBLAS_ORDER Order,*/ const enum HBLAS_TRANSPOSE TransA,
+void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
                  const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
                  const int K, const double alpha, const double *A,
                  const int lda, const double *B, const int ldb,
