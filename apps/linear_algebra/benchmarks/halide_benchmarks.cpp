@@ -31,11 +31,11 @@
         double end = current_time();                                    \
         double elapsed = end - start;                                   \
                                                                         \
-        std::cout << std::setw(15) << name + "::" + #benchmark          \
-                  << std::setw(8) << type                               \
+        std::cout << std::setw(8) << name                               \
+                  << std::setw(15) << type #benchmark                   \
                   << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(20) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << std::to_string(elapsed)           \
+                  << std::setw(20) << 1000 * N / elapsed                \
                   << std::endl;                                         \
     }                                                                   \
 
@@ -54,11 +54,34 @@
         double end = current_time();                                    \
         double elapsed = end - start;                                   \
                                                                         \
-        std::cout << std::setw(15) << name + "::" + #benchmark          \
-                  << std::setw(8) << type                               \
+        std::cout << std::setw(8) << name                               \
+                  << std::setw(15) << type #benchmark                   \
                   << std::setw(8) << std::to_string(N)                  \
-                  << std::setw(20) << std::to_string(elapsed) + "(ms)"  \
-                  << std::setw(20) << items_per_second(N, elapsed)      \
+                  << std::setw(20) << std::to_string(elapsed)           \
+                  << std::setw(20) << 1000 * N / elapsed                \
+                  << std::endl;                                         \
+    }                                                                   \
+
+#define L3Benchmark(benchmark, type, code)                              \
+    virtual void bench_##benchmark(int N) {                             \
+        Scalar alpha = randomScalar();                                  \
+        Scalar beta = randomScalar();                                   \
+        std::unique_ptr<Matrix> A(randomMatrix(N));                     \
+        std::unique_ptr<Matrix> B(randomMatrix(N));                     \
+        std::unique_ptr<Matrix> C(randomMatrix(N));                     \
+                                                                        \
+        double start = current_time();                                  \
+        for (int i = 0; i < num_iters; ++i) {                           \
+            code;                                                       \
+        }                                                               \
+        double end = current_time();                                    \
+        double elapsed = end - start;                                   \
+                                                                        \
+        std::cout << std::setw(8) << name                               \
+                  << std::setw(15) << type #benchmark                   \
+                  << std::setw(8) << std::to_string(N)                  \
+                  << std::setw(20) << std::to_string(elapsed)           \
+                  << std::setw(20) << 1000 * N / elapsed                \
                   << std::endl;                                         \
     }                                                                   \
 
@@ -113,8 +136,18 @@ struct BenchmarksBase {
             bench_dot(size);
         } else if (benchmark == "asum") {
             bench_asum(size);
-        } else if (benchmark == "gemv") {
-            this->bench_gemv(size);
+        } else if (benchmark == "gemv_notrans") {
+            bench_gemv_notrans(size);
+        } else if (benchmark == "gemv_trans") {
+            bench_gemv_trans(size);
+        } else if (benchmark == "gemm_notrans") {
+            bench_gemm_notrans(size);
+        } else if (benchmark == "gemm_transA") {
+            bench_gemm_transA(size);
+        } else if (benchmark == "gemm_transB") {
+            bench_gemm_transB(size);
+        } else if (benchmark == "gemm_transAB") {
+            bench_gemm_transAB(size);
         }
     }
 
@@ -123,7 +156,12 @@ struct BenchmarksBase {
     virtual void bench_axpy(int N) =0;
     virtual void bench_dot(int N)  =0;
     virtual void bench_asum(int N) =0;
-    virtual void bench_gemv(int N) =0;
+    virtual void bench_gemv_notrans(int N) =0;
+    virtual void bench_gemv_trans(int N) =0;
+    virtual void bench_gemm_notrans(int N) =0;
+    virtual void bench_gemm_transA(int N) =0;
+    virtual void bench_gemm_transB(int N) =0;
+    virtual void bench_gemm_transAB(int N) =0;
 };
 
 struct BenchmarksFloat : public BenchmarksBase<float> {
@@ -134,17 +172,29 @@ struct BenchmarksFloat : public BenchmarksBase<float> {
 
     Halide::Buffer result;
 
-    L1Benchmark(copy, "float", halide_scopy(x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(scal, "float", halide_sscal(alpha, x->raw_buffer()))
-    L1Benchmark(axpy, "float", halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(dot,  "float", halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
-    L1Benchmark(asum, "float", halide_sasum(x->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(copy, "s", halide_scopy(x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(scal, "s", halide_sscal(alpha, x->raw_buffer()))
+    L1Benchmark(axpy, "s", halide_saxpy(alpha, x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(dot,  "s", halide_sdot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(asum, "s", halide_sasum(x->raw_buffer(), result.raw_buffer()))
 
-    // L2Benchmark(gemv, "float", halide_sgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
-    //                                beta, y->raw_buffer()))
+    L2Benchmark(gemv_notrans, "s", halide_sgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
+                                                    beta, y->raw_buffer()))
 
-    L2Benchmark(gemv, "float", halide_sgemv(true, alpha, A->raw_buffer(), x->raw_buffer(),
-                                            beta, y->raw_buffer()))
+    L2Benchmark(gemv_trans, "s", halide_sgemv(true, alpha, A->raw_buffer(), x->raw_buffer(),
+                                                  beta, y->raw_buffer()))
+
+    L3Benchmark(gemm_notrans, "s", halide_sgemm(false, false, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
+
+    L3Benchmark(gemm_transA, "s", halide_sgemm(true, false, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
+
+    L3Benchmark(gemm_transB, "s", halide_sgemm(false, true, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
+
+    L3Benchmark(gemm_transAB, "s", halide_sgemm(true, true, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
 };
 
 struct BenchmarksDouble : public BenchmarksBase<double> {
@@ -155,17 +205,29 @@ struct BenchmarksDouble : public BenchmarksBase<double> {
 
     Halide::Buffer result;
 
-    L1Benchmark(copy, "double", halide_dcopy(x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(scal, "double", halide_dscal(alpha, x->raw_buffer()))
-    L1Benchmark(axpy, "double", halide_daxpy(alpha, x->raw_buffer(), y->raw_buffer()))
-    L1Benchmark(dot,  "double", halide_ddot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
-    L1Benchmark(asum, "double", halide_dasum(x->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(copy, "d", halide_dcopy(x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(scal, "d", halide_dscal(alpha, x->raw_buffer()))
+    L1Benchmark(axpy, "d", halide_daxpy(alpha, x->raw_buffer(), y->raw_buffer()))
+    L1Benchmark(dot,  "d", halide_ddot(x->raw_buffer(), y->raw_buffer(), result.raw_buffer()))
+    L1Benchmark(asum, "d", halide_dasum(x->raw_buffer(), result.raw_buffer()))
 
-    // L2Benchmark(gemv, "double", halide_dgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
-    //                                          beta, y->raw_buffer()))
+    L2Benchmark(gemv_notrans, "d", halide_dgemv(false, alpha, A->raw_buffer(), x->raw_buffer(),
+                                                     beta, y->raw_buffer()))
 
-    L2Benchmark(gemv, "double", halide_dgemv(true, alpha, A->raw_buffer(), x->raw_buffer(),
-                                             beta, y->raw_buffer()))
+    L2Benchmark(gemv_trans, "d", halide_dgemv(true, alpha, A->raw_buffer(), x->raw_buffer(),
+                                                   beta, y->raw_buffer()))
+
+    L3Benchmark(gemm_notrans, "d", halide_dgemm(false, false, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
+
+    L3Benchmark(gemm_transA, "d", halide_dgemm(true, false, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
+
+    L3Benchmark(gemm_transB, "d", halide_dgemm(false, true, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
+
+    L3Benchmark(gemm_transAB, "d", halide_dgemm(true, true, alpha, A->raw_buffer(),
+                                                B->raw_buffer(), beta, C->raw_buffer()))
 };
 
 int main(int argc, char* argv[]) {
@@ -174,8 +236,16 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    BenchmarksFloat ("Halide", 1000).run(argv[1], std::stoi(argv[2]));
-    BenchmarksDouble("Halide", 1000).run(argv[1], std::stoi(argv[2]));
+    std::string subroutine = argv[1];
+    char type = subroutine[0];
+    int  size = std::stoi(argv[2]);
+
+    subroutine = subroutine.substr(1);
+    if (type == 's') {
+        BenchmarksFloat ("Halide", 1000).run(subroutine, size);
+    } else if (type == 'd') {
+        BenchmarksDouble("Halide", 1000).run(subroutine, size);
+    }
 
     return 0;
 }
