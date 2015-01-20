@@ -67,6 +67,22 @@ int main(int argc, char **argv) {
        return -1;
     }
 
+    // Full specification round-trip, PNacl
+    t1 = Target(Target::NaCl, Target::PNaCl, 32);
+    ts = t1.to_string();
+    if (ts != "pnacl-32-nacl") {
+       printf("to_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+    if (!t2.from_string(ts)) {
+       printf("from_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+    if (t2 != t1) {
+       printf("compare failure: %s %s\n", t1.to_string().c_str(), t2.to_string().c_str());
+       return -1;
+    }
+
     // Partial specification merging: os,arch,bits get replaced; features get combined
     t2 = Target(Target::Linux, Target::X86, 64, vec(Target::OpenCL));
     if (!t2.merge_string("x86-32-sse41")) {
@@ -115,6 +131,84 @@ int main(int argc, char **argv) {
     ts = t2.to_string();
     if (ts != "x86-32-linux-sse41") {
        printf("to_string failure: %s\n", ts.c_str());
+       return -1;
+    }
+
+    // natural_vector_size
+    // SSE4.1 is 16 bytes wide
+    t1 = Target(Target::Linux, Target::X86, 32, vec(Target::SSE41));
+    if (t1.natural_vector_size<uint8_t>() != 16) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<int16_t>() != 8) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<uint32_t>() != 4) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<float>() != 4) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+
+    // AVX is 32 bytes wide for float, but we treat as only 16 for integral types,
+    // due to suboptimal integer instructions
+    t1 = Target(Target::Linux, Target::X86, 32, vec(Target::SSE41, Target::AVX));
+    if (t1.natural_vector_size<uint8_t>() != 16) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<int16_t>() != 8) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<uint32_t>() != 4) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<float>() != 8) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+
+    // AVX2 is 32 bytes wide
+    t1 = Target(Target::Linux, Target::X86, 32, vec(Target::SSE41, Target::AVX, Target::AVX2));
+    if (t1.natural_vector_size<uint8_t>() != 32) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<int16_t>() != 16) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<uint32_t>() != 8) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<float>() != 8) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+
+    // NEON is 16 bytes wide
+    t1 = Target(Target::Linux, Target::ARM, 32);
+    if (t1.natural_vector_size<uint8_t>() != 16) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<int16_t>() != 8) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<uint32_t>() != 4) {
+       printf("natural_vector_size failure\n");
+       return -1;
+    }
+    if (t1.natural_vector_size<float>() != 4) {
+       printf("natural_vector_size failure\n");
        return -1;
     }
 

@@ -686,6 +686,15 @@ private:
             // Probably more conservative than necessary
             Expr equivalent_select = Select::make(op->args[0], op->args[1], op->args[2]);
             equivalent_select.accept(this);
+        } else if (op->call_type == Call::Intrinsic && 
+                   (op->name == Call::shift_left || op->name == Call::shift_right || op->name == Call::bitwise_and)) {
+            Expr simplified = simplify(op);
+            if (!simplified.same_as(op)) {
+                simplified.accept(this);
+            } else {
+                // Just use the bounds of the type
+                bounds_of_type(op->type);
+            }
         } else if (op->args.size() == 1 && min.defined() && max.defined() &&
                    (op->name == "ceil_f32" || op->name == "ceil_f64" ||
                     op->name == "floor_f32" || op->name == "floor_f64" ||
@@ -716,8 +725,12 @@ private:
             min = Call::make(Int(32), Call::extract_buffer_min, op->args, Call::Intrinsic);
             max = Call::make(Int(32), Call::extract_buffer_max, op->args, Call::Intrinsic);
         } else if (op->call_type == Call::Intrinsic && op->name == Call::memoize_expr) {
-            assert(op->args.size() >= 1);
+            internal_assert(op->args.size() >= 1);
             op->args[0].accept(this);
+        } else if (op->call_type == Call::Intrinsic && op->name == Call::trace_expr) {
+            // trace_expr returns argument 4
+            internal_assert(op->args.size() >= 5);
+            op->args[4].accept(this);
         } else if (op->func.has_pure_definition()) {
             bounds_of_func(op->func, op->value_index);
         } else {

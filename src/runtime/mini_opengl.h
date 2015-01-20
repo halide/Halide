@@ -5,6 +5,7 @@
 // ---------- OpenGL core (1.3 and earlier) ----------
 
 typedef char GLchar;
+typedef unsigned char GLubyte;
 typedef unsigned int GLenum;
 typedef unsigned char GLboolean;
 typedef int GLint;
@@ -18,6 +19,7 @@ typedef void GLvoid;
 #define GL_NO_ERROR 0x0
 #define GL_FALSE 0x0
 #define GL_TRUE 0x1
+#define GL_TRIANGLES 0x0004
 #define GL_TRIANGLE_STRIP 0x0005
 #define GL_CULL_FACE 0x0B44
 #define GL_DEPTH_TEST 0x0B71
@@ -37,9 +39,12 @@ typedef void GLvoid;
 #define GL_FLOAT 0x1406
 #define GL_MODELVIEW 0x1700
 #define GL_PROJECTION 0x1701
+#define GL_RED 0x1903
 #define GL_RGB 0x1907
 #define GL_RGBA 0x1908
 #define GL_LUMINANCE 0x1909
+#define GL_VERSION 0x1F02
+#define GL_EXTENSIONS 0x1F03
 #define GL_NEAREST 0x2600
 #define GL_TEXTURE_MAG_FILTER 0x2800
 #define GL_TEXTURE_MIN_FILTER 0x2801
@@ -56,6 +61,7 @@ typedef void (*PFNGLDRAWBUFFERSPROC) (GLsizei n, const GLenum *bufs);
 typedef void (*PFNGLDRAWELEMENTSPROC)(GLenum mode, GLsizei count, GLenum type, const GLvoid *indices );
 typedef void (*PFNGLGENTEXTURESPROC)(GLsizei n, GLuint *textures);
 typedef GLenum (*PFNGLGETERRORPROC)(void);
+typedef const GLubyte *(*PFNGLGETSTRINGPROC)(GLenum name);
 typedef void (*PFNGLGETTEXIMAGEPROC)(GLenum target, GLint level,
                                      GLenum format, GLenum type,
                                      GLvoid *pixels);
@@ -125,12 +131,20 @@ typedef void (*PFNGLUNIFORM2IVPROC) (GLint location, GLsizei count, const GLint 
 typedef void (*PFNGLUNIFORM1FVPROC) (GLint location, GLsizei count, const GLfloat *value);
 typedef void (*PFNGLUSEPROGRAMPROC) (GLuint program);
 typedef void (*PFNGLVERTEXATTRIBPOINTERPROC) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const GLvoid *pointer);
+typedef void (*PFNGLGETINTEGERV)(GLenum pname, GLint *data);
 
 
 // ---------- OpenGL 3.0 ----------
 
-// #define GL_RGBA32F 0x8814
-// #define GL_RGB32F 0x8815
+#define GL_MAJOR_VERSION 0x821B
+#define GL_MINOR_VERSION 0x821C
+#define GL_NUM_EXTENSIONS 0x821D
+#define GL_RG 0x8227
+#define GL_R32F 0x822E
+#define GL_RG32F 0x8230
+#define GL_RGBA32F 0x8814
+#define GL_RGB32F 0x8815
+#define GL_LUMINANCE32F 0x8818
 
 // GL_ARB_framebuffer_object
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
@@ -142,5 +156,10 @@ typedef GLenum (*PFNGLCHECKFRAMEBUFFERSTATUSPROC) (GLenum target);
 typedef void (*PFNGLDELETEFRAMEBUFFERSPROC) (GLsizei n, const GLuint *framebuffers);
 typedef void (*PFNGLFRAMEBUFFERTEXTURE2DPROC) (GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
 typedef void (*PFNGLGENFRAMEBUFFERSPROC) (GLsizei n, GLuint *framebuffers);
+
+typedef void (*PFNGLGENVERTEXARRAYS)(GLsizei n, GLuint *arrays);
+typedef void (*PFNGLBINDVERTEXARRAY)(GLuint array);
+typedef void (*PFNGLDELETEVERTEXARRAYS)(GLsizei n, const GLuint *arrays);
+typedef const GLubyte *(*PFNGLGETSTRINGI)(GLenum name, GLuint index);
 
 #endif  // MINI_OPENGL_H

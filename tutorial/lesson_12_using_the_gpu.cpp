@@ -2,12 +2,17 @@
 
 // This lesson demonstrates how to use Halide to run code on a GPU.
 
+// This lesson can be built by invoking the command:
+//    make tutorial_lesson_12_using_the_gpu
+// in a shell with the current directory at the top of the halide source tree.
+// Otherwise, see the platform-specific compiler invocations below.
+
 // On linux, you can compile and run it like so:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -lpthread -ldl -o lesson_12
+// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_12
 // LD_LIBRARY_PATH=../bin ./lesson_12
 
 // On os x:
-// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide -lpng -o lesson_12
+// g++ lesson_12*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -o lesson_12
 // DYLD_LIBRARY_PATH=../bin ./lesson_12
 
 #include <Halide.h>
@@ -244,6 +249,7 @@ public:
                                output(x, y, c),
                                reference_output(x, y, c),
                                x, y, c);
+                        exit(0);
                     }
                 }
             }
@@ -251,6 +257,8 @@ public:
 
     }
 };
+
+bool have_opencl();
 
 int main(int argc, char **argv) {
     // Load an input image.
@@ -265,11 +273,34 @@ int main(int argc, char **argv) {
     p1.test_performance();
     p1.curved.realize(reference_output);
 
-    printf("Testing performance on GPU:\n");
-    Pipeline p2(input);
-    p2.schedule_for_gpu();
-    p2.test_performance();
-    p2.test_correctness(reference_output);
+    if (have_opencl()) {
+        printf("Testing performance on GPU:\n");
+        Pipeline p2(input);
+        p2.schedule_for_gpu();
+        p2.test_performance();
+        p2.test_correctness(reference_output);
+    } else {
+        printf("Not testing performance on GPU, because I can't find the opencl library\n");
+    }
 
     return 0;
+}
+
+
+// A helper function to check if OpenCL seems to exist on this machine.
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+bool have_opencl() {
+#ifdef _WIN32
+    return LoadLibrary("OpenCL.dll") != NULL;
+#elif __APPLE__
+    return dlopen("/System/Library/Frameworks/OpenCL.framework/Versions/Current/OpenCL", RTLD_LAZY) != NULL;
+#else
+    return dlopen("libOpenCL.so", RTLD_LAZY) != NULL;
+#endif
 }

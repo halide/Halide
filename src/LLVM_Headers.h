@@ -21,6 +21,8 @@
 #else
 #include <llvm/ExecutionEngine/JIT.h>
 #endif
+#include <llvm/ExecutionEngine/JITEventListener.h>
+
 
 #if LLVM_VERSION < 35
 #include <llvm/Analysis/Verifier.h>
@@ -33,7 +35,9 @@
 
 #include <llvm/Bitcode/ReaderWriter.h>
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
+#if LLVM_VERSION < 36
 #include <llvm/ExecutionEngine/JITMemoryManager.h>
+#endif
 #include <llvm/PassManager.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/FormattedStream.h>
@@ -41,7 +45,11 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Support/DataExtractor.h>
+#if LLVM_VERSION > 36
+#include <llvm/Analysis/TargetLibraryInfo.h>
+#else
 #include <llvm/Target/TargetLibraryInfo.h>
+#endif
 #include <llvm/Target/TargetSubtargetInfo.h>
 #include <llvm/Transforms/IPO/PassManagerBuilder.h>
 #include <llvm/Transforms/IPO.h>
@@ -85,5 +93,15 @@
 #include <assert.h>
 #define NDEBUG
 #endif
+
+namespace Halide { namespace Internal {
+#if LLVM_VERSION >= 36
+typedef llvm::Metadata *LLVMMDNodeArgumentType;
+inline llvm::Metadata *value_as_metadata_type(llvm::Value *val) { return llvm::ValueAsMetadata::get(val); }
+#else
+typedef llvm::Value *LLVMMDNodeArgumentType;
+inline llvm::Value *value_as_metadata_type(llvm::Value *val) { return val; }
+#endif
+}}
 
 #endif

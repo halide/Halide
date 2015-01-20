@@ -102,9 +102,10 @@ void CodeGen_PTX_Dev::add_kernel(Stmt stmt,
     builder->CreateBr(body_block);
 
     // Add the nvvm annotation that it is a kernel function.
-    MDNode *mdNode = MDNode::get(*context, vec<Value *>(function,
-                                                        MDString::get(*context, "kernel"),
-                                                        ConstantInt::get(i32, 1)));
+    MDNode *mdNode = MDNode::get(*context, vec<LLVMMDNodeArgumentType>(value_as_metadata_type(function),
+                                                                       MDString::get(*context, "kernel"),
+                                                                       value_as_metadata_type(ConstantInt::get(i32, 1))));
+
     module->getOrInsertNamedMetadata("nvvm.annotations")->addOperand(mdNode);
 
 
@@ -315,8 +316,11 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     // Set up passes
     PassManager PM;
 
-    TargetLibraryInfo *TLI = new TargetLibraryInfo(TheTriple);
-    PM.add(TLI);
+    #if LLVM_VERSION < 37
+    PM.add(new TargetLibraryInfo(TheTriple));
+    #else
+    PM.add(new TargetLibraryInfoWrapperPass(TheTriple));
+    #endif
 
     if (target.get()) {
         #if LLVM_VERSION < 33
@@ -410,6 +414,10 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
 #endif
 }
 
+int CodeGen_PTX_Dev::native_vector_bits() const {
+    // PTX doesn't really do vectorization. The widest type is a double.
+    return 64;
+}
 
 string CodeGen_PTX_Dev::get_current_kernel_name() {
     return function->getName();
@@ -417,6 +425,10 @@ string CodeGen_PTX_Dev::get_current_kernel_name() {
 
 void CodeGen_PTX_Dev::dump() {
     module->dump();
+}
+
+std::string CodeGen_PTX_Dev::print_gpu_name(const std::string &name) {
+    return name;
 }
 
 }}

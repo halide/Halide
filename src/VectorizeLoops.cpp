@@ -7,6 +7,8 @@
 #include "Deinterleave.h"
 #include "Substitute.h"
 #include "IROperator.h"
+#include "IREquality.h"
+#include "ExprUsesVar.h"
 
 namespace Halide {
 namespace Internal {
@@ -18,6 +20,7 @@ class VectorizeLoops : public IRMutator {
     class VectorSubs : public IRMutator {
         string var;
         Expr replacement;
+        string widening_suffix;
         Scope<Expr> scope;
         Scope<int> internal_allocations;
 
@@ -48,14 +51,13 @@ class VectorizeLoops : public IRMutator {
         }
 
         virtual void visit(const Variable *op) {
+            string widened_name = op->name + widening_suffix;
             if (op->name == var) {
                 expr = replacement;
-            } else if (scope.contains(op->name)) {
-                // The type of a var may have changed. E.g. if
-                // we're vectorizing across x we need to know the
-                // type of y has changed in the following example:
-                // let y = x + 1 in y*3
-                expr = Variable::make(scope.get(op->name).type(), op->name);
+            } else if (scope.contains(widened_name)) {
+                // If the variable appears in scope then we previously widened
+                // it and we use the new widened name for the variable.
+                expr = Variable::make(scope.get(widened_name).type(), widened_name);
             } else {
                 expr = op;
             }
@@ -140,66 +142,186 @@ class VectorizeLoops : public IRMutator {
         }
 
         void visit(const Call *op) {
-            vector<Expr> new_args(op->args.size());
-            bool changed = false;
 
-            // Mutate the args
-            int max_width = 0;
-            for (size_t i = 0; i < op->args.size(); i++) {
-                Expr old_arg = op->args[i];
-                Expr new_arg = mutate(old_arg);
-                if (!new_arg.same_as(old_arg)) changed = true;
-                new_args[i] = new_arg;
-                max_width = std::max(new_arg.type().width, max_width);
-            }
+            // The shuffle_vector intrinsic has a different argument passing
+            // convention than the rest of Halide. Instead of passing widened
+            // expressions, individual scalar expressions for each lane are
+            // passed as a variable number of arguments to the intrinisc.
+            if (op->name == Call::shuffle_vector &&
+                op->call_type == Call::Intrinsic) {
 
-            if (!changed) {
-                expr = op;
-            } else {
-                // Widen the args to have the same width as the max width found
-                for (size_t i = 0; i < new_args.size(); i++) {
-                    new_args[i] = widen(new_args[i], max_width);
+                int replacement_width = replacement.type().width;
+                int shuffle_width = op->type.width;
+
+                internal_assert(shuffle_width == (int)op->args.size() - 1);
+
+                // To widen successfully, the intrinisic must either produce a
+                // vector width result or a scalar result that we can broadcast.
+                if (shuffle_width == 1) {
+
+                    // Check to see if the shuffled expression contains the
+                    // vectorized dimension variable. Since vectorization will
+                    // change the vectorized dimension loop to a single value
+                    // let, we need to eliminate any use of the vectorized
+                    // dimension variable inside the shuffled expression
+                    Expr shuffled_expr = op->args[0];
+                    if (expr_uses_var(shuffled_expr,var)) {
+                        shuffled_expr = scalarize(op);
+                    }
+
+                    // Otherwise, the shuffle produces a scalar result and has
+                    // only one channel selector argument which must be scalar
+                    internal_assert(op->args.size() == 2);
+                    internal_assert(op->args[1].type().width == 1);
+                    Expr mutated_channel = mutate(op->args[1]);
+                    int mutated_width = mutated_channel.type().width;
+
+                    // Determine how to mutate the intrinsic. If the mutated
+                    // channel expression matches the for-loop variable
+                    // replacement exactly, and is the same width as the
+                    // existing vector expression, then we can remove the
+                    // shuffle_vector intrinisic and return the vector
+                    // expression it contains directly.
+                    if (equal(replacement,mutated_channel) &&
+                        (shuffled_expr.type().width == replacement_width)) {
+
+                        // Note that we stop mutating at this expression. Any
+                        // unvectorized variables inside this argument may
+                        // continue to refer to scalar expressions in the
+                        // enclosing lets whose names have not changed.
+                        expr = shuffled_expr;
+
+                    } else if (mutated_width == replacement_width) {
+                        // Otherwise, if the mutated channel width matches the
+                        // vectorized width but the expression is not a simple
+                        // ramp across the whole width, then convert the channel
+                        // expression into shuffle_vector intrinsic arguments.
+                        vector<Expr> new_args(1+replacement_width);
+
+                        // Append the vector expression as the first argument
+                        new_args[0] = shuffled_expr;
+
+                        // Extract each channel of the mutated channel
+                        // expression, each is passed as a separate argument to
+                        // shuffle_vector
+                        for (int i = 0; i != replacement_width; ++i) {
+                            new_args[1 + i] = extract_lane(mutated_channel, i);
+                        }
+
+                        expr = Call::make(op->type.vector_of(replacement_width),
+                                          op->name, new_args, op->call_type,
+                                          op->func, op->value_index, op->image,
+                                          op->param);
+
+                    } else {
+                        internal_assert(mutated_width == 1);
+                        // Otherwise this shuffle_vector is independent of the
+                        // dimension being vectorized.
+                        expr = op;
+                    }
+
+                } else {
+                    // If the shuffle_vector result is not a scalar there are no
+                    // rules for how to widen it.
+                    internal_error << "Mismatched vector widths in VectorSubs for shuffle_vector\n";
                 }
-                expr = Call::make(op->type.vector_of(max_width), op->name, new_args,
-                                  op->call_type, op->func, op->value_index, op->image, op->param);
+
+            } else {
+                // Otherwise, widen the call by changing the width of all of its
+                // arguments and its return type
+                vector<Expr> new_args(op->args.size());
+                bool changed = false;
+
+                // Mutate the args
+                int max_width = 0;
+                for (size_t i = 0; i < op->args.size(); i++) {
+                    Expr old_arg = op->args[i];
+                    Expr new_arg = mutate(old_arg);
+                    if (!new_arg.same_as(old_arg)) changed = true;
+                    new_args[i] = new_arg;
+                    max_width = std::max(new_arg.type().width, max_width);
+                }
+
+                if (!changed) {
+                    expr = op;
+                } else {
+                    // Widen the args to have the same width as the max width found
+                    for (size_t i = 0; i < new_args.size(); i++) {
+                        new_args[i] = widen(new_args[i], max_width);
+                    }
+                    expr = Call::make(op->type.vector_of(max_width), op->name, new_args,
+                                      op->call_type, op->func, op->value_index, op->image, op->param);
+                }
             }
         }
 
         void visit(const Let *op) {
-            Expr value = mutate(op->value);
-            if (value.type().is_vector()) {
-                scope.push(op->name, value);
+
+            // Vectorize the let value and check to see if it was vectorized by
+            // this mutator. The type of the expression might already be vector
+            // width.
+            Expr mutated_value = mutate(op->value);
+            bool was_vectorized = !op->value.type().is_vector() &&
+                                   mutated_value.type().is_vector();
+
+            // If the value was vectorized by this mutator, add a new name to
+            // the scope for the vectorized value expression.
+            std::string vectorized_name;
+            if (was_vectorized) {
+                vectorized_name = op->name + widening_suffix;
+                scope.push(vectorized_name, mutated_value);
             }
 
-            Expr body = mutate(op->body);
+            Expr mutated_body = mutate(op->body);
 
-            if (value.type().is_vector()) {
-                scope.pop(op->name);
+            if (was_vectorized) {
+                scope.pop(vectorized_name);
             }
 
-            if (value.same_as(op->value) && body.same_as(op->body)) {
+            // Check to see if the value and body were modified by this mutator
+            if (mutated_value.same_as(op->value) &&
+                mutated_body.same_as(op->body)) {
                 expr = op;
             } else {
-                expr = Let::make(op->name, value, body);
+                // Otherwise create a new Let containing the original value
+                // expression plus the widened expression 
+                expr = Let::make(op->name, op->value, mutated_body);
+
+                if (was_vectorized) {
+                    expr = Let::make(vectorized_name, mutated_value, expr);
+                }
             }
         }
 
         void visit(const LetStmt *op) {
-            Expr value = mutate(op->value);
-            if (value.type().is_vector()) {
-                scope.push(op->name, value);
+            Expr mutated_value = mutate(op->value);
+
+            // Check if the value was vectorized by this mutator.
+            bool was_vectorized = !op->value.type().is_vector() &&
+            mutated_value.type().is_vector();
+
+            std::string vectorized_name;
+
+            if (was_vectorized) {
+                vectorized_name = op->name + widening_suffix;
+                scope.push(vectorized_name, mutated_value);
             }
 
-            Stmt body = mutate(op->body);
+            Stmt mutated_body = mutate(op->body);
 
-            if (value.type().is_vector()) {
-                scope.pop(op->name);
+            if (was_vectorized) {
+                scope.pop(vectorized_name);
             }
 
-            if (value.same_as(op->value) && body.same_as(op->body)) {
+            if (mutated_value.same_as(op->value) &&
+                mutated_body.same_as(op->body)) {
                 stmt = op;
             } else {
-                stmt = LetStmt::make(op->name, value, body);
+                stmt = LetStmt::make(op->name, op->value, mutated_body);
+
+                if (was_vectorized) {
+                    stmt = LetStmt::make(vectorized_name, mutated_value, stmt);
+                }
             }
         }
 
@@ -423,9 +545,61 @@ class VectorizeLoops : public IRMutator {
             return result;
         }
 
+        Expr scalarize(Expr e) {
+            // This method returns a select tree that produces a vector width
+            // result expression
+
+            // TODO: Add an intrinisic to create a vector from a list of scalars
+            // instead of a select tree.
+
+            Expr result;
+
+            int width = replacement.type().width;
+            Expr old_replacement = replacement;
+            internal_assert(!scalarized);
+            scalarized = true;
+
+            for (int i = width - 1; i >= 0; --i) {
+                // Extract a single lane from the vectorized variable expression
+                // substituted in by this mutator
+                replacement = extract_lane(old_replacement, i);
+                scalar_lane = i;
+
+                Expr new_expr = e;
+
+                // Hide all the vector let values in scope with a scalar version
+                // in the appropriate lane.
+                for (Scope<Expr>::iterator iter = scope.begin(); iter != scope.end(); ++iter) {
+                    string name = iter.name() + ".lane." + int_to_string(i);
+                    Expr lane = extract_lane(iter.value(), i);
+                    new_expr = substitute(iter.name(), Variable::make(lane.type(), name), new_expr);
+                    new_expr = Let::make(name, lane, new_expr);
+                }
+
+                // Replace uses of the vectorized variable with the extracted
+                // lane expression
+                new_expr = substitute(var, scalar_lane, new_expr);
+
+                if (i == width - 1) {
+                    result = Broadcast::make(new_expr,width);
+                } else {
+                    Expr cond = (old_replacement == Broadcast::make(scalar_lane, width));
+                    result = Select::make(cond, Broadcast::make(new_expr,width), result);
+                }
+            }
+
+            replacement = old_replacement;
+            scalarized = false;
+            
+            return result;
+        }
+
     public:
         VectorSubs(string v, Expr r) : var(v), replacement(r),
                                        scalarized(false), scalar_lane(0) {
+
+            std::ostringstream oss;
+            widening_suffix = ".x" + int_to_string(replacement.type().width);
         }
     };
 

@@ -48,6 +48,9 @@
 %ignore halide_memoization_cache_store;
 %ignore halide_memoization_cache_cleanup;
 
+%ignore halide_opengl_context_lost;
+%ignore halide_opengl_output_client_bound;
+
 %ignore halide_mutex_lock;
 %ignore halide_mutex_unlock;
 %ignore halide_mutex_cleanup;
@@ -59,6 +62,29 @@
 #include "py_util.h"
 using namespace Halide;
 %}
+
+// ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~
+%typemap(out) std::string {
+%#if PY_VERSION_HEX >= 0x03000000
+  $result = PyBytes_FromStringAndSize($1.data(), $1.size());
+%#else
+  $result = PyString_FromStringAndSize($1.data(), $1.size());
+%#endif
+}
+
+#define DEFINE_TYPE(T) std::string image_to_string(const Image<T> &a);
+DEFINE_TYPE(uint8_t)
+DEFINE_TYPE(uint16_t)
+DEFINE_TYPE(uint32_t)
+DEFINE_TYPE(int8_t)
+DEFINE_TYPE(int16_t)
+DEFINE_TYPE(int32_t)
+DEFINE_TYPE(float)
+DEFINE_TYPE(double)
+#undef DEFINE_TYPE
+
+%typemap(out) std::string; // Reset the typemap
+// ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~
 
 namespace Halide {
 %ignore Internal;

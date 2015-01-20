@@ -31,11 +31,15 @@ volatile int WEAK *cl_lock_ptr = NULL;
 
 extern "C" {
 
-extern int64_t halide_current_time_ns(void *user_context);
 extern void free(void *);
 extern void *malloc(size_t);
 extern const char * strstr(const char *, const char *);
 extern int atoi(const char *);
+
+#ifdef DEBUG_RUNTIME
+extern int halide_start_clock(void *user_context);
+extern int64_t halide_current_time_ns(void *user_context);
+#endif
 
 WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, volatile int* lock_ptr) {
     cl_ctx_ptr = ctx_ptr;
@@ -107,6 +111,9 @@ public:
                                     context(NULL),
                                     cmd_queue(NULL),
                                     error(CL_SUCCESS) {
+#ifdef DEBUG_RUNTIME
+        halide_start_clock(user_context);
+#endif
         error = halide_acquire_cl_context(user_context, &context, &cmd_queue);
         halide_assert(user_context, context != NULL && cmd_queue != NULL);
     }
@@ -834,13 +841,19 @@ WEAK int halide_dev_run(void *user_context,
                         int threadsX, int threadsY, int threadsZ,
                         int shared_mem_bytes,
                         size_t arg_sizes[],
-                        void* args[]) {
+                        void* args[],
+                        int num_attributes,
+                        float* vertex_buffer,
+                        int num_coords_dim0,
+                        int num_coords_dim1) {
+
     debug(user_context)
         << "CL: halide_dev_run (user_context: " << user_context << ", "
         << "entry: " << entry_name << ", "
         << "blocks: " << blocksX << "x" << blocksY << "x" << blocksZ << ", "
         << "threads: " << threadsX << "x" << threadsY << "x" << threadsZ << ", "
         << "shmem: " << shared_mem_bytes << "\n";
+
 
     cl_int err;
     ClContext ctx(user_context);

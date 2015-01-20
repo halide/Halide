@@ -137,7 +137,7 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
             // Only print out the value on stores and loads.
             bool print_value = (e->event < 2);
 
-            ss << event_types[e->event] << " " << e->func << "." << e->value_index << "[";
+            ss << event_types[e->event] << " " << e->func << "." << e->value_index << "(";
             if (e->vector_width > 1) {
                 ss << "<";
             }
@@ -152,9 +152,9 @@ WEAK int32_t halide_trace(void *user_context, const halide_trace_event *e) {
                 ss << e->coordinates[i];
             }
             if (e->vector_width > 1) {
-                ss << ">]";
+                ss << ">)";
             } else {
-                ss << "]";
+                ss << ")";
             }
 
             if (print_value) {

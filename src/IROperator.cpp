@@ -7,6 +7,7 @@
 #include "IRPrinter.h"
 #include "Simplify.h"
 #include "Debug.h"
+#include "CSE.h"
 
 namespace Halide {
 
@@ -51,6 +52,7 @@ namespace Internal {
 bool is_const(Expr e) {
     if (e.as<IntImm>()) return true;
     if (e.as<FloatImm>()) return true;
+    if (e.as<StringImm>()) return true;
     if (const Cast *c = e.as<Cast>()) {
         return is_const(c->value);
     }
@@ -72,6 +74,12 @@ bool is_const(Expr e, int value) {
     return false;
 }
 
+bool is_no_op(Stmt s) {
+    if (!s.defined()) return true;
+    const Evaluate *e = s.as<Evaluate>();
+    return e && is_const(e->value);
+}
+
 const int * as_const_int(Expr e) {
     const IntImm *i = e.as<IntImm>();
     return i ? &(i->value) : NULL;
@@ -90,7 +98,7 @@ bool is_const_power_of_two(Expr e, int *bits) {
     if (c) return is_const_power_of_two(c->value, bits);
 
     const IntImm *int_imm = e.as<IntImm>();
-    if (int_imm) {
+    if (int_imm && ((int_imm->value & (int_imm->value - 1)) == 0)) {
         int bit_count = 0;
         int tmp;
         for (tmp = 1; tmp < int_imm->value; tmp *= 2) {
@@ -303,14 +311,16 @@ void match_types(Expr &a, Expr &b) {
 
 // Factor a float into 2^exponent * reduced, where reduced is between 0.75 and 1.5
 void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
-    Expr int_version = reinterpret<int>(input);
+    Type type = input.type();
+    Type int_type = Int(32, type.width);
+    Expr int_version = reinterpret(int_type, input);
 
     // single precision = SEEE EEEE EMMM MMMM MMMM MMMM MMMM MMMM
     // exponent mask    = 0111 1111 1000 0000 0000 0000 0000 0000
     //                    0x7  0xF  0x8  0x0  0x0  0x0  0x0  0x0
     // non-exponent     = 1000 0000 0111 1111 1111 1111 1111 1111
     //                  = 0x8  0x0  0x7  0xF  0xF  0xF  0xF  0xF
-    int non_exponent_mask = 0x807fffff;
+    Expr non_exponent_mask = make_const(int_type, 0x807fffff);
 
     // Extract a version with no exponent (between 1.0 and 2.0)
     Expr no_exponent = int_version & non_exponent_mask;
@@ -326,7 +336,7 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 
     Expr blended = (int_version & non_exponent_mask) | (new_biased_exponent << 23);
 
-    *reduced = reinterpret<float>(blended);
+    *reduced = reinterpret(type, blended);
 
     /*
     // Floats represent exponents using 8 bits, which encode the range
@@ -352,18 +362,11 @@ void range_reduce_log(Expr input, Expr *reduced, Expr *exponent) {
 }
 
 Expr halide_log(Expr x_full) {
-    internal_assert(x_full.type() == Float(32));
+    Type type = x_full.type();
+    internal_assert(type.element_of() == Float(32));
 
-    if (is_const(x_full)) {
-        x_full = simplify(x_full);
-        const float * f = as_const_float(x_full);
-        if (f) {
-            return logf(*f);
-        }
-    }
-
-    Expr nan = Call::make(Float(32), "nan_f32", std::vector<Expr>(), Call::Extern);
-    Expr neg_inf = Call::make(Float(32), "neg_inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr nan = Call::make(type, "nan_f32", std::vector<Expr>(), Call::Extern);
+    Expr neg_inf = Call::make(type, "neg_inf_f32", std::vector<Expr>(), Call::Extern);
 
     Expr use_nan = x_full < 0.0f; // log of a negative returns nan
     Expr use_neg_inf = x_full == 0.0f; // log of zero is -inf
@@ -371,7 +374,7 @@ Expr halide_log(Expr x_full) {
 
     // Avoid producing nans or infs by generating ln(1.0f) instead and
     // then fixing it later.
-    Expr patched = select(exceptional, 1.0f, x_full);
+    Expr patched = select(exceptional, make_one(type), x_full);
     Expr reduced, exponent;
     range_reduce_log(patched, &reduced, &exponent);
 
@@ -392,21 +395,19 @@ Expr halide_log(Expr x_full) {
     Expr x1 = reduced - 1.0f;
     Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
-    result += cast<float>(exponent) * logf(2.0);
+    result += cast(type, exponent) * logf(2.0);
 
-    return select(exceptional, select(use_nan, nan, neg_inf), result);
+    result = select(exceptional, select(use_nan, nan, neg_inf), result);
+
+    // This introduces lots of common subexpressions
+    result = common_subexpression_elimination(result);
+
+    return result;
 }
 
 Expr halide_exp(Expr x_full) {
-    internal_assert(x_full.type() == Float(32));
-
-    if (is_const(x_full)) {
-        x_full = simplify(x_full);
-        const float * f = as_const_float(x_full);
-        if (f) {
-            return logf(*f);
-        }
-    }
+    Type type = x_full.type();
+    internal_assert(type.element_of() == Float(32));
 
     float ln2_part1 = 0.6931457519f;
     float ln2_part2 = 1.4286067653e-6f;
@@ -414,7 +415,7 @@ Expr halide_exp(Expr x_full) {
 
     Expr scaled = x_full * one_over_ln2;
     Expr k_real = floor(scaled);
-    Expr k = cast<int>(k_real);
+    Expr k = cast(Int(32, type.width), k_real);
 
     Expr x = x_full - k_real * ln2_part1;
     x -= k_real * ln2_part2;
@@ -434,16 +435,19 @@ Expr halide_exp(Expr x_full) {
     int fpbias = 127;
     Expr biased = k + fpbias;
 
-    Expr inf = Call::make(Float(32), "inf_f32", std::vector<Expr>(), Call::Extern);
+    Expr inf = Call::make(type, "inf_f32", std::vector<Expr>(), Call::Extern);
 
     // Shift the bits up into the exponent field and reinterpret this
     // thing as float.
-    Expr two_to_the_n = reinterpret<float>(biased << 23);
+    Expr two_to_the_n = reinterpret(type, biased << 23);
     result *= two_to_the_n;
 
     // Catch overflow and underflow
     result = select(biased < 255, result, inf);
-    result = select(biased > 0, result, 0.0f);
+    result = select(biased > 0, result, make_zero(type));
+
+    // This introduces lots of common subexpressions
+    result = common_subexpression_elimination(result);
 
     return result;
 }
@@ -482,7 +486,10 @@ Expr halide_erf(Expr x_full) {
 
     // Switch between the two approximations based on the magnitude.
     Expr y = select(x > 1.0f, approx1, approx2);
-    return sign * y;
+
+    Expr result = common_subexpression_elimination(sign * y);
+
+    return result;
 }
 
 Expr raise_to_integer_power(Expr e, int p) {
@@ -521,9 +528,11 @@ Expr fast_log(Expr x) {
         -0.49997513376789826101f,
         1.0f,
         0.0f};
-    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
 
-    return result + cast<float>(exponent) * logf(2);
+    Expr result = evaluate_polynomial(x1, coeff, sizeof(coeff)/sizeof(coeff[0]));
+    result = result + cast<float>(exponent) * logf(2);
+    result = common_subexpression_elimination(result);
+    return result;
 }
 
 Expr fast_exp(Expr x_full) {
@@ -551,7 +560,7 @@ Expr fast_exp(Expr x_full) {
     // thing as float.
     Expr two_to_the_n = reinterpret<float>(biased << 23);
     result *= two_to_the_n;
-
+    result = common_subexpression_elimination(result);
     return result;
 }
 
@@ -564,19 +573,6 @@ Expr print(const std::vector<Expr> &args) {
             print_args[i*2+1] = Expr(" ");
         } else {
             print_args[i*2+1] = Expr("\n");
-        }
-    }
-
-    // Concat adjacent string immediates eagerly.
-    size_t i = 0;
-    while (i+1 < print_args.size()) {
-        const Internal::StringImm *a = print_args[i].as<Internal::StringImm>();
-        const Internal::StringImm *b = print_args[i+1].as<Internal::StringImm>();
-        if (a && b) {
-            print_args[i] = a->value + b->value;
-            print_args.erase(print_args.begin() + i + 1);
-        } else {
-            i++;
         }
     }
 
