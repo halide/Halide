@@ -23,8 +23,12 @@ extern "C" {
 
 extern int atoi(const char *);
 extern char *getenv(const char *);
-extern int64_t halide_current_time_ns(void *user_context);
 extern void *malloc(size_t);
+
+#ifdef DEBUG_RUNTIME
+extern int halide_start_clock(void *user_context);
+extern int64_t halide_current_time_ns(void *user_context);
+#endif
 
 WEAK void halide_set_cuda_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
     cuda_ctx_ptr = ctx_ptr;
@@ -88,6 +92,9 @@ public:
     CudaContext(void *user_context) : user_context(user_context),
                                       context(NULL),
                                       error(CUDA_SUCCESS) {
+#ifdef DEBUG_RUNTIME
+        halide_start_clock(user_context);
+#endif
         error = halide_acquire_cuda_context(user_context, &context);
         halide_assert(user_context, context != NULL);
         if (error != 0) {
@@ -628,7 +635,12 @@ WEAK int halide_dev_run(void *user_context,
                         int threadsX, int threadsY, int threadsZ,
                         int shared_mem_bytes,
                         size_t arg_sizes[],
-                        void* args[]) {
+                        void* args[],
+                        int num_attributes,
+                        float* vertex_buffer,
+                        int num_coords_dim0,
+                        int num_coords_dim1) {
+
     debug(user_context) << "CUDA: halide_dev_run ("
                         << "user_context: " << user_context << ", "
                         << "entry: " << entry_name << ", "

@@ -34,18 +34,21 @@ public:
      * everything as internal, including weak symbols that Halide
      * relies on being weak). The final linking stage (e.g. using
      * pnacl-clang++) handles the sandboxing. */
-    void compile_to_native(const std::string &filename, bool assembly) {
+    void compile_to_native(const std::string &filename, bool /*assembly*/) {
         // TODO: Emit .ll when assembly is true
         compile_to_bitcode(filename);
     }
 
 protected:
 
+    llvm::Triple get_target_triple() const;
+
     using CodeGen_Posix::visit;
 
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 };
 
 }}

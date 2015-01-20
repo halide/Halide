@@ -2,6 +2,11 @@
 
 // This lesson demonstrates how express multi-stage pipelines.
 
+// This lesson can be built by invoking the command:
+//    make tutorial_lesson_07_multi_stage_pipelines
+// in a shell with the current directory at the top of the halide source tree.
+// Otherwise, see the platform-specific compiler invocations below.
+
 // On linux, you can compile and run it like so:
 // g++ lesson_07*.cpp -g -I ../include -L ../bin -lHalide `libpng-config --cflags --ldflags` -lpthread -ldl -o lesson_07
 // LD_LIBRARY_PATH=../bin ./lesson_07

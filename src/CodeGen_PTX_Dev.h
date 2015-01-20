@@ -40,6 +40,8 @@ public:
     std::string get_current_kernel_name();
 
     void dump();
+    
+    virtual std::string print_gpu_name(const std::string &name);
 
 protected:
     using CodeGen::visit;
@@ -59,6 +61,7 @@ protected:
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 
     /** Map from simt variable names (e.g. foo.__block_id_x) to the llvm
      * ptx intrinsic functions to call to get them. */

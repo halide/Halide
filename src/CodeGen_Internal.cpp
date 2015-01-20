@@ -163,7 +163,7 @@ void Closure::unpack_struct(Scope<Value *> &dst,
         if (load->getType()->isPointerTy()) {
             // Give it a unique type so that tbaa tells llvm that this can't alias anything
             load->setMetadata("tbaa", MDNode::get(context,
-                                                  vec<Value *>(MDString::get(context, nm[i]))));
+                                                  vec<LLVMMDNodeArgumentType>(MDString::get(context, nm[i]))));
         }
         dst.push(nm[i], load);
         load->setName(nm[i]);
@@ -171,7 +171,6 @@ void Closure::unpack_struct(Scope<Value *> &dst,
 }
 
 llvm::Type *llvm_type_of(LLVMContext *c, Halide::Type t) {
-
     if (t.width == 1) {
         if (t.is_float()) {
             switch (t.bits) {

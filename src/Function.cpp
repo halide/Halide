@@ -228,7 +228,8 @@ void Function::define(const vector<string> &args, vector<Expr> values) {
         if (values.size() > 1) {
             buffer_name += '.' + int_to_string((int)i);
         }
-        contents.ptr->output_buffers.push_back(Parameter(values[i].type(), true, buffer_name));
+        Parameter output(values[i].type(), true, args.size(), buffer_name);
+        contents.ptr->output_buffers.push_back(output);
     }
 }
 
@@ -428,7 +429,6 @@ void Function::define_extern(const std::string &function_name,
                              const std::vector<Type> &types,
                              int dimensionality) {
 
-    string source_loc = get_source_location();
     user_assert(!has_pure_definition() && !has_update_definition())
         << "In extern definition for Func \"" << name() << "\":\n"
         << "Func with a pure definition cannot have an extern definition.\n";
@@ -446,7 +446,8 @@ void Function::define_extern(const std::string &function_name,
         if (types.size() > 1) {
             buffer_name += '.' + int_to_string((int)i);
         }
-        contents.ptr->output_buffers.push_back(Parameter(types[i], true, buffer_name));
+        Parameter output(types[i], true, dimensionality, buffer_name);
+        contents.ptr->output_buffers.push_back(output);
     }
 
     // Make some synthetic var names for scheduling purposes (e.g. reorder_storage).

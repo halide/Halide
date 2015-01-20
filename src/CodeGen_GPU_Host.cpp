@@ -11,6 +11,7 @@
 #include "Util.h"
 #include "Bounds.h"
 #include "Simplify.h"
+#include "VaryingAttributes.h"
 
 #ifdef _WIN32
 #define NOMINMAX
@@ -183,7 +184,7 @@ protected:
             // The argument to the call is either a StringImm or a broadcasted
             // StringImm if this is part of a vectorized expression
 
-            const StringImm* string_imm = op->args[0].as<StringImm>();
+            const StringImm *string_imm = op->args[0].as<StringImm>();
             if (!string_imm) {
                 internal_assert(op->args[0].as<Broadcast>());
                 string_imm = op->args[0].as<Broadcast>()->value.as<StringImm>();
@@ -495,9 +496,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                  << bounds.num_blocks[2] << ", "
                  << bounds.num_blocks[3] << ") blocks\n";
 
-        // compute a closure over the state passed into the kernel
-        GPU_Host_Closure c(loop, loop->name);
-
         // compile the kernel
         string kernel_name = unique_name("kernel_" + loop->name, false);
         for (size_t i = 0; i < kernel_name.size(); i++) {
@@ -505,8 +503,68 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
+        
+        Value *null_float_ptr = ConstantPointerNull::get(CodeGen::f32->getPointerTo());
+        Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
+        Value *gpu_num_padded_attributes  = zero_int32;
+        Value *gpu_vertex_buffer   = null_float_ptr;
+        Value *gpu_num_coords_dim0 = zero_int32;
+        Value *gpu_num_coords_dim1 = zero_int32;
+
+        if (target.has_feature(Target::OpenGL)) {
+            
+            // GL draw calls that invoke the GLSL shader are issued for pairs of
+            // for-loops over spatial x and y dimensions. For each for-loop we create
+            // one scalar vertex attribute for the spatial dimension corresponding to
+            // that loop, plus one scalar attribute for each expression previously
+            // labeled as "glsl_varying"
+
+            // Pass variables created during setup_gpu_vertex_buffer to the
+            // dev run function call.
+            gpu_num_padded_attributes = codegen(Variable::make(Int(32), "glsl.num_padded_attributes"));
+            gpu_num_coords_dim0 = codegen(Variable::make(Int(32), "glsl.num_coords_dim0"));
+            gpu_num_coords_dim1 = codegen(Variable::make(Int(32), "glsl.num_coords_dim1"));
+
+            // Look up the allocation for the vertex buffer and cast it to the
+            // right type
+            gpu_vertex_buffer = codegen(Variable::make(Handle(), "glsl.vertex_buffer.host"));
+            gpu_vertex_buffer = builder->CreatePointerCast(gpu_vertex_buffer,
+                                                           CodeGen::f32->getPointerTo());
+
+        }
+
+        // compute a closure over the state passed into the kernel
+        GPU_Host_Closure c(loop, loop->name);
+        
+        // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
+
+        // Halide allows passing of scalar float and integer arguments. For
+        // OpenGL, pack these into vec4 uniforms and varying attributes
+        if (target.has_feature(Target::OpenGL)) {
+
+            int num_uniform_floats = 0;
+
+            // The spatial x and y coordinates are passed in the first two
+            // scalar float varying slots
+            int num_varying_floats = 2;
+            int num_uniform_ints   = 0;
+
+            // Pack scalar parameters into vec4
+            for (size_t i = 0; i < closure_args.size(); i++) {
+                if (closure_args[i].is_buffer) {
+                    continue;
+                } else if (ends_with(closure_args[i].name, ".varying")) {
+                    closure_args[i].packed_index = num_varying_floats++;
+                } else if (closure_args[i].type.is_float()) {
+                    closure_args[i].packed_index = num_uniform_floats++;
+                } else if (closure_args[i].type.is_int()) {
+                    closure_args[i].packed_index = num_uniform_ints++;
+                }
+            }
+        }
+
         for (size_t i = 0; i < closure_args.size(); i++) {
             if (closure_args[i].is_buffer && allocations.contains(closure_args[i].name)) {
                 closure_args[i].size = allocations.get(closure_args[i].name).constant_bytes;
@@ -546,6 +604,12 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             if (closure_args[i].is_buffer) {
                 // If it's a buffer, dereference the dev handle
                 val = buffer_dev(sym_get(name + ".buffer"));
+            } else if (ends_with(name, ".varying")) {
+                // Expressions for varying attributes are passed in the
+                // expression mesh. Pass a non-NULL value in the argument array
+                // to keep it in sync with the argument names encoded in the
+                // shader header
+                val = ConstantInt::get(target_size_t_type, 1);
             } else {
                 // Otherwise just look up the symbol
                 val = sym_get(name);
@@ -558,7 +622,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             // store the closure value into the stack space
             builder->CreateStore(val, ptr);
 
-            // store a void* pointer to the argument into the gpu_args_arr
+            // store a void * pointer to the argument into the gpu_args_arr
             Value *bits = builder->CreateBitCast(ptr, arg_t);
             builder->CreateStore(bits,
                                  builder->CreateConstGEP2_32(gpu_args_arr, 0, i));
@@ -585,7 +649,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
             codegen(bounds.num_threads[0]), codegen(bounds.num_threads[1]), codegen(bounds.num_threads[2]),
             codegen(bounds.shared_mem_size),
             builder->CreateConstGEP2_32(gpu_arg_sizes_arr, 0, 0, "gpu_arg_sizes_ar_ref"),
-            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref")
+            builder->CreateConstGEP2_32(gpu_args_arr, 0, 0, "gpu_args_arr_ref"),
+            gpu_num_padded_attributes,
+            gpu_vertex_buffer,
+            gpu_num_coords_dim0,
+            gpu_num_coords_dim1,
         };
         llvm::Function *dev_run_fn = module->getFunction("halide_dev_run");
         internal_assert(dev_run_fn) << "Could not find halide_dev_run in module\n";
@@ -627,7 +695,7 @@ template class CodeGen_GPU_Host<CodeGen_ARM>;
 template class CodeGen_GPU_Host<CodeGen_MIPS>;
 #endif
 
-#ifdef WITH_PNACL
+#ifdef WITH_NATIVE_CLIENT
 template class CodeGen_GPU_Host<CodeGen_PNaCl>;
 #endif
 
