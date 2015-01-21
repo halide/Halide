@@ -476,8 +476,12 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     // Build up all of the passes that we want to do to the module.
     PassManager pass_manager;
 
+    #if LLVM_VERSION < 37
     // Add an appropriate TargetLibraryInfo pass for the module's triple.
     pass_manager.add(new TargetLibraryInfo(Triple(module->getTargetTriple())));
+    #else
+    pass_manager.add(new TargetLibraryInfoWrapperPass(Triple(module->getTargetTriple())));
+    #endif
 
     #if LLVM_VERSION < 33
     pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
