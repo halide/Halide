@@ -65,25 +65,17 @@ class GEMVGenerator :
 
       RDom sum_lanes(0, vec_size);
       Func prod("prod");
-      // prod(i)   = b_ * y_(i);
       prod(i)  += At(i, sum_lanes);
       result(i) = b_ * y_(i) + a_ * prod(i);
 
       if (vectorize_) {
-        // Var ii("ii");
-        // result.specialize(num_rows >= block_size_)
-        //     .split(i, i, ii, block_size_)//.parallel(i)
-        //     .vectorize(ii, vec_size).unroll(ii);
-
         result.specialize(num_rows >= vec_size).vectorize(i, vec_size);
 
-        // RVar ki("ki");
         prod.compute_at(result, i);
         prod.vectorize(i, vec_size).unroll(i);
         prod.update(0).specialize(num_rows >= vec_size)
-        //     .split(k, k, ki, block_size_)
             .reorder(i, sum_lanes).unroll(sum_lanes)
-             .vectorize(i, vec_size).unroll(i);
+            .vectorize(i, vec_size).unroll(i);
 
         Ax.compute_at(result, i).vectorize(j).unroll(i);
         Ax.update(0).specialize(num_rows >= vec_size)
@@ -98,34 +90,25 @@ class GEMVGenerator :
       y_.set_bounds(0, 0, A_.height());
       result.output_buffer().set_bounds(0, 0, A_.height());
     } else {
-      const Expr proxy_size = ((num_cols + block_size_ - 1) / block_size_) * block_size_;
+      const int block_size = 4;
+      const Expr proxy_size = ((num_cols + block_size_ - 1) / block_size) * block_size;
 
       RDom k(0, proxy_size, "k");
-      Func prod("prod");
-      // prod(i)   = b_ * y_(i);
-      prod(i)  += A_(i, k) * x_(k);
-      result(i) = b_ * y_(i) + a_ * prod(i);
+      result(i)  = b_ * y_(i);
+      result(i) += A(i, k) * x_(k);
 
       if (vectorize_) {
-        Var ii("ii");
-        result.specialize(num_rows >= block_size_)
-            .split(i, i, ii, block_size_)//.parallel(i)
-            .vectorize(ii, vec_size).unroll(ii);
 
         RVar ki("ki");
-        prod.compute_at(result, i);
-        prod.specialize(num_rows >= block_size_).vectorize(i, vec_size).unroll(i);
-        prod.update(0).specialize(num_rows >= block_size_)
-            .split(k, k, ki, block_size_)
-            .reorder(i, ki, k)
-            .vectorize(i, vec_size).unroll(i);
+        Var ii("ii");
+        result.update(0).specialize(num_rows >= vec_size && num_cols >= block_size)
+            .split(i, i, ii, vec_size)
+            .split(k, k, ki, block_size)
+            .reorder(ii, ki, i, k)
+            .vectorize(ii).unroll(ki);
 
         result.specialize(num_rows >= vec_size).vectorize(i, vec_size);
-
-        prod.specialize(num_rows >= vec_size).vectorize(i, vec_size).unroll(i);
-        prod.update(0).specialize(num_rows >= vec_size)
-            .reorder(i, k)
-            .vectorize(i, vec_size).unroll(i);
+        result.update(0).specialize(num_rows >= vec_size).vectorize(i, vec_size);
       }
 
 
