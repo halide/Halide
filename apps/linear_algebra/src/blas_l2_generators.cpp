@@ -91,11 +91,11 @@ class GEMVGenerator :
       result.output_buffer().set_bounds(0, 0, A_.height());
     } else {
       const int block_size = 4;
-      const Expr proxy_size = ((num_cols + block_size_ - 1) / block_size) * block_size;
+      const Expr proxy_size = ((num_cols + block_size - 1) / block_size) * block_size;
 
       RDom k(0, proxy_size, "k");
       result(i)  = b_ * y_(i);
-      result(i) += A(i, k) * x_(k);
+      result(i) += a_ * A_(i, k) * x_(k);
 
       if (vectorize_) {
 
