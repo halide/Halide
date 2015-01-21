@@ -75,23 +75,16 @@ struct JITModule {
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
-struct JITCustomAllocator {
-    void *(*custom_malloc)(void *, size_t);
-    void (*custom_free)(void *, void *);
-    JITCustomAllocator() : custom_malloc(NULL), custom_free(NULL) {}
-    JITCustomAllocator(void *(*custom_malloc)(void *, size_t),
-                       void (*custom_free)(void *, void *)) : custom_malloc(custom_malloc), custom_free(custom_free) {
-    }
-};
-
 struct JITHandlers {
     void (*custom_print)(void *, const char *);
-    JITCustomAllocator custom_allocator;
+    void *(*custom_malloc)(void *, size_t);
+    void (*custom_free)(void *, void *);
     int (*custom_do_task)(void *, halide_task, int, uint8_t *);
     int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
     void (*custom_error)(void *, const char *);
     int32_t (*custom_trace)(void *, const halide_trace_event *);
-    JITHandlers() : custom_print(NULL), custom_do_task(NULL), custom_do_par_for(NULL),
+    JITHandlers() : custom_print(NULL), custom_malloc(NULL), custom_free(NULL), 
+                    custom_do_task(NULL), custom_do_par_for(NULL),
                     custom_error(NULL), custom_trace(NULL) {
     }
 };

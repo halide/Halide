@@ -308,22 +308,13 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
             const std::string &name(iter->first);
             const Symbol &s(iter->second);
             if (provided_symbols.find(iter->first) == provided_symbols.end()) {
-                GlobalValue *gv;
                 if (s.llvm_type->isFunctionTy()) {
-#if 0
-                    if (!starts_with(name, "_")) {
-                        gv = dyn_cast<GlobalValue>(m->getOrInsertFunction("_" + name, (FunctionType *)copy_llvm_type_to_module(m, s.llvm_type)));
-                        ee->addGlobalMapping(gv, s.address);
-                    }
-#endif
                     llvm::Type *copied_type = copy_llvm_type_to_module(m, s.llvm_type);
-                    Constant *cv = m->getOrInsertFunction(name, cast<FunctionType>(copied_type));
-                    gv = cast<GlobalValue>(cv);
+                    m->getOrInsertFunction(name, cast<FunctionType>(copied_type));
                 } else {
-                    gv = dyn_cast<GlobalValue>(m->getOrInsertGlobal(name, copy_llvm_type_to_module(m, s.llvm_type)));
+                    m->getOrInsertGlobal(name, copy_llvm_type_to_module(m, s.llvm_type));
                 }
-                //ee->addGlobalMapping(gv, s.address);
-                (void)gv;
+                debug(3) << "Global value " << name << " is at address " << s.address << "\n";
                 provided_symbols.insert(name);
             }
         }
@@ -356,16 +347,17 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         "halide_copy_to_host",
         "halide_set_custom_print",
         "halide_set_error_handler",
-        "halide_set_custom_allocator",
+        "halide_set_custom_malloc",
+        "halide_set_custom_free",
         "halide_set_custom_trace",
         "halide_set_custom_do_par_for",
         "halide_set_custom_do_task",
         "halide_memoization_cache_set_size",
+        NULL
     };
 
     std::map<std::string, void *> runtime_internal_exports;
-    for (size_t i = 0;
-         i < sizeof(runtime_internal_names) / sizeof(runtime_internal_names[0]); i++) {
+    for (size_t i = 0; runtime_internal_names[i]; i++) {
         void *address = compile_and_get_function(ee, m, runtime_internal_names[i], true).address;
         if (address) {
             runtime_internal_exports[runtime_internal_names[i]] = address;
@@ -491,8 +483,11 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_print) {
         base.custom_print = addins.custom_print;
     }
-    if (addins.custom_allocator.custom_malloc && addins.custom_allocator.custom_free) {
-        base.custom_allocator = addins.custom_allocator;
+    if (addins.custom_malloc) {
+        base.custom_malloc = addins.custom_malloc;
+    }
+    if (addins.custom_free) {
+        base.custom_free = addins.custom_free;
     }
     if (addins.custom_do_task) {
         base.custom_do_task = addins.custom_do_task;
@@ -522,9 +517,9 @@ void *malloc_handler(void *context, size_t x) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
 
-        return (*jit_user_context->handlers.custom_allocator.custom_malloc)(context, x);
+        return (*jit_user_context->handlers.custom_malloc)(context, x);
     } else {
-        return (*active_handlers.custom_allocator.custom_malloc)(context, x);
+        return (*active_handlers.custom_malloc)(context, x);
     }
 }
 
@@ -532,9 +527,9 @@ void free_handler(void *context, void *ptr) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
 
-        (*jit_user_context->handlers.custom_allocator.custom_free)(context, ptr);
+        (*jit_user_context->handlers.custom_free)(context, ptr);
     } else {
-        (*active_handlers.custom_allocator.custom_free)(context, ptr);
+        (*active_handlers.custom_free)(context, ptr);
     }
 }
 
@@ -585,7 +580,6 @@ function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const
     std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
     function_t (*hook_setter)(function_t) = (function_t (*)(function_t))iter->second.address;
-
     return (*hook_setter)(hook);
 }
 }
@@ -623,8 +617,8 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
     if (!shared_runtimes[runtime_kind].jit_module.defined()) {
         LLVMContext *llvm_context = new LLVMContext();
 
-        llvm::Module *shared_runtime = get_initial_module_for_target(target,
-                                                                     llvm_context, true, runtime_kind != MainShared);
+        llvm::Module *shared_runtime = 
+            get_initial_module_for_target(target, llvm_context, true, runtime_kind != MainShared);
 
         std::set<std::string> halide_exports_unique;
 
@@ -641,13 +635,26 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
         shared_runtimes[runtime_kind].compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
-            runtime_internal_handlers.custom_print = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
-            JITCustomAllocator custom_allocator(malloc_handler, free_handler);
-            runtime_internal_handlers.custom_allocator = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_allocator", custom_allocator);
-            runtime_internal_handlers.custom_do_task = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
-            runtime_internal_handlers.custom_do_par_for = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
-            runtime_internal_handlers.custom_error = hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
-            runtime_internal_handlers.custom_trace = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
+            runtime_internal_handlers.custom_print = 
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
+
+            runtime_internal_handlers.custom_malloc =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_malloc", malloc_handler);
+
+            runtime_internal_handlers.custom_free =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_free", free_handler);
+
+            runtime_internal_handlers.custom_do_task = 
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
+
+            runtime_internal_handlers.custom_do_par_for = 
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+
+            runtime_internal_handlers.custom_error = 
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
+
+            runtime_internal_handlers.custom_trace = 
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);

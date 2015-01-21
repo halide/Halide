@@ -700,7 +700,7 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
 }
 
 /** Create an llvm module containing the support code for a given target. */
-  llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
+llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
     enum InitialModuleType {
         ModuleAOT,
         ModuleJITShared,
