@@ -48,8 +48,10 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] -e EMIT_OPTIONS "
-                          "target=target-string [generator_arg=value [...]]\n";
+    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e EMIT_OPTIONS] "
+                          "target=target-string [generator_arg=value [...]]\n\n"
+                          "  -e  A comma separated list of optional files to emit. Accepted values are "
+                          "[assembly, bitcode, stmt, html]\n";
 
     std::map<std::string, std::string> flags_info = { { "-f", "" }, { "-g", "" }, { "-o", "" }, { "-e", "" } };
     std::map<std::string, std::string> generator_args;
@@ -116,24 +118,20 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
     GeneratorBase::EmitOptions emit_options;
-    std::string emit_flag = flags_info["-e"];
-    while (emit_flag != "") {
-      size_t pos = emit_flag.find(",");
-      std::string opt = emit_flag.substr(0, pos);
-      if (opt == "assembly") {
-        emit_options.emit_assembly = true;
-      } else if (opt == "bitcode") {
-        emit_options.emit_bitcode = true;
-      } else if (opt == "stmt") {
-        emit_options.emit_stmt = true;
-      } else if (opt == "html") {
-        emit_options.emit_stmt_html = true;
-      }
-      if (pos == std::string::npos) {
-        emit_flag = "";
-      } else {
-        emit_flag = emit_flag.substr(pos+1);
-      }
+    std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    for (const std::string &opt : emit_flags) {
+        if (opt == "assembly") {
+            emit_options.emit_assembly = true;
+        } else if (opt == "bitcode") {
+            emit_options.emit_bitcode = true;
+        } else if (opt == "stmt") {
+            emit_options.emit_stmt = true;
+        } else if (opt == "html") {
+            emit_options.emit_stmt_html = true;
+        } else {
+            user_warning << "Unrecognized emit option: " << opt
+                         << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+        }
     }
 
     std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
@@ -304,7 +302,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                 std::string function_name){
+                                std::string function_name){
     Func f = build();
     Func f_extern;
     if (function_name.empty()) {
