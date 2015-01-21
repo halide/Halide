@@ -129,8 +129,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         } else if (opt == "html") {
             emit_options.emit_stmt_html = true;
         } else {
-            user_warning << "Unrecognized emit option: " << opt
-                         << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+          cerr << "Unrecognized emit option: " << opt
+               << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
         }
     }
 
