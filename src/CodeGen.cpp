@@ -1445,7 +1445,7 @@ Value *CodeGen::interleave_vectors(Type type, const std::vector<Expr>& vecs) {
         }
 
         return builder->CreateShuffleVector(value_ab, value_c, ConstantVector::get(indices));
-    } else if(vecs.size() == 4) {
+    } else if(vecs.size() == 4 && vecs[0].type().bits <= 32) {
         Expr a = vecs[0], b = vecs[1], c = vecs[2], d = vecs[3];
         debug(3) << "Vectors to interleave: " << a << ", " << b << ", " << c << ", " << d << "\n";
 
