@@ -118,10 +118,8 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
     GeneratorBase::EmitOptions emit_options;
-    std::string emit_flag = flags_info["-e"];
-    while (emit_flag != "") {
-        size_t pos = emit_flag.find(",");
-        std::string opt = emit_flag.substr(0, pos);
+    std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    for (const std::string &opt : emit_flags) {
         if (opt == "assembly") {
             emit_options.emit_assembly = true;
         } else if (opt == "bitcode") {
@@ -133,11 +131,6 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         } else {
             user_warning << "Unrecognized emit option: " << opt
                          << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
-        }
-        if (pos == std::string::npos) {
-            emit_flag = "";
-        } else {
-            emit_flag = emit_flag.substr(pos+1);
         }
     }
 
