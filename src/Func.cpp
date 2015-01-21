@@ -2233,8 +2233,8 @@ void Func::set_error_handler(void (*handler)(void *, const char *)) {
 
 void Func::set_custom_allocator(void *(*cust_malloc)(void *, size_t),
                                 void (*cust_free)(void *, void *)) {
-    jit_handlers.custom_allocator.custom_malloc = cust_malloc;
-    jit_handlers.custom_allocator.custom_free = cust_free;
+    jit_handlers.custom_malloc = cust_malloc;
+    jit_handlers.custom_free = cust_free;
 }
 
 void Func::set_custom_do_par_for(int (*cust_do_par_for)(void *, int (*)(void *, int, uint8_t *), int, int, uint8_t *)) {
@@ -2690,6 +2690,6 @@ void Func::test() {
 
 EXPORT Var _("_");
 EXPORT Var _0("_0"), _1("_1"), _2("_2"), _3("_3"), _4("_4"),
-                 _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
+           _5("_5"), _6("_6"), _7("_7"), _8("_8"), _9("_9");
 
 }
