@@ -1,8 +1,8 @@
 #ifndef HALIDE_JIT_MODULE_H
 #define HALIDE_JIT_MODULE_H
 
-/** \file
- * Defines the struct representing a JIT compiled halide pipeline
+/** \file Defines the struct representing lifetime and dependencies of
+ * a JIT compiled halide pipeline
  */
 
 #include "IntrusivePtr.h"
@@ -37,6 +37,15 @@ struct JITModule {
     JITModule() {}
     JITModule(const std::map<std::string, Symbol> &exports);
 
+    /** The exports map of a JITModule contains all symbols which are
+     * available to other JITModules which depend on this one. For
+     * runtime modules, this is all of the symbols exported from the
+     * runtime. For a JITted Func, it generally only contains the main
+     * result Func of the compilation, which takes its name directly
+     * from the Func declaration. One can also make a module which
+     * contains no code itself but is just an exports maps providing
+     * arbitarty pointers to functions or global variables to JITted
+     * code. */
     const std::map<std::string, Symbol> &exports() const;
 
     /** A pointer to the raw halide function. It's true type depends
