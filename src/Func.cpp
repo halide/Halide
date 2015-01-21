@@ -2227,7 +2227,6 @@ void Func::compile_to_assembly(const string &filename, vector<Argument> args, co
 }
 
 void Func::set_error_handler(void (*handler)(void *, const char *)) {
-      debug(0) << "Setting Error handler\n";
     jit_handlers.custom_error = handler;
 }
 

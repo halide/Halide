@@ -35,9 +35,10 @@ public:
     void jit_init(llvm::ExecutionEngine *, llvm::Module *);
     void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
 
+    llvm::Triple get_target_triple() const;
+
 protected:
 
-    llvm::Triple get_target_triple() const;
 
     using CodeGen_Posix::visit;
 
