@@ -32,8 +32,6 @@ public:
                  const std::vector<Argument> &args,
                  const std::vector<Buffer> &images_to_embed);
 
-    static void test();
-
     void jit_init(llvm::ExecutionEngine *, llvm::Module *);
     void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
 
