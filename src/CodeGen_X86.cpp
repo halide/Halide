@@ -740,7 +740,7 @@ int CodeGen_X86::native_vector_bits() const {
     }
 }
 
-void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *)
+void CodeGen_X86::jit_init(llvm::ExecutionEngine *ee, llvm::Module *m)
 {
     jitEventListener = llvm::JITEventListener::createIntelJITEventListener();
     if (jitEventListener) {

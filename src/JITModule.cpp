@@ -240,9 +240,15 @@ public:
 void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
+
+    // Set the target triple on the module.
+    m->setTargetTriple(cg->get_target_triple().str());
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
+    debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
     string error_string;
+
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;

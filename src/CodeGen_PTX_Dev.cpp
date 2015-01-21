@@ -246,6 +246,10 @@ bool CodeGen_PTX_Dev::use_soft_float_abi() const {
     return false;
 }
 
+llvm::Triple CodeGen_PTX_Dev::get_target_triple() const {
+    return Triple(Triple::normalize(march() + "--"));
+}
+
 vector<char> CodeGen_PTX_Dev::compile_to_src() {
 
     #ifdef WITH_PTX
@@ -261,8 +265,8 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
     optimize_module();
 
     // Set up TargetTriple
-    module->setTargetTriple(Triple::normalize(march()+"--"));
-    Triple TheTriple(module->getTargetTriple());
+    Triple TheTriple = get_target_triple();
+    module->setTargetTriple(TheTriple.str());
 
     // Allocate target machine
     const std::string MArch = march();
