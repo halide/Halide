@@ -107,7 +107,9 @@ set(RUNTIME_CPP
   posix_print
   to_string
   cache
-  nacl_host_cpu_count)
+  nacl_host_cpu_count,
+  module_jit_ref_count,
+  module_aot_ref_count)
 set (RUNTIME_LL
   arm
   aarch64
