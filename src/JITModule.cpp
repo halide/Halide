@@ -588,9 +588,8 @@ function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const
     function_t (*hook_setter)(function_t) = (function_t (*)(function_t))iter->second.address;
     return (*hook_setter)(hook);
 }
-}
 
-static void adjust_module_ref_count(void *arg, int32_t count) {
+void adjust_module_ref_count(void *arg, int32_t count) {
     JITModuleContents *module = (JITModuleContents *)arg;
 
     debug(2) << "Adjusting refcount for module " << module->name << " by " << count << "\n";
@@ -602,12 +601,20 @@ static void adjust_module_ref_count(void *arg, int32_t count) {
     }
 }
 
-namespace {
-
 #if __cplusplus > 199711L || _MSC_VER >= 1800
 std::mutex shared_runtimes_mutex;
 #endif
 
+// The Halide runtime is broken up into pieces so that state can be
+// shared across JIT compilations that do not use the same target
+// options. At present, the split is into a MainShared module that
+// contains most of the runtime except for device API specific code
+// (GPU runtimes). There is one shared runtime per device API and a
+// the JITModule for a Func depends on all device API modules
+// specified in the target when it is JITted. (Instruction set variant
+// specific code, such as math routines, is inlined into the module
+// produced by compiling a Func so it can be specialized exactly for
+// each target.)
 enum RuntimeKind {
     MainShared,
     CUDA,
@@ -687,6 +694,14 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
 }  // anonymous namespace
 
+/* Shared runtimes are stored as global state. The set needed is
+ * determined from the target and the retrieved. If one does not exist
+ * yet, it is made on the fly from the compiled in bitcode of the
+ * runtime modules. As with all JITModules, the shared runtime is ref
+ * counted, but a globabl keeps one ref alive until shutdown or when
+ * JITSharedRuntime::release_all is called. If
+ * JITSharedRuntime::release_all is called, the global state is rest
+ * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) {
     #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
@@ -715,7 +730,7 @@ std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) 
 // caller provided user context work with JIT. (At present, this
 // cacscaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
-// calls anotehr callback wich is not overriden by the caller.)
+// calls another callback wich is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
                                              void *user_context, const JITHandlers &handlers) {
     jit_user_context.handlers = active_handlers;
