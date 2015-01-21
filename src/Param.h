@@ -301,7 +301,7 @@ public:
     EXPORT operator ExternFuncArgument() const;
 };
 
-/** An Image parameter to a halide pipelin\e. E.g., the input image. */
+/** An Image parameter to a halide pipeline. E.g., the input image. */
 class ImageParam : public OutputImageParam {
 
 public:

@@ -39,7 +39,7 @@ struct Type {
     bool is_bool() const {return code == UInt && bits == 1;}
 
     /** Is this type a vector type? (width > 1) */
-    bool is_vector() const {return width > 1;}
+    bool is_vector() const {return width != 1;}
 
     /** Is this type a scalar type? (width == 1) */
     bool is_scalar() const {return width == 1;}
