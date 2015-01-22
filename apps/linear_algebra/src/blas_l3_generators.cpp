@@ -8,9 +8,9 @@ namespace {
 // Generator class for BLAS gemm operations.
 template<class T>
 class GEMMGenerator :
-      public Generator<GEMMGenerator<T> > {
+      public Generator<GEMMGenerator<T>> {
  public:
-  typedef Generator<GEMMGenerator<T> > Base;
+  typedef Generator<GEMMGenerator<T>> Base;
   using Base::target;
   using Base::get_target;
   using Base::natural_vector_size;
@@ -23,6 +23,7 @@ class GEMMGenerator :
   GeneratorParam<bool> transpose_A_ = {"transpose_A", false};
   GeneratorParam<bool> transpose_B_ = {"transpose_B", false};
 
+  // Standard ordering of parameters in GEMM functions.
   Param<T>   a_ = {"a", 1.0};
   ImageParam A_ = {type_of<T>(), 2, "A"};
   ImageParam B_ = {type_of<T>(), 2, "B"};
@@ -48,7 +49,10 @@ class GEMMGenerator :
 
     Var i("i"), j("j");
     Func result("result");
-    if (1) {
+    // TODO: Currently I have only implemented the non-transpose
+    // case. Need to provide implementations for transposing either,
+    // or both, A & B.
+    if (!transpose_A_ && !transpose_B_) {
       const Expr num_rows = A_.width();
       const Expr num_cols = B_.height();
       const Expr sum_size = A_.height();
@@ -85,13 +89,22 @@ class GEMMGenerator :
       B_.set_bounds(0, 0, sum_size).set_min(1, 0);
       C_.set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
       result.output_buffer().set_bounds(0, 0, num_rows).set_bounds(1, 0, num_cols);
+    } else if (!transpose_A_) {
+      // TODO.
+      result(i, j) = undef<T>();
+    } else if (!transpose_B_) {
+      // TODO.
+      result(i, j) = undef<T>();
+    } else {
+      // TODO.
+      result(i, j) = undef<T>();
     }
 
     return result;
   }
 };
 
-RegisterGenerator<GEMMGenerator<float> >    register_sgemm("sgemm");
-RegisterGenerator<GEMMGenerator<double> >   register_dgemm("dgemm");
+RegisterGenerator<GEMMGenerator<float>>    register_sgemm("sgemm");
+RegisterGenerator<GEMMGenerator<double>>   register_dgemm("dgemm");
 
 }  // namespace

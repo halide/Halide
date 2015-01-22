@@ -8,9 +8,9 @@ namespace {
 // Generator class for BLAS axpy operations.
 template<class T>
 class AXPYGenerator :
-      public Generator<AXPYGenerator<T> > {
+      public Generator<AXPYGenerator<T>> {
  public:
-  typedef Generator<AXPYGenerator<T> > Base;
+  typedef Generator<AXPYGenerator<T>> Base;
   using Base::target;
   using Base::get_target;
   using Base::natural_vector_size;
@@ -23,6 +23,7 @@ class AXPYGenerator :
   GeneratorParam<bool> scale_x_ = {"scale_x", true};
   GeneratorParam<bool> add_to_y_ = {"add_to_y", true};
 
+  // Standard ordering of parameters in AXPY functions.
   Param<T>   a_ = {"a", 1.0};
   ImageParam x_ = {type_of<T>(), 1, "x"};
   ImageParam y_ = {type_of<T>(), 1, "y"};
@@ -87,9 +88,9 @@ class AXPYGenerator :
 // Generator class for BLAS dot operations.
 template<class T>
 class DotGenerator :
-      public Generator<DotGenerator<T> > {
+      public Generator<DotGenerator<T>> {
  public:
-  typedef Generator<DotGenerator<T> > Base;
+  typedef Generator<DotGenerator<T>> Base;
   using Base::target;
   using Base::get_target;
   using Base::natural_vector_size;
@@ -150,9 +151,9 @@ class DotGenerator :
 // Generator class for BLAS dot operations.
 template<class T>
 class AbsSumGenerator :
-      public Generator<AbsSumGenerator<T> > {
+      public Generator<AbsSumGenerator<T>> {
  public:
-  typedef Generator<AbsSumGenerator<T> > Base;
+  typedef Generator<AbsSumGenerator<T>> Base;
   using Base::target;
   using Base::get_target;
   using Base::natural_vector_size;
@@ -208,11 +209,11 @@ class AbsSumGenerator :
   }
 };
 
-RegisterGenerator<AXPYGenerator<float> >    register_saxpy("saxpy");
-RegisterGenerator<AXPYGenerator<double> >   register_daxpy("daxpy");
-RegisterGenerator<DotGenerator<float> >     register_sdot("sdot");
-RegisterGenerator<DotGenerator<double> >    register_ddot("ddot");
-RegisterGenerator<AbsSumGenerator<float> >  register_sasum("sasum");
-RegisterGenerator<AbsSumGenerator<double> > register_dasum("dasum");
+RegisterGenerator<AXPYGenerator<float>>    register_saxpy("saxpy");
+RegisterGenerator<AXPYGenerator<double>>   register_daxpy("daxpy");
+RegisterGenerator<DotGenerator<float>>     register_sdot("sdot");
+RegisterGenerator<DotGenerator<double>>    register_ddot("ddot");
+RegisterGenerator<AbsSumGenerator<float>>  register_sasum("sasum");
+RegisterGenerator<AbsSumGenerator<double>> register_dasum("dasum");
 
 }  // namespace
