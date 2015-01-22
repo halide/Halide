@@ -4,6 +4,13 @@
 extern "C" {
 
 struct halide_device_interface {
+    // These next two methods are used to reference count the runtime code
+    // these function pointers point to. They should always be initialized
+    // to halide_use_jit_module and halide_release_jit_module and Halide's JIT
+    // arranges for this to reference count the container for the code. In AOT
+    // compilation, these are empty functions which do nothing.
+    void (*use_module)();
+    void (*release_module)();
     int (*device_malloc)(void *user_context, struct buffer_t *buf);
     int (*device_free)(void *user_context, struct buffer_t *buf);
     int (*device_sync)(void *user_context, struct buffer_t *buf);

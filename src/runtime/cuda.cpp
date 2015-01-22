@@ -382,8 +382,6 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
-    halide_release_jit_module();
-
     return 0;
 }
 
@@ -493,8 +491,6 @@ WEAK int halide_cuda_device_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
-
-    halide_use_jit_module();
 
     return 0;
 }
@@ -821,6 +817,8 @@ WEAK const char *get_error_name(CUresult error) {
 }
 
 WEAK halide_device_interface cuda_device_interface = {
+    halide_use_jit_module,
+    halide_release_jit_module,
     halide_cuda_device_malloc,
     halide_cuda_device_free,
     halide_cuda_device_sync,
