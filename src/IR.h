@@ -44,6 +44,7 @@ enum Values {
 inline const char *device_api_to_string(const DeviceAPI &device_api) {
     switch (device_api) {
     case DeviceAPI::Host:
+        return "";
         break;
     case DeviceAPI::Parent:
         return "<Parent>";

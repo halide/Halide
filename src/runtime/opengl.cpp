@@ -921,8 +921,6 @@ WEAK int halide_opengl_device_free(void *user_context, buffer_t *buf) {
 
     free(texinfo);
 
-    halide_release_jit_module();
-
     return 0;
 }
 
@@ -1171,8 +1169,6 @@ WEAK int halide_opengl_copy_to_device(void *user_context, buffer_t *buf) {
     if (global_state.CheckAndReportError(user_context, "halide_opengl_copy_to_device BindTexture")) {
         return 1;
     }
-
-    halide_use_jit_module();
 
     return 0;
 }
@@ -1973,6 +1969,8 @@ WEAK void halide_opengl_cleanup() {
 namespace Halide { namespace Runtime { namespace Internal { namespace OpenGL {
 
 WEAK halide_device_interface opengl_device_interface = {
+    halide_use_jit_module,
+    halide_release_jit_module,
     halide_opengl_device_malloc,
     halide_opengl_device_free,
     halide_opengl_device_sync,

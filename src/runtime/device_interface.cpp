@@ -65,12 +65,16 @@ WEAK uint64_t halide_new_device_wrapper(uint64_t handle, const struct halide_dev
     }
     wrapper->device_handle = handle;
     wrapper->interface = interface;
+
+    interface->use_module();
+
     debug(NULL) << "Creating device wrapper for interface " << interface << " handle " << (void *)handle << " wrapper " << wrapper << "\n";
     return (uint64_t)wrapper;
 }
 
 WEAK void halide_delete_device_wrapper(uint64_t wrapper) {
     device_handle_wrapper *wrapper_ptr = (device_handle_wrapper *)wrapper;
+    wrapper_ptr->interface->release_module();
     debug(NULL) << "Deleting device wrapper for interface " << wrapper_ptr->interface << " device_handle " << (void *)wrapper_ptr->device_handle << " at addr " << wrapper_ptr << "\n";
     free(wrapper_ptr);
 }
@@ -196,7 +200,12 @@ WEAK int halide_device_malloc(void *user_context, struct buffer_t *buf, const ha
         return -1;
     }
 
+    // Ensure code is not freed prematurely.
+    // TODO: Exception safety...
+    interface->use_module();
     int result = interface->device_malloc(user_context, buf);
+    interface->release_module();
+
     return result;
 }
 
@@ -210,7 +219,11 @@ WEAK int halide_device_free(void *user_context, struct buffer_t *buf) {
     if (buf != NULL) {
         const halide_device_interface *interface = halide_get_device_interface(dev_field);
         if (interface != NULL) {
+            // Ensure interface is not freed prematurely.
+            // TODO: Exception safety...
+            interface->use_module();
             int result = interface->device_free(user_context, buf);
+            interface->release_module();
             halide_assert(user_context, buf->dev == 0);
             return result;
         }

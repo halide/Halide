@@ -451,8 +451,6 @@ WEAK int halide_opencl_device_free(void *user_context, buffer_t* buf) {
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
 
-    halide_release_jit_module();
-
     return 0;
 }
 
@@ -701,8 +699,6 @@ WEAK int halide_opencl_device_malloc(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
-
-    halide_use_jit_module();
 
     return CL_SUCCESS;
 }
@@ -1121,6 +1117,8 @@ WEAK const char *get_opencl_error_name(cl_int err) {
 }
 
 WEAK halide_device_interface opencl_device_interface = {
+    halide_use_jit_module,
+    halide_release_jit_module,
     halide_opencl_device_malloc,
     halide_opencl_device_free,
     halide_opencl_device_sync,
