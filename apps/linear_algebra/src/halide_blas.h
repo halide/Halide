@@ -112,20 +112,20 @@ extern "C" {
 //                     const int incX, const float *Y, const int incY);
 // double hblas_dsdot(const int N, const float *X, const int incX, const float *Y,
 //                    const int incY);
-    float  hblas_sdot(const int N, const float  *X, const int incX,
-                      const float  *Y, const int incY);
-    double hblas_ddot(const int N, const double *X, const int incX,
-                      const double *Y, const int incY);
+float  hblas_sdot(const int N, const float  *X, const int incX,
+                  const float  *Y, const int incY);
+double hblas_ddot(const int N, const double *X, const int incX,
+                  const double *Y, const int incY);
 
 
 /*
  * Functions having prefixes S D SC DZ
  */
-    float  hblas_snrm2(const int N, const float *X, const int incX);
-    float  hblas_sasum(const int N, const float *X, const int incX);
+float  hblas_snrm2(const int N, const float *X, const int incX);
+float  hblas_sasum(const int N, const float *X, const int incX);
 
-    double hblas_dnrm2(const int N, const double *X, const int incX);
-    double hblas_dasum(const int N, const double *X, const int incX);
+double hblas_dnrm2(const int N, const double *X, const int incX);
+double hblas_dasum(const int N, const double *X, const int incX);
 
 
 /*
@@ -147,17 +147,17 @@ extern "C" {
  */
 // void hblas_sswap(const int N, float *X, const int incX,
 //                  float *Y, const int incY);
-    void hblas_scopy(const int N, const float *X, const int incX,
-                     float *Y, const int incY);
-    void hblas_saxpy(const int N, const float alpha, const float *X,
-                     const int incX, float *Y, const int incY);
+void hblas_scopy(const int N, const float *X, const int incX,
+                 float *Y, const int incY);
+void hblas_saxpy(const int N, const float alpha, const float *X,
+                 const int incX, float *Y, const int incY);
 
 // void hblas_dswap(const int N, double *X, const int incX,
 //                  double *Y, const int incY);
-    void hblas_dcopy(const int N, const double *X, const int incX,
-                     double *Y, const int incY);
-    void hblas_daxpy(const int N, const double alpha, const double *X,
-                     const int incX, double *Y, const int incY);
+void hblas_dcopy(const int N, const double *X, const int incX,
+                 double *Y, const int incY);
+void hblas_daxpy(const int N, const double alpha, const double *X,
+                 const int incX, double *Y, const int incY);
 
 
 /*
@@ -181,8 +181,8 @@ extern "C" {
 /*
  * Routines with S D C Z CS and ZD prefixes
  */
-    void hblas_sscal(const int N, const float alpha, float *X, const int incX);
-    void hblas_dscal(const int N, const double alpha, double *X, const int incX);
+void hblas_sscal(const int N, const float alpha, float *X, const int incX);
+void hblas_dscal(const int N, const double alpha, double *X, const int incX);
 
 /*
  * ===========================================================================
@@ -193,17 +193,17 @@ extern "C" {
 /*
  * Routines with standard 4 prefixes (S, D, C, Z)
  */
-    void hblas_sgemv(const enum HBLAS_ORDER order,
-                     const enum HBLAS_TRANSPOSE TransA, const int M, const int N,
-                     const float alpha, const float *A, const int lda,
-                     const float *X, const int incX, const float beta,
-                     float *Y, const int incY);
+void hblas_sgemv(const enum HBLAS_ORDER order,
+                 const enum HBLAS_TRANSPOSE TransA, const int M, const int N,
+                 const float alpha, const float *A, const int lda,
+                 const float *X, const int incX, const float beta,
+                 float *Y, const int incY);
 
-    void hblas_dgemv(const enum HBLAS_ORDER order,
-                     const enum HBLAS_TRANSPOSE TransA, const int M, const int N,
-                     const double alpha, const double *A, const int lda,
-                     const double *X, const int incX, const double beta,
-                     double *Y, const int incY);
+void hblas_dgemv(const enum HBLAS_ORDER order,
+                 const enum HBLAS_TRANSPOSE TransA, const int M, const int N,
+                 const double alpha, const double *A, const int lda,
+                 const double *X, const int incX, const double beta,
+                 double *Y, const int incY);
 
 /*
  * ===========================================================================
@@ -214,17 +214,17 @@ extern "C" {
 /*
  * Routines with standard 4 prefixes (S, D, C, Z)
  */
-    void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
-                     const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
-                     const int K, const float alpha, const float *A,
-                     const int lda, const float *B, const int ldb,
-                     const float beta, float *C, const int ldc);
+void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
+                 const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
+                 const int K, const float alpha, const float *A,
+                 const int lda, const float *B, const int ldb,
+                 const float beta, float *C, const int ldc);
 
-    void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
-                     const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
-                     const int K, const double alpha, const double *A,
-                     const int lda, const double *B, const int ldb,
-                     const double beta, double *C, const int ldc);
+void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
+                 const enum HBLAS_TRANSPOSE TransB, const int M, const int N,
+                 const int K, const double alpha, const double *A,
+                 const int lda, const double *B, const int ldb,
+                 const double beta, double *C, const int ldc);
 
 #ifdef __cplusplus
 }
