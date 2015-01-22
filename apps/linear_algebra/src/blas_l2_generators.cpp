@@ -8,9 +8,9 @@ namespace {
 // Generator class for BLAS gemv operations.
 template<class T>
 class GEMVGenerator :
-      public Generator<GEMVGenerator<T> > {
+      public Generator<GEMVGenerator<T>> {
  public:
-  typedef Generator<GEMVGenerator<T> > Base;
+  typedef Generator<GEMVGenerator<T>> Base;
   using Base::target;
   using Base::get_target;
   using Base::natural_vector_size;
@@ -22,6 +22,7 @@ class GEMVGenerator :
   GeneratorParam<int>  block_size_ = {"block_size", 1 << 5};
   GeneratorParam<bool> transpose_ = {"transpose", false};
 
+  // Standard ordering of parameters in GEMV functions.
   Param<T>   a_ = {"a", 1.0};
   ImageParam A_ = {type_of<T>(), 2, "A"};
   ImageParam x_ = {type_of<T>(), 1, "x"};
@@ -122,7 +123,7 @@ class GEMVGenerator :
   }
 };
 
-RegisterGenerator<GEMVGenerator<float> >    register_sgemv("sgemv");
-RegisterGenerator<GEMVGenerator<double> >   register_dgemv("dgemv");
+RegisterGenerator<GEMVGenerator<float>>    register_sgemv("sgemv");
+RegisterGenerator<GEMVGenerator<double>>   register_dgemv("dgemv");
 
 }  // namespace

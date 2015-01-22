@@ -1,7 +1,11 @@
 #include <string.h>
+#include <iostream>
 #include "halide_blas.h"
 
-#define assert(cond) halide_assert(0,cond)
+#define assert_no_error(func)                                       \
+  if (func != 0) {                                                  \
+    std::cerr << "ERROR! Halide kernel returned non-zero value.\n"; \
+  }                                                                 \
 
 namespace {
 
@@ -72,7 +76,7 @@ void hblas_scopy(const int N, const float *x, const int incx,
   buffer_t buff_x, buff_y;
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
-  assert(0 == halide_scopy(&buff_x, &buff_y));
+  assert_no_error(halide_scopy(&buff_x, &buff_y));
 }
 
 void hblas_dcopy(const int N, const double *x, const int incx,
@@ -80,7 +84,7 @@ void hblas_dcopy(const int N, const double *x, const int incx,
   buffer_t buff_x, buff_y;
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
-  assert(0 == halide_dcopy(&buff_x, &buff_y));
+  assert_no_error(halide_dcopy(&buff_x, &buff_y));
 }
 
 //////////
@@ -90,13 +94,13 @@ void hblas_dcopy(const int N, const double *x, const int incx,
 void hblas_sscal(const int N, const float a, float *x, const int incx) {
   buffer_t buff_x;
   init_vector_buffer(N, x, incx, &buff_x);
-  assert(0 == halide_sscal(a, &buff_x));
+  assert_no_error(halide_sscal(a, &buff_x));
 }
 
 void hblas_dscal(const int N, const double a, double *x, const int incx) {
   buffer_t buff_x;
   init_vector_buffer(N, x, incx, &buff_x);
-  assert(0 == halide_dscal(a, &buff_x));
+  assert_no_error(halide_dscal(a, &buff_x));
 }
 
 //////////
@@ -108,7 +112,7 @@ void hblas_saxpy(const int N, const float a, const float *x, const int incx,
   buffer_t buff_x, buff_y;
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
-  assert(0 == halide_saxpy(a, &buff_x, &buff_y));
+  assert_no_error(halide_saxpy(a, &buff_x, &buff_y));
 }
 
 void hblas_daxpy(const int N, const double a, const double *x, const int incx,
@@ -116,7 +120,7 @@ void hblas_daxpy(const int N, const double a, const double *x, const int incx,
   buffer_t buff_x, buff_y;
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
-  assert(0 == halide_daxpy(a, &buff_x, &buff_y));
+  assert_no_error(halide_daxpy(a, &buff_x, &buff_y));
 }
 
 //////////
@@ -130,7 +134,7 @@ float hblas_sdot(const int N, const float *x, const int incx,
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
   init_scalar_buffer(&result, &buff_dot);
-  assert(0 == halide_sdot(&buff_x, &buff_y, &buff_dot));
+  assert_no_error(halide_sdot(&buff_x, &buff_y, &buff_dot));
   return result;
 }
 
@@ -141,7 +145,7 @@ double hblas_ddot(const int N, const double *x, const int incx,
   init_vector_buffer(N, x, incx, &buff_x);
   init_vector_buffer(N, y, incy, &buff_y);
   init_scalar_buffer(&result, &buff_dot);
-  assert(0 == halide_ddot(&buff_x, &buff_y, &buff_dot));
+  assert_no_error(halide_ddot(&buff_x, &buff_y, &buff_dot));
   return result;
 }
 
@@ -154,7 +158,7 @@ float hblas_snrm2(const int N, const float *x, const int incx) {
   buffer_t buff_x, buff_nrm;
   init_vector_buffer(N, x, incx, &buff_x);
   init_scalar_buffer(&result, &buff_nrm);
-  assert(0 == halide_sdot(&buff_x, &buff_x, &buff_nrm));
+  assert_no_error(halide_sdot(&buff_x, &buff_x, &buff_nrm));
   return std::sqrt(result);
 }
 
@@ -163,7 +167,7 @@ double hblas_dnrm2(const int N, const double *x, const int incx) {
   buffer_t buff_x, buff_nrm;
   init_vector_buffer(N, x, incx, &buff_x);
   init_scalar_buffer(&result, &buff_nrm);
-  assert(0 == halide_ddot(&buff_x, &buff_x, &buff_nrm));
+  assert_no_error(halide_ddot(&buff_x, &buff_x, &buff_nrm));
   return std::sqrt(result);
 }
 
@@ -176,7 +180,7 @@ float hblas_sasum(const int N, const float *x, const int incx) {
   buffer_t buff_x, buff_sum;
   init_vector_buffer(N, x, incx, &buff_x);
   init_scalar_buffer(&result, &buff_sum);
-  assert(0 == halide_sasum(&buff_x, &buff_sum));
+  assert_no_error(halide_sasum(&buff_x, &buff_sum));
   return result;
 }
 
@@ -185,7 +189,7 @@ double hblas_dasum(const int N, const double *x, const int incx) {
   buffer_t buff_x, buff_sum;
   init_vector_buffer(N, x, incx, &buff_x);
   init_scalar_buffer(&result, &buff_sum);
-  assert(0 == halide_dasum(&buff_x, &buff_sum));
+  assert_no_error(halide_dasum(&buff_x, &buff_sum));
   return result;
 }
 
@@ -216,7 +220,7 @@ void hblas_sgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
     init_vector_buffer(M, y, incy, &buff_y);
   }
 
-  assert(0 == halide_sgemv(t, a, &buff_A, &buff_x, b, &buff_y));
+  assert_no_error(halide_sgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
 
 void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans, const int M, const int N,
@@ -242,7 +246,7 @@ void hblas_dgemv(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE trans,
     init_vector_buffer(M, y, incy, &buff_y);
   }
 
-  assert(0 == halide_dgemv(t, a, &buff_A, &buff_x, b, &buff_y));
+  assert_no_error(halide_dgemv(t, a, &buff_A, &buff_x, b, &buff_y));
 }
 
 void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
@@ -282,7 +286,7 @@ void hblas_sgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA
 
   init_matrix_buffer(M, N, C, ldc, &buff_C);
 
-  assert(0 == halide_sgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
+  assert_no_error(halide_sgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
 }
 
 void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA,
@@ -322,7 +326,7 @@ void hblas_dgemm(const enum HBLAS_ORDER Order, const enum HBLAS_TRANSPOSE TransA
 
   init_matrix_buffer(M, N, C, ldc, &buff_C);
 
-  assert(0 == halide_dgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
+  assert_no_error(halide_dgemm(tA, tB, alpha, &buff_A, &buff_B, beta, &buff_C));
 }
 
 
