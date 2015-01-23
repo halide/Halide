@@ -74,6 +74,9 @@ void CodeGen_Hexagon::compile(Stmt stmt, string name,
 
     user_warning << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 
+    cl::ParseEnvironmentOptions("halide-hvx-be", "HALIDE_LLVM_ARGS",
+                                "Halide HVX internal compiler\n");
+
     // Pass to the generic codegen
     CodeGen::compile(stmt, name, args, images_to_embed);
 
