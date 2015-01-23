@@ -181,43 +181,43 @@ $(KERNEL_DIR)/%.generator: src/%_generators.cpp $(GENGEN_DEPS) #$(KERNEL_DIR)
 
 $(KERNEL_DIR)/halide_scopy_impl.o $(KERNEL_DIR)/halide_scopy_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g saxpy -f halide_scopy_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true scale_x=false add_to_y=false
+	target=$(HL_TARGET) vectorize=true scale_x=false add_to_y=false
 
 $(KERNEL_DIR)/halide_dcopy_impl.o $(KERNEL_DIR)/halide_dcopy_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g daxpy -f halide_dcopy_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true scale_x=false add_to_y=false
+	target=$(HL_TARGET) vectorize=true scale_x=false add_to_y=false
 
 $(KERNEL_DIR)/halide_sscal_impl.o $(KERNEL_DIR)/halide_sscal_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g saxpy -f halide_sscal_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true scale_x=true add_to_y=false
+	target=$(HL_TARGET) vectorize=true scale_x=true add_to_y=false
 
 $(KERNEL_DIR)/halide_dscal_impl.o $(KERNEL_DIR)/halide_dscal_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g daxpy -f halide_dscal_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true scale_x=true add_to_y=false
+	target=$(HL_TARGET) vectorize=true scale_x=true add_to_y=false
 
 $(KERNEL_DIR)/halide_saxpy_impl.o $(KERNEL_DIR)/halide_saxpy_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g saxpy -f halide_saxpy_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true scale_x=true add_to_y=true
+	target=$(HL_TARGET) vectorize=true scale_x=true add_to_y=true
 
 $(KERNEL_DIR)/halide_daxpy_impl.o $(KERNEL_DIR)/halide_daxpy_impl.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g daxpy -f halide_daxpy_impl -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true scale_x=true add_to_y=true
+	target=$(HL_TARGET) vectorize=true scale_x=true add_to_y=true
 
 $(KERNEL_DIR)/halide_sdot.o $(KERNEL_DIR)/halide_sdot.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g sdot -f halide_sdot -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true
+	target=$(HL_TARGET) vectorize=true
 
 $(KERNEL_DIR)/halide_ddot.o $(KERNEL_DIR)/halide_ddot.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g ddot -f halide_ddot -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true
+	target=$(HL_TARGET) vectorize=true
 
 $(KERNEL_DIR)/halide_sasum.o $(KERNEL_DIR)/halide_sasum.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g sasum -f halide_sasum -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true
+	target=$(HL_TARGET) vectorize=true
 
 $(KERNEL_DIR)/halide_dasum.o $(KERNEL_DIR)/halide_dasum.h: $(KERNEL_DIR)/blas_l1.generator
 	$(LD_PATH_SETUP) $< -g dasum -f halide_dasum -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \
-	target=$(HL_TARGET) parallel=false vectorize=true
+	target=$(HL_TARGET) vectorize=true
 
 $(KERNEL_DIR)/halide_sgemv_notrans.o $(KERNEL_DIR)/halide_sgemv_notrans.h: $(KERNEL_DIR)/blas_l2.generator
 	$(LD_PATH_SETUP) $< -g sgemv -f halide_sgemv_notrans -o $(KERNEL_DIR) -e $(EMIT_OPTIONS) \

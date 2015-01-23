@@ -6,8 +6,8 @@
 //
 // Accepted values for subroutine are:
 //    L1: scal, copy, axpy, dot, nrm2
-//    L2: gemv
-//    L3: gemm
+//    L2: gemv_notrans, gemv_trans
+//    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
 //
 
 #include <iomanip>
@@ -18,9 +18,9 @@
 
 #define L1Benchmark(benchmark, type, code)                              \
     void bench_##benchmark(int N) {                                     \
-        Scalar alpha = randomScalar();                                  \
-        Vector x = randomVector(N);                                     \
-        Vector y = randomVector(N);                                     \
+        Scalar alpha = random_scalar();                                 \
+        Vector x = random_vector(N);                                    \
+        Vector y = random_vector(N);                                    \
                                                                         \
         double start = current_time();                                  \
         for (int i = 0; i < num_iters; ++i) {                           \
@@ -39,11 +39,11 @@
 
 #define L2Benchmark(benchmark, type, code)                              \
     void bench_##benchmark(int N) {                                     \
-        Scalar alpha = randomScalar();                                  \
-        Scalar beta = randomScalar();                                   \
-        Vector x = randomVector(N);                                     \
-        Vector y = randomVector(N);                                     \
-        Matrix A = randomMatrix(N);                                     \
+        Scalar alpha = random_scalar();                                 \
+        Scalar beta = random_scalar();                                  \
+        Vector x = random_vector(N);                                    \
+        Vector y = random_vector(N);                                    \
+        Matrix A = random_matrix(N);                                    \
                                                                         \
         double start = current_time();                                  \
         for (int i = 0; i < num_iters; ++i) {                           \
@@ -62,11 +62,11 @@
 
 #define L3Benchmark(benchmark, type, code)                              \
     void bench_##benchmark(int N) {                                     \
-        Scalar alpha = randomScalar();                                  \
-        Scalar beta = randomScalar();                                   \
-        Matrix A = randomMatrix(N);                                     \
-        Matrix B = randomMatrix(N);                                     \
-        Matrix C = randomMatrix(N);                                     \
+        Scalar alpha = random_scalar();                                 \
+        Scalar beta = random_scalar();                                  \
+        Matrix A = random_matrix(N);                                    \
+        Matrix B = random_matrix(N);                                    \
+        Matrix C = random_matrix(N);                                    \
                                                                         \
         double start = current_time();                                  \
         for (int i = 0; i < num_iters; ++i) {                           \
@@ -98,19 +98,19 @@ struct Benchmarks {
     typedef Eigen::Matrix<T, Eigen::Dynamic, 1> Vector;
     typedef Eigen::Matrix<T, Eigen::Dynamic, Eigen::Dynamic> Matrix;
 
-    Scalar randomScalar() {
+    Scalar random_scalar() {
         Vector x(1);
         x.setRandom();
         return x[0];
     }
 
-    Vector randomVector(int N) {
+    Vector random_vector(int N) {
         Vector x(N);
         x.setRandom();
         return x;
     }
 
-    Matrix randomMatrix(int N) {
+    Matrix random_matrix(int N) {
         Matrix A(N, N);
         A.setRandom();
         return A;

@@ -16,9 +16,9 @@
 
 #define L1_VECTOR_TEST(method, code)                    \
     bool test_##method(int N) {                         \
-        Scalar alpha = randomScalar();                  \
-        std::unique_ptr<Vector> ex(randomVector(N));    \
-        std::unique_ptr<Vector> ey(randomVector(N));    \
+        Scalar alpha = random_scalar();                  \
+        std::unique_ptr<Vector> ex(random_vector(N));    \
+        std::unique_ptr<Vector> ey(random_vector(N));    \
         Vector ax(*ex), ay(*ey);                        \
                                                         \
         {                                               \
@@ -38,9 +38,9 @@
 
 #define L1_SCALAR_TEST(method, code)                    \
     bool test_##method(int N) {                         \
-        Scalar alpha = randomScalar();                  \
-        std::unique_ptr<Vector> ex(randomVector(N));    \
-        std::unique_ptr<Vector> ey(randomVector(N));    \
+        Scalar alpha = random_scalar();                  \
+        std::unique_ptr<Vector> ex(random_vector(N));    \
+        std::unique_ptr<Vector> ey(random_vector(N));    \
         Vector ax(*ex), ay(*ey);                        \
         Scalar er, ar;                                  \
                                                         \
@@ -61,11 +61,11 @@
 
 #define L2_TEST(method, cblas_code, hblas_code)         \
     bool test_##method(int N) {                         \
-        Scalar alpha = randomScalar();                  \
-        Scalar beta = randomScalar();                   \
-        std::unique_ptr<Vector> ex(randomVector(N));    \
-        std::unique_ptr<Vector> ey(randomVector(N));    \
-        std::unique_ptr<Matrix> eA(randomMatrix(N));    \
+        Scalar alpha = random_scalar();                  \
+        Scalar beta = random_scalar();                   \
+        std::unique_ptr<Vector> ex(random_vector(N));    \
+        std::unique_ptr<Vector> ey(random_vector(N));    \
+        std::unique_ptr<Matrix> eA(random_matrix(N));    \
         Vector ax(*ex), ay(*ey);                        \
         Matrix aA(*eA);                                 \
                                                         \
@@ -88,11 +88,11 @@
 
 #define L3_TEST(method, cblas_code, hblas_code)         \
     bool test_##method(int N) {                         \
-        Scalar alpha = randomScalar();                  \
-        Scalar beta = randomScalar();                   \
-        std::unique_ptr<Matrix> eA(randomMatrix(N));    \
-        std::unique_ptr<Matrix> eB(randomMatrix(N));    \
-        std::unique_ptr<Matrix> eC(randomMatrix(N));    \
+        Scalar alpha = random_scalar();                  \
+        Scalar beta = random_scalar();                   \
+        std::unique_ptr<Matrix> eA(random_matrix(N));    \
+        std::unique_ptr<Matrix> eB(random_matrix(N));    \
+        std::unique_ptr<Matrix> eC(random_matrix(N));    \
         Matrix aA(*eA), aB(*eB), aC(*eC);               \
                                                         \
         {                                               \
@@ -124,25 +124,25 @@ struct BLASTestBase {
 
     BLASTestBase() : rand_eng(rand_dev()) {}
 
-    Scalar randomScalar() {
+    Scalar random_scalar() {
         std::uniform_real_distribution<T> uniform_dist(0.0, 1.0);
         return uniform_dist(rand_eng);
     }
 
-    Vector *randomVector(int N) {
+    Vector *random_vector(int N) {
         Vector *buff = new Vector(N);
         Vector &x = *buff;
         for (int i=0; i<N; ++i) {
-            x[i] = randomScalar();
+            x[i] = random_scalar();
         }
         return buff;
     }
 
-    Matrix *randomMatrix(int N) {
+    Matrix *random_matrix(int N) {
         Matrix *buff = new Matrix(N * N);
         Matrix &A = *buff;
         for (int i=0; i<N*N; ++i) {
-            A[i] = randomScalar();
+            A[i] = random_scalar();
         }
         return buff;
     }

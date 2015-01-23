@@ -6,8 +6,8 @@
 //
 // Accepted values for subroutine are:
 //    L1: scal, copy, axpy, dot, nrm2
-//    L2: gemv
-//    L3: gemm
+//    L2: gemv_notrans, gemv_trans
+//    L3: gemm_notrans, gemm_trans_A, gemm_trans_B, gemm_trans_AB
 //
 
 #include <iomanip>
@@ -28,9 +28,9 @@
 
 #define L1Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
-        Scalar alpha = randomScalar();                                  \
-        std::unique_ptr<Vector> x(randomVector(N));                     \
-        std::unique_ptr<Vector> y(randomVector(N));                     \
+        Scalar alpha = random_scalar();                                 \
+        std::unique_ptr<Vector> x(random_vector(N));                    \
+        std::unique_ptr<Vector> y(random_vector(N));                    \
                                                                         \
         double start = current_time();                                  \
         for (int i = 0; i < num_iters; ++i) {                           \
@@ -49,11 +49,11 @@
 
 #define L2Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
-        Scalar alpha = randomScalar();                                  \
-        Scalar beta = randomScalar();                                   \
-        std::unique_ptr<Vector> x(randomVector(N));                     \
-        std::unique_ptr<Vector> y(randomVector(N));                     \
-        std::unique_ptr<Matrix> A(randomMatrix(N));                     \
+        Scalar alpha = random_scalar();                                 \
+        Scalar beta = random_scalar();                                  \
+        std::unique_ptr<Vector> x(random_vector(N));                    \
+        std::unique_ptr<Vector> y(random_vector(N));                    \
+        std::unique_ptr<Matrix> A(random_matrix(N));                    \
                                                                         \
         double start = current_time();                                  \
         for (int i = 0; i < num_iters; ++i) {                           \
@@ -72,11 +72,11 @@
 
 #define L3Benchmark(benchmark, type, code)                              \
     virtual void bench_##benchmark(int N) {                             \
-        Scalar alpha = randomScalar();                                  \
-        Scalar beta = randomScalar();                                   \
-        std::unique_ptr<Matrix> A(randomMatrix(N));                     \
-        std::unique_ptr<Matrix> B(randomMatrix(N));                     \
-        std::unique_ptr<Matrix> C(randomMatrix(N));                     \
+        Scalar alpha = random_scalar();                                 \
+        Scalar beta = random_scalar();                                  \
+        std::unique_ptr<Matrix> A(random_matrix(N));                    \
+        std::unique_ptr<Matrix> B(random_matrix(N));                    \
+        std::unique_ptr<Matrix> C(random_matrix(N));                    \
                                                                         \
         double start = current_time();                                  \
         for (int i = 0; i < num_iters; ++i) {                           \
@@ -106,25 +106,25 @@ struct BenchmarksBase {
     std::string name;
     int num_iters;
 
-    Scalar randomScalar() {
+    Scalar random_scalar() {
         std::uniform_real_distribution<T> uniform_dist(0.0, 1.0);
         return uniform_dist(rand_eng);
     }
 
-    Vector *randomVector(int N) {
+    Vector *random_vector(int N) {
         Vector *buff = new Vector(N);
         Vector &x = *buff;
         for (int i=0; i<N; ++i) {
-            x[i] = randomScalar();
+            x[i] = random_scalar();
         }
         return buff;
     }
 
-    Matrix *randomMatrix(int N) {
+    Matrix *random_matrix(int N) {
         Matrix *buff = new Matrix(N * N);
         Matrix &A = *buff;
         for (int i=0; i<N*N; ++i) {
-            A[i] = randomScalar();
+            A[i] = random_scalar();
         }
         return buff;
     }
