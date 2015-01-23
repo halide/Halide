@@ -18,7 +18,6 @@ class AXPYGenerator :
     GeneratorParam<bool> assertions_enabled_ = {"assertions_enabled", false};
     GeneratorParam<bool> use_fma_ = {"use_fma", false};
     GeneratorParam<bool> vectorize_ = {"vectorize", true};
-    GeneratorParam<bool> parallel_ = {"parallel", true};
     GeneratorParam<int>  block_size_ = {"block_size", 1024};
     GeneratorParam<bool> scale_x_ = {"scale_x", true};
     GeneratorParam<bool> add_to_y_ = {"add_to_y", true};
@@ -67,12 +66,6 @@ class AXPYGenerator :
             result
                 .specialize(x_.width() >= vec_size).vectorize(i, vec_size)
                 .specialize(x_.width() >= 4 * vec_size).unroll(i, 4);
-        }
-
-        if (parallel_) {
-            Var ii("ii");
-            Expr factor = block_size_ / vec_size;
-            result.specialize(x_.width() >= 4 * block_size_).split(i, i, ii, factor).parallel(i);
         }
 
         result.bound(i, 0, x_.width());
