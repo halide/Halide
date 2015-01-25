@@ -346,6 +346,7 @@ void CodeGen_C::compile(Stmt s, string name,
         Buffer buffer = images_to_embed[i];
         string name = print_name(buffer.name());
         buffer_t b = *(buffer.raw_buffer());
+        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
 
         // Figure out the offset of the last pixel.
         size_t num_elems = 1;
@@ -362,7 +363,6 @@ void CodeGen_C::compile(Stmt s, string name,
         stream << "};\n";
 
         // Emit the buffer_t
-        user_assert(b.host) << "Can't embed image: " << buffer.name() << " because it has a null host pointer\n";
         user_assert(!b.dev_dirty) << "Can't embed image: " << buffer.name() << "because it has a dirty device pointer\n";
         stream << "static buffer_t " << name << "_buffer = {"
                << "0, " // dev
