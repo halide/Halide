@@ -235,6 +235,7 @@ public:
         return SectionMemoryManager::getSymbolAddress(name);
     }
 };
+
 }
 
 void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
@@ -277,7 +278,6 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
-#ifdef USE_MCJIT
 #if LLVM_VERSION < 36
     // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
@@ -287,9 +287,6 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     engine_builder.setMCJITMemoryManager(memory_manager);
 #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-#endif
-#else
-    engine_builder.setUseMCJIT(false);
 #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(cg->mcpu());
@@ -339,7 +336,7 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         exports[function_name] = temp = compile_and_get_function(ee, m, function_name);
         main_fn = temp.address;
         exports[function_name + "_jit_wrapper"] = temp = compile_and_get_function(ee, m, function_name + "_jit_wrapper");
-        wrapper_fn = (int (*)(const void **))temp.address;
+        wrapper_fn = reinterpret_bits<int (*)(const void **)>(temp.address);
     }
 
     for (size_t i = 0; i < requested_exports.size(); i++) {
@@ -415,7 +412,7 @@ void JITModule::make_externs(const std::vector<JITModule> &deps, llvm::Module *m
                 gv = (llvm::Function *)module->getOrInsertFunction(name, (FunctionType *)copy_llvm_type_to_module(module, s.llvm_type));
             } else {
                 gv = (GlobalValue *)module->getOrInsertGlobal(name, copy_llvm_type_to_module(module, s.llvm_type));
-            }
+            }            
             gv->setLinkage(GlobalValue::ExternalWeakLinkage);
         }
     }
@@ -440,7 +437,7 @@ int JITModule::copy_to_dev(struct buffer_t *buf) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_copy_to_dev");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
         }
     }
     return 0;
@@ -451,7 +448,7 @@ int JITModule::copy_to_host(struct buffer_t *buf) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_copy_to_host");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
         }
     }
     return 0;
@@ -462,7 +459,7 @@ int JITModule::dev_free(struct buffer_t *buf) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_dev_free");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
         }
     }
     return 0;
@@ -473,7 +470,7 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_memoization_cache_set_size");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-          return ((void (*)(int64_t))f->second)(size);
+            return (reinterpret_bits<void (*)(int64_t)>(f->second))(size);
         }
     }
 }
@@ -585,7 +582,8 @@ template <typename function_t>
 function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
     std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
-    function_t (*hook_setter)(function_t) = (function_t (*)(function_t))iter->second.address;
+    function_t (*hook_setter)(function_t) = 
+        reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
     return (*hook_setter)(hook);
 }
 
@@ -681,7 +679,8 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             shared_runtimes[runtime_kind].jit_module.ptr->name = "GPU";
         }
 
-        uint64_t arg_addr = shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
+        uint64_t arg_addr = 
+            shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = shared_runtimes[runtime_kind].jit_module.ptr;
 

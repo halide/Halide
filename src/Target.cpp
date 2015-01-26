@@ -729,15 +729,6 @@ llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool
     bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
     bool debug = t.has_feature(Target::Debug);
 
-#ifndef USE_MCJIT
-    // -g (debug info) doesn't work with the old JIT, give an
-    // intelligible reason why here.
-    if (debug && t.has_feature(Target::JIT)) {
-        Internal::debug(0) << "The debug runtime is not supported when using JIT on this platform.\n";
-        debug = false;
-    }
-#endif
-
     vector<llvm::Module *> modules;
 
     if (module_type != ModuleGPU) {

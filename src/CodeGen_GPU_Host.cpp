@@ -571,17 +571,19 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
 template<typename CodeGen_CPU>
 Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state() {
-    GlobalVariable *module_state = module->getGlobalVariable("module_state", true);
+
+    GlobalVariable *module_state = module->getGlobalVariable("halide_gpu_module_state", true);
     if (!module_state)
     {
         // Create a global variable to hold the module state
         PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
         module_state = new GlobalVariable(*module, void_ptr_type,
-                                          false, GlobalVariable::PrivateLinkage,
+                                          false, GlobalVariable::InternalLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
-                                          "module_state");
+                                          "halide_gpu_module_state");
         debug(4) << "Created device module state global variable\n";
     }
+
     return module_state;
 }
 
