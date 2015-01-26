@@ -109,6 +109,7 @@ enum PrinterType {BasicPrinter = 0,
 // Then remember the print only happens when the debug object leaves
 // scope, which may print at a confusing time.
 
+namespace {
 template<int type, uint64_t length = 1024>
 class Printer {
 public:
@@ -201,6 +202,7 @@ typedef Printer<BasicPrinter> debug;
 #else
 typedef SinkPrinter debug;
 #endif
+}
 
 extern WEAK void halide_use_jit_module();
 extern WEAK void halide_release_jit_module();
