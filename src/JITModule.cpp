@@ -329,8 +329,8 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
 
     std::map<std::string, Symbol> exports;
 
-    void *main_fn;
-    int (*wrapper_fn)(const void **);
+    void *main_fn = NULL;
+    int (*wrapper_fn)(const void **) = NULL;
     if (!function_name.empty()) {
         Symbol temp;
         exports[function_name] = temp = compile_and_get_function(ee, m, function_name);
