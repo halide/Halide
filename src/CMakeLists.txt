@@ -14,6 +14,7 @@ else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")
   add_definitions("-std=c++11")
+  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
