@@ -27,11 +27,9 @@ public:
                  const std::vector<Argument> &args,
                  const std::vector<Buffer> &images_to_embed);
 
-    static void test();
+    llvm::Triple get_target_triple() const;
 
 protected:
-
-    llvm::Triple get_target_triple() const;
 
     using CodeGen_Posix::visit;
 
