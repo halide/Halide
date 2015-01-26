@@ -32,14 +32,13 @@ public:
                  const std::vector<Argument> &args,
                  const std::vector<Buffer> &images_to_embed);
 
-    static void test();
-
     void jit_init(llvm::ExecutionEngine *, llvm::Module *);
-    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *);
+    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
+
+    llvm::Triple get_target_triple() const;
 
 protected:
 
-    llvm::Triple get_target_triple() const;
 
     using CodeGen_Posix::visit;
 

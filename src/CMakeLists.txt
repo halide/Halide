@@ -107,7 +107,9 @@ set(RUNTIME_CPP
   posix_print
   to_string
   cache
-  nacl_host_cpu_count)
+  nacl_host_cpu_count,
+  module_jit_ref_count,
+  module_aot_ref_count)
 set (RUNTIME_LL
   arm
   aarch64
@@ -252,7 +254,7 @@ set(HEADER_FILES
   IRVisitor.h
   InjectOpenGLIntrinsics.h
   InjectHostDevBufferCopies.h
-  JITCompiledModule.h
+  JITModule.h
   Lambda.h
   Debug.h
   Lower.h
@@ -373,7 +375,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   Deinterleave.cpp
   DebugToFile.cpp
   Type.cpp
-  JITCompiledModule.cpp
+  JITModule.cpp
   EarlyFree.cpp
   UniquifyVariableNames.cpp
   CSE.cpp

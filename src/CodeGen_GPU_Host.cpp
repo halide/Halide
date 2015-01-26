@@ -35,45 +35,6 @@ static bool have_symbol(const char *s) {
 namespace Halide {
 namespace Internal {
 
-extern "C" { typedef struct CUctx_st *CUcontext; }
-
-// A single global cuda context to share between jitted functions
-int (GPU_LIB_CC *cuCtxDestroy)(CUctx_st *) = 0;
-
-struct SharedCudaContext {
-    CUctx_st *ptr;
-    volatile int lock;
-
-    // Will be created on first use by a jitted kernel that uses it
-    SharedCudaContext() : ptr(0), lock(0) {
-    }
-
-    // Note that we never free the context, because static destructor
-    // order is unpredictable, and we can't free the context before
-    // all JITCompiledModules are freed. Users may be stashing Funcs
-    // or Images in globals, and these keep JITCompiledModules around.
-} cuda_ctx;
-
-extern "C" {
-    typedef struct cl_context_st *cl_context;
-    typedef struct cl_command_queue_st *cl_command_queue;
-}
-
-int (GPU_LIB_CC *clReleaseContext)(cl_context);
-int (GPU_LIB_CC *clReleaseCommandQueue)(cl_command_queue);
-
-// A single global OpenCL context and command queue to share between jitted functions.
-struct SharedOpenCLContext {
-    cl_context context;
-    cl_command_queue command_queue;
-    volatile int lock;
-
-    SharedOpenCLContext() : context(NULL), command_queue(NULL), lock(0) {
-    }
-
-    // We never free the context, for the same reason as above.
-} cl_ctx;
-
 using std::vector;
 using std::string;
 using std::map;
@@ -290,8 +251,11 @@ void CodeGen_GPU_Host<CodeGen_CPU>::compile(Stmt stmt, string name,
 
     module = get_initial_module_for_target(target, context);
 
-    // grab runtime helper functions
+    if (target.has_feature(Target::JIT)) {
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
 
+        JITModule::make_externs(shared_runtime, module);
+    }
 
     // Fix the target triple
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
@@ -369,14 +333,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             user_assert(error.empty()) << "Could not find libcuda.so, libcuda.dylib, or nvcuda.dll\n";
         }
         lib_cuda_linked = true;
-
-        // Now dig out cuCtxDestroy_v2 so that we can clean up the
-        // shared context at termination
-        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("cuCtxDestroy_v2");
-        internal_assert(ptr) << "Could not find cuCtxDestroy_v2 in cuda library\n";
-
-        cuCtxDestroy = reinterpret_bits<int (GPU_LIB_CC *)(CUctx_st *)>(ptr);
-
     } else if (target.has_feature(Target::OpenCL)) {
         // First check if libOpenCL has already been linked
         // in. If so we shouldn't need to set any mappings.
@@ -396,19 +352,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             }
             user_assert(error.empty()) << "Could not find libopencl.so, OpenCL.framework, or opencl.dll\n";
         }
-
-        // Now dig out clReleaseContext/CommandQueue so that we can clean up the
-        // shared context at termination
-        void *ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseContext");
-        internal_assert(ptr) << "Could not find clReleaseContext\n";
-
-        clReleaseContext = reinterpret_bits<int (GPU_LIB_CC *)(cl_context)>(ptr);
-
-        ptr = llvm::sys::DynamicLibrary::SearchForAddressOfSymbol("clReleaseCommandQueue");
-        internal_assert(ptr) << "Could not find clReleaseCommandQueue\n";
-
-        clReleaseCommandQueue = reinterpret_bits<int (GPU_LIB_CC *)(cl_command_queue)>(ptr);
-
     } else if (target.has_feature(Target::OpenGL)) {
         if (target.os == Target::Linux) {
             if (have_symbol("glXGetCurrentContext") && have_symbol("glDeleteTextures")) {
@@ -436,42 +379,6 @@ void CodeGen_GPU_Host<CodeGen_CPU>::jit_init(ExecutionEngine *ee, Module *module
             internal_error << "JIT support for OpenGL on anything other than linux or OS X not yet implemented\n";
         }
     }
-}
-
-template<typename CodeGen_CPU>
-void CodeGen_GPU_Host<CodeGen_CPU>::jit_finalize(ExecutionEngine *ee, Module *module,
-                                                 vector<JITCompiledModule::CleanupRoutine> *cleanup_routines) {
-    if (target.has_feature(Target::CUDA)) {
-        // Remap the cuda_ctx of PTX host modules to a shared location for all instances.
-        // CUDA behaves much better when you don't initialize >2 contexts.
-        llvm::Function *fn = module->getFunction("halide_set_cuda_context");
-        internal_assert(fn) << "Could not find halide_set_cuda_context in module\n";
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_set_cuda_context in module\n";
-        void (*set_cuda_context)(CUcontext *, volatile int *) =
-            reinterpret_bits<void (*)(CUcontext *, volatile int *)>(f);
-        set_cuda_context(&cuda_ctx.ptr, &cuda_ctx.lock);
-    } else if (target.has_feature(Target::OpenCL)) {
-        // Share the same cl_ctx, cl_q across all OpenCL modules.
-        llvm::Function *fn = module->getFunction("halide_set_cl_context");
-        internal_assert(fn) << "Could not find halide_set_cl_context in module\n";
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_set_cl_context in module\n";
-        void (*set_cl_context)(cl_context *, cl_command_queue *, volatile int *) =
-            reinterpret_bits<void (*)(cl_context *, cl_command_queue *, volatile int *)>(f);
-        set_cl_context(&cl_ctx.context, &cl_ctx.command_queue, &cl_ctx.lock);
-    }
-
-    // If the module contains a halide_release function, run it when the module dies.
-    llvm::Function *fn = module->getFunction("halide_release");
-    if (fn) {
-        void *f = ee->getPointerToFunction(fn);
-        internal_assert(f) << "Could not find compiled form of halide_release in module\n";
-        void (*cleanup_routine)(void *) =
-            reinterpret_bits<void (*)(void *)>(f);
-        cleanup_routines->push_back(JITCompiledModule::CleanupRoutine(cleanup_routine, NULL));
-    }
-    CodeGen_CPU::jit_finalize(ee, module, cleanup_routines);
 }
 
 template<typename CodeGen_CPU>

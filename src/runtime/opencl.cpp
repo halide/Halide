@@ -356,7 +356,7 @@ WEAK int create_opencl_context(void *user_context, cl_context *ctx, cl_command_q
 
 extern "C" {
 
-WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+WEAK int halide_dev_free(void *user_context, struct buffer_t *buf) {
 
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
@@ -394,6 +394,8 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_release_jit_module();
 
     return 0;
 }
@@ -586,7 +588,14 @@ WEAK void halide_release(void *user_context) {
     halide_release_cl_context(user_context);
 }
 
-WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
+namespace {
+__attribute__((destructor))
+WEAK void halide_opencl_cleanup() {
+    halide_release(NULL);
+}
+}
+
+WEAK int halide_dev_malloc(void *user_context, struct buffer_t *buf) {
     debug(user_context)
         << "CL: halide_dev_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -635,6 +644,8 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_use_jit_module();
 
     return CL_SUCCESS;
 }
