@@ -1,8 +1,8 @@
 #ifndef HALIDE_JIT_MODULE_H
 #define HALIDE_JIT_MODULE_H
 
-/** \file
- * Defines the struct representing a JIT compiled halide pipeline
+/** \file Defines the struct representing lifetime and dependencies of
+ * a JIT compiled halide pipeline
  */
 
 #include "IntrusivePtr.h"
@@ -37,6 +37,15 @@ struct JITModule {
     JITModule() {}
     JITModule(const std::map<std::string, Symbol> &exports);
 
+    /** The exports map of a JITModule contains all symbols which are
+     * available to other JITModules which depend on this one. For
+     * runtime modules, this is all of the symbols exported from the
+     * runtime. For a JITted Func, it generally only contains the main
+     * result Func of the compilation, which takes its name directly
+     * from the Func declaration. One can also make a module which
+     * contains no code itself but is just an exports maps providing
+     * arbitarty pointers to functions or global variables to JITted
+     * code. */
     const std::map<std::string, Symbol> &exports() const;
 
     /** A pointer to the raw halide function. It's true type depends
@@ -75,23 +84,16 @@ struct JITModule {
 
 typedef int (*halide_task)(void *user_context, int, uint8_t *);
 
-struct JITCustomAllocator {
-    void *(*custom_malloc)(void *, size_t);
-    void (*custom_free)(void *, void *);
-    JITCustomAllocator() : custom_malloc(NULL), custom_free(NULL) {}
-    JITCustomAllocator(void *(*custom_malloc)(void *, size_t),
-                       void (*custom_free)(void *, void *)) : custom_malloc(custom_malloc), custom_free(custom_free) {
-    }
-};
-
 struct JITHandlers {
     void (*custom_print)(void *, const char *);
-    JITCustomAllocator custom_allocator;
+    void *(*custom_malloc)(void *, size_t);
+    void (*custom_free)(void *, void *);
     int (*custom_do_task)(void *, halide_task, int, uint8_t *);
     int (*custom_do_par_for)(void *, halide_task, int, int, uint8_t *);
     void (*custom_error)(void *, const char *);
     int32_t (*custom_trace)(void *, const halide_trace_event *);
-    JITHandlers() : custom_print(NULL), custom_do_task(NULL), custom_do_par_for(NULL),
+    JITHandlers() : custom_print(NULL), custom_malloc(NULL), custom_free(NULL), 
+                    custom_do_task(NULL), custom_do_par_for(NULL),
                     custom_error(NULL), custom_trace(NULL) {
     }
 };

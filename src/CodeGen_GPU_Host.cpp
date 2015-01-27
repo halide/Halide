@@ -441,7 +441,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
                 kernel_name[i] = '_';
             }
         }
-        
+
         Value *null_float_ptr = ConstantPointerNull::get(CodeGen::f32->getPointerTo());
         Value *zero_int32 = codegen(Expr(cast<int>(0)));
 
@@ -451,7 +451,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
         Value *gpu_num_coords_dim1 = zero_int32;
 
         if (loop->device_api == DeviceAPI::GLSL) {
-            
+
             // GL draw calls that invoke the GLSL shader are issued for pairs of
             // for-loops over spatial x and y dimensions. For each for-loop we create
             // one scalar vertex attribute for the spatial dimension corresponding to
@@ -474,7 +474,7 @@ void CodeGen_GPU_Host<CodeGen_CPU>::visit(const For *loop) {
 
         // compute a closure over the state passed into the kernel
         GPU_Host_Closure c(loop, loop->name);
-        
+
         // Determine the arguments that must be passed into the halide function
         vector<GPU_Argument> closure_args = c.arguments();
 
@@ -628,11 +628,12 @@ Value *CodeGen_GPU_Host<CodeGen_CPU>::get_module_state(const std::string &api_un
         // Create a global variable to hold the module state
         PointerType *void_ptr_type = llvm::Type::getInt8PtrTy(*context);
         module_state = new GlobalVariable(*module, void_ptr_type,
-                                          false, GlobalVariable::PrivateLinkage,
+                                          false, GlobalVariable::InternalLinkage,
                                           ConstantPointerNull::get(void_ptr_type),
                                           "module_state" + api_unique_name);
         debug(4) << "Created device module state global variable\n";
     }
+
     return module_state;
 }
 

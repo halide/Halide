@@ -14,6 +14,7 @@ else()
   add_definitions("-D__STDC_LIMIT_MACROS")
   add_definitions("-D__STDC_CONSTANT_MACROS")
   add_definitions("-std=c++11")
+  add_definitions("-fno-rtti")
   set(RUNTIME_DEBUG_FLAG "-g")
 endif()
 
@@ -86,6 +87,8 @@ set(RUNTIME_CPP
   linux_clock
   linux_host_cpu_count
   linux_opengl_context
+  module_aot_ref_count
+  module_jit_ref_count
   nacl_host_cpu_count
   opencl
   opengl
@@ -108,7 +111,7 @@ set(RUNTIME_CPP
   windows_opencl
   windows_thread_pool
   write_debug_image
-)
+
 set (RUNTIME_LL
   aarch64
   arm
@@ -305,7 +308,7 @@ set(HEADER_FILES
   StmtToHtml.h
   Memoization.h
   CodeGen_MIPS.h
-  Generator.h 
+  Generator.h
   ObjectInstanceRegistry.h
   BlockFlattening.h
   LinearSolve.h
@@ -411,7 +414,7 @@ add_library(Halide ${HALIDE_LIBRARY_TYPE}
   StmtToHtml.cpp
   Memoization.cpp
   CodeGen_MIPS.cpp
-  Generator.cpp 
+  Generator.cpp
   ObjectInstanceRegistry.cpp
   BlockFlattening.cpp
   LinearSolve.cpp

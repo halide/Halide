@@ -59,7 +59,7 @@ struct halide_gcd_job {
 
 // Take a call from grand-central-dispatch's parallel for loop, and
 // make a call to Halide's do task
-WEAK void halide_do_gcd_task(void *job, size_t idx) {
+WEAK void halide_do_gcd_task(void *job, size_t idx) {    
     halide_gcd_job *j = (halide_gcd_job *)job;
     j->exit_status = halide_do_task(j->user_context, j->f, j->min + (int)idx,
                                     j->closure);
@@ -73,6 +73,7 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
     job.closure = closure;
     job.min = min;
     job.exit_status = 0;
+
     dispatch_apply_f(size, dispatch_get_global_queue(0, 0), &job, &halide_do_gcd_task);
     return job.exit_status;
 }

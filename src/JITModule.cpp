@@ -235,14 +235,21 @@ public:
         return SectionMemoryManager::getSymbolAddress(name);
     }
 };
+
 }
 
 void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &function_name,
                                const std::vector<JITModule> &dependencies,
                                const std::vector<std::string> &requested_exports) {
+
+    // Set the target triple on the module.
+    m->setTargetTriple(cg->get_target_triple().str());
+
     // Make the execution engine
     debug(2) << "Creating new execution engine\n";
+    debug(2) << "Target triple: " << m->getTargetTriple() << "\n";
     string error_string;
+
 
     TargetOptions options;
     options.LessPreciseFPMADOption = true;
@@ -271,7 +278,6 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     engine_builder.setTargetOptions(options);
     engine_builder.setErrorStr(&error_string);
     engine_builder.setEngineKind(EngineKind::JIT);
-#ifdef USE_MCJIT
 #if LLVM_VERSION < 36
     // >= 3.6 there is only mcjit
     engine_builder.setUseMCJIT(true);
@@ -281,9 +287,6 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
     engine_builder.setMCJITMemoryManager(memory_manager);
 #else
     engine_builder.setMCJITMemoryManager(std::unique_ptr<RTDyldMemoryManager>(new HalideJITMemoryManager(dependencies)));
-#endif
-#else
-    engine_builder.setUseMCJIT(false);
 #endif
     engine_builder.setOptLevel(CodeGenOpt::Aggressive);
     engine_builder.setMCPU(cg->mcpu());
@@ -308,22 +311,13 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
             const std::string &name(iter->first);
             const Symbol &s(iter->second);
             if (provided_symbols.find(iter->first) == provided_symbols.end()) {
-                GlobalValue *gv;
                 if (s.llvm_type->isFunctionTy()) {
-#if 0
-                    if (!starts_with(name, "_")) {
-                        gv = dyn_cast<GlobalValue>(m->getOrInsertFunction("_" + name, (FunctionType *)copy_llvm_type_to_module(m, s.llvm_type)));
-                        ee->addGlobalMapping(gv, s.address);
-                    }
-#endif
                     llvm::Type *copied_type = copy_llvm_type_to_module(m, s.llvm_type);
-                    Constant *cv = m->getOrInsertFunction(name, cast<FunctionType>(copied_type));
-                    gv = cast<GlobalValue>(cv);
+                    m->getOrInsertFunction(name, cast<FunctionType>(copied_type));
                 } else {
-                    gv = dyn_cast<GlobalValue>(m->getOrInsertGlobal(name, copy_llvm_type_to_module(m, s.llvm_type)));
+                    m->getOrInsertGlobal(name, copy_llvm_type_to_module(m, s.llvm_type));
                 }
-                //ee->addGlobalMapping(gv, s.address);
-                (void)gv;
+                debug(3) << "Global value " << name << " is at address " << s.address << "\n";
                 provided_symbols.insert(name);
             }
         }
@@ -335,14 +329,14 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
 
     std::map<std::string, Symbol> exports;
 
-    void *main_fn;
-    int (*wrapper_fn)(const void **);
+    void *main_fn = NULL;
+    int (*wrapper_fn)(const void **) = NULL;
     if (!function_name.empty()) {
         Symbol temp;
         exports[function_name] = temp = compile_and_get_function(ee, m, function_name);
         main_fn = temp.address;
         exports[function_name + "_jit_wrapper"] = temp = compile_and_get_function(ee, m, function_name + "_jit_wrapper");
-        wrapper_fn = (int (*)(const void **))temp.address;
+        wrapper_fn = reinterpret_bits<int (*)(const void **)>(temp.address);
     }
 
     for (size_t i = 0; i < requested_exports.size(); i++) {
@@ -356,16 +350,17 @@ void JITModule::compile_module(CodeGen *cg, llvm::Module *m, const string &funct
         "halide_copy_to_host",
         "halide_set_custom_print",
         "halide_set_error_handler",
-        "halide_set_custom_allocator",
+        "halide_set_custom_malloc",
+        "halide_set_custom_free",
         "halide_set_custom_trace",
         "halide_set_custom_do_par_for",
         "halide_set_custom_do_task",
         "halide_memoization_cache_set_size",
+        NULL
     };
 
     std::map<std::string, void *> runtime_internal_exports;
-    for (size_t i = 0;
-         i < sizeof(runtime_internal_names) / sizeof(runtime_internal_names[0]); i++) {
+    for (size_t i = 0; runtime_internal_names[i]; i++) {
         void *address = compile_and_get_function(ee, m, runtime_internal_names[i], true).address;
         if (address) {
             runtime_internal_exports[runtime_internal_names[i]] = address;
@@ -442,7 +437,7 @@ int JITModule::copy_to_device(struct buffer_t *buf) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_copy_to_device");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
         }
     }
     return 0;
@@ -453,7 +448,7 @@ int JITModule::copy_to_host(struct buffer_t *buf) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_copy_to_host");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
         }
     }
     return 0;
@@ -464,7 +459,7 @@ int JITModule::device_free(struct buffer_t *buf) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_device_free");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-            return ((int (*)(void *, struct buffer_t *))f->second)(NULL, buf);
+            return (reinterpret_bits<int (*)(void *, struct buffer_t *)>(f->second))(NULL, buf);
         }
     }
     return 0;
@@ -475,7 +470,7 @@ void JITModule::memoization_cache_set_size(int64_t size) const {
         std::map<std::string, void *>::const_iterator f =
             jit_module.ptr->runtime_internal_exports.find("halide_memoization_cache_set_size");
         if (f != jit_module.ptr->runtime_internal_exports.end()) {
-          return ((void (*)(int64_t))f->second)(size);
+            return (reinterpret_bits<void (*)(int64_t)>(f->second))(size);
         }
     }
 }
@@ -491,8 +486,11 @@ void merge_handlers(JITHandlers &base, const JITHandlers &addins) {
     if (addins.custom_print) {
         base.custom_print = addins.custom_print;
     }
-    if (addins.custom_allocator.custom_malloc && addins.custom_allocator.custom_free) {
-        base.custom_allocator = addins.custom_allocator;
+    if (addins.custom_malloc) {
+        base.custom_malloc = addins.custom_malloc;
+    }
+    if (addins.custom_free) {
+        base.custom_free = addins.custom_free;
     }
     if (addins.custom_do_task) {
         base.custom_do_task = addins.custom_do_task;
@@ -522,9 +520,9 @@ void *malloc_handler(void *context, size_t x) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
 
-        return (*jit_user_context->handlers.custom_allocator.custom_malloc)(context, x);
+        return (*jit_user_context->handlers.custom_malloc)(context, x);
     } else {
-        return (*active_handlers.custom_allocator.custom_malloc)(context, x);
+        return (*active_handlers.custom_malloc)(context, x);
     }
 }
 
@@ -532,9 +530,9 @@ void free_handler(void *context, void *ptr) {
     if (context) {
         JITUserContext *jit_user_context = (JITUserContext *)context;
 
-        (*jit_user_context->handlers.custom_allocator.custom_free)(context, ptr);
+        (*jit_user_context->handlers.custom_free)(context, ptr);
     } else {
-        (*active_handlers.custom_allocator.custom_free)(context, ptr);
+        (*active_handlers.custom_free)(context, ptr);
     }
 }
 
@@ -584,13 +582,12 @@ template <typename function_t>
 function_t hook_function(std::map<std::string, JITModule::Symbol> exports, const char *hook_name, function_t hook) {
     std::map<std::string, JITModule::Symbol>::const_iterator iter = exports.find(hook_name);
     internal_assert(iter != exports.end());
-    function_t (*hook_setter)(function_t) = (function_t (*)(function_t))iter->second.address;
-
+    function_t (*hook_setter)(function_t) =
+        reinterpret_bits<function_t (*)(function_t)>(iter->second.address);
     return (*hook_setter)(hook);
 }
-}
 
-static void adjust_module_ref_count(void *arg, int32_t count) {
+void adjust_module_ref_count(void *arg, int32_t count) {
     JITModuleContents *module = (JITModuleContents *)arg;
 
     debug(2) << "Adjusting refcount for module " << module->name << " by " << count << "\n";
@@ -602,12 +599,20 @@ static void adjust_module_ref_count(void *arg, int32_t count) {
     }
 }
 
-namespace {
-
 #if __cplusplus > 199711L || _MSC_VER >= 1800
 std::mutex shared_runtimes_mutex;
 #endif
 
+// The Halide runtime is broken up into pieces so that state can be
+// shared across JIT compilations that do not use the same target
+// options. At present, the split is into a MainShared module that
+// contains most of the runtime except for device API specific code
+// (GPU runtimes). There is one shared runtime per device API and a
+// the JITModule for a Func depends on all device API modules
+// specified in the target when it is JITted. (Instruction set variant
+// specific code, such as math routines, is inlined into the module
+// produced by compiling a Func so it can be specialized exactly for
+// each target.)
 enum RuntimeKind {
     MainShared,
     OpenCL,
@@ -644,13 +649,26 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
         shared_runtimes[runtime_kind].compile_module(cg, shared_runtime, "", deps, halide_exports);
 
         if (runtime_kind == MainShared) {
-            runtime_internal_handlers.custom_print = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
-            JITCustomAllocator custom_allocator(malloc_handler, free_handler);
-            runtime_internal_handlers.custom_allocator = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_allocator", custom_allocator);
-            runtime_internal_handlers.custom_do_task = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
-            runtime_internal_handlers.custom_do_par_for = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
-            runtime_internal_handlers.custom_error = hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
-            runtime_internal_handlers.custom_trace = hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
+            runtime_internal_handlers.custom_print =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_print", print_handler);
+
+            runtime_internal_handlers.custom_malloc =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_malloc", malloc_handler);
+
+            runtime_internal_handlers.custom_free =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_free", free_handler);
+
+            runtime_internal_handlers.custom_do_task =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_task", do_task_handler);
+
+            runtime_internal_handlers.custom_do_par_for =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_do_par_for", do_par_for_handler);
+
+            runtime_internal_handlers.custom_error =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_error_handler", error_handler_handler);
+
+            runtime_internal_handlers.custom_trace =
+                hook_function(shared_runtimes[MainShared].exports(), "halide_set_custom_trace", trace_handler);
 
             active_handlers = runtime_internal_handlers;
             merge_handlers(active_handlers, default_handlers);
@@ -664,7 +682,8 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
             shared_runtimes[runtime_kind].jit_module.ptr->name = "GPU";
         }
 
-        uint64_t arg_addr = shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
+        uint64_t arg_addr =
+            shared_runtimes[runtime_kind].jit_module.ptr->execution_engine->getGlobalValueAddress("halide_jit_module_argument");
         internal_assert(arg_addr != 0);
         *((void **)arg_addr) = shared_runtimes[runtime_kind].jit_module.ptr;
 
@@ -677,6 +696,14 @@ JITModule &make_module(CodeGen *cg, const Target &target, RuntimeKind runtime_ki
 
 }  // anonymous namespace
 
+/* Shared runtimes are stored as global state. The set needed is
+ * determined from the target and the retrieved. If one does not exist
+ * yet, it is made on the fly from the compiled in bitcode of the
+ * runtime modules. As with all JITModules, the shared runtime is ref
+ * counted, but a globabl keeps one ref alive until shutdown or when
+ * JITSharedRuntime::release_all is called. If
+ * JITSharedRuntime::release_all is called, the global state is rest
+ * and any newly compiled Funcs will get a new runtime. */
 std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) {
     #if __cplusplus > 199711L || _MSC_VER >= 1800
     std::lock_guard<std::mutex> lock(shared_runtimes_mutex);
@@ -706,7 +733,7 @@ std::vector<JITModule> JITSharedRuntime::get(CodeGen *cg, const Target &target) 
 // caller provided user context work with JIT. (At present, this
 // cacscaded handler calls cannot work with the right context as
 // JITModule needs its context to be passed in case the called handler
-// calls anotehr callback wich is not overriden by the caller.)
+// calls another callback wich is not overriden by the caller.)
 void JITSharedRuntime::init_jit_user_context(JITUserContext &jit_user_context,
                                              void *user_context, const JITHandlers &handlers) {
     jit_user_context.handlers = active_handlers;
