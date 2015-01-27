@@ -266,6 +266,8 @@ int main(int argc, char **argv) {
     call_2(uint8_t, absd, 256, uint8_min, uint8_max, uint8_min, uint8_max);
     call_2(uint16_t, absd, 256, uint16_min, uint16_max, uint16_min, uint16_max);
     call_2(uint32_t, absd, 256, uint32_min, uint32_max, uint32_min, uint32_max);
+    // TODO: int64 isn't tested because the testing mechanism relies
+    // on integer types being representable with doubles.
 
     printf("Success!\n");
     return 0;
