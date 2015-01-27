@@ -331,25 +331,25 @@ vector<char> CodeGen_PTX_Dev::compile_to_src() {
         #endif
     }
 
-    // Add the target data from the target machine, if it exists, or the module.
+    #if LLVM_VERSION == 36
+    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
+    #else
+    const DataLayout *TD = Target.getDataLayout();
+    #endif
+
     #if LLVM_VERSION < 35
-    if (const DataLayout *TD = Target.getDataLayout()) {
+    if (TD) {
         PM.add(new DataLayout(*TD));
     } else {
         PM.add(new DataLayout(module));
     }
     #else
-    #if LLVM_VERSION == 35
-    const DataLayout *TD = Target.getDataLayout();
     if (TD) {
         module->setDataLayout(TD);
     }
+    #if LLVM_VERSION == 35
     PM.add(new DataLayoutPass(module));
     #else // llvm >= 3.6
-    const DataLayout *TD = Target.getSubtargetImpl()->getDataLayout();
-    if (TD) {
-        module->setDataLayout(TD);
-    }
     PM.add(new DataLayoutPass);
     #endif
     #endif
