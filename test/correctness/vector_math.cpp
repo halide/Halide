@@ -611,7 +611,7 @@ bool test(int vec_width) {
 
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
-            A correct = absd((double)input(x, y), (double)input(x+1, y));
+            typename with_unsigned<A>::type correct = absd((double)input(x, y), (double)input(x+1, y));
             if (im22(x, y) != correct) {
                 printf("im22(%d, %d) = %f instead of %f\n", x, y, (double)(im3(x, y)), (double)(correct));
                 return false;
