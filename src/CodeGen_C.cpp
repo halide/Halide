@@ -760,7 +760,14 @@ void CodeGen_C::visit(const Call *op) {
             rhs << (have_user_context ? "__user_context_" : "NULL");
             rhs << ")";
         } else if (op->name == Call::lerp) {
+            internal_assert(op->args.size() == 3);
             Expr e = lower_lerp(op->args[0], op->args[1], op->args[2]);
+            rhs << print_expr(e);
+        } else if (op->name == Call::absd) {
+            internal_assert(op->args.size() == 2);
+            Expr a = op->args[0];
+            Expr b = op->args[1];
+            Expr e = select(a < b, b - a, a - b);
             rhs << print_expr(e);
         } else if (op->name == Call::null_handle) {
             rhs << "NULL";
