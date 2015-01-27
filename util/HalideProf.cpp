@@ -129,15 +129,19 @@ namespace {
 
   int64_t AdjustOverhead(OpInfo& op_info, ChildMap& child_map, double overhead_ticks_avg) {
     int64_t overhead_ticks = op_info.count * overhead_ticks_avg;
+
+    op_info.ticks_only -= overhead_ticks;
+
     std::string qual_name = qualified_name(op_info.op_type, op_info.op_name);
     const std::vector<OpInfo*>& children = child_map[qual_name];
     for (std::vector<OpInfo*>::const_iterator it = children.begin(); it != children.end(); ++it) {
       OpInfo* c = *it;
       int64_t child_overhead = AdjustOverhead(*c, child_map, overhead_ticks_avg);
       overhead_ticks += child_overhead;
-      op_info.ticks -= child_overhead;
-      op_info.ticks_only -= child_overhead;
     }
+
+    op_info.ticks -= overhead_ticks;
+
     return overhead_ticks;
   }
 

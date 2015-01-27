@@ -89,6 +89,9 @@ public:
     virtual int native_vector_bits() const = 0;
     // @}
 
+    /** Get the llvm target triple used. */
+    virtual llvm::Triple get_target_triple() const = 0;
+
     /** Do any required target-specific things to the execution engine
      * and the module prior to jitting. Called by JITModule
      * just before it jits. Does nothing by default. */
@@ -104,6 +107,7 @@ public:
 
     /** Which built-in functions require a user-context first argument? */
     static bool function_takes_user_context(const std::string &name);
+
 
 protected:
 

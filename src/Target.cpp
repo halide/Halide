@@ -700,7 +700,7 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
 }
 
 /** Create an llvm module containing the support code for a given target. */
-  llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
+llvm::Module *get_initial_module_for_target(Target t, llvm::LLVMContext *c, bool for_shared_jit_runtime, bool just_gpu) {
     enum InitialModuleType {
         ModuleAOT,
         ModuleJITShared,
@@ -728,15 +728,6 @@ void add_underscores_to_posix_calls_on_windows(llvm::Module *m) {
     // in which the 32- and 64-bit runtimes differ.
     bool bits_64 = (t.bits == 64) && (t.os != Target::NaCl);
     bool debug = t.has_feature(Target::Debug);
-
-#ifndef USE_MCJIT
-    // -g (debug info) doesn't work with the old JIT, give an
-    // intelligible reason why here.
-    if (debug && t.has_feature(Target::JIT)) {
-        Internal::debug(0) << "The debug runtime is not supported when using JIT on this platform.\n";
-        debug = false;
-    }
-#endif
 
     vector<llvm::Module *> modules;
 
