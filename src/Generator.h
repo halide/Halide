@@ -386,7 +386,7 @@ public:
      * probably broken. */
     virtual bool test() {return false;}
 
-    /** Print out help test describing how to use this generator. */
+    /** Print out help text describing how to use this generator. */
     virtual void help(std::ostream &out) {}
 
     /** Prints out a description of the params and generator params. */
