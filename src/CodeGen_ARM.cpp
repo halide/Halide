@@ -433,6 +433,12 @@ void CodeGen_ARM::compile(Stmt stmt, string name,
 
     module = get_initial_module_for_target(target, context);
 
+    if (target.has_feature(Target::JIT)) {
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
+
+        JITModule::make_externs(shared_runtime, module);
+    }
+
     // Fix the target triple.
     debug(1) << "Target triple of initial module: " << module->getTargetTriple() << "\n";
 

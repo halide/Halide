@@ -23,8 +23,12 @@ extern "C" {
 
 extern int atoi(const char *);
 extern char *getenv(const char *);
-extern int64_t halide_current_time_ns(void *user_context);
 extern void *malloc(size_t);
+
+#ifdef DEBUG_RUNTIME
+extern int halide_start_clock(void *user_context);
+extern int64_t halide_current_time_ns(void *user_context);
+#endif
 
 WEAK void halide_set_cuda_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
     cuda_ctx_ptr = ctx_ptr;
@@ -88,6 +92,9 @@ public:
     CudaContext(void *user_context) : user_context(user_context),
                                       context(NULL),
                                       error(CUDA_SUCCESS) {
+#ifdef DEBUG_RUNTIME
+        halide_start_clock(user_context);
+#endif
         error = halide_acquire_cuda_context(user_context, &context);
         halide_assert(user_context, context != NULL);
         if (error != 0) {
@@ -326,7 +333,7 @@ WEAK int halide_init_kernels(void *user_context, void **state_ptr, const char* p
     return 0;
 }
 
-WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
+WEAK int halide_dev_free(void *user_context, struct buffer_t *buf) {
     // halide_dev_free, at present, can be exposed to clients and they
     // should be allowed to call halide_dev_free on any buffer_t
     // including ones that have never been used with a GPU.
@@ -363,6 +370,8 @@ WEAK int halide_dev_free(void *user_context, buffer_t* buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_release_jit_module();
 
     return 0;
 }
@@ -411,7 +420,14 @@ WEAK void halide_release(void *user_context) {
     halide_release_cuda_context(user_context);
 }
 
-WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
+namespace {
+__attribute__((destructor))
+WEAK void halide_cuda_cleanup() {
+    halide_release(NULL);
+}
+}
+
+WEAK int halide_dev_malloc(void *user_context, struct buffer_t *buf) {
     debug(user_context)
         << "CUDA: halide_dev_malloc (user_context: " << user_context
         << ", buf: " << buf << ")\n";
@@ -466,6 +482,8 @@ WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {
     uint64_t t_after = halide_current_time_ns(user_context);
     debug(user_context) << "    Time: " << (t_after - t_before) / 1.0e6 << " ms\n";
     #endif
+
+    halide_use_jit_module();
 
     return 0;
 }

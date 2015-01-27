@@ -48,12 +48,16 @@ const std::map<std::string, Halide::Type> &get_halide_type_enum_map() {
 }
 
 int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
-    const char kUsage[] = "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-test] [-help] [-list] "
-                          "[target=target-string] [generator_arg=value [...]]\n";
+    const char kUsage[] =
+        "gengen [-g GENERATOR_NAME] [-f FUNCTION_NAME] [-o OUTPUT_DIR] [-e [assembly],[stmt],[bitcode],[html]] "
+        "[-test] [-help] [-list] "
+        "[target=target-string] [generator_arg=value [...]]\n";
 
     std::map<std::string, std::string> flags_info = {{ "-f", "" },
                                                      { "-g", "" },
+                                                     { "-e", "" },
                                                      { "-o", "" }};
+
     std::map<std::string, bool> bool_flags_info = {{ "-test", false },
                                                    { "-help", false },
                                                    { "-list", false }};
@@ -141,6 +145,23 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
         return 1;
     }
 
+    GeneratorBase::EmitOptions emit_options;
+    std::vector<std::string> emit_flags = split_string(flags_info["-e"], ",");
+    for (const std::string &opt : emit_flags) {
+        if (opt == "assembly") {
+            emit_options.emit_assembly = true;
+        } else if (opt == "bitcode") {
+            emit_options.emit_bitcode = true;
+        } else if (opt == "stmt") {
+            emit_options.emit_stmt = true;
+        } else if (opt == "html") {
+            emit_options.emit_stmt_html = true;
+        } else if (!opt.empty()) {
+            cerr << "Unrecognized emit option: " << opt
+                 << " not one of [assembly, bitcode, stmt, html], ignoring.\n";
+        }
+    }
+
     std::unique_ptr<GeneratorBase> gen = GeneratorRegistry::create(generator_name, generator_args);
     if (gen == nullptr) {
         cerr << "Unknown generator: " << generator_name << "\n";
@@ -165,7 +186,7 @@ int generate_filter_main(int argc, char **argv, std::ostream &cerr) {
     }
 
     if (!output_dir.empty()) {
-        gen->emit_filter(output_dir, function_name);
+        gen->emit_filter(output_dir, function_name, function_name, emit_options);
     }
 
     return 0;
@@ -370,7 +391,7 @@ void GeneratorBase::emit_filter(const std::string &output_dir,
 }
 
 Func GeneratorBase::call_extern(std::initializer_list<ExternFuncArgument> function_arguments,
-                                 std::string function_name){
+                                std::string function_name){
     Func f = build();
     Func f_extern;
     if (function_name.empty()) {
