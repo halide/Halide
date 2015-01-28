@@ -56,7 +56,7 @@ WEAK void halide_set_cl_context(cl_context* ctx_ptr, cl_command_queue* q_ptr, vo
 // - A call to halide_acquire_cl_context is followed by a matching call to
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
-WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q) {
+WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_command_queue *q, bool create = true) {
     // TODO: Should we use a more "assertive" assert? These asserts do
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
@@ -75,7 +75,7 @@ WEAK int halide_acquire_cl_context(void *user_context, cl_context *ctx, cl_comma
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, cl_ctx_ptr != NULL);
     halide_assert(user_context, cl_q_ptr != NULL);
-    if (!(*cl_ctx_ptr)) {
+    if (!(*cl_ctx_ptr) && create) {
         cl_int error = create_opencl_context(user_context, cl_ctx_ptr, cl_q_ptr);
         if (error != CL_SUCCESS) {
             __sync_lock_release(cl_lock_ptr);
@@ -548,41 +548,43 @@ WEAK void halide_release(void *user_context) {
     int err;
     cl_context ctx;
     cl_command_queue q;
-    err = halide_acquire_cl_context(user_context, &ctx, &q);
+    err = halide_acquire_cl_context(user_context, &ctx, &q, false);
     if (err != 0 || !ctx) {
         return;
     }
 
-    err = clFinish(q);
-    halide_assert(user_context, err == CL_SUCCESS);
+    if (ctx) {
+        err = clFinish(q);
+        halide_assert(user_context, err == CL_SUCCESS);
 
-    // Unload the modules attached to this context. Note that the list
-    // nodes themselves are not freed, only the program objects are
-    // released. Subsequent calls to halide_init_kernels might re-create
-    // the program object using the same list node to store the program
-    // object.
-    module_state *state = state_list;
-    while (state) {
-        if (state->program) {
-            debug(user_context) << "    clReleaseProgram " << state->program << "\n";
-            err = clReleaseProgram(state->program);
-            halide_assert(user_context, err == CL_SUCCESS);
-            state->program = NULL;
+        // Unload the modules attached to this context. Note that the list
+        // nodes themselves are not freed, only the program objects are
+        // released. Subsequent calls to halide_init_kernels might re-create
+        // the program object using the same list node to store the program
+        // object.
+        module_state *state = state_list;
+        while (state) {
+            if (state->program) {
+                debug(user_context) << "    clReleaseProgram " << state->program << "\n";
+                err = clReleaseProgram(state->program);
+                halide_assert(user_context, err == CL_SUCCESS);
+                state->program = NULL;
+            }
+            state = state->next;
         }
-        state = state->next;
-    }
 
-    // Release the context itself, if we created it.
-    if (ctx == weak_cl_ctx) {
-        debug(user_context) << "    clReleaseCommandQueue " << weak_cl_q << "\n";
-        err = clReleaseCommandQueue(weak_cl_q);
-        halide_assert(user_context, err == CL_SUCCESS);
-        weak_cl_q = NULL;
+        // Release the context itself, if we created it.
+        if (ctx == weak_cl_ctx) {
+            debug(user_context) << "    clReleaseCommandQueue " << weak_cl_q << "\n";
+            err = clReleaseCommandQueue(weak_cl_q);
+            halide_assert(user_context, err == CL_SUCCESS);
+            weak_cl_q = NULL;
 
-        debug(user_context) << "    clReleaseContext " << weak_cl_ctx << "\n";
-        err = clReleaseContext(weak_cl_ctx);
-        halide_assert(user_context, err == CL_SUCCESS);
-        weak_cl_ctx = NULL;
+            debug(user_context) << "    clReleaseContext " << weak_cl_ctx << "\n";
+            err = clReleaseContext(weak_cl_ctx);
+            halide_assert(user_context, err == CL_SUCCESS);
+            weak_cl_ctx = NULL;
+        }
     }
 
     halide_release_cl_context(user_context);
