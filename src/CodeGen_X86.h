@@ -32,20 +32,13 @@ public:
                  const std::vector<Argument> &args,
                  const std::vector<Buffer> &images_to_embed);
 
-    static void test();
-
     void jit_init(llvm::ExecutionEngine *, llvm::Module *);
-    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *, std::vector<JITCompiledModule::CleanupRoutine> *);
-
-protected:
+    void jit_finalize(llvm::ExecutionEngine *, llvm::Module *);
 
     llvm::Triple get_target_triple() const;
 
-    /** Generate a call to an sse or avx intrinsic */
-    // @{
-    llvm::Value *call_intrin(Type t, const std::string &name, std::vector<Expr>);
-    llvm::Value *call_intrin(llvm::Type *t, const std::string &name, std::vector<llvm::Value *>);
-    // @}
+protected:
+
 
     using CodeGen_Posix::visit;
 
@@ -57,11 +50,19 @@ protected:
     void visit(const Div *);
     void visit(const Min *);
     void visit(const Max *);
+    void visit(const GT *);
+    void visit(const LT *);
+    void visit(const LE *);
+    void visit(const GE *);
+    void visit(const EQ *);
+    void visit(const NE *);
+    void visit(const Select *);
     // @}
 
     std::string mcpu() const;
     std::string mattrs() const;
     bool use_soft_float_abi() const;
+    int native_vector_bits() const;
 
 private:
     llvm::JITEventListener* jitEventListener;

@@ -41,6 +41,11 @@ void CodeGen_PNaCl::compile(Stmt stmt, string name,
 
     module = get_initial_module_for_target(target, context);
 
+    if (target.has_feature(Target::JIT)) {
+        std::vector<JITModule> shared_runtime = JITSharedRuntime::get(this, target);
+        JITModule::make_externs(shared_runtime, module);
+    }
+
     llvm::Triple triple = get_target_triple();
     module->setTargetTriple(triple.str());
     module->setDataLayout("e-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-p:32:32:32-v128:32:32");
@@ -63,6 +68,10 @@ string CodeGen_PNaCl::mattrs() const {
 
 bool CodeGen_PNaCl::use_soft_float_abi() const {
     return false;
+}
+
+int CodeGen_PNaCl::native_vector_bits() const {
+    return 128;
 }
 
 }}

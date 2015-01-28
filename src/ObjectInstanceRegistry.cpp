@@ -1,4 +1,5 @@
 #include "ObjectInstanceRegistry.h"
+#include "Introspection.h"
 #include "Error.h"
 
 namespace Halide {
@@ -12,13 +13,18 @@ ObjectInstanceRegistry &ObjectInstanceRegistry::get_registry() {
 
 /* static */
 void ObjectInstanceRegistry::register_instance(void *this_ptr, size_t size, Kind kind,
-                                               void *subject_ptr) {
+                                               void *subject_ptr, const void *introspection_helper) {
 #if __cplusplus > 199711L || _MSC_VER >= 1800
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
     internal_assert(registry.instances.find(key) == registry.instances.end());
-    registry.instances[key] = InstanceInfo(size, kind, subject_ptr);
+    if (introspection_helper) {
+        registry.instances[key] = InstanceInfo(size, kind, subject_ptr, true);
+        Introspection::register_heap_object(this_ptr, size, introspection_helper);
+    } else {
+        registry.instances[key] = InstanceInfo(size, kind, subject_ptr, false);
+    }
 #endif
 }
 
@@ -28,8 +34,12 @@ void ObjectInstanceRegistry::unregister_instance(void *this_ptr) {
     ObjectInstanceRegistry &registry = get_registry();
     std::lock_guard<std::mutex> lock(registry.mutex);
     uintptr_t key = (uintptr_t)this_ptr;
-    size_t num_erased = registry.instances.erase(key);
-    internal_assert(num_erased == 1) << "num_erased: " << num_erased;
+    std::map<uintptr_t, InstanceInfo>::iterator it = registry.instances.find(key);
+    internal_assert(it != registry.instances.end());
+    if (it->second.registered_for_introspection) {
+        Introspection::deregister_heap_object(this_ptr, it->second.size);
+    }
+    registry.instances.erase(it);
 #endif
 }
 

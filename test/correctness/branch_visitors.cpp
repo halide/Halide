@@ -40,8 +40,10 @@ void fill_scope() {
 }
 
 bool test_branches_in_var() {
+    Stmt do_foo = Evaluate::make(Call::make(Int(32), "foo", std::vector<Expr>(), Call::Extern));
+
     // Test basic functionality of branches_in_var
-    Stmt s1 = IfThenElse::make(x < 0, Evaluate::make(0));
+    Stmt s1 = IfThenElse::make(x < 0, do_foo);
     Expr e1 = Select::make(x < 0, 0, x);
     Expr e2 = clamp(x, 0, 100);
 
@@ -66,7 +68,7 @@ bool test_branches_in_var() {
     }
 
     // Test branches_in_var uses linearity correctly.
-    Stmt s2 = IfThenElse::make(y < 0, Evaluate::make(0));
+    Stmt s2 = IfThenElse::make(y < 0, do_foo);
     Expr e3 = Select::make(y < 0, 0, x);
 
     if (!branches_linearly_in_var(s2, "x", linearity)) {
@@ -81,7 +83,7 @@ bool test_branches_in_var() {
 
     // Test branches_in_var doesn't explode with deeply nested linearitys.
     Expr vN = v[N-1];
-    Stmt s3 = IfThenElse::make(vN < 0, Evaluate::make(0));
+    Stmt s3 = IfThenElse::make(vN < 0, do_foo);
 
     if (branches_linearly_in_var(s3, "x", linearity)) {
         std::cout << "Expected not to branch in x:\n" << s3;
@@ -103,8 +105,8 @@ bool test_normalize_branches() {
     Scope<int> free_vars;
     free_vars.push("x", 0);
 
-    Stmt then_case = Evaluate::make(0);
-    Stmt else_case = Evaluate::make(1);
+    Stmt then_case = Evaluate::make(Call::make(Int(32), "foo", std::vector<Expr>(), Call::Extern));
+    Stmt else_case = Evaluate::make(Call::make(Int(32), "bar", std::vector<Expr>(), Call::Extern));
 
     Stmt s1 = IfThenElse::make(x != 0 && x != 1, then_case, else_case);
     Stmt s1_ans1 = IfThenElse::make(x < 1, then_case, IfThenElse::make(1 < x, then_case, else_case));
