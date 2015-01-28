@@ -73,13 +73,13 @@ if [[ `uname` == Darwin ]]; then
     export CXX="clang++ -stdlib=libc++"
     export GXX="clang++ -stdlib=libc++"
     export CC="clang"
-    export LLVMS="trunk release-3.5 release-3.4 pnacl"
+    export LLVMS="trunk release-3.5 release-3.6 pnacl"
 else
     export CXX="g++"
     export GXX="g++"
     export CC="gcc"
     export LD_LIBRARY_PATH=/usr/local/lib32:/usr/local/lib64
-    export LLVMS="release-3.5 trunk release-3.4 pnacl"
+    export LLVMS="release-3.5 trunk release-3.6 pnacl"
 fi
 
 # link testing/reports/head to the current head
@@ -109,6 +109,10 @@ for LLVM in ${LLVMS}; do
     elif [[ "$LLVM" == release-3.5 ]]; then
         LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_35
         CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_35
+        LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
+    elif [[ "$LLVM" == release-3.6 ]]; then
+        LLVM_REPO=http://llvm.org/svn/llvm-project/llvm/branches/release_36
+        CLANG_REPO=http://llvm.org/svn/llvm-project/cfe/branches/release_36
         LLVM_TARGETS="X86;ARM;AArch64;NVPTX;Mips"
     fi
 
@@ -170,7 +174,7 @@ pwd
 
 for LLVM in ${LLVMS}; do
     if [[ "$LLVM" == pnacl ]]; then
-        TARGETS="x86-32-sse41 x86-64-avx x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
+        TARGETS="x86-32-nacl x86-32-sse41-nacl x86-64-nacl x86-64-sse41-nacl"
     elif [[ "$LLVM" == trunk ]]; then
         TARGETS="x86-32 x86-32-sse41 x86-64 x86-64-sse41 x86-64-avx ptx opencl"
     else
