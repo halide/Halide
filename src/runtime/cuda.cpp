@@ -40,7 +40,7 @@ WEAK void halide_cuda_set_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
     Halide::Runtime::Internal::Cuda::lock_ptr = lock_ptr;
 }
 
-// The default implementation of halide_acquire_cuda_context uses the global
+// The default implementation of halide_cuda_acquire_context uses the global
 // pointers above, and serializes access with a spin lock.
 // Overriding implementations of acquire/release must implement the following
 // behavior:
@@ -49,7 +49,7 @@ WEAK void halide_cuda_set_context(CUcontext *ctx_ptr, volatile int *lock_ptr) {
 // - A call to halide_acquire_cl_context is followed by a matching call to
 //   halide_release_cl_context. halide_acquire_cl_context should block while a
 //   previous call (if any) has not yet been released via halide_release_cl_context.
-WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx) {
+WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool create = true) {
     // TODO: Should we use a more "assertive" assert? these asserts do
     // not block execution on failure.
     halide_assert(user_context, ctx != NULL);
@@ -391,39 +391,41 @@ WEAK int halide_cuda_device_release(void *user_context) {
 
     int err;
     CUcontext ctx;
-    err = halide_cuda_acquire_context(user_context, &ctx);
+    err = halide_cuda_acquire_context(user_context, &ctx, false);
     if (err != CUDA_SUCCESS || !ctx) {
         return -1;
     }
 
-    // It's possible that this is being called from the destructor of
-    // a static variable, in which case the driver may already be
-    // shutting down.
-    err = cuCtxSynchronize();
-    halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-
-    // Unload the modules attached to this context. Note that the list
-    // nodes themselves are not freed, only the module objects are
-    // released. Subsequent calls to halide_initialize_kernels might re-create
-    // the program object using the same list node to store the module
-    // object.
-    module_state *state = state_list;
-    while (state) {
-        if (state->module) {
-            debug(user_context) << "    cuModuleUnload " << state->module << "\n";
-            err = cuModuleUnload(state->module);
-            halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-            state->module = 0;
-        }
-        state = state->next;
-    }
-
-    // Only destroy the context if we own it
-    if (ctx == weak_cuda_context) {
-        debug(user_context) << "    cuCtxDestroy " << weak_cuda_context << "\n";
-        err = cuCtxDestroy(weak_cuda_context);
+    if (ctx) {
+        // It's possible that this is being called from the destructor of
+        // a static variable, in which case the driver may already be
+        // shutting down.
+        err = cuCtxSynchronize();
         halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
-        weak_cuda_context = NULL;
+
+        // Unload the modules attached to this context. Note that the list
+        // nodes themselves are not freed, only the module objects are
+        // released. Subsequent calls to halide_init_kernels might re-create
+        // the program object using the same list node to store the module
+        // object.
+        module_state *state = state_list;
+        while (state) {
+            if (state->module) {
+                debug(user_context) << "    cuModuleUnload " << state->module << "\n";
+                err = cuModuleUnload(state->module);
+                halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+                state->module = 0;
+            }
+            state = state->next;
+        }
+
+        // Only destroy the context if we own it
+        if (ctx == weak_cuda_context) {
+            debug(user_context) << "    cuCtxDestroy " << weak_cuda_context << "\n";
+            err = cuCtxDestroy(weak_cuda_context);
+            halide_assert(user_context, err == CUDA_SUCCESS || err == CUDA_ERROR_DEINITIALIZED);
+            weak_cuda_context = NULL;
+        }
     }
 
     halide_cuda_release_context(user_context);
