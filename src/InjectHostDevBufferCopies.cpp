@@ -24,7 +24,7 @@ DeviceAPI fixup_device_api(DeviceAPI device_api, const Target &target) {
         } else {
             user_error << "Schedule uses Default_GPU without a valid GPU (OpenCL or CUDA) specified in target.\n";
         }
-    } 
+    }
     return device_api;
 }
 
@@ -49,8 +49,9 @@ class FindBuffersToTrack : public IRVisitor {
     void visit(const Allocate *op) {
         debug(2) << "Buffers to track: Setting Allocate for loop " << op->name << " to " << static_cast<int>(device_api) << "\n";
         internal_assert(internal.find(op->name) == internal.end()) << "Duplicate Allocate node in FindBuffersToTrack.\n";
-        internal[op->name] = device_api;
+        pair<map<string, DeviceAPI>::iterator, bool> it = internal.insert(make_pair(op->name, device_api));
         IRVisitor::visit(op);
+        internal.erase(it.first);
     }
 
     void visit(const For *op) {
@@ -118,12 +119,13 @@ class InjectBufferCopies : public IRMutator {
             dev_touched,    // Is there definitely a device-side allocation?
             host_current,   // Is the data known to be up-to-date on the host?
             dev_current,    // Is the data known to be up-to-date on the device?
-            internal;       // Did Halide allocate this buffer?
+            internal,       // Did Halide allocate this buffer?
+            dev_allocated;  // Has the buffer been allocated?
         // The compute_at loop level for this buffer. It's at this
         // loop level that all copies should occur. Empty string for
         // input buffers and compute_root things.
         string loop_level;
-        DeviceAPI device_first_touched;      // First device to read or write in 
+        DeviceAPI device_first_touched;      // First device to read or write in
         DeviceAPI current_device;            // Valid if dev_current is true
         std::set<DeviceAPI> devices_reading; // List of devices, including host, reading buffer in visited scope
         std::set<DeviceAPI> devices_writing; // List of devices, including host, writing buffer in visited scope
@@ -133,6 +135,7 @@ class InjectBufferCopies : public IRMutator {
                        host_current(false),
                        dev_current(false),
                        internal(false),
+                       dev_allocated(true),  // This is true unless we know for sure it is not allocated (this BufferInfo is from an Allocate node).
                        device_first_touched(DeviceAPI::Parent), // Meaningless initial value
                        current_device(DeviceAPI::Host) {}
     };
@@ -156,7 +159,7 @@ class InjectBufferCopies : public IRMutator {
             interface_name = "halide_opengl_device_interface";
             break;
           default:
-            internal_error << "Bad DeviceAPI in make_dev_malloc " << static_cast<int>(device_api) << "\n";
+            internal_error << "Bad DeviceAPI " << static_cast<int>(device_api) << "\n";
             break;
         }
         std::vector<Expr> no_args;
@@ -315,8 +318,17 @@ class InjectBufferCopies : public IRMutator {
             buf.devices_reading.clear();
             buf.devices_writing.clear();
 
-            if (direction != NoCopy) {
+            if (direction != NoCopy && touching_device != DeviceAPI::Host) {
                 s = Block::make(make_buffer_copy(direction, iter->first, touching_device), s);
+            }
+
+            // Inject a dev_malloc if needed.
+            if (!buf.dev_allocated && buf.device_first_touched != DeviceAPI::Host && buf.device_first_touched != DeviceAPI::Parent) {
+                debug(4) << "Injecting device malloc for " << iter->first << " on " <<
+                    static_cast<int>(buf.device_first_touched) << "\n";
+                Stmt dev_malloc = make_dev_malloc(iter->first, buf.device_first_touched);
+                s = Block::make(dev_malloc, s);
+                buf.dev_allocated = true;
             }
         }
 
@@ -432,7 +444,7 @@ class InjectBufferCopies : public IRMutator {
                  iter != state.end(); ++iter) {
                 const string &buf_name = iter->first;
                 if ((buf_name == op->name || starts_with(buf_name, op->name + ".")) &&
-                    iter->second.dev_touched) {
+                    iter->second.dev_touched && iter->second.current_device != DeviceAPI::Host) {
                     // Inject a device copy, which will make sure the device buffer is allocated
                     // on the right device and that the host dirty bit is false so the device
                     // can write. (Which will involve copying to the device if host was dirty
@@ -472,6 +484,7 @@ class InjectBufferCopies : public IRMutator {
         string buf_name = op->name;
 
         state[buf_name].internal = true;
+        state[buf_name].dev_allocated = false;
 
         IRMutator::visit(op);
         op = stmt.as<Allocate>();
@@ -499,24 +512,15 @@ class InjectBufferCopies : public IRMutator {
             if (!should_track(buf_name)) {
                 return;
             }
-            if (state[buf_name].dev_touched) {
-                // Inject a dev_malloc
-                debug(4) << "Injecting device malloc for " << buf_name << " on " <<
-                    static_cast<int>(state[buf_name].device_first_touched) << "\n";
-                Stmt dev_malloc = make_dev_malloc(buf_name, state[buf_name].device_first_touched);
-                Stmt body = Block::make(dev_malloc, op->body);
-
+            if (!state[buf_name].host_touched) {
                 // Use null as a host pointer if there's no host allocation
-                Expr val = op->value;
-                if (!state[buf_name].host_touched) {
-                    const Call *create_buffer_t = val.as<Call>();
-                    internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
-                    vector<Expr> args = create_buffer_t->args;
-                    args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
-                    val = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);
-                }
+                const Call *create_buffer_t = op->value.as<Call>();
+                internal_assert(create_buffer_t && create_buffer_t->name == Call::create_buffer_t);
+                vector<Expr> args = create_buffer_t->args;
+                args[0] = Call::make(Handle(), Call::null_handle, vector<Expr>(), Call::Intrinsic);
+                Expr val = Call::make(Handle(), Call::create_buffer_t, args, Call::Intrinsic);
 
-                stmt = LetStmt::make(op->name, val, body);
+                stmt = LetStmt::make(op->name, val, op->body);
             }
         }
     }
