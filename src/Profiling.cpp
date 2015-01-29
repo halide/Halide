@@ -221,6 +221,7 @@ private:
                       << op->name << "\n";
             stmt = op;
         } else {
+            PushCallStack st(this, "forloop", op->name);
             IRMutator::visit(op);
         }
         // We only instrument loops at profiling level 2 or higher

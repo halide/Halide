@@ -70,7 +70,7 @@ void StmtCompiler::compile_to_native(const string &filename, bool assembly) {
     contents.ptr->compile_to_native(filename, assembly);
 }
 
-JITCompiledModule StmtCompiler::compile_to_function_pointers() {
+JITModule StmtCompiler::compile_to_function_pointers() {
     return contents.ptr->compile_to_function_pointers();
 }
 

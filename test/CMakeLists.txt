@@ -10,6 +10,7 @@ else()
   # src/CMakeLists.txt always enables C++11 for non-Windows,
   # so we'll give the same courtesy to tests
   add_definitions("-std=c++11")
+  add_definitions("-fno-rtti")
 endif()
 
 function(tests folder)
