@@ -6,7 +6,7 @@
  */
 
 #include "IR.h"
-#include "JITCompiledModule.h"
+#include "JITModule.h"
 #include "Target.h"
 
 #include <string>
@@ -54,7 +54,7 @@ public:
      * such as a hook for setting the function to call when an assert
      * fails.
      */
-    JITCompiledModule compile_to_function_pointers();
+    JITModule compile_to_function_pointers();
 };
 
 }

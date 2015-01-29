@@ -228,7 +228,7 @@ WEAK GLuint make_shader(void *user_context, GLenum type,
                         const char *source, GLint *length) {
 
     debug(user_context) << "SHADER SOURCE:\n"
-			<< source << "\n";
+                        << source << "\n";
 
     GLuint shader = ST.CreateShader(type);
     CHECK_GLERROR(1);
@@ -848,6 +848,9 @@ WEAK int halide_opengl_dev_free(void *user_context, buffer_t *buf) {
     }
 
     free(texinfo);
+
+    halide_release_jit_module();
+
     return 0;
 }
 
@@ -1093,6 +1096,9 @@ WEAK int halide_opengl_copy_to_dev(void *user_context, buffer_t *buf) {
     }
     ST.BindTexture(GL_TEXTURE_2D, 0);
     buf->host_dirty = false;
+
+    halide_use_jit_module();
+
     return 0;
 }
 
@@ -1548,7 +1554,7 @@ WEAK int halide_opengl_dev_run(
     debug(user_context) << "Vertex buffer:";
     for (int i=0;i!=vertex_buffer_size;++i) {
         if (!(i%num_padded_attributes)) {
-	  debug(user_context) << "\n";
+          debug(user_context) << "\n";
         }
         debug(user_context) << vertex_buffer[i] << " ";
     }
@@ -1685,6 +1691,13 @@ WEAK uint64_t halide_opengl_output_client_bound() {
 
 WEAK void halide_release(void *user_context) {
     halide_opengl_release(user_context);
+}
+
+namespace {
+__attribute__((destructor))
+WEAK void halide_opengl_cleanup() {
+    halide_release(NULL);
+}
 }
 
 WEAK int halide_dev_malloc(void *user_context, buffer_t *buf) {

@@ -33,10 +33,11 @@ private:
         // a comparison on b and a.
         uint64_t pa = (uint64_t)(a.ptr);
         uint64_t pb = (uint64_t)(b.ptr);
-        pa ^= pb;
-        pa ^= pa >> bits;
-        pa ^= pa >> (bits*2);
-        return pa & ((1 << bits) - 1);
+        uint64_t mix = (pa + pb) + (pa ^ pb);
+        mix ^= (mix >> bits);
+        mix ^= (mix >> (bits*2));
+        uint32_t bottom = mix & ((1 << bits) - 1);
+        return bottom;
     }
 
     std::vector<Entry> entries;
@@ -49,10 +50,11 @@ public:
     }
 
     bool contains(const Expr &a, const Expr &b) const {
+        
         uint32_t h = hash(a, b);
         const Entry &e = entries[h];
         return ((a.same_as(e.a) && b.same_as(e.b)) ||
-                (a.same_as(e.b) && b.same_as(e.a)));
+                (a.same_as(e.b) && b.same_as(e.a)));       
     }
 
     void clear() {
@@ -64,7 +66,6 @@ public:
 
     IRCompareCache() {}
     IRCompareCache(int b) : bits(b), entries(1 << bits) {}
-
 };
 
 /** A wrapper about Exprs so that they can be deeply compared with a

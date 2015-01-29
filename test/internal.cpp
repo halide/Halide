@@ -19,11 +19,6 @@ using namespace Halide::Internal;
 
 int main(int argc, const char **argv) {
     IRPrinter::test();
-
-    #ifdef __i386__
-    CodeGen_X86::test();
-    #endif
-
     CodeGen_C::test();
     ir_equality_test();
     bounds_test();
