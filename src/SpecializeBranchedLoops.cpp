@@ -62,6 +62,16 @@ bool should_extract(Expr e) {
     return true;
 }
 
+bool is_extent_var(const Variable *v) {
+    std::vector<std::string> parts = split_string(v->name, ".");
+    for (size_t i = 0; i < parts.size(); ++i) {
+        if (parts[i] == "extent") {
+            return true;
+        }
+    }
+    return false;
+}
+
 Expr branch_point(Expr cond, Expr min, Expr extent, bool &swap) {
     const LE *le = cond.as<LE>();
     const GE *ge = cond.as<GE>();
@@ -338,6 +348,8 @@ private:
     }
 
     void push_bounds(Expr min, Expr extent) {
+        min = simplify(min, true, bounds_info);
+        extent = simplify(extent, true, bounds_info);
         Expr max = simplify(min + extent - 1);
         curr_min.push(min);
         curr_extent.push(extent);
@@ -362,8 +374,8 @@ private:
         }
 
         Branch branch;
-        branch.min = curr_min.top();
-        branch.extent = curr_extent.top();
+        branch.min = simplify(curr_min.top(), true, bounds_info);
+        branch.extent = simplify(curr_extent.top(), true, bounds_info);
         branch.content = content;
         branches.push_back(branch);
 
@@ -399,11 +411,33 @@ private:
         return can_prove_expr(test, in_range);
     }
 
+    Expr clamp_bound(Expr bound, Expr min, Expr max) {
+        Expr expr = simplify(bound);
+        bool is_true;
+        if (can_prove_expr(bound <= max, is_true)) {
+            if (!is_true) {
+                expr = max;
+            }
+        } else {
+            expr = Min::make(expr, max);
+        }
+
+        if (can_prove_expr(bound >= min, is_true)) {
+            if (!is_true) {
+                expr = min;
+            }
+        } else {
+            expr = Max::make(expr, min);
+        }
+
+        return expr;
+    }
+
     // Build a pair of branches for 2 exprs, based on a simple inequality conditional.
     // It is assumed that the inequality has been solved and so the variable of interest
     // is on the left hand side.
     bool add_branches(Expr cond, StmtOrExpr a, StmtOrExpr b) {
-        debug(3) << "Branching on condition: " << cond << "\n";
+        debug(3) << "Branching on condition: " << cond << "\n\n";
 
         Expr min = curr_min.top();
         Expr extent = curr_extent.top();
@@ -440,7 +474,7 @@ private:
             }
         } else {
             min1 = min;
-            ext1 = simplify(clamp(point - min, 0, extent));
+            ext1 = simplify(clamp_bound(point - min, 0, extent));
             min2 = simplify(min + ext1);
             ext2 = simplify(extent - ext1);
         }
@@ -592,7 +626,7 @@ private:
                             Expr max = simplify(branch_points[j+1] - 1);
                             for (size_t k = 0; k < child_branches[i].size(); ++k) {
                                 Branch branch = child_branches[i][k];
-                                new_branch_points.push_back(simplify(clamp(branch.min, min, max)));
+                                new_branch_points.push_back(simplify(clamp_bound(branch.min, min, max)));
                                 new_args.push_back(args[j]);
                                 new_args.back().push_back(branch.content);
                             }
@@ -686,6 +720,10 @@ private:
     }
 
     void visit(const Variable *op) {
+        if (is_extent_var(op) && !bounds_info.contains(op->name)) {
+            bounds_info.push(op->name, Interval(0, Expr()));
+        }
+
         if (let_branches.contains(op->name)) {
             vector<Branch> &var_branches = let_branches.ref(op->name);
 
