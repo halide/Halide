@@ -64,7 +64,7 @@ WEAK int halide_cuda_acquire_context(void *user_context, CUcontext *ctx, bool cr
 
     // If the context has not been initialized, initialize it now.
     halide_assert(user_context, cuda_context_ptr != NULL);
-    if (*cuda_context_ptr == NULL) {
+    if (*cuda_context_ptr == NULL && create) {
         CUresult error = create_cuda_context(user_context, cuda_context_ptr);
         if (error != CUDA_SUCCESS) {
             __sync_lock_release(lock_ptr);
@@ -387,12 +387,16 @@ WEAK int halide_cuda_device_free(void *user_context, buffer_t* buf) {
 
 WEAK int halide_cuda_device_release(void *user_context) {
     debug(user_context)
-        << "CUDA: halide_cuda_release (user_context: " <<  user_context << ")\n";
+        << "CUDA: halide_cuda_device_release (user_context: " <<  user_context << ")\n";
 
     int err;
     CUcontext ctx;
     err = halide_cuda_acquire_context(user_context, &ctx, false);
-    if (err != CUDA_SUCCESS || !ctx) {
+    if (err != CUDA_SUCCESS) {
+        return -1;
+    }
+    if (!ctx) {
+        halide_cuda_release_context(user_context);
         return -1;
     }
 
