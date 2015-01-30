@@ -225,7 +225,7 @@ class BranchCollector : public IRVisitor {
 public:
     BranchCollector(const string &n, Expr min, Expr extent, const Scope<Expr> *s,
                     const Scope<int> *lv, const Scope<Interval> *bi) :
-            name(n), branching_vars(false), branches()
+            name(n), branches()
     {
         free_vars.set_containing_scope(lv);
         bounds_info.set_containing_scope(bi);
@@ -304,7 +304,6 @@ private:
 
     Scope<int> free_vars;
     Scope<Interval> bounds_info;
-    bool branching_vars;
 
     // These variables store the actual branches.
     vector<Branch> branches;
@@ -778,30 +777,28 @@ private:
     void visit_min_or_max(const Op *op) {
         visit_binary_op(op);
 
-        if (!branching_vars) {
-            vector<Branch> child_branches;
-            branches.swap(child_branches);
-            for (size_t i = 0; i < child_branches.size(); ++i) {
-                Branch &branch = child_branches[i];
-                const Op *min_or_max = branch.content.as<Op>();
-                if (min_or_max) {
-                    Expr a = min_or_max->a;
-                    Expr b = min_or_max->b;
-                    if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
-                        push_bounds(branch.min, branch.extent);
-                        Expr cond = Cmp::make(a, b);
-                        if (!visit_simple_cond(cond, a, b)) {
-                            branches.push_back(branch);
-                        }
-                        pop_bounds();
-
-                        continue;
+        vector<Branch> child_branches;
+        branches.swap(child_branches);
+        for (size_t i = 0; i < child_branches.size(); ++i) {
+            Branch &branch = child_branches[i];
+            const Op *min_or_max = branch.content.as<Op>();
+            if (min_or_max) {
+                Expr a = min_or_max->a;
+                Expr b = min_or_max->b;
+                if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
+                    push_bounds(branch.min, branch.extent);
+                    Expr cond = Cmp::make(a, b);
+                    if (!visit_simple_cond(cond, a, b)) {
+                        branches.push_back(branch);
                     }
-                }
+                    pop_bounds();
 
-                // We did not branch, so add current branch as is.
-                branches.push_back(branch);
+                    continue;
+                }
             }
+
+            // We did not branch, so add current branch as is.
+            branches.push_back(branch);
         }
     }
 
