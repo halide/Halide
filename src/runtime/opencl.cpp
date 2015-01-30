@@ -959,7 +959,7 @@ WEAK int halide_opencl_run(void *user_context,
             debug(user_context) << "Mapped dev handle is: " << (void *)opencl_handle << "\n";
             this_arg = &opencl_handle;
         }
-                                
+
         cl_int err = clSetKernelArg(f, i, arg_sizes[i], this_arg);
         if (err != CL_SUCCESS) {
             error(user_context) << "CL: clSetKernelArg failed: "
