@@ -493,13 +493,13 @@ public:
             !then_case.same_as(op->then_case) ||
             !else_case.same_as(op->else_case)) {
             if (is_one(condition)) {
-                stmt = simplify(then_case, true, bounds_info);
+                stmt = then_case;
             } else if (is_zero(condition)) {
-                stmt = simplify(else_case, true, bounds_info);
+                stmt = else_case;
             } else if (equal(then_case, else_case)) {
-                stmt = simplify(then_case, true, bounds_info);
+                stmt = then_case;
             } else {
-                stmt = simplify(IfThenElse::make(condition, then_case, else_case), true, bounds_info);
+                stmt = IfThenElse::make(condition, then_case, else_case);
             }
         } else {
             stmt = op;
