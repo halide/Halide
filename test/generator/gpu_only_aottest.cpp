@@ -2,6 +2,11 @@
 #include <stdio.h>
 #include <HalideRuntime.h>
 #include <assert.h>
+#if defined(TEST_OPENCL)
+#include <HalideRuntimeOpencl.h>
+#else if defined(TEST_CUDA)
+#include <HalideRuntimeCuda.h>
+#endif
 
 #include "gpu_only.h"
 #include "static_image.h"
@@ -19,7 +24,11 @@ int main(int argc, char **argv) {
 
     // Explicitly copy data to the GPU.
     input.set_host_dirty();
-    input.copy_to_device();
+#if defined(TEST_OPENCL)
+    input.copy_to_device(halide_opencl_device_interface());
+#else if defined(TEST_CUDA)
+    input.copy_to_device(halide_cuda_device_interface());
+#endif
 
     Image<int> output(W, H);
 
