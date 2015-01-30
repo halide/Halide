@@ -226,10 +226,10 @@ class InjectBufferCopies : public IRMutator {
                      << "Internal: " << buf.internal << " Device touching first: "
                      << static_cast<int>(buf.device_first_touched) << "\n"
                      << "Current device: " << static_cast<int>(buf.current_device) << "\n";
-            DeviceAPI touching_device;
+            DeviceAPI touching_device = DeviceAPI::Parent;
             bool host_read = false;
             size_t non_host_devices_reading_count = 0;
-            DeviceAPI reading_device;
+            DeviceAPI reading_device = DeviceAPI::Parent;
             for (std::set<DeviceAPI>::const_iterator dev = buf.devices_reading.begin(); dev != buf.devices_reading.end(); dev++) {
                 debug(4) << "Device " << static_cast<int>(*dev) << " read buffer\n";
                 if (*dev != DeviceAPI::Host) {
@@ -242,7 +242,7 @@ class InjectBufferCopies : public IRMutator {
             }
             bool host_wrote = false;
             size_t non_host_devices_writing_count = 0;
-            DeviceAPI writing_device;
+            DeviceAPI writing_device = DeviceAPI::Parent;
             for (std::set<DeviceAPI>::const_iterator dev = buf.devices_writing.begin(); dev != buf.devices_writing.end(); dev++) {
                 debug(4) << "Device " << static_cast<int>(*dev) << " wrote buffer\n";
                 if (*dev != DeviceAPI::Host) {
