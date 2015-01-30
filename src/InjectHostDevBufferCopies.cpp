@@ -60,6 +60,10 @@ class FindBuffersToTrack : public IRVisitor {
                 " to " << static_cast<int>(op->device_api) << " for loop " << op->name << "\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
+            if (device_api == DeviceAPI::Parent) {
+                device_api = old_device_api;
+            }
+            internal_assert(device_api != DeviceAPI::Parent);
             IRVisitor::visit(op);
             device_api = old_device_api;
         } else {
@@ -603,6 +607,10 @@ class InjectBufferCopies : public IRMutator {
                 static_cast<int>(op->device_api) << " in for loop " << op->name <<"\n";
             DeviceAPI old_device_api = device_api;
             device_api = fixup_device_api(op->device_api, target);
+            if (device_api == DeviceAPI::Parent) {
+                device_api = old_device_api;
+            }
+            internal_assert(device_api != DeviceAPI::Parent);
             IRMutator::visit(op);
             device_api = old_device_api;
         } else {
