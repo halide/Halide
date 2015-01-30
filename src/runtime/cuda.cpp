@@ -392,13 +392,6 @@ WEAK int halide_cuda_device_release(void *user_context) {
     int err;
     CUcontext ctx;
     err = halide_cuda_acquire_context(user_context, &ctx, false);
-    if (err != CUDA_SUCCESS) {
-        return -1;
-    }
-    if (!ctx) {
-        halide_cuda_release_context(user_context);
-        return -1;
-    }
 
     if (ctx) {
         // It's possible that this is being called from the destructor of
