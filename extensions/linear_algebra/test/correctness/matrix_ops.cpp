@@ -1,13 +1,16 @@
 #include <stdio.h>
 
 #ifdef WITH_EIGEN
+#include <Eigen/Eigen>
 
 #include <Halide.h>
+#include <HalideLinAlg.h>
 
 #include <algorithm>
 #include <iostream>
 
 using namespace Halide;
+using namespace Halide::LinearAlgebra;
 
 bool approx_equal(float x, float y) {
     static const float p = Eigen::NumTraits<float>::dummy_precision();
@@ -58,7 +61,7 @@ bool test_matrix_operations() {
     v = EigenMatrix::Random();
 
     printf("mat-mat multiply..");
-    Matrix AB = Matrix(A) * Matrix(B);
+    Matrix AB = Matrix(A, "A") * Matrix(B, "B");
     success &= same_as_matrix(AB.realize(), A*B);
     if (success) printf("success!\n");
     else { printf("fail\n"); return success; }
@@ -115,7 +118,7 @@ bool test_matrix_operations(const int n) {
 
     printf("mat-mat multiply..");
     Matrix AB = Matrix(A) * Matrix(B);
-    Func f = AB.function();
+    // Func f = AB;
     success &= same_as_matrix(AB.realize(), A*B);
     if (success) printf("success!\n");
     else { printf("fail\n"); return success; }
@@ -145,10 +148,10 @@ bool test_matrix_operations(const int n) {
 int main(int argc, char **argv) {
     bool success = true;
 
-    success &= test_matrix_operations<1>();
-    success &= test_matrix_operations<2>();
-    success &= test_matrix_operations<3>();
-    success &= test_matrix_operations<4>();
+    // success &= test_matrix_operations<1>();
+    // success &= test_matrix_operations<2>();
+    // success &= test_matrix_operations<3>();
+    // success &= test_matrix_operations<4>();
 
     for (int n = 5; n <= 10; ++n ) {
         success &= test_matrix_operations(n);

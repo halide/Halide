@@ -3,6 +3,8 @@
 #include <sstream>
 
 #include <Halide.h>
+#include <HalideLinAlg.h>
+
 #include <stdio.h>
 #include "clock.h"
 
@@ -11,6 +13,8 @@
 #endif
 
 using namespace Halide;
+using namespace Halide::LinearAlgebra;
+using Halide::Internal::vec;
 
 void print_results(const int N, const int num_iters, const std::string &result, const double delta_t) {
     const size_t buffer_size = N * N * sizeof(float);
@@ -81,7 +85,7 @@ void test_small_matrix(const int num_iters) {
     C.compile_to_lowered_stmt("small_mul.stmt", Text, t);
 
     // Uncomment to see the generated asm
-    C.compile_to_assembly("small_mul.s", Internal::vec<Argument>(A_in, B_in), t);
+    C.compile_to_assembly("small_mul.s", vec<Argument>(A_in, B_in), t);
 
     A_in.set(a);
     B_in.set(b);
@@ -152,7 +156,7 @@ void test_matrix_multiply(const int N, const int num_iters) {
     prod.compile_jit(t);
 
     // Uncomment to see the generated asm
-    // C.compile_to_assembly("/dev/stdout", Internal::vec<Argument>(A, B), "");
+    // C.compile_to_assembly("/dev/stdout", vec<Argument>(A, B), "");
 
     A_in.set(a);
     B_in.set(b);
@@ -230,7 +234,7 @@ void test_explicit_multiply(const int N, const int num_iters) {
     C.compile_to_lowered_stmt("exp_mul.stmt", Text, t);
 
     // Uncomment to see the generated asm
-    // C.compile_to_assembly("/dev/stdout", Internal::vec<Argument>(A, B), "");
+    // C.compile_to_assembly("/dev/stdout", vec<Argument>(A, B), "");
 
     A.set(a);
     B.set(b);

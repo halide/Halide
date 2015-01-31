@@ -12,12 +12,12 @@
 
 namespace Halide {
 
-static const int small_matrix_limit = 4;
-
 using namespace Internal;
 using std::map;
 using std::string;
 using std::vector;
+
+namespace LinearAlgebra {
 
 namespace {
 
@@ -46,8 +46,27 @@ string block_var_name(string base_name, int level) {
     return sout.str();
 }
 
-string matrix_name(Matrix *M, string name, string alt_name = "") {
-    static string default_name = make_entity_name(M, "Halide::Matrix", 'M');
+// Inject a suitable base-case definition given an update
+// definition. This is a helper for MatrixRef::operator+= and co.
+void define_base_case(Matrix &M, Function func, const vector<Expr> &a, Expr e) {
+    if (func.has_pure_definition()) return;
+    func.define(matrix_args(M), vec(e));
+}
+
+}  // namespace
+
+using Halide::operator-;
+using Halide::operator+;
+using Halide::operator*;
+using Halide::operator/;
+using Halide::operator%;
+
+vector<string> matrix_args(Matrix &M) {
+    return vec(M.row_var().name(), M.col_var().name());
+}
+
+string matrix_name(Matrix *M, string name, string alt_name) {
+    string default_name = make_entity_name(M, "Halide::Matrix", 'M');
 
     if (name.empty()) {
         if (alt_name.empty()) {
@@ -58,20 +77,6 @@ string matrix_name(Matrix *M, string name, string alt_name = "") {
     } else {
         return strip(name);
     }
-}
-
-const vector<string> &matrix_args() {
-    static const vector<string> args = vec(string("i"), string("j"));
-    return args;
-}
-
-// Inject a suitable base-case definition given an update
-// definition. This is a helper for MatrixRef::operator+= and co.
-void define_base_case(Function func, const vector<Expr> &a, Expr e) {
-    if (func.has_pure_definition()) return;
-    func.define(matrix_args(), vec(e));
-}
-
 }
 
 MatrixRef::MatrixRef(Matrix& M, Expr i, Expr j) : mat(M), row(i), col(j) {
@@ -94,7 +99,7 @@ void MatrixRef::operator=(Expr x) {
 
 void MatrixRef::operator+=(Expr x) {
     if (mat.is_large) {
-        define_base_case(mat.func, vec(row, col), cast(x.type(), 0));
+        define_base_case(mat, mat.func, vec(row, col), cast(x.type(), 0));
         Expr value = *this;
         mat.define_update(row, col, value + x);
     } else {
@@ -105,7 +110,7 @@ void MatrixRef::operator+=(Expr x) {
 
 void MatrixRef::operator-=(Expr x) {
     if (mat.is_large) {
-        define_base_case(mat.func, vec(row, col), cast(x.type(), 0));
+        define_base_case(mat, mat.func, vec(row, col), cast(x.type(), 0));
         Expr value = *this;
         mat.define_update(row, col, value - x);
     } else {
@@ -116,7 +121,7 @@ void MatrixRef::operator-=(Expr x) {
 
 void MatrixRef::operator*=(Expr x) {
     if (mat.is_large) {
-        define_base_case(mat.func, vec(row, col), cast(x.type(), 1));
+        define_base_case(mat, mat.func, vec(row, col), cast(x.type(), 1));
         Expr value = *this;
         mat.define_update(row, col, value * x);
     } else {
@@ -127,7 +132,7 @@ void MatrixRef::operator*=(Expr x) {
 
 void MatrixRef::operator/=(Expr x) {
     if (mat.is_large) {
-        define_base_case(mat.func, vec(row, col), cast(x.type(), 1));
+        define_base_case(mat, mat.func, vec(row, col), cast(x.type(), 1));
         Expr value = *this;
         mat.define_update(row, col, value / x);
     } else {
@@ -192,7 +197,11 @@ struct PartitionContents : public RefCount {
     {}
 };
 
+}  // namespace LinearAlgebra
+
 namespace Internal {
+
+using LinearAlgebra::PartitionContents;
 
 template<>
 EXPORT RefCount &ref_count<PartitionContents>(const PartitionContents *p) {
@@ -204,7 +213,11 @@ EXPORT void destroy<PartitionContents>(const PartitionContents *p) {
     delete p;
 }
 
-}
+}  // namespace Internal
+
+namespace LinearAlgebra {
+
+static const int small_matrix_limit = 4;
 
 Partition::Partition(IntrusivePtr<PartitionContents> c) :
         contents(c)
@@ -508,7 +521,7 @@ void Matrix::init(Expr num_rows = 0, Expr num_cols = 0) {
 }
 
 void Matrix::define(Expr value) {
-    func.define(matrix_args(), vec(value));
+    func.define(matrix_args(*this), vec(value));
 }
 
 void Matrix::define_update(Expr row, Expr col, Expr value) {
@@ -726,16 +739,18 @@ Matrix::operator Func() {
         int m, n;
         const_size(m, n);
 
-        Expr mat = undef(type());
+        // debug(0) << "Defining expr for " << m << "x" << n << " matrix:\n";
+        Expr mat = cast(type(), 0);
         for (int j = 0; j < n; ++j ) {
             for (int i = 0; i < n; ++i ) {
                 const int idx = small_offset(i, j);
                 mat = select(row_var() == i && col_var() == j,
                              coeffs[idx], mat);
+                // debug(0) << "("<<i<<","<<j<<"): " << simplify(mat) << "\n";
             }
         }
 
-        func.define(matrix_args(), vec(mat));
+        func.define(matrix_args(*this), vec(mat));
     }
 
     return Func(func);
@@ -805,19 +820,6 @@ Matrix &Matrix::compute_at_columns(Partition p) {
 //     if (is_large) {
 //         func.schedule() = schedule;
 //     }
-// }
-
-// Buffer Matrix::realize() {
-//   internal_assert(is_size_const(nrows));
-//   internal_assert(is_size_const(ncols));
-
-//   const int nr = *as_const_int(nrows);
-//   const int nc = *as_const_int(ncols);
-
-//   Func f = *this;
-//   f.bound(x, 0, nrows).bound(y, 0, ncols);
-
-//   return f.realize(nr, nc);
 // }
 
 Matrix &Matrix::partition(Expr size) {
@@ -1162,6 +1164,20 @@ Matrix Matrix::inverse() {
     return inv;
 }
 
+Realization Matrix::realize(const Target &target) {
+    int m, n;
+    internal_assert(const_num_rows(m));
+    internal_assert(const_num_cols(n));
+
+    Var i = row_var();
+    Var j = col_var();
+    Func f = static_cast<Func>(*this);
+    // f.bound(i, 0, num_rows())
+    //  .bound(j, 0, num_cols());
+
+    return f.realize(m, n, target);
+}
+
 MatrixRef Matrix::operator[] (Expr i) {
     user_assert(is_one(nrows) || is_one(ncols))
             << "operator[] only defined for 1-dimensional matrices.\n";
@@ -1335,7 +1351,7 @@ Matrix operator*(Matrix A, Matrix B) {
                         const int p = *as_const_int(A.num_cols());
                         prod[idx] = cast(A.type(), 0);
                         for (int k = 0; k < p; ++k) {
-                            prod[idx] += A(i, k) * A(k, j);
+                            prod[idx] += A(i, k) * B(k, j);
                         }
                     }
                 }
@@ -1431,4 +1447,5 @@ Matrix operator*(Matrix A, Matrix B) {
 }
 
 
+}
 }

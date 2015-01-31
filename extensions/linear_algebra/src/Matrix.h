@@ -13,8 +13,15 @@
 #include "Tuple.h"
 
 namespace Halide {
+namespace LinearAlgebra {
 
 class Matrix;
+class MatrixRef;
+class Partition;
+class PartitionContents;
+
+std::vector<std::string> matrix_args(Matrix &M);
+std::string matrix_name(Matrix *M, std::string name, std::string alt_name = "");
 
 /** A fragment of front-end syntax of the form A(i, j), where i, and j
  * are Exprs. It could be the left hand side of a reduction
@@ -26,7 +33,7 @@ class MatrixRef {
     Expr row;
     Expr col;
 public:
-    MatrixRef(Matrix& M, Expr i, Expr j);
+    MatrixRef(LinearAlgebra::Matrix& M, Expr i, Expr j);
 
     /** Use this as the left-hand-side of a reduction definition (see
      * \ref RDom). The function must already have a pure definition.
@@ -74,9 +81,6 @@ public:
      * of a definition. Only works for single-output Funcs. */
     EXPORT operator Expr() const;
 };
-
-class Matrix;
-class PartitionContents;
 
 /**
  * A Partition defines a decomposition of a Matrix into a hierarchy of
@@ -206,7 +210,7 @@ public:
 
 #ifdef WITH_EIGEN
     template<class M>
-    EXPORT Matrix(const Eigen::MatrixBase<M>& mat);
+    EXPORT Matrix(const Eigen::MatrixBase<M>& mat, std::string name = "");
 #endif
 
     EXPORT bool is_large_matrix() const {return is_large;}
@@ -255,6 +259,8 @@ public:
     EXPORT Matrix inverse();
     // @}
 
+    EXPORT Realization realize(const Target &target = get_jit_target_from_environment());
+
     operator Tuple();
     operator Func();
 
@@ -277,6 +283,8 @@ EXPORT Matrix operator*(Matrix, Expr);
 EXPORT Matrix operator/(Matrix, Expr);
 
 #ifdef WITH_EIGEN
+}  // namespace LinearAlgebra
+
 namespace Internal {
 template<class M>
 Expr buildMatrixDef(const Eigen::MatrixBase<M>& mat,
@@ -292,21 +300,22 @@ Expr buildMatrixDef(const Eigen::MatrixBase<M>& mat,
                       buildMatrixDef(mat, x, y, next_i, next_j));
     }
 }
-
 }  // namespace Internal
 
+
+namespace LinearAlgebra {
+
 template<class M>
-Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
+Matrix::Matrix(const Eigen::MatrixBase<M>& mat, std::string name)
+        : func(matrix_name(this, name)) {
     const int m = mat.rows();
     const int n = mat.cols();
 
     init(m, n);
 
     if (is_large) {
-        Var i = row_var();
-        Var j = col_var();
         Matrix &A = *this;
-        A(i, j) = Internal::buildMatrixDef(mat, i, j);
+        A(row_var(), col_var()) = Internal::buildMatrixDef(mat, row_var(), col_var());
     } else {
         coeffs.resize(m * n);
         for (int j = 0; j < n; ++j) {
@@ -319,6 +328,7 @@ Matrix::Matrix(const Eigen::MatrixBase<M>& mat) {
 }
 #endif
 
-}
+}  // namespace LinearAlgebra
+}  // namespace Halide
 
 #endif
