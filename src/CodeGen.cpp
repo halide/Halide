@@ -486,7 +486,7 @@ void CodeGen::compile_to_native(const string &filename, bool assembly) {
     #if LLVM_VERSION < 33
     pass_manager.add(new TargetTransformInfo(target_machine->getScalarTargetTransformInfo(),
                                              target_machine->getVectorTargetTransformInfo()));
-    #else
+    #elif LLVM_VERSION < 37
     target_machine->addAnalysisPasses(pass_manager);
     #endif
 
