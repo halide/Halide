@@ -117,11 +117,11 @@ namespace {
     op_info.parent_type = parent_type;
     op_info.parent_name = parent_name;
     if (metric == "count") {
-      op_info.count = (accumulate_runs?op_info.count:0) + value;
+      op_info.count = (accumulate_runs ? op_info.count : 0) + value;
     } else if (metric == "ticks") {
-      op_info.ticks = (accumulate_runs?op_info.ticks:0) + value;
+      op_info.ticks = (accumulate_runs ? op_info.ticks : 0) + value;
     } else if (metric == "nsec") {
-      op_info.nsec = (accumulate_runs?op_info.nsec:0) + value;
+      op_info.nsec = (accumulate_runs ? op_info.nsec : 0) + value;
     }
   }
 
