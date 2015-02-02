@@ -43,7 +43,7 @@ public:
                 PushCallStack st(this, kToplevel, kToplevel);
                 s = mutate(s);
             }
-            s = add_ticks(kToplevel, kToplevel, s);
+            s = add_count_and_ticks(kToplevel, kToplevel, s);
             s = add_nsec(kToplevel, kToplevel, s);
 
             // Note that this is tacked on to the front of the block, since it must come
