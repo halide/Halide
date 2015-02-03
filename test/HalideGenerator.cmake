@@ -1,3 +1,14 @@
+# This function returns the intermediate output directory where the Halide
+# generator output will be placed. This path is automatically added to the
+# library path and include path of the specified target. This function can be
+# used to determine the location of the other output files like the bit code and
+# html.
+function(halide_generator_output_path gen_name result_var)
+  file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/" NATIVE_INT_DIR)
+  set(${result_var} "${NATIVE_INT_DIR}scratch_${gen_name}" PARENT_SCOPE)
+  file(MAKE_DIRECTORY "${result_var}")
+endfunction(halide_generator_output_path)
+
 # This function adds custom build steps to invoke a Halide generator exectuable,
 # produce a static library containing the generated code, and then link that
 # static library to the specified target. The generator executable must be
@@ -6,9 +17,7 @@ function(halide_add_generator_dependency target gen_target gen_name func_name)
 
   # Determine a scratch directory to build and execute the generator. ${target}
   # will include the generated header from this directory.
-  file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/" NATIVE_INT_DIR)
-  set(SCRATCH_DIR "${NATIVE_INT_DIR}scratch_${gen_name}")
-  file(MAKE_DIRECTORY "${SCRATCH_DIR}")
+  halide_generator_output_path(${gen_name} SCRATCH_DIR)
 
   # CMake 2.8 doesn't have string(CONCAT), so fake it like so:
   string(REPLACE ".lib" "${CMAKE_STATIC_LIBRARY_SUFFIX}" FILTER_LIB "${func_name}.lib" )
