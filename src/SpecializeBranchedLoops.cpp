@@ -777,28 +777,35 @@ private:
     void visit_min_or_max(const Op *op) {
         visit_binary_op(op);
 
-        vector<Branch> child_branches;
-        branches.swap(child_branches);
-        for (size_t i = 0; i < child_branches.size(); ++i) {
-            Branch &branch = child_branches[i];
-            const Op *min_or_max = branch.content.as<Op>();
-            if (min_or_max) {
-                Expr a = min_or_max->a;
-                Expr b = min_or_max->b;
-                if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
-                    push_bounds(branch.min, branch.extent);
-                    Expr cond = Cmp::make(a, b);
-                    if (!visit_simple_cond(cond, a, b)) {
-                        branches.push_back(branch);
+        if (!branching_vars) {
+            vector<Branch> child_branches;
+            branches.swap(child_branches);
+            for (size_t i = 0; i < child_branches.size(); ++i) {
+                Branch &branch = child_branches[i];
+                const Op *min_or_max = branch.content.as<Op>();
+                if (min_or_max) {
+                    Expr a = min_or_max->a;
+                    Expr b = min_or_max->b;
+                    if (expr_uses_var(a, name, scope) || expr_uses_var(b, name, scope)) {
+                        // Ensure that the variable appears in a for consistency with other min/max exprs.
+                        if (!expr_uses_var(b, name, scope)) {
+                            std::swap(a, b);
+                        }
+
+                        push_bounds(branch.min, branch.extent);
+                        Expr cond = Cmp::make(a, b);
+                        if (!visit_simple_cond(cond, a, b)) {
+                            branches.push_back(branch);
+                        }
+                        pop_bounds();
+
+                        continue;
                     }
-                    pop_bounds();
-
-                    continue;
                 }
-            }
 
-            // We did not branch, so add current branch as is.
-            branches.push_back(branch);
+                // We did not branch, so add current branch as is.
+                branches.push_back(branch);
+            }
         }
     }
 
@@ -808,7 +815,7 @@ private:
     void visit(const Div *op) {visit_binary_op(op);}
     void visit(const Mod *op) {visit_binary_op(op);}
 
-    void visit(const Min *op) {visit_min_or_max<Min, LE>(op);}
+    void visit(const Min *op) {visit_min_or_max<Min, LT>(op);}
     void visit(const Max *op) {visit_min_or_max<Max, GE>(op);}
 
     void visit(const EQ *op)  {visit_binary_op(op);}
