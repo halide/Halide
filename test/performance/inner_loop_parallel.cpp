@@ -15,23 +15,26 @@ int main(int argc, char **argv) {
     double correct_time = 0;
 
     for (int t = 2; t <= 64; t *= 2) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "HL_NUM_THREADS=%d", t);
-        putenv(buf);
+        std::ostringstream ss;
+        ss << "HL_NUM_THREADS=" << t;
+        putenv(ss.str().c_str());
         Halide::Internal::JITSharedRuntime::release_all();
         f.compile_jit();
+        // Start the thread pool without giving any hints as to the
+        // number of tasks we'll be using.
+        f.realize(t, 1);
         double min_time = 1e20;
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 3; i++) {
             double t1 = current_time();
-            f.realize(2, 100000);
-            double t2 = current_time();
-            min_time = std::min(min_time, t2 - t1);
+            f.realize(2, 1000000);
+            double t2 = current_time() - t1;
+            if (t2 < min_time) min_time = t2;
         }
 
         printf("%d: %f ms\n", t, min_time);
         if (t == 2) {
             correct_time = min_time;
-        } else if (min_time > correct_time * 2) {
+        } else if (min_time > correct_time * 5) {
             printf("Unacceptable overhead when using %d threads for 2 tasks: %f ms vs %f ms\n",
                    t, min_time, correct_time);
             return -1;
