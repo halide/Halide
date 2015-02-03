@@ -133,22 +133,21 @@ WEAK void *halide_worker_thread(void *void_arg) {
            : halide_work_queue.running()) {
 
         if (halide_work_queue.jobs == NULL) {
-            // There are no jobs pending, though some tasks may still
-            // be in flight from the last job. Release the lock and
-            // wait for something new to happen.
             if (owned_job) {
+                // There are no jobs pending. Wait for the last worker
+                // to signal that the job is finished.
                 pthread_cond_wait(&halide_work_queue.wakeup_owners, &halide_work_queue.mutex);
-            } else {
+            } else if (halide_work_queue.a_team_size <= halide_work_queue.target_a_team_size) {
+                // There are no jobs pending. Wait until more jobs are enqueued.
                 pthread_cond_wait(&halide_work_queue.wakeup_a_team, &halide_work_queue.mutex);
+            } else {
+                // There are no jobs pending, and there are too many
+                // threads in the A team. Transition to the B team
+                // until the wakeup_b_team condition is fired.
+                halide_work_queue.a_team_size--;
+                pthread_cond_wait(&halide_work_queue.wakeup_b_team, &halide_work_queue.mutex);
+                halide_work_queue.a_team_size++;
             }
-        } else if (!owned_job &&
-                   halide_work_queue.a_team_size > halide_work_queue.target_a_team_size) {
-            // I'm awake but shouldn't be.
-
-            // Transition to b team until the wakeup_b_team condition is fired.
-            halide_work_queue.a_team_size--;
-            pthread_cond_wait(&halide_work_queue.wakeup_b_team, &halide_work_queue.mutex);
-            halide_work_queue.a_team_size++;
         } else {
             // Grab the next job.
             work *job = halide_work_queue.jobs;
@@ -266,11 +265,11 @@ WEAK int default_do_par_for(void *user_context, halide_task f,
 
     pthread_mutex_unlock(&halide_work_queue.mutex);
 
-    // Wake up our a team.
+    // Wake up our A team.
     pthread_cond_broadcast(&halide_work_queue.wakeup_a_team);
 
     if (wake_b_team) {
-        // We need the b team too.
+        // We need the B team too.
         pthread_cond_broadcast(&halide_work_queue.wakeup_b_team);
     }
 
